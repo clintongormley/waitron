@@ -54,6 +54,7 @@ import {
   type ServedMenu,
 } from "@waitron/menu";
 import type {
+  LateSendMark,
   PreparedServiceDay,
   ServiceMode,
   ZoneMenuState,
@@ -1236,6 +1237,7 @@ export async function listWorkingLineContexts(
     menuId: string;
     menuVersionId: string | null;
     menuName: string;
+    departmentId: string;
     categoryName: string;
     unitId: string;
     unitName: Record<string, string>;
@@ -1254,6 +1256,7 @@ export async function listWorkingLineContexts(
       menuId: workingLineContexts.menuId,
       menuVersionId: workingLineContexts.menuVersionId,
       menuName: workingLineContexts.menuName,
+      departmentId: workingLineContexts.departmentId,
       categoryName: workingLineContexts.categoryName,
       unitId: workingLineContexts.unitId,
       unitName: workingLineContexts.unitName,
@@ -1301,16 +1304,20 @@ export async function readLinesSoldInEach(
   return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
 
-/** The period name of each of `lineIds` whose context records a late send; unmarked lines are absent. */
+/**
+ * The period name of each of `lineIds` whose context records a late send, and whether someone
+ * agreed to it (`agreed` is false where the send asked nobody); unmarked lines are absent.
+ */
 export async function readLateSendMarks(
   tx: Transaction,
   lineIds: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, LateSendMark>> {
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
       workingOrderLineId: workingLineContexts.workingOrderLineId,
       latePeriodName: workingLineContexts.latePeriodName,
+      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
     })
     .from(workingLineContexts)
     .where(
@@ -1319,7 +1326,28 @@ export async function readLateSendMarks(
         isNotNull(workingLineContexts.latePeriodName),
       ),
     );
-  return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
+  return new Map(
+    rows.map((row) => [
+      row.workingOrderLineId,
+      { periodName: row.latePeriodName!, agreed: row.lateConfirmedBy !== null },
+    ]),
+  );
+}
+
+/**
+ * Mark each line as sent after its period: `confirmedBy` is the person who agreed to send it, or
+ * null where the send asked nobody.
+ */
+export async function recordLateSendMarks(
+  tx: Transaction,
+  marks: readonly { lineId: string; periodName: string; confirmedBy: string | null }[],
+): Promise<void> {
+  for (const mark of marks) {
+    await tx
+      .update(workingLineContexts)
+      .set({ latePeriodName: mark.periodName, lateConfirmedBy: mark.confirmedBy })
+      .where(eq(workingLineContexts.workingOrderLineId, mark.lineId));
+  }
 }
 
 export async function readSentLineNutrition(

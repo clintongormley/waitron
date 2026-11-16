@@ -6,7 +6,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
@@ -31,8 +31,10 @@ import {
   createExtraList,
   writeProductModifiers,
   deactivateMenu,
+  updateProduct,
 } from "@waitron/menu";
 import {
+  configureZone,
   createServiceZone,
   departments,
   menuPeriods,
@@ -51,8 +53,11 @@ import {
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { createPrinter } from "@waitron/printing";
-import { createStation } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { releaseHeldWorkOf } from "./order-groups.js";
+import { lateUnsentDishes, unsentDishLines } from "./working-order.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
@@ -1912,6 +1917,874 @@ describe("a dish whose period ended earlier today", () => {
       expect(await lineMarks(held.id)).toHaveLength(1);
     });
   });
+
+  describe("a dish parked during its period and sent after it", () => {
+    const lunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.mark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    const unaskedLunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.unaskedMark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    /** The Midday Toast parked at `parkedAt`, with every dish made at one station with its own printer. */
+    const parkedAtLunch = async (
+      parkedAt = "13:50",
+      extra: (v: Venue) => Record<string, unknown> = () => ({}),
+      weekdays: readonly number[] = [1],
+    ) => {
+      at(mondayAt(parkedAt));
+      const v = await mealVenue(weekdays);
+      const { printerId, stationId } = await withTransaction(suite.db, async (tx) => {
+        const stationId = (await createStation(tx, { name: "Kitchen" })).id;
+        const printer = await createPrinter(tx, {
+          name: "Kitchen printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
+        await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+        await setRoutingCell(
+          tx,
+          { row: { kind: "all" }, zoneId: v.diningZone },
+          { kind: "station", stationId },
+        );
+        return { printerId: printer.id, stationId };
+      });
+      const held = await parkWith(v, v.toast.midday, extra(v));
+      expect(held.status).toBe(200);
+      const [line] = await suite.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, held.id));
+      return { v, printerId, stationId, id: held.id, lineId: line!.id };
+    };
+    const place = async (v: Venue, id: string, extra: Record<string, unknown> = {}) =>
+      sendAsTill(v, "POST", `/api/working-orders/${id}/place`, {
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)),
+        ...extra,
+      });
+    const printed = async (printerId: string) =>
+      (
+        await suite.db
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.printerId, printerId))
+      ).map((job) => decodeTicket(job.payload));
+    const sentState = async (id: string) => ({
+      order: (
+        await suite.db
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id))
+      )[0],
+      lines: await suite.db
+        .select({ sentAt: workingOrderLines.sentAt })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    });
+
+    it("is refused when placed unconfirmed at 14:05, naming its stored line, and nothing is sent", async () => {
+      const { v, printerId, id, lineId } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      expect(await place(v, id)).toEqual({
+        status: 409,
+        body: {
+          error: {
+            code: "menu_period.ended",
+            params: {
+              departmentId: v.restaurant,
+              menus: [{ menuId: v.menus["Midday menu"], periodName: "Lunch" }],
+              menuItemIds: [v.toast.midday],
+              needsManager: false,
+              workingOrderLineIds: [lineId],
+            },
+          },
+        },
+      });
+      expect(await sentState(id)).toEqual({ order: { status: "open" }, lines: [{ sentAt: null }] });
+      expect(await printed(printerId)).toEqual([]);
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    });
+
+    it("is placed at 14:05 when the till confirms its menu, marked by the signed-in person, and its ticket carries the mark", async () => {
+      const { v, printerId, id } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      const placed = await place(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      expect(placed).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+      ]);
+      expect(await printed(printerId)).toEqual([expect.stringContaining(`\n${lunchMark}\n`)]);
+    });
+
+    it("refuses a place whose lateSend is null and sends nothing", async () => {
+      const { v, id } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      expect(await place(v, id, { lateSend: null })).toMatchObject({
+        status: 400,
+        body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
+      });
+      expect(await sentState(id)).toEqual({ order: { status: "open" }, lines: [{ sentAt: null }] });
+    });
+
+    it("is placed at 19:30 without asking, unmarked, while Dinner sells the Toast", async () => {
+      const { v, printerId, id } = await parkedAtLunch();
+      at(mondayAt("19:30"));
+      expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+      expect(await printed(printerId)).toEqual([expect.not.stringContaining(lunchMark)]);
+    });
+
+    it("parked confirmed at 14:05 is placed at 14:10 without asking again, keeping its mark", async () => {
+      const { v, id } = await parkedAtLunch("14:05", (venue) => ({
+        lateSend: { menuIds: [venue.menus["Midday menu"]] },
+      }));
+      at(mondayAt("14:10"));
+      expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+      ]);
+    });
+
+    it("is sent when paid at 14:05 without asking, marked with no confirmer on the line, its ticket and its station's queue, never as agreed", async () => {
+      const { v, printerId, stationId, id } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      const paid = await sendAsTill(v, "POST", "/api/sales", {
+        workingOrderId: id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      });
+      expect(paid.status).toBe(200);
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
+      ]);
+      expect(unaskedLunchMark).toBe("** TRAS LUNCH **");
+      expect(await printed(printerId)).toEqual([
+        expect.stringContaining(`\n${unaskedLunchMark}\n`),
+      ]);
+      expect(await printed(printerId)).toEqual([expect.not.stringContaining(lunchMark)]);
+      const queue = await sendAsTill(v, "GET", `/api/stations/${stationId}/queue`);
+      expect(queue.status).toBe(200);
+      expect(
+        (queue.body as { items: { items: Record<string, unknown>[] }[] }).items.flatMap(
+          (group) => group.items,
+        ),
+      ).toEqual([expect.objectContaining({ afterPeriod: "Lunch", afterPeriodUnasked: true })]);
+    });
+
+    it("is sent when moved to a table at 14:05 without asking, marked with no confirmer", async () => {
+      const { v, id } = await parkedAtLunch();
+      await suite.db
+        .update(departments)
+        .set({ orderStart: "table" })
+        .where(eq(departments.id, v.restaurant));
+      const { id: tableId } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, v.cfg, { label: "Late arrival", zoneId: v.diningZone }),
+      );
+      at(mondayAt("14:05"));
+      const moved = await sendAsTill(v, "POST", `/api/bills/${id}/move`, {
+        to: { tableId },
+        partyId: null,
+        otherPartyId: null,
+        expectedEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, id))],
+        submissionId: randomUUID(),
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      });
+      expect(moved.status).toBe(200);
+      expect((await sentState(id)).lines).toEqual([{ sentAt: expect.any(String) }]);
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
+      ]);
+    });
+
+    /** Gives Lunch the Deli takeaway menu in place of the Midday menu its dish was parked from. */
+    const replaceLunchMenu = (v: Venue) =>
+      withTransaction(suite.db, async (tx) => {
+        const periods = await tx
+          .select()
+          .from(menuPeriods)
+          .where(eq(menuPeriods.departmentId, v.restaurant));
+        const lunch = periods.find((period) => period.menuId === v.menus["Midday menu"])!;
+        await updateMenuPeriod(tx, lunch.id, { menuId: v.menus["Deli takeaway"] });
+      });
+
+    it("asks when placed at 14:05 after Lunch's menu was replaced, naming the dish's menu, and marks it once confirmed", async () => {
+      const { v, printerId, id, lineId } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      await replaceLunchMenu(v);
+      expect(await place(v, id)).toEqual({
+        status: 409,
+        body: {
+          error: {
+            code: "menu_period.ended",
+            params: {
+              departmentId: v.restaurant,
+              menus: [{ menuId: v.menus["Midday menu"], periodName: "Midday menu" }],
+              menuItemIds: [v.toast.midday],
+              needsManager: false,
+              workingOrderLineIds: [lineId],
+            },
+          },
+        },
+      });
+      expect(await sentState(id)).toEqual({ order: { status: "open" }, lines: [{ sentAt: null }] });
+      expect(await printed(printerId)).toEqual([]);
+      const placed = await place(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      expect(placed).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: v.personId },
+      ]);
+    });
+
+    it("is marked with no confirmer when paid at 14:05 after Lunch's menu was replaced", async () => {
+      const { v, id } = await parkedAtLunch();
+      at(mondayAt("14:05"));
+      await replaceLunchMenu(v);
+      const paid = await sendAsTill(v, "POST", "/api/sales", {
+        workingOrderId: id,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      });
+      expect(paid.status).toBe(200);
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: null },
+      ]);
+    });
+
+    it("is placed at 19:30 without asking after Lunch's menu was replaced, while Dinner sells the Toast", async () => {
+      const { v, id } = await parkedAtLunch();
+      at(mondayAt("19:30"));
+      await replaceLunchMenu(v);
+      expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    });
+
+    it("is not judged late at 13:55 after its zone moved to a department not selling its menu, while its own Lunch runs", async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const held = await park(v, v.terraceZone, v.toast.midday);
+      expect(held.status).toBe(200);
+      at(mondayAt("13:55"));
+      await withTransaction(suite.db, async (tx) => {
+        await configureZone(tx, { zoneId: v.terraceZone, departmentId: v.deli });
+        await lateUnsentDishes(tx, held.id, await unsentDishLines(tx, held.id), "mark");
+      });
+      expect(await marksOf(held.id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    });
+
+    it.each([
+      ["its own department's Lunch", true, "Lunch"],
+      ["its menu, its own department being gone,", false, "Midday menu"],
+    ])(
+      "is marked after %s at 14:05 when its zone moved to a department not selling its menu",
+      async (_, ownActive, periodName) => {
+        at(mondayAt("13:50"));
+        const v = await mealVenue();
+        const held = await park(v, v.terraceZone, v.toast.midday);
+        expect(held.status).toBe(200);
+        at(mondayAt("14:05"));
+        await withTransaction(suite.db, async (tx) => {
+          await configureZone(tx, { zoneId: v.terraceZone, departmentId: v.deli });
+          if (!ownActive)
+            await tx
+              .update(departments)
+              .set({ active: false })
+              .where(eq(departments.id, v.restaurant));
+          await lateUnsentDishes(tx, held.id, await unsentDishLines(tx, held.id), "mark");
+        });
+        expect(await marksOf(held.id)).toEqual([
+          { unitPriceGross: 400, latePeriodName: periodName, lateConfirmedBy: null },
+        ]);
+      },
+    );
+
+    it.each([
+      ["before Tuesday's Lunch", [1, 2]],
+      ["with no period on Tuesday", [1]],
+    ])(
+      "parked at Lunch on Monday is placed on Tuesday at 10:00 %s without asking, unmarked, and reaches its station",
+      async (_, weekdays) => {
+        const { v, printerId, id } = await parkedAtLunch(undefined, undefined, weekdays);
+        at(new Date("2026-10-06T10:00:00+02:00"));
+        expect(await place(v, id)).toEqual({ status: 200, body: { id, status: "placed" } });
+        expect(await marksOf(id)).toEqual([
+          { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+        ]);
+        expect((await sentState(id)).lines).toEqual([{ sentAt: expect.any(String) }]);
+        expect(await printed(printerId)).toEqual([expect.not.stringContaining("**")]);
+      },
+    );
+
+    it("marks the extras stored with a dish parked at 13:50 and placed confirmed at 14:05", async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const { extraId, listId } = await butterOnMiddayToast(v);
+      const held = await parkWith(v, v.toast.midday, {
+        lines: [
+          {
+            menuItemId: v.toast.midday,
+            quantity: "1",
+            extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
+          },
+        ],
+      });
+      expect(held.status).toBe(200);
+      at(mondayAt("14:05"));
+      const placed = await place(v, held.id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      expect(placed).toEqual({ status: 200, body: { id: held.id, status: "placed" } });
+      expect(await marksOf(held.id)).toEqual(
+        expect.arrayContaining([
+          { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+        ]),
+      );
+      expect(await marksOf(held.id)).toHaveLength(2);
+    });
+
+    it("asks at Place for an extra added at 14:10 to a dish confirmed late at 14:05, and marks the extra once confirmed", async () => {
+      at(mondayAt("14:05"));
+      const v = await mealVenue();
+      const { extraId, listId } = await butterOnMiddayToast(v);
+      const lateSend = { lateSend: { menuIds: [v.menus["Midday menu"]] } };
+      const held = await parkWith(v, v.toast.midday, lateSend);
+      expect(held.status).toBe(200);
+      at(mondayAt("14:10"));
+      const read = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
+      const order = read.body as {
+        revision: number;
+        lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
+      };
+      const dishId = order.lines[0]!.workingOrderLineId;
+      const added = await sendAsTill(v, "PUT", `/api/working-orders/${held.id}`, {
+        revision: order.revision,
+        lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
+          workingOrderLineId,
+          menuItemId,
+          quantity,
+          extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
+        })),
+      });
+      expect(added.status).toBe(200);
+      const asked = await place(v, held.id);
+      expect(asked).toMatchObject({
+        status: 409,
+        body: {
+          error: {
+            code: "menu_period.ended",
+            params: {
+              menus: [{ menuId: v.menus["Midday menu"], periodName: "Lunch" }],
+              workingOrderLineIds: [dishId],
+            },
+          },
+        },
+      });
+      expect((await sentState(held.id)).lines).toEqual([{ sentAt: null }, { sentAt: null }]);
+      const placed = await place(v, held.id, lateSend);
+      expect(placed).toEqual({ status: 200, body: { id: held.id, status: "placed" } });
+      expect(await marksOf(held.id)).toEqual(
+        expect.arrayContaining([
+          { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+        ]),
+      );
+      expect(await marksOf(held.id)).toHaveLength(2);
+    });
+  });
+
+  describe("a set lunch's course stored during Lunch and sent after it", () => {
+    const lunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.mark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    const unaskedLunchMark = `** ${KITCHEN_LATE_SEND_WORDS.es.unaskedMark.replace("{period}", "Lunch").toLocaleUpperCase("es")} **`;
+    const lateSend = (v: Venue) => ({ lateSend: { menuIds: [v.menus["Midday menu"]] } });
+    const partyRevisionOf = async (partyId: string) =>
+      (
+        await suite.db
+          .select({ revision: parties.revision })
+          .from(parties)
+          .where(eq(parties.id, partyId))
+      )[0]!.revision;
+    /**
+     * At 13:50, a table seated in the dining room, and a Midday Set lunch whose choices are Soup
+     * (Starter) and Fish, Pie and Bread (Main); Bread and the Set lunch itself have no preparation,
+     * and every other dish is made at one station with its own printer.
+     */
+    const lunchTable = async () => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      await suite.db
+        .update(departments)
+        .set({ orderStart: "table" })
+        .where(eq(departments.id, v.restaurant));
+      const setup = await withTransaction(suite.db, async (tx) => {
+        const stationId = (await createStation(tx, { name: "Kitchen" })).id;
+        const printer = await createPrinter(tx, {
+          name: "Kitchen printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
+        await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+        await setRoutingCell(
+          tx,
+          { row: { kind: "all" }, zoneId: v.diningZone },
+          { kind: "station", stationId },
+        );
+        const starter = (await createCourse(tx, { name: "Starter", displayOrder: 1 })).id;
+        const main = (await createCourse(tx, { name: "Main", displayOrder: 2 })).id;
+        const product = async (name: string) =>
+          (
+            await createProduct(tx, {
+              categoryId: null,
+              name,
+              pricingUnit: "each",
+              unitPrice: "5.00",
+              vatClass: "general",
+            })
+          ).id;
+        const dishes = {
+          soup: await product("Soup"),
+          bread: await product("Bread"),
+          fish: await product("Fish"),
+          pie: await product("Pie"),
+        };
+        for (const [dish, course] of [
+          [dishes.soup, starter],
+          [dishes.bread, main],
+          [dishes.fish, main],
+          [dishes.pie, main],
+        ] as const)
+          await setProductCourse(tx, dish, course);
+        const setLunch = await product("Set lunch");
+        await updateProduct(tx, setLunch, {
+          setLunch: true,
+          unitPrice: "15.00",
+          vatClass: "reduced",
+        });
+        const list = await createExtraList(
+          tx,
+          {
+            name: "Lunch choices",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: Object.values(dishes).map((productId) => ({
+              productId,
+              maxQuantity: 1,
+              preselected: false,
+              price: "0.00",
+            })),
+          },
+          SIGNED_IN_TILL_LOCALE,
+        );
+        await writeProductModifiers(tx, setLunch, [{ kind: "extras", id: list.id }]);
+        for (const productId of [setLunch, dishes.bread])
+          await setRoutingCell(
+            tx,
+            { row: { kind: "product", productId }, zoneId: v.diningZone },
+            { kind: "no_preparation" },
+          );
+        const offer = (
+          await addProductToMenu(tx, { menuId: v.menus["Midday menu"], productId: setLunch })
+        ).id;
+        await publishWorkingMenu(tx, v.menus["Midday menu"]);
+        const table = await createTable(tx, v.cfg, { label: "Lunch table", zoneId: v.diningZone });
+        return {
+          stationId,
+          printerId: printer.id,
+          offer,
+          listId: list.id,
+          dishes,
+          tableId: table.id,
+        };
+      });
+      const seated = await sendAsTill(v, "POST", `/api/tables/${setup.tableId}/seat`, {
+        guestCount: 2,
+      });
+      expect(seated.status).toBe(200);
+      const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
+      return { v, ...setup, partyId, tabId };
+    };
+    type LunchTable = Awaited<ReturnType<typeof lunchTable>>;
+    const picksOf = (t: LunchTable, picks: (keyof LunchTable["dishes"])[]) => [
+      {
+        listId: t.listId,
+        picks: picks.map((dish) => ({ productId: t.dishes[dish], quantity: 1 })),
+      },
+    ];
+    /** Send a Set lunch with `picks` to `billId` (the table's first bill unless named). */
+    const orderLunch = async (
+      t: LunchTable,
+      picks: (keyof LunchTable["dishes"])[],
+      release: "hold" | "fire",
+      to: { billId?: string; joinGroupId?: string } = {},
+    ) => {
+      const sent = await sendAsTill(t.v, "POST", `/api/parties/${t.partyId}/groups`, {
+        expectedEdit: await withTransaction(suite.db, (tx) =>
+          readBillEditState(tx, to.billId ?? t.tabId),
+        ),
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevisionOf(t.partyId),
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        groups: [
+          {
+            lines: [{ menuItemId: t.offer, quantity: "1", extras: picksOf(t, picks) }],
+            release,
+          },
+        ],
+        ...to,
+      });
+      expect(sent.status).toBe(200);
+      return sent.body as { groups: { id: string }[] };
+    };
+    /** Change the bill's Set lunch (its line 1) to `picks`, through the till's line edit. */
+    const changeLunch = async (
+      t: LunchTable,
+      picks: (keyof LunchTable["dishes"])[],
+      billId = t.tabId,
+    ) => {
+      const read = await sendAsTill(t.v, "GET", `/api/working-orders/${billId}`);
+      const changed = await sendAsTill(t.v, "PUT", `/api/working-orders/${billId}/lines/1`, {
+        portionLineNos: [],
+        revision: (read.body as { revision: number }).revision,
+        extras: picksOf(t, picks),
+      });
+      expect(changed.status).toBe(200);
+    };
+    /** The bill's line of `dish`, with what the kitchen has of it. */
+    const courseLine = async (
+      t: LunchTable,
+      dish: keyof LunchTable["dishes"],
+      billId = t.tabId,
+    ) => {
+      const [line] = await suite.db
+        .select({
+          id: workingOrderLines.id,
+          lineNo: workingOrderLines.lineNo,
+          groupId: workingOrderLines.groupId,
+          sentAt: workingOrderLines.sentAt,
+          firedAt: ticketItems.firedAt,
+          latePeriodName: workingLineContexts.latePeriodName,
+          lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+        })
+        .from(workingOrderLines)
+        .innerJoin(
+          workingLineContexts,
+          eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
+        )
+        .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, billId),
+            eq(workingOrderLines.productId, t.dishes[dish]),
+          ),
+        );
+      return line!;
+    };
+    const printed = async (printerId: string) =>
+      (
+        await suite.db
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.printerId, printerId))
+      ).map((job) => decodeTicket(job.payload));
+    const refusal = (t: LunchTable, lineIds: string[]) => ({
+      status: 409,
+      body: {
+        error: {
+          code: "menu_period.ended",
+          params: {
+            departmentId: t.v.restaurant,
+            menus: [{ menuId: t.v.menus["Midday menu"], periodName: "Lunch" }],
+            menuItemIds: [t.offer],
+            needsManager: false,
+            workingOrderLineIds: lineIds,
+          },
+        },
+      },
+    });
+    /** A Set lunch of Soup and Fish sent at 13:50, its Main changed to Pie at 13:55. */
+    const pieStoredAtLunch = async (release: "hold" | "fire") => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["soup", "fish"], release);
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "pie"]);
+      const pie = await courseLine(t, "pie");
+      expect(pie).toMatchObject({ sentAt: null, firedAt: null, latePeriodName: null });
+      return { t, groupId: groups[0]!.id, pie };
+    };
+    const send = async (t: LunchTable, lineNos: number[], extra: Record<string, unknown> = {}) =>
+      sendAsTill(t.v, "POST", `/api/working-orders/${t.tabId}/lines/send`, {
+        lineNos,
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId)),
+        ...extra,
+      });
+    const fireCourse = async (
+      t: LunchTable,
+      groupId: string,
+      extra: Record<string, unknown> = {},
+    ) =>
+      sendAsTill(t.v, "POST", `/api/parties/${t.partyId}/groups/${groupId}/fire`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevisionOf(t.partyId),
+        ...extra,
+      });
+    const fireLine = async (t: LunchTable, lineId: string, extra: Record<string, unknown> = {}) =>
+      sendAsTill(t.v, "POST", `/api/parties/${t.partyId}/groups/fire-line`, {
+        lineId,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevisionOf(t.partyId),
+        ...extra,
+      });
+
+    it("Send at 14:05 of a Main stored at 13:55 is refused unconfirmed, naming its line, and nothing is sent", async () => {
+      const { t, pie } = await pieStoredAtLunch("fire");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await send(t, [pie.lineNo])).toEqual(refusal(t, [pie.id]));
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    it("Send at 14:05 of a Main stored at 13:55 is sent when the till confirms, and its own ticket line carries the mark", async () => {
+      const { t, pie } = await pieStoredAtLunch("fire");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect((await send(t, [pie.lineNo], lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "pie")).toMatchObject({
+        sentAt: expect.any(String),
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+      const sent = (await printed(t.printerId)).slice(before.length);
+      expect(sent).toHaveLength(1);
+      const ticket = sent[0]!.split("\n");
+      expect(ticket).toContain(lunchMark);
+      expect(ticket[ticket.indexOf(lunchMark) + 1]).toMatch(/PIE/i);
+      expect(await courseLine(t, "soup")).toMatchObject({ latePeriodName: null });
+    });
+
+    it("Fire course at 14:05 on a held Set lunch whose Main was changed at 13:55 is refused unconfirmed, naming the Main, and then sent confirmed and marked", async () => {
+      const { t, groupId, pie } = await pieStoredAtLunch("hold");
+      expect(pie.groupId).toBe(groupId);
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groupId)).toEqual(refusal(t, [pie.id]));
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect((await fireCourse(t, groupId, lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "pie")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+      expect(await courseLine(t, "soup")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: null,
+      });
+    });
+
+    it("Fire line at 14:05 on a held Main changed at 13:55 is refused unconfirmed, naming it, and then sent confirmed and marked", async () => {
+      const { t, pie } = await pieStoredAtLunch("hold");
+      at(mondayAt("14:05"));
+      expect(await fireLine(t, pie.id)).toEqual(refusal(t, [pie.id]));
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect((await fireLine(t, pie.id, lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "pie")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+    });
+
+    it("Fire course at 14:05 across two bills is refused once, naming each bill's stored Main, and one confirmation marks both", async () => {
+      const { t, groupId, pie } = await pieStoredAtLunch("hold");
+      at(mondayAt("13:56"));
+      const opened = await sendAsTill(t.v, "POST", `/api/parties/${t.partyId}/bills`, {
+        expectedPartyRevision: await partyRevisionOf(t.partyId),
+      });
+      expect(opened.status).toBe(200);
+      const secondBill = (opened.body as { billId: string }).billId;
+      await orderLunch(t, ["soup", "fish"], "hold", { billId: secondBill, joinGroupId: groupId });
+      await changeLunch(t, ["soup", "pie"], secondBill);
+      const secondPie = await courseLine(t, "pie", secondBill);
+      expect(secondPie).toMatchObject({ groupId, sentAt: null, firedAt: null });
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groupId)).toEqual(
+        refusal(t, expect.arrayContaining([pie.id, secondPie.id]) as unknown as string[]),
+      );
+      expect(await courseLine(t, "pie", secondBill)).toEqual(secondPie);
+      expect((await fireCourse(t, groupId, lateSend(t.v))).status).toBe(200);
+      for (const billId of [t.tabId, secondBill])
+        expect(await courseLine(t, "pie", billId)).toMatchObject({
+          firedAt: expect.any(String),
+          latePeriodName: "Lunch",
+          lateConfirmedBy: t.v.personId,
+        });
+    });
+
+    it("Fire course and Fire line at 14:05 never ask about a course sent on hold at 13:50 with no preparation, and leave it unmarked", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["bread", "fish"], "hold");
+      const bread = await courseLine(t, "bread");
+      expect(bread).toMatchObject({ groupId: groups[0]!.id, sentAt: null, firedAt: null });
+      at(mondayAt("14:05"));
+      expect((await fireLine(t, bread.id)).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        sentAt: expect.any(String),
+        latePeriodName: null,
+      });
+      expect((await fireCourse(t, groups[0]!.id)).status).toBe(200);
+      expect(await courseLine(t, "fish")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: null,
+      });
+    });
+
+    it("Send at 14:05 of a no-preparation Main stored at 13:55 asks like any other stored course", async () => {
+      const t = await lunchTable();
+      await orderLunch(t, ["soup", "fish"], "fire");
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "bread"]);
+      const bread = await courseLine(t, "bread");
+      expect(bread).toMatchObject({ sentAt: null, firedAt: null });
+      at(mondayAt("14:05"));
+      expect(await send(t, [bread.lineNo])).toEqual(refusal(t, [bread.id]));
+      expect((await send(t, [bread.lineNo], lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        sentAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+    });
+
+    it("Fire course at 14:05 of a held group holding only a no-preparation course sent at 13:50 does not ask", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["bread"], "hold");
+      at(mondayAt("14:05"));
+      expect((await fireCourse(t, groups[0]!.id)).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        sentAt: expect.any(String),
+        latePeriodName: null,
+      });
+    });
+
+    const malformed = {
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
+    };
+
+    it("refuses a Send whose lateSend is null and sends nothing", async () => {
+      const { t, pie } = await pieStoredAtLunch("fire");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await send(t, [pie.lineNo], { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    it("refuses a Fire course whose lateSend is null and fires nothing", async () => {
+      const { t, groupId, pie } = await pieStoredAtLunch("hold");
+      const soup = await courseLine(t, "soup");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groupId, { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await courseLine(t, "soup")).toEqual(soup);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    it("refuses a Fire line whose lateSend is null and fires nothing", async () => {
+      const { t, pie } = await pieStoredAtLunch("hold");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireLine(t, pie.id, { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    /** Choose, through the till's make-at route, the station that makes `lineId`. */
+    const makeAt = async (t: LunchTable, lineId: string) => {
+      const read = await sendAsTill(t.v, "GET", `/api/working-orders/${t.tabId}`);
+      const chosen = await sendAsTill(t.v, "PUT", `/api/working-orders/${t.tabId}/make-at`, {
+        revision: (read.body as { revision: number }).revision,
+        lines: { [lineId]: t.stationId },
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId)),
+      });
+      expect(chosen.status).toBe(200);
+    };
+
+    it("Fire course at 14:05 asks about a no-preparation Main changed at 13:55 and then given a station, and prints it marked once confirmed", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["soup", "fish"], "hold");
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "bread"]);
+      const bread = await courseLine(t, "bread");
+      await makeAt(t, bread.id);
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groups[0]!.id)).toEqual(refusal(t, [bread.id]));
+      expect(await printed(t.printerId)).toEqual(before);
+      expect((await fireCourse(t, groups[0]!.id, lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+      const ticket = (await printed(t.printerId)).slice(before.length).join("\n").split("\n");
+      expect(ticket[ticket.indexOf(lunchMark) + 1]).toMatch(/BREAD/i);
+    });
+
+    it("Fire course at 14:05 asks about a no-preparation course sent on hold at 13:50 once its routing sends it to a station, since nothing stored says it was sent", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["bread", "fish"], "hold");
+      const bread = await courseLine(t, "bread");
+      at(mondayAt("13:55"));
+      await withTransaction(suite.db, (tx) =>
+        setRoutingCell(
+          tx,
+          { row: { kind: "product", productId: t.dishes.bread }, zoneId: t.v.diningZone },
+          { kind: "station", stationId: t.stationId },
+        ),
+      );
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groups[0]!.id)).toEqual(refusal(t, [bread.id]));
+    });
+
+    it("Fire course at 14:05 does not ask about a no-preparation Main changed at 13:55 that no station makes, and leaves it unmarked", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["soup", "fish"], "hold");
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "bread"]);
+      at(mondayAt("14:05"));
+      expect((await fireCourse(t, groups[0]!.id)).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        sentAt: expect.any(String),
+        firedAt: null,
+        latePeriodName: null,
+      });
+    });
+
+    it("collecting the party at the counter at 14:05 fires a held Main changed at 13:55 without asking, marked with no confirmer", async () => {
+      const { t } = await pieStoredAtLunch("hold");
+      at(mondayAt("14:05"));
+      const cfg = await deviceRequestCfg(suite.db, t.v.cfg);
+      await withTransaction(suite.db, (tx) =>
+        releaseHeldWorkOf(tx, cfg, t.partyId, [t.tabId], t.v.personId),
+      );
+      expect(await courseLine(t, "pie")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: null,
+      });
+      expect(await printed(t.printerId)).toEqual(
+        expect.arrayContaining([expect.stringContaining(`\n${unaskedLunchMark}\n`)]),
+      );
+      expect(await printed(t.printerId)).toEqual(
+        expect.not.arrayContaining([expect.stringContaining(lunchMark)]),
+      );
+    });
+  });
 });
 
 describe("GET /api/menu-state", () => {
@@ -2397,6 +3270,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     };
     const late = await queueItems(c.upstairs.stationId);
     expect(late).toEqual([expect.objectContaining({ name: "Mojito", afterPeriod: "Lunch" })]);
+    expect(late[0]).not.toHaveProperty("afterPeriodUnasked");
     const unmarked = await queueItems(c.downstairs.stationId);
     expect(unmarked).toEqual([expect.objectContaining({ name: "Mojito" })]);
     expect(unmarked[0]).not.toHaveProperty("afterPeriod");

@@ -843,6 +843,12 @@ export interface LateSend {
   override?: { personId: string; pin: string };
 }
 
+/** A table send or fire: `lateSend` confirms a stored set-lunch course whose period has ended, which
+ * is otherwise refused with `menu_period.ended` naming its lines in `workingOrderLineIds`. */
+export interface ReleaseCommand extends AllergyCommand {
+  lateSend?: LateSend;
+}
+
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -1590,8 +1596,10 @@ export interface StationQueueItem {
   course: StationQueueCourse | null;
   /** Absent on a bill with no party, and on a line moved in from another bill. */
   group?: QueueGroup;
-  /** The period this dish was confirmed sent after; absent when it was not. */
+  /** The period this dish was sent after; absent when it was not. */
   afterPeriod?: string;
+  /** Set when that send asked nobody, so its mark does not say agreed. */
+  afterPeriodUnasked?: true;
   phase: KitchenPhase;
   /** `null` while the item is held. */
   requestedAt: string | null;
@@ -3430,11 +3438,18 @@ export class TillApi {
    * except while a full-disk stop holds, when every placement, a retry included, rejects with
    * `storage.disk_full`.
    * A different placement rejects with `submission.id_reused`; an absent order or one closed
-   * without this placement rejects with `working_order.not_open`.
+   * without this placement rejects with `working_order.not_open`. A stored dish whose period has
+   * ended, unless `lateSend` confirms it, rejects with `menu_period.ended` naming its line in
+   * `workingOrderLineIds`.
    */
-  placeOrder(id: string, expectedEdit: BillEditExpected | null): Promise<PlaceOrderResult> {
+  placeOrder(
+    id: string,
+    expectedEdit: BillEditExpected | null,
+    lateSend?: LateSend,
+  ): Promise<PlaceOrderResult> {
     return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST", {
       expectedEdit,
+      ...(lateSend === undefined ? {} : { lateSend }),
     });
   }
 
@@ -4379,7 +4394,7 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: AllergyCommand,
+    command: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4499,7 +4514,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: AllergyCommand,
+    command: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4576,7 +4591,7 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
-    command?: AllergyCommand,
+    command?: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<void> {
     await this.#request<void>(

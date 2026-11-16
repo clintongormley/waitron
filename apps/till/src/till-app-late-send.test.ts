@@ -37,6 +37,8 @@ import {
   tableOrder as allergyOrder,
 } from "../test/allergy-app-fixture.js";
 import { burger, showView } from "./screens/till-table-order-screen.test-helpers.js";
+import { row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
+import { line as tabLine } from "../test/bill-pay-app.js";
 
 interface Menu {
   id: string;
@@ -2324,6 +2326,80 @@ describe("counter place and park", () => {
     expect(approval(el)).toBeNull();
   });
 
+  const STORED_OMELETTE_ENDED = { ...BREAKFAST_ENDED, workingOrderLineIds: ["wol-omelette"] };
+  const placedLateSends = () => api.placeOrder!.mock.calls.map((call) => call[2]);
+  const removeText = (el: TillApp) =>
+    windowOf(el)!.shadowRoot!.querySelector("[data-late-remove]")!.textContent!.trim();
+  const storedLines = (el: TillApp) =>
+    counterScreen(el).store.lines.map((line) => [line.product.name, line.workingOrderLineId]);
+
+  it("lists a parked dish Place's refusal names by its line, and places it once the station agreed", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(STORED_OMELETTE_ENDED)
+      .mockResolvedValue({ id: "wo-1", status: "placed" });
+    const el = await counterBasket(parking({ placeOrder }), { ...PLACE, products: [], held: true });
+    await place(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(agreedText(el)).toBe("Station agreed — send");
+    expect(removeText(el)).toBe("Don't send them");
+
+    await choose(el, "data-late-agreed");
+
+    expect(placedLateSends()).toEqual([undefined, BREAKFAST_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("removes a new marked dish on Remove them, then leaves the parked dish on the order unsent on Don't send them", async () => {
+    const placeOrder = vi.fn().mockRejectedValue(STORED_OMELETTE_ENDED);
+    const el = await lateCounter(parking({ placeOrder }), {
+      ...PLACE,
+      products: ["Omelette"],
+      held: true,
+    });
+    await place(el);
+    expect(removeText(el)).toBe("Remove them");
+    await choose(el, "data-late-remove");
+
+    expect(storedLines(el)).toEqual([["Omelette", "wol-omelette"]]);
+    expect(placeOrder).not.toHaveBeenCalled();
+
+    await place(el);
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(storedLines(el)).toEqual([["Omelette", "wol-omelette"]]);
+    expect(placedLateSends()).toEqual([undefined]);
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("asks for a manager when Place's refusal of a parked dish needs one, and places again with their PIN", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(STORED_OMELETTE_ENDED)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ id: "wo-1", status: "placed" });
+    const el = await counterBasket(
+      parking({ placeOrder, serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]) }),
+      { ...PLACE, products: [], held: true },
+    );
+    await place(el);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
+    await authorize(el, "0123");
+
+    expect(placedLateSends()).toEqual([
+      undefined,
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
   it("asks about the marked dish before Park saves anything, offering to save", async () => {
     const el = await lateCounter(parking());
     await park(el);
@@ -2864,5 +2940,186 @@ describe("extras added to a sent dish after its period", () => {
     expect(screen(el).textContent).toContain("Omelette");
     expect(screen(el).textContent).not.toContain("bacon");
     expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "").toBe("");
+  });
+});
+
+describe("a table's stored set-lunch course", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  const LUNCH_MENU = { menuId: "set-lunch", periodName: "Lunch" };
+  const LUNCH_CONFIRMED = { menuIds: [LUNCH_MENU.menuId] };
+  /** A refusal naming the stored courses by line: the soup on this bill, the salad on another of
+   * the party's bills. */
+  const courseEnded = (lineIds: string[]) => ({
+    ...refusal([LUNCH_MENU], ["offer-soup", "offer-salad"]),
+    workingOrderLineIds: lineIds,
+  });
+  const heldCourse = (lineId: string, name: string, workingOrderId: string) =>
+    row(lineId, name, "1.000", {
+      workingOrderId,
+      released: false,
+      firedAt: null,
+      kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
+    });
+  const currentOrders = {
+    revision: 3,
+    hasGroups: true,
+    nextDisplayNumber: 2,
+    retainedCourses: [],
+    reminder: null,
+    ungrouped: [],
+    groups: [
+      {
+        id: "g-lunch",
+        position: 1,
+        displayNumber: 1,
+        numberPartyId: "v1",
+        state: "held" as const,
+        firedAt: null,
+        remindAt: null,
+        sentAt: "2026-11-16T13:00:00.000Z",
+        sentBy: null,
+        rows: [heldCourse("wol-soup", "Soup", "wo-4"), heldCourse("wol-salad", "Salad", "wo-9")],
+      },
+    ],
+  };
+  const lateSendsOf = (release: ReturnType<typeof vi.fn>, at: number) =>
+    release.mock.calls.map((call) => (call[at] as { lateSend?: unknown }).lateSend);
+
+  async function courseTable(overrides: Record<string, unknown>) {
+    const { el } = await mountAllergyApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(currentOrders),
+      previewPartyAllergy: vi.fn(async () => allergyView("none")),
+      ...overrides,
+    });
+    const order = await openAllergyTable(el);
+    await flush(el, 6);
+    return { el, order };
+  }
+
+  it("lists the course Send's refusal names, and sends it again with the period once the station agreed", async () => {
+    const sendLines = vi
+      .fn()
+      .mockRejectedValueOnce(courseEnded(["wol-soup"]))
+      .mockResolvedValue(undefined);
+    const { el, order } = await courseTable({ sendLines });
+
+    emit(order, "send-lines", { lineNos: [1], expectedEdit: order.billEdit });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Soup"]);
+    expect(heading(el)).toBe("Lunch has ended");
+    await choose(el, "data-late-agreed");
+
+    expect(sendLines.mock.calls.map((call) => call[1])).toEqual([[1], [1]]);
+    expect(lateSendsOf(sendLines, 3)).toEqual([undefined, LUNCH_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("lists Fire course's refused courses on every bill of the party, and fires the course again once the station agreed", async () => {
+    const fireGroup = vi
+      .fn()
+      .mockRejectedValueOnce(courseEnded(["wol-soup", "wol-salad"]))
+      .mockResolvedValue({ revision: 4 });
+    const { el, order } = await courseTable({ fireGroup });
+
+    emit(order, "fire-group", { groupId: "g-lunch" });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Soup", "1× Salad"]);
+    await choose(el, "data-late-agreed");
+
+    expect(fireGroup.mock.calls.map((call) => call[1])).toEqual(["g-lunch", "g-lunch"]);
+    expect(lateSendsOf(fireGroup, 2)).toEqual([undefined, LUNCH_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("fires a course's dishes again from the refused one on, never the one already fired", async () => {
+    let revision = 3;
+    const fired = async () => ({ revision: ++revision });
+    const fireHeldLine = vi
+      .fn()
+      .mockImplementationOnce(fired)
+      .mockRejectedValueOnce(courseEnded(["wol-salad"]))
+      .mockImplementation(fired);
+    const previewPartyAllergy = vi.fn(async () => {
+      const view = allergyView("none");
+      return { ...view, snapshot: { ...view.snapshot, revision } };
+    });
+    const { el, order } = await courseTable({ fireHeldLine, previewPartyAllergy });
+
+    emit(order, "fire-held-line", { lineId: "wol-soup", lineIds: ["wol-soup", "wol-salad"] });
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+
+    expect(windowDishes(el)).toEqual(["1× Salad"]);
+    await choose(el, "data-late-agreed");
+
+    expect(fireHeldLine.mock.calls.map((call) => call[1])).toEqual([
+      "wol-soup",
+      "wol-salad",
+      "wol-salad",
+    ]);
+    expect(lateSendsOf(fireHeldLine, 2)).toEqual([undefined, undefined, LUNCH_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("lists the open bill's dish carrying a refused offer when the refusal names no line the till holds", async () => {
+    const sendLines = vi.fn().mockRejectedValue(courseEnded(["wol-unknown"]));
+    const { el, order } = await courseTable({
+      sendLines,
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [
+          tabLine({ id: "wol-bread", lineNo: 1, name: "Bread", menuItemId: "offer-bread" }),
+          tabLine({ id: "wol-soup-2", lineNo: 2, name: "Soup", menuItemId: "offer-soup" }),
+        ],
+        revision: 0,
+      }),
+    });
+
+    emit(order, "send-lines", { lineNos: [1, 2], expectedEdit: order.billEdit });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Soup"]);
+  });
+
+  it("asks for a manager when Fire course's agreed send needs one, and fires again with their PIN", async () => {
+    const fireGroup = vi
+      .fn()
+      .mockRejectedValueOnce(courseEnded(["wol-soup", "wol-salad"]))
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ revision: 4 });
+    const { el, order } = await courseTable({
+      fireGroup,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(order, "fire-group", { groupId: "g-lunch" });
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+
+    await authorize(el, "0123");
+
+    expect(lateSendsOf(fireGroup, 2)).toEqual([
+      undefined,
+      LUNCH_CONFIRMED,
+      { ...LUNCH_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("closes the window on Don't send them, firing nothing again", async () => {
+    const fireGroup = vi.fn().mockRejectedValue(courseEnded(["wol-soup", "wol-salad"]));
+    const { el, order } = await courseTable({ fireGroup });
+    emit(order, "fire-group", { groupId: "g-lunch" });
+    await flush(el, 6);
+    expect(buttonText(el, "data-late-remove")).toBe("Don't send them");
+
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(fireGroup).toHaveBeenCalledTimes(1);
+    expect(errorLine(el)).toBe("");
   });
 });

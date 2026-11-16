@@ -25,6 +25,7 @@ describe.each(["light", "dark"] as const)("till-late-send-dialog a11y (%s theme)
     ["one period", ["Lunch"], "send"],
     ["two periods", ["Breakfast", "Lunch"], "send"],
     ["two periods, park", ["Breakfast", "Lunch"], "save"],
+    ["stored dishes", ["Lunch"], "stored"],
   ])("has no violations with %s", async (_state, periodNames, purpose) => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillLateSendDialog>(

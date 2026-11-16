@@ -1,4 +1,4 @@
 export const KITCHEN_LATE_SEND_WORDS = {
-  en: { mark: "After {period} — agreed" },
-  es: { mark: "Tras {period} — aceptado" },
+  en: { mark: "After {period} — agreed", unaskedMark: "After {period}" },
+  es: { mark: "Tras {period} — aceptado", unaskedMark: "Tras {period}" },
 } as const;

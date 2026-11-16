@@ -47,8 +47,10 @@ export interface KitchenTicketItem {
   goesWith?: readonly string[];
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
-  /** The period the dish was agreed to be sent after. */
+  /** The period the dish was sent after. */
   afterPeriod?: string;
+  /** Set when that send asked nobody, so its mark does not say agreed. */
+  afterPeriodUnasked?: true;
 }
 
 export interface KitchenTicketStation {
@@ -111,6 +113,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.crossRefs ?? [],
     item.contains ?? [],
     item.afterPeriod ?? null,
+    item.afterPeriodUnasked ?? false,
     item.allergy == null
       ? null
       : [
@@ -327,12 +330,16 @@ function emitCue(
 
 function emitLateMark(
   b: ReturnType<typeof esc>,
-  period: string,
+  item: KitchenTicketItem & { afterPeriod: string },
   columns: number,
   locale: string,
 ): void {
   const language = ticketLanguage(locale);
-  const words = KITCHEN_LATE_SEND_WORDS[language].mark.replace("{period}", () => period);
+  const { mark, unaskedMark } = KITCHEN_LATE_SEND_WORDS[language];
+  const words = (item.afterPeriodUnasked ? unaskedMark : mark).replace(
+    "{period}",
+    () => item.afterPeriod,
+  );
   for (const line of wrapText(prepareText(`** ${words.toLocaleUpperCase(language)} **`), columns))
     b.line(line);
 }
@@ -347,7 +354,7 @@ function emitGrouped(
   lateMarks: boolean,
   cues = false,
 ): void {
-  let mark: string | undefined;
+  let mark: KitchenTicketItem | undefined;
   for (const [index, item] of items.entries()) {
     if (
       item.group !== undefined &&
@@ -362,9 +369,14 @@ function emitGrouped(
     current = item;
     if (lateMarks && mark !== undefined && item.afterPeriod === undefined)
       b.line("-".repeat(columns));
-    if (lateMarks && item.afterPeriod !== undefined && item.afterPeriod !== mark)
-      emitLateMark(b, item.afterPeriod, columns, locale);
-    mark = item.afterPeriod;
+    if (
+      lateMarks &&
+      item.afterPeriod !== undefined &&
+      (item.afterPeriod !== mark?.afterPeriod ||
+        item.afterPeriodUnasked !== mark.afterPeriodUnasked)
+    )
+      emitLateMark(b, { ...item, afterPeriod: item.afterPeriod }, columns, locale);
+    mark = item.afterPeriod === undefined ? undefined : item;
     emitItem(b, item, columns, locale);
   }
 }

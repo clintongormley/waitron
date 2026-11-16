@@ -79,6 +79,7 @@ import {
   refusePaymentInFlight,
   toVatBreakdown,
   unsentDishLines,
+  lateUnsentDishes,
 } from "./working-order.js";
 import type {
   GrossOrder,
@@ -2094,13 +2095,9 @@ export async function fireDishesAtPayment(
           )[0]!.partyId;
     if (party !== null) return null;
   }
-  const unrouted = await fireLines(
-    tx,
-    cfg,
-    workingOrderId,
-    await unsentDishLines(tx, workingOrderId),
-    { unroutable: "skip" },
-  );
+  const unsent = await unsentDishLines(tx, workingOrderId);
+  await lateUnsentDishes(tx, workingOrderId, unsent, "mark");
+  const unrouted = await fireLines(tx, cfg, workingOrderId, unsent, { unroutable: "skip" });
   await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
   return unrouted.length === 0 ? null : { productIds: unrouted.map((line) => line.productId!) };
 }

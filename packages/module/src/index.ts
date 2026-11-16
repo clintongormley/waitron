@@ -34,6 +34,7 @@ export type {
   ConfigurationTransferTable,
   JsonReference,
   ModuleConfigurationTransfer,
+  LateSendMark,
   OrderServiceContext,
   ServiceZoneSummary,
   ZoneDeviceHome,

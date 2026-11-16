@@ -2684,6 +2684,7 @@ describe("till-station-queue — a dish sent after its period", () => {
     id: string,
     course: StationQueueItem["course"],
     afterPeriod?: string,
+    unasked = false,
   ): StationQueueItem => ({
     ...groupA.items[0]!,
     id,
@@ -2691,6 +2692,7 @@ describe("till-station-queue — a dish sent after its period", () => {
     name: id,
     course,
     ...(afterPeriod === undefined ? {} : { afterPeriod }),
+    ...(unasked ? { afterPeriodUnasked: true as const } : {}),
   });
   const lateOrder = (items: StationQueueItem[]): StationQueueGroup => ({ ...groupA, items });
   // Each section's lines in order: a mark row reads as its words, a dish as its id.
@@ -2774,6 +2776,28 @@ describe("till-station-queue — a dish sent after its period", () => {
     expect(rows(el)).toEqual([
       ["After Lunch — agreed", "tortilla", "After Brunch — agreed", "cava"],
     ]);
+  });
+
+  it("words a dish sent without asking anyone without agreed, under its own mark", async () => {
+    const el = await mount([
+      line("tortilla", starters, "Lunch"),
+      line("entrecot", starters, "Lunch", true),
+      line("flan", starters, "Lunch", true),
+    ]);
+    expect(rows(el)).toEqual([
+      ["After Lunch — agreed", "tortilla", "After Lunch", "entrecot", "flan"],
+    ]);
+  });
+
+  it("words a dish sent without asking anyone in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mount([line("tortilla", starters, "Lunch $&", true)]);
+      expect(rows(el)).toEqual([["Tras Lunch $&", "tortilla"]]);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("draws no mark when no dish is marked", async () => {

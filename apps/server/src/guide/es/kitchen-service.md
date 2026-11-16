@@ -364,6 +364,12 @@ la estación. **La estación acepta — enviar** los envía y **Quitarlos** los 
 el botón dice **La estación acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
+Un plato guardado antes de que acabara su periodo, en un pedido aparcado del mostrador o como plato
+posterior de una comida a precio fijo, pregunta lo mismo cuando haces el pedido, lo envías o lo
+marchas tras el periodo; **No enviarlos** lo deja sin enviar. Un extra añadido a un plato aparcado
+después de su periodo pregunta lo mismo cuando haces el pedido, aunque la estación ya aceptara el
+plato.
+
 Añadir un extra a un plato ya enviado después de que acabe su periodo abre la misma ventana:
 **La estación acepta — enviar** añade el extra (desde **Elegir platos** dice
 **La estación acepta — guardar**), y **No añadirlos** deja el plato como estaba.
@@ -372,15 +378,17 @@ Si el terminal dice que ha terminado el periodo de un plato sin mostrar una list
 pedido y quita los platos de periodos terminados antes de volver a enviarlo.
 
 Un plato que también vende el periodo en curso no se marca y se envía como siempre. Un plato que
-quedó de un día de servicio anterior muestra **Ya no se admiten pedidos** y no se puede enviar: en
-una mesa, **Quitar** lo quita y **Dejar** lo deja en el pedido sin enviar, y en el mostrador solo
-puedes cobrar cuando lo has quitado.
+se añadió en un día de servicio anterior y nunca se aparcó ni se envió muestra **Ya no se admiten
+pedidos** y no se puede enviar: en una mesa, **Quitar** lo quita y **Dejar** lo deja en el pedido
+sin enviar, y en el mostrador solo puedes cobrar cuando lo has quitado.
 
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
-la estación lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de estación, una
+estación lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de estación, una
 línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En el papel, una línea separadora termina ese
 bloque antes del siguiente plato sin marca; un nuevo encabezado de grupo o estación también lo
 termina. En la pantalla de estación, la tarjeta muestra **Tras Almuerzo — aceptado** encima del plato.
+Un plato enviado sin preguntar a nadie, por ejemplo al cobrar una cuenta guardada del mostrador o al
+pasar una cuenta a una mesa, lleva la marca sin «aceptado»: `** TRAS ALMUERZO **` y **Tras Almuerzo**.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y estaciones**, en su pestaña

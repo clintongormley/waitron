@@ -164,8 +164,10 @@ function goesWith(card: KitchenCard): TemplateResult | typeof nothing {
   </p>`;
 }
 
-function afterPeriodWords(period: string): string {
-  return t("station.after_period").replace("{period}", () => period);
+function afterPeriodWords(item: StationQueueItem & { afterPeriod: string }): string {
+  return t(
+    item.afterPeriodUnasked ? "station.after_period_unasked" : "station.after_period",
+  ).replace("{period}", () => item.afterPeriod);
 }
 
 /**
@@ -1125,16 +1127,22 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** A mark row goes above each run of consecutive lines agreed after the same period, within one head. */
+  /** A mark row goes above each run of consecutive lines with the same mark (its period, and whether
+   *  anyone was asked), within one head. */
   #sectionLines(
     rows: readonly StationQueueItem[][],
     row: (members: StationQueueItem[]) => TemplateResult,
   ): TemplateResult[] {
     return rows.map((members, index) => {
-      const period = members[0]!.afterPeriod;
+      const first = members[0]!;
+      const previous = rows[index - 1]?.[0];
       const mark =
-        period !== undefined && rows[index - 1]?.[0]!.afterPeriod !== period
-          ? html`<li class="after-period" data-after-period>${afterPeriodWords(period)}</li>`
+        first.afterPeriod !== undefined &&
+        (previous?.afterPeriod !== first.afterPeriod ||
+          previous.afterPeriodUnasked !== first.afterPeriodUnasked)
+          ? html`<li class="after-period" data-after-period>
+              ${afterPeriodWords({ ...first, afterPeriod: first.afterPeriod })}
+            </li>`
           : nothing;
       return html`${mark}
         <li>${row(members)}</li>`;

@@ -6279,6 +6279,10 @@ the status line's words, and the narrowing applies once the person leaves the ta
 A dish sent after its period ended, once the station agreed, carries "After {period} — agreed"
 (`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
+A dish sent after its period without asking anyone (a saved counter bill paid, a bill moved to a
+table, a party finished or collected, a table split) carries "After {period}"
+(`station.after_period_unasked`) in the same chip, and the ticket prints `** AFTER {PERIOD} **`. A
+change between the two marks starts a new run.
 On a card it is a row of its own above each run of consecutive dishes with the same mark, within
 one course. The pass shows no mark. The station ticket prints the same words in
 capitals between `**` above each such run. A full-width dashed divider separates that run from
@@ -6600,7 +6604,9 @@ because a park stores the order without sending it. When Change dish, or a set l
 extras to a sent dish, the window lists the dish with its added extras ("1× Omelette + Bacon"), and
 the secondary reads Don't add them, which abandons the change and closes the set lunch's choices;
 nothing is sent. From a set lunch's choices the primary reads Station agreed — save, because the
-course waits for Send to prep. The window holds a choice, not staged input,
+course waits for Send to prep. For dishes already stored on the order (a parked order's Place, a
+set lunch course's Send, Fire course or Fire line), the secondary reads Don't send them, which
+leaves them unsent. The window holds a choice, not staged input,
 so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it sends nothing and
 removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
 

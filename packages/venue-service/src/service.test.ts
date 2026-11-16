@@ -94,6 +94,7 @@ describe("VENUE_SERVICE", () => {
       "receiptDepartmentForOrder",
       "receiptDepartmentForSale",
       "recordKitchenNotices",
+      "recordLateSendMarks",
       "recordLineContexts",
       "recordOrderContext",
       "recordSaleReceiptHeader",

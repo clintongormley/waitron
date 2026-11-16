@@ -83,6 +83,18 @@ describe("till-late-send-dialog", () => {
     );
   });
 
+  it.each([
+    ["en-GB", "Don't send them", "Station agreed — send"],
+    ["es-ES", "No enviarlos", "La estación acepta — enviar"],
+  ])(
+    "offers not to send stored dishes, which it does not remove, in %s",
+    async (locale, dontSend, agreed) => {
+      const { el } = await mount({ dishes, periodNames: ["Lunch"], purpose: "stored" }, locale);
+      expect(words(button(el, "remove"))).toBe(dontSend);
+      expect(words(button(el, "agreed"))).toBe(agreed);
+    },
+  );
+
   it("says save on a Park, which stores the order without sending it", async () => {
     const { el } = await mount({ dishes, periodNames: ["Lunch"], purpose: "save" });
     expect(words(button(el, "agreed"))).toBe("Station agreed — save");

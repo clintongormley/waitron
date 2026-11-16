@@ -74,6 +74,7 @@ function sectionRows(
       kitchenPortionKey(item, item.quantity, [
         orderOf.get(item.id)!.orderId,
         item.afterPeriod ?? null,
+        item.afterPeriodUnasked ?? false,
         item.lastMove ?? null,
       ]),
     // A stable sort, so each row keeps the read's order.

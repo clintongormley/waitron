@@ -54,6 +54,7 @@ import {
   fireLines,
   refuseHeldLeavingParty,
   unsentDishLines,
+  lateUnsentDishes,
 } from "./working-order.js";
 import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
@@ -622,6 +623,7 @@ async function adoptZone(
     tx,
     unsent.map((line) => line.id),
   );
+  await lateUnsentDishes(tx, billId, unsent, "mark");
   await fireLines(tx, cfg, billId, unsent);
 }
 
