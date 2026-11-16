@@ -115,6 +115,7 @@ const fallbackTests = "src/popover-fallback.test.ts";
 const touchTests = "src/icon-button.touch.test.ts";
 
 export default defineConfig({
+  server: { forwardConsole: false },
   optimizeDeps: {
     include: [
       "lit/directives/repeat.js",

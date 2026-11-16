@@ -437,12 +437,11 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **Other server test files still hash fixed PINs and passwords on every test.**
   [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
 
-## Bundle: Vitest settings: remaining measurements and console policy
+## Bundle: Vitest settings: remaining measurements
 
-3 entries, size M. Helper adoption and A902's guide receipt are complete; the remaining work is:
+2 entries, size M. The remaining work is:
 
 - **Worker limits (A490):** compare each unqualified one-worker setting on a loaded runner; isolated package pairs do not recreate the reported condition.
-- **Disable browser console forwarding (A902).** The owner asked to turn it off everywhere on 16 November 2026. Apply `server.forwardConsole: false` in every browser package's Vitest config; dashboard already has it.
 - **Dependency optimizer:** qualify the remaining Vite 8 behavior; the setup control was inconclusive and dashboard, till and UI remain unmeasured.
   [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured).
 
@@ -459,6 +458,8 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
   [Detail](ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
 
 ## Decisions and deliberate limits
+
+- **Browser-console forwarding is off in every browser package’s Vitest config** (owner, 16 November 2026, “Turn it off everywhere”, recorded by the watcher in Lane I’s `questions.md` at 02:25). Keep the Vite-level `server.forwardConsole: false` setting; its placement and A902’s receipt are in the [testing guide](../developers/testing-guide.md#vitest-hides-a-passing-tests-console-output-under-an-ai-agent).
 
 ### UI pointer command helpers stay outside the mutation score
 

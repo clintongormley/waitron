@@ -25,6 +25,7 @@ export default defineConfig({
         },
       },
       {
+        server: { forwardConsole: false },
         test: {
           name: "browser",
           sequence: { groupOrder: 2 },
