@@ -5390,7 +5390,9 @@ versioned archive key, an owned private scratch parent and cancellation signal. 
 measures the ciphertext it consumes, authenticates the archive, migrates a separate private copy,
 and checks every declared owner through query-only handles. A passing result requires its owned
 handles to close and scratch to be removed; uncertain cleanup returns `unavailable`.
-You can run this entry with worker threads denied. Placement restores the database copy and
+You can run this entry with worker threads denied. Certificate checks require child-process
+permission and the shipped sibling `certificate-open.js`; the permission test retains the refused
+worker and ordinary-open controls while allowing that child. Placement restores the database copy and
 state files inside the verification's scratch folder; migrations write that copy. Module checks use
 query-only handles. Venue-store opens on the copy take the exclusive venue lock without creating
 a holder heartbeat or watchdog thread. Normal server and restore opens

@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import forge from "node-forge";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { openCertificateFile } from "./certificate-file.js";
 import { openCertificate } from "./certificate-open.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
+
+vi.mock("node:child_process", { spy: true });
 
 const candidate = makeAuthority().issue();
 
@@ -124,4 +126,14 @@ it("distinguishes a child that cannot run from an unreadable certificate", async
   } finally {
     process.execPath = node;
   }
+});
+
+it("reports a synchronous launch refusal as unavailable", async () => {
+  vi.mocked(spawn).mockImplementationOnce(() => {
+    throw Object.assign(new Error("child launch refused"), { code: "ERR_ACCESS_DENIED" });
+  });
+  await expect(openCertificate(candidate.pfx, candidate.passphrase)).resolves.toEqual({
+    ok: false,
+    reason: "unavailable",
+  });
 });

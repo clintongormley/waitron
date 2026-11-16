@@ -31,7 +31,7 @@ beforeAll(async () => {
   await writeFile(
     buildScript,
     `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)};
-bundle([{ entry: "src/bin.ts", outfile: ${JSON.stringify(binary)} }], {
+bundle([{ entry: "src/bin.ts", outfile: ${JSON.stringify(binary)} }, { entry: "../fiscal-verifactu/src/certificate-open-entry.ts", outfile: ${JSON.stringify(join(directory, "certificate-open.js"))} }], {
   release: {
     sourceCommit: "${"a".repeat(40)}",
     committedAt: "2026-10-15T00:00:00.000Z",

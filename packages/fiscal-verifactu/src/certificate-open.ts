@@ -18,7 +18,7 @@ export async function openCertificate(
     source ? "./certificate-open-entry.ts" : "./certificate-open.js",
     import.meta.url,
   );
-  return new Promise((resolve) => {
+  return new Promise<OpenResult | typeof unavailable>((resolve) => {
     const child = spawn(
       process.execPath,
       [...(source ? ["--import", import.meta.resolve("tsx")] : []), fileURLToPath(entry)],
@@ -58,5 +58,5 @@ export async function openCertificate(
       }
     });
     child.stdin.end(input);
-  });
+  }).catch(() => unavailable);
 }
