@@ -242,17 +242,17 @@ from both queue pressure and the advertised total, including old runs with jobs
 (watcher, 2026-11-14 10:24). This also omits queued retries of runs originally
 created before the cutoff; in-progress retries remain visible. A missing recent
 run makes the list unreadable unless the queued CI-workflow exception below applies.
-Running-run lists and the standalone `check`, `recover`, `recover-planners` and
-`probe` commands retain their full reads.
+Running-run lists and standalone commands keep their full history windows. Planner
+discovery has the short-list exception below; other standalone reads retain count completeness.
 The query omits old records without enumerating or logging their individual ids.
-Each list read restarts once from page 1 after an empty page before completion or a
-changed valid total. Routing alone accepts its queued CI-workflow list when both reads
+Each strict list read restarts once from page 1 after an empty page before completion or a
+changed valid total. During routing, its queued CI-workflow list is accepted when both reads
 end on empty pages with identical row values, ignoring row order. The first read's empty
 page may change its count; a changing count within the second read still refuses. It uses the second read and logs
 `Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
 (watcher, 2026-11-15 15:10). Natural workflow qualification remains open.
-Different short rows still select hosted. Every other
-list discards its earlier rows and retains strict count completeness. Duplicate/excess rows
+Different short rows still select hosted. Outside planner discovery below, other
+lists discard earlier rows and retain strict count completeness. Duplicate/excess rows
 take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
@@ -264,12 +264,12 @@ External provenance, read 2026-11-09:
 | PR workflow identity can be reconstructed from a local reusable call | [Reuse workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow), read 15 November: “the called workflow is from the same commit as the caller workflow” | Match `referenced_workflows[].sha` to the inspected `./.github/workflows/image-smoke.yml` call; retain the source head separately. |
 | The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
-| Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full lists. |
+| Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full run-history window. |
 | Only the server planning step installs gh | [GitHub runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context): “self-hosted for self-hosted runners configured by the repository owner” | Test `runner.environment` so hosted jobs keep their existing tools. |
 
 The routing health check reads CI's queued and running workflows, bounding its queued
-list to the same 24-hour run-created window. Standalone health and recovery commands
-keep full lists, including their cancellation reads. A job's wait is dated from its own
+list to the same 24-hour run-created window. Standalone commands keep the full run-history
+window; planner discovery may end short, while its cancellation reads require complete jobs. A job's wait is dated from its own
 `started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
 If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
@@ -277,7 +277,7 @@ minutes, this run uses GitHub and records the reason in its summary. An unverifi
 server-health inventory makes routing continue checking the other readable runs, then choose GitHub
 (owner, 2026-11-10, A1470). The watcher's 2026-11-15 15:55 clarification treats the
 queued CI-workflow list's two agreeing row sets as readable; both reads could miss the
-same run. Every other list stays strict. Degraded reads can leave the server idle. The summary
+same run. Other routing lists stay strict. Degraded reads can leave the server idle. The summary
 names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
 When the retry record and previous attempt can be read, an unassigned server job cancelled
@@ -307,6 +307,15 @@ minutes without assignment. It skips runs already marked for hosted recovery and
 whose capacity snapshot under five minutes old shows every positive slot occupied.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
+Only this planner candidate scan accepts collected workflow rows when an empty page arrives
+before the advertised count after the existing single immediate reread. It logs
+`Planner discovery count shortfall` with path, page, read, totals and numeric IDs
+(watcher, 16 November 2026 13:31). Omitted candidates may wait. Malformed, duplicate,
+excess-row and count-drift checks remain; all job lists, standalone `check`, `recover` and
+`probe`, and routing retain their existing rules. The full-server skip still applies.
+The current run, open owned PR head and complete current-attempt jobs are checked before
+cancellation and again before retry. A short discovery list does not establish a complete queue.
+
 To find why a planning job remains queued, read `Planner rescue skipped: run=…
 attempt=… job=…; reason.` in the health log. The scan names missing or changed PR
 identity, incorrect planning labels, unknown job age, waits under five minutes,
@@ -322,6 +331,16 @@ the queued/running CI inventory and queued unassigned self-hosted `changes` jobs
 examined; fork and non-PR planning stays hosted. Unreadable inventories, an earlier
 error, the step deadline or a pass that never starts can leave a job unseen or unreached.
 A failure in the rescue loop also leaves later excluded-run diagnostics unreported.
+On 16 November, [Server health 43858443488](https://github.com/clintongormley/waitron/actions/runs/43858443488)
+reported an in-progress workflow list with `starting_total=2; reply_total=2; rows=1` and an empty
+second page. A separate read-only capture of run 43863317324 saw one row/count one, then no
+rows/count one, then no rows/count zero around its completion. This observes disagreement,
+not GitHub's internal cause or the earlier missing row. Re-reading all nine health passes during
+#3470's 47 minute 19 second unassigned wait found five full-server skips, one planner inventory
+refusal, two no-stall reports and one different PR rescued. Inventory refusal does not explain
+the entire wait. Fixture recovery from the short-list shape is not evidence of repaired live recovery;
+that qualification remains in the [routing bundle](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup).
+
 The pass attempts eligible planners in order; its five-minute step limit can end a busy pass
 before every planner is reached. Later passes reconsider work that is still queued.
 After cancellation, an interrupted retry is reported for intervention; later passes do not

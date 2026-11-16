@@ -7,7 +7,16 @@ import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
 
-async function inventory(request, path, key, limit, pageSize = 100, reread = true, staleCount) {
+async function inventory(
+  request,
+  path,
+  key,
+  limit,
+  pageSize = 100,
+  reread = true,
+  staleCount,
+  plannerShortfall,
+) {
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
@@ -52,11 +61,16 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
         pageSize,
         false,
         !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
+        plannerShortfall,
       );
     if (answer.total_count !== total) throw unavailable("Incomplete server inventory");
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
     if (!answer[key].length) {
+      if (plannerShortfall && !reread) {
+        plannerShortfall(unavailable("Planner discovery count shortfall").message);
+        return entries;
+      }
       if (reread)
         return inventory(
           request,
@@ -66,6 +80,7 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
           pageSize,
           false,
           staleCount && { ...staleCount, entries, total },
+          plannerShortfall,
         );
       const byId = (a, b) => a.id - b.id;
       if (
@@ -145,7 +160,7 @@ async function readInventory(read, unavailable) {
   }
 }
 
-export async function serverHealth(options, unavailable, staleQueuedCount) {
+export async function serverHealth(options, unavailable, staleQueuedCount, plannerShortfall) {
   const { request, repository, repositoryId, now = Date.now() } = options;
   assert.match(repository, /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
   const runs = new Map();
@@ -160,6 +175,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount) {
           100,
           true,
           status === "queued" ? staleQueuedCount : undefined,
+          plannerShortfall,
         ),
       unavailable,
     )) {
@@ -384,7 +400,12 @@ export async function recoverServer(options) {
   }
   const retried = [],
     preserved = [],
-    state = await serverHealth(options);
+    state = await serverHealth(
+      options,
+      undefined,
+      undefined,
+      plannersOnly ? (options.report ?? (() => {})) : undefined,
+    );
   if (!plannersOnly && state.stuck.length && (await completedServerTraffic(options)))
     return { retried };
   const oldest = state.stuck.sort(
@@ -620,7 +641,9 @@ export async function healthCommand(command, options, { report, output }) {
         report(
           retried.length
             ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned${command === "recover" ? " or recently progressing server" : ""} work.`
-            : "No stalled server run needed recovery.",
+            : command === "recover-planners"
+              ? "No planner was retried."
+              : "No stalled server run needed recovery.",
         );
     } else {
       assert.equal(command, "probe", "Unknown server health command");

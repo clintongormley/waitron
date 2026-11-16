@@ -1397,11 +1397,13 @@ describe("scheduled PR planner recovery", () => {
       path.endsWith("/pulls/7") ? f.pull : f.request(path, options);
     return f;
   }
-  it.each(
-    ["recover-planners", "check"].flatMap((command) =>
-      ["workflow_runs", "jobs"].map((key) => ({ command, key })),
-    ),
-  )("identifies the refused $key read in $command without writes", async ({ command, key }) => {
+  it.each([
+    { command: "recover-planners", key: "jobs" },
+    { command: "check", key: "workflow_runs" },
+    { command: "check", key: "jobs" },
+    { command: "recover", key: "workflow_runs" },
+    { command: "probe", key: "workflow_runs" },
+  ])("identifies the refused $key read in $command without writes", async ({ command, key }) => {
     const f = planner(),
       reports = [],
       calls = [];
@@ -1434,6 +1436,91 @@ describe("scheduled PR planner recovery", () => {
       calls.filter(([endpoint]) => endpoint.startsWith(path)).map(([endpoint]) => endpoint),
     ).toEqual([1, 2, 1, 2].map((page) => path + suffix + page));
     expect(calls.filter(([, options]) => options?.method)).toEqual([]);
+  });
+  it.each(["queued", "in_progress"])(
+    "recovers an observed planner despite a short %s workflow list",
+    async (status) => {
+      const f = planner(),
+        reports = [],
+        calls = [];
+      const path = `/repos/fixture/waitron/actions/workflows/ci.yml/runs?status=${status}`;
+      const request = (endpoint, options) => {
+        calls.push([endpoint, options]);
+        return endpoint.startsWith(path)
+          ? { total_count: 2, workflow_runs: endpoint.endsWith("page=1") ? [{ ...f.run }] : [] }
+          : endpoint.includes("/workflows/ci.yml/runs?")
+            ? { total_count: 0, workflow_runs: [] }
+            : f.options.request(endpoint, options);
+      };
+      await health.healthCommand(
+        "recover-planners",
+        { ...f.options, request },
+        {
+          report: (line) => reports.push(line),
+        },
+      );
+      expect(calls.filter(([, options]) => options?.method).map(([endpoint]) => endpoint)).toEqual([
+        "/repos/fixture/waitron/actions/runs/12/force-cancel",
+        "/repos/fixture/waitron/actions/runs/12/rerun",
+      ]);
+      expect(reports.join("\n")).toContain("Retried PR run 12 on GitHub.");
+      expect(reports.join("\n")).toContain(
+        `Planner discovery count shortfall; path=${path}&per_page=100&page=2; page=2; read=2; starting_total=2; reply_total=2; rows=1; ids=12; page_ids=`,
+      );
+      expect(
+        calls.filter(([endpoint]) => endpoint.startsWith(path)).map(([endpoint]) => endpoint),
+      ).toEqual([1, 2, 1, 2].map((page) => `${path}&per_page=100&page=${page}`));
+    },
+  );
+  it("rescues the planner found by the existing reread after a transient discovery gap", async () => {
+    const f = planner(),
+      reports = [];
+    const request = f.options.request;
+    let reads = 0;
+    f.options.request = (path, options) => {
+      if (path.includes("/workflows/ci.yml/runs?"))
+        return {
+          total_count: path.includes("status=queued") ? 1 : 0,
+          workflow_runs: path.includes("status=queued") && ++reads > 1 ? [{ ...f.run }] : [],
+        };
+      return request(path, options);
+    };
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(f.calls.filter(([, options]) => options.method).map(([path]) => path)).toEqual([
+      "/repos/fixture/waitron/actions/runs/12/force-cancel",
+      "/repos/fixture/waitron/actions/runs/12/rerun",
+    ]);
+    expect(reads).toBe(2);
+    expect(reports.join("\n")).not.toContain("Planner discovery count shortfall");
+  });
+  it("limits the no-recovery summary to observed rows when discovery ends empty and short", async () => {
+    const f = planner(),
+      reports = [];
+    const request = f.options.request;
+    f.options.request = (path, options) =>
+      path.includes("/workflows/ci.yml/runs?")
+        ? { total_count: path.includes("status=queued") ? 1 : 0, workflow_runs: [] }
+        : request(path, options);
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(reports.join("\n")).toContain("Planner discovery count shortfall");
+    expect(reports.at(-1)).toBe("No planner was retried.");
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it("refuses incomplete final planner jobs without writes", async () => {
+    const f = planner(),
+      reports = [];
+    replyJobs(f, () => ({ total_count: 2, jobs: [] }), 1);
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(reports.join("\n")).toContain(
+      "Server inventory unavailable; planner recovery stopped: Incomplete server inventory",
+    );
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
   });
   it.each(["excess", "changed"])("locates the %s-count refusal", async (kind) => {
     const f = planner(),
@@ -1725,7 +1812,7 @@ describe("scheduled PR planner recovery", () => {
       expect(reports).toEqual([
         "Planner rescue skipped: server is full in a fresh capacity snapshot.",
         `Planner rescue skipped: run=12 attempt=${kind === "retry" ? 2 : 1} job=123; server full.`,
-        "No stalled server run needed recovery.",
+        "No planner was retried.",
       ]);
       expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
     },
@@ -1745,7 +1832,7 @@ describe("scheduled PR planner recovery", () => {
     expect(reports).toEqual([
       "Planner rescue skipped: server is full in a fresh capacity snapshot.",
       "Planner diagnostics unavailable: run=12 attempt=1; diagnostic refused",
-      "No stalled server run needed recovery.",
+      "No planner was retried.",
     ]);
     expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
   });
@@ -1797,7 +1884,7 @@ describe("scheduled PR planner recovery", () => {
     expect(reports).toEqual([
       "Planner rescue skipped: server is full in a fresh capacity snapshot.",
       "Planner diagnostics unavailable: list refused",
-      "No stalled server run needed recovery.",
+      "No planner was retried.",
     ]);
   });
   it.each(["marked", "retry"])("rescues before reading %s diagnostics", async (kind) => {
