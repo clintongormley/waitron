@@ -74,8 +74,11 @@ describe("runBin", () => {
     expect(proc.err).toEqual(["to err\n"]);
   });
 
-  it("answers both kinds of prompt from the given stdin", async () => {
+  it("answers both kinds of prompt from the given stdin, echoing only the plain one", async () => {
     const proc = fakeProcess();
+    // At a terminal readline echoes each keystroke, so a secret echoed would show in `out`.
+    Object.assign(proc.stdin, { isTTY: true });
+    Object.assign(proc.stdout, { isTTY: true });
     const answers: string[] = [];
     await runBin(proc, async (_argv, deps) => {
       proc.stdin.write("Ana\n");
@@ -85,6 +88,7 @@ describe("runBin", () => {
       return 0;
     });
     expect(answers).toEqual(["Ana", "1234"]);
+    expect(proc.out.join("")).toContain("Ana");
     expect(proc.out.join("")).not.toContain("1234");
   });
 
