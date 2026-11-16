@@ -223,6 +223,11 @@ export class TillPassBoard extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .item.dimmed.held {
+        border-style: dashed;
+        border-left-style: solid;
+      }
+
       .item.dimmed .line-diet * {
         color: var(--wt-color-text-muted);
       }

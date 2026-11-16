@@ -456,6 +456,41 @@ describe("A773 pass board widget: dishes", () => {
     expect(stripe("dimmed")).toEqual(["rgb(4, 5, 6)", "solid", "5px"]);
   });
 
+  it("keeps a held dish's dashed box when the dish belongs to another station", async () => {
+    const el = await mountBoard(
+      passBoard({
+        held: [
+          passCard({
+            kind: "held",
+            items: [
+              passItem({
+                id: "held-own",
+                phase: "held",
+                firedAt: null,
+                requestedAt: null,
+              }),
+              passItem({
+                id: "held-elsewhere",
+                phase: "held",
+                firedAt: null,
+                requestedAt: null,
+                informational: true,
+                stationName: "Bar",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const box = getComputedStyle(itemOf(el, "held-elsewhere"));
+    expect([
+      box.borderTopStyle,
+      box.borderRightStyle,
+      box.borderBottomStyle,
+      box.borderLeftStyle,
+    ]).toEqual(["dashed", "dashed", "dashed", "solid"]);
+  });
+
   it("draws a dimmed dish's dotted box in the muted text colour, not the faint border colour", async () => {
     const el = await inProgress([
       passItem({ id: "dimmed", stationName: "Bar", informational: true }),
