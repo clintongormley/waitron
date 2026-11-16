@@ -805,9 +805,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     section the server held shows its lines greyed with no fire button (`#fireAction` in
     `station-queue.ts`, from #131).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
-  - The till always mounts the counter screen `embedded` (#614). In device mode the station
-    screen's `#reload` swallows a `device.unauthorized`, so a device cookie revoked mid-session
-    raises nothing until the next connect.
+  - The till always mounts the counter screen `embedded` (#614).
     [Detail](backlog/till.md#the-till-always-mounts-the-counter-screen-embedded)
   - Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite
     `provider.ts:66-83` (#613). The checker compares tool comments character for character, so
@@ -875,10 +873,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   only after an extended logout time (eg 30 minutes)". Today nobody can sign in on one. Left out
   of slice 5 as too large for it.
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
-
-- **A kitchen display forgets its chosen language on a reload** (seen 2026-10-27 in A797 slice 9's
-  LOOK; open).
-  [Detail](backlog/till.md#a-kitchen-display-forgets-its-chosen-language-on-a-reload)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - Each new group Ready command moves the party's revision, so a waiter's open table screen meets
