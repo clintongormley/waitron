@@ -744,10 +744,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   started dish's saved answer means.
   [Detail](backlog/till.md#a1416-a-started-or-served-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
 
-- **A till request refused for naming someone not signed in locks the screen with no sentence (left
-  open by A1382).** #2534 built the check on every such request; the owner's words are not in yet.
-  [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
-
 - **Other till sentences still send the person to somebody else, against the refusal rule (left open
   by A1382).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)

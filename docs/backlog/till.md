@@ -1520,14 +1520,6 @@ sends would silently drop a real change from a till that could not read the line
 stays editable (`#lineReadOnly`, by reading). The other routes, such as a mark from the till that the
 line was not touched or an id on the answer, change what the till and the box agree on.
 
-## A till request refused for naming someone not signed in locks the screen with no sentence
-
-Left open by A1382. #2534 built one check on every request that needs a signed-in person, so a
-refusal from any of them locks the till, and the sign-in screen says nothing about why
-([One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773)). The owner chose the words on
-2026-11-07: "You have been logged out because somebody else has logged in on this device." They are
-not in yet, and the Spanish is not written.
-
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:

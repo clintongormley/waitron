@@ -23904,6 +23904,10 @@ export class TillApp extends LitElement {
                           .cloudEmergencyRefused=${this.cloudEmergencyRefused}
                           @switch-to-spare=${() => void this.#onSwitchToSpare()}
                           @start-in-cloud=${() => void this.#onStartInCloud()}
+                          .loggedOutByOther=${
+                            this.#refusedPerson !== undefined &&
+                            this.#refusedPerson === this.#tabPerson
+                          }
                           .clockNotice=${this.pinClockNotice}
                           .storageNotices=${this.pinStorageNotices}
                           @check-again=${() => void this.router?.probeNow()}

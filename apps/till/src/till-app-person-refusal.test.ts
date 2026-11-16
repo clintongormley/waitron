@@ -361,6 +361,8 @@ function switchServer(router: ServerRouter): void {
 }
 
 const lockScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-lock-screen");
+const loggedOutLine = (el: TillApp) =>
+  lockScreen(el)?.shadowRoot!.querySelector("[data-logged-out-by-other]") ?? null;
 const shellOf = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell");
 
 /** `person` taps their name and keys `pin` on the real lock screen, then presses Log in. */
@@ -850,5 +852,50 @@ describe("the till through its real client", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("says on the lock that somebody else logged in on this device, when a request is refused for naming Ana", async () => {
+    const server = tillServer();
+    const { el } = await mountTill(server);
+    await signInAsAna(el);
+    server.refuse("PUT /api/session/locale", 409, SESSION_PERSON_REFUSAL);
+
+    chooseLocale(el);
+    await vi.waitFor(() => expect(loggedOutLine(el)).not.toBeNull());
+
+    expect(loggedOutLine(el)!.getAttribute("role")).toBe("status");
+    expect(loggedOutLine(el)!.textContent!.trim()).toBe(t("lock.logged_out_by_other"));
+    expect(t("lock.logged_out_by_other")).toBe(
+      "You have been logged out because somebody else has logged in on this device.",
+    );
+  });
+
+  it("says nothing of somebody else on the lock after an ordinary sign-out", async () => {
+    const server = tillServer();
+    const { el } = await mountTill(server);
+    await signInAsAna(el);
+
+    await signOut(el);
+    await el.updateComplete;
+
+    await lockScreen(el)!.updateComplete;
+    expect(loggedOutLine(el)).toBeNull();
+  });
+
+  it("drops the line once someone signs in again, and leaves it off their ordinary sign-out", async () => {
+    const server = tillServer();
+    const { el } = await mountTill(server);
+    await signInAsAna(el);
+    server.refuse("PUT /api/session/locale", 409, SESSION_PERSON_REFUSAL);
+    chooseLocale(el);
+    await vi.waitFor(() => expect(loggedOutLine(el)).not.toBeNull());
+    server.allow("PUT /api/session/locale");
+
+    await signIn(el, LUIS, LUIS_PIN);
+    await signOut(el);
+    await el.updateComplete;
+    await lockScreen(el)!.updateComplete;
+
+    expect(loggedOutLine(el)).toBeNull();
   });
 });

@@ -127,6 +127,16 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on the logged-out-by-somebody-else line", async () => {
+    const { el, host } = await mountWidget<TillLockScreen>(
+      "till-lock-screen",
+      { api: stubApi(), loggedOutByOther: true },
+      theme,
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the PIN-error banner", async () => {
     const api = stubApi({ login: vi.fn().mockRejectedValue({ code: "pin.invalid" }) });
     const { el, host } = await mountWidget<TillLockScreen>("till-lock-screen", { api }, theme);
