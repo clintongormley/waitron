@@ -28,6 +28,7 @@ const coffee: TillProduct = {
 };
 
 const heldOrder: HeldOrderSummary = {
+  zoneId: null,
   items: [],
   id: "held",
   orderNumber: 1,

@@ -57,6 +57,7 @@ const previewItems = [
   },
 ];
 const parked: HeldOrderSummary = {
+  zoneId: null,
   id: "parked",
   orderNumber: 41,
   label: "Alex Morgan Smith Jones, covered garden terrace",

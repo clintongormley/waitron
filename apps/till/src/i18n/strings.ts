@@ -1626,6 +1626,7 @@ export const en = {
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
+  "held.open_failed": "The order could not be opened. Try again.",
   "held.discard_editing": "Someone else is editing this bill. Open it from Floor to review it.",
   "held.discard_unsent":
     "Open the table's bill and send or remove its unsent dishes before discarding it.",
@@ -3713,6 +3714,7 @@ export const es: Record<StringKey, string> = {
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
+  "held.open_failed": "No se pudo abrir el pedido. Inténtalo de nuevo.",
   "held.discard_editing":
     "Otra persona está editando esta cuenta. Ábrela desde Sala para revisarla.",
   "held.discard_unsent":

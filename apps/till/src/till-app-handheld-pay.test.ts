@@ -4038,6 +4038,7 @@ describe("the document choice on a handheld", () => {
         listBills: vi.fn().mockResolvedValue(listPage([counter])),
         getFindBill: vi.fn().mockResolvedValue(counter),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          zoneId: null,
           kitchenNote: {
             scope: { workingOrderId: "wo-counter" },
             note: null,
@@ -6730,6 +6731,7 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
       listBills: vi.fn().mockResolvedValue(listPage([row])),
       getFindBill: vi.fn().mockResolvedValue(row),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-parked" },
           note: null,

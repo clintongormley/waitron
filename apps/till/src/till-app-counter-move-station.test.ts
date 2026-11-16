@@ -281,6 +281,7 @@ const sentDish = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabL
 
 function placedServer() {
   const order: HeldOrder = {
+    zoneId: null,
     dining: "eat_in",
     diningChoice: "none",
     expectedEdit: null,

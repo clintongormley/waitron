@@ -106,6 +106,7 @@ function heldOrder(
   draughtBeerQuantity = "1.000",
 ): HeldOrder {
   return {
+    zoneId: null,
     id: "wo-9",
     orderNumber: 12,
     label: "Table 4",

@@ -10,6 +10,7 @@ import { TillDepartmentTransfers } from "./department-transfers.js";
 afterEach(cleanupWidgets);
 const tableLabel = "Garden terrace — North 1 + North 2";
 const base = {
+  zoneId: null,
   id: "bill",
   orderNumber: 12,
   label: "Birthday bill",

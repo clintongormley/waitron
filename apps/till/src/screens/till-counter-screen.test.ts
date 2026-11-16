@@ -63,6 +63,7 @@ const waitingList = (el: TillCounterScreen) =>
   el.shadowRoot!.querySelector("till-counter-waiting")!;
 const heldList = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-held-orders")!;
 const heldOrder = {
+  zoneId: null,
   items: [],
   id: "held",
   orderNumber: 1,
@@ -302,6 +303,7 @@ describe("till-counter-screen", () => {
         billName: null,
         openedAt: "2026-08-05T10:00:00.000Z",
         signals: [],
+        zoneId: null,
       },
     ];
     const { el } = await mount({ heldOrders, orderList: "parked" });

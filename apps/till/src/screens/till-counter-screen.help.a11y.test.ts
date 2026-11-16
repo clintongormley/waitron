@@ -9,6 +9,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import type { CounterWaitingOrder, HeldOrderSummary } from "../api/client.js";
 
 const heldOrder: HeldOrderSummary = {
+  zoneId: null,
   items: [],
   id: "held",
   orderNumber: 1,

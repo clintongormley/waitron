@@ -5415,11 +5415,15 @@ export interface HeldOrderSummary {
   /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
   billName: string | null;
   openedAt: string;
+  /** The service zone the order is recorded in; null for one with none. */
+  zoneId: string | null;
 }
 
 /** A retrieved order with the stored commercial snapshot needed to rebuild its basket. */
 export interface HeldOrder {
   id: string;
+  /** The service zone the order is recorded in; null for one with none. */
+  zoneId: string | null;
   expectedEdit: OrderEditAuthority["expectedEdit"];
   kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
@@ -5531,6 +5535,7 @@ export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderS
     const former = await readFormerNumbers(tx, ids);
     const items = await readOrderPreviewItems(tx, ids);
     const counts = await readOrderStateCounts(tx, ids);
+    const zones = await VENUE_SERVICE.findOrderZones(tx, ids);
     const identities = await VENUE_SERVICE.readBillIdentities(
       tx,
       rows.flatMap((row) => (row.partyId === null ? [] : [row.id])),
@@ -5547,6 +5552,7 @@ export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderS
         billName: identity?.name ?? null,
         counts: counts.get(row.id)!,
         openedAt: row.openedAt,
+        zoneId: zones.get(row.id) ?? null,
         ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
         items: items.get(row.id)!,
         total,
@@ -5729,8 +5735,10 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
 
     const kitchenNote = (await readOrderKitchenNotes(tx, [order.id])).get(order.id)!;
     const edit = order.partyId === null ? null : await readBillEditState(tx, order.id);
+    const zoneId = (await VENUE_SERVICE.findOrderZones(tx, [order.id])).get(order.id) ?? null;
     return {
       id: order.id,
+      zoneId,
       expectedEdit:
         edit === null
           ? null

@@ -2492,6 +2492,7 @@ describe("till-app retrieving a held order", () => {
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -2516,6 +2517,7 @@ describe("till-app retrieving a held order", () => {
     const snapshot: TillProduct = { ...coffee, id: "retired", name: "Antiguo", unitPrice: "4.00" };
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -2691,6 +2693,7 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
       getTill: vi.fn().mockResolvedValue(cashTill),
       updateWorkingOrder,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -2726,6 +2729,7 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
         .fn()
         .mockResolvedValue(offersSelling({ policy: "eat_in", startsAs: "eat_in" })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        zoneId: null,
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
           note: null,
@@ -2764,6 +2768,7 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
           .fn()
           .mockResolvedValue(offersSelling({ policy: "till_choice", startsAs: "eat_in" })),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          zoneId: null,
           kitchenNote: {
             scope: { workingOrderId: "wo-1" },
             note: null,
@@ -3245,6 +3250,7 @@ describe("till-app logout while a request is waiting for the server", () => {
       label: null;
       lines: [];
       kitchenNote: import("./api/client.js").KitchenNoteSnapshot;
+      zoneId: null;
     }) => void;
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
@@ -3258,6 +3264,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     emit(shell(el)!, "logout");
     await flush(el);
     answer({
+      zoneId: null,
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
       id: "wo-1",
       orderNumber: 1,
@@ -4911,6 +4918,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let accepted = false;
     const held = {
+      zoneId: null,
       items: [],
       id: "tab-1",
       orderNumber: 12,
@@ -5317,6 +5325,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let received = false;
     const row = {
+      zoneId: null,
       items: [],
       id: "tab-1",
       orderNumber: 12,
@@ -5376,6 +5385,7 @@ describe("department transfers across operator lifetimes", () => {
     await flush(el);
     answer([
       {
+        zoneId: null,
         items: [],
         id: "old-tab",
         orderNumber: 12,
@@ -5424,6 +5434,7 @@ describe("department transfers across operator lifetimes", () => {
       ).toHaveProperty("snapshot.sent.0.status", "accepted"),
     );
     answer({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "tab-1" },
         note: null,
@@ -5472,6 +5483,7 @@ describe("department transfers across operator lifetimes", () => {
       ).toHaveProperty("snapshot.sent.0.status", "accepted"),
     );
     answer({
+      zoneId: null,
       kitchenNote: {
         scope: { workingOrderId: "different-tab" },
         note: null,
@@ -5594,6 +5606,7 @@ describe("till-app when the server reports another build", () => {
     const { el } = await mountApp(
       {
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          zoneId: null,
           kitchenNote: {
             scope: { workingOrderId: "wo-1" },
             note: null,
@@ -6942,6 +6955,7 @@ describe("A738 counter order views", () => {
     const lines = store.lines;
     const original = structuredClone(lines);
     const held = (id: string) => ({
+      zoneId: null,
       items: [],
       id,
       orderNumber: 42,
@@ -7054,6 +7068,7 @@ describe("A1208 a retrieved counter order's portions", () => {
   const coffeeOffer = "menu-item-cafe-0";
   const ids = ["l1", "l2", "l3"];
   const held = (revision = 4) => ({
+    zoneId: null,
     kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
     id: "wo-1",
     expectedEdit: null,
@@ -7092,6 +7107,7 @@ describe("A1208 a retrieved counter order's portions", () => {
     portion: true,
   });
   const summary = (hasPayments: boolean) => ({
+    zoneId: null,
     items: [],
     id: "wo-1",
     orderNumber: 5,
@@ -7544,6 +7560,62 @@ describe("A1208 a retrieved counter order's portions", () => {
       await refusedPay(el, c);
       expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
       expect(recordSale).not.toHaveBeenCalled();
+      expect(c.store.editsLocked).toBe(true);
+
+      emit(c, "park-order", { label: "Later" });
+      await flush(el);
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    });
+
+    /** The order parked on the terrace, which alone offers the café; the counter offers only the
+     * tostada. The terrace's offer cannot be read once `terraceUnreadable` is set. */
+    let terraceUnreadable = false;
+    const inTerrace = () => {
+      terraceUnreadable = false;
+      const counterOnly = zoneOffers({ menus: [defaultMenu], products: [toast] }, "zone-counter");
+      const terrace = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-terrace");
+      const saved = reads();
+      return {
+        ...saved,
+        retrieveWorkingOrder: vi.fn(async () => ({
+          ...(await saved.retrieveWorkingOrder()),
+          zoneId: "zone-terrace",
+        })),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(counterOnly)),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOnly),
+        listZoneOffers: vi.fn(async (zoneId: string) => {
+          if (zoneId !== "zone-terrace") return counterOnly;
+          if (terraceUnreadable) throw new TypeError("Failed to fetch");
+          return terrace;
+        }),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      };
+    };
+
+    it("judges the order read back against the offer of the area it is in, not the counter's", async () => {
+      const { el, c } = await retrieved(inTerrace());
+      expect(c.store.lines.map((line) => [line.quantity, line.notOffered])).toEqual([
+        ["3", undefined],
+      ]);
+      c.store.setLineQuantity(0, "4");
+      await refusedPay(el, c);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(c.store.lines.map((line) => [line.portionLineIds, line.notOffered])).toEqual([
+        [four, undefined],
+      ]);
+      expect(c.store.editsLocked).toBe(false);
+    });
+
+    it("holds the basket as it was when the offer of the order's area cannot be read back", async () => {
+      const { el, c, updateWorkingOrder } = await retrieved(inTerrace());
+      terraceUnreadable = true;
+      c.store.setLineQuantity(0, "4");
+      await refusedPay(el, c);
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
+      expect(c.store.lines.map((line) => [line.quantity, line.notOffered])).toEqual([
+        ["4", undefined],
+      ]);
       expect(c.store.editsLocked).toBe(true);
 
       emit(c, "park-order", { label: "Later" });

@@ -59,6 +59,7 @@ const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLi
 
 function heldOrder(revision: number, drinkPrice = "2.50", drinkQuantity = "1.000"): HeldOrder {
   return {
+    zoneId: null,
     kitchenNote: {
       scope: { workingOrderId: "wo-9" },
       note: null,

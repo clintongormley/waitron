@@ -284,6 +284,18 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
+/** A second area in `setupVenue`'s department, offering `menuId`, and not the counter's default. */
+async function secondArea(menuId: string): Promise<string> {
+  return withTransaction(db, async (tx) => {
+    const zoneId = randomUUID();
+    await tx.execute(sql`
+      insert into floor_zones (id, name, department_id, created_at)
+      select ${zoneId}, 'Terrace', department_id, ${nowIso()} from floor_zones limit 1`);
+    await offerMenuThroughZone(tx, zoneId, menuId);
+    return zoneId;
+  });
+}
+
 /** A basket line naming the product it sells; {@link ZoneOffers.toOfferLines} turns it into an offer line. */
 interface ProductLine {
   productId: string;
@@ -1359,7 +1371,7 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
 
 describe("listHeldOrders", () => {
   it("lists the venue's open orders with item counts, GROSS total and label, ordered by number", async () => {
-    const { cfg, coffeeId, waterId } = await setupVenue();
+    const { cfg, coffeeId, waterId, zoneId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, coffeeId));
     });
@@ -1414,6 +1426,7 @@ describe("listHeldOrders", () => {
         billName: null,
         openedAt: a.openedAt,
         signals: [],
+        zoneId,
       },
       {
         id: idB,
@@ -1429,6 +1442,7 @@ describe("listHeldOrders", () => {
         billName: null,
         openedAt: b.openedAt,
         signals: [],
+        zoneId,
       },
     ]);
   });
@@ -1502,6 +1516,27 @@ describe("listHeldOrders", () => {
     expect(held.map((o) => o.id)).toEqual([openId]);
   });
 
+  it("names the area each order was parked in, and null for an order with none", async () => {
+    const { cfg, menuId, coffeeOfferId } = await setupVenue();
+    const terrace = await secondArea(menuId);
+    const parked = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id: parked,
+      zoneId: terrace,
+      lines: [{ menuItemId: coffeeOfferId, quantity: "1" }],
+    });
+    const zoneless = await seedForeignNodeOrder(cfg);
+
+    const held = await listHeldOrders({ db });
+
+    expect(new Map(held.map((order) => [order.id, order.zoneId]))).toEqual(
+      new Map([
+        [parked, terrace],
+        [zoneless, null],
+      ]),
+    );
+  });
+
   it("lists an open order from ANOTHER node of the same taxpayer — reads are venue-wide under warm standby", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const mine = randomUUID();
@@ -1514,6 +1549,21 @@ describe("listHeldOrders", () => {
 });
 
 describe("getHeldOrder", () => {
+  it("names the area the order was parked in, and null for an order with none", async () => {
+    const { cfg, menuId, coffeeOfferId } = await setupVenue();
+    const terrace = await secondArea(menuId);
+    const parked = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id: parked,
+      zoneId: terrace,
+      lines: [{ menuItemId: coffeeOfferId, quantity: "1" }],
+    });
+    const zoneless = await seedForeignNodeOrder(cfg);
+
+    expect((await getHeldOrder({ db }, parked)).zoneId).toBe(terrace);
+    expect((await getHeldOrder({ db }, zoneless)).zoneId).toBeNull();
+  });
+
   it.each(["open", "placed"] as const)(
     "reads the invoice type stored on a %s counter order",
     async (status) => {
@@ -2076,6 +2126,7 @@ describe("getHeldOrder", () => {
       })),
     }).toEqual({
       id,
+      zoneId: offers.zoneId,
       expectedEdit: null,
       orderNumber: 1,
       label: "Table 7",

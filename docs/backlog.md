@@ -803,8 +803,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   floor join that needs seats asks for them before its first request and sends once.
   [Detail](backlog/till.md#a666-a-floor-join-that-moves-tables-together-is-sent-once-without-seats)
 
-- **Do not offer a closed area as a destination** (bundle of 1, size S). [Detail](backlog/till.md#bundle-do-not-offer-a-closed-area-as-a-destination)
-
 - **A730 — The floor's Rename window may keep comparing against the name it opened with after the
   name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**
   **Next action:** probe it in real Chromium; if Save compares against the old name, follow the
@@ -1010,7 +1008,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   name only, not a customer name. The till also searches displayed section names (A461).
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
-- **Reopening a held order keeps its lines right** (bundle of 5, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
+- **Reopening a held order keeps its lines right** (bundle of 4, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
 
 ### Printers, the print agent and receipts
 

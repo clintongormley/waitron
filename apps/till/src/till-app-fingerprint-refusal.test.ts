@@ -242,6 +242,7 @@ it.each(["en-GB", "es-ES"])("keeps a refused placement and its basket in %s", as
 it.each(["en-GB", "es-ES"])("keeps a refused discard in the held list in %s", async (locale) => {
   const write = vi.fn().mockRejectedValue(refusal);
   const held = {
+    zoneId: null,
     items: [],
     id: "held",
     orderNumber: 5,

@@ -296,10 +296,12 @@ export class TillHeldOrders extends LitElement {
   }
 
   #picker(order: HeldOrderSummary): TemplateResult {
-    const tables = this.tables.filter(
-      (table) =>
-        table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),
-    );
+    // The server refuses an open order a closed area other than its own.
+    const tables = this.tables.filter((table) => {
+      const zone = this.zones.find((zone) => zone.id === table.zoneId);
+      if (zone?.closed === true && zone.id !== order.zoneId) return false;
+      return table.party !== null || seatsGuests(zone);
+    });
     return html`<wt-dialog
       ${trackDialog()}
       data-table-picker
