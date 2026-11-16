@@ -256,14 +256,6 @@ library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-p
 `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
 sandbox case beside `checkout.sandbox.test.ts` would settle it.
 
-## The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit
-
-Real-browser qualification against a silent provider remains open: several concurrent reader
-status reads may exhaust the browser's HTTP/1.1 connections to the box. Exercise the real
-browser and provider transport; a mocked fetch does not measure this. Left open by A260
-(W18c #1145 and W48 #1162).
-
-
 ## A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets
 
 NOT APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
@@ -322,6 +314,13 @@ Remaining Stripe qualification and maintenance.
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
 
 ## Decisions and deliberate limits
+
+- **Silent-provider qualification, 2026-11-16:** two real Chromium Payments tabs over loopback
+  HTTP/1.1 retained two live streams and two silent-provider reads; an unrelated authenticated
+  read answered in 1.4 ms. A six-socket saturation control blocked that read until a socket was
+  released. Removing Web Locks started four browser requests but only two reached the provider;
+  that observation does not qualify four distinct fallback reads. No production change.
+  [Scope, failed hypothesis and receipts](../research/2026-11-16-silent-provider-connections.md).
 
 - **The Stripe payments check reads amounts only; a Stripe account that settles in a currency other
   than the euro is out of scope** (watcher, 2026-11-15, lane A's STRIPE-CURRENCY). Waitron charges

@@ -1085,9 +1085,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
   [Detail](backlog/payments.md#a793--tips-who-a-tip-belongs-to-how-it-is-shared-out-and-what-payroll-gets)
 
-- **Qualify concurrent reader status reads in a real browser against a silent provider, including
-  the box’s HTTP/1.1 connection limit.** [Detail](backlog/payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
-
 ### Users, sign-in and the dashboard shell
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
