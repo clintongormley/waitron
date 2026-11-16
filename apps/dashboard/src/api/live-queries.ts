@@ -500,11 +500,14 @@ export const QUERY_DEPENDENCIES = {
   // The stop is process state no table reports, so the timer reads it; `incidents` holds the
   // deletion it names.
   getDiskStop: ["incidents"],
+  // In-memory build state, published on each change; the timer covers a session refused the stream.
+  getTaxOfficeMonthDownload: ["tax_office_download"],
 } as const;
 
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 
 export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
+  "getTaxOfficeMonthDownload",
   "getMenuSettings",
   "listMenus",
   "getMenuStructure",
@@ -626,7 +629,10 @@ export function dashboardQuery<N extends DashboardQueryName>(
           ? 5_000
           : name === "getBoxHealth" || name === "listRecentJobs"
             ? 15_000
-            : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
+            : name === "getEmailInbox" ||
+                name === "getBackupStatus" ||
+                name === "getStreamSettings" ||
+                name === "getTaxOfficeMonthDownload"
               ? 10_000
               : 60_000,
   };

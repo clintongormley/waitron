@@ -142,9 +142,17 @@ import type {
   AlertsResponse,
   DashboardApi,
   DiskStopResponse,
+  MonthDownloadDto,
   TradingAdmissionView,
 } from "./api/client.js";
 import { diskStopMessage } from "./i18n/disk-stop-words.js";
+import {
+  clockTime,
+  monthName,
+  saveTaxOfficeFile,
+  startBrowserDownload,
+  type StartDownload,
+} from "./tax-office-download.js";
 import {
   consumeGoogleLoginPreference,
   rememberSuccessfulLogin,
@@ -908,6 +916,7 @@ export class DashboardApp extends LitElement {
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) liveUpdates?: { start(): void; stop(): void };
   @property({ attribute: false }) reload: () => void = () => location.reload();
+  @property({ attribute: false }) startDownload: StartDownload = startBrowserDownload;
 
   /** Defaults to `login`, so a cold load never flashes a logged-in face before the probe confirms a
    * session. */
@@ -1053,6 +1062,18 @@ export class DashboardApp extends LitElement {
     this,
     () => this.api,
     (error) => diag.record("warn", "disk_stop.load_failed", { code: codeOf(error) }),
+  );
+  @state() private taxOfficeToast:
+    | { kind: "ready"; month: string; expiresAt: string }
+    | { kind: "failed" | "restarted"; month: string }
+    | { kind: "refused"; code: string; params?: Parameters<typeof codeMessage>[2] }
+    | null = null;
+  /** The last view of the person's month file this sign-in; null until the first read answers. */
+  #taxOfficeSeen: MonthDownloadDto | null = null;
+  readonly #taxOfficeQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => diag.record("warn", "tax_office_download.load_failed", { code: codeOf(error) }),
   );
   readonly #venueThemeQueries = new DashboardQueries(
     this,
@@ -1214,6 +1235,10 @@ export class DashboardApp extends LitElement {
   constructor() {
     super();
     this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
+    // The screen's request counts as seen, so a file built within one poll still gets its notice.
+    this.addEventListener("tax-office-month-requested", (event) => {
+      this.#taxOfficeSeen = (event as CustomEvent<MonthDownloadDto>).detail;
+    });
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
     const applyLocale = () => {
@@ -1433,7 +1458,67 @@ export class DashboardApp extends LitElement {
     this.#loadContentLanguages();
     this.#watchAlerts();
     this.#watchDiskStop();
+    this.#watchTaxOfficeDownload();
     this.#watchVenueTheme();
+  }
+
+  #watchTaxOfficeDownload(): void {
+    if (!this.#sessionPermissions.includes("invoice.inspect")) {
+      this.#clearTaxOfficeDownload();
+      return;
+    }
+    void this.#taxOfficeQueries
+      .watch("getTaxOfficeMonthDownload", [], (view) => this.#applyTaxOfficeView(view), {
+        passive: true,
+      })
+      .catch(() => undefined);
+  }
+
+  #clearTaxOfficeDownload(): void {
+    this.#taxOfficeQueries.release("getTaxOfficeMonthDownload");
+    this.#taxOfficeSeen = null;
+    this.taxOfficeToast = null;
+  }
+
+  #applyTaxOfficeView(view: MonthDownloadDto): void {
+    const last = this.#taxOfficeSeen;
+    this.#taxOfficeSeen = view;
+    // The sign-in's first read is not news: a reload must not repeat a notice.
+    if (last === null) return;
+    if (view.status === "ready" || view.status === "failed") {
+      if (last.status === view.status && last.id === view.id) return;
+      this.taxOfficeToast =
+        view.status === "ready"
+          ? { kind: "ready", month: view.month, expiresAt: view.expiresAt }
+          : { kind: "failed", month: view.month };
+    } else if (view.status === "none" && last.status === "building") {
+      this.taxOfficeToast = { kind: "restarted", month: last.month };
+    }
+  }
+
+  async #saveTaxOfficeFile(month: string): Promise<void> {
+    const generation = this.sessionGeneration;
+    try {
+      await saveTaxOfficeFile(this.api, month, this.startDownload);
+      if (generation === this.sessionGeneration) this.taxOfficeToast = null;
+    } catch (error) {
+      if (generation !== this.sessionGeneration) return;
+      const params = (error as { params?: Parameters<typeof codeMessage>[2] }).params;
+      this.taxOfficeToast = { kind: "refused", code: codeOf(error), params };
+    }
+  }
+
+  #taxOfficeMessage(): string {
+    const notice = this.taxOfficeToast;
+    if (notice === null) return "";
+    if (notice.kind === "refused") return codeMessage(notice.code, currentLocale(), notice.params);
+    const month = monthName(notice.month);
+    if (notice.kind === "ready")
+      return fill("tax_office.notice_ready", { month, time: clockTime(notice.expiresAt) });
+    return fill(
+      notice.kind === "failed" ? "tax_office.notice_failed" : "tax_office.notice_restarted",
+      { month },
+    );
   }
 
   #watchDiskStop(): void {
@@ -1669,6 +1754,7 @@ export class DashboardApp extends LitElement {
     this.#venueThemeQueries.release("getVenueTheme");
     this.#diskStopQueries.release("getDiskStop");
     this.diskStop = null;
+    this.#clearTaxOfficeDownload();
     this.#clearAlerts();
     this.saveRefusal = null;
     this.contentLanguagesReady = false;
@@ -2173,7 +2259,38 @@ export class DashboardApp extends LitElement {
         close-label=${t("action.close")}
         @wt-activate=${(e: Event) => this.#onToastActivate(e)}
         @wt-close=${(e: Event) => this.#onToastClose(e)}
-      ></wt-toast>`;
+      ></wt-toast>
+      ${this.#taxOfficeToastView(slot)}`;
+  }
+
+  #taxOfficeToastView(slot?: string): TemplateResult {
+    const notice = this.taxOfficeToast;
+    return html`<wt-toast
+      data-test="tax-office-toast"
+      slot=${slot ?? nothing}
+      .open=${notice !== null}
+      .message=${this.#taxOfficeMessage()}
+      .duration=${0}
+      tone=${notice === null || notice.kind === "ready" ? "info" : "error"}
+      close-label=${t("action.close")}
+      @wt-close=${(event: Event) => {
+        if (event.target === event.currentTarget) this.taxOfficeToast = null;
+      }}
+      >${
+        notice?.kind === "ready"
+          ? html`<wt-button
+              slot="action"
+              variant="secondary"
+              data-test="tax-office-save"
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                void this.#saveTaxOfficeFile(notice.month);
+              }}
+              >${t("tax_office.save_file")}</wt-button
+            >`
+          : nothing
+      }</wt-toast
+    >`;
   }
 
   #diskStopBar(slot?: string): TemplateResult | typeof nothing {

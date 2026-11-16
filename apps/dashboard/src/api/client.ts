@@ -1690,6 +1690,13 @@ export interface TaxOfficePageDto {
   timeZone: string;
 }
 
+/** The person's own month file for the tax office, built on the box in the background. */
+export type MonthDownloadDto =
+  | { status: "none" }
+  | { status: "building"; id: string; month: string }
+  | { status: "ready"; id: string; month: string; bytes: number; expiresAt: string }
+  | { status: "failed"; id: string; month: string };
+
 /** Issue dates are venue calendar days; the other filters are left out when not given. */
 export interface TaxOfficeQuery {
   from: string;
@@ -4822,6 +4829,23 @@ export class DashboardApi {
       undefined,
       { as: "blob" },
     );
+  }
+
+  /** Starts building `month` (`YYYY-MM`) on the box; the server records who asked. */
+  requestTaxOfficeMonth(month: string): Promise<MonthDownloadDto> {
+    return this.#request<MonthDownloadDto>(
+      `/management-api/tax-office/months/${encodeURIComponent(month)}`,
+      "POST",
+    );
+  }
+
+  getTaxOfficeMonthDownload(): Promise<MonthDownloadDto> {
+    return this.#request<MonthDownloadDto>("/management-api/tax-office/month-download", "GET");
+  }
+
+  /** The browser downloads this address itself, so the file never passes through the page. */
+  taxOfficeMonthFileUrl(): string {
+    return `${this.#baseUrl}/management-api/tax-office/month-download/file`;
   }
 
   /** Every invoice issued in `month` (`YYYY-MM`) as one ZIP; the server records who downloaded it. */

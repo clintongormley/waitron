@@ -1610,6 +1610,43 @@ it("downloads a month of tax-office invoices as a POST, with the server's file n
   expect([...new Uint8Array(await file.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
 });
 
+it("asks for a month of tax-office invoices as a POST, answering the person's view", async () => {
+  const view = { status: "building", id: "b1", month: "2026-03" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(view, true, 202));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.requestTaxOfficeMonth("2026-03")).toEqual(view);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/months/2026-03", "POST", undefined],
+  ]);
+});
+
+it("reads the person's tax-office month file as a GET", async () => {
+  const view = {
+    status: "ready",
+    id: "b1",
+    month: "2026-03",
+    bytes: 12,
+    expiresAt: "2026-11-16T20:00:00.000Z",
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(view));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.getTaxOfficeMonthDownload()).toEqual(view);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/month-download", "GET", undefined],
+  ]);
+});
+
+it("names the tax-office month file's address under the client's base, without fetching it", () => {
+  const fetchImpl = vi.fn();
+  expect(new DashboardApi("", fetchImpl).taxOfficeMonthFileUrl()).toBe(
+    "/management-api/tax-office/month-download/file",
+  );
+  expect(new DashboardApi("https://box.test", fetchImpl).taxOfficeMonthFileUrl()).toBe(
+    "https://box.test/management-api/tax-office/month-download/file",
+  );
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 it("downloads the accountant workbook for the chosen calendar dates as a POST, bytes untouched", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([0x50, 0x4b, 3, 4])));
   const api = new DashboardApi("", fetchImpl);
