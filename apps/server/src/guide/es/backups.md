@@ -10,7 +10,7 @@ Revisa esta tarjeta después de cambiar los ajustes de las copias o las claves. 
 
 ## Exportación de configuración {#configuration-export}
 
-Para reutilizar tu configuración en un local nuevo, introduce y confirma una contraseña de exportación de al menos 12 caracteres y elige **Descargar exportación de configuración**. Guarda el archivo descargado y su contraseña en un lugar seguro. Si lo que necesitas es recuperar este local desde una copia, sigue [Recuperar desde una copia](backup-recovery.md#source).
+Para reutilizar tu configuración en un local nuevo, introduce y confirma una contraseña de exportación de al menos 12 caracteres y elige **Descargar configuración**. Guarda el archivo descargado y su contraseña en un lugar seguro. Si lo que necesitas es recuperar este local desde una copia, sigue [Recuperar desde una copia](backup-recovery.md#source).
 
 ## Copias programadas {#archives}
 
@@ -24,7 +24,7 @@ Con las copias activadas, usa **Cambiar el destino o la programación** y **Guar
 
 Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de recuperación en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.
 
-Antes de elegir **Cambiar la clave de recuperación**, guarda también la clave actual. Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
+Al cambiar la clave de recuperación, usa **Mostrar la clave actual** para guardar también la clave antigua. Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
 
 ## Copia continua en tu bucket {#bucket-copy}
 

@@ -24,7 +24,7 @@ Once backups are on, use **Change destination or schedule** and **Save changes**
 
 Use **Copy** or **Download key file** to keep the recovery key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.
 
-Before choosing **Change the recovery key**, save the current key too. Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
+When you change the recovery key, use **Show the current key** to save the old key too. Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
 
 ## Continuous copy to your bucket {#bucket-copy}
 
