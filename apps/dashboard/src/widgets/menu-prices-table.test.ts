@@ -334,6 +334,25 @@ it.each([
 );
 
 it.each([
+  { locale: "en-GB", range: "3.00 – 3.75", single: "12.00" },
+  { locale: "es-ES", range: "3,00 – 3,75", single: "12,00" },
+])(
+  "writes an inherited range's placeholder with $locale's decimal mark, as a single price's is",
+  async ({ locale, range, single }) => {
+    setLocale(locale);
+    try {
+      const el = await mount();
+      const shown = (key: string) =>
+        override(el, key).shadowRoot!.querySelector("input")!.getAttribute("placeholder");
+      expect(shown("mi-lemonade")).toBe(range);
+      expect(shown("mi-burger")).toBe(single);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it.each([
   { locale: "en-GB", heading: "Section" },
   { locale: "es-ES", heading: "Sección" },
 ])("names the placements column $heading in $locale", async ({ locale, heading }) => {
@@ -402,7 +421,7 @@ it("lists each product once with its price override, and where it appears by the
   // product's own price, and the large's 3.75 on this menu.
   expect(keys.map((key) => override(el, key).placeholder)).toEqual([
     "12.00",
-    "3.00 – 3.75",
+    "3,00 – 3,75",
     "2.00",
   ]);
 });
@@ -783,7 +802,7 @@ it("edits each row's price in its own field, a variant following the price typed
   await table(el).updateComplete;
   const keys = ["mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
   expect(keys.map((key) => override(el, key).value)).toEqual(["2.50", "", "3.75"]);
-  expect(keys.map((key) => override(el, key).placeholder)).toEqual(["3.00 – 3.75", "2.50", "3.40"]);
+  expect(keys.map((key) => override(el, key).placeholder)).toEqual(["3,00 – 3,75", "2.50", "3.40"]);
   // Each price falls back to another when left empty, so none is required or marked as required.
   for (const key of keys) {
     expect(override(el, key).required, key).toBe(false);
@@ -2207,7 +2226,7 @@ describe("variants", () => {
     const el = await mountVariants();
     expect(override(el, "mi-wine").value).toBe("13.00");
     expect(["mi-juice", "mi-tea", "mi-burger"].map((key) => override(el, key).placeholder)).toEqual(
-      ["3.50 – 5.00", "2.40", "12.00"],
+      ["3,50 – 5,00", "2.40", "12.00"],
     );
   });
 
@@ -2432,48 +2451,48 @@ describe("variants", () => {
     expect(headers(again)).toEqual(["name", "override", "placements", "category", "available", ""]);
   });
 
-  it.each(["en-GB", "es-ES"])(
-    "fits the longest range placeholder whole inside the field (%s)",
-    async (locale) => {
-      setLocale(locale);
-      try {
-        const wide = {
-          ...juice,
-          combined: combinedFixture(
-            "p-juice",
-            "4.00",
-            [
-              { variantId: "v-juice-small", price: "1000.00" },
-              { variantId: "v-juice-large", price: "9999.99" },
-            ],
-            null,
-            "4.00",
-            { "v-juice-small": "3.00", "v-juice-large": "5.00" },
-          ),
-          variants: [
-            { variantId: "v-juice-small", price: "1000.00", available: true },
-            { variantId: "v-juice-large", price: "9999.99", available: true },
+  it.each([
+    ["en-GB", "1000.00 – 9999.99"],
+    ["es-ES", "1000,00 – 9999,99"],
+  ])("fits the longest range placeholder whole inside the field (%s)", async (locale, shown) => {
+    setLocale(locale);
+    try {
+      const wide = {
+        ...juice,
+        combined: combinedFixture(
+          "p-juice",
+          "4.00",
+          [
+            { variantId: "v-juice-small", price: "1000.00" },
+            { variantId: "v-juice-large", price: "9999.99" },
           ],
-        };
-        const el = await mount({ rows: [wide], products });
-        const input = override(el, "mi-juice").shadowRoot!.querySelector("input")!;
-        expect(input.placeholder).toBe("1000.00 – 9999.99");
-        const style = getComputedStyle(input);
-        const context = document.createElement("canvas").getContext("2d")!;
-        // The placeholder's own font, which is italic and wider than the amount's.
-        context.font = getComputedStyle(input, "::placeholder").font;
-        const room =
-          input.getBoundingClientRect().width -
-          parseFloat(style.borderLeftWidth) -
-          parseFloat(style.borderRightWidth) -
-          parseFloat(style.paddingLeft) -
-          parseFloat(style.paddingRight);
-        expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
-      } finally {
-        setLocale("es-ES");
-      }
-    },
-  );
+          null,
+          "4.00",
+          { "v-juice-small": "3.00", "v-juice-large": "5.00" },
+        ),
+        variants: [
+          { variantId: "v-juice-small", price: "1000.00", available: true },
+          { variantId: "v-juice-large", price: "9999.99", available: true },
+        ],
+      };
+      const el = await mount({ rows: [wide], products });
+      const input = override(el, "mi-juice").shadowRoot!.querySelector("input")!;
+      expect(input.placeholder).toBe(shown);
+      const style = getComputedStyle(input);
+      const context = document.createElement("canvas").getContext("2d")!;
+      // The placeholder's own font, which is italic and wider than the amount's.
+      context.font = getComputedStyle(input, "::placeholder").font;
+      const room =
+        input.getBoundingClientRect().width -
+        parseFloat(style.borderLeftWidth) -
+        parseFloat(style.borderRightWidth) -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
 
   it("fits the longest range placeholder whole inside the field in a larger, wider font, beyond phone width", async () => {
     const width = window.innerWidth,
@@ -2490,7 +2509,7 @@ describe("variants", () => {
     // Connected again once the font is set, as a table drawn in that font from the start would be.
     el.remove();
     host.append(el);
-    expect(textFit(override(el, "mi-ranged")).shown).toBe("1000.00 – 9999.99");
+    expect(textFit(override(el, "mi-ranged")).shown).toBe("1000,00 – 9999,99");
     await vi.waitFor(() => {
       const fit = textFit(override(el, "mi-ranged"));
       expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
@@ -2917,8 +2936,10 @@ it.each([
     await frame();
     await frame();
     const keys = ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"];
-    // As typed into the field, with a point whatever the language.
-    expect(textFit(override(el, "mi-ranged")).shown).toBe(`${low} – ${high}`);
+    const mark = locale === "es-ES" ? "," : ".";
+    expect(textFit(override(el, "mi-ranged")).shown).toBe(
+      `${low.replace(".", mark)} – ${high.replace(".", mark)}`,
+    );
     for (const key of keys) {
       const fit = textFit(override(el, key));
       expect(fit.needed, `${key} ${JSON.stringify(fit)}`).toBeLessThanOrEqual(fit.room);
@@ -2955,7 +2976,7 @@ it.each(["", "Verdana"])(
     const stored = override(el, "mi-ranged").getBoundingClientRect().width;
     await typeAndDraw(el, "mi-ranged", "");
     const fit = textFit(override(el, "mi-ranged"));
-    expect(fit.shown).toBe("12.50 – 15.00");
+    expect(fit.shown).toBe("12,50 – 15,00");
     expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
     expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
   },
@@ -4000,8 +4021,8 @@ it("gives a variant following its product this menu's price as its placeholder, 
   // The small follows the product's price on this menu, which is this menu's own 2.50.
   expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
   // With the product's field blank the small would follow the product's own 3.00, which is what
-  // the product's placeholder, 3.00 – 3.75, counts.
-  expect(override(el, "mi-lemonade").placeholder).toBe("3.00 – 3.75");
+  // the product's placeholder, 3,00 – 3,75, counts.
+  expect(override(el, "mi-lemonade").placeholder).toBe("3,00 – 3,75");
 });
 
 it("names the included menu's price, not the product's own, as what a blank field inherits", async () => {

@@ -353,15 +353,13 @@ Product editor keeps a private `text()` helper doing what `languageText` does, a
 `product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
 names; folding them into the one helper was not part of W77a.
 
-## In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is drawn about 14 px wider than the others
+## A refused field is drawn about 14 px wider than the others
 
-- Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input`,
-  `#focusField` and the placeholder line are untouched): in Spanish a range's placeholder reads
-  "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
-  a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
-  390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
-  half-hidden behind the pinned Resolve column. (A344 removed the "?" and the Resolve column and keeps each price
-  box on screen at 390 px; the wider refused field and the placeholder's full stops were not
+- Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input` and
+  `#focusField` are untouched): a refused field is drawn about 14 px wider than the others, pushing
+  its "?" to the right; and at 390 wide a refusal's focus scrolls the table only part way sideways,
+  leaving Spanish prices half-hidden behind the pinned Resolve column. (A344 removed the "?" and
+  the Resolve column and keeps each price box on screen at 390 px; the wider refused field was not
   re-checked.)
 
 ## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
@@ -711,11 +709,10 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   user cannot reach Undo from a field within its 5 seconds (decided as built, not tested with a
   user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
   field it saved.
-- In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is
-  drawn about 14 px wider than the others (seen in #1368's screenshots). A344 removed the "?" and
-  the Resolve column and keeps each price box on screen at 390 px; the wider refused field and
-  the placeholder's full stops were not re-checked.
-  [Detail](menu.md#in-spanish-a-ranges-placeholder-reads-800--1200-with-full-stops-and-a-refused-field-is-drawn-about-14-px-wider-than-the-others)
+- A refused field is drawn about 14 px wider than the others (seen in #1368's screenshots). A344
+  removed the "?" and the Resolve column and keeps each price box on screen at 390 px; the wider
+  refused field was not re-checked.
+  [Detail](menu.md#a-refused-field-is-drawn-about-14-px-wider-than-the-others)
 
 ## Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit product, #1408)
 

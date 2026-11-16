@@ -2,7 +2,12 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, belongsToComposition, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  belongsToComposition,
+  formatDecimalInput,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-toast.js";
@@ -128,8 +133,14 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
         .replace("{low}", format(span.low))
         .replace("{high}", format(span.high));
 
-/** As typed into a price field, which draws no sign. */
-const placeholderOf = (span: Span): string => spanText(span, (amount) => amount);
+/**
+ * As typed into a price field, which draws no sign. The field writes a lone amount with the
+ * locale's decimal mark itself, but leaves a range as given.
+ */
+const placeholderOf = (span: Span): string =>
+  oneAmount(span)
+    ? span.low
+    : spanText(span, (amount) => formatDecimalInput(amount, currentLocale()));
 
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active variants
