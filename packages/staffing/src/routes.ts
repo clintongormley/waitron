@@ -35,6 +35,7 @@ import {
 import {
   createStaffRole,
   deleteStaffRole,
+  listStaffRoles,
   listStaffRolesWithHolderNames,
   profilesLeftEmptyBy,
   setPersonStaffRoles,
@@ -302,7 +303,9 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const staffRoles = await gatedBy(VIEW_VENUE, sessionId, (tx) =>
-          listStaffRolesWithHolderNames(tx),
+          c.req.query("holderNames") === "false"
+            ? listStaffRoles(tx)
+            : listStaffRolesWithHolderNames(tx),
         );
         return c.json({ staffRoles });
       }),

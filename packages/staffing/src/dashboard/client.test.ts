@@ -70,6 +70,11 @@ describe("StaffingApi", () => {
     const queries = new QueryController(host(), () => liveData, vi.fn());
     const apply = vi.fn();
     await api(fetchImpl, liveData).watchStaffRoles(queries, apply, "painter-staff-roles");
+    expect(sent(fetchImpl)).toMatchObject({
+      path: `${BASE}?holderNames=false`,
+      method: "GET",
+      live: "1",
+    });
     expect(liveData.interests).toEqual([{ type: "staff_roles" }, { type: "person_staff_roles" }]);
     liveData.invalidate([{ type: "persons" }]);
     await new Promise((resolve) => setTimeout(resolve, 20));

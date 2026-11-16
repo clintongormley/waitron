@@ -57,6 +57,7 @@ describe("the slot picker", () => {
     expect(r.querySelector("[data-person=marc]")!.textContent).toContain("free");
     expect(r.querySelector("[data-person=laia]")!.textContent).toContain("on leave");
     expect(r.querySelector("[data-person=joan]")!.textContent).toContain("41 / 40 h");
+    expect(r.querySelector("[data-test=show-everyone]")!.getAttribute("variant")).toBe("link");
     r.querySelector<HTMLElement>("[data-test=show-everyone]")!.click();
     await el.updateComplete;
     expect(

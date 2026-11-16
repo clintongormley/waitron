@@ -3,7 +3,9 @@ import { seedDeviceProfiles, seedBusinessDay } from "@waitron/db/testing/seed.js
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createRequest, QueryController } from "@waitron/dashboard-kit";
+import { StaffingApi } from "./dashboard/client.js";
 import { CORE_MIGRATIONS, menus, kitchenStations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -111,6 +113,43 @@ async function answers(response: Response, status: number, body?: unknown) {
 const refusal = (code: string, params: Record<string, unknown>) => ({ error: { code, params } });
 
 describe("the staff-role routes", () => {
+  it("feeds painters no holder names while the ordinary feed keeps names", async () => {
+    const r = await routed();
+    const role = await r.create("Waiter");
+    await r.send("PUT", `/${role.id}/holders`, r.manager, { personIds: [r.ana] });
+    const client = new StaffingApi(
+      createRequest({
+        fetchImpl: ((path: string, init: RequestInit) =>
+          r.app.request(path, {
+            ...init,
+            headers: { ...init.headers, cookie: r.manager },
+          })) as typeof fetch,
+      }),
+    );
+    const queries = new QueryController(
+      { addController: vi.fn(), requestUpdate: vi.fn() } as unknown as ConstructorParameters<
+        typeof QueryController
+      >[0],
+      () => undefined,
+      vi.fn(),
+    );
+    const ordinary = vi.fn();
+    const painter = vi.fn();
+    try {
+      await client.watchStaffRoles(queries, ordinary);
+      await client.watchStaffRoles(queries, painter, "painter-staff-roles");
+      expect(ordinary).toHaveBeenCalledWith([
+        { ...role, holderIds: [r.ana], holderNames: [await displayNameOf(r.ana)] },
+      ]);
+      expect(painter).toHaveBeenCalledWith([{ ...role, holderIds: [r.ana] }]);
+      await answers(await r.send("GET", "?holderNames=0", r.manager), 200, {
+        staffRoles: [{ ...role, holderIds: [r.ana], holderNames: [await displayNameOf(r.ana)] }],
+      });
+    } finally {
+      queries.hostDisconnected();
+    }
+  });
+
   it("reads profiles left empty only with schedule.manage", async () => {
     const r = await routed();
     const role = await r.create("Team");
@@ -385,6 +424,9 @@ describe("the staff-role routes", () => {
       expect(error.code).toBe("authorization.not_permitted");
     };
     await answers(await r.send("GET", "", r.supervisor), 200);
+    await answers(await r.send("GET", "?holderNames=false", r.supervisor), 200);
+    await notPermitted(await r.send("GET", "?holderNames=false", r.staff));
+    await answers(await r.send("GET", "?holderNames=false", ""), 401);
     await notPermitted(await r.send("GET", "", r.staff));
     await notPermitted(await r.send("POST", "", r.supervisor, { name: "Cook", colour: "blue" }));
     await notPermitted(

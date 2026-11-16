@@ -4,7 +4,7 @@ import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-spinner.js";
 
-export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+export type WtButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "link";
 export type WtButtonSize = "sm" | "md" | "lg";
 export type WtButtonAlign = "center" | "start";
 export type WtButtonShape = "default" | "round";
@@ -92,6 +92,24 @@ export class WtButton extends LitElement {
       :host([variant="ghost"]) button {
         background: transparent;
         color: var(--wt-color-text);
+      }
+
+      :host([variant="link"]) button {
+        padding-inline: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
+      }
+
+      @media (forced-colors: active) {
+        :host([variant="link"]) button {
+          border-color: Canvas;
+        }
+        :host([variant="link"]) button:disabled,
+        :host([variant="link"]) button[aria-disabled="true"] {
+          color: GrayText;
+        }
       }
 
       /* Final colours, so no fade on top; a loading button keeps its own colour, faded. */

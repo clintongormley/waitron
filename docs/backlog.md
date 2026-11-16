@@ -1237,13 +1237,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Staffing reads the day start in force on each date** (bundle of 3, 1 important, size M, needs the owner). Holds A851, A644, A708. [Detail](backlog/workforce.md#bundle-staffing-reads-the-day-start-in-force-on-each-date)
 
-- **A780. The staffing painters read holder names they never show (left open by #1828).**
-  [Detail](backlog/workforce.md#a780-the-staffing-painters-read-holder-names-they-never-show-left-open-by-1828).
-
 - **Staffing month day box** (bundle of 2, size M, waits for another entry). Holds A763. [Detail](backlog/workforce.md#bundle-staffing-month-day-box)
-
-- **A link look for `wt-button` (left open by #1841).**
-  [Detail](backlog/workforce.md#a-link-look-for-wt-button-left-open-by-1841)
 
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).
