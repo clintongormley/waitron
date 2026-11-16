@@ -770,6 +770,27 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
       expectInView(leverError(el));
     });
 
+    it(`at ${width} px, leaves the page where the person scrolled it while a refused Fire's board read was out`, async () => {
+      await pageAt(width, height);
+      const read = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
+      });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard(longBoard) });
+      await pressLow(el, '[data-pass-fire="group:g-12"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expectInView(leverError(el));
+
+      scroller().scrollTop = scroller().scrollHeight;
+      const scrolledTo = scroller().scrollTop;
+      expect(scrolledTo).toBeGreaterThan(0);
+      read.resolve(deviceBoard(longBoard));
+      await flush(el);
+      expect(leverError(el)).not.toBeNull();
+      expect(scroller().scrollTop).toBe(scrolledTo);
+    });
+
     it(`at ${width} px, brings the stale line into view when a Fire gets no answer`, async () => {
       await pageAt(width, height);
       const api = fakeApi({

@@ -201,6 +201,8 @@ export class TillPassScreen extends LitElement {
   #failedRequest = 0;
   /** Set by a Fire with no answer only: a background read failing never scrolls a wall monitor. */
   #revealStale = false;
+  /** The refusal line's reveal, answering the page's scroll position it left. */
+  #leverRevealed?: Promise<number | undefined>;
   /** Card keys with a Fire out. */
   @state() private sending: ReadonlySet<string> = new Set();
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
@@ -352,7 +354,8 @@ export class TillPassScreen extends LitElement {
       void this.#reveal("[data-stale]");
     }
     if (changed.has("tableChanged") && this.tableChanged) void this.#reveal("[data-table-changed]");
-    if (changed.has("leverError") && this.leverError) void this.#reveal("[data-lever-error]");
+    if (changed.has("leverError") && this.leverError)
+      this.#leverRevealed = this.#reveal("[data-lever-error]");
     if (changed.has("reprintErrorCode") && this.reprintErrorCode)
       void this.#reveal("[data-reprint-error]");
   }
@@ -362,17 +365,24 @@ export class TillPassScreen extends LitElement {
    * Waits for the board to redraw: its header, above the lines, can change height, and without
    * scroll anchoring that moves the line after it was scrolled into view.
    */
-  async #reveal(selector: string): Promise<void> {
+  async #reveal(selector: string): Promise<number | undefined> {
     await this.updateComplete;
     await this.renderRoot.querySelector("till-pass-board")?.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "nearest" });
+    return document.scrollingElement?.scrollTop;
   }
 
-  /** A refusal line drawn before this read answers is brought back into view after it redraws. */
+  /**
+   * A refusal line drawn before this read answers is brought back into view after it redraws,
+   * unless the page has scrolled since it was revealed: the person moved it, or anchoring kept it.
+   */
   async #reloadAfterPress(): Promise<void> {
     const refusal = this.leverError;
     await this.#reload();
-    if (refusal !== undefined && this.leverError === refusal)
+    if (refusal === undefined || this.leverError !== refusal) return;
+    await this.updateComplete;
+    const revealedAt = await this.#leverRevealed;
+    if (document.scrollingElement?.scrollTop === revealedAt)
       await this.#reveal("[data-lever-error]");
   }
 
