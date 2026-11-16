@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -101,7 +101,9 @@ describe("shipped certificate diagnosis entry", () => {
   }, 190_000);
 
   it("opens a certificate through the built host and sibling child, with shipped notices", async () => {
-    const host = await import(pathToFileURL(join(root!, "open-host.js")).href);
+    const host = (await import(pathToFileURL(join(root!, "open-host.js")).href)) as {
+      openCertificate: typeof import("@waitron/fiscal-verifactu/src/certificate-open.js").openCertificate;
+    };
     expect(await host.openCertificate(first.pfx, first.passphrase)).toMatchObject({
       ok: true,
       details: { fingerprint: first.fingerprint },
@@ -110,6 +112,41 @@ describe("shipped certificate diagnosis entry", () => {
       "Bundled npm package notices",
     );
   });
+
+  it("the declared provisioning build ships the child used by bundled validation", async () => {
+    const directory = join(root!, "provisioning");
+    await mkdir(directory);
+    const cwd = resolve("../../packages/provisioning");
+    const manifest = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as {
+      scripts: { build: string };
+    };
+    const [runtime, ...args] = manifest.scripts.build.split(" ");
+    await run(
+      runtime!,
+      args.map((arg) => arg.replace("=dist/", `=${directory}/`)),
+      { cwd, timeout: 180_000, maxBuffer: 2_000_000 },
+    );
+    await run(
+      "pnpm",
+      [
+        "exec",
+        "node",
+        "../../scripts/bundle-node.mjs",
+        `../../packages/fiscal-verifactu/src/certificate-open.ts=${join(directory, "open-host.js")}`,
+      ],
+      { cwd: resolve("."), timeout: 180_000, maxBuffer: 2_000_000 },
+    );
+    const host = (await import(pathToFileURL(join(directory, "open-host.js")).href)) as {
+      openCertificate: typeof import("@waitron/fiscal-verifactu/src/certificate-open.js").openCertificate;
+    };
+    expect(await host.openCertificate(first.pfx, first.passphrase)).toMatchObject({
+      ok: true,
+      details: { fingerprint: first.fingerprint },
+    });
+    expect(await readFile(join(directory, "certificate-open.js.NOTICES.txt"), "utf8")).toContain(
+      "Bundled npm package notices",
+    );
+  }, 190_000);
 
   it.each(["sello", "representante"] as const)(
     "inspects selected %s bytes with the composed real module and no source loader",

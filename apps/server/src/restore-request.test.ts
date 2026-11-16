@@ -1,3 +1,4 @@
+import * as kdf from "./scrypt-kdf.js";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -902,4 +903,33 @@ it("validation refusal or disconnection publishes no received file", async () =>
     expect(await readRestoreFlow(stateDir)).toBeNull();
     expect(await readFile(artifactPath, "utf8")).toBe("received");
   }
+});
+
+it.each([false, true])("erases its restart key after restore refusal=%s", async (refuse) => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, {
+    artifact: Uint8Array.of(1),
+    recoveryKey: "private key",
+    environment: "preproduction",
+  });
+  const derive = vi.spyOn(kdf, "deriveKeyAsync");
+  const fault = new Error("placement refused");
+  const restoring = runStagedRestore(
+    { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: () => {} },
+    async (args) => {
+      const key = await args.archiveKey!.derive("private key", Buffer.alloc(16, 91), {
+        N: 16,
+        r: 1,
+        p: 1,
+        keylen: 32,
+        maxmem: 1024 * 1024,
+      });
+      expect(key).not.toEqual(Buffer.alloc(32));
+      if (refuse) throw fault;
+    },
+  );
+  if (refuse) await expect(restoring).rejects.toBe(fault);
+  else await expect(restoring).resolves.toBe(true);
+  expect(derive).toHaveBeenCalledTimes(1);
+  expect(await derive.mock.results[0]!.value).toEqual(Buffer.alloc(32));
 });

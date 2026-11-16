@@ -16,7 +16,7 @@
     }
   },
   "scripts": {
-    "build": "node ../../scripts/bundle-node.mjs src/bin.ts=dist/bin.js",
+    "build": "node ../../scripts/bundle-node.mjs src/bin.ts=dist/bin.js ../fiscal-verifactu/src/certificate-open-entry.ts=dist/certificate-open.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

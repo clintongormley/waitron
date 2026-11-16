@@ -1,5 +1,6 @@
 import { openCertificateFile } from "./certificate-file.js";
 
+process.stdin.setEncoding("utf8");
 let input = "";
 for await (const chunk of process.stdin) {
   input += String(chunk);

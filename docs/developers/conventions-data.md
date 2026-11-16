@@ -6824,4 +6824,6 @@ in `certificate-install.ts` and `aeat-transport.ts`; diagnosis and filing transp
 
 The source loader must resolve from the owning module, independently of the command's working
 directory: provisioning's CLI has no direct `tsx` dependency. Its settings and CLI tests exercise
-that caller; passing only the fiscal package's source test would miss it.
+that source caller; the diagnosis-bundle suite also runs the declared provisioning build and
+opens through a bundled validation host beside its outputs. Passing only the fiscal package's
+source test would miss a missing child in the provisioning build.
