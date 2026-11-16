@@ -148,8 +148,8 @@ describe("GET /management-api/membership", () => {
         displayName: "Suspended administrator",
         role: "admin",
         status: "suspended",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
       }),
     );
     const app = mountApp(designated);
