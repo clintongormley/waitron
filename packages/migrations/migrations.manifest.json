@@ -16,7 +16,6 @@
       "sale_receipt_guests",
       "invoice_pdf_downloads",
       "daily_closes",
-      "activity_log",
       "bill_payment_lines",
       "invoice_correction_refunds",
       "unpaid_departures",

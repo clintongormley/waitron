@@ -2,7 +2,12 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { eq, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core/query-builders/select";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { recordActivity, readActivityForSubject, readActivityForPerson } from "./activity-log.js";
+import {
+  pruneActivityLog,
+  recordActivity,
+  readActivityForSubject,
+  readActivityForPerson,
+} from "./activity-log.js";
 import { CORE_CHANGE_SOURCES } from "./classification.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { persons } from "./schema/identity/persons.js";
@@ -323,6 +328,35 @@ describe("activity log", () => {
     expect(filteredPerson).toContain("activity_log_person_at_idx");
     expect(filteredPerson).toContain("activity_log_subject_idx");
     expect(filteredPerson).not.toContain("activity_log_kind_at_idx");
+  });
+  it("prunes only entries before the cutoff in bounded batches", async () => {
+    const cutoff = new Date("2026-10-15T04:00:00.000Z");
+    const older = await add("older", new Date("2026-10-01T00:00:00.000Z"));
+    const before = await add("before", new Date("2026-10-15T03:59:59.999Z"));
+    const boundary = await add("boundary", cutoff);
+    const recent = await add("recent", new Date("2026-11-01T00:00:00.000Z"));
+    const prune = (limit: number) =>
+      withTransaction(suite.db, (tx) => pruneActivityLog(tx, cutoff, limit));
+    expect(await prune(1)).toBe(1);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).not.toContain(
+      older.id,
+    );
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).toContain(before.id);
+    expect(await prune(2)).toBe(1);
+    expect(await prune(2)).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id).sort()).toEqual(
+      [boundary.id, recent.id].sort(),
+    );
+  });
+  it("rolls pruning back with the caller's transaction", async () => {
+    const row = await add("old", new Date("2026-01-01T00:00:00.000Z"));
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        expect(await pruneActivityLog(tx, at, 2)).toBe(1);
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    expect((await suite.db.select().from(activityLog)).map((entry) => entry.id)).toEqual([row.id]);
   });
   it("is a live-update source", () => {
     expect(CORE_CHANGE_SOURCES).toContainEqual({

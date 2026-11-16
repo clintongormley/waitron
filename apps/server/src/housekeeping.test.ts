@@ -1,10 +1,18 @@
 import { setImmediate as turn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
+import {
+  activityLog,
+  recordActivity,
+  CORE_MIGRATIONS,
+  printJobs,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
-import { clearOldPrintPayloads, housekeepingJob } from "./housekeeping.js";
+import { clearOldActivityLog, clearOldPrintPayloads, housekeepingJob } from "./housekeeping.js";
+import { startClockState } from "./start-clock-check.js";
+import { startClockGateHolds } from "./start-clock-gate.js";
 import { createJobRunner } from "./job-runner.js";
 import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
@@ -39,6 +47,82 @@ const lengths = () =>
   suite.db.all<{ size: number; storage: string }>(
     sql`select length(payload) size, typeof(payload) storage from print_jobs order by rowid`,
   );
+
+describe("activity log housekeeping", () => {
+  async function activity(at: string) {
+    return withTransaction(suite.db, (tx) =>
+      recordActivity(tx, {
+        kind: "settings.saved",
+        subjectId: "venue",
+        personId: null,
+        data: { revision: 1 },
+        at: new Date(at),
+      }),
+    );
+  }
+  it("prunes the log at 30 days while print payloads keep their seven-day rule", async () => {
+    const expired = await activity("2026-10-15T03:59:59.999Z");
+    const boundary = await activity("2026-10-15T04:00:00.000Z");
+    const recent = await activity("2026-11-01T04:00:00.000Z");
+    const p = await printer();
+    await job(p.id);
+    const duty = housekeepingJob({
+      db: suite.db,
+      isPrimary: () => true,
+      clockUnconfirmed: () => false,
+      readClock: async () => ({
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        cutoverChanges: [],
+      }),
+      jitterSeed: "node",
+      now: () => now,
+      log: () => {},
+      maxWaitMs: 3600000,
+    });
+    await duty.pass({ now, signal: new AbortController().signal });
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id).sort()).toEqual(
+      [boundary.id, recent.id].sort(),
+    );
+    expect(await suite.db.select().from(activityLog).where(eq(activityLog.id, expired.id))).toEqual(
+      [],
+    );
+    expect(lengths()[0]!.size).toBe(0);
+  });
+  it("honours a stop received while a batch waits for the write lock", async () => {
+    const entry = await activity("2026-10-01T00:00:00.000Z");
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const holding = withTransaction(suite.db, async () => {
+      entered();
+      await gate;
+    });
+    await started;
+    const controller = new AbortController();
+    const pruning = clearOldActivityLog(suite.db, now, controller.signal, 2);
+    controller.abort();
+    release();
+    await holding;
+    expect(await pruning).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).toEqual([entry.id]);
+  });
+  it("yields between batches and honours an abort before the next write", async () => {
+    for (let i = 0; i < 3; i++) await activity("2026-10-01T00:00:00.000Z");
+    const controller = new AbortController();
+    const stop = turn().then(() => controller.abort());
+    expect(await clearOldActivityLog(suite.db, now, controller.signal, 2)).toBe(2);
+    await stop;
+    expect(await suite.db.select().from(activityLog)).toHaveLength(1);
+    expect(await clearOldActivityLog(suite.db, now, controller.signal, 2)).toBe(0);
+    expect(await clearOldActivityLog(suite.db, now, new AbortController().signal, 2)).toBe(1);
+    expect(await suite.db.select().from(activityLog)).toEqual([]);
+  });
+});
 
 describe("print payload housekeeping", () => {
   it("empties only old terminal jobs and stores an empty blob without changing their history", async () => {
@@ -114,6 +198,7 @@ describe("print payload housekeeping", () => {
       const duty = housekeepingJob({
         db: suite.db,
         isPrimary: () => true,
+        clockUnconfirmed: () => false,
         readClock: async () => ({
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
@@ -151,9 +236,24 @@ describe("print payload housekeeping", () => {
     const row = await job(p.id);
     let at = new Date("2026-11-14T02:00:00.000Z");
     let primary = true;
+    const startClock = startClockState();
+    const activity = await withTransaction(suite.db, (tx) =>
+      recordActivity(tx, {
+        kind: "settings.saved",
+        subjectId: "venue",
+        personId: null,
+        data: { revision: 1 },
+        at: new Date("2026-10-01T00:00:00.000Z"),
+      }),
+    );
     const duty = housekeepingJob({
       db: suite.db,
       isPrimary: () => primary,
+      clockUnconfirmed: startClockGateHolds(
+        startClock,
+        () => true,
+        () => false,
+      ),
       readClock: async () => ({
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
@@ -170,6 +270,9 @@ describe("print payload housekeeping", () => {
       new Date("2026-11-14T03:00:00.000Z"),
     );
     expect(lengths()[0]!.size).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((entry) => entry.id)).toEqual([
+      activity.id,
+    ]);
     await suite.db
       .update(printJobs)
       .set({ payload: new Uint8Array([1, 2, 3]) })
@@ -177,10 +280,12 @@ describe("print payload housekeeping", () => {
     await duty.pass({ now: at, signal: new AbortController().signal });
     expect(lengths()[0]!.size).toBe(3);
     at = new Date("2026-11-14T03:00:00.000Z");
+    startClock.confirm("by_person", {});
     expect((await duty.pass({ now: at, signal: new AbortController().signal })).nextDueAt).toEqual(
       new Date("2026-11-15T03:00:00.000Z"),
     );
     expect(lengths()[0]!.size).toBe(0);
+    expect(await suite.db.select().from(activityLog)).toEqual([]);
     await suite.db
       .update(printJobs)
       .set({ payload: new Uint8Array([1]) })

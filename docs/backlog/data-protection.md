@@ -248,6 +248,13 @@ by the answers):
 
 ## Decisions and deliberate limits
 
+- **DB-GROWTH, 2026-11-15:** you chose to prune the activity log after about a month
+  ("The activity log may be useful briefly (eg one month max) but we can prune it after that",
+  recorded in Lane H's queue and the [plan evidence](../superpowers/plans/2026-11-15-db-growth-evidence.md#authority)).
+  The watcher cleared a fixed 30-day cutoff at 23:01. Housekeeping removes older entries;
+  UPDATE remains refused. This overrides A1543 for this log only; it does not
+  authorise trimming fiscal, payment or other working records.
+
 - **A1543, 2026-11-15:** the owner chose “Keep everything” at 19:32, recorded by the watcher in Lane J’s `questions.md` at 19:55. Do not trim the working records examined in the [proposal](../superpowers/specs/2026-11-15-a1543-working-records-proposal.md); revisit retention with A664 after the advisers. No seven-day cutoff or implementation was accepted. The proposal remains the audit and measurement record.
 
 - **2026-11-09, A1404 Amazon acceptance:** the trial passed key rotation, the production recovery PDF and a fresh-target restore with row and sealed-secret checks; owned-resource cleanup left no bucket or uploads. [Receipt](../receipts/a1404/README.md#amazon-rotation-and-production-pdf-9-november-2026).

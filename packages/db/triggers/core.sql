@@ -1,3 +1,10 @@
+CREATE TRIGGER activity_log_refuse_update
+BEFORE UPDATE ON activity_log
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'activity_log entries cannot be updated');
+END;
+--> statement-breakpoint
 CREATE TRIGGER tenders_reject_post_settlement
 BEFORE INSERT ON tenders
 FOR EACH ROW

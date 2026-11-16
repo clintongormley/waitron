@@ -32,7 +32,6 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
  * dropping one is a decision that should cost an edit here.
  */
 const EXPECTED = [
-  "activity_log",
   "adjustment_lines",
   "adjustment_refunds",
   "adjustments",

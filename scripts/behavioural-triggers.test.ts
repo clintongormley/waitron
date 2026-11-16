@@ -93,6 +93,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "activity_log_refuse_update",
   "party_allergy_guests_need_answer_insert",
   "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",

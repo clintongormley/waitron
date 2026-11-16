@@ -801,7 +801,8 @@ signed handover record, checked against signed return evidence. The 19:30 split 
 acceptance rule in fiscal-verifactu”; `filing-cases.ts` remains untouched. The watcher cleared the
 payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
 11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
-who accepted which clash across backup and handover, without deciding product behaviour.
+who accepted which clash across backup and handover for the live log’s 30-day retention,
+without deciding product behaviour. Earlier backup points retain their own history.
 
 **2026-11-12, A1342-3:** The owner's 13:52 direction is that a spare taking over becomes the new
 main, and the old main returns its data to it; switching roles again uses the same handover.

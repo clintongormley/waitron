@@ -27,6 +27,21 @@ it("reads a legitimate held setup in place: every activation row, nothing kept, 
   expect(result).toMatchObject({ rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 });
 });
 
+it("activity history does not count as kept records for Start again", async () => {
+  const held = await heldSetup();
+  const before = await read(held);
+  write(held, [
+    `insert into activity_log (id, at, kind, subject_kind, subject_id, data)
+    values ('history', '2026-11-15T12:00:00.000Z', 'settings.saved', 'settings', 'venue', '{"revision":1}')`,
+  ]);
+  expect(await read(held)).toMatchObject({
+    rows: before.rows + 1,
+    kept: 0,
+    records: 0,
+    accepted: 0,
+  });
+});
+
 it("counts an invoice as a record and as a kept row", async () => {
   const held = await heldSetup({ invoices: 1 });
   const result = await read(held);

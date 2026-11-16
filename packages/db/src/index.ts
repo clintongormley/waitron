@@ -496,7 +496,12 @@ export type {
   ActivityKindRule,
   ActivitySubjectKind,
 } from "./activity-kinds.js";
-export { recordActivity, readActivityForSubject, readActivityForPerson } from "./activity-log.js";
+export {
+  pruneActivityLog,
+  recordActivity,
+  readActivityForSubject,
+  readActivityForPerson,
+} from "./activity-log.js";
 export type {
   ActivityInput,
   RecordedActivity,

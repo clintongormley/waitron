@@ -79,3 +79,25 @@ storage writer matches checkpoint `a4bc610345` modulo formatting (`git diff -w -
 overnight assignment, questions and export formatting are outside this run. The workload has **no
 rota shifts and no legal clock rows**; its storage figures do not verify those behaviors. Focused real
 rota/clock tests and the independent Claude reviews supply that evidence.
+
+## 2026-11-16 — implemented fixed 30-day retention
+
+A fresh 30-day, 7,500-bill build (seed 1) was swept with the real housekeeping job.
+At the saved simulated clock, `2025-12-03T04:30:00.068Z`, its fixed cutoff was
+`2025-11-03T04:30:00.068Z`. The log went from **7,515 to 7,500 entries**: all 15
+expired entries were removed and the digest of every retained row stayed identical. The digest
+of all 7,500 fiscal records also stayed identical. Print payloads stayed at **176,465,211 bytes**
+after the same seven-day print cleanup.
+
+Compacted copies of that same database measured **421,457,920 before → 421,449,728 bytes after**
+the log sweep: 8,192 bytes less. The live file stayed at **1,025,028,096 bytes**. This first month
+contains only 15 expired seed events; it does not measure a continuing monthly growth slope
+or claim to solve the earlier 1.2 GB/month by itself. The fixture has no rota shifts or legal
+clock entries; these empty tables prove nothing about their nonempty behavior.
+
+The builder started from parent `755698e27c` plus the pruning changes later committed as
+`3dc40298aa`; the driver rebased while it ran. The before/after comparison above uses one stopped
+database and the post-review housekeeping implementation, not two whole-branch builds.
+Lane H receipts `db-growth-retention/month-{build.log,sweep.log,result-context.json}` record
+the commands, source context and sweep source hashes. Focused tests own clock-wait gating,
+batch bounds, rollback and stop behavior.
