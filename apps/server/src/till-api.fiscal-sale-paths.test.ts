@@ -469,6 +469,36 @@ describe("POST /api/session (PIN login body handling)", () => {
 });
 
 describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
+  it.each(["sale", "collect"])(
+    "manual tip validates at the HTTP boundary for %s",
+    async (route) => {
+      const { cfg, operatorId } = await setupVenue();
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const deviceCookie = await enrolTillCookie(
+        cfg,
+        await seedProfileFF("till", ["hand-keyed-card-payment"]),
+      );
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      const url = route === "sale" ? "/api/sales" : `/api/working-orders/${randomUUID()}/collect`;
+      for (const addedTip of [null, -1, "-0.30", "bad", "0.001", ["0.30"]]) {
+        const answer = await app.request(url, {
+          method: "POST",
+          headers: { cookie: `${cookie}; ${deviceCookie}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            expectedEdit: null,
+            lines: [],
+            tender: { method: "card", amount: "1.50", addedTip },
+          }),
+        });
+        expect(answer.status).toBe(400);
+        expect(await answer.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "addedTip" } },
+        });
+      }
+    },
+  );
+
   it("returns the active conflict refusal for new cash while replaying the original ticket", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;

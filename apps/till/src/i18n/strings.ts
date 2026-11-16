@@ -556,7 +556,6 @@ export const en = {
     "That printer is no longer the invoice printer. Check Delivery and save again.",
   "tender.card_ref": "Operation number (optional)",
   "tender.operation_number": "Operation number",
-  "tender.reader_tip_cleared": "The reader tip was cleared and is not included in this payment.",
   "tender.outside_source": "Card taken on (optional)",
   "tender.outside_unspecified": "Not specified",
   "tender.outside_sumup": "This SumUp account",
@@ -934,6 +933,10 @@ export const en = {
   "profile.title": "This device's profile",
   "profile.label": "Device profile",
   "profile.switch": "Switch",
+  "tender.tip_not_recorded":
+    "This payment was not recorded: tips are off or nothing is owed. Keep the terminal details and check the payment before changing the tip. Do not charge the card again.",
+  "profile.payment_recovery":
+    "After checking the payment, try Switch again. Cancel keeps the current profile.",
   "profile.order_open": "Park or clear the order in progress before switching profile.",
   "profile.draft_unsaved":
     "The order's last change could not be saved. Try again, or remove it, before switching profile.",
@@ -2669,8 +2672,6 @@ export const es: Record<StringKey, string> = {
     "Esa impresora ya no es la de facturas. Revisa la entrega y vuelve a guardar.",
   "tender.card_ref": "Número de operación (opcional)",
   "tender.operation_number": "Número de operación",
-  "tender.reader_tip_cleared":
-    "Se ha borrado la propina del datáfono y no se incluye en este cobro.",
   "tender.outside_source": "Tarjeta cobrada en (opcional)",
   "tender.outside_unspecified": "Sin especificar",
   "tender.outside_sumup": "Esta cuenta de SumUp",
@@ -3026,6 +3027,10 @@ export const es: Record<StringKey, string> = {
   "profile.title": "Perfil de este dispositivo",
   "profile.label": "Perfil de dispositivo",
   "profile.switch": "Cambiar",
+  "tender.tip_not_recorded":
+    "Este pago no se ha registrado: las propinas están desactivadas o no queda nada por pagar. Conserva los datos del terminal y comprueba el pago antes de cambiar la propina. No vuelvas a cobrar la tarjeta.",
+  "profile.payment_recovery":
+    "Después de comprobar el pago, vuelve a pulsar Cambiar. Cancelar mantiene el perfil actual.",
   "profile.order_open": "Aparca o vacía el pedido en curso antes de cambiar de perfil.",
   "profile.draft_unsaved":
     "No se pudo guardar el último cambio del pedido. Vuelve a intentarlo, o quítalo, antes de cambiar de perfil.",

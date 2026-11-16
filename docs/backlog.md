@@ -1009,9 +1009,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   outside it.
 
 - **Loose ends left by W97 (#1311).**
-  - A card payment stuck `attempting` holds its device's profile switch until a manager resolves
-    it on Payments. The till only says to switch once it finishes; point it at the Payments screen.
-    [Detail](backlog/till.md#a-card-payment-stuck-attempting-holds-its-devices-profile-switch)
   - The till's Profile button shows whenever the device has more than one approved profile, read
     at boot: neither approvals added later nor the signed-in person's admission hide or show it
     until the dialog reads `/api/device/me` again.
@@ -1143,8 +1140,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   other-provider and cash-only qualification remains open.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
-- **A payment on another card machine cannot carry a tip in the counter’s direct collection form.** The bill-payment window already accepts a manual-card tip.
-
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 
@@ -1158,10 +1153,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses
   Wi-Fi mid-payment", and default 7). The server is unchanged, so another phone can start a
   payment on the same bill meanwhile.
-
-- **A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show
-  the ticket.**
-  [Detail](backlog/payments.md#a-payment-whose-read-shows-it-settled-the-bill-needs-one-press-of-comprobar-de-nuevo-to-show-the-ticket)
 
 
 - **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing

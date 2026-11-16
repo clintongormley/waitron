@@ -463,6 +463,45 @@ describe("TillApi", () => {
     );
   });
 
+  it.each([undefined, "0.30"])(
+    "direct card wire preserves an optional added tip %s",
+    async (addedTip) => {
+      const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
+      const api = new TillApi("", fetchStub);
+      const tender = {
+        method: "card" as const,
+        amount: "1.50",
+        externalRef: "OP-TIP",
+        ...(addedTip === undefined ? {} : { addedTip }),
+      };
+      await api.recordSale(
+        [],
+        tender,
+        "wo-tip",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+      );
+      await api.collectOrder("wo-tip", tender, undefined, undefined, null);
+      const bodies = fetchStub.mock.calls.map(([, init]) =>
+        JSON.parse((init as RequestInit).body as string),
+      );
+      const wanted = {
+        method: "card",
+        amount: "1.50",
+        externalRef: "OP-TIP",
+        ...(addedTip === undefined ? {} : { addedTip: "0.30" }),
+      };
+      expect(bodies).toEqual([
+        { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null },
+        { tender: wanted, expectedEdit: null },
+      ]);
+    },
+  );
+
   it("sends the chosen receipt language with a sale, a card payment and a collect", async () => {
     const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
     const api = new TillApi("", fetchStub);

@@ -274,13 +274,6 @@ and by pay period, frozen when a pay period closes (once the product has a step 
 The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).
 
-## A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show the ticket
-
-A bill read that lists a held payment frees the bill, except when that payment
-settled it: the locked confirmation stays, and its Comprobar de nuevo replays the payment and
-shows the ticket (`apps/till/src/till-app-bill-payments.test.ts`, "keeps the locked
-confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket").
-
 ## Loose ends left by A633
 
 - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage

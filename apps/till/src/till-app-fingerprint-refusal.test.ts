@@ -26,7 +26,7 @@ import {
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillProduct } from "./api/client.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 
 const refusal = { code: "fiscal.fingerprint_mismatch", status: 409 };
@@ -363,3 +363,37 @@ it.each(
     await page.viewport(1280, 900);
   }
 });
+
+it.each(["confirm-payment", "collect-order"])(
+  "keeps manual tip details after a refused %s",
+  async (eventName) => {
+    const write = vi.fn().mockRejectedValue({ code: "bill.tip_not_allowed", status: 400 });
+    const { el } = await mount("en-GB", { recordSale: write, collectOrder: write });
+    const screen = await openCounter(el);
+    screen.tipsEnabled = true;
+    await screen.updateComplete;
+    const form = screen.shadowRoot!.querySelector("till-tender-pay")!;
+    await form.updateComplete;
+    emit(form, eventName, {
+      method: "card",
+      amount: "3.00",
+      addedTip: "0.30",
+      externalRef: "OP-TIP",
+      externalMachine: "Spare Solo",
+    });
+    await flush(el);
+    await screen.updateComplete;
+    await form.updateComplete;
+    expect(banner(el)?.textContent).toContain(t("tender.tip_not_recorded"));
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".tip-input")?.value,
+    ).toBe("0.30");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".ref-input")?.value,
+    ).toBe("OP-TIP");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="externalMachine"]')
+        ?.value,
+    ).toBe("Spare Solo");
+  },
+);

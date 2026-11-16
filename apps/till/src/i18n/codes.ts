@@ -819,8 +819,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No puedes iniciar sesión con ese perfil. Elige otro",
   },
   "device.payment_in_progress": {
-    en: "A card payment on this device is still in progress. Switch once it finishes or is cancelled",
-    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia cuando termine o se cancele",
+    en: "A card payment on this device is still in progress. Open Check card payments to check its outcome; sign in there if asked.",
+    es: "Hay un pago con tarjeta en curso en este dispositivo. Abre Comprobar pagos con tarjeta para consultar el resultado; inicia sesión allí si se solicita.",
   },
   "device.profile_changed": {
     en: "This device switched to another profile while the payment was starting. No card was charged. Try again.",

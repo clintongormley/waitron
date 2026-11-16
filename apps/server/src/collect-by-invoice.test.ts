@@ -236,6 +236,86 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     );
   }
 
+  it("manual tip settles a corrected issued bill without changing its invoice, including replay", async () => {
+    const { billId, saleId } = await correctedCake();
+    const deps = {
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      admission: testTradingAdmission(),
+    };
+    const request = {
+      id: billId,
+      lines: [],
+      tender: { method: "card" as const, amount: "18.00", addedTip: "0.30" },
+    };
+    const before = fiscalRecordCount(venue, billId);
+    const paid = await collectOrder(
+      deps,
+      { ...venue.cfg, tipsEnabled: true },
+      request,
+      venue.operatorId,
+    );
+    expect(paid.total).toBe("18.00");
+    expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1588, cash: null }]);
+    expect(paid.tender).toMatchObject({ charged: "15.88", tip: "0.30" });
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ amount: payments.amount })
+          .from(payments)
+          .where(eq(payments.workingOrderId, billId)),
+      ),
+    ).toEqual([{ amount: 1588 }]);
+    const replay = await collectOrder(
+      deps,
+      { ...venue.cfg, tipsEnabled: false },
+      request,
+      venue.operatorId,
+    );
+    expect(replay.tender).toEqual(paid.tender);
+    expect(fiscalRecordCount(venue, billId)).toBe(before);
+  });
+
+  it("refuses a manual tip on an issued bill while tips are off", async () => {
+    const { billId, saleId } = await correctedCake();
+    await expect(
+      collectOrder(
+        {
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          admission: testTradingAdmission(),
+        },
+        { ...venue.cfg, tipsEnabled: false },
+        { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
+        venue.operatorId,
+      ),
+    ).rejects.toMatchObject({ code: "bill.tip_not_allowed", params: { chargeable: "15.58" } });
+    expect(await tendersOf(saleId)).toEqual([]);
+  });
+
+  it.each([false, true])(
+    "refuses a positive manual tip at zero due (tips enabled: %s)",
+    async (tipsEnabled) => {
+      const { billId } = await correctedCake({ total: "-18.00", base: "14.88" });
+      await expect(
+        collectOrder(
+          {
+            db: venue.db,
+            backend: venue.backend,
+            clock: venue.clock,
+            admission: testTradingAdmission(),
+          },
+          { ...venue.cfg, tipsEnabled },
+          { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
+          venue.operatorId,
+        ),
+      ).rejects.toMatchObject({ code: "bill.tip_not_allowed" });
+      expect(await statusOf(venue, billId)).toBe("placed");
+    },
+  );
+
   it("settles a cash collection at the corrected amount the customer owes", async () => {
     const { billId, saleId } = await correctedCake();
 

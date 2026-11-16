@@ -49,8 +49,8 @@ and record its operation number and machine. You can choose **This SumUp account
 machine uses the connected account, or **Paid outside Waitron** for another provider. These
 fields are optional; the bill keeps the details you enter.
 
-If you entered a reader tip before switching, the direct counter form clears it and tells you
-it is not included. Use the bill-payment window to record a tip taken on another machine.
+If the venue takes tips, enter the tip taken on that machine in **Tip**. A tip you entered
+before choosing **Other card machine** stays there; check that the total matches the machine.
 
 Record each payment as you take it while Waitron accepts payments. If Waitron refuses a payment,
 follow the message before recording it again; do not charge the customer twice. If you have no
@@ -707,7 +707,9 @@ When this device is approved for more than one profile, **More** (☰) offers **
 Choose another **Device profile** and tap **Switch**. You can only switch to a profile you are
 allowed to use.
 
-Before switching, park or clear the order in progress and wait for any payment in progress to finish.
+Before switching, park or clear the order in progress. If a card payment is still in progress,
+choose **Check card payments / sign in** to check its outcome, signing in there if asked.
+Then try **Switch** again. **Cancel** keeps the current profile.
 Other staff signed in on this device are signed out if the new profile does not allow them to sign in.
 To choose which zones this device shows, see
 [Choose the zones this device shows](table-service.md#device-zones).

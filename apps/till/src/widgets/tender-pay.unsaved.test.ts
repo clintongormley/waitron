@@ -405,3 +405,24 @@ it("tracks the separate machine and source as a draft, ignoring blank machine te
   await click(form, 'input[name="external-provider"][value=""]');
   expect(unload()).toBe(false);
 });
+
+it("manual tip protects leave without a reader and confirmation consumes it once", async () => {
+  const { app, form } = await mount();
+  form.tipsEnabled = true;
+  await form.updateComplete;
+  await click(form, ".pay-card");
+  await fill(form, ".tip-input", "0.30");
+  expect(unload()).toBe(true);
+  const leaving = app.leave.coordinator.request({
+    scopes: [form],
+    reason: "navigation",
+    proceed() {},
+  });
+  expect((await question(app)).open).toBe(true);
+  await choose(app, "keep");
+  expect(await leaving).toBe("kept");
+  expect(form.shadowRoot!.querySelector<WtInput>(".tip-input")!.value).toBe("0.30");
+  await click(form, ".confirm");
+  expect(app.payments).toEqual([{ method: "card", amount: "3.00", addedTip: "0.30" }]);
+  expect(unload()).toBe(false);
+});

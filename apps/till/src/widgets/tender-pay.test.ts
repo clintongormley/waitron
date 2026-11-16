@@ -1442,7 +1442,7 @@ describe("till-tender-pay", () => {
       expect(query(el, ".pay")).toBeNull();
     });
 
-    it("shows a tip entry only when tipsEnabled (integrated only)", async () => {
+    it("shows a tip entry only when tipsEnabled on either card path", async () => {
       const store = new WorkingOrderStore();
       const { el: withTip } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
@@ -1460,9 +1460,9 @@ describe("till-tender-pay", () => {
 
       const { el: manual } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
-        tipsEnabled: true, // ignored under the manual path
+        tipsEnabled: true,
       });
-      expect(query(manual, ".tip-input")).toBeNull();
+      expect(query(manual, ".tip-input")).not.toBeNull();
     });
 
     it("reads the entered tip onto the emitted collect-card detail", async () => {
@@ -2635,10 +2635,56 @@ it.each(["2.00", "bad"])(
       expect(query(el, ".ref-input")).toBeNull();
       expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).not.toBe("");
     } else {
-      expect(query(el, "[data-reader-tip-cleared]")?.textContent).toContain("not included");
+      expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("2.00");
       click(el, ".cancel");
       await el.updateComplete;
-      expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("");
+      expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("2.00");
     }
+  },
+);
+
+it.each(["sumup_cloud", "none"] as const)(
+  "manual card retains tip with %s",
+  async (cardProvider) => {
+    const previous = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(previous));
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider,
+      takesManualCard: true,
+      tipsEnabled: true,
+    });
+    const sent: unknown[] = [];
+    el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
+    await typeTip(el, "0.30");
+    click(el, cardProvider === "none" ? ".pay-card" : ".pay-manual-card");
+    await el.updateComplete;
+    expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("0.30");
+    expect(query(el, ".total")?.textContent).toBe("€1.80");
+    await typeTip(el, "bad");
+    click(el, ".confirm");
+    await el.updateComplete;
+    expect(sent).toEqual([]);
+    expect((query(el, ".confirm") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).toBe(
+      t("bill_pay.tip_invalid"),
+    );
+    await typeTip(el, "0.30");
+    await typeRef(el, "OP-TIP");
+    click(el, ".confirm");
+    click(el, ".confirm");
+    expect(sent).toEqual([
+      { method: "card", amount: "1.50", addedTip: "0.30", externalRef: "OP-TIP" },
+    ]);
+    await el.updateComplete;
+    el.confirmation = {
+      tender: sent[0] as import("./tender-pay.js").RetainedTender["tender"],
+      outstanding: "1.50",
+    };
+    await el.updateComplete;
+    expect(query(el, ".total")?.textContent).toBe("€1.80");
   },
 );

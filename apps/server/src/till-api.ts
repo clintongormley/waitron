@@ -1821,6 +1821,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
+      if (body.tender?.method === "card") optionalMoney(body.tender.addedTip, "addedTip");
       Object.assign(
         body.tender ?? {},
         readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
@@ -2779,6 +2780,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       assertTakesTender(session.device, tillTenderKind(body.tender));
+      if (body.tender?.method === "card") optionalMoney(body.tender.addedTip, "addedTip");
       Object.assign(
         body.tender ?? {},
         readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
