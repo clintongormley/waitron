@@ -637,7 +637,7 @@ export async function healthCommand(command, options, { report, output }) {
       );
       report(
         short
-          ? "Queued workflow inventory was short; unread runs may contain waiting work. See the counts and inspected IDs above."
+          ? "Queued workflow inventory was short; unread runs may contain waiting work."
           : "No stalled server queue needs attention.",
       );
     } else if (command === "recover" || command === "recover-planners") {
