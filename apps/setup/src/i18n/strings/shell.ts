@@ -141,6 +141,10 @@ export const shellEn = {
     "This backup has no active administrator with a password. Choose another backup.",
   "shell.restore.environment_mismatch":
     "The backup comes from the other environment. Choose the environment it came from.",
+  "shell.restore.manifest_invalid":
+    "The backup manifest is damaged or incomplete. Choose another complete backup.",
+  "shell.restore.manifest_unsupported":
+    "This backup uses an unsupported format. Install a Waitron version that supports it, then try again.",
   "shell.restore.other_version":
     "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
 
@@ -370,6 +374,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta copia no tiene ningún administrador activo con contraseña. Elige otra copia de seguridad.",
   "shell.restore.environment_mismatch":
     "La copia viene del otro entorno. Elige el entorno del que viene.",
+  "shell.restore.manifest_invalid":
+    "El manifiesto de la copia está dañado o incompleto. Elige otra copia completa.",
+  "shell.restore.manifest_unsupported":
+    "Esta copia usa un formato no compatible. Instala una versión de Waitron que lo admita y vuelve a intentarlo.",
   "shell.restore.other_version":
     "Este archivo de copia de seguridad se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarlo. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otro archivo.",
 

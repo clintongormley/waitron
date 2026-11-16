@@ -64,7 +64,15 @@ export class SetupRecoveryCopy extends LitElement {
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
   @state() private error?:
-    "key" | "environment" | "file" | "kit" | "capacity" | "interrupted" | "failed";
+    | "key"
+    | "environment"
+    | "file"
+    | "kit"
+    | "capacity"
+    | "interrupted"
+    | "manifest"
+    | "unsupported"
+    | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
   #staged?: StagedCopy;
@@ -269,21 +277,25 @@ export class SetupRecoveryCopy extends LitElement {
         const error = cause as ApiError | undefined;
         const field = error?.params?.field;
         this.error =
-          error?.code === "restore.upload_interrupted"
-            ? "interrupted"
-            : error?.code === "restore.archive_resource_limit"
-              ? "capacity"
-              : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
-                ? "key"
-                : error?.code === "restore.environment_mismatch" || field === "environment"
-                  ? "environment"
-                  : error?.code === "backup.artifact_invalid" ||
-                      error?.code === "backup.archive_invalid" ||
-                      field === "artifact"
-                    ? "file"
-                    : error?.code === "backup.stream_kit_invalid" || field === "kit"
-                      ? "kit"
-                      : "failed";
+          error?.code === "restore.manifest_invalid"
+            ? error.params?.reason === "unsupported"
+              ? "unsupported"
+              : "manifest"
+            : error?.code === "restore.upload_interrupted"
+              ? "interrupted"
+              : error?.code === "restore.archive_resource_limit"
+                ? "capacity"
+                : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
+                  ? "key"
+                  : error?.code === "restore.environment_mismatch" || field === "environment"
+                    ? "environment"
+                    : error?.code === "backup.artifact_invalid" ||
+                        error?.code === "backup.archive_invalid" ||
+                        field === "artifact"
+                      ? "file"
+                      : error?.code === "backup.stream_kit_invalid" || field === "kit"
+                        ? "kit"
+                        : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -322,6 +334,8 @@ export class SetupRecoveryCopy extends LitElement {
   override render() {
     const preview = this.preview;
     const errors = {
+      manifest: "shell.restore.manifest_invalid",
+      unsupported: "shell.restore.manifest_unsupported",
       key: "restore.preview_key_error",
       environment: "restore.preview_environment_error",
       file: "restore.preview_file_error",

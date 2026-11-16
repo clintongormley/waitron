@@ -688,6 +688,7 @@ export async function restoreDatabase(args: {
     await removeIncomings();
     throw error;
   }
+  args.log("debug", "restore.db.staged");
   const replaced = args.nodeDump === undefined ? [target] : [target, nodeTarget];
   const moved: string[] = [];
   let nodePlaced = false;
@@ -705,11 +706,14 @@ export async function restoreDatabase(args: {
       await fs.rename(member, join(aside, basename(member)));
       moved.push(member);
     }
+    args.log("debug", "restore.db.previous_moved");
     if (args.nodeDump !== undefined) {
       await fs.rename(nodeIncoming, nodeTarget);
       nodePlaced = true;
+      args.log("debug", "restore.db.node_placed");
     }
     await fs.rename(incoming, target);
+    args.log("debug", "restore.db.venue_placed");
   } catch (error) {
     // The backup's node.db never stays without its venue.db: the box's own goes back or none does.
     if (nodePlaced) await removeIncoming(fs, nodeTarget, args.log);

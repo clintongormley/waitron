@@ -210,6 +210,18 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     },
   },
+  "restore.manifest_invalid": {
+    "en-GB": {
+      title: "Waitron could not read this backup's manifest.",
+      action:
+        "Choose another complete backup, or install a supported Waitron version if this backup uses a different format. Then retry the restore.",
+    },
+    "es-ES": {
+      title: "Waitron no ha podido leer el manifiesto de esta copia.",
+      action:
+        "Elige otra copia completa o instala una versión compatible de Waitron si esta copia usa un formato diferente. Después, reintenta la restauración.",
+    },
+  },
   "restore.archive_resource_limit": {
     "en-GB": {
       title: "The box could not make enough temporary space to open this backup.",

@@ -240,12 +240,12 @@ list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
 
 The image ships with backups OFF, deliberately.
 
-Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot success-path integration
-test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
-`packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails safe under GCM auth
-today); generalise archive entry routing off declared source ids when a second non-DB source lands.
-Database placement durability: sync both incoming database files and the venue folder, then
-qualify power loss during placement; A1415's process-kill tests establish restart decisions only.
+Scope the flat `resolvers` map by module when a second `nonDbState` module lands; generalise
+archive entry routing off declared source ids when a second non-DB source lands.
+Physical power loss during database placement remains unqualified. The placement kill tests in
+`restore-placement-crash.e2e.test.ts` qualify restart decisions only. A failed folder flush after
+publication is logged and restore finishes with the matching new identity; durability is then
+unconfirmed (watcher, 2026-11-16 12:48, Lane J questions).
 
 ## Box image constraints (B3)
 

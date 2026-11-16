@@ -55,6 +55,7 @@ import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
+import { clearRestoreSecretFiles } from "./restore-secrets.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
@@ -88,6 +89,7 @@ export interface EntryDeps {
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
   /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */
   clearReplacedDatabases?: (venueDir: string, log: Logger) => Promise<void>;
+  clearRestoreSecretFiles?: (stateDir: string, log: Logger) => Promise<void>;
   /** Defaults to the real `lockVenueDatabase`, never a no-op: the clearing is safe only while the
    *  folder is held. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
@@ -715,6 +717,7 @@ async function runAdmittedEntry(
     const hold = await (deps.lockVenue ?? lockVenueDatabase)(deps.venueDir);
     try {
       await (deps.clearReplacedDatabases ?? clearReplacedDatabases)(deps.venueDir, deps.log);
+      await (deps.clearRestoreSecretFiles ?? clearRestoreSecretFiles)(deps.stateDir, deps.log);
 
       // Unchecked, an ahead database would surface as an unclassified driver error in whatever
       // query first touched the changed schema.

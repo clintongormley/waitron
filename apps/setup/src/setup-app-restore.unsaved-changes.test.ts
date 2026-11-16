@@ -220,6 +220,25 @@ describe("setup archive restore unsaved changes", () => {
       expect(unload()).toBe(true);
     },
   );
+  it.each(["invalid", "unsupported"])("explains a %s manifest refusal", async (reason) => {
+    const { el, form, api } = await mount();
+    vi.mocked(api.restore).mockRejectedValue({
+      code: "restore.manifest_invalid",
+      params: { reason },
+    });
+    await fill(form);
+    q(form, "[data-test=restore]").click();
+    await expect
+      .poll(
+        () =>
+          el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")?.errorMessage,
+      )
+      .toBe(
+        reason === "unsupported"
+          ? "This backup uses an unsupported format. Install a Waitron version that supports it, then try again."
+          : "The backup manifest is damaged or incomplete. Choose another complete backup.",
+      );
+  });
   it("a refused request remains protected against the original empty form", async () => {
     const { el, form, api } = await mount();
     vi.mocked(api.restore).mockRejectedValue({ code: "restore.environment_mismatch" });

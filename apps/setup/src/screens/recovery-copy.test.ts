@@ -357,3 +357,34 @@ it("explains an interrupted staging upload and clears the message after retry", 
     "The backup upload did not finish.",
   );
 });
+
+it.each(["invalid", "unsupported"])(
+  "explains a %s manifest before offering recovery",
+  async (reason) => {
+    const api = new SetupApi("", async () =>
+      Response.json(
+        { error: { code: "restore.manifest_invalid", params: { reason } } },
+        { status: 422 },
+      ),
+    );
+    const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", { api });
+    el.artifact = new File(["backup"], "copy.backup");
+    el.recoveryKey = "key";
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await expect
+      .poll(
+        () =>
+          (
+            el.shadowRoot!.querySelector("wt-form-actions") as
+              (HTMLElement & { error: string }) | null
+          )?.error,
+      )
+      .toBe(
+        reason === "unsupported"
+          ? "This backup uses an unsupported format. Install a Waitron version that supports it, then try again."
+          : "The backup manifest is damaged or incomplete. Choose another complete backup.",
+      );
+    expect(el.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();
+  },
+);

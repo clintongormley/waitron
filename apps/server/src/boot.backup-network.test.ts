@@ -1,6 +1,10 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { ensureStreamId } from "@waitron/db";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { gunzipSync } from "node:zlib";
+import { DatabaseSync } from "node:sqlite";
+import { decryptArtifact } from "./artifact-cipher.js";
+import { unpackArchive } from "./backup-archive.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -287,6 +291,35 @@ async function managerCookie(): Promise<string> {
   });
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
+
+it("starts, completes a decryptable backup with venue data, sells and answers health", async () => {
+  let scratch = "";
+  const productId = productIdOf("Tarta");
+  await bootAndTrade(
+    async (dir) => {
+      scratch = dir;
+      await storeArchiveRecord(boxRing(), join(dir, "backups"));
+      return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+    },
+    async (lines) => {
+      const completed = await waitForEvent(lines, "backup.destination_completed");
+      expect(completed.destination).toBe("primary");
+      const encrypted = await readFile(join(scratch, "backups", String(completed.key)));
+      const entries = unpackArchive(gunzipSync(decryptArtifact(encrypted, "twelve-chars!")));
+      const dump = entries.find((entry) => entry.name === "db.dump")!;
+      const path = join(scratch, "checked-backup.db");
+      await writeFile(path, dump.bytes);
+      const copy = new DatabaseSync(path, { readOnly: true });
+      try {
+        expect(copy.prepare("select id from products where id = ?").get(productId)).toEqual({
+          id: productId,
+        });
+      } finally {
+        copy.close();
+      }
+    },
+  );
+}, 60_000);
 
 describe("trading with an archive destination the box cannot use", () => {
   // Unavailability: the destination path is a regular file, so the folder cannot be created there.
