@@ -51,16 +51,6 @@ certificate export. The existing walkthrough above remains open.
 setup languages render three FNMT links under `/en/` and retain the three article identifiers.
 It does not fetch FNMT or check its translations.
 
-## Switching setup mode does not clean up what the server already holds
-
-**Still open after #334:**
-
-#334 clears the browser's
-  own record that a certificate import was requested, and nothing more. If someone fills in Demo,
-  Prepare or Live far enough that the server has stored part of that answer and then switches mode,
-  what the server kept is untested — write a test that stages configuration in one mode, switches,
-  and asserts what survives.
-
 ## In Demo, a server refusal of a field Demo hides can only be retried unchanged
 
 **Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
@@ -252,11 +242,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
   on real Spanish systems (left open by C42, #837).
   [Detail](#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
-- Switching setup mode does not clean up what the server already holds. If someone fills in
-  Demo, Prepare or Live far enough that the server has stored part of that answer and then
-  switches mode, what the server kept is untested — write a test that stages configuration in
-  one mode, switches, and asserts what survives.
-  [Detail](#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
 
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
