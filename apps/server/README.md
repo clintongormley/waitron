@@ -877,6 +877,12 @@ The ones worth grepping for:
   line; nothing retries a bind failure in the background. A spare's store listener carries
   `listener: spare_store`: its bind failure fails the start, and an error after it is listening is
   logged at `warn` while it keeps serving.
+- **`server.shutdown_step_overran`** (`warn`) — the final stream-stop reserve arrived while
+  shutdown was waiting on `step` (or `shutdown_preparation` before boot reached a named wait).
+  The stream host is asked to stop then; `streamState` says whether the copy was streaming,
+  opening, paused, refused or off. The warning can also describe a slow wait on a box with no
+  bucket copy configured. Remaining cleanup is still awaited. Requests or late duties committing
+  after this point can miss the final upload.
 - **`server.stopped`** / **`loop.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
 
 Never prose, and never a secret: every credential-adjacent error reports a structured code and — at

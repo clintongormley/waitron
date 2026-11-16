@@ -256,6 +256,7 @@ export class StreamHost {
   #reloading = false;
   #reloadCount = 0;
   #stopped = false;
+  #stopping: Promise<void> | undefined;
   #observerAbort: AbortController | undefined;
   #observer: Promise<void> | undefined;
   #pointerStore: { bucket: BucketConfig; store: ObjectStore } | undefined;
@@ -468,12 +469,14 @@ export class StreamHost {
    * only once every supervisor this host started has stopped, including one a reload is still
    * stopping, because the caller closes the store next.
    */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    if (this.#stopping !== undefined) return this.#stopping;
     this.#stopped = true;
     this.#observerAbort?.abort();
-    await this.#observer;
-    await this.#retire();
-    this.#deps.log("info", "stream.stopped", {});
+    this.#stopping = Promise.all([this.#retire(), this.#observer]).then(() => {
+      this.#deps.log("info", "stream.stopped", {});
+    });
+    return this.#stopping;
   }
 
   async suspend(): Promise<void> {

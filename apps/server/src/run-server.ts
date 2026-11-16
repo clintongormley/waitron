@@ -36,6 +36,14 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
 let shutdownUnderWay = false;
 let handlersInstalled = false;
 let restartRequested = false;
+let publishShutdown!: (startedAt: number) => void;
+const shutdownStarted = new Promise<number>((resolve) => {
+  publishShutdown = resolve;
+});
+
+export function whenShutdownStarts(): Promise<number> {
+  return shutdownStarted;
+}
 
 /** What the shutdown handlers stop. */
 export interface ShutdownTarget {
@@ -87,6 +95,7 @@ export function installShutdownHandlers(
     if (shuttingDown) return;
     shuttingDown = true;
     shutdownUnderWay = true;
+    publishShutdown(performance.now());
     // Left running after a rejection: it is the exit if the failure line's write never completes.
     const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
       if (exited) return;

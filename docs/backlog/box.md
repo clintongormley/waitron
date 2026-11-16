@@ -448,14 +448,6 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
   rehearsal, [receipts](../receipts/a538/README.md), A538-10); the unit tests drive the real S3
   client over a scripted network, and the loop test drives it against versitygw.
 
-## Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
-
-- Earlier work can still consume the stream's final-upload time inside the server's 8-second
-  shutdown: running jobs (including scheduled backups), the archive supervisor, the sending loop
-  and pending stream-service work. The Cloud snapshot pass is now awaited after the stream stops,
-  but those earlier waits remain unbounded within that deadline. Litestream's own
-  `shutdown-timeout: 4500ms` and its 5-second forced kill still count against the 8.
-
 ## Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
 
 - A commit that changes no row but writes to the side file, such as a schema change or a pragma
@@ -1341,11 +1333,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: Remaining bucket-copy limits
 
-3 entries, size S.
-
-- **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
-  Earlier shutdown waits can still consume the stream's final-upload time.
-  [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-6-590-the-litestream-supervisor)
+2 entries, size S.
 - **Loose ends left by A549.**
   Bound local level-0 growth and qualify starts during an outage and venue conditions.
   [Detail](box.md#loose-ends-left-by-a549)
@@ -1366,6 +1354,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+### Writes after the reserved final stream stop (2026-11-16)
+
+The shutdown reserve gives Litestream its configured 4.5 seconds within the eight-second
+process deadline, with a 100 ms scheduling allowance. A blocked event loop can still delay the
+timer. HTTP admission stays open through `stopWork`: requests or late duties that commit after
+the reserve point can miss the final upload. Request fencing and listener reordering remain
+outside this change. Claude reviewed the plan twice; the watcher cleared this smaller route
+and its stated limit at 19:37 on 16 November.
 
 ### Steady clocks and persisted sign-in failure times (2026-11-16)
 

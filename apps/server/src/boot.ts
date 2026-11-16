@@ -193,7 +193,9 @@ import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { buildHeaderMiddleware } from "./build-header.js";
 import { requestIdMiddleware } from "./request-id.js";
-import { restartProcess } from "./run-server.js";
+import { restartProcess, whenShutdownStarts, SHUTDOWN_DEADLINE_MS } from "./run-server.js";
+import { LITESTREAM_SHUTDOWN_TIMEOUT_MS } from "@waitron/stream";
+import { unrefTimer, type Timer } from "./unref-timer.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { corsForVenue } from "./cors.js";
@@ -3614,6 +3616,34 @@ async function bootServer(
     ...(storeLookup === undefined ? {} : { storeLookup }),
     ...seams.stream,
   });
+  let shutdownStep = "shutdown_preparation";
+  let streamStopping = false;
+  let streamStopTimer: Timer | undefined;
+  const stopStream = () => {
+    streamStopping = true;
+    streamStopTimer?.cancel();
+    return streamHost.stop();
+  };
+  undoOnFailure.push(async () => {
+    streamStopping = true;
+    streamStopTimer?.cancel();
+  });
+  void whenShutdownStarts().then((startedAt) => {
+    if (streamStopping) return;
+    const reserve = SHUTDOWN_DEADLINE_MS - LITESTREAM_SHUTDOWN_TIMEOUT_MS - 100;
+    const stopAtReserve = () => {
+      log("warn", "server.shutdown_step_overran", {
+        step: shutdownStep,
+        streamState: streamHost.status().state,
+      });
+      void stopStream().catch((error: unknown) =>
+        log("error", "stream.stop_failed", { errorCode: codeOf(error) }),
+      );
+    };
+    const remaining = reserve - (performance.now() - startedAt);
+    if (remaining <= 0) stopAtReserve();
+    else streamStopTimer = unrefTimer(remaining, stopAtReserve);
+  });
   const stopSealingNodeCommits = store.node.onCommit(() => jobRunner.wake("backups.sealed_state"));
   jobRunner.add(
     sealedStateJob(
@@ -3635,9 +3665,10 @@ async function bootServer(
       stopSealingNodeCommits,
     ),
   );
-  await jobRunner.addService(
-    streamService(streamHost, () => holders.singletonRole.current === "primary"),
-  );
+  await jobRunner.addService({
+    ...streamService(streamHost, () => holders.singletonRole.current === "primary"),
+    stop: stopStream,
+  });
   readSendingStream = () => streamHost.status();
   health.readStream = () => streamHost.status();
   // Only the one main box records its spare.
@@ -4750,12 +4781,17 @@ async function bootServer(
         return closeAll([
           async () => {
             try {
+              shutdownStep = "jobRunner";
               await jobRunner.stopJobs();
             } finally {
+              shutdownStep = "staffListener";
               await staffListener?.close();
             }
           },
-          () => stopBackgroundDuties(duties),
+          () =>
+            stopBackgroundDuties(duties, (name) => {
+              shutdownStep = name;
+            }),
         ]);
       },
       settleRequests: settleManagementRequests,

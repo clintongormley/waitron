@@ -94,6 +94,33 @@ function recordingHandles(
 }
 
 describe("background duties", () => {
+  it("names the closer before entering it, and continues naming after a refusal", async () => {
+    const names: string[] = [];
+    const failure = new Error("stop refused");
+    await expect(
+      stopBackgroundDuties(
+        {
+          aborts: [],
+          closers: [
+            {
+              name: "held",
+              close: () => {
+                expect(names).toEqual(["held"]);
+                throw failure;
+              },
+            },
+            {
+              name: "later",
+              close: () => {
+                expect(names).toEqual(["held", "later"]);
+              },
+            },
+          ],
+        },
+        (name) => names.push(name),
+      ),
+    ).rejects.toBe(failure);
+  });
   it("holds the aborts and the closers in exactly today's shutdown order", () => {
     const duties = backgroundDuties(recordingHandles([]));
     expect(duties.aborts.map((a) => a.name)).toEqual(ABORTS);
