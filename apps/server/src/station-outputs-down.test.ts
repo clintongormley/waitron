@@ -1,6 +1,6 @@
 import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
@@ -32,6 +32,7 @@ import {
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { kitchenScreenDevice, profile } from "./testing/kitchen-screen-device.js";
 import { waitingDish } from "./testing/waiting-dish.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -255,7 +256,7 @@ describe("station output status", () => {
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      await stationScreenDevice({
+      const screenId = await stationScreenDevice({
         stationId: f.grill,
         deviceProfileId: await profile(suite.db, "kds"),
         label: "Dark kitchen",
@@ -279,7 +280,7 @@ describe("station output status", () => {
         });
         return id;
       };
-      return { ...f, printerId, firedAt, orderId, paper };
+      return { ...f, printerId, firedAt, orderId, lineId: line!.id, screenId, paper };
     }
 
     it("clears a dark-screen alert after same-millisecond linked paper prints, keeping waiting work", async () => {
@@ -309,6 +310,47 @@ describe("station output status", () => {
       await f.paper();
       await waitingItem(f.venue, f.grill, f.firedAt);
       expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+    });
+
+    it("warns after a dish returns to its station when only its old ticket printed", async () => {
+      const f = await paperFixture();
+      await f.paper();
+      for (const [stationId, time] of [
+        [f.bar, "17:51"],
+        [f.grill, "17:52"],
+      ] as const) {
+        vi.useFakeTimers({ toFake: ["Date"], now: new Date(`2026-10-02T${time}:00.000Z`) });
+        try {
+          await withTransaction(suite.db, (tx) =>
+            moveDishesToStation(
+              tx,
+              f.venue.cfg,
+              f.orderId,
+              { submissionId: randomUUID(), lineIds: [f.lineId], stationId },
+              { deviceId: f.screenId, personId: null },
+            ),
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+      const failed = await suite.db
+        .update(printJobs)
+        .set({ status: "failed" })
+        .where(
+          and(
+            eq(printJobs.printerId, f.printerId),
+            eq(printJobs.createdAt, "2026-10-02T17:52:00.000Z"),
+          ),
+        )
+        .returning({ id: printJobs.id });
+      expect(failed).toHaveLength(1);
+      expect(await darkScreenAlertKeys(f)).toEqual([`station.screens_dark:${f.grill}`]);
+      await suite.db
+        .update(printJobs)
+        .set({ status: "done" })
+        .where(eq(printJobs.id, failed[0]!.id));
+      expect(await darkScreenAlertKeys(f)).toEqual([]);
     });
 
     it("does not count a completed line link for another station", async () => {

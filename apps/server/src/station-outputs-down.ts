@@ -133,8 +133,7 @@ export function waitingDishesQuery(
               join ${printJobs} on ${printJobs.id} = ${kitchenPrintJobLines.printJobId}
               where ${kitchenPrintJobLines.workingOrderLineId} = ${ticketItems.workingOrderLineId}
               and ${kitchenPrintJobs.stationId} = ${ticketItems.stationId}
-              and ${printJobs.kind} = 'document'
-              and ${printJobs.createdAt} >= ${ticketItems.firedAt}
+              and ${printJobs.createdAt} >= max(${ticketItems.firedAt}, coalesce(${ticketItems.stationChosenAt}, ${ticketItems.firedAt}))
               and ${printedOrResent(printJobs)})`
           : undefined,
       ),
