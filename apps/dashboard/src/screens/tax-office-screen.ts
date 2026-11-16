@@ -8,7 +8,7 @@ import {
   pageTitleStyles,
   type DataTableColumn,
 } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, isCalendarDate } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -331,10 +331,10 @@ export class TaxOfficeScreen extends LitElement {
     }
   }
 
-  /** The `YYYY-MM` of the issue range's start, or null while that date is not a whole date. */
+  /** The `YYYY-MM` of the issue range's start, or null while that date is not a calendar day. */
   #month(): string | null {
     const from = this.filter.from;
-    return from !== undefined && DAY.test(from) ? from.slice(0, 7) : null;
+    return from !== undefined && isCalendarDate(from) ? from.slice(0, 7) : null;
   }
 
   async #downloadMonth(): Promise<void> {

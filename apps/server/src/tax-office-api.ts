@@ -21,7 +21,12 @@ import {
   type SupportedLocale,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { readSaleCopy, renderSaleCopy, type SaleCopy } from "./orders-invoice-pdf.js";
+import {
+  invoicePdfFileName,
+  readSaleCopy,
+  renderSaleCopy,
+  type SaleCopy,
+} from "./orders-invoice-pdf.js";
 import { zipStream } from "./download-archive.js";
 import { toLanguage } from "./personal-data-export-api.js";
 import { resolveSessionLocale } from "./session-locale.js";
@@ -188,7 +193,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const bytes = await renderSaleCopy(copy);
       return c.body(new Uint8Array(bytes), 200, {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename="${copy.fileName}"`,
+        "content-disposition": `attachment; filename="${invoicePdfFileName(copy.code, copy.number)}"`,
         "cache-control": "no-store",
       });
     }),

@@ -8,6 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   activityLog,
+  devices,
   invoicePdfDownloads,
   invoiceSeries,
   sales,
@@ -19,10 +20,14 @@ import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   decimal,
+  type DeviceOrigin,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
+import { createPrinter } from "@waitron/printing";
+import * as receiptPrint from "./receipt-print.js";
 import { inTx } from "./testing/bill-venue.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import {
   parked,
@@ -32,11 +37,17 @@ import {
 } from "./testing/order-venue.js";
 import { mountTaxOfficeApi, type TaxOfficeApiDeps } from "./tax-office-api.js";
 import { confineTo, sessionHolding } from "./testing/session-holding.js";
-import type { SaleCopy } from "./orders-invoice-pdf.js";
+import { invoicePdfFileName, type SaleCopy } from "./orders-invoice-pdf.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { renderTaxOfficeCsv, taxOfficeMonthEntries } from "./tax-office-export.js";
 import type { TaxOfficeInvoice } from "./tax-office-list.js";
 
+vi.mock("./receipt-print.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./receipt-print.js")>();
+  return { ...actual, resolveReceiptPrinter: vi.fn(actual.resolveReceiptPrinter) };
+});
+
+const TICKET_58MM = 164.41;
 const TICKET_80MM = 226.77;
 const A4 = 595.28;
 
@@ -66,7 +77,11 @@ function mount(extra: Partial<TaxOfficeApiDeps> = {}, log: Logger = () => {}): H
 async function issueAt(
   iso: string,
   series: string,
-  opts: { customer?: boolean; lines?: { vatRate: string; lineTotal: string }[] } = {},
+  opts: {
+    customer?: boolean;
+    lines?: { vatRate: string; lineTotal: string }[];
+    origin?: DeviceOrigin;
+  } = {},
 ): Promise<{ billId: string; saleId: string }> {
   const billId = await parked(venue, "Croquettes");
   const lines = opts.lines ?? [{ vatRate: "10", lineTotal: "3.00" }];
@@ -76,7 +91,7 @@ async function issueAt(
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
       operationDescription: "Restaurante",
-      origin: venue.cfg.origin,
+      origin: opts.origin ?? venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series),
       workingOrderId: brandWorkingOrderId(billId),
@@ -224,7 +239,7 @@ function countingRender() {
   return {
     calls,
     render: (copy: SaleCopy) => {
-      calls.push(copy.fileName);
+      calls.push(invoicePdfFileName(copy.code, copy.number));
       return Promise.resolve(new TextEncoder().encode("%PDF-stub"));
     },
   };
@@ -384,6 +399,26 @@ describe("the month's export", () => {
     gate.abort();
     expect(await drain(reader)).toMatchObject({ code: "handover.stepping_down" });
     expect(counter.calls).toHaveLength(rendered);
+  });
+
+  it("stops when a handover closes the gate after the last copy is drawn", async () => {
+    const gate = new AbortController();
+    const drawn: string[] = [];
+    const response = await exportMonth(
+      mount({
+        render: (copy) => {
+          drawn.push(copyNumber(copy));
+          if (drawn.length === 6) gate.abort();
+          return Promise.resolve(STUB_PDF);
+        },
+        closed: gate.signal,
+      }),
+      "2026-01",
+    );
+    expect(await drain(response.body!.getReader())).toMatchObject({
+      code: "handover.stepping_down",
+    });
+    expect(drawn).toHaveLength(6);
   });
 
   it("errors the stream when the person loses invoice.inspect before the end", async () => {
@@ -573,6 +608,48 @@ describe("the month's export", () => {
     expect(csvLines(files)).toHaveLength(1 + 51);
   });
 
+  it("looks up each selling device's receipt printer once per export", async () => {
+    const other = (await deviceRequestCfg(db(), venue.cfg)).origin;
+    const narrow = await inTx(venue, (tx) =>
+      createPrinter(tx, {
+        name: "Narrow receipts",
+        transport: "cloud_poll",
+        pollId: "poll-narrow-receipts",
+        paperWidth: "58mm",
+      }),
+    );
+    await db()
+      .update(devices)
+      .set({ receiptPrinterId: narrow.id })
+      .where(eq(devices.id, other.deviceId));
+    const mine: string[] = [];
+    for (const hour of [9, 10, 11])
+      mine.push(
+        (await issueAt(new Date(Date.UTC(2025, 8, 3, hour)).toISOString(), seriesIds.standard))
+          .saleId,
+      );
+    const theirs = (
+      await issueAt("2025-09-03T12:00:00.000Z", seriesIds.standard, { origin: other })
+    ).saleId;
+    const lookups = vi.mocked(receiptPrint.resolveReceiptPrinter);
+    lookups.mockClear();
+    const files = await unzipped(await exportMonth(mount(), "2025-09"));
+    const asked = lookups.mock.calls.map(([, origin]) =>
+      origin.source === "device" ? origin.deviceId : origin.source,
+    );
+    expect(asked.sort()).toEqual([venue.cfg.origin.deviceId, other.deviceId].sort());
+    const widthOf = async (saleId: string) => {
+      const [sale] = await db()
+        .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+        .from(sales)
+        .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+        .where(eq(sales.id, saleId));
+      return pdfWidth(files[`invoices/${invoicePdfFileName(sale!.code, sale!.number)}`]!);
+    };
+    for (const saleId of mine) expect(await widthOf(saleId)).toBe(TICKET_80MM);
+    expect(await widthOf(theirs)).toBe(TICKET_58MM);
+  });
+
   it("frees the export when its first turn fails", async () => {
     const app = mount();
     db().run(sql`create temp trigger refuse_month_entry before insert on activity_log
@@ -640,6 +717,14 @@ describe("the month's CSV and README", () => {
     expect(line).toBe(
       '"A/1","F2","2026-01-12","12:00:00","2026-01-11","","","","","","3.00","A/0 B/0",""',
     );
+  });
+
+  it("writes a cancellation's date as the venue's calendar day", () => {
+    const voided = { ...row, cancelledAt: "2026-01-31T23:30:00.000Z" };
+    const lineIn = (timeZone: string) =>
+      new TextDecoder().decode(renderTaxOfficeCsv([voided], "en", timeZone)).split("\r\n")[1];
+    expect(lineIn("Europe/Madrid")).toMatch(/,"2026-02-01"$/);
+    expect(lineIn("UTC")).toMatch(/,"2026-01-31"$/);
   });
 
   it("guards a rate cell that is not a plain decimal against spreadsheet formulas", () => {

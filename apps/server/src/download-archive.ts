@@ -90,17 +90,26 @@ export async function zipArchiveInTurns(
   return Buffer.concat(chunks);
 }
 
+/** fflate writes no ZIP64: its end record's entry count is two bytes and every offset and size
+ * four, each written without a check, so a larger value wraps and the archive reads back wrong. An
+ * offset of 0xFFFFFFFF itself tells a reader to look for ZIP64. */
+export const ZIP_LIMITS = { entries: 0xffff, bytesBeforeDirectory: 0xfffffffe };
+
 /** `zipArchiveInTurns`' ZIP as a stream that takes the next entry only when the reader asks for
  * more, so no more than one entry's bytes wait in memory. It gives the event loop no turn of its
- * own between entries: a source whose entries are slow to make must give those turns itself. */
+ * own between entries: a source whose entries are slow to make must give those turns itself. An
+ * entry past `limits` errors the stream instead of being written. */
 export function zipStream(
   entries: AsyncIterable<{ name: string; content: string | Uint8Array }>,
   at: Date,
+  limits: typeof ZIP_LIMITS = ZIP_LIMITS,
 ): ReadableStream<Uint8Array> {
   const iterator = entries[Symbol.asyncIterator]();
   const mtime = zipTime(at);
   let chunks: Uint8Array[] = [];
   let failure: Error | null = null;
+  let added = 0;
+  let written = 0;
   const zip = new Zip((error, chunk) => {
     if (error) failure = error;
     else chunks.push(chunk);
@@ -112,8 +121,18 @@ export function zipStream(
           const next = await iterator.next();
           if (next.done) zip.end();
           else {
+            if (added === limits.entries)
+              throw new Error(
+                `a ZIP without ZIP64 holds at most ${limits.entries.toLocaleString("en")} entries`,
+              );
+            added++;
             addEntry(zip, next.value.name, next.value.content, mtime);
             if (failure) throw failure;
+            for (const chunk of chunks) written += chunk.length;
+            if (written > limits.bytesBeforeDirectory)
+              throw new Error(
+                `a ZIP without ZIP64 holds at most ${limits.bytesBeforeDirectory.toLocaleString("en")} bytes of entries`,
+              );
           }
           for (const chunk of chunks) controller.enqueue(chunk);
           chunks = [];

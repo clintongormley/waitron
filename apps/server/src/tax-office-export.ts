@@ -3,13 +3,14 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import type { Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
+import { civilDateOf } from "@waitron/reporting";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
 import { amountCell } from "./deferred-payment-export.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { uniquePdfPath } from "./invoice-customer-data.js";
-import { copyOfSale, type SaleCopy } from "./orders-invoice-pdf.js";
+import { copyOfSale, rememberedReceiptPrinters, type SaleCopy } from "./orders-invoice-pdf.js";
 import {
   listTaxOfficeInvoices,
   TAX_OFFICE_PAGE_SIZE,
@@ -47,10 +48,6 @@ const DECIMAL = /^-?\d+(\.\d+)?$/;
 function rateCell(text: string, language: "en" | "es"): string {
   if (!DECIMAL.test(text)) return csvCell(text);
   return `"${language === "es" ? text.replace(".", ",") : text}"`;
-}
-
-function dayOf(instant: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(instant));
 }
 
 export function renderTaxOfficeCsv(
@@ -95,7 +92,7 @@ export function renderTaxOfficeCsv(
           rate === null ? csvCell("") : amountCell(decimal(rate.tax), language),
           amountCell(row.total, language),
           csvCell(row.corrects.join(" ")),
-          csvCell(row.cancelledAt === null ? "" : dayOf(row.cancelledAt, timeZone)),
+          csvCell(row.cancelledAt === null ? "" : civilDateOf(new Date(row.cancelledAt), timeZone)),
         ].join(","),
       );
     }
@@ -108,7 +105,7 @@ export function renderTaxOfficeCsv(
  * copy is read in a lock turn of its own and rendered outside it, with a turn of the event loop
  * after each render, since a render resolves without one and renders back to back would hold the
  * thread. A copy that cannot be made is logged, left out and named in `failed.txt`, unless the
- * export was asked to stop. Authority is checked again after the last copy.
+ * export was asked to stop. Authority, and whether to stop, are checked again after the last copy.
  */
 export async function* taxOfficeMonthEntries(
   deps: TaxOfficeExportDeps,
@@ -138,7 +135,7 @@ export async function* taxOfficeMonthEntries(
       venue: month.venue,
       month: month.month,
       timeZone: month.issued.timeZone,
-      date: dayOf(month.at.toISOString(), month.issued.timeZone),
+      date: civilDateOf(month.at, month.issued.timeZone),
     }),
   };
   yield {
@@ -147,11 +144,14 @@ export async function* taxOfficeMonthEntries(
   };
   const taken = new Set<string>();
   const failed: string[] = [];
+  const receiptPrinterOf = rememberedReceiptPrinters();
   for (const row of rows) {
     deps.stopIfAsked();
     let made: { copy: SaleCopy; content: Uint8Array };
     try {
-      const copy = await deps.db.withWriteLock(() => copyOfSale(tx, deps, row.id));
+      const copy = await deps.db.withWriteLock(() =>
+        copyOfSale(tx, deps, row.id, receiptPrinterOf),
+      );
       deps.stopIfAsked();
       made = { copy, content: await deps.render(copy) };
     } catch (error) {
@@ -180,4 +180,5 @@ export async function* taxOfficeMonthEntries(
     if (again.authorizedBy !== month.authorizedBy)
       throw new Error("tax office authorisation named a different person after building");
   });
+  deps.stopIfAsked();
 }

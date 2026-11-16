@@ -441,6 +441,24 @@ it("keeps the download action quiet and switched off while the issue start date 
   expect(downloadTaxOfficeMonth).not.toHaveBeenCalled();
 });
 
+it("keeps the download action quiet and switched off when the address holds an impossible start date", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-13-01/to/2026-13-31");
+  const downloadTaxOfficeMonth = vi.fn();
+  const el = await mount({
+    listTaxOfficeInvoices: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "from" } }),
+    downloadTaxOfficeMonth,
+  });
+
+  await vi.waitFor(() => expect(field(el, "from").error).toBe(en["tax_office.refused.date"]));
+  expect(monthButton(el).disabled).toBe(true);
+  expect(monthButton(el).textContent!.trim()).toBe("Download the month");
+  expect(monthButton(el).getAttribute("variant")).toBe("secondary");
+  monthButton(el).click();
+  expect(downloadTaxOfficeMonth).not.toHaveBeenCalled();
+});
+
 it("downloads the start month and saves it under the server's file name", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
   const zip = new Blob(["PK"], { type: "application/zip" });

@@ -2,7 +2,13 @@ import { strFromU8, strToU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { PersonalDataFile } from "@waitron/module";
-import { archiveFileName, zipArchive, zipArchiveInTurns, zipStream } from "./download-archive.js";
+import {
+  archiveFileName,
+  ZIP_LIMITS,
+  zipArchive,
+  zipArchiveInTurns,
+  zipStream,
+} from "./download-archive.js";
 
 const AT = new Date("2026-10-04T22:30:00Z");
 
@@ -371,6 +377,55 @@ describe("zipStream", () => {
       }),
     };
     await expect(readAll(zipStream(iterable, AT))).rejects.toThrow("filename too long");
+  });
+
+  /** `count` one-byte entries, made only as the stream asks for them. */
+  async function* tiny(count: number): AsyncGenerator<Entry> {
+    const byte = new Uint8Array([1]);
+    for (let index = 0; index < count; index++) yield { name: `${index}.pdf`, content: byte };
+  }
+
+  it("writes 65,535 entries, the most a ZIP without ZIP64 can count", async () => {
+    const zip = await readAll(zipStream(tiny(65_535), AT));
+    expect(Object.keys(unzipSync(zip))).toHaveLength(65_535);
+  });
+
+  it("errors the stream when the source offers a 65,536th entry, and stops the source", async () => {
+    const state = { pulled: 0, finished: false };
+    async function* source(): AsyncGenerator<Entry> {
+      try {
+        for await (const entry of tiny(65_537)) {
+          state.pulled++;
+          yield entry;
+        }
+      } finally {
+        state.finished = true;
+      }
+    }
+    await expect(readAll(zipStream(source(), AT))).rejects.toThrow(
+      "a ZIP without ZIP64 holds at most 65,535 entries",
+    );
+    expect(state.pulled).toBe(65_536);
+    expect(state.finished).toBe(true);
+  });
+
+  it("errors the stream on an entry that takes the archive past its byte limit, and stops the source", async () => {
+    // Each entry: a 30-byte header, its 5-letter name, 1 byte and a 16-byte descriptor.
+    const three = { ...ZIP_LIMITS, bytesBeforeDirectory: 3 * 52 };
+    const zip = await readAll(zipStream(tiny(3), AT, three));
+    expect(Object.keys(unzipSync(zip))).toHaveLength(3);
+    const { state, iterable } = generated([
+      { name: "0.pdf", content: new Uint8Array([1]) },
+      { name: "1.pdf", content: new Uint8Array([1]) },
+      { name: "2.pdf", content: new Uint8Array([1]) },
+      { name: "3.pdf", content: new Uint8Array([1]) },
+    ]);
+    const short = { ...three, bytesBeforeDirectory: 3 * 52 - 1 };
+    await expect(readAll(zipStream(iterable, AT, short))).rejects.toThrow(
+      "a ZIP without ZIP64 holds at most 155 bytes of entries",
+    );
+    expect(state.pulled).toBe(3);
+    expect(state.finished).toBe(true);
   });
 
   it("finishes a cancel once the entry being prepared arrives, and stops the source", async () => {
