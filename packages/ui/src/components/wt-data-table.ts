@@ -515,6 +515,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         flex-basis: 100%;
       }
 
+      /* Outside contrast themes, the border marks focus without a second line. */
       .table-search:focus-visible {
         border-color: var(--wt-color-primary);
         outline: none;

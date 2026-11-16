@@ -69,6 +69,16 @@ test("the table search keeps a visible keyboard focus outline", async () => {
   );
 });
 
+test("a non-clickable joined row keeps its side mark", async () => {
+  const el = await table();
+  const row = el.shadowRoot!.querySelector('tr[data-row-key="Coffee"]')!.getBoundingClientRect();
+  const parent = el.shadowRoot!.querySelector('tr[data-row-key="Drinks"]')!.getBoundingClientRect();
+  const at = await elementPixels(el.parentElement!);
+  expect(at(row.left + 1, row.top + row.height / 2)).not.toEqual(
+    at(parent.left + 1, parent.top + parent.height / 2),
+  );
+});
+
 test("joined rows keep a side mark and still open from their second cell", async () => {
   const el = await table();
   const opened = vi.fn();

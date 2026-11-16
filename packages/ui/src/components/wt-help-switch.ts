@@ -47,7 +47,6 @@ export class WtHelpSwitch extends LitElement {
 
       @media (forced-colors: active) {
         button[aria-pressed="true"] .icon {
-          forced-color-adjust: none;
           border-color: Highlight;
           background: Highlight;
           color: HighlightText;

@@ -2643,7 +2643,7 @@ leave in the brand colour. The shared controls use these marks:
 - `wt-colour-chooser` draws an inset ring over the checked tile, leaving its outer focus outline
   separate, and preserves the actual colour of its swatches;
 - `wt-data-table` thickens a filtered heading's bottom line, outlines its focused search and puts
-  a side mark on a joined row's tree content. The mark does not position a cell, so the row's
+  a side mark at a joined row's leading edge. The mark does not position a cell, so the row's
   activator still reaches across its other cells.
 
 Named exceptions: combobox and table hover fills gain no outline because it would imitate keyboard
@@ -2656,7 +2656,7 @@ The floor map and the floor plan's rings (`floor-ring.ts`) remain open; see
 
 The sibling `*.forced-colors.test.ts` files turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
 which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks
-the theme took, and reads pixels from a real screenshot with `elementPixels`:
+the theme took, and reads pixels from a real screenshot with `elementPixels`. Examples include:
 `packages/ui-core/src/components/wt-input.forced-colors.test.ts`,
 `packages/ui/src/components/wt-switch.forced-colors.test.ts` and
 `packages/ui/src/components/wt-tabs.forced-colors.test.ts`.

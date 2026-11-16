@@ -36,6 +36,10 @@ test("an open non-search list keeps the field's focus edge without using its inv
   el.invalid = true;
   await el.updateComplete;
   expect(getComputedStyle(field, "::after").borderBottomWidth).toBe("2px");
+  const invalid = await elementPixels(el);
+  expect(invalid(box.left + 1, box.top + box.height / 2)).toEqual(
+    before(box.left + 1, box.top + box.height / 2),
+  );
 });
 
 test("the searchable list draws an outline around its focused search", async () => {

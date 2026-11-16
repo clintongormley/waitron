@@ -198,6 +198,7 @@ export class WtCombobox extends LitElement {
         box-shadow: var(--wt-shadow-1);
       }
 
+      /* Outside contrast themes, the border marks focus without a second line. */
       .search:focus-visible {
         outline: none;
       }
