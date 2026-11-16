@@ -86,7 +86,7 @@ cause and the distinction between a failed write and a successful write whose re
   one file as text for them, so a future push-triggered workflow that groups by ref is seen by
   nothing.
 
-## Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying
+## Unexplained incidents, each seen once or twice; on recurrence retain the log before retrying
 
 Standing rule: a flaky test is fixed at the root. Eleven UI suites failing to load with
 "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); bookings' browser
@@ -140,27 +140,6 @@ within its 30-second limit's reach once; no earlier kept log names it. The likel
 case walking `apps` and `packages` and parsing every non-test source file under `apps/*/src` (the
 server's included) and the modules' `src/dashboard` folders with the TypeScript compiler
 (`scripts/action-menu-styles.test.ts:140-157`) — is read, not measured. The log is kept at `~/waitron-campaign-b/ci-logs/pr3399-run43766044951-attempt1-root-guards.log`.
-
-16 November 2026: PR #3494's `test-server (13)`
-([run 43862896971, attempt 1](https://github.com/clintongormley/waitron/actions/runs/43862896971/job/133284679660))
-failed `apps/server/scripts/demo-seed/seed.test.ts:355`, "rates a seeded deli sale's cola at 21% and a
-seeded restaurant sale's cola at 10%": no seeded restaurant sale held a cola (`expected 0 to be greater
-than 0`); 1,808 other cases passed. The case was added that day by #3448; #3494 changes no demo seed,
-menu or sale code. On the same commit (8628115a04) it passed locally three times as a whole file, under
-`TZ=UTC`, under `LANG`/`LC_ALL` set to `C.UTF-8`, `C` and `POSIX`, and in the whole of shard 13/24
-with CI's excludes (1,809 passed). The seed's random numbers come from a fixed LCG
-(`scripts/demo-seed/seed-sales.ts:115`) and the case freezes `Date`, so what differed on the runner is
-not found. The log is kept at `~/waitron-campaign-b/ci-logs/pr3494-run43862896971-test-server-13.log`.
-
-16 November 2026: the demo seed cola assertion recorded from [PR #3494, run 43862896971](https://github.com/clintongormley/waitron/actions/runs/43862896971/job/133284679660) recurred on [PR #3516, run 43871829602, shard 13](https://github.com/clintongormley/waitron/actions/runs/43871829602/job/133315565161). `apps/server/scripts/demo-seed/seed.test.ts:355` expected a restaurant cola sale and found none (`expected 0 to be greater than 0`); 1 failed and 1,730 passed. PR #3516 changes only a fake peer response in `waiting-start.test.ts`. Its full failed-job log is `~/waitron-campaign-k/receipts/live-setup-stamp-order/waiting-fixture-ci-server13.log`. The runner difference remains unexplained; a passing retry does not close this incident.
-
-
-16 November 2026: the same restaurant-cola assertion recurred on [PR #3556, run 43934245196,
-server shard 13](https://github.com/clintongormley/waitron/actions/runs/43934245196/job/133535117631):
-`seed.test.ts:355` found no restaurant cola sale; 1 failed and 1,644 passed. This payment-guide
-branch changes no demo-seed code. The full log is retained at
-`~/waitron-campaign-f/receipts/pay-sheet-guide-20261116/ci-server-13-failure.log`.
-This is another occurrence of the unresolved incident above, not a diagnosed cause or repair.
 
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
@@ -292,7 +271,7 @@ before retrying and reproduce the pending operation before assigning a cause.
 | #1557: venue-service browser startup remains unexplained. | [38170156450](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899); 2026-10-11, attempt 1. | Download `venue-service-diagnostics-<shard>` and locate the first missing startup step before changing limits or concurrency. | [Detail](#venue-service-browser-startup-remains-unexplained-1557). |
 | A419 / #1474: dashboard stall remains unexplained; `catalogue-screen.test.ts` unfinished. Focused/full local and diagnostic CI passed; no repair established. The failed run was cancelled after 3m26s without output. | [37932573955](https://github.com/clintongormley/waitron/actions/runs/37932573955); job/date not recorded. Diagnostic [37936013331](https://github.com/clintongormley/waitron/actions/runs/37936013331) passed. | Per-test progress; locate the waiting operation before changing the browser harness. A441 reports file start/end and unfinished files every 60 s via `scripts/vitest-file-progress.mjs`. | Retained-log path not recorded. |
 | Frozen-bucket control in `stream-pause.e2e.test.ts`, step 6 / line 540: expected `unanswered`, got `answered` after `s3.pause()`. W30 awaits stopped state; original one-off race not reproduced locally. | [37108993254](https://github.com/clintongormley/waitron/actions/runs/37108993254/job/111163230954); PR #1101, 2026-10-03, attempt 1; re-run passed. | Keep the log and inspect child state before naming another cause. | Retained-log path not recorded. |
-| Suite loading; bookings freeze; detached frame; refund search; restore timer ticks; action-menu guard. Causes and reproduction limits remain in the linked detail. | [43766044951](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897); 2026-11-15, attempt 1. Distinct timer sighting [43689826000](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327). | Retain the log before retrying; keep each incident’s timing, process/browser state and reproduction limits. | [Detail](#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying) contains every retained path. |
+| Suite loading; bookings freeze; detached frame; refund search; restore timer ticks; action-menu guard. Causes and reproduction limits remain in the linked detail. | [43766044951](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897); 2026-11-15, attempt 1. Distinct timer sighting [43689826000](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327). | Retain the log before retrying; keep each incident’s timing, process/browser state and reproduction limits. | [Detail](#unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying) contains every retained path. |
 | Fiscal shard 2: first-hour PDF assertion failed before the deadline; cause unconfirmed. Passing focused runs do not diagnose it. | [43604245865](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462); 2026-11-14. Earlier [43548232659](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811). | Keep diagnostics on; retain assertion trace and unfinished-file/process report before retrying, then locate the pending operation. | `receipts/a1308-5h/ci-rebased-fiscal.log` in lane E; [timing and trace limits](#fiscal-shard-2-first-hour-pdf-failed-before-the-deadline). |
 | Dashboard heading order remains unexplained after #350: `dashboard-app.a11y.test.ts` is a different rule with no colour evidence. | Run/job/date not recorded. | Retain the exact heading-order failure log before assigning a cause. | Retained-log path not recorded. |
 | #414: shard exited 1 with every test passing. Vitest 4.1.11 / #437 closed that exit-1 path; why the reporting call went unanswered remains open. | PR #414; run/job/date not recorded. | Keep the next job log. Under 3.2.7 `onTaskUpdate` hit birpc’s 60-second default; on 4.1.11 an unanswered call instead waits for the 10-minute job cancellation. | Retained-log path not recorded; [CI guide](../developers/ci-and-gates.md), written up rather than fixed (owner, 2026-09-18). |

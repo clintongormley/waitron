@@ -357,6 +357,36 @@ describe("seedDemoRestaurant", () => {
     expect(new Set(cola.map((row) => Number(row.vat_rate)))).toEqual(new Set([1000, 2100]));
   });
 
+  it("hands the practice sales a product pool in a fixed order, whatever order the database reads them in", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-08T22:00:00.000Z") });
+    const venue = await provisionVenue();
+    const realSeedSales = salesSeed.seedSales;
+    type Pool = readonly salesSeed.SeedSalesProduct[];
+    let pools: { products: Pool; deli: Pool } | undefined;
+    const salesStep = vi.spyOn(salesSeed, "seedSales").mockImplementation(async (db, input) => {
+      pools = { products: input.products, deli: input.deliProducts ?? [] };
+      return realSeedSales(db, input);
+    });
+    try {
+      await seedDemoRestaurant(suite.db, {
+        venue,
+        locale: LOCALE,
+        salesDays: 1,
+        departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+    } finally {
+      salesStep.mockRestore();
+    }
+    const key = (p: salesSeed.SeedSalesProduct) =>
+      JSON.stringify([p.name, p.customerName, p.unitPrice, p.vatClass, p.takeawayVatClass ?? null]);
+    const sorted = (list: Pool) => list.map(key).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    expect(pools!.products.length).toBeGreaterThan(1);
+    expect(pools!.deli.length).toBeGreaterThan(1);
+    expect(pools!.products.map(key)).toEqual(sorted(pools!.products));
+    expect(pools!.deli.map(key)).toEqual(sorted(pools!.deli));
+  });
+
   it("refuses a production environment before writing anything", async () => {
     const venue = await provisionVenue();
     const before = await withTransaction(suite.db, async (tx) => ({
