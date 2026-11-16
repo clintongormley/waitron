@@ -1927,6 +1927,7 @@ function saleRefusalOf(
 ):
   | Extract<
       StringKey,
+      | "tender.tip_not_recorded"
       | "sale.disk_full"
       | "sale.disk_full_manual_card"
       | "sale.chain_handed_over_manual_card"
@@ -1950,6 +1951,8 @@ function saleRefusalOf(
       }
     | undefined;
   switch (refusal?.code) {
+    case "bill.tip_not_allowed":
+      return tender.manualCard ? "tender.tip_not_recorded" : undefined;
     case "sale.full_invoice_unavailable":
     case "fiscal.fingerprint_mismatch":
       return { code: refusal.code };
@@ -7157,7 +7160,12 @@ export class TillApp extends LitElement {
    * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
-  async #onConfirmPayment(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
+  async #onConfirmPayment(
+    event: Event,
+    retried = false,
+    lateSend?: LateSend,
+    sourceForm?: HTMLElementTagNameMap["till-tender-pay"],
+  ): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
     if (this.#store.lines.some((line) => line.blocked === "period_ended")) {
@@ -7165,7 +7173,13 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#askInvoiceRecipientForLargeBill()) return;
-    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
+    const form =
+      sourceForm ??
+      (event
+        .composedPath()
+        .find((node) => node instanceof HTMLElement && node.localName === "till-tender-pay") as
+        HTMLElementTagNameMap["till-tender-pay"] | undefined);
+    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed, form);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
     this.sendingTender = (event as CustomEvent<ConfirmPaymentDetail>).detail.method;
@@ -7225,6 +7239,13 @@ export class TillApp extends LitElement {
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
       if (session !== this.#operatorSession) return;
+      if (
+        tender.method === "card" &&
+        (error as { code?: string }).code === "bill.tip_not_allowed"
+      ) {
+        form?.restoreManualCard(tender);
+      }
+
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
@@ -7262,14 +7283,14 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onConfirmPayment(event, true, lateSend),
+        this.#onConfirmPayment(event, true, lateSend, form),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#onConfirmPayment(event, true, lateSend);
+      await this.#onConfirmPayment(event, true, lateSend, form);
   }
 
   /** The late-send window over the counter basket's marked lines; answers whether it opened. */
@@ -8392,6 +8413,10 @@ export class TillApp extends LitElement {
    */
   async #onCollectOrder(event: Event): Promise<void> {
     if (this.submitting) return;
+    const form = event
+      .composedPath()
+      .find((node) => node instanceof HTMLElement && node.localName === "till-tender-pay") as
+      HTMLElementTagNameMap["till-tender-pay"] | undefined;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -8414,6 +8439,13 @@ export class TillApp extends LitElement {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
       // permanent refusal takes `sale.refused`.
       if (session !== this.#operatorSession) return;
+      if (
+        tender.method === "card" &&
+        (error as { code?: string }).code === "bill.tip_not_allowed"
+      ) {
+        form?.restoreManualCard(tender);
+      }
+
       this.errorKey =
         saleRefusalOf(error, { manualCard: tender.method === "card" }) ?? settlingErrorOf(error);
     } finally {

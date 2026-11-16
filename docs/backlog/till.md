@@ -735,16 +735,6 @@ paragraphs rather than beside a field; and the supervisor override dialog
 (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
 empty, before any press.
 
-## A card payment stuck `attempting` holds its device's profile switch
-
-Left open by W97 (#1311), found in its review and not fixed on the branch:
-
-- A card payment stuck `attempting` holds its device's profile switch until a manager resolves
-  it on Payments; an `initiated` one has no production writer today, and once hosted payments
-  are wired a missed `checkout.session.expired` webhook would hold it for good
-  (`assertNoPaymentInProgress`, `apps/server/src/device.ts`). The till only says to switch
-  once it finishes; point it at the Payments screen.
-
 ## The till's Profile button shows whenever the device has more than one approved profile
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:

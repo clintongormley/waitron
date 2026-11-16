@@ -90,7 +90,9 @@ describe("till-profile-dialog", () => {
   it("a refusal naming no field is said at the bottom", async () => {
     const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });
     expect(picker(el).error).toBe("");
-    expect(await bottom(el)).toBe(codeMessage("device.payment_in_progress"));
+    expect(await bottom(el)).toBe(
+      `${codeMessage("device.payment_in_progress")} ${t("profile.payment_recovery")}`,
+    );
     expect(codeMessage("device.payment_in_progress")).not.toBe(codeMessage("nope.unknown"));
   });
 
@@ -120,4 +122,27 @@ describe("till-profile-dialog", () => {
     const el = await mountDialog({ open: false });
     expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
   });
+});
+
+it.each(["en", "es"])("unfinished card offers check and sign in in %s", async (locale) => {
+  setLocale(locale);
+  try {
+    const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]");
+    expect(link?.getAttribute("href")).toBe("/manage/check-card-payments");
+    expect(link?.textContent).toBe(t("bill_pay.card_recovery_open"));
+    expect(await bottom(el)).toContain(t("profile.payment_recovery"));
+    expect(picker(el).error).toBe("");
+    const seen = switches(el);
+    let closed = 0;
+    el.addEventListener("close", () => closed++);
+    button(el, "profile-cancel").click();
+    expect(closed).toBe(1);
+    expect(seen).toEqual([]);
+    el.notice = { code: "device_profile.not_admitted" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("a[data-recovery]")).toBeNull();
+  } finally {
+    setLocale("en");
+  }
 });

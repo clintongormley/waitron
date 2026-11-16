@@ -318,6 +318,66 @@ function decodeNames<T extends StoredNames>(
 }
 
 describe("recordTillSale", () => {
+  it("manual tip changes settlement only and survives replay after tips are off", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    const id = randomUUID();
+    const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
+    const request = {
+      workingOrderId: id,
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+      tender: { method: "card" as const, amount: "1.50", addedTip: "0.30", externalRef: "OP-TIP" },
+    };
+    const paid = await recordTillSale(deps, { ...cfg, tipsEnabled: true }, request);
+    expect(paid.total).toBe("2.25");
+    expect(paid.vatBreakdown).toEqual([{ rate: "21.00", base: "1.86", tax: "0.39" }]);
+    expect(paid.tender).toMatchObject({ charged: "2.55", tip: "0.30", reference: "OP-TIP" });
+    const replay = await recordTillSale(deps, { ...cfg, tipsEnabled: false }, request);
+    expect(replay.tender).toEqual(paid.tender);
+    const rows = await suite.db.execute(sql`
+      select t.amount, t.tip_amount, p.amount as paid, s.total
+      from tenders t join sales s on s.id = t.sale_id
+      join payments p on p.sale_id = s.id where s.working_order_id = ${id}`);
+    expect(rows.rows).toEqual([{ amount: 255, tip_amount: 30, paid: 255, total: 225 }]);
+    expect(
+      await suite.db
+        .select({ total: registrosFacturacion.importeTotal })
+        .from(registrosFacturacion),
+    ).toEqual([{ total: "2.25" }]);
+  });
+
+  it("refuses a manual tip on a free walk-up without filing a sale", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`update menu_items set gross_price = 0 where id = ${waterOfferId}`);
+      await republishMenus(tx);
+    });
+    await expect(
+      recordTillSale(
+        { db: suite.db, backend, clock, admission: testTradingAdmission() },
+        { ...cfg, tipsEnabled: true },
+        {
+          zoneId,
+          lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+          tender: { method: "card", amount: "0.00", addedTip: "0.30" },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "bill.tip_not_allowed", params: { chargeable: "0.00" } });
+    expect(await suite.db.select().from(sales)).toEqual([]);
+  });
+
+  it("refuses a manual tip when tips are off without filing a sale", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    await expect(
+      recordTillSale({ db: suite.db, backend, clock, admission: testTradingAdmission() }, cfg, {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50", addedTip: "0.30" },
+      }),
+    ).rejects.toMatchObject({ code: "bill.tip_not_allowed" });
+    expect(await suite.db.select().from(sales)).toEqual([]);
+  });
+
   it("requires an Available variant and freezes its menu price and presentation facts", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     await suite.db

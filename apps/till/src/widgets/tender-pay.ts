@@ -10,6 +10,7 @@ import { cardSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  FormFeedback,
   submitOnEnter,
   formatDecimalInput,
   formMessage,
@@ -22,6 +23,7 @@ import {
 } from "@waitron/ui";
 import { live } from "lit/directives/live.js";
 import {
+  addDecimal,
   compareDecimal,
   decimal,
   formatMoney,
@@ -61,7 +63,12 @@ import { helpAnchorStyles, helpBadge } from "./help-badge.js";
  */
 export type ConfirmPaymentDetail = (
   | { method: "cash"; amount: string }
-  | ({ method: "card"; amount: string; externalRef?: string } & OutsideCardDetails)
+  | ({
+      method: "card";
+      amount: string;
+      addedTip?: string;
+      externalRef?: string;
+    } & OutsideCardDetails)
 ) &
   ReceiptGuestsDetail;
 
@@ -135,7 +142,13 @@ const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
 
 const ZERO = decimal("0");
 
-type EntryDraft = { entry: string; label: string; ref: string; outside: OutsideCardDetails };
+type EntryDraft = {
+  entry: string;
+  label: string;
+  ref: string;
+  outside: OutsideCardDetails;
+  tip: string;
+};
 type CardDraft = {
   tip: string;
   simulation: "captured" | "declined" | "attempting";
@@ -340,11 +353,10 @@ export class TillTenderPay extends LitElement {
   @state() private outside: OutsideCardDetails = {};
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
-  @state() private tipAttempted = false;
-  @state() private readerTipCleared = false;
+  readonly #tipFeedback = new FormFeedback(this);
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
-  @state() private guestsAttempted = false;
+  readonly #guestsFeedback = new FormFeedback(this);
   #guestsOrderId?: string;
   @property({ type: Boolean }) slipPrinterAvailable = false;
   @state() private printCardSlip = false;
@@ -386,7 +398,13 @@ export class TillTenderPay extends LitElement {
   }
 
   #entryDraft(): EntryDraft {
-    return { entry: this.entry, label: this.labelEntry, ref: this.refEntry, outside: this.outside };
+    return {
+      entry: this.entry,
+      label: this.labelEntry,
+      ref: this.refEntry,
+      outside: this.outside,
+      tip: this.tipEntry,
+    };
   }
 
   #cardDraft(): CardDraft {
@@ -427,7 +445,8 @@ export class TillTenderPay extends LitElement {
           view === "holding"
             ? a.label.trim() === b.label.trim()
             : view === "card"
-              ? a.ref.trim() === b.ref.trim() &&
+              ? this.#sameNumber(a.tip, b.tip) &&
+                a.ref.trim() === b.ref.trim() &&
                 a.outside.externalProvider === b.outside.externalProvider &&
                 (a.outside.externalMachine ?? "").trim() ===
                   (b.outside.externalMachine ?? "").trim()
@@ -437,6 +456,7 @@ export class TillTenderPay extends LitElement {
           this.labelEntry = value.label;
           this.refEntry = value.ref;
           this.outside = value.outside;
+          this.tipEntry = value.tip;
         },
       });
       this.#entryScope?.commit(this.#entryBaseline);
@@ -536,6 +556,7 @@ export class TillTenderPay extends LitElement {
       this.view = "idle";
     }
     if (this.#guestsOrderId !== this.store.id) {
+      this.#resetTip();
       this.printCardSlip = false;
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
@@ -589,7 +610,7 @@ export class TillTenderPay extends LitElement {
 
   #resetGuests(): void {
     this.guestsEntry = undefined;
-    this.guestsAttempted = false;
+    this.#guestsFeedback.reset();
   }
 
   #onGuestsChange(event: Event): void {
@@ -600,7 +621,7 @@ export class TillTenderPay extends LitElement {
 
   /** Asked again after the check before payment, which can wait while the field stays open. */
   #guestsRefused(): boolean {
-    this.guestsAttempted = true;
+    this.#guestsFeedback.press();
     if (!this.#guestsInvalid()) return false;
     this.shadowRoot!.querySelector<HTMLElement>('[name="guests"]')?.focus();
     return true;
@@ -634,24 +655,25 @@ export class TillTenderPay extends LitElement {
   #startCard(): void {
     this.refEntry = "";
     this.outside = {};
-    this.readerTipCleared = this.tipEntry.trim() !== "";
-    this.tipEntry = "";
     this.view = "card";
   }
 
+  #resetTip(): void {
+    this.#extrasScope?.dispose();
+    this.#extrasScope = undefined;
+    this.#extrasBaseline = undefined;
+    this.tipEntry = "";
+    this.#tipFeedback.reset();
+  }
+
   #tipInvalid(): boolean {
-    return (
-      this.tipsEnabled &&
-      this.cardProvider !== "none" &&
-      this.tipEntry.trim() !== "" &&
-      typedAmount(this.tipEntry) === null
-    );
+    return this.tipsEnabled && this.tipEntry.trim() !== "" && typedAmount(this.tipEntry) === null;
   }
 
   /** Asked again after the check before payment, like `#guestsRefused`. */
   #tipRefused(): boolean {
-    this.tipAttempted = true;
-    this.guestsAttempted = true;
+    this.#tipFeedback.press();
+    this.#guestsFeedback.press();
     if (!this.#tipInvalid()) return false;
     this.shadowRoot!.querySelector<HTMLElement>(".tip-input")?.focus();
     return true;
@@ -712,6 +734,7 @@ export class TillTenderPay extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.tipEntry = (event as CustomEvent<{ value: string }>).detail.value;
+    if (this.view === "card") this.#entryScope?.changed();
     this.#extrasScope?.changed();
   }
 
@@ -799,6 +822,7 @@ export class TillTenderPay extends LitElement {
     if (!this.isConnected || this.busy || this.view !== "paying") return;
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
     this.#finishEntry();
+    this.#resetTip();
     const detail: ConfirmPaymentDetail = {
       method: "cash",
       amount: this.#enteredDecimal(),
@@ -815,18 +839,32 @@ export class TillTenderPay extends LitElement {
     this.entry = "";
   }
 
-  /** Reset BEFORE the dispatch, like `#park`. */
+  restoreManualCard(tender: Extract<Tender, { method: "card" }>): void {
+    this.#finishEntry();
+    this.#entryView = "card";
+    this.#entryBaseline = { entry: "", label: "", ref: "", outside: {}, tip: "" };
+    this.tipEntry = tender.addedTip ?? "";
+    this.refEntry = tender.externalRef ?? "";
+    this.outside = outsideCardValues(tender);
+    this.#tipFeedback.reset();
+    this.view = "card";
+  }
+
   #confirmCard(): void {
-    if (!this.isConnected || this.busy || this.view !== "card") return;
+    if (!this.isConnected || this.busy || this.view !== "card" || this.#tipRefused()) return;
     this.#finishEntry();
     const ref = this.refEntry.trim();
     const detail: ConfirmPaymentDetail = {
       method: "card",
       amount: this.store.total,
+      ...(this.tipsEnabled && typedAmount(this.tipEntry) !== null
+        ? { addedTip: typedAmount(this.tipEntry)! }
+        : {}),
       ...(ref === "" ? {} : { externalRef: ref }),
       ...outsideCardValues(this.outside),
       ...this.#guestsDetail(),
     };
+    this.#resetTip();
     this.view = "idle";
     this.refEntry = "";
     this.dispatchEvent(
@@ -946,7 +984,7 @@ export class TillTenderPay extends LitElement {
         variant=${this.#tenderVariant("card")}
         .loading=${this.busy && this.sendingTender === "card"}
         size="md"
-        ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
+        ?disabled=${disabled || (this.#tipFeedback.attempted && this.#tipInvalid()) || this.#guestsHeld()}
         @click=${() => {
           if (!this.#quietTap()) this.#onCardTap();
         }}
@@ -959,7 +997,7 @@ export class TillTenderPay extends LitElement {
               class="pay-manual-card"
               variant="secondary"
               size="md"
-              ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
+              ?disabled=${disabled || (this.#tipFeedback.attempted && this.#tipInvalid()) || this.#guestsHeld()}
               @click=${() => {
                 if (!this.#quietTap()) this.#onOtherCardTap();
               }}
@@ -1046,13 +1084,14 @@ export class TillTenderPay extends LitElement {
   }
 
   #guestsHeld(): boolean {
-    return this.guestsAttempted && this.#guestsInvalid();
+    return this.#guestsFeedback.attempted && this.#guestsInvalid();
   }
 
   #renderFormMessage() {
-    return formMessage(
-      (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld() ? t("form.fix_fields") : "",
-    );
+    const fields = new Set<string>();
+    if (this.#tipFeedback.attempted && this.#tipInvalid()) fields.add("tip");
+    if (this.#guestsHeld()) fields.add("guests");
+    return formMessage(this.#tipFeedback.message({}, fields, t("form.fix_fields")));
   }
 
   /** No draft scope tracks this field (A663 Part 3b plan). */
@@ -1200,24 +1239,28 @@ export class TillTenderPay extends LitElement {
               </div>`
             : nothing
         }
-        ${
-          this.tipsEnabled
-            ? html`
-                <wt-input
-                  @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".pay-card"))}
-                  name="tip"
-                  class="tip-input"
-                  decimal-locale=${currentLocale()}
-                  .error=${this.tipAttempted && this.#tipInvalid() ? t("bill_pay.tip_invalid") : ""}
-                  .value=${live(this.tipEntry)}
-                  .label=${t("card.tip")}
-                  @wt-change=${(event: Event) => this.#onTipChange(event)}
-                ></wt-input>
-              `
-            : nothing
-        }
+        ${this.#renderTip(".pay-card")}
       </div>
     `;
+  }
+
+  #renderTip(action: string) {
+    return !this.tipsEnabled
+      ? nothing
+      : html`<wt-input
+          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(action))}
+          name="tip"
+          class="tip-input"
+          decimal-locale=${currentLocale()}
+          .error=${this.#tipFeedback.attempted && this.#tipInvalid() ? t("bill_pay.tip_invalid") : ""}
+          .value=${live(this.tipEntry)}
+          .label=${t("card.tip")}
+          @wt-change=${(event: Event) => this.#onTipChange(event)}
+        ></wt-input>`;
+  }
+
+  #cardTotal(amount: string, addedTip?: string): Decimal {
+    return addDecimal(decimal(amount), decimal(addedTip === undefined ? "0" : addedTip));
   }
 
   #renderCollecting() {
@@ -1297,7 +1340,9 @@ export class TillTenderPay extends LitElement {
         <p class="tender-kind">${t(tender.method === "cash" ? "tender.cash" : "tender.card")}</p>
         <div class="row">
           <span class="label">${t("label.total")}</span>
-          <span class="amount total">${formatMoney(outstanding, currentLocale())}</span>
+          <span class="amount total"
+            >${formatMoney(tender.method === "card" ? this.#cardTotal(outstanding, tender.addedTip) : outstanding, currentLocale())}</span
+          >
         </div>
         ${
           tender.method === "cash"
@@ -1402,14 +1447,16 @@ export class TillTenderPay extends LitElement {
 
   #renderCard() {
     return html`
-      ${this.readerTipCleared ? html`<p data-reader-tip-cleared>${t("tender.reader_tip_cleared")}</p>` : nothing}
       <div class="summary">
         <p class="tender-kind">${t("tender.card")}</p>
         <div class="row">
           <span class="label">${t("label.total")}</span>
-          <span class="amount total">${formatMoney(this.store.total, currentLocale())}</span>
+          <span class="amount total"
+            >${formatMoney(this.#cardTotal(this.store.total, this.tipsEnabled ? (typedAmount(this.tipEntry) ?? undefined) : undefined), currentLocale())}</span
+          >
         </div>
       </div>
+      ${this.#renderTip(".confirm")}
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(".confirm"))}
         name="externalRef"
@@ -1426,12 +1473,13 @@ export class TillTenderPay extends LitElement {
         },
         this.busy,
       )}
+      ${this.#renderFormMessage()}
       <div class="actions">
         <wt-button
           class="confirm"
           variant=${this.payQuiet ? "secondary" : "primary"}
           size="lg"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || (this.#tipFeedback.attempted && this.#tipInvalid())}
           @click=${() => {
             if (!this.#quietTap()) this.#confirmCard();
           }}

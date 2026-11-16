@@ -972,6 +972,7 @@ export interface OutsideCardDetails {
 export interface CardTender extends OutsideCardDetails {
   method: "card";
   amount: string;
+  addedTip?: string;
   externalRef?: string;
 }
 

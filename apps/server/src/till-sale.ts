@@ -198,6 +198,7 @@ export interface TillTender extends OutsideCardDetails {
   method: "cash" | "card";
   amount: string;
   externalRef?: string;
+  addedTip?: string;
 }
 
 /**
@@ -992,6 +993,21 @@ export async function printSaleReceipt(
   });
 }
 
+function manualTip(
+  tender: TillTender | null,
+  cfg: DeviceRequestConfig,
+  due: Decimal,
+  workingOrderId: string,
+): Decimal {
+  const tip =
+    tender?.method === "card"
+      ? decimal(tender.addedTip === undefined ? "0" : tender.addedTip)
+      : ZERO;
+  if (compareDecimal(tip, ZERO) > 0 && (!cfg.tipsEnabled || compareDecimal(due, ZERO) <= 0))
+    throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: due });
+  return tip;
+}
+
 /** Cash covers the settled total; short cash is passed through so settlement rejects it atomically. */
 function settlementFor(tender: TillTender, total: string): { settledAmount: string } {
   return {
@@ -1034,6 +1050,7 @@ async function fileImmediateSale(
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
   const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
+  const tip = manualTip(tender, cfg, decimal(priced.total), workingOrderId);
   const taken = compareDecimal(decimal(priced.total), ZERO) > 0 ? settled : null;
 
   // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
@@ -1065,8 +1082,8 @@ async function fileImmediateSale(
           : [
               {
                 method: taken.method,
-                amount: taken.settledAmount,
-                tipAmount: "0.00",
+                amount: addDecimal(decimal(taken.settledAmount), tip),
+                tipAmount: tip,
                 cashTendered: taken.method === "cash" ? taken.amount : null,
                 settledAt,
               },
@@ -1087,7 +1104,7 @@ async function fileImmediateSale(
       origin: cfg.origin,
       workingOrderId,
       nodeId: cfg.nodeId,
-      amount: decimal(priced.total),
+      amount: addDecimal(decimal(priced.total), tip),
       settledAt,
       externalRef: taken.externalRef,
       ...outsideCardDetails(taken),
@@ -2287,6 +2304,7 @@ async function runCollectOrder(
       if (outstanding !== undefined) {
         // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
         const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
+        const tip = manualTip(req.tender, cfg, outstanding.amountDue, req.id);
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
           const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
           await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -2299,8 +2317,8 @@ async function runCollectOrder(
           tenders: [
             {
               method: req.tender.method,
-              amount: settledAmount,
-              tipAmount: "0.00",
+              amount: addDecimal(decimal(settledAmount), tip),
+              tipAmount: tip,
               cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
               settledAt,
             },
@@ -2312,7 +2330,7 @@ async function runCollectOrder(
             origin: cfg.origin,
             workingOrderId: req.id,
             nodeId: cfg.nodeId,
-            amount: outstanding.amountDue,
+            amount: addDecimal(outstanding.amountDue, tip),
             settledAt,
             externalRef: req.tender.externalRef,
             ...outsideCardDetails(req.tender),

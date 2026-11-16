@@ -1,11 +1,12 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles, saveActionState } from "@waitron/ui";
+import { baseStyles, FormFeedback, saveActionState } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { recoveryLink } from "./recovery-refusal.js";
 import { trackDialog } from "./track-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -48,13 +49,14 @@ export class TillProfileDialog extends LitElement {
   @property({ type: Boolean }) busy = false;
 
   @state() private chosen = "";
-  /** Cleared when the person changes the choice the refusal was about. */
-  @state() private refusalShown = true;
+  readonly #feedback = new FormFeedback(this);
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if ((changed.has("open") || changed.has("activeProfileId")) && this.open)
+    if ((changed.has("open") || changed.has("activeProfileId")) && this.open) {
       this.chosen = this.activeProfileId;
-    if (changed.has("notice")) this.refusalShown = true;
+      this.#feedback.reset();
+    }
+    if (changed.has("notice")) this.#feedback.newRefusal();
   }
 
   #emit<T>(type: string, detail?: T): void {
@@ -63,7 +65,9 @@ export class TillProfileDialog extends LitElement {
 
   #fieldError(): string {
     const code = typeof this.notice === "object" ? this.notice?.code : undefined;
-    return code !== undefined && ABOUT_CHOICE.has(code) && this.refusalShown
+    return code !== undefined &&
+      ABOUT_CHOICE.has(code) &&
+      this.#feedback.remaining({ choice: true }).choice === true
       ? codeMessage(code)
       : "";
   }
@@ -72,8 +76,17 @@ export class TillProfileDialog extends LitElement {
     const notice = this.notice;
     if (notice === null) return "";
     if (typeof notice === "string") return t(ORDER_NOTICES[notice]);
-    if (ABOUT_CHOICE.has(notice.code)) return this.refusalShown ? t("form.fix_fields") : "";
-    return codeMessage(notice.code);
+    if (ABOUT_CHOICE.has(notice.code))
+      return this.#feedback.remaining({ choice: true }).choice === true ? t("form.fix_fields") : "";
+    return this.#feedback.message(
+      {
+        notice: codeMessage(notice.code),
+        recovery:
+          notice.code === "device.payment_in_progress" ? t("profile.payment_recovery") : undefined,
+      },
+      new Set(),
+      t("form.fix_fields"),
+    );
   }
 
   #switchState() {
@@ -111,11 +124,12 @@ export class TillProfileDialog extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.chosen = event.detail.value;
-            this.refusalShown = false;
+            this.#feedback.dismiss("choice");
           }}
         ></wt-combobox>
       </div>
       <wt-form-actions slot="footer" .error=${this.#bottomMessage()}>
+        ${recoveryLink(typeof this.notice === "object" && this.notice?.code === "device.payment_in_progress" ? { code: this.notice.code, recoveryUrl: "/manage/check-card-payments" } : null)}
         <wt-button
           slot="cancel"
           data-test="profile-cancel"

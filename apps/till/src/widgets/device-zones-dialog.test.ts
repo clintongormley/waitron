@@ -266,3 +266,12 @@ it("a nested close event cannot discard the zone editor's draft", async () => {
     },
   ]);
 });
+
+it("an unfinished payment refusal does not promise an absent recovery link", async () => {
+  const { el } = await mount();
+  el.refusal = { code: "device.payment_in_progress" };
+  await el.updateComplete;
+  expect(bottom(el)).toBe(
+    "A card payment on this device is still in progress. Wait for its outcome before changing this device.",
+  );
+});

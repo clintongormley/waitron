@@ -52,9 +52,9 @@ su número de operación y el datáfono utilizado. Puedes elegir **Esta cuenta d
 cuenta conectada, o **Cobrado fuera de Waitron** si es de otro proveedor. Los campos son
 opcionales; la cuenta conserva los datos que introduzcas.
 
-Si habías introducido una propina para el datáfono conectado, el formulario directo del
-mostrador la borra y te avisa de que no se incluye. Usa la ventana de cobro de la cuenta para
-registrar una propina cobrada en otro datáfono.
+Si el local acepta propinas, introduce en **Propina** la que has cobrado en ese datáfono.
+La propina que escribas antes de elegir **Otro datáfono** se conserva; comprueba que el total
+coincide con el del datáfono.
 
 Registra cada pago cuando lo cobres, mientras Waitron acepte pagos. Si Waitron rechaza un pago,
 sigue las indicaciones antes de volver a registrarlo; no cobres dos veces al cliente. Si no tienes
@@ -757,7 +757,10 @@ Cuando este dispositivo está aprobado para más de un perfil, **Más** (☰) of
 Elige otro **Perfil de dispositivo** y toca **Cambiar**. Solo puedes cambiar a un perfil que
 tengas permiso para usar.
 
-Antes de cambiar, aparca o vacía el pedido en curso y espera a que termine cualquier cobro en curso.
+Antes de cambiar, aparca o vacía el pedido en curso. Si hay un pago con tarjeta en curso,
+elige **Comprobar pagos con tarjeta / acceder** para consultar el resultado e inicia
+sesión allí si se solicita. Después, vuelve a pulsar **Cambiar**. **Cancelar** mantiene el
+perfil actual.
 Las otras personas que tengan sesión en este dispositivo salen de ella si el nuevo perfil no les
 permite iniciar sesión.
 Para elegir qué zonas muestra este dispositivo, consulta
