@@ -1,5 +1,9 @@
 # CI watch table plan
 
+**16 November follow-on:** CERT-CHILD-DEADLINE retires the diagnosis-child membership below
+under the watcher's 11:59 direction. Its historical run and saved-log pointers remain in the
+[testing guide](../../developers/testing-guide.md#real-process-tests-need-time-to-observe-child-exit).
+
 **Source:** Lane I's `CI-WATCH-TABLE` ask in
 `/Users/clintongormley/waitron-campaign-i/queue.md:61–64`; inspected 16 November 2026.
 **Status:** Drafted by GPT-6.1 Sol/high, checked by the Codex driver and corrected after
