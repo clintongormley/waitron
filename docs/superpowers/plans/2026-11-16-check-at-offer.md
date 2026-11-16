@@ -58,9 +58,9 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    **Tests:** `S/handover-manifest.test.ts`: “WAL-only growth is included in the offer copy budget”
    (disable auto-checkpoint, commit growth, assert main-file size < budget and an unchanged-data
    `archiveTo` copy size ≤ budget). `S/handover-destination-api.test.ts`: “one byte below two
-   copies plus floor refuses without recording”, exact-boundary pass, each folder being lower,
+   copies plus floor refuses without recording”, exact-boundary pass, `venueDir` being lower,
    neither reporting space, malformed sizes, old-shape offer refusal before recording, and replay
-   after room disappears. Keep one lower-folder case to check `venueDir` wiring. In
+   after room disappears. The lower-folder case checks `venueDir` wiring. In
    `S/handover-source-start-api.test.ts`, use its real spare route for “no room or wrong same-version
    key leaves the source selling and the destination unrecorded”; assert no stepdown/restriction,
    source abandonment, exact 409 code and logs excluding key bytes. Add “source growth retries the original signed offer”.
