@@ -106,15 +106,18 @@ export function resolveContentText(
 ): string {
   for (const locale of [requestedLanguage, defaultLanguage]) {
     let language: string;
+    let bare: boolean;
     try {
       language = contentLanguageCode(locale);
+      bare = new Intl.Locale(locale).toString() === language;
     } catch {
       language = locale.split("-")[0]!;
+      bare = !locale.includes("-");
     }
     const keys = [
       locale,
       language,
-      ...Object.keys(translations)
+      ...Object.keys(bare ? translations : {})
         .filter((key) => {
           try {
             return contentLanguageCode(key) === language;

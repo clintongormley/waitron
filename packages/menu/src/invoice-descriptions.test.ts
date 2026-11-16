@@ -50,6 +50,15 @@ describe("toInvoiceLineDescriptions", () => {
     });
   });
 
+  it("never fills a full tag from another region of its language", () => {
+    expect(
+      toInvoiceLineDescriptions({ "es-MX": "Pan MX", fr: "Pain" }, ["es-ES", "fr-FR"], "fr"),
+    ).toEqual({
+      "es-ES": "Pain",
+      "fr-FR": "Pain",
+    });
+  });
+
   it("maps every tag to the empty string for an empty menu (no throw)", () => {
     expect(toInvoiceLineDescriptions({}, ["es-ES"], "es")).toEqual({ "es-ES": "" });
   });
