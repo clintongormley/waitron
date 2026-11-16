@@ -3,7 +3,7 @@
 **Source:** Lane I's `CI-WATCH-TABLE` ask in
 `/Users/clintongormley/waitron-campaign-i/queue.md:61–64`; inspected 16 November 2026.
 **Status:** Drafted by GPT-6.1 Sol/high, checked by the Codex driver and corrected after
-Claude’s plan read on 16 November 2026. Awaiting watcher clearance before consolidation.
+Claude’s plan read on 16 November 2026. See the dated execution note below for clearance.
 
 **Smallest usable result:** You can find each watched incident, its last recorded sighting,
 what to retain next time and its evidence location in one table. Reuse existing prose, links,
@@ -65,3 +65,9 @@ Name the reviewer and watcher; do not claim owner design approval. Use the regis
 branch, `git commit -s` and normal hooks. Take Lane I's shared main lock only for the refreshed
 fast-forward and direct push, release only your own lock, and follow the normal main-update and
 cleanup steps. No PR or forced CI run. This authoring task stops at the saved draft.
+
+**16 November execution note.** The watcher cleared the corrected plan at 05:23 after Claude’s
+sole plan read (166 seconds), with all six findings accepted. No separate owner design approval
+is claimed. The fiscal paragraph keeps its original timing and trace limits as linked detail so
+the table remains readable. The eighteen rows preserve the recorded sightings; this work does
+not search for later recurrences or close any investigation.

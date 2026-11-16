@@ -27,15 +27,6 @@ step missing from `shard.log`; fix that step. Do not raise `connectTimeout`, add
 concurrency first. A raised limit goes in the outer config's `test.browser` block, the only place
 Vitest 4.1.11 reads it.
 
-## The stream pause test's frozen-bucket control failed once in CI
-
-- In
-  `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
-  `s3.pause()` answered before the bound, so the assertion at line 540 read
-  `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
-  caller starts that control. The original one-off race has not been reproduced locally. If the control
-  fails again, retain that run's log and inspect the child state before naming another cause.
-
 ## What the landing-port fix (A80, PR #740) left open
 
 The remaining work includes in-process setup/recovery suites outside the migrated `boot*`
@@ -195,17 +186,6 @@ its two previous heads. Locally on macOS the same 60-file shard (`--shard=19/24`
 the file-progress reporter) passed every file. Unlike the browser shards, the server shard has no
 diagnostic process deadline, so a hang here leaves nothing once the log is lost.
 
-## A sixth: a CI shard exited 1 with every test passing (PR #414)
-
-- **The exit-1 path closed by the
-  Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Under vitest 3.2.7 one
-  worker's `onTaskUpdate` reporting call timed out on birpc's 60-second default. On 4.1.11 an answer
-  that never came would leave the shard waiting until the job's 10-minute `timeout-minutes`
-  cancelled it, rather than failing it when the run ends. Written up in
-  [ci-and-gates.md](../developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
-  the job log on the next sighting — it is the cheapest evidence there is.
-
-
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 
 Written 2026-09-14 during the tenant-column removal. It flags a comment whose
@@ -334,62 +314,46 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 - **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
   person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
 
-## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
+## CI incidents to watch
 
-14 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+The causes and qualification limits below remain open. Sightings are the records already kept
+in this backlog; “not recorded” marks information absent from the source entry. Keep the log
+before retrying and reproduce the pending operation before assigning a cause.
 
-- **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
-  returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
-  baseline do not explain the missing trigger. Retain the after-merge run check.
-  [Recovery procedure](../developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created).
-- **A891: retain input and timer timing if the missing product-information window recurs.**
-  [Detail](ci.md#a891-retain-input-and-timer-timing-if-the-missing-product-information-window-recurs).
-- **A999 residual: retain the other allergy-move failure if it recurs.**
-  [Detail](ci.md#a999-residual-retain-the-other-allergy-move-failure-if-it-recurs).
-- **Explain the two older silent pnpm setup stalls.**
-  Both lacked command progress reports; replacing the initial Node read does not establish their cause.
-  [Detail](ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
-- **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
-  [Detail](ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
-- **A1230 residual: dashboard shard 1's blocked operation is unknown.**
-  Retain the next failing log's selected-file case/hook events and Playwright API log;
-  use them to locate the pending operation before changing test or product behavior.
-  A1305 owns the later shard-4 deadline with `device-profiles-screen.clock.test.ts` unfinished;
-  its cause is also unconfirmed and its complete log is retained.
-  [Detail](ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
-- **A1305 residual: the dashboard page blocked during a click, and what blocked it is unknown.**
-  On `device-profiles-screen.clock.test.ts`, a switch click never completed and the log shows no
-  later call naming an element that file clicks, which fits a blocked main thread. At the next
-  stall of a file silent for 60 seconds past its time limits, read the reporter's `[file-progress] stack:` lines before changing test or product behaviour.
-  [Detail](ci.md#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown).
-- **A1027 residual: the till shard's blocked operation is unknown.**
-  [Detail](ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
-- **Venue-service browser startup remains unexplained (#1557).**
-  [Detail](ci.md#venue-service-browser-startup-remains-unexplained-1557).
-- **A419 dashboard CI stall remains unexplained (#1474).**
-  [Detail](ci.md#a419-dashboard-ci-stall-remains-unexplained-1474).
-- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254 attempt 1, job 111163230954, 2026-10-03; passed on re-run).**
-  The original one-off race has not been reproduced locally.
-  [Detail](ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci).
-- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying**
-  [Detail](ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying).
-- **Fiscal shard 2: the first-hour PDF assertion failed before the whole-shard deadline.**
-  [Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
-  has no retained assertion trace. The PDF case passed five focused local runs unchanged.
-  `backup-verification-history.test.ts` took 323.1 s; `recovery-hour.browser.test.ts` was assigned
-  only 14.224 s before the 420 s shard deadline, so that report does not establish a recovery-hour hang.
-  Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
-  before retrying; locate the pending operation before changing test or product behaviour.
-  Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
-  failed the same first-hour key-only PDF case before the deadline; the deadline again prevented
-  Vitest's final assertion trace. The complete failed log and process report are retained in lane E's
-  `receipts/a1308-5h/ci-rebased-fiscal.log`. History verification passed in 311.4 s; recovery-reader
-  began 20.8 s before the deadline. The unchanged first-hour file passed all 142 cases locally.
-- **The unexplained dashboard heading-order failure remains open** after #350. The
-  `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence,
-  so nothing here explains it — treat it as still unexplained.
-- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
-  [Detail](ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
+| What was seen | Last recorded sighting (run/job) | Retain next time | Retained logs |
+| --- | --- | --- | --- |
+| A1022: GitHub created no workflows for A987’s main merge; cause unverified. Recovery and a successful-CI baseline do not explain the trigger. | No CI run created for `e7ce92a7c`; runs API returned none. | Keep the after-merge run check. | No CI log recorded; [recovery procedure](../developers/ci-and-gates.md#recover-a-main-commit-whose-ci-run-was-never-created). |
+| A891: missing product-information window. A busy-renderer probe reproduces the symptom; the gesture now recognises a held release before its overdue timer. The exact CI cause remains unverified. | [39180066136](https://github.com/clintongormley/waitron/actions/runs/39180066136); job ID not recorded; that run retained no such trace. | Pointer timestamps, hold-callback timing, selection count and screenshot before retrying. | [Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs); CI trace not retained. |
+| A999: allergy move; the original loaded run reported two failures without case names or assertion output. The 2026-10-22 reproduction found the corrected-guest case, where a parent restored a cleared refusal. | Original CI run/job not recorded; reproduction: 2026-10-22. | Capture the exact case and output before attributing another recurrence to the same mechanism. | [Receipt](../developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal); original case names and output not retained. |
+| Silent pnpm setup stayed active through cancellation; final log unavailable. Fresh-runner samples do not establish its cause. | [40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856/job/122671628160) | Last phase `start`/`end` and the named operation; retain cleanup/GITHUB_PATH evidence before changing limits. | [Detail](#explain-the-two-older-silent-pnpm-setup-stalls); final log unavailable. |
+| Silent pnpm setup timed out with no script output or tests. Removing the initial Node dependency does not establish its cause. | [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487/job/127269970638) | Last phase `start`/`end` and the named operation before changing limits. | [Detail](#explain-the-two-older-silent-pnpm-setup-stalls); retained-log path not recorded. |
+| A544 / step-watch pre-push failures: the earlier late-worker cause remains likely, unconfirmed; the later undefined held-thread result has a controlled reproduction, with the original delay unobserved. | Local pre-push, no CI run; latest recorded failure 2026-10-16 (A770). | Keep the exact message and distinguish stalled phases, an empty report and a held call that never ran. | [Detail](#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one); [held-thread observation](#the-step-watch-guard-received-an-undefined-held-thread-result). |
+| A1230: dashboard shard 1’s blocked operation remains unknown. | [41046955691](https://github.com/clintongormley/waitron/actions/runs/41046955691/job/124036233860); 2026-10-30. | Whole log, selected-file case/hook events and Playwright API log; locate the pending operation first. | Retained-log path not recorded; [detail](#a1230-dashboard-shard-1s-blocked-operation-is-unknown). |
+| A1305: dashboard page blocked during a switch click; what blocked it remains unknown. | [41338680756](https://github.com/clintongormley/waitron/actions/runs/41338680756/job/124944000948); 2026-11-01, `test-dashboard (4)`. | Read `[file-progress] stack:` first once a file is silent 60 seconds past its limits; retain the complete log. | Retained-log path not recorded; [detail](#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown). |
+| A1027: till shard’s blocked operation remains unknown; preceding/following healthy shards do not diagnose it. | [39898823017](https://github.com/clintongormley/waitron/actions/runs/39898823017/job/120235613840) at `c76bcdaf3`; log lost. | Failed step log, unfinished-file/process reports, selected-file case/hook events, Playwright calls and any stack sample. | Original log lost; retained-log path not recorded; [detail](#the-till-shards-blocked-operation-is-unknown-a1027). |
+| #1557: venue-service browser startup remains unexplained. | [38170156450](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899); 2026-10-11, attempt 1. | Download `venue-service-diagnostics-<shard>` and locate the first missing startup step before changing limits or concurrency. | [Detail](#venue-service-browser-startup-remains-unexplained-1557). |
+| A419 / #1474: dashboard stall remains unexplained; `catalogue-screen.test.ts` unfinished. Focused/full local and diagnostic CI passed; no repair established. The failed run was cancelled after 3m26s without output. | [37932573955](https://github.com/clintongormley/waitron/actions/runs/37932573955); job/date not recorded. Diagnostic [37936013331](https://github.com/clintongormley/waitron/actions/runs/37936013331) passed. | Per-test progress; locate the waiting operation before changing the browser harness. A441 reports file start/end and unfinished files every 60 s via `scripts/vitest-file-progress.mjs`. | Retained-log path not recorded. |
+| Frozen-bucket control in `stream-pause.e2e.test.ts`, step 6 / line 540: expected `unanswered`, got `answered` after `s3.pause()`. W30 awaits stopped state; original one-off race not reproduced locally. | [37108993254](https://github.com/clintongormley/waitron/actions/runs/37108993254/job/111163230954); PR #1101, 2026-10-03, attempt 1; re-run passed. | Keep the log and inspect child state before naming another cause. | Retained-log path not recorded. |
+| Suite loading; bookings freeze; detached frame; refund search; diagnosis child; restore timer ticks; action-menu guard. Causes and reproduction limits remain in the linked detail. | [43766044951](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897); 2026-11-15, attempt 1. Distinct timer sighting [43689826000](https://github.com/clintongormley/waitron/actions/runs/43689826000/job/132738101327). | Retain the log before retrying; keep each incident’s timing, process/browser state and reproduction limits. | [Detail](#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying) contains every retained path; diagnosis run `43717151594` has no recorded job ID. |
+| Fiscal shard 2: first-hour PDF assertion failed before the deadline; cause unconfirmed. Passing focused runs do not diagnose it. | [43604245865](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462); 2026-11-14. Earlier [43548232659](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811). | Keep diagnostics on; retain assertion trace and unfinished-file/process report before retrying, then locate the pending operation. | `receipts/a1308-5h/ci-rebased-fiscal.log` in lane E; [timing and trace limits](#fiscal-shard-2-first-hour-pdf-failed-before-the-deadline). |
+| Dashboard heading order remains unexplained after #350: `dashboard-app.a11y.test.ts` is a different rule with no colour evidence. | Run/job/date not recorded. | Retain the exact heading-order failure log before assigning a cause. | Retained-log path not recorded. |
+| #414: shard exited 1 with every test passing. Vitest 4.1.11 / #437 closed that exit-1 path; why the reporting call went unanswered remains open. | PR #414; run/job/date not recorded. | Keep the next job log. Under 3.2.7 `onTaskUpdate` hit birpc’s 60-second default; on 4.1.11 an unanswered call instead waits for the 10-minute job cancellation. | Retained-log path not recorded; [CI guide](../developers/ci-and-gates.md), written up rather than fixed (owner, 2026-09-18). |
+| Server shard 2 / #2664: two database-open hooks and a process case timed out on a hosted runner; the re-run passed without locating the wait. | [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010); 2026-11-09, shard 2; job ID not recorded. | Keep the log and locate what the hooks were waiting on before changing a deadline. | `~/waitron-campaign-l/ci-logs/pr2664-run42690313010-test-server-2.log`; [Detail](#server-shard-2-stalled-once-on-a-hosted-runner-pr-2664-2026-11-09). |
+| Server shard 19 / #3342: silent to the 10-minute job limit; jobs-logs API returned `BlobNotFound`. Earlier heads and the local shard passed; cause unknown. | [43721700167](https://github.com/clintongormley/waitron/actions/runs/43721700167/job/132835178034); 2026-11-15. | Retain step output and file progress before cancellation; this server shard has no diagnostic process deadline. | [Detail](#server-shard-2-stalled-once-on-a-hosted-runner-pr-2664-2026-11-09); no file progress survives. |
+
+## Fiscal shard 2: first-hour PDF failed before the deadline
+
+[Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
+has no retained assertion trace. The PDF case passed five focused local runs unchanged.
+`backup-verification-history.test.ts` took 323.1 s; `recovery-hour.browser.test.ts` was assigned
+only 14.224 s before the 420 s shard deadline, so that report does not establish a recovery-hour hang.
+Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
+before retrying; locate the pending operation before changing test or product behaviour.
+Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
+failed the same first-hour key-only PDF case before the deadline; the deadline again prevented
+Vitest's final assertion trace. The complete failed log and process report are retained in lane E's
+`receipts/a1308-5h/ci-rebased-fiscal.log`. History verification passed in 311.4 s; recovery-reader
+began 20.8 s before the deadline. The unchanged first-hour file passed all 142 cases locally.
 
 ## Bundle: Qualify CI's server routing and action setup
 
@@ -890,15 +854,6 @@ and A770 widened the limit
 ([receipt](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); neither
 shape above has yet been seen in a real run.
 
-## A419 dashboard CI stall remains unexplained (#1474)
-
-Run `37932573955` left `catalogue-screen.test.ts` unfinished; local focused and full-package runs
-and diagnostic CI `37936013331` completed. No repair was established. Next: if it recurs, retain
-per-test progress and locate the waiting operation before changing the browser harness. Since A441
-every package test job prints each file's start and end and, every 60 s, the files still running
-(`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
-output.
-
 ## The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, #1788)
 
 - [#1788](https://github.com/clintongormley/waitron/pull/1788): the captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
@@ -999,15 +954,6 @@ to those paths with their own tests; native-device reproduction remains unverifi
 [Detail](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
 
 
-## A891: retain input and timer timing if the missing product-information window recurs
-
-A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
-held release before its overdue timer. Main run `39180066136` retained no such trace, so its
-exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
-selection count and the screenshot before retrying.
-[Reproduction](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
-
-
 ## Finish reusing fixed-secret hashes in remaining server test setup
 
 Use `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
@@ -1020,15 +966,6 @@ Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
 `src/bill-payments-api.test.ts` and `src/attendance-till-api.test.ts`, plus the shared
 `src/testing/handover-placed-copy.ts`. The two staged-hour salt helpers remain in
 [the existing speed-up entry](#server-test-time-levers-left-after-a1297).
-
-
-## A999 residual: retain the other allergy-move failure if it recurs
-
-The original loaded
-run reported two failing cases without their names or assertion output. The 2026-10-22
-reproduction identified the corrected-guest case, where a parent render restored a cleared
-refusal. Capture the exact case and output on any further recurrence before attributing it
-to the same mechanism. [Receipt](../developers/conventions-ui.md#a-parent-render-must-not-restore-a-corrected-request-refusal).
 
 
 ## Loose ends left by the comment-pruning pull requests (#559 to #624)
