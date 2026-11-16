@@ -41,7 +41,7 @@ No workflow, shared-script, controller, cache, record or cancellation-policy cha
       preserve the planner message bytes and existing metadata builder.
 - [ ] A partial success reports inspected/advertised counts and says unread runs may
       contain waiting work. It never contains `No stalled server queue`; the step
-      remains green and the existing failed-run watcher does not alert on it.
+      remains green.
       A queued run with assigned work can still be omitted; this observation is limited.
 - [ ] Preserve default `serverHealth`, routing, `recover`, `probe`, strict job and
       cancellation reads, full-server suppression and malformed/duplicate/excess/drift

@@ -357,7 +357,7 @@ completed server traffic explains the gap. Missing, invalid, stale or zero capac
 suppress that alarm. The machine-local stall watcher reports failed health workflows for
 intervention. `check` accepts a short queued workflow list after its existing reread and
 logs `Queued workflow discovery count shortfall` with counts and IDs. Running lists and job
-lists stay strict. A partial no-stall answer stays green, names unread work and makes no
+lists stay strict. A partial no-stall answer stays green, says that unread runs may hold waiting work and makes no
 whole-queue health claim; omitted queued runs may contain assigned work. Incomplete other
 inventories are reported without changing work; API failures remain visible. The explicit general `recover` helper remains manual. Non-planner health checks
 report a stop for a person to resolve.
