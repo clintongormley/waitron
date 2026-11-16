@@ -11,12 +11,10 @@ Packages run `tsc` at 7; the repository root resolves the name `typescript` to
 `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads.
 typescript-eslint tracks the work in its issue 10940, and the message it prints today names
 version **7.1** as the target. When a release supports it, the root entry goes back to a plain
-`^7` range and the alias disappears. `scripts/comments-only.mjs`,
-`scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
-`scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` parse with
-the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
-before that move. The arrangement is in [ci-and-gates.md](../developers/ci-and-gates.md) → _Two
-TypeScript compilers are installed, and that is deliberate_.
+`^7` range and the alias disappears. Every root script that imports `typescript`
+(`git grep -l 'from "typescript"' -- scripts`) uses the version 6 API, so they have to be ported,
+or the alias kept for them, before that move. The arrangement is in
+[ci-and-gates.md](../developers/ci-and-gates.md) → _Two TypeScript compilers are installed, and that is deliberate_.
 
 ## A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it
 
