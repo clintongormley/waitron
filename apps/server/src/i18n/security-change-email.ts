@@ -13,7 +13,7 @@ export const SECURITY_CHANGE_EMAIL_WORDS = {
       google_disconnected: "Google sign-in was disconnected from your account.",
     },
     text: (venue: string, change: string, when: string) =>
-      `${venue}: ${change} Changed on ${when}.\n\nIf this was not you, sign in, remove any sign-in method you don't recognise and change your password; if you can't sign in, ask a venue administrator to reset your sign-in.`,
+      `${venue}: ${change} Changed on ${when}.\n\nIf this was not you, sign in, remove any login method you don't recognise and change your password; if you can't sign in, ask a venue administrator to reset your login.`,
   },
   es: {
     subject: "Cambió la seguridad de tu cuenta",

@@ -93,7 +93,7 @@ it.each(
       change,
       locale: "en-GB",
       subject: "Your account security changed",
-      text: `Corner Bistro: ${en} Changed on 13 Nov 2026, 13:00.\n\nIf this was not you, sign in, remove any sign-in method you don't recognise and change your password; if you can't sign in, ask a venue administrator to reset your sign-in.`,
+      text: `Corner Bistro: ${en} Changed on 13 Nov 2026, 13:00.\n\nIf this was not you, sign in, remove any login method you don't recognise and change your password; if you can't sign in, ask a venue administrator to reset your login.`,
     },
     {
       change,
