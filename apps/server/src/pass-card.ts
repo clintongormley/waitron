@@ -4,6 +4,7 @@ import { initiatedAt, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js
 import { passSees, type PassScope } from "./pass-board.js";
 import { canonicalJson } from "./parties.js";
 import { byText } from "./text-order.js";
+import { byMoment, earliestTime, latestTime } from "./time-order.js";
 import type { ExpoItem } from "./working-order.js";
 
 export type PassTarget =
@@ -237,14 +238,10 @@ function placeCard(
       : allReady
         ? "ready"
         : "inProgress";
-  const initiated = cardRows
-    .map(initiatedAt)
-    .filter((time): time is string => time !== null)
-    .sort(byText);
+  const initiated = cardRows.map(initiatedAt).filter((time): time is string => time !== null);
   const readyTimes = cardRows
     .map((row) => row.readyAt)
-    .filter((time): time is string => time !== null)
-    .sort(byText);
+    .filter((time): time is string => time !== null);
   const orders = new Map<string, PassCard["orders"][number]>();
   for (const row of [...cardRows].sort(
     (a, b) => byText(a.order.openedAt, b.order.openedAt) || byText(a.orderId, b.orderId),
@@ -261,8 +258,8 @@ function placeCard(
     key,
     target,
     kind: allHeld ? "held" : (group?.requestKind ?? "new_order"),
-    requestedAt: initiated[0] ?? null,
-    readyAt: column === "ready" ? (readyTimes.at(-1) ?? null) : null,
+    requestedAt: earliestTime(initiated) ?? null,
+    readyAt: column === "ready" ? (latestTime(readyTimes) ?? null) : null,
     allReady,
     ...(group !== null ? { party: { id: group.partyId, revision: group.partyRevision } } : {}),
     orders: [...orders.values()],
@@ -323,8 +320,7 @@ export function buildPassBoard(
       .filter((entry) => entry.column === name)
       .sort((a, b) => order(a, b) || byText(a.card.key, b.card.key))
       .map((entry) => entry.card);
-  const byRequest = (a: Placed, b: Placed) =>
-    byText(a.card.requestedAt ?? "", b.card.requestedAt ?? "");
+  const byRequest = (a: Placed, b: Placed) => byMoment(a.card.requestedAt, b.card.requestedAt);
   const board: PassBoard = {
     held: column(
       "held",
@@ -335,7 +331,7 @@ export function buildPassBoard(
     ),
     toFire: column("toFire", byRequest),
     inProgress: column("inProgress", byRequest),
-    ready: column("ready", (a, b) => byText(a.card.readyAt ?? "", b.card.readyAt ?? "")),
+    ready: column("ready", (a, b) => byMoment(a.card.readyAt, b.card.readyAt)),
     overview: [],
   };
   for (const card of [...board.held, ...board.toFire, ...board.inProgress, ...board.ready]) {

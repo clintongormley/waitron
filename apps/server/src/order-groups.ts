@@ -72,6 +72,7 @@ import {
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { initiatedAt, initiatedItem, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
+import { earliestTime, latestTime } from "./time-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -2661,22 +2662,6 @@ export async function correctJoin(
     );
     await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
   }
-}
-
-/** Stored times are compared as moments, since a writer may spell one with an offset; the winner
- * is returned as stored. */
-function earliestTime(times: readonly string[]): string | undefined {
-  return times.reduce<string | undefined>(
-    (best, time) => (best === undefined || Date.parse(time) < Date.parse(best) ? time : best),
-    undefined,
-  );
-}
-
-function latestTime(times: readonly string[]): string | undefined {
-  return times.reduce<string | undefined>(
-    (best, time) => (best === undefined || Date.parse(time) > Date.parse(best) ? time : best),
-    undefined,
-  );
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
