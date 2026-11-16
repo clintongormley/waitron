@@ -1651,10 +1651,6 @@ Not in any track until the standalone primary is done.
 
 - **The spare's wait loop: back-off, reasons, stop signals** (4 remaining entries, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 
-- **No test holds "M1 is restricted before, during and after" at every state.** It is true now, but
-  nothing holds it at `return_pending`, `return_complete` or `replaced`. Due before Slices 10 and 13
-  add code that changes those states. Left open by A1018 Slice 5.
-
 - **Remaining handover refusal wording.** Codes whose words name no next step,
   words false at the stage they appear, and the "Unreadable" settings, each for Slice 6 to settle as
   its screens first show them. Left open by A1018 Slice 5.

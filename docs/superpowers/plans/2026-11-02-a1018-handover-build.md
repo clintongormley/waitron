@@ -3101,7 +3101,8 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 
 **For later slices:** Slice 6's words are listed in the backlog. "M1 is restricted before, during and
 after" has a test at some states only; it must cover the rest before Slices 10 and 13 add code that
-changes those states (backlog).
+changes those states (backlog). (2026-11-16: covered by the three cases at the end of
+`apps/server/src/handover-relinquish.test.ts`; backlog entry deleted.)
 
 ---
 
