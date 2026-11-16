@@ -162,13 +162,18 @@ first quarter's return is filed on 20 April; the error comes to light, and is co
 sale and changing no amount (DGT V1665-22; V0305-24). One corrective may cover several invoices (RD
 1619/2012 art. 15.4).
 
-*What Waitron proposes for the VAT period.* A report already filed never changes. A change that
-lowers a quarter's VAT counts in the current quarter, as answer 1.12 allows for a cancellation. A
-change that adds VAT to a filed quarter goes on a separate "correction for the first quarter" line,
-for the accountant to file as a complementary return (LGT art. 122), in line with answer 1.13 for a
-wrong VAT rate. In the example, the first quarter stays as filed, the second-quarter report (not
-yet filed in May) no longer counts the ticket, and the correction line shows its VAT for the first
-quarter. The same applies to an invoice issued after its meal's quarter was filed, for example a
+*What Waitron proposes for the VAT period.* A quarter's report counts that quarter's own invoices,
+with the corrections made to them within the same quarter, and a report already filed never
+changes. A correction made later to an earlier quarter's invoice is not counted in the current
+quarter, whether it lowers the VAT or adds to it. It goes on a separate corrections report, grouped
+by the quarter of the original invoice and by VAT rate, with reductions and additions shown apart.
+The accountant then files each one as the law allows: a reduction in the current return (LIVA art.
+89.Cinco.b, as answer 1.12 allows for a cancellation) or by having the earlier return corrected
+(LGT art. 120.3); an addition in a complementary return for its quarter (LGT art. 122), in line with
+answer 1.13 for a wrong VAT rate. A correction made before the earlier quarter's return is filed
+goes on the same report, for the accountant to include in that return. In the example, the first
+quarter stays as filed, the second-quarter report (not yet filed in May) no longer counts the
+ticket, and the corrections report shows its VAT for the first quarter. The same applies to an invoice issued after its meal's quarter was filed, for example a
 bill left open by mistake from 31 March to 25 April: its VAT fell due when the meal ended (LIVA
 75.Uno.2.º; answer 1.4).
 
@@ -611,14 +616,20 @@ real de la operación y no cambia ningún importe (DGT V1665-22: «será necesar
 factura rectificativa»; V0305-24). Una rectificativa puede corregir varias facturas (RD 1619/2012,
 art. 15.4).
 
-*Propuesta de Waitron para el periodo del IVA.* Un informe ya presentado no cambia nunca. Un cambio
-que reduce el IVA de un trimestre se imputa al trimestre en curso, como permite su respuesta 1.12
-para una anulación. Un cambio que añade IVA a un trimestre ya presentado se muestra en una línea
-aparte, «corrección del primer trimestre», para que el gestor presente una autoliquidación
-complementaria (LGT art. 122), en línea con su respuesta 1.13 para un tipo de IVA erróneo. En el
-ejemplo, el primer trimestre queda como se presentó, el informe del segundo trimestre (aún sin
-presentar en mayo) deja de incluir el tique, y la línea de corrección muestra su IVA para el primer
-trimestre. Lo mismo vale para una factura expedida después de presentar el trimestre de su comida,
+*Propuesta de Waitron para el periodo del IVA.* El informe de un trimestre incluye las facturas de
+ese trimestre, con las correcciones que se les hagan dentro del mismo trimestre, y un informe ya
+presentado no cambia nunca. Una corrección hecha más tarde a una factura de un trimestre anterior no
+se imputa al trimestre en curso, tanto si reduce el IVA como si lo aumenta. Se muestra en un informe
+de correcciones aparte, agrupado por el trimestre de la factura original y por tipo de IVA, con las
+reducciones y los aumentos por separado. El gestor presenta después cada una como permita la ley:
+una reducción, en la autoliquidación en curso (art. 89.Cinco.b LIVA, como permite su respuesta 1.12
+para una anulación) o mediante la rectificación de la autoliquidación anterior (art. 120.3 LGT); un
+aumento, en una autoliquidación complementaria de su trimestre (LGT art. 122), en línea con su
+respuesta 1.13 para un tipo de IVA erróneo. Una corrección hecha antes de presentar la
+autoliquidación del trimestre anterior figura en el mismo informe, para que el gestor la incluya en
+esa autoliquidación. En el ejemplo, el primer trimestre queda como se presentó, el informe del
+segundo trimestre (aún sin presentar en mayo) deja de incluir el tique, y el informe de correcciones
+muestra su IVA para el primer trimestre. Lo mismo vale para una factura expedida después de presentar el trimestre de su comida,
 por ejemplo una cuenta que se dejó abierta por error del 31 de marzo al 25 de abril: su IVA se
 devengó al terminar la comida (LIVA art. 75.Uno.2.º; su respuesta 1.4).
 

@@ -2,7 +2,8 @@
 
 Written 15 November 2026 for the owner, to go through before the meeting with the adviser on
 Thursday 19 November. Rewritten the same day so that each section can be read on its own. Updated
-16 November with your decisions D1, D2, D6 and D12, and with corrections from a review.
+16 November with your decisions D1, D2, D6 and D12, and with corrections from a review; later that
+day you widened D12 so that reductions go on the corrections report too (Part B13).
 
 ## About this document
 
@@ -67,8 +68,8 @@ and line behind each claim are in the [evidence table](#evidence) at the end.
   belonged to a quarter whose VAT return is already filed, the venue may either take the reduction
   in the current quarter's return or ask for the old return to be corrected. Waitron's VAT report
   counts the cancellation on the day it is made (your decision of 24 September), which is the first
-  option. It also fits your decision of 16 November that a report already filed never changes
-  (Part B13).
+  option. Your decision D12 (Part B13) changes this: a cancellation of an earlier quarter's invoice
+  goes on the corrections report instead, and the accountant chooses between the two options.
 - **Full invoices and their exchanges share a series (answer 1.14, first half).** Full invoices (F1)
   and full invoices issued in exchange for tickets (F3) may share a numbering series. In Waitron they
   do.
@@ -512,12 +513,18 @@ return is filed. Lane L's branch does the same for an invoice issued late (Part 
   report, not yet filed in May, no longer counts the ticket, and a corrections line shows the
   ticket's VAT as owed for the first quarter.
 
-**What should change.** A report already filed never changes. A change that lowers the VAT counts
-in the current quarter. A change that adds VAT to a filed quarter goes on a separate report of
-corrections, by quarter, which the accountant files as a complementary return. Question 7 asks the adviser to
-confirm.
+**What should change.** A quarter's report counts that quarter's own invoices, with the
+corrections made to them within the same quarter, and a report already filed never changes. A
+correction made later to an earlier quarter's invoice is never counted in the current quarter,
+whichever way it moves the VAT. It goes on a separate report of corrections, grouped by the quarter
+of the original invoice and by VAT rate, with reductions and additions apart. The accountant files a
+reduction in the current return or by having the earlier return corrected (answer 1.12), and an
+addition as a complementary return (answer 1.13). Question 7 asks the adviser to confirm.
 
-**Your decision (D12).** *Owner, 16 November: as above.*
+**Your decision (D12).** *Owner, 16 November: a filed report never changes; reductions in the
+current quarter, additions on a corrections report. Widened by the owner later the same day: "we
+use a corrections report instead of just adding the transaction to the current period", so
+reductions go on the corrections report too, as above.*
 
 ## Part C. To remember when these are built
 
@@ -563,7 +570,7 @@ Each is explained in full in its section.
 | D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 20 |
 | D10 | Date of the sale on lane L's branch | B11 | Decided: after Thursday |
 | D11 | Goodwill refunds without a corrective | B12 | After question 19 |
-| D12 | A filed report never changes: reductions in the current quarter, additions on a corrections report | B13 | Decided 16 November; question 7 asks the adviser to confirm |
+| D12 | A filed report never changes; every later correction of an earlier quarter, reduction or addition, goes on a corrections report | B13 | Decided 16 November, widened the same day; question 7 asks the adviser to confirm |
 
 ## Evidence
 

@@ -902,12 +902,27 @@ Also open, from before A802:
   the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
   the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
-## Correct VAT without returning money
+## A corrections report for earlier quarters' VAT (was: Correct VAT without returning money)
 
-The owner excluded a VAT-only correction from A802 on 2026-10-21. Design how to correct a wrong
-VAT rate or classification while keeping the customer's gross total unchanged and returning no
-money. Settle its fiscal document, source-history checks, paper and reporting in that separate
-design. A802's gross-reduction workflow does not authorise this build.
+Settled by the owner's decisions D6 and D12 of 2026-11-16, after the tax adviser's answers 1.12 and
+1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13):
+
+- A wrong VAT rate found after sale gets no document for customers: the adviser says the law bars
+  charging them the difference (LIVA 89.Tres.1.º). The venue pays it, and the product's rate is
+  corrected for future sales.
+- A quarter's VAT report counts that quarter's own invoices, with corrections made to them within
+  the same quarter, and a filed report never changes. Any later correction of an earlier quarter's
+  invoice (a cancellation, a corrective, a wrong date, a wrong rate, an invoice issued after its
+  meal's quarter) is left out of the current quarter, whichever way it moves the VAT, and listed on
+  a separate corrections report by original quarter and rate, reductions and additions apart. The
+  accountant files reductions in the current return or a corrected earlier one, and additions as
+  complementary returns. Waitron files nothing itself.
+- Today `packages/reporting/src/vat-return.ts` counts a corrective in the quarter it is issued, at
+  the original's rate, and moves a wrong-date corrective's VAT back to the real day, changing a
+  filed quarter's figures (read, not run).
+- Question 7 of the [19 November meeting sheet](../compliance/2026-11-19-adviser-meeting.md) asks the
+  adviser to confirm. How a wrong rate is recorded waits on the per-product VAT rate design under
+  discussion on 2026-11-16 (dated rates per product, chosen from a list Waitron ships).
 
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
 

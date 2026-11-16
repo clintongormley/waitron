@@ -356,10 +356,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   same step (A758 §3.8, owner Q43 e).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 
-- **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
-  or classification when the customer's gross total stays the same. The owner left this out of
-  A802's money-back scope on 2026-10-21; no build is approved.
-  [Detail](backlog/fiscal.md#correct-vat-without-returning-money)
+- **A corrections report for earlier quarters' VAT** (owner, D6 and D12, 2026-11-16). A filed
+  quarter never changes; every later correction of an earlier quarter's invoice goes on a separate
+  report for the accountant instead of into the current quarter. Waits on the adviser's answer to
+  question 7 on 19 November. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a-corrections-report-for-earlier-quarters-vat-was-correct-vat-without-returning-money)
 
 - **Probe a replacement R5 "S", and an R4 "S", on AEAT's test service (go-live; watcher, 2026-11-14 18:22; the R4 "S", watcher, 2026-11-15 01:52).** Run
   before the first real R5 'S': a simplified invoice refused for a future date (`1112`), then a
