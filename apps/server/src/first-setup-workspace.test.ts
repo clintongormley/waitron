@@ -3,7 +3,6 @@ import { mkdtemp, mkdir, rm, writeFile, stat, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { startServer } from "./boot.js";
-import { freePorts } from "./testing/free-ports.js";
 import { startAgainMarkerFor, writeStartAgainMarker } from "@waitron/provisioning";
 const dirs: string[] = [];
 afterEach(async () => {
@@ -27,7 +26,6 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
   );
   await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
-  const [port] = await freePorts(1);
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   try {
     await expect(
@@ -36,7 +34,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
           WAITRON_VENUE_DIR: venueDir,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_HTTP_HOST: "127.0.0.1",
-          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_PORT: "3000",
         });
       })(),
     ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });

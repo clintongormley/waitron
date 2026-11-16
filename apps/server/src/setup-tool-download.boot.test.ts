@@ -4,10 +4,15 @@ import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { Agent } from "undici";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer, type StartedServer } from "./boot.js";
-import { freePorts } from "./testing/free-ports.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+
+vi.mock("@hono/node-server", async () =>
+  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
+);
+const { startServer, httpPort } = ephemeralServerFixture();
 
 it("serves the built wizard without the retired offline tool or an identity claim", async () => {
   const root = await mkdtemp(join(tmpdir(), "setup-tool-boot-"));
@@ -31,13 +36,12 @@ it("serves the built wizard without the retired offline tool or an identity clai
         { recursive: true },
       );
     }
-    const [port] = await freePorts(1);
     const stateDir = join(root, "state");
     server = await startServer({
       WAITRON_STATE_DIR: stateDir,
       WAITRON_VENUE_DIR: join(root, "venue"),
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MIGRATIONS_DIR: migrations,
       WAITRON_SETUP_APP_DIR: wizard,
@@ -45,12 +49,15 @@ it("serves the built wizard without the retired offline tool or an identity clai
     });
     agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
     const via = { dispatcher: agent } as RequestInit;
-    const response = await fetch(`https://127.0.0.1:${port}/setup-assets/custodian-tool.html`, via);
+    const response = await fetch(
+      `https://127.0.0.1:${httpPort()}/setup-assets/custodian-tool.html`,
+      via,
+    );
     expect(response.status).toBe(404);
     expect(response.headers.get("Content-Disposition")).toBeNull();
-    const status = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, via);
+    const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/first-setup/status`, via);
     expect(await status.json()).toEqual({ claimed: false });
-    const index = await fetch(`https://127.0.0.1:${port}/`, via);
+    const index = await fetch(`https://127.0.0.1:${httpPort()}/`, via);
     expect(index.status).toBe(200);
     expect(await index.text()).toContain("/assets/");
   } finally {

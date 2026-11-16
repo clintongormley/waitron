@@ -27,7 +27,18 @@ import {
 } from "@waitron/provisioning/testing/start-again-attempt";
 import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { closeListener } from "./close-listener.js";
-import { freePorts } from "./testing/free-ports.js";
+import { listener } from "./testing/ephemeral-listener.js";
+
+vi.mock("@hono/node-server", async () => {
+  const mock = await (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock();
+  return {
+    ...mock,
+    serve: (...args: Parameters<typeof mock.serve>) => {
+      expect(args[0].port).toBe(3000);
+      return mock.serve(...args);
+    },
+  };
+});
 import { escapeHtml } from "./html-page.js";
 import { OPERATOR_WORDS, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
@@ -422,10 +433,10 @@ type Mode = (typeof MODES)[number];
 
 /** Starts the box in `mode` on a real listener; `restart` is what Try again reaches in either mode. */
 async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }) {
-  const [port] = (await freePorts(1)) as [number];
+  listener.port = undefined;
   const listenerEnv = {
     WAITRON_HTTP_HOST: "127.0.0.1",
-    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_PORT: "3000",
     WAITRON_HTTP_LANDING_PORT: "0",
   };
   const restart = vi.fn();
@@ -447,6 +458,7 @@ async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }
       assertNotAhead: async () => {},
       startServer,
       serveRecovery: async (app, options) => {
+        expect(options.port).toBe(3000);
         const server = await serveRecovery(app, options);
         closes.push(() => closeListener(server));
       },
@@ -463,7 +475,16 @@ async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }
     );
     closes.push(() => server.close());
   }
-  return { port, restart, writes, startServer };
+  const port = listener.port;
+  return {
+    get port() {
+      if (port === undefined) throw new Error("Expected bound recovery listener");
+      return port;
+    },
+    restart,
+    writes,
+    startServer,
+  };
 }
 
 function overHttps(
@@ -621,14 +642,14 @@ it.each(MODES)(
 it("a deletion refused for an unlisted file names that file under 'Why the last start failed'", async () => {
   const f = await startingBox("unlisted");
   const lines: { event: string; fields: unknown }[] = [];
-  const [port] = (await freePorts(1)) as [number];
+  listener.port = undefined;
   await entry.runEntry({
     ...f,
     args: [],
     statfs: plentyOfSpace,
     baseEnv: {
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
       WAITRON_HTTP_LANDING_PORT: "0",
     },
     readRecoveryState: async () => FRESH,
@@ -636,6 +657,7 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     loadBoxEnv: async (base) => base,
     startServer: stopped,
     serveRecovery: async (app, options) => {
+      expect(options.port).toBe(3000);
       const server = await serveRecovery(app, options);
       closes.push(() => closeListener(server));
     },
@@ -644,7 +666,8 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     log: (_level, event, fields) => lines.push({ event, fields }),
     exit: () => {},
   });
-  const page = (await overHttps(port, "/", "en-GB")).body;
+  if (listener.port === undefined) throw new Error("Expected bound recovery listener");
+  const page = (await overHttps(listener.port, "/", "en-GB")).body;
   const heading = page.indexOf("Why the last start failed (");
   expect(heading).toBeGreaterThan(-1);
   const section = page.slice(heading, page.indexOf("</pre>", heading));

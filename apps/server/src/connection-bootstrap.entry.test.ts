@@ -16,7 +16,8 @@ import {
 } from "./recovery-listener.js";
 import { installVenueAuthority } from "./box-tls-install.js";
 import { closeListener } from "./close-listener.js";
-import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { tlsFile, tlsSetMatches } from "./testing/box-tls.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
@@ -47,8 +48,25 @@ beforeAll(() => {
 });
 const dirs: string[] = [];
 const closes: (() => Promise<void>)[] = [];
+const reservations: RetainedHttpListener[] = [];
+const adoptions: ReturnType<typeof adoptRetainedListeners>[] = [];
+async function retainedPorts(count: number) {
+  const held: RetainedHttpListener[] = [];
+  for (let index = 0; index < count; index++) {
+    const entry = await retainHttpListener();
+    reservations.push(entry);
+    held.push(entry);
+  }
+  adoptions.push(adoptRetainedListeners(held));
+  return held.map((entry) => entry.port);
+}
 afterEach(async () => {
-  await Promise.all(closes.splice(0).map((close) => close()));
+  try {
+    await Promise.all(closes.splice(0).map((close) => close()));
+  } finally {
+    for (const adoption of adoptions.splice(0)) adoption.restore();
+    for (const held of reservations.splice(0)) if (held.server.listening) await held.close();
+  }
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 async function fixture(
@@ -128,7 +146,7 @@ it.each(["missing-key", "malformed", "mismatch", "missing-ca", "expired"] as con
   "real recovery listeners expose only connection bootstrap for %s",
   async (damage) => {
     const f = await fixture(damage);
-    const [port, landingPort] = (await freePorts(2)) as [number, number];
+    const [port, landingPort] = (await retainedPorts(2)) as [number, number];
     const privateApp = new Hono();
     privateApp.get("/", (c) => c.text("PRIVATE RECOVERY LOG"));
     privateApp.post("/recovery-api/retry", (c) => c.json({ private: true }));
@@ -174,7 +192,7 @@ it("direct repair re-enters resolution on verified HTTPS and the returned handle
   const f = await fixture();
   await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(f.stateDir, "flows/setup/record.json"), "torn claim");
-  const [port, landingPort] = (await freePorts(2)) as [number, number];
+  const [port, landingPort] = (await retainedPorts(2)) as [number, number];
   const strict = vi.fn(async () => {
     throw new Error("strict start reached unresolved workspace");
   });
@@ -228,7 +246,7 @@ it.each(
       await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
       await writeFile(join(f.stateDir, "flows/setup/record.json"), "retained torn claim");
     }
-    const [port] = (await freePorts(1)) as [number];
+    const [port] = (await retainedPorts(1)) as [number];
     const forbidden = vi.fn(async () => {
       throw new Error("protected work reached");
     });
@@ -274,7 +292,7 @@ it.each(
 
 it("a failed direct continuation keeps public retry available and the next retry closes the replacement", async () => {
   const f = await fixture();
-  const [port] = (await freePorts(1)) as [number];
+  const [port] = (await retainedPorts(1)) as [number];
   let starts = 0;
   const strict = vi.fn(async () => {
     if (++starts === 1) throw new Error("PRIVATE boot failure detail");
@@ -327,15 +345,17 @@ it("healthy recovery keeps its protected Retry on verified HTTPS and flushes its
     join(f.stateDir, "tls/server.pem"),
     material.serverCertPem + material.serverKeyPem,
   );
-  const [port] = (await freePorts(1)) as [number];
   const onRetry = vi.fn(async () => {});
   const server = await serveRecovery(recoveryApp({ state: FRESH, logDir: f.stateDir, onRetry }), {
     stateDir: f.stateDir,
-    port,
+    port: 0,
     httpHost: "127.0.0.1",
     log: () => {},
   });
   closes.push(() => closeListener(server));
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("Expected TCP listener");
+  const port = address.port;
   const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const req = httpsRequest(
       {
@@ -371,7 +391,7 @@ it("healthy recovery keeps its protected Retry on verified HTTPS and flushes its
 
 it("real HTTP refuses forged origins and streamed private input while an empty action remains usable", async () => {
   const f = await fixture();
-  const [port] = (await freePorts(1)) as [number];
+  const [port] = (await retainedPorts(1)) as [number];
   const server = await serveRecovery(new Hono(), {
     stateDir: f.stateDir,
     port,
@@ -424,7 +444,7 @@ it("recovery respects operator TLS selected in the retained settings without exp
     join(f.stateDir, "trading.env"),
     "WAITRON_TLS_CERT_FILE=/operator/server.pem\nWAITRON_TLS_KEY_FILE=/operator/server.pem\n",
   );
-  const [port] = (await freePorts(1)) as [number];
+  const [port] = (await retainedPorts(1)) as [number];
   const forbidden = async () => {
     throw new Error("protected work reached");
   };
@@ -465,7 +485,7 @@ it.each(["malformed", "mismatch", "missing-ca", "expired"] as const)(
   "direct %s repair returns through full admission to a verified HTTPS listener",
   async (damage) => {
     const f = await fixture(damage);
-    const [port] = (await freePorts(1)) as [number];
+    const [port] = (await retainedPorts(1)) as [number];
     const strict = vi.fn(async () => {
       const app = new Hono();
       app.get("/", (c) => c.text("admitted after connection repair"));
@@ -516,7 +536,7 @@ it.each(["malformed", "mismatch", "missing-ca", "expired"] as const)(
 
 it("actual HTTP rejects forged/private requests and archive reads before a legitimate empty repair", async () => {
   const f = await fixture();
-  const [port] = (await freePorts(1)) as [number];
+  const [port] = (await retainedPorts(1)) as [number];
   const server = await serveRecovery(new Hono(), {
     stateDir: f.stateDir,
     port,
@@ -561,7 +581,7 @@ it("actual HTTP rejects forged/private requests and archive reads before a legit
 
 it("keeps public CA download and reload available after a discarded repair reply until explicit HTTPS continuation", async () => {
   const f = await fixture("missing-ca");
-  const [port] = (await freePorts(1)) as [number];
+  const [port] = (await retainedPorts(1)) as [number];
   const strict = vi.fn(async () => {
     const app = new Hono();
     app.get("/", (c) => c.text("admitted after public certificate download"));
@@ -691,7 +711,6 @@ it.each([0, 1, 2])(
   "the supervised entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
   async (renamed) => {
     const f = await halfInstalled(renamed);
-    const [port] = (await freePorts(1)) as [number];
     const past = vi.fn(async () => {
       throw new Error("past the connection check");
     });
@@ -701,7 +720,7 @@ it.each([0, 1, 2])(
       args: [],
       baseEnv: {
         WAITRON_HTTP_HOST: "127.0.0.1",
-        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_PORT: "3000",
         WAITRON_HTTP_LANDING_PORT: "0",
       },
       spareBytes: 0,
@@ -730,7 +749,6 @@ it.each([0, 1, 2])(
   "the direct entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
   async (renamed) => {
     const f = await halfInstalled(renamed);
-    const [port] = (await freePorts(1)) as [number];
     const served: RecoveryServeOptions[] = [];
     const started = vi.fn(async () => ({ close: async () => {} }));
     const handle = await startServerOrFirstSetupResolution(
@@ -738,7 +756,7 @@ it.each([0, 1, 2])(
         WAITRON_STATE_DIR: f.stateDir,
         WAITRON_VENUE_DIR: f.venueDir,
         WAITRON_HTTP_HOST: "127.0.0.1",
-        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_PORT: "3000",
         WAITRON_HTTP_LANDING_PORT: "0",
       },
       {},

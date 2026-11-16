@@ -9,7 +9,24 @@ import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
-import { freePorts } from "./testing/free-ports.js";
+import { listener } from "./testing/ephemeral-listener.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
+
+vi.mock("@hono/node-server", async () => {
+  const mock = await (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock();
+  return {
+    ...mock,
+    serve: (...args: Parameters<typeof mock.serve>) => {
+      if (!listener.configured) expect(args[0].port).toBe(3000);
+      return mock.serve(...args);
+    },
+  };
+});
+function httpPort() {
+  if (listener.port === undefined) throw new Error("Expected bound recovery listener");
+  return listener.port;
+}
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -50,19 +67,21 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         now: () => new Date(),
         listIpv4: () => ["127.0.0.1"],
       });
-      const [port] = await freePorts(1);
+      listener.port = undefined;
       const restart = vi.fn();
       server = await startServerOrFirstSetupResolution(
         {
           WAITRON_STATE_DIR: f.stateDir,
           WAITRON_VENUE_DIR: f.venueDir,
-          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_PORT: "3000",
+          WAITRON_HTTP_HOST: "127.0.0.1",
+          WAITRON_HTTP_LANDING_PORT: "0",
         },
         {},
         { requestRestart: restart },
       );
       agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-      const origin = `https://127.0.0.1:${port}`;
+      const origin = `https://127.0.0.1:${httpPort()}`;
       const get = async () =>
         (
           await fetch(`${origin}/setup-api/first-setup/resolution`, {
@@ -144,14 +163,16 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
-    const [port] = await freePorts(1);
+    listener.port = undefined;
     server = await startServerOrFirstSetupResolution({
       WAITRON_STATE_DIR: f.stateDir,
       WAITRON_VENUE_DIR: f.venueDir,
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: "0",
     });
     agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-    const origin = `https://127.0.0.1:${port}`;
+    const origin = `https://127.0.0.1:${httpPort()}`;
     const inspection = await (
       await fetch(`${origin}/setup-api/first-setup/resolution`, {
         dispatcher: agent,
@@ -257,14 +278,16 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
-    const [port] = await freePorts(1);
+    listener.port = undefined;
     server = await startServerOrFirstSetupResolution({
       WAITRON_STATE_DIR: f.stateDir,
       WAITRON_VENUE_DIR: f.venueDir,
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: "0",
     });
     agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-    const origin = `https://127.0.0.1:${port}`;
+    const origin = `https://127.0.0.1:${httpPort()}`;
     const inspection = await (
       await fetch(`${origin}/setup-api/first-setup/resolution`, {
         dispatcher: agent,
@@ -311,14 +334,16 @@ it("confirmUnreadableDatabase is parsed only with a shown summary that said the 
       now: () => new Date(),
       listIpv4: () => ["127.0.0.1"],
     });
-    const [port] = await freePorts(1);
+    listener.port = undefined;
     server = await startServerOrFirstSetupResolution({
       WAITRON_STATE_DIR: f.stateDir,
       WAITRON_VENUE_DIR: f.venueDir,
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: "0",
     });
     agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-    const origin = `https://127.0.0.1:${port}`;
+    const origin = `https://127.0.0.1:${httpPort()}`;
     const inspection = await (
       await fetch(`${origin}/setup-api/first-setup/resolution`, {
         dispatcher: agent,
@@ -365,13 +390,19 @@ it("confirmUnreadableDatabase is parsed only with a shown summary that said the 
 it("the loopback resolution listener keeps certificate guidance on the local address", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;
+  let held: RetainedHttpListener | undefined;
+  let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
   try {
-    const [port] = await freePorts(1);
+    held = await retainHttpListener();
+    adoption = adoptRetainedListeners([held]);
+    const port = held.port;
+    listener.configured = true;
     server = await startServerOrFirstSetupResolution({
       WAITRON_STATE_DIR: f.stateDir,
       WAITRON_VENUE_DIR: f.venueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: "0",
     });
     const response = await fetch(`http://127.0.0.1:${port}/setup/trust`);
     expect(response.status).toBe(200);
@@ -379,7 +410,10 @@ it("the loopback resolution listener keeps certificate guidance on the local add
     expect(html).not.toContain("waitron.local");
     expect(html).toContain(`127.0.0.1:${port}`);
   } finally {
+    listener.configured = false;
+    adoption?.restore();
     await server?.close();
+    if (held?.server.listening) await held.close();
     await f.dispose();
   }
 });
@@ -388,22 +422,24 @@ it("HTTP refuses start-again before reading secrets even with forwarded HTTPS", 
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;
   try {
-    const [port] = await freePorts(1);
+    listener.port = undefined;
     server = await startServerOrFirstSetupResolution({
       WAITRON_STATE_DIR: f.stateDir,
       WAITRON_VENUE_DIR: f.venueDir,
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: "0",
     });
     const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
-    const route = `http://127.0.0.1:${port}/setup-api/first-setup/resolution/start-again`;
+    const route = `http://127.0.0.1:${httpPort()}/setup-api/first-setup/resolution/start-again`;
     const headers = { "Content-Type": "application/json", "X-Forwarded-Proto": "https" };
     const response = await fetch(route, { method: "POST", headers, body: "not even JSON" });
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("404 Not Found");
     expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
-    expect((await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)).status).toBe(
-      404,
-    );
+    expect(
+      (await fetch(`http://127.0.0.1:${httpPort()}/setup-api/first-setup/resolution`)).status,
+    ).toBe(404);
     const admission = await resolveFirstSetupEntry(
       { stateDir: f.stateDir, venueDir: f.venueDir },
       {},

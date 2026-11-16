@@ -14,7 +14,6 @@ import {
 } from "../test/stop-route-server.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
-import { freePorts } from "./testing/free-ports.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
   observeTimeServiceHourClock: async () => ({
@@ -144,8 +143,7 @@ it("refuses a forwarded HTTPS header on a plain socket, and writes nothing", asy
   const s = await ordinaryServer();
   const ids = await s.ids();
   const before = await s.record();
-  const [port] = await freePorts(1);
-  const server = serve({ fetch: s.app.fetch, port, hostname: "127.0.0.1" });
+  const server = serve({ fetch: s.app.fetch, port: 0, hostname: "127.0.0.1" });
   cleanups.push(
     () =>
       new Promise<void>((resolve, reject) =>
@@ -153,6 +151,9 @@ it("refuses a forwarded HTTPS header on a plain socket, and writes nothing", asy
       ),
   );
   if (!server.listening) await once(server, "listening");
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("Expected TCP listener");
+  const port = address.port;
   const response = await fetch(`http://127.0.0.1:${port}${STOP}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },

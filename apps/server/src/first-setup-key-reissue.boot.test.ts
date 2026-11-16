@@ -3,11 +3,17 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Agent } from "undici";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { verifySecretAsync } from "@waitron/identity";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { listener } from "./testing/ephemeral-listener.js";
+
+vi.mock("@hono/node-server", async () =>
+  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
+);
+const { startServer, httpPort } = ephemeralServerFixture();
 import { request, PASSWORD } from "../test/first-fiscal.js";
 
 it("reissues on the real setup HTTPS listener after a restart loses the raw key", async () => {
@@ -19,24 +25,23 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
       venueDir = join(root, "venue"),
       migrations = join(root, "migrations");
     await copyMigrationsRoot(migrations);
-    const [port] = await freePorts(1);
     const env = {
       WAITRON_ENV: "production",
       WAITRON_STATE_DIR: stateDir,
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: migrations,
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: "3000",
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_RP_ID: "localhost",
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     };
     server = await startServer(env);
     agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-    const url = `https://127.0.0.1:${port}`;
+    const url = () => `https://127.0.0.1:${httpPort()}`;
     let headers: Record<string, string> = {};
     const post = async (path: string, body: unknown) => {
-      const response = await fetch(url + "/setup-api/first-setup/" + path, {
+      const response = await fetch(url() + "/setup-api/first-setup/" + path, {
         dispatcher: agent,
         method: "POST",
         headers: { "Content-Type": "application/json", ...headers },
@@ -60,7 +65,9 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     const initial = await post("node-key", proof.body);
     expect(initial.status).toBe(200);
     const original = (await readSetupFlowRecord(stateDir))?.nodeKey;
+    const initialListener = listener.current;
     await server.close();
+    expect(initialListener?.listening).toBe(false);
     server = undefined;
     server = await startServer(env);
     const before = (await readSetupFlowRecord(stateDir))?.attempt;
