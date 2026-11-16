@@ -4071,6 +4071,16 @@ describe("the sharded jobs", () => {
 });
 
 describe("the lint and root-guards jobs", () => {
+  it.each(["lint", "root-guards"])(
+    "does not start %s when workflow and changes are cancelled",
+    (id) => {
+      const context = routingContext();
+      context.cancelled = () => true;
+      context.needs.changes.result = "cancelled";
+      expect(jobCondition(job(id).body, context)).toBe(false);
+    },
+  );
+
   // The repo-level project runs in a job of its own so its time runs beside lint's rather than
   // inside it.
   it("run the repo-level Vitest project only in root-guards, including failed classification", () => {
@@ -4081,7 +4091,10 @@ describe("the lint and root-guards jobs", () => {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
-      ).toEqual(["    needs: changes", "    if: ${{ always() && !inputs.server_probe }}"]);
+      ).toEqual([
+        "    needs: changes",
+        "    if: ${{ always() && !cancelled() && !inputs.server_probe }}",
+      ]);
     }
   });
 

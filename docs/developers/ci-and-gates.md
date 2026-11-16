@@ -1821,6 +1821,21 @@ failed. In that run `needs` also said `cancelled`, so it does not show the secon
 the first missed. GitHub's own "not acquired" cancellation, the 2026-10-05 case, could not be
 produced on demand, so the second step has not been seen failing a run that `needs` passed.
 
+### Cancelled workflows do not start lint or root guards
+
+Both jobs keep `always()` so an ordinary classification failure still gets those checks, and require `!cancelled()` so workflow cancellation does not start them. The aggregate keeps its existing `always()` and refuses cancelled results.
+
+On 16 November 2026, the controller's normal overflow cancellations in runs `43897916387`, `43908700691` and `43911407648` left their planners unassigned but started new hosted lint/root jobs before the retry. The bot annotations and the installed controller's overflow/cancellation logs identify those moves. No controller or routing change is part of this repair.
+
+In [owned hosted run 43924100221](https://github.com/clintongormley/waitron/actions/runs/43924100221), source `beeba1b9b1593f6dd049400d997b7f07289d56a5`, cancellation was requested while planner `133498861965` was queued. Lint `133498887874` and root-guards `133498888273` were labelled **cancelled**, with no runner and no steps. They were not labelled skipped. The unchanged aggregate `133498888458` received a hosted runner. Its first check failed because the cancelled planner supplied no coverage mode; its second check refused the cancelled job results. The workflow finished cancelled. One dispatch was used.
+
+Locally, both new cancellation cases failed on the original conditions; adding the guards passed those cases and the retained failed-classification control. All 751 workflow cases passed. These local expression checks and the hosted no-execution records establish different parts of the behaviour; the hosted record does not measure a time saving.
+
+| Source, checked 16 November 2026 | Source words | Use here |
+| --- | --- | --- |
+| [GitHub `always()`](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#always) | “returns `true`, even when canceled” | Retain failure checks while adding the cancellation condition. |
+| [GitHub `cancelled()`](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#cancelled) | “Returns `true` if the workflow was canceled.” | Suppress new lint/root work on workflow cancellation. |
+
 ### A shard can exit 1 with every one of its tests passing — RETIRED from CLAUDE.md
 
 Taken out of `CLAUDE.md` §2 on 2026-09-25: on Vitest 4.1.11 this call has no timeout, measured
@@ -1899,10 +1914,10 @@ not count, and a step an `if:` switches off does; a reporter counts only in a `-
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
 
-`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run on every
-CI run except a `server_probe` dispatch, so a regression in a path the gated test jobs skip is
-caught there only as far as the root suites exercise it. On a pull request or ordinary `main`
-push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
+`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are enabled
+on workflows that have not been cancelled, except a `server_probe` dispatch, so a regression in
+a path the gated test jobs skip is caught there only as far as the root suites exercise it.
+On a pull request or ordinary `main` push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
 (see "The lint job reuses earlier results except on a full run").
 
 Main uses the newest completed successful main ancestor to scope quick checks. A later docs
@@ -4287,7 +4302,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 ### Adding a workspace package breaks the root guards until it is wired in
 
 Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
-runs that project on every CI run except a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
+is enabled on workflows that have not been cancelled, except a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
