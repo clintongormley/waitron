@@ -36,6 +36,69 @@ describe("PairingHold", () => {
     expect(changes).toEqual(["held", "idle"]);
   });
 
+  it("a stop given a promise releases the hold only once that promise settles, only once, and renews nothing meanwhile", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    const changes: string[] = [];
+    const hold = new PairingHold(
+      () => api,
+      (s) => changes.push(s),
+      60_000,
+    );
+    await hold.start();
+    let settle!: () => void;
+    hold.stop(new Promise<void>((r) => (settle = r)));
+    expect(hold.holdId).toBeNull();
+    expect(changes).toEqual(["held", "idle"]);
+    await vi.advanceTimersByTimeAsync(240_000);
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+    expect(api.renewPairingHold).not.toHaveBeenCalled();
+    settle();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
+  });
+
+  it("a stop given a promise releases the hold once that promise is refused", async () => {
+    const api = fakeApi();
+    const hold = new PairingHold(
+      () => api,
+      () => {},
+      60_000,
+    );
+    await hold.start();
+    let refuse!: (error: unknown) => void;
+    hold.stop(new Promise<void>((_, r) => (refuse = r)));
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+  });
+
+  it("a start after a stop given a promise leaves the handed-over hold alone", async () => {
+    vi.useFakeTimers();
+    const take = vi
+      .fn()
+      .mockResolvedValueOnce({ holdId: "h1", openUntil: "x" })
+      .mockResolvedValueOnce({ holdId: "h2", openUntil: "x" });
+    const api = fakeApi({ takePairingHold: take });
+    const hold = new PairingHold(
+      () => api,
+      () => {},
+      60_000,
+    );
+    await hold.start();
+    let settle!: () => void;
+    hold.stop(new Promise<void>((r) => (settle = r)));
+    await hold.start();
+    expect(hold.holdId).toBe("h2");
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+    settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
+    hold.stop();
+    expect(api.releasePairingHold).toHaveBeenLastCalledWith("h2");
+    expect(api.releasePairingHold).toHaveBeenCalledTimes(2);
+  });
+
   it("reports a lapsed hold and stops renewing", async () => {
     vi.useFakeTimers();
     const api = fakeApi({

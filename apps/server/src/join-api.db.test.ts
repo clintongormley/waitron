@@ -1188,6 +1188,49 @@ describe("device pairing: check, claim, approve", () => {
     expect(mode.claimOf(made.joinId)).toBeUndefined();
   });
 
+  const deviceRows = (id: string) =>
+    suite.db.select({ id: devices.id }).from(devices).where(eq(devices.id, id));
+
+  // The dashboard holds back both while a Pair save is unanswered: either one ahead of the save
+  // turns the device away.
+  it("an accept after its own login denied the checked request is refused and makes no device", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { app, holdId } = await pairingApp(venue);
+    const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
+    expect(
+      (await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId })).status,
+    ).toBe(204);
+    expect((await deny(app, venue.managerCookie, made.joinId)).status).toBe(204);
+
+    const res = await accept(app, venue.managerCookie, made.joinId, { name: "Bar", profileId });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "join_request.unclaimed", params: {} });
+    expect(await deviceRows(made.joinId)).toEqual([]);
+  });
+
+  it("an accept after the claim's own hold was released is refused and makes no device", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { app, holdId } = await pairingApp(venue);
+    // A second hold keeps the window open, so only the claim's own hold can turn the accept away.
+    await takeHold(app, venue.managerCookie);
+    const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
+    expect(
+      (await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId })).status,
+    ).toBe(204);
+    const released = await send(app, "DELETE", `/management-api/pairing-mode/holds/${holdId}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(released.status).toBe(204);
+
+    const res = await accept(app, venue.managerCookie, made.joinId, { name: "Bar", profileId });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "join_request.unclaimed", params: {} });
+    expect(await deviceRows(made.joinId)).toEqual([]);
+    expect(await pendingCount()).toBe(0);
+  });
+
   it("approval without a claim is refused", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
