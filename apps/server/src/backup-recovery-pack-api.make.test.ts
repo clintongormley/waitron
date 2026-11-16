@@ -1500,11 +1500,13 @@ it("bounds a status read to eight seconds and reports an unknown code", async ()
   }
 });
 
-it("refuses an unsigned status read before contacting Cloud", async () => {
+it("checks system.manage before contacting Cloud for pack status", async () => {
+  const supervisor = await openManagementSession(suite.db, "supervisor");
   const cloud = cloudPack();
   const read = vi.fn(cloud.connection.emergency);
   cloud.connection.emergency = read;
-  const response = await fixture({ cloud }).status(null);
-  expect(response.status).toBe(401);
+  const response = await fixture({ cloud }).status(supervisor.token);
+  expect(response.status).toBe(403);
+  expect((await codeOf(response)).code).toBe("authorization.not_permitted");
   expect(read).not.toHaveBeenCalled();
 });

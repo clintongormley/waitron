@@ -1031,3 +1031,38 @@ it.each(["en-GB", "es-ES"] as const)(
     }
   },
 );
+
+it.each([true, false])(
+  "waits for linked maker's server-key facts (present=%s)",
+  async (present) => {
+    const value = status({
+      latest: latest({ parts: present ? PARTS : [{ part: "server-key", state: "absent" }] }),
+      keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
+    });
+    const api = stubApi(value);
+    let release!: (value: RecoveryPackStatus) => void;
+    api.getRecoveryPackStatus.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+      api,
+      canManage: true,
+      openRequested: true,
+    });
+    const dialog = dialogOf(el);
+    try {
+      expect(dialog.isOpen).toBe(false);
+    } finally {
+      release(value);
+    }
+    await expect.poll(() => dialog.isOpen).toBe(true);
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector("#new-server-key") !== null).toBe(present);
+    if (present)
+      expect(words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
+        "recovery pack 1, made on 2 September",
+      );
+  },
+);

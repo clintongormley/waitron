@@ -481,6 +481,13 @@ describe("emergency-code freshness", () => {
       "included",
       [{ part: "emergency", kind: "cannot_check" }],
     ],
+    [
+      "failed page while Cloud is open",
+      { asOf: fresh, open: true, codeIssuedAt: issued },
+      "failed",
+      [],
+    ],
+    ["failed page while Cloud is unavailable", null, "failed", []],
     ["unavailable", null, "included", [{ part: "emergency", kind: "cannot_check" }]],
     ["not applicable", undefined, "included", [{ part: "emergency", kind: "cannot_check" }]],
     [
@@ -513,6 +520,6 @@ describe("emergency-code freshness", () => {
     });
     const answer = status([record], { current: { ...current, emergency } });
     expect(answer.reasons).toEqual(reasons);
-    expect(answer.upToDate).toBe(reasons.length === 0);
+    expect(answer.upToDate).toBe(state !== "failed" && reasons.length === 0);
   });
 });

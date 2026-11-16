@@ -119,6 +119,7 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
     }
   }
   const recorded = partOf(record, "emergency");
+  if (recorded?.state === "failed") return reasons;
   const emergency = current.emergency;
   if (recorded?.state === "included") {
     if (!emergency?.open || emergency.codeIssuedAt !== recorded.codeIssuedAt) {

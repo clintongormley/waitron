@@ -1500,7 +1500,7 @@ export const en = {
   "recovery_pack.reason.emergency_missing":
     "A person with permission to manage the box must make the pack to include the emergency code.",
   "recovery_pack.reason.emergency_unknown":
-    "The emergency code could not be checked. Try again when Cloud answers.",
+    "The emergency code could not be checked. Try again later.",
   "recovery_pack.reason.emergency_removed": "Emergency start is closed.",
   "recovery_pack.cannot_check":
     "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
@@ -5859,7 +5859,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.reason.emergency_missing":
     "Una persona con permiso para gestionar el servidor debe hacer el paquete para incluir el código de emergencia.",
   "recovery_pack.reason.emergency_unknown":
-    "No se pudo comprobar el código de emergencia. Vuelve a intentarlo cuando Cloud responda.",
+    "No se pudo comprobar el código de emergencia. Vuelve a intentarlo más tarde.",
   "recovery_pack.reason.emergency_removed": "El inicio de emergencia está cerrado.",
   "recovery_pack.cannot_check":
     "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",

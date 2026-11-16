@@ -2928,6 +2928,7 @@ it("opens the existing pack maker for its linked address", async () => {
           dialog.shadowRoot?.querySelector("wt-dialog")?.shadowRoot?.querySelector("dialog")?.open,
       )
       .toBe(true);
+    expect(new URL(location.href).searchParams.has("recovery-pack")).toBe(false);
   } finally {
     history.replaceState(null, "", before);
   }

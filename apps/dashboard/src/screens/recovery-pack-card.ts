@@ -191,9 +191,16 @@ export class RecoveryPackCard extends LitElement {
     }
   }
 
-  protected override updated(changes: PropertyValues): void {
-    if (changes.has("openRequested") && this.openRequested && this.canManage && this.api)
+  protected override updated(): void {
+    if (this.openRequested && this.canManage && this.api && (this.status !== null || this.failed)) {
+      this.openRequested = false;
+      const url = new URL(location.href);
+      if (url.searchParams.get("recovery-pack") === "make") {
+        url.searchParams.delete("recovery-pack");
+        history.replaceState(history.state, "", url);
+      }
       this.#make();
+    }
   }
 
   override disconnectedCallback(): void {
