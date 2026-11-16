@@ -4307,6 +4307,51 @@ email-time assertions. Run `pnpm --filter @waitron/server exec vitest run
 src/boot.venue-details.test.ts`. This reproduces the clock-advance mechanism; the
 failed run did not retain which earlier read first crossed a polling interval.
 
+## pnpm test drops a name filter without a bare double dash
+
+Give `pnpm test` a name filter only after a bare `--`, or use `pnpm run test` or
+`exec vitest run`. Measured on 16 November 2026 with pnpm 9.15.0 in `packages/shared`, whose
+`test` script is `vitest run`, against `src/scales.test.ts` (43 cases, 6 of them with "counts" in
+their names):
+
+| Command                                                                      | What pnpm ran                                   | Tests                |
+| ---------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
+| `pnpm --filter @waitron/shared test src/scales.test.ts -t counts`            | `vitest run "src/scales.test.ts"`               | 43 passed            |
+| `pnpm test src/scales.test.ts -t counts`, run in `packages/shared`           | `vitest run "src/scales.test.ts"`               | 43 passed            |
+| `pnpm --filter @waitron/shared test src/scales.test.ts -- -t counts`         | `vitest run "src/scales.test.ts" "-t" "counts"` | 6 passed, 37 skipped |
+| `pnpm --filter @waitron/shared test -- src/scales.test.ts -t counts`         | `vitest run "src/scales.test.ts" "-t" "counts"` | 6 passed, 37 skipped |
+| `pnpm --filter @waitron/shared run test src/scales.test.ts -t counts`        | `vitest run "src/scales.test.ts" "-t" "counts"` | 6 passed, 37 skipped |
+| `pnpm --filter @waitron/shared exec vitest run src/scales.test.ts -t counts` | Vitest directly                                 | 6 passed, 37 skipped |
+
+The dropping runs exit 0 and print a passing count, so a filtered run that "passed" may have run
+the whole file. `pnpm help test` prints `Usage: pnpm test [-- <args>...]`. This guide's own
+commands use `exec vitest run`; some landed plans name the dropping form (for example
+`docs/superpowers/plans/2026-11-12-a1209-help-tooltip-placement.md:33`). This was measured on that
+one package's script.
+
+## A matrix that varies two inputs separately never tests them together
+
+When a test grid varies two inputs, list the pairs a person meets before trusting it — above all
+the screen's default load, which is the one pair every visitor sends.
+
+#339 (the image library) passed an isolated run-it review and green CI, and the first person
+to open the screen got a 500 on every visit. The library's first read asks for a
+relevance sort with an empty search box; with nothing to rank, the sort was built over bare
+constants and the database refused it. Every relevance test also typed a search term, and every
+empty-search test fell through to date order, so no case crossed the two. #344 fixed it; its
+description says the crossed case it added fails without the fix, with the database's error.
+
+## A two-sided concurrency test starts the waiting side after the holding side says it holds
+
+Start the waiting side of a two-writer test only after the holding side signals that it holds the
+lock. The first version of #456's racing test started the transaction that holds a row and the save
+that should wait for it one after the other, without waiting for the first to hold anything. It
+passed locally and failed on CI with "timed out waiting for the save to reach the row the blocker
+holds", having proved nothing rather than found a bug (backlog commit `f59a16087e`). The fix did
+exactly that. That test was on PostgreSQL; #489 (`aabdde6a8e`) removed it and added a SQLite
+version, now `packages/menu/src/product-modifiers.concurrency.test.ts`, which was not checked for
+the shape.
+
 ## Root receipts moved on 2026-11-09
 
 These supporting fragments are from `CLAUDE.md` at

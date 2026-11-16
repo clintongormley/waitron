@@ -10,13 +10,6 @@ their full text.
 Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
 the same limit and, if so, share one constant.
 
-## The test-shape half of #339's lesson is unwritten
-
-#339 passed review and CI and the first
-person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
-other half — a matrix that varies two things separately and never crosses them proves less than
-it looks — wants its own line. Left open by content languages and the image library (#339).
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -434,19 +427,12 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 ## Bundle: One small pull request for rule lines
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Decide whether browser tests stop replacing modules (A943 follow-up).**
   [Detail](ci.md#decide-whether-browser-tests-stop-replacing-modules-a943-follow-up).
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
   [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
-- **The test-shape half of #339's lesson is unwritten.**
-  [Detail](ci.md#the-test-shape-half-of-339s-lesson-is-unwritten).
-- **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
-  Nothing guards the shape; look for it in any new racing test.
-- **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
-  `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
-  it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
 
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 
