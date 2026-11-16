@@ -74,6 +74,7 @@ export { refreshHeldAlert } from "./held-alert.js";
 export type { HeldAlertSink } from "./held-alert.js";
 export {
   appendReaderToProfiles,
+  isKnownReader,
   clearUnlistedReaderChoice,
   readProfileReaderList,
   readReaderEquipment,
@@ -141,8 +142,6 @@ export type {
 } from "./card-provider.js";
 export { cardProviderById, selectCardProviders } from "./card-provider.js";
 export { cardReaders } from "./schema/card-readers.js";
-export { deviceCardReaders } from "./schema/device-card-readers.js";
-export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
 
 export { payments } from "./schema/payments.js";
 export { runState, reconciliationRuns } from "./schema/reconciliation-runs.js";

@@ -946,7 +946,8 @@ also qualifies the historical operation-description references in this section.
   The box's role, recovery key, signing key, mirror link and pinned main-box key share one local
   row; role changes, recovery-key replacements and signing-key rotations leave events in node.db.
   A card reader holds its device id on its own row; its enabled status comes from `disabled_at`.
-  Device choices and profile reader lists still await pa4b.
+  A device keeps its chosen reader on its row, and a profile keeps its ordered readers and default
+  in one list. Reader deletion clears both; configuration exports leave those assignments behind.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

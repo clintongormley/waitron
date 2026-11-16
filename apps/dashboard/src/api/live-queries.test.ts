@@ -252,7 +252,7 @@ it.each([
   ["listStuckBillRefunds", [], "payments"],
   ["listStuckBillRefunds", [], "working_orders"],
   ["listReaders", [], "devices"],
-  ["listReaders", [], "device_profile_card_readers"],
+  ["listReaders", [], "device_profiles"],
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
   ["getReceiptLanguage", [], "settings.business_day"],
@@ -384,24 +384,12 @@ it.each([
       "kitchen_stations",
       "device_approved_profiles",
       "device_profiles",
-      "device_card_readers",
     ],
   ],
   // `cardReaderDeleteRules` (apps/server/src/card-reader-delete.ts): the reader, its payments in
   // progress, and the devices, profiles and holders it would be taken from, each named. The
   // provider check reads `venue_credentials`, which no module declares as a live resource.
-  [
-    "getReaderDeleteImpact",
-    ["r1"],
-    [
-      "card_readers",
-      "payments",
-      "devices",
-      "device_profiles",
-      "device_card_readers",
-      "device_profile_card_readers",
-    ],
-  ],
+  ["getReaderDeleteImpact", ["r1"], ["card_readers", "payments", "devices", "device_profiles"]],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's
   // rows and lists, joined to the stations and zones they name.
   [
@@ -430,9 +418,7 @@ it.each([
       "device_made_here_stations",
       "device_approved_profiles",
       "printer_holders",
-      "device_card_readers",
       "device_profile_printers",
-      "device_profile_card_readers",
       "printers",
       "page_printers",
       "card_readers",

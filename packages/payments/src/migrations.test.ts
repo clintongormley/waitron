@@ -195,7 +195,7 @@ describe("payments migrations", () => {
 
   it("carries no tenant_id column on any table in the set", async () => {
     const found: string[] = [];
-    for (const table of ["payments", "payment_refunds", "card_readers", "device_card_readers"]) {
+    for (const table of ["payments", "payment_refunds", "card_readers"]) {
       for (const column of await columnsOf(table)) {
         if (column.name === "tenant_id") found.push(`${table}.${column.name}`);
       }

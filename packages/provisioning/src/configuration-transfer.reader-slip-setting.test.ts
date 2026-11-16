@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction } from "@waitron/db";
+import { CORE_CONFIGURATION_TRANSFER, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor, appliedSchemaVersion } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
@@ -14,7 +14,7 @@ import { exportConfigurationTables, importConfigurationTables } from "./configur
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-it("keeps hardware readers and their slip settings outside configuration bundles", async () => {
+it("keeps hardware readers, slip settings and profile assignments outside configuration bundles", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
   await applyVenue(
     planVenue(
@@ -59,4 +59,41 @@ it("keeps hardware readers and their slip settings outside configuration bundles
     importConfigurationTables(tx, bundle, [payments], versions),
   );
   expect((await suite.db.execute(sql`select * from card_readers`)).rows).toEqual([]);
+
+  await suite.db.run(
+    sql`insert into device_profiles (id,name,form_factor,created_at,updated_at,card_readers) values ('profile','Counter','till','2026-11-01','2026-11-01','{"ids":["local-reader"],"defaultId":"local-reader"}')`,
+  );
+  const core = {
+    ...modules.find((module) => module.name === "core")!,
+    configurationTransfer: {
+      kind: "tables" as const,
+      tables: CORE_CONFIGURATION_TRANSFER.tables.filter((t) => t.name === "device_profiles"),
+    },
+  };
+  const profileExport = await exportConfigurationTables(suite.db, [core]);
+  const profile = profileExport.tables.device_profiles!.find((row) => row.id === "profile")!;
+  expect(profile).toBeDefined();
+  expect(profile).not.toHaveProperty("card_readers");
+  const profileBundle = {
+    ...configurationBundle(),
+    modules: { core: 1 },
+    tables: { device_profiles: [{ ...profile, card_readers: "{}" }] },
+  };
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      importConfigurationTables(tx, profileBundle, [core], { core: 1 }),
+    ),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "device_profiles.card_readers" },
+  });
+  await withTransaction(suite.db, (tx) =>
+    importConfigurationTables(tx, { ...profileBundle, tables: profileExport.tables }, [core], {
+      core: 1,
+    }),
+  );
+  expect(
+    (await suite.db.execute(sql`select card_readers from device_profiles where name='Counter'`))
+      .rows,
+  ).toEqual([{ card_readers: "{}" }]);
 });

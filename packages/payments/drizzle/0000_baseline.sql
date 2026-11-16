@@ -13,24 +13,6 @@ CREATE TABLE `card_readers` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `card_readers_provider_ref_key` ON `card_readers` (`provider`,`provider_ref`) WHERE "card_readers"."deleted_at" is null;--> statement-breakpoint
-CREATE TABLE `device_card_readers` (
-	`device_id` text PRIMARY KEY NOT NULL,
-	`reader_id` text NOT NULL,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`reader_id`) REFERENCES `card_readers`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE TABLE `device_profile_card_readers` (
-	`device_profile_id` text NOT NULL,
-	`reader_id` text NOT NULL,
-	`position` integer NOT NULL,
-	`is_default` integer DEFAULT false NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `reader_id`),
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`reader_id`) REFERENCES `card_readers`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_card_readers_profile_default_key` ON `device_profile_card_readers` (`device_profile_id`) WHERE "device_profile_card_readers"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `payment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,

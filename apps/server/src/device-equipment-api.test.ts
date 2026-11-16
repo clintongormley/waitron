@@ -30,7 +30,6 @@ import type { ProfilePrinterLists } from "@waitron/layouts";
 import type { StaffNotice, StaffNoticeReadContext, WaitronModule } from "@waitron/module";
 import {
   cardReaders,
-  deviceCardReaders,
   failAttempting,
   payments,
   setProfileReaderList,
@@ -222,10 +221,12 @@ async function columns(deviceId: string) {
 
 async function readerChoices(): Promise<Record<string, string>> {
   const rows = await suite.db
-    .select()
-    .from(deviceCardReaders)
-    .where(inArray(deviceCardReaders.deviceId, [a, b]));
-  return Object.fromEntries(rows.map((row) => [row.deviceId, row.readerId]));
+    .select({ deviceId: devices.id, readerId: devices.cardReaderId })
+    .from(devices)
+    .where(inArray(devices.id, [a, b]));
+  return Object.fromEntries(
+    rows.filter((row) => row.readerId !== null).map((row) => [row.deviceId, row.readerId!]),
+  );
 }
 
 async function printerHolder(printerId: string): Promise<string | null> {
@@ -500,10 +501,7 @@ describe("paying only on a reader this device holds, with no other device's paym
     expect(await paymentsOf(named.workingOrderId)).toEqual([]);
 
     // The device's stored choice names a reader another device holds.
-    await suite.db
-      .update(deviceCardReaders)
-      .set({ readerId: r2 })
-      .where(eq(deviceCardReaders.deviceId, a));
+    await suite.db.update(devices).set({ cardReaderId: r2 }).where(eq(devices.id, a));
     const stored = await pay(venue.cookie);
 
     expect(stored.status).toBe(409);
@@ -683,9 +681,9 @@ describe("what a device may newly choose", () => {
         .from(cardReaders)
         .where(eq(cardReaders.heldByDeviceId, a)),
       readerChoice: await suite.db
-        .select({ readerId: deviceCardReaders.readerId })
-        .from(deviceCardReaders)
-        .where(eq(deviceCardReaders.deviceId, a)),
+        .select({ readerId: devices.cardReaderId })
+        .from(devices)
+        .where(eq(devices.id, a)),
     };
   }
 

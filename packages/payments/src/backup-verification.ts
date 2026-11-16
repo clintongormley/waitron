@@ -154,6 +154,31 @@ async function referencesValid(query: BackupQuery): Promise<boolean> {
         return false;
     }
   }
+  if (await hasTable(query, "card_readers")) {
+    const readerIds = new Set<string>();
+    for await (const row of query.rows("select id from card_readers"))
+      readerIds.add(row.id as string);
+    if (await hasTable(query, "devices")) {
+      for await (const row of query.rows(
+        "select card_reader_id from devices where card_reader_id is not null",
+      )) {
+        if (!readerIds.has(row.card_reader_id as string)) return false;
+      }
+    }
+    if (await hasTable(query, "device_profiles")) {
+      for await (const row of query.rows("select card_readers from device_profiles")) {
+        const list = JSON.parse(row.card_readers as string) as {
+          ids?: string[];
+          defaultId?: string | null;
+        };
+        if (
+          (list.ids ?? []).some((id) => !readerIds.has(id)) ||
+          (list.defaultId != null && !readerIds.has(list.defaultId))
+        )
+          return false;
+      }
+    }
+  }
   return true;
 }
 async function providerCredential(

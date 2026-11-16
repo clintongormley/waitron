@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { devices, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -14,9 +20,8 @@ import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import {
   cardReaders,
-  deviceCardReaders,
-  deviceProfileCardReaders,
   payments,
+  readProfileReaderList,
   type CardProviderContribution,
 } from "@waitron/payments";
 import "./errors.js";
@@ -83,7 +88,6 @@ function withoutReaderLinks(
   readerId: string,
   change: (row: Record<string, unknown>) => Record<string, unknown>,
 ): Snapshot {
-  const unlinked = (rows: Rows) => rows.filter((row) => row.reader_id !== readerId);
   return {
     ...before,
     card_readers: sorted(
@@ -91,8 +95,28 @@ function withoutReaderLinks(
         row.id === readerId ? { ...change(row), held_by_device_id: null } : row,
       ),
     ),
-    device_card_readers: unlinked(before.device_card_readers!),
-    device_profile_card_readers: unlinked(before.device_profile_card_readers!),
+    devices: sorted(
+      before.devices!.map((row) =>
+        row.card_reader_id === readerId ? { ...row, card_reader_id: null } : row,
+      ),
+    ),
+    device_profiles: sorted(
+      before.device_profiles!.map((row) => {
+        const list = JSON.parse(row.card_readers as string) as {
+          ids?: string[];
+          defaultId?: string | null;
+        };
+        if (!list.ids?.includes(readerId) && list.defaultId !== readerId) return row;
+        return {
+          ...row,
+          card_readers: JSON.stringify({
+            ...list,
+            ids: list.ids?.filter((id) => id !== readerId),
+            defaultId: list.defaultId === readerId ? null : list.defaultId,
+          }),
+        };
+      }),
+    ),
   };
 }
 
@@ -150,12 +174,14 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
   });
   const diningProfile = await profile("Dining room");
   const terraceProfile = await profile("Terrace");
-  await suite.db.insert(deviceProfileCardReaders).values([
-    { deviceProfileId: diningProfile.id, readerId: r, position: 0, isDefault: true },
-    { deviceProfileId: diningProfile.id, readerId: q, position: 1, isDefault: false },
-    { deviceProfileId: terraceProfile.id, readerId: q, position: 0, isDefault: true },
-    { deviceProfileId: terraceProfile.id, readerId: r, position: 1, isDefault: false },
-  ]);
+  await suite.db
+    .update(deviceProfiles)
+    .set({ cardReaders: { ids: [r, q], defaultId: r } })
+    .where(eq(deviceProfiles.id, diningProfile.id));
+  await suite.db
+    .update(deviceProfiles)
+    .set({ cardReaders: { ids: [q, r], defaultId: q } })
+    .where(eq(deviceProfiles.id, terraceProfile.id));
 
   const device = async (name: string, profileId: string, active = true) => {
     const { deviceId } = await seedDevice(suite.db, { label: name, profileId });
@@ -167,10 +193,8 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
   const secondTill = await device("Till 2", diningProfile.id);
   const retiredTill = await device("Unplugged till", terraceProfile.id, false);
   const thirdTill = await device("Till 3", terraceProfile.id);
-  await suite.db.insert(deviceCardReaders).values([
-    { deviceId: firstTill.id, readerId: r },
-    { deviceId: retiredTill.id, readerId: r },
-  ]);
+  for (const deviceId of [firstTill.id, retiredTill.id])
+    await suite.db.update(devices).set({ cardReaderId: r }).where(eq(devices.id, deviceId));
   await suite.db
     .update(cardReaders)
     .set({ heldByDeviceId: firstTill.id })
@@ -349,6 +373,18 @@ describe("deleting a card reader", () => {
           disabled_at: expectedDisabledAt,
         })),
       );
+      expect(
+        await withTransaction(suite.db, (tx) => readProfileReaderList(tx, v.diningProfile.id)),
+      ).toEqual({ readerIds: [v.q], defaultReaderId: null });
+      expect(
+        await withTransaction(suite.db, (tx) => readProfileReaderList(tx, v.terraceProfile.id)),
+      ).toEqual({ readerIds: [v.q], defaultReaderId: v.q });
+      expect(
+        await suite.db
+          .select({ choice: devices.cardReaderId })
+          .from(devices)
+          .where(inArray(devices.id, [v.firstTill.id, v.retiredTill.id])),
+      ).toEqual([{ choice: null }, { choice: null }]);
       const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
       expect(row!.unpairedAt).toBe(UNPAIRED);
     },

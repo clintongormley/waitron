@@ -14,7 +14,9 @@ import {
   billPayments,
   workingOrders,
   devices,
+  deviceProfiles,
   nowIso,
+  removeIdFromJson,
   taxpayer,
   withTransaction,
   saveSettings,
@@ -38,8 +40,6 @@ import {
   PAYMENTS_SETTINGS,
   SimulatorPaymentProvider,
   cardReaders,
-  deviceProfileCardReaders,
-  deviceCardReaders,
   payments,
   reconciliationRuns,
   recordRefund,
@@ -159,8 +159,9 @@ async function listOnProfile(deviceId: string, readerId: string): Promise<void> 
     .from(devices)
     .where(eq(devices.id, deviceId));
   await suite.db
-    .insert(deviceProfileCardReaders)
-    .values({ deviceProfileId: device!.profileId, readerId, position: 0 });
+    .update(deviceProfiles)
+    .set({ cardReaders: { ids: [readerId], defaultId: null } })
+    .where(eq(deviceProfiles.id, device!.profileId));
 }
 
 /** A fake Stripe SDK: a key carrying `bad` throws on the account read (a rejected credential). */
@@ -623,7 +624,8 @@ describe("device and profile readers", () => {
     const device = await seedDevice();
     await listOnProfile(device, reader!);
     await withTransaction(suite.db, (tx) => deleteDevice(tx, cfgOf(venue), device));
-    const choices = () => suite.db.select().from(deviceCardReaders);
+    const choices = () =>
+      suite.db.select({ id: devices.id, readerId: devices.cardReaderId }).from(devices);
     const before = { choices: await choices(), holder: await readerHolder(reader!) };
 
     for (const readerId of [reader!, null]) {
@@ -830,11 +832,10 @@ describe("readers — lifecycle and screens", () => {
       name: "Shared tills",
       formFactor: "till",
     });
-    await suite.db.insert(deviceProfileCardReaders).values([
-      { deviceProfileId: profile!.id, readerId: first, position: 0, isDefault: true },
-      { deviceProfileId: profile!.id, readerId: second, position: 1 },
-      { deviceProfileId: profile!.id, readerId: unused, position: 2 },
-    ]);
+    await suite.db
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [first, second, unused], defaultId: first } })
+      .where(eq(deviceProfiles.id, profile!.id));
     const rows: { id: string; label: string }[] = [];
     for (const label of ["Terrace till", "Bar till", "Own choice", "Disabled till"])
       rows.push({
@@ -845,10 +846,10 @@ describe("readers — lifecycle and screens", () => {
       .update(devices)
       .set({ active: false })
       .where(eq(devices.id, rows.find((row) => row.label === "Disabled till")!.id));
-    await suite.db.insert(deviceCardReaders).values({
-      deviceId: rows.find((row) => row.label === "Own choice")!.id,
-      readerId: second,
-    });
+    await suite.db
+      .update(devices)
+      .set({ cardReaderId: second })
+      .where(eq(devices.id, rows.find((row) => row.label === "Own choice")!.id));
     const response = await send(app, "GET", "/management-api/payments/readers", {
       cookie: venue.managerCookie,
     });
@@ -882,8 +883,10 @@ describe("readers — lifecycle and screens", () => {
     const deviceId = await seedDevice();
     await suite.db.update(devices).set({ label: "Counter" }).where(eq(devices.id, deviceId));
     await listOnProfile(deviceId, readerId);
-    await suite.db.update(deviceProfileCardReaders).set({ isDefault: true });
-    await suite.db.insert(deviceCardReaders).values({ deviceId, readerId });
+    await suite.db
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [readerId], defaultId: readerId } });
+    await suite.db.update(devices).set({ cardReaderId: readerId }).where(eq(devices.id, deviceId));
     const response = await send(app, "GET", "/management-api/payments/readers", {
       cookie: venue.managerCookie,
     });
@@ -1601,12 +1604,10 @@ describe("reader adoption and local management", () => {
       .insert(cardReaders)
       .values({ provider: "stripe", providerRef: nextRef(), name: "Existing" })
       .returning({ id: cardReaders.id });
-    await suite.db.insert(deviceProfileCardReaders).values({
-      deviceProfileId: ids.till!,
-      readerId: r0!.id,
-      position: 0,
-      isDefault: true,
-    });
+    await suite.db
+      .update(deviceProfiles)
+      .set({ cardReaders: { ids: [r0!.id], defaultId: r0!.id } })
+      .where(eq(deviceProfiles.id, ids.till!));
     return {
       till: ids.till!,
       kds: ids.kds!,
@@ -1617,15 +1618,15 @@ describe("reader adoption and local management", () => {
   }
 
   async function listsOf(profileId: string) {
-    return suite.db
-      .select({
-        readerId: deviceProfileCardReaders.readerId,
-        position: deviceProfileCardReaders.position,
-        isDefault: deviceProfileCardReaders.isDefault,
-      })
-      .from(deviceProfileCardReaders)
-      .where(eq(deviceProfileCardReaders.deviceProfileId, profileId))
-      .orderBy(deviceProfileCardReaders.position);
+    const [row] = await suite.db
+      .select({ list: deviceProfiles.cardReaders })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    return (row!.list.ids ?? []).map((readerId, position) => ({
+      readerId,
+      position,
+      isDefault: row!.list.defaultId === readerId,
+    }));
   }
 
   async function expectJoinedTakingProfiles(
@@ -1674,9 +1675,7 @@ describe("reader adoption and local management", () => {
     const opts = { cookie: venue.managerCookie };
     const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     const { id } = (await first.json()) as { id: string };
-    await suite.db
-      .delete(deviceProfileCardReaders)
-      .where(eq(deviceProfileCardReaders.readerId, id));
+    await withTransaction(suite.db, (tx) => removeIdFromJson(tx, deviceProfiles.cardReaders, id));
     await switchOffReader(id);
     const again = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(await again.json()).toEqual({ id, status: "paired" });
@@ -2198,13 +2197,15 @@ describe("reader delete", () => {
   async function linksOf(readerId: string) {
     return {
       chosen: await suite.db
-        .select()
-        .from(deviceCardReaders)
-        .where(eq(deviceCardReaders.readerId, readerId)),
+        .select({ deviceId: devices.id, readerId: devices.cardReaderId })
+        .from(devices)
+        .where(eq(devices.cardReaderId, readerId)),
       listed: await suite.db
-        .select()
-        .from(deviceProfileCardReaders)
-        .where(eq(deviceProfileCardReaders.readerId, readerId)),
+        .select({ profileId: deviceProfiles.id, readers: deviceProfiles.cardReaders })
+        .from(deviceProfiles)
+        .where(
+          sql`exists (select 1 from json_each(${deviceProfiles.cardReaders}, '$.ids') where value = ${readerId})`,
+        ),
       held: await suite.db
         .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
         .from(cardReaders)
@@ -2216,7 +2217,7 @@ describe("reader delete", () => {
   async function linkReader(readerId: string): Promise<string> {
     const device = await seedDevice();
     await listOnProfile(device, readerId);
-    await suite.db.insert(deviceCardReaders).values({ deviceId: device, readerId });
+    await suite.db.update(devices).set({ cardReaderId: readerId }).where(eq(devices.id, device));
     await suite.db
       .update(cardReaders)
       .set({ heldByDeviceId: device })

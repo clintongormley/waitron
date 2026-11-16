@@ -10,12 +10,10 @@ import {
   type DeleteImpactRefusal,
   type DeleteTarget,
 } from "@waitron/shared";
-import { deviceProfiles, devices, type Transaction } from "@waitron/db";
+import { deviceProfiles, devices, removeIdFromJson, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
-  deviceCardReaders,
-  deviceProfileCardReaders,
   IN_PROGRESS_PAYMENT_STATES,
   payments,
   type CardProviderContribution,
@@ -106,33 +104,32 @@ async function cardReaderDeleteRules(
 
   const choosing = await tx
     .select({ id: devices.id, name: devices.label, active: devices.active })
-    .from(deviceCardReaders)
-    .innerJoin(devices, eq(devices.id, deviceCardReaders.deviceId))
-    .where(eq(deviceCardReaders.readerId, id));
-  // The reader list's "In use by" rule (`payments-api.ts`): active devices with no choice of their
-  // own, whose profile's default is this reader.
+    .from(devices)
+    .where(eq(devices.cardReaderId, id));
   const inheriting = await tx
     .select({ id: devices.id, name: devices.label })
     .from(devices)
-    .innerJoin(
-      deviceProfileCardReaders,
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(
       and(
-        eq(deviceProfileCardReaders.deviceProfileId, devices.deviceProfileId),
-        eq(deviceProfileCardReaders.readerId, id),
-        eq(deviceProfileCardReaders.isDefault, true),
+        eq(devices.active, true),
+        isNull(devices.cardReaderId),
+        sql`json_extract(${deviceProfiles.cardReaders}, '$.defaultId') = ${id}`,
       ),
-    )
-    .leftJoin(deviceCardReaders, eq(deviceCardReaders.deviceId, devices.id))
-    .where(and(eq(devices.active, true), isNull(deviceCardReaders.deviceId)));
+    );
   const listed = await tx
     .select({
       id: deviceProfiles.id,
       name: deviceProfiles.name,
-      isDefault: deviceProfileCardReaders.isDefault,
+      isDefault:
+        sql<boolean>`json_extract(${deviceProfiles.cardReaders}, '$.defaultId') = ${id}`.mapWith(
+          Boolean,
+        ),
     })
-    .from(deviceProfileCardReaders)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileCardReaders.deviceProfileId))
-    .where(eq(deviceProfileCardReaders.readerId, id));
+    .from(deviceProfiles)
+    .where(
+      sql`exists (select 1 from json_each(${deviceProfiles.cardReaders}, '$.ids') where value = ${id})`,
+    );
   const holders = await tx
     .select({ id: devices.id, name: devices.label })
     .from(cardReaders)
@@ -199,7 +196,12 @@ export async function readCardReaderDeleteImpact(
   return (await cardReaderDeleteRules(tx, seats, id, true)).plan.impact;
 }
 
-// Disable before the provider call so a later payment cannot select this reader.
+/**
+ * Step (a): the rules, throwing the first refusal's code; when `unpairAtProvider`, also switches
+ * the reader off (disabled_at set if null) before the provider is called, so a pay
+ * that starts afterwards does not find it (`resolvePayReader` reads active readers only,
+ * `till-api.ts:316`).
+ */
 export async function prepareCardReaderDelete(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
@@ -236,6 +238,7 @@ export async function startCardReaderDelete(
   return { plan, deleted: plan.impact };
 }
 
+/** Unpair's local write: disabled_at and unpaired_at = at, undeleted rows only. */
 export async function markCardReaderUnpaired(
   tx: Transaction,
   id: string,
@@ -268,8 +271,8 @@ export async function deleteCardReader(
 
 /** The delete's writes, for a plan computed on `tx` that needs no unpair. */
 async function removeCardReader(tx: Transaction, id: string, now: Date): Promise<void> {
-  await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.readerId, id));
-  await tx.delete(deviceProfileCardReaders).where(eq(deviceProfileCardReaders.readerId, id));
+  await tx.update(devices).set({ cardReaderId: null }).where(eq(devices.cardReaderId, id));
+  await removeIdFromJson(tx, deviceProfiles.cardReaders, id);
   await tx
     .update(cardReaders)
     .set({

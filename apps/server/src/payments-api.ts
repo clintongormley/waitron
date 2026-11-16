@@ -55,9 +55,8 @@ import {
   appendReaderToProfiles,
   cardProviderById,
   cardReaders,
-  deviceCardReaders,
+  isKnownReader,
   SimulatorPaymentProvider,
-  deviceProfileCardReaders,
   findPaymentByBillPayment,
   listAbandonedRefundOutcomes,
   IN_PROGRESS_PAYMENT_STATES,
@@ -247,11 +246,7 @@ const runBodyReaders = createErrorBoundary(
 );
 
 async function requireKnownReader(tx: Transaction, readerId: string): Promise<void> {
-  const [reader] = await tx
-    .select({ id: cardReaders.id })
-    .from(cardReaders)
-    .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
-  if (reader === undefined) {
+  if (!(await isKnownReader(tx, readerId))) {
     throw new AppError("reader.not_found", { id: readerId });
   }
 }
@@ -1035,18 +1030,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         assignments: await tx
           .select({
             name: devices.label,
-            chosenReaderId: deviceCardReaders.readerId,
-            defaultReaderId: deviceProfileCardReaders.readerId,
+            chosenReaderId: devices.cardReaderId,
+            defaultReaderId: sql<
+              string | null
+            >`json_extract(${deviceProfiles.cardReaders}, '$.defaultId')`,
           })
           .from(devices)
-          .leftJoin(deviceCardReaders, eq(deviceCardReaders.deviceId, devices.id))
-          .leftJoin(
-            deviceProfileCardReaders,
-            and(
-              eq(deviceProfileCardReaders.deviceProfileId, devices.deviceProfileId),
-              eq(deviceProfileCardReaders.isDefault, true),
-            ),
-          )
+          .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
           .where(eq(devices.active, true))
           .orderBy(devices.label, devices.id),
       }));
@@ -1210,9 +1200,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const rows = await gated(sessionId, async (tx) => {
         await requireKnownDevice(tx, deviceId);
         return tx
-          .select({ readerId: deviceCardReaders.readerId })
-          .from(deviceCardReaders)
-          .where(eq(deviceCardReaders.deviceId, deviceId));
+          .select({ readerId: devices.cardReaderId })
+          .from(devices)
+          .where(eq(devices.id, deviceId));
       });
       return c.json({ readerId: rows[0]?.readerId ?? null });
     }),
@@ -1267,9 +1257,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         throw new AppError("management.request_invalid", { field: "readerIds" });
       }
       const ids = readerIds.map((id) => requireBodyUuid(id, "readerIds"));
-      if (new Set(ids).size !== ids.length) {
-        throw new AppError("management.request_invalid", { field: "readerIds" });
-      }
       if (!("defaultReaderId" in body)) {
         throw new AppError("management.request_invalid", { field: "defaultReaderId" });
       }
@@ -1279,12 +1266,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           : requireBodyUuid(body.defaultReaderId, "defaultReaderId");
       const list = await gated(sessionId, async (tx) => {
         await requireDeviceProfile(tx, profileId);
-        for (const id of ids) await requireKnownReader(tx, id);
         const saved = await setProfileReaderList(tx, profileId, {
           readerIds: ids,
           defaultReaderId,
         });
         if (!saved.ok) {
+          if (saved.refusal === "duplicate")
+            throw new AppError("management.request_invalid", { field: "readerIds" });
+          if (saved.refusal === "unknown_reader")
+            throw new AppError("reader.not_found", { id: saved.readerId });
           throw new AppError("device_profile.invalid", {
             reason: "default_not_listed",
             field: "defaultReaderId",
