@@ -135,8 +135,8 @@ hand over again. The main box keeps selling. If an encryption key is missing or 
 **Stop** and join the spare again before handing over.
 
 Before sales stop, this box checks its venue data. If the check refuses the handover, choose **Stop**
-and keep selling here. Keep this box and its data. Wait a minute before trying again.
-For an urgent switch, follow the [emergency procedure](servers.md#emergency) with a working backup.
+and keep selling here. Keep this box and its data. You can try the handover again later. If it still
+refuses, keep the venue on this box. For an urgent switch, follow the [emergency procedure](servers.md#emergency) with a working backup.
 
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once the
 copy is ready, enter the same administrator account and choose **Continue to clock check**. Tick

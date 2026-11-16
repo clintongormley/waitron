@@ -1229,6 +1229,7 @@ describe("the same operation again", () => {
       },
     });
 
+    // A replay returning while the operation remains prepared is an internal fault.
     expect(await start({}, on)).toEqual({
       status: 500,
       body: { error: { code: "server.internal" } },
