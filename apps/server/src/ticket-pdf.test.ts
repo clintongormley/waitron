@@ -2,6 +2,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   DOTS_PER_COLUMN,
   dpiValue,
@@ -15,9 +16,10 @@ import { previewPrintJob, type PrintPreviewBlock } from "./print-job-preview.js"
 import { formatReceipt } from "./receipt-ticket.js";
 import { sampleDocument } from "./sample-receipt.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { renderTicketPdf, ticketDrawing } from "./ticket-pdf.js";
 
-const QR_TEXT = { caption: "QR tributario:", legend: "VERI*FACTU" };
+const QR_TEXT = FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText!;
 const PRINTER_80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 const PRINTER_58: EscSetting = { paperWidth: "58mm", resolution: "203dpi" };
 const ISSUED_AT = new Date("2026-08-17T22:34:00Z");
@@ -196,7 +198,7 @@ describe("ticketDrawing and renderTicketPdf", () => {
       const page = await read(await renderTicket(bytes, printer), printer);
       const margin = marginOf(printer);
       const lines = imagesOf(bytes, widthDots).filter((image) => image.text?.trim());
-      expect(lines.map((line) => line.text)).toContain("PRUEBA - SIN COBRO REAL");
+      expect(lines.map((line) => line.text)).toContain(receiptLabelsFor("es-ES").practice);
       const ys = [...new Set(page.pieces.map((piece) => piece.y))];
       expect(ys).toHaveLength(lines.length);
       ys.forEach((y, index) => {
