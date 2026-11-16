@@ -55,7 +55,7 @@ const run = createErrorBoundary(
 );
 
 /** The printers table's own default setting (80 mm at 180 dpi, 512 dots across). */
-const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+export const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 
 /** Blocks `[start, end)` of the preview. */
 export interface BlockRange {

@@ -13,9 +13,8 @@ import {
   requireRange,
 } from "@waitron/server-kit";
 import { AppError, isUuid, stringToBasisPoints, stringToCents } from "@waitron/shared";
-import { renderInvoicePdf } from "./invoice-pdf.js";
 import type { Logger } from "./logger.js";
-import { readSaleForDownload } from "./orders-invoice-pdf.js";
+import { readSaleCopy, renderSaleCopy } from "./orders-invoice-pdf.js";
 import { optionalSearch } from "./orders-list.js";
 import {
   listTaxOfficeInvoices,
@@ -131,17 +130,17 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const saleId = c.req.param("saleId").toLowerCase();
       if (!isUuid(saleId)) throw new AppError("invoice_delivery.not_found", {});
-      const { document, fileName } = await withTransaction(deps.db, async (tx) => {
+      const copy = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "invoice.inspect",
         });
-        return readSaleForDownload(tx, deps, saleId, authorizedBy);
+        return readSaleCopy(tx, deps, saleId, authorizedBy);
       });
-      const bytes = await renderInvoicePdf(document);
+      const bytes = await renderSaleCopy(copy);
       return c.body(new Uint8Array(bytes), 200, {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename="${fileName}"`,
+        "content-disposition": `attachment; filename="${copy.fileName}"`,
         "cache-control": "no-store",
       });
     }),

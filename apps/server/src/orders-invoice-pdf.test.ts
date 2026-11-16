@@ -9,6 +9,7 @@ import {
   invoiceDeliveries,
   invoicePdfDownloads,
   invoiceSeries,
+  printers,
   sales,
   taxpayer,
 } from "@waitron/db";
@@ -17,6 +18,7 @@ import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { Hono } from "hono";
 import {
+  jobOrigin,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
@@ -27,8 +29,10 @@ import {
   parked,
   placedIssuedBill,
   provisionOrderVenue,
+  voidInvoice,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import { mountTaxOfficeApi } from "./tax-office-api.js";
@@ -466,4 +470,159 @@ describe("tax office invoice PDF", () => {
     expect(await rowCounts()).toEqual(before);
     expect(await downloadsOf(saleId)).toEqual([]);
   });
+});
+
+async function pageWidth(bytes: Uint8Array): Promise<number> {
+  const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+  const pdf = await loading.promise;
+  try {
+    return Math.round((await pdf.getPage(1)).view[2]! * 100) / 100;
+  } finally {
+    await loading.destroy();
+  }
+}
+
+/** An F2 of `count` lines from the demo seed, which sells on no device. */
+async function seededTicket(count: number): Promise<string> {
+  const { saleId } = await inTx(venue, (tx) =>
+    recordSale(tx, venue.backend, {
+      operationDescription: "Restaurante",
+      origin: jobOrigin("demo_seed"),
+      nodeId: venue.cfg.nodeId,
+      seriesId: venue.seriesId,
+      locale: venue.cfg.locale,
+      invoiceLocales: [venue.cfg.locale],
+      total: (count * 1.1).toFixed(2),
+      lines: Array.from({ length: count }, (_, index) => ({
+        lineNo: index + 1,
+        name: `Tapa ${index + 1}`,
+        descriptions: { [venue.cfg.locale]: `Tapa ${index + 1}` },
+        quantity: "1",
+        unitPrice: "1.00",
+        vatRate: "10",
+        lineTotal: "1.00",
+      })),
+      clock: venue.clock,
+      settlement: { kind: "deferred" },
+      operatorId: venue.operatorId,
+    }),
+  );
+  return saleId;
+}
+
+const TICKET_80MM = 226.77;
+const A4 = 595.28;
+
+describe("tax office copy: a ticket at ticket width, a full invoice on A4", () => {
+  async function opened(saleId: string) {
+    const answer = await saleDownload(managerDashboard, saleId);
+    expect(answer.status).toBe(200);
+    expect(await downloadsOf(saleId)).toHaveLength(1);
+    return { width: await pageWidth(answer.bytes), text: await pdfText(answer.bytes) };
+  }
+
+  const tickets: Record<string, () => Promise<string>> = {
+    F2: async () => saleOfBill(await placedIssuedBill(venue, "Caña")),
+    R5: async () => {
+      const billId = await placedIssuedBill(venue, "Caña");
+      const ticket = await saleOfBill(billId);
+      await credit(venue, billId, "1.00", "-1.21");
+      const [corrective] = await inTx(venue, (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, ticket)),
+      );
+      return corrective!.id;
+    },
+    "voided F2": async () => {
+      const billId = await placedIssuedBill(venue, "Caña");
+      await voidInvoice(venue, billId);
+      return saleOfBill(billId);
+    },
+  };
+  for (const [kind, issue] of Object.entries(tickets)) {
+    it(`draws an ${kind} one 80 mm ticket wide, numbered and marked as a copy`, async () => {
+      const saleId = await issue();
+      const { code, number } = await numberOf(saleId);
+      const { width, text } = await opened(saleId);
+      expect(width).toBe(TICKET_80MM);
+      expect(text).toContain(`${code}/${number}`);
+      expect(text).toContain("DUPLICADO");
+    });
+  }
+
+  const invoices: Record<string, () => Promise<string>> = {
+    F1: async () => (await fullInvoice()).saleId,
+    F3: async () => {
+      const ticket = await saleOfBill(await placedIssuedBill(venue, "Caña"));
+      const { saleId } = await inTx(venue, (tx) =>
+        recordSubstitution(tx, venue.backend, {
+          operationDescription: "Restaurante",
+          origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
+          seriesId: brandSeriesId(fullSeriesId),
+          substitutedSaleIds: [brandSaleId(ticket)],
+          counterparty: {
+            taxId: "12345678Z",
+            legalName: "Cliente Mayorista SL",
+            countryCode: "ES",
+          },
+          recipientAddress: "Calle Cliente 9, Madrid",
+          total: "3.00",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Caña",
+              descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+              quantity: "1",
+              unitPrice: "3.00",
+              vatRate: "10",
+              lineTotal: "3.00",
+            },
+          ],
+          locale: venue.cfg.locale,
+          invoiceLocales: [venue.cfg.locale],
+          clock: venue.clock,
+        }),
+      );
+      return saleId;
+    },
+    R4: async () => {
+      const { saleId } = await fullInvoice();
+      return inTx(venue, (tx) => insertCorrective(tx, saleId, { replaces: true }));
+    },
+  };
+  for (const [kind, issue] of Object.entries(invoices)) {
+    it(`draws an ${kind}, which names a customer, on an A4 page`, async () => {
+      expect((await opened(await issue())).width).toBe(A4);
+    });
+  }
+
+  it("lays a ticket out for its device's receipt printer as it is now", async () => {
+    const saleId = await tickets.F2!();
+    await inTx(venue, (tx) =>
+      tx.update(printers).set({ paperWidth: "58mm" }).where(eq(printers.id, venue.printerId)),
+    );
+    try {
+      expect((await opened(saleId)).width).toBe(164.41);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(printers).set({ paperWidth: "80mm" }).where(eq(printers.id, venue.printerId)),
+      );
+    }
+  });
+
+  it("lays a ticket sold on no device out for an 80 mm printer", async () => {
+    const saleId = await seededTicket(1);
+    const { code, number } = await numberOf(saleId);
+    const { width, text } = await opened(saleId);
+    expect(width).toBe(TICKET_80MM);
+    expect(text).toContain(`${code}/${number}`);
+  });
+
+  it("draws a ticket too long to read back whole on an A4 page", async () => {
+    const saleId = await seededTicket(2_100);
+    const { code, number } = await numberOf(saleId);
+    const { width, text } = await opened(saleId);
+    expect(width).toBe(A4);
+    expect(text).toContain(`${code}/${number}`);
+  }, 60_000);
 });
