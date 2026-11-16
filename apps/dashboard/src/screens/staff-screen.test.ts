@@ -1699,11 +1699,16 @@ describe("staff-screen filter fields", () => {
         expect(chip("status")!.getBoundingClientRect().width).toBeGreaterThan(0);
         const root = list(el).shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
         await userEvent.click(root.querySelector<HTMLButtonElement>(".filters-trigger")!);
-        await chooseOptions(field(el, "[data-test=role-filter]")!, ["manager"]);
+        await chooseOptions(field(el, "[data-test=role-filter]")!, ["staff", "admin"]);
         await userEvent.click(root.querySelector<HTMLButtonElement>(".filters-close")!);
-        await vi.waitFor(() => expect(chip("roles")?.textContent).toContain(roleName("manager")));
+        const rolesText = `${t("staff.filter_role")}: ${roleName("admin")}, ${roleName("staff")}`;
+        await vi.waitFor(() => expect(chip("roles")?.textContent?.trim()).toBe(`${rolesText} ×`));
+        expect(chip("roles")!.getAttribute("aria-label")).toBe(
+          `${rolesText}, ${t("staff.remove_filter").replace("{filter}", t("staff.filter_role"))}`,
+        );
         expect(chip("roles")!.getBoundingClientRect().width).toBeGreaterThan(0);
-        await userEvent.click(chip("roles")!);
+        chip("roles")!.focus();
+        await userEvent.keyboard("{Enter}");
         await vi.waitFor(() =>
           expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
             expect.objectContaining({ roleIds: [], status: "current" }),
@@ -1711,13 +1716,17 @@ describe("staff-screen filter fields", () => {
         );
         expect(chip("roles")).toBeNull();
         expect(chip("status")).not.toBeNull();
-        await userEvent.click(chip("status")!);
+        expect(chip("status")!.shadowRoot!.activeElement).toBe(
+          chip("status")!.shadowRoot!.querySelector("button"),
+        );
+        await userEvent.keyboard("{Enter}");
         await vi.waitFor(() =>
           expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
             expect.objectContaining({ roleIds: [], status: "all" }),
           ),
         );
         expect(chip("status")).toBeNull();
+        expect(root.activeElement).toBe(root.querySelector(".filters-trigger"));
       } finally {
         await page.viewport(previous.width, previous.height);
       }

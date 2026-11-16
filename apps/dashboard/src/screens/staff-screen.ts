@@ -509,7 +509,18 @@ export class StaffScreen extends LitElement {
       variant="secondary"
       data-chip=${key}
       aria-label=${`${text}, ${fill("staff.remove_filter", { filter })}`}
-      @click=${clear}
+      @click=${async () => {
+        clear();
+        await this.updateComplete;
+        const next = this.renderRoot.querySelector<HTMLElement>("[data-chip]");
+        if (next) next.focus();
+        else
+          this.renderRoot
+            .querySelector("dashboard-staff-list")
+            ?.shadowRoot?.querySelector("wt-data-table")
+            ?.shadowRoot?.querySelector<HTMLButtonElement>(".filters-trigger")
+            ?.focus();
+      }}
       >${text} ×</wt-button
     >`;
   }
@@ -616,6 +627,7 @@ export class StaffScreen extends LitElement {
                         this.accessRoles
                           .filter((role) => this.roleFilter.includes(role.id))
                           .map((role) => accessRoleName(role))
+                          .sort((a, b) => a.localeCompare(b, currentLocale()))
                           .join(", "),
                         () => {
                           this.roleFilter = [];
