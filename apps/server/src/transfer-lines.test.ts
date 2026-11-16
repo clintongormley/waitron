@@ -350,7 +350,7 @@ describe("transfer — guards", () => {
   });
 });
 
-describe("transfer — extras children (FIX 2 cascade)", () => {
+describe("transfer — extras children", () => {
   /** Offer `extraProductId` as an extra of `dishId` through a one-item list, returning the list id a
    *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
   async function addExtra(

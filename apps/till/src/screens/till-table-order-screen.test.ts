@@ -748,7 +748,7 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-status-clear]")).toBeNull();
   });
 
-  it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
+  it("renders an ENABLED Table actions trigger that opens the action menu", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
     const button = trigger.shadowRoot!.querySelector("button")!;
@@ -3684,7 +3684,7 @@ describe("till-table-order-screen", () => {
     });
   });
 
-  describe("table actions (TS-3/TS-4)", () => {
+  describe("table actions", () => {
     const tableState = (over: Partial<TableState> = {}): TableState => ({
       id: "t1",
       label: "1",

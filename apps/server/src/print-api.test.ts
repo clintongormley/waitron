@@ -2833,7 +2833,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     expect(await preview.json()).toMatchObject({ error: { code: "print_job.not_found" } });
   });
 
-  it("returns an ISO last-print timestamp regardless of database date display settings", async () => {
+  it("answers the last print time as a UTC ISO timestamp", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
     // A stored value with a +02:00 offset must still answer the canonical UTC ISO spelling.

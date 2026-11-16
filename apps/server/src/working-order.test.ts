@@ -6995,7 +6995,7 @@ describe("bumpBillReady — pass card preparation without dispatch", () => {
   });
 });
 
-describe("a cancel's extras cascade (FIX 2)", () => {
+describe("a dish's extras children", () => {
   it("rescales a held kitchen ticket by the extra's frozen 50 g portion", async () => {
     const { cfg, coffeeId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {

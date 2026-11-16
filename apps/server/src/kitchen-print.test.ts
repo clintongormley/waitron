@@ -617,7 +617,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     expect(jobs.filter((j) => j.printerId === pDead)).toHaveLength(0);
   });
 
-  it("a later line release prints only round-2 items and never reprints round 1 (R-D)", async () => {
+  it("a later line release prints only round-2 items and never reprints round 1", async () => {
     const { cfg } = await setupVenue();
     const { printerId, afterRound1, afterRound2, afterRefire } = await asApp(cfg, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });

@@ -149,8 +149,8 @@ third SQLite file, `migrations.lock`, which the migrator holds an open transacti
 length of the run — a second migrator waits up to two minutes and is then refused
 `database is locked`. It is a SQLite file rather than an exclusively-created lock file on purpose:
 closing the connection releases it, and so does killing the process, where a plain lock file would
-survive the crash and wedge every later boot. `packages/migrations/src/apply.ts` carries the races
-that were run to decide both. Only the migrate step waits: opening the folder is guarded separately
+survive the crash and wedge every later boot. #489's version of `packages/migrations/src/apply.ts` records
+the races run to decide both. Only the migrate step waits: opening the folder is guarded separately
 by `venue.lock`, so a second process that opens it WITH the lock while another holds it, a second
 server included, is refused `provisioning.database_in_use`; the tools meant to run beside the server
 open it without the lock ([conventions-data.md](../../docs/developers/conventions-data.md), "One process per venue folder").
