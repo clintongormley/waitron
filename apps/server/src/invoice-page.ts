@@ -139,8 +139,9 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     });
     y += LINE_HEIGHT / 2;
   };
+  const fits = (height: number): boolean => y + height <= INVOICE_PAGE_HEIGHT - MARGIN;
   const room = (height: number): void => {
-    if (y + height <= INVOICE_PAGE_HEIGHT - MARGIN) return;
+    if (fits(height)) return;
     const previous = pages.at(-1)!.elements;
     let strandedRules = 0;
     while (previous.at(-1)?.kind === "rule") {
@@ -182,26 +183,53 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     bold: boolean,
   ): void => place(page, at, value, right - width(value, size), size, bold);
   const linesPerPage = Math.floor((INVOICE_PAGE_HEIGHT - 2 * MARGIN) / LINE_HEIGHT);
-  const tableRow = (row: ReceiptTableRow, bold: boolean, withRate: boolean): void => {
-    if (width(row.units, BODY_SIZE) > columns.unitsRoom) {
-      text(row.units, MARGIN, INVOICE_PAGE_WIDTH - 2 * MARGIN, {
-        size: BODY_SIZE,
-        bold,
-        centered: false,
-      });
-      tableRow({ ...row, units: "" }, bold, withRate);
-      return;
-    }
+  type RowLines = { units: string[]; item: string[]; count: number };
+  const rowLines = (row: ReceiptTableRow): RowLines => {
+    const units =
+      width(row.units, BODY_SIZE) > columns.unitsRoom
+        ? wrap(row.units, INVOICE_PAGE_WIDTH - 2 * MARGIN, BODY_SIZE)
+        : [];
     const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
-    const itemLines = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
-    if (itemLines.length === 0) itemLines.push("");
-    // A row no page could hold starts where it is and breaks line by line.
-    room((itemLines.length <= linesPerPage ? itemLines.length : 1) * LINE_HEIGHT);
+    const item = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
+    if (item.length === 0) item.push("");
+    return { units, item, count: units.length + item.length };
+  };
+  /** Lines a row keeps together: all of them, or one for a row no page could hold below the header, which breaks line by line. */
+  const rowStart = (count: number, headerLines: number): number =>
+    count <= linesPerPage - headerLines ? count : 1;
+  type TableHeader = { row: ReceiptTableRow; lines: RowLines };
+  let headedPage: InvoicePage | undefined;
+  const drawHeader = (header: TableHeader, withRate: boolean): void => {
+    tableRow(header.row, header.lines, true, withRate);
+    headedPage = pages.at(-1);
+  };
+  /** Each page the row moves or breaks onto opens with `header`. */
+  const tableRow = (
+    row: ReceiptTableRow,
+    lines: RowLines,
+    bold: boolean,
+    withRate: boolean,
+    header?: TableHeader,
+  ): void => {
+    const lineRoom = (count: number): void => {
+      if (fits(count * LINE_HEIGHT)) return;
+      room(count * LINE_HEIGHT);
+      if (header) drawHeader(header, withRate);
+    };
+    const { units, item } = lines;
+    lineRoom(rowStart(lines.count, header?.lines.count ?? 0));
+    for (const line of units) {
+      lineRoom(1);
+      place(pages.at(-1)!, y, line, MARGIN, BODY_SIZE, bold);
+      y += LINE_HEIGHT;
+    }
+    lineRoom(1);
     const page = pages.at(-1)!;
     const top = y;
-    placeRight(page, top, row.units, columns.unitsRight, BODY_SIZE, bold);
-    for (const line of itemLines) {
-      room(LINE_HEIGHT);
+    if (units.length === 0) placeRight(page, top, row.units, columns.unitsRight, BODY_SIZE, bold);
+    const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
+    for (const line of item) {
+      lineRoom(1);
       place(pages.at(-1)!, y, line, columns.itemLeft + indent, BODY_SIZE, bold);
       y += LINE_HEIGHT;
     }
@@ -209,6 +237,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     placeRight(page, top, row.amount, columns.amountRight, BODY_SIZE, bold);
     if (withRate) placeRight(page, top, row.rate ?? "", columns.contentRight, BODY_SIZE, bold);
   };
+  // The builder gives only the item list's first table a header (receipt-document.ts, endTable).
+  let itemHeader: TableHeader | undefined;
   for (const element of document.elements) {
     const previousWasRule = afterRule;
     if (element.kind !== "align") afterRule = element.kind === "rule";
@@ -255,10 +285,20 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         y += QR_SIZE + 2 * quietZone + LINE_HEIGHT / 2;
         break;
       }
-      case "table":
-        if (element.table.header) tableRow(element.table.header, true, element.table.withRate);
-        for (const row of element.table.rows) tableRow(row, false, element.table.withRate);
+      case "table": {
+        const { header, rows, withRate } = element.table;
+        if (header) itemHeader = { row: header, lines: rowLines(header) };
+        for (const [index, row] of rows.entries()) {
+          const lines = rowLines(row);
+          if (index === 0 && itemHeader && headedPage !== pages.at(-1)) {
+            const headerLines = itemHeader.lines.count;
+            room((headerLines + rowStart(lines.count, headerLines)) * LINE_HEIGHT);
+            drawHeader(itemHeader, withRate);
+          }
+          tableRow(row, lines, false, withRate, itemHeader);
+        }
         break;
+      }
       case "text":
       case "amount": {
         const indent = typeof element.indent === "number" ? element.indent * INDENT_WIDTH : 0;
@@ -274,8 +314,10 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         const besideLast =
           captionLines.length > 0 &&
           width(captionLines.at(-1)!, size) + size + width(element.amount, size) <= available;
-        textLines(captionLines, x, { size, bold, centered: false });
         const height = (LINE_HEIGHT * size) / BODY_SIZE;
+        const block = (captionLines.length + (besideLast ? 0 : 1)) * height;
+        if (block <= INVOICE_PAGE_HEIGHT - 2 * MARGIN) room(block);
+        textLines(captionLines, x, { size, bold, centered: false });
         if (besideLast) y -= height;
         else room(height);
         placeRight(pages.at(-1)!, y, element.amount, INVOICE_PAGE_WIDTH - MARGIN, size, bold);
