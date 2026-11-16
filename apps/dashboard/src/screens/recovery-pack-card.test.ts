@@ -30,6 +30,25 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
   };
 }
 
+it.each([
+  ["en-GB", "Backups guide", "/help/en/backups#recovery-pack"],
+  ["es-ES", "Guía de copias de seguridad", "/help/es/backups#recovery-pack"],
+] as const)(
+  "links the manager's Recovery pack card to the guide in %s",
+  async (locale, label, href) => {
+    setLocale(locale);
+    const el = await mount(stubApi());
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[href^='/help/']")!;
+    expect(link).not.toBeNull();
+    await expect.element(link).toBeVisible();
+    expect(link.textContent?.trim()).toBe(label);
+    expect(link.getAttribute("href")).toBe(href);
+    el.canManage = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("a")).toBeNull();
+  },
+);
+
 const PARTS: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
   { part: "bucket", state: "included" },
   { part: "archives", state: "included" },

@@ -2175,6 +2175,7 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
   "backup.title": "Backups",
+  "backup.guide": "Backups guide",
   "node_pack.create": "Create pack",
   "node_pack.key_error": "The server key is not valid.",
   "node_pack.title": "Node recovery pack",
@@ -6553,6 +6554,7 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
+  "backup.guide": "Guía de copias de seguridad",
   "node_pack.create": "Crear kit",
   "node_pack.key_error": "La clave del servidor no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",

@@ -39,6 +39,27 @@ const OFF: BackupStatusView = {
   recoveryKeyTooShort: false,
 };
 
+it.each([
+  ["en-GB", "Backups guide", "/help/en/backups", true],
+  ["en-GB", "Backups guide", "/help/en/backups", false],
+  ["es-ES", "Guía de copias de seguridad", "/help/es/backups", true],
+  ["es-ES", "Guía de copias de seguridad", "/help/es/backups", false],
+] as const)(
+  "offers the Backups guide (%s, %s, %s, manager %s)",
+  async (locale, label, href, canManage) => {
+    setLocale(locale);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, OFF),
+      canManage,
+    });
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[href^='/help/']")!;
+    expect(link).not.toBeNull();
+    await expect.element(link).toBeVisible();
+    expect(link.textContent?.trim()).toBe(label);
+    expect(link.getAttribute("href")).toBe(href);
+  },
+);
+
 it("offers the manager the recovery pack card first, even with archives and bucket streaming off", async () => {
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
     api: stubApi({}, OFF),

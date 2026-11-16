@@ -1,3 +1,4 @@
+import { guideHref } from "../help-guide.js";
 import {
   BUCKET_FIELDS,
   missingBucketField,
@@ -259,6 +260,9 @@ export class BackupScreen extends LitElement {
         border-radius: var(--wt-radius-md);
         color: var(--wt-color-danger);
         background: var(--wt-color-surface);
+      }
+      .guide {
+        color: var(--wt-color-primary-text);
       }
       .error {
         color: var(--wt-color-danger);
@@ -1202,6 +1206,7 @@ export class BackupScreen extends LitElement {
     const alertKey = this.errorKey ?? this.refreshErrorKey;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
+      <p><a class="guide" href=${guideHref("backups.overview")}>${t("backup.guide")}</a></p>
       ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .openRequested=${new URL(location.href).searchParams.get("recovery-pack") === "make"} .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
