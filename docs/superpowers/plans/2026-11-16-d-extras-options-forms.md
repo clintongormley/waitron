@@ -1,0 +1,25 @@
+# Extras and Options list forms
+
+**Finish line:** managers see an accurate Price heading and Each portions; both contracts reuse their input checks without changing refusals. Resolve the three layout reports from screenshots and remove only completed backlog points.
+
+**Authority:** watcher’s EXTRAS-OPTIONS-FORMS ask, `~/waitron-campaign-d/queue.md`, 2026-11-16 15:39. Source inspected; no runtime reproduction or tests run. Claude’s approach review and watcher clearance precede inline execution; no owner design approval is claimed.
+
+Menu filenames below mean `packages/menu/src/`; widget filenames mean `apps/dashboard/src/widgets/`.
+
+1. **Share matching checks.** Add menu `contract-input.ts`: `contractInput(prefix)` accepts `extras`, `options` or `product`, returning `invalid/record/keys/staffName/translations/kitchenName/id`. Replace copies in `extra-contract.ts` and `option-contract.ts`. In `product-editor-input.ts`, share only `invalid` and `id`; retain its object/translation parsing because translations require a map and language-key errors currently escape differently. Preserve whitespace, null/absence handling, lowercase IDs, refusal codes and nested field paths. Leave `resolveExtraPrice` in `extras.ts`: this extraction does not need it moved.
+
+   Menu owns parser behaviour. New `contract-input.test.ts`: “keeps the caller’s refusal code and nested field”, “preserves optional names and normalises IDs”. Run these red before extraction, then green; run `extra-contract.test.ts`, `option-contract.test.ts`, `product-editor-input.test.ts` with existing assertions unchanged. Reuse `validateOptionalTranslations` and `nonBlankTranslations`; no generic validation framework.
+
+2. **Use neutral wording.** First inspect an extras list with Each and measured rows. Change `extras.price` in `apps/dashboard/src/i18n/strings.ts` to **Price / Precio**, including its existing accessible-label consumer. Widget `extra-list-form.test.ts` owns “heads mixed Each and measured rows Price / Precio”, asserting literal wording, not merely the translation lookup. Preserve Portion and price calculations.
+
+3. **Match `isEachUnit`.** `Product.unit` currently carries no seed key (`packages/shared/src/menu-document/product-types.ts`); `units.ts` imports the database. Add optional `seedKey?: "each"` only to `Product.unit`, selecting it in `operations.ts`’s product projection and omitting it otherwise. Preserve stored IDs. Move the existing predicate to browser-safe `unit-validation.ts`, re-export from `units.ts`; `extra-list-form.ts` calls it with absent seed key mapped to null. Neither precision nor abbreviation identifies Each.
+
+   Menu `operations.test.ts` owns “carries stored Each identity in product reads”, using the existing legacy-unit fixture. Keep `units.test.ts` assertions. Widget `extra-list-form.test.ts` owns “treats stored Each as fixed one”: stale portion neither multiplies the inherited hint nor returns in Save; retain measured/missing-product assertions. Each new behaviour goes red first. This product-read addition crosses packages: apply the contract review trigger.
+
+4. **Layout remains conditional.** Screenshot all three reports at 390px: extras variant warning, extras Price at initial/rightmost scroll, Options row with a server field error. Reuse widget mount/row fixtures and existing wrapping-name/phone geometry assertions. Only after reproduction, change `extra-list-form.ts` or `option-list-form.ts` minimally. Their respective `.test.ts` files own named regressions “keeps the variant warning readable at 390px”, “keeps Price reachable within its scroll area”, and “aligns controls with the name above a row error”; pin the observed failing geometry before CSS. Preserve taps, wording and existing behavioural assertions. If absent, close with screenshot receipt and no speculative fix/test.
+
+5. **Trace only.** Follow all callers of `readMenuExtras` (including whether retired), `readProductExtras`, `readOptionListsByIds`, `readProductModifiers`, and `working-order.ts`’s `productOptionLists` to transaction boundaries. Record paths in the PR. Close locking only if all qualify; otherwise retain it, describe the caller and ask the watcher before changes. Recheck the obsolete `options.ts` comment entry with `rg -n findContentTranslationGap`; delete with its receipt.
+
+Run focused files via `pnpm --filter <package> exec vitest run <files>`, existing widget a11y/save-state siblings, then finish-branch/CI. Inspect EN/ES, both themes, phone/desktop; keep screenshots local. Update `apps/server/src/guide/{en,es}/modifiers.md` wording and `docs/backlog/menu.md`, `docs/backlog.md`: delete finished bullets, correct surviving index text. Leave long-number sizing, shared form plumbing, import/default/availability work and dependant conditions untouched.
+
+Expected added/removed lines: production **150/170**, tests **220/0**, support/generated **0/0**, plan/guide docs **45/5**, backlog **0/40**: **630 total**, less if layout reports no longer reproduce. One PR; about 120 minutes of build. Ask the watcher before exceeding **945** changed lines; no padding to meet size.
