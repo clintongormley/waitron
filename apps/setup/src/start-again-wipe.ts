@@ -9,7 +9,7 @@ import type {
 import { startAgainRefusalCause } from "./first-setup-session.js";
 
 const SUMMARY_KEYS = ["reached", "recoveryRecordDamaged", "databaseUnreadable"];
-const SUMMARY_REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"];
+const SUMMARY_REACHED = ["unknown", "claimed", "named", "fiscal-started", "fiscal-finished"];
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -20,7 +20,8 @@ function summaryOf(value: unknown): StartAgainSummary {
     Object.keys(value).some((key) => !SUMMARY_KEYS.includes(key)) ||
     !SUMMARY_REACHED.includes(value.reached as string) ||
     !flag(value.recoveryRecordDamaged) ||
-    !flag(value.databaseUnreadable)
+    !flag(value.databaseUnreadable) ||
+    (value.reached === "unknown" && Object.keys(value).length !== 1)
   )
     throw { code: "setup.attempt_invalid" };
   return value as unknown as StartAgainSummary;
@@ -35,7 +36,13 @@ export async function readWipeSummary(
   api: SetupApi,
   snapshot: FirstSetupResolutionSnapshot,
 ): Promise<StartAgainSummary> {
-  return summaryOf(await api.startAgainSummary(snapshot));
+  const summary = summaryOf(await api.startAgainSummary(snapshot));
+  if (
+    (snapshot.revision === null && snapshot.ownerGeneration === null) !==
+    (summary.reached === "unknown")
+  )
+    throw { code: "setup.attempt_invalid" };
+  return summary;
 }
 
 /**
@@ -51,14 +58,16 @@ export async function sendWipe(
   if (!sameSummary(await readWipeSummary(api, snapshot), shown))
     throw { code: "setup.attempt_conflict" };
   const confirm: StartAgainConfirm =
-    database === "missing"
-      ? { confirmMissingDatabase: { nothingFiledOrSold: true, shown } }
-      : {
-          ...(shown.databaseUnreadable === true && { confirmUnreadableDatabase: { shown } }),
-          ...(shown.recoveryRecordDamaged === true && {
-            recoveryRecordDamagedShown: true as const,
-          }),
-        };
+    shown.reached === "unknown"
+      ? { confirmDamagedSetupRecord: { shown } }
+      : database === "missing"
+        ? { confirmMissingDatabase: { nothingFiledOrSold: true, shown } }
+        : {
+            ...(shown.databaseUnreadable === true && { confirmUnreadableDatabase: { shown } }),
+            ...(shown.recoveryRecordDamaged === true && {
+              recoveryRecordDamagedShown: true as const,
+            }),
+          };
   const result = await api.startAgainFirstSetup(snapshot, confirm);
   // Not a conflict: the box may already have deleted the setup, so the page says to reconnect.
   if (result?.restarting !== true)

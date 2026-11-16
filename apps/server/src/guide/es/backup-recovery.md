@@ -43,9 +43,9 @@ Empezar de nuevo y Recuperar desde una copia la borran igualmente.
 No se ofrece ninguna de las dos, y la página dice por qué con las mismas palabras para ambas, si la
 configuración ya terminó, o si la base de datos de configuración tiene una factura u otro registro
 que Waitron nunca borra. Si el servidor no puede confirmar que borrar la configuración sea seguro, la
-página lo indica y no ofrece ninguna. Eso incluye una configuración cuyo propio registro no se puede
-leer: entonces la única salida es reinstalar Waitron. Con una conexión sin cifrar no funciona
-ninguna: configura antes la conexión segura.
+página lo indica y no ofrece ninguna. Eso incluye un registro de configuración que no se puede leer, salvo que la página ofrezca la confirmación de registro dañado que se explica a continuación. Con una conexión sin cifrar no funciona ninguna: configura antes la conexión segura.
+
+Si el propio registro de configuración está dañado, la página puede ofrecer **Empezar de nuevo** o **Recuperar desde una copia** con una advertencia, tras comprobar que la base de datos no contiene ventas ni registros fiscales. Waitron no puede saber si esa configuración llegó a la AEAT. Cualquiera de las dos opciones borra la base de datos de configuración, incluidos los datos de menús o personal, cuando marcas la confirmación y vuelves a pulsar el mismo botón. Elige **Cancelar** para conservarlo todo. Después de **Recuperar desde una copia**, eliges la copia que la sustituirá.
 
 Cuando se ha borrado la configuración, el servidor se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges

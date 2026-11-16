@@ -32,17 +32,18 @@ import type { Logger } from "./logger.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
-  revision: number;
-  ownerGeneration: number;
+  revision: number | null;
+  ownerGeneration: number | null;
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmUnreadableDatabase?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
+  confirmDamagedSetupRecord?: { shown: StartAgainSummary };
 }
 export interface StartAgainSummaryRequest {
   inspectionId: string;
-  revision: number;
-  ownerGeneration: number;
+  revision: number | null;
+  ownerGeneration: number | null;
 }
 type NotReadyCause = "may-have-filed" | "unexpected" | "too-large" | "unreadable";
 /** No cause: only a fault in Waitron reaches it. */
@@ -232,7 +233,7 @@ export function createFirstSetupResolutionActions(
   };
   const matchesInspection = (
     inspection: { inspectionId: string; revision: number | null; ownerGeneration: number | null },
-    request: { inspectionId: string; revision: number; ownerGeneration: number },
+    request: { inspectionId: string; revision: number | null; ownerGeneration: number | null },
   ) => {
     if (
       inspection.inspectionId !== request.inspectionId ||
@@ -270,6 +271,37 @@ export function createFirstSetupResolutionActions(
   ) => {
     const inspection = await host.resolution.inspectFirstSetupResolution();
     matchesInspection(inspection, request);
+    if (inspection.setupRecordDamaged === true) {
+      if (
+        request.revision !== null ||
+        request.ownerGeneration !== null ||
+        request.register !== undefined ||
+        request.confirmMissingDatabase !== undefined ||
+        request.confirmUnreadableDatabase !== undefined ||
+        request.recoveryRecordDamagedShown !== undefined
+      )
+        conflict();
+      if (inspection.database === "missing") unavailable("unreadable");
+      if (
+        inspection.artifacts.some(
+          (file) =>
+            file.name.startsWith("outside-") ||
+            (![FIRST_SETUP_FILE, VENUE_FILE, VENUE_WAL_FILE].includes(file.name) &&
+              file.status !== "missing"),
+        )
+      )
+        unavailable("may-have-filed");
+      const snapshot = await host.resolution.captureFirstSetupOriginals();
+      matchesInspection(snapshot.inspection, request);
+      if (snapshot.inspection.setupRecordDamaged !== true) conflict();
+      const box = await assertStartAgainAllowedOnDisk(roots, {});
+      const read = await readSetupDatabase(roots, []);
+      assertNoKeptRecords(read);
+      if (read.kind !== "read") unavailable("unreadable");
+      matchesInspection(await host.resolution.inspectFirstSetupResolution(), request);
+      return { damaged: true as const, box };
+    }
+    if (request.confirmDamagedSetupRecord !== undefined) conflict();
     const retained = await host.store.readResumable();
     if (retained === null) unavailable();
     const { state } = retained;
@@ -354,6 +386,7 @@ export function createFirstSetupResolutionActions(
         ? recordDamaged
         : typeof present?.assignment === "object" && present.assignment.recoveryRecordDamaged;
     return {
+      damaged: false as const,
       state,
       missing,
       heldOption,
@@ -367,11 +400,14 @@ export function createFirstSetupResolutionActions(
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration"]);
-          const { state, recoveryRecordDamaged, databaseUnreadable } = await assessStartAgain(
-            request,
-            "summary",
-          );
-          return summaryOf(state, recoveryRecordDamaged, databaseUnreadable);
+          const assessed = await assessStartAgain(request, "summary");
+          return assessed.damaged
+            ? { reached: "unknown" }
+            : summaryOf(
+                assessed.state,
+                assessed.recoveryRecordDamaged,
+                assessed.databaseUnreadable,
+              );
         }),
       );
     },
@@ -391,7 +427,9 @@ export function createFirstSetupResolutionActions(
           const { status } = pair.state;
           if (status === "complete" && pair.publicationComplete) conflict();
           const writes = status === "claimed" || status === "consumption-intent";
-          const { state } = await assessStartAgain(request, "summary", !writes);
+          const assessed = await assessStartAgain(request, "summary", !writes);
+          if (assessed.damaged) conflict();
+          const { state } = assessed;
           if (writes) {
             await host.store.update(
               state.frozen.attemptId,
@@ -417,8 +455,27 @@ export function createFirstSetupResolutionActions(
             "confirmMissingDatabase",
             "confirmUnreadableDatabase",
             "recoveryRecordDamagedShown",
+            "confirmDamagedSetupRecord",
           ]);
           const assessed = await assessStartAgain(request, "start-again");
+          if (assessed.damaged) {
+            if (
+              !isDeepStrictEqual(request.confirmDamagedSetupRecord, {
+                shown: { reached: "unknown" },
+              })
+            )
+              conflict();
+            const marker = await startAgainMarkerFor(assessed.box, null).catch((error: unknown) => {
+              throw markerRefusal(error);
+            });
+            if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
+              unavailable("too-large");
+            matchesInspection(await host.resolution.inspectFirstSetupResolution(), request);
+            await writeStartAgainMarker(assessed.box, marker);
+            await deleteMarkedAttempt(assessed.box, marker, options.remove);
+            await clearStartAgainMarker(assessed.box.venueDir);
+            return;
+          }
           const { state, missing, heldOption, box, databaseUnreadable } = assessed;
           if (databaseUnreadable !== (request.confirmUnreadableDatabase !== undefined)) conflict();
           const marker = await markerFor(box, state, heldOption);

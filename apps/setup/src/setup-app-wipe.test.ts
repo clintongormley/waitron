@@ -137,7 +137,7 @@ it("a summary refused setup.owner_required never says to resume in the owner tab
   expect(q(app, "retire-confirmed")).toBeNull();
 });
 
-it("where the setup record cannot be read, Start again is not offered and no summary is read", async () => {
+it("where the setup envelope is invalid without syntax damage, Start again is not offered and no summary is read", async () => {
   const { app, requests } = await wipeFixture({
     inspection: { pair: "invalid", revision: null, ownerGeneration: null },
   });
@@ -315,7 +315,7 @@ for (const [locale, lang] of locales)
   });
 
 for (const [locale, lang] of locales)
-  it(`in ${locale}, where the setup record cannot be read, the page says deleting is not offered`, async () => {
+  it(`in ${locale}, where the setup envelope is invalid without syntax damage, the page says deleting is not offered`, async () => {
     const strings = initialOwnerStrings[lang];
     const { app } = await wipeFixture({
       inspection: { pair: "invalid", revision: null, ownerGeneration: null },
@@ -434,4 +434,62 @@ it("an answer to Start again that does not confirm the restart says to reconnect
   await expect.poll(() => formErrors(app)).toContain(t.error);
   expect(formErrors(app)).not.toContain(t.heldChanged);
   expect(text(app)).not.toContain(t.restarting);
+});
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const [press, confirm] of [
+    ["start-again", "confirm-start-again"],
+    ["recover-backup", "confirm-recover"],
+  ] as const)
+    it(`${locale} ${press}: a syntax-damaged setup record warns of unknown history and requires a fresh confirmed summary`, async () => {
+      setLocale(locale);
+      const words = initialOwnerStrings[locale === "es-ES" ? "es" : "en"];
+      const { app, requests } = await wipeFixture({
+        locale,
+        inspection: {
+          pair: "invalid",
+          revision: null,
+          ownerGeneration: null,
+          setupRecordDamaged: true,
+        },
+        summary: () => Response.json({ reached: "unknown" }),
+      });
+      expect(q<import("@waitron/ui").WtButton>(app, press)?.disabled).toBe(false);
+      await click(app, press);
+      await expect.poll(() => q(app, "setup-record-damaged")).not.toBeNull();
+      expect(text(app)).toContain(words.setupRecordDamaged);
+      expect(text(app)).not.toContain(words.noInvoiceSent);
+      expect(q<HTMLInputElement>(app, "retire-confirmed")!.checked).toBe(false);
+      expect(q<import("@waitron/ui").WtButton>(app, confirm)!.disabled).toBe(true);
+      expect(sends(requests)).toEqual([]);
+      await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+      await click(app, confirm);
+      await expect.poll(() => sends(requests)).toHaveLength(1);
+      expect(summaryReads(requests)).toHaveLength(2);
+      expect(sends(requests)[0]!.body).toEqual({
+        inspectionId: "a".repeat(64),
+        revision: null,
+        ownerGeneration: null,
+        confirmDamagedSetupRecord: { shown: { reached: "unknown" } },
+      });
+    });
+
+it("a damaged-record summary that changes before confirmation sends no wipe", async () => {
+  let reads = 0;
+  const { app, requests } = await wipeFixture({
+    inspection: {
+      pair: "invalid",
+      revision: null,
+      ownerGeneration: null,
+      setupRecordDamaged: true,
+    },
+    summary: () => Response.json({ reached: reads++ === 0 ? "unknown" : "named" }),
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => summaryReads(requests)).toHaveLength(2);
+  await settled(app);
+  expect(sends(requests)).toEqual([]);
 });

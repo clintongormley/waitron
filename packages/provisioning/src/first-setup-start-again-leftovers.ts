@@ -217,6 +217,7 @@ export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgai
     const collected = await collectStartAgainFindings(canonical);
     if (collected === null) return null;
     const { marker, markerSha256, findings, blocker } = collected;
+    if (marker.version === 2) throw new Explain("damaged setup record: files need inspection");
     if (blocker !== null) throw new Explain(blocker.reason ?? blocker.code);
     const marked = new Set(marker.files.map((file) => `${file.root}:${file.name}`));
     if (!marked.has(`state:${SETUP_RECORD}`)) throw new Explain("setup record not marked");

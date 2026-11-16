@@ -105,15 +105,15 @@ export interface StartAgainMarkedFile extends StartAgainFingerprint {
   root: Root;
   name: string;
 }
-export interface StartAgainMarker {
-  version: 1;
-  attemptId: string;
-  frozenDigest: string;
+interface StartAgainMarkerFiles {
   venueDir: string;
   stateDir: string;
   files: StartAgainMarkedFile[];
   wal: Record<(typeof WAL_FILES)[number], StartAgainFingerprint | null>;
 }
+
+export type StartAgainMarker = StartAgainMarkerFiles &
+  ({ version: 1; attemptId: string; frozenDigest: string } | { version: 2 });
 
 /** `reason` is log-only: a check's name and a path, never a file's contents. */
 const incomplete = (reason: string) => new AppError("setup.start_again_incomplete", {}, { reason });
@@ -166,15 +166,17 @@ function fingerprint(value: unknown): StartAgainFingerprint {
 }
 
 function parseMarker(value: unknown): StartAgainMarker {
-  const keys = ["version", "attemptId", "frozenDigest", "venueDir", "stateDir", "files", "wal"];
+  const keys = ["version", "venueDir", "stateDir", "files", "wal"];
+  if (object(value) && value.version === 1) keys.push("attemptId", "frozenDigest");
   if (!object(value) || !exactKeys(value, keys)) throw incomplete("marker damaged");
   const { version, attemptId, frozenDigest, venueDir, stateDir, files, wal } = value;
   if (
-    version !== 1 ||
-    typeof attemptId !== "string" ||
-    !isUuid(attemptId) ||
-    typeof frozenDigest !== "string" ||
-    !HASH.test(frozenDigest) ||
+    (version !== 1 && version !== 2) ||
+    (version === 1 &&
+      (typeof attemptId !== "string" ||
+        !isUuid(attemptId) ||
+        typeof frozenDigest !== "string" ||
+        !HASH.test(frozenDigest))) ||
     typeof venueDir !== "string" ||
     !venueDir.startsWith("/") ||
     typeof stateDir !== "string" ||
@@ -199,10 +201,15 @@ function parseMarker(value: unknown): StartAgainMarker {
     seen.add(`${root}:${name}`);
     return { root, name, ...fingerprint({ size: entry.size, sha256: entry.sha256 }) };
   });
+  if (
+    version === 2 &&
+    !parsed.some((file) => file.root === "state" && file.name === FIRST_SETUP_FILE)
+  )
+    throw incomplete("marker damaged");
   return {
-    version: 1,
-    attemptId,
-    frozenDigest,
+    ...(version === 1
+      ? { version, attemptId: attemptId as string, frozenDigest: frozenDigest as string }
+      : { version }),
     venueDir,
     stateDir,
     files: parsed,
@@ -344,7 +351,7 @@ async function fingerprintAgainst(
 /** Names every present file of the deletion list with its size and SHA-256. */
 export async function startAgainMarkerFor(
   roots: Roots,
-  attempt: { attemptId: string; frozenDigest: string },
+  attempt: { attemptId: string; frozenDigest: string } | null,
   options: Options = {},
 ): Promise<StartAgainMarker> {
   const canonical = await canonicalFirstSetupRoots(roots);
@@ -361,8 +368,7 @@ export async function startAgainMarkerFor(
     return (await present(path)) ? sha256(path) : null;
   };
   return parseMarker({
-    version: 1,
-    ...attempt,
+    ...(attempt === null ? { version: 2 } : { version: 1, ...attempt }),
     ...canonical,
     files,
     wal: {

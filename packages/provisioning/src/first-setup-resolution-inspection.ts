@@ -42,6 +42,7 @@ export interface FirstSetupInspection {
   revision: number | null;
   ownerGeneration: number | null;
   emptyDatabase: boolean;
+  setupRecordDamaged?: true;
   artifacts: FirstSetupArtifact[];
 }
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -53,6 +54,7 @@ async function artifact(
   limit = 1024 * 1024,
   json = true,
   fingerprint = true,
+  syntaxFailure?: () => void,
 ): Promise<FirstSetupArtifact> {
   let handle;
   try {
@@ -74,6 +76,7 @@ async function artifact(
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
           return { ...value, status: "invalid" };
       } catch {
+        syntaxFailure?.();
         return { ...value, status: "invalid" };
       }
     }
@@ -280,6 +283,7 @@ export function createFirstSetupResolutionInspection(
         ),
       );
       const artifacts: FirstSetupArtifact[] = [];
+      const damage = { syntax: false };
       const physicalSources: (string | null)[] = [];
       for (const name of [
         FIRST_SETUP_FILE,
@@ -288,7 +292,20 @@ export function createFirstSetupResolutionInspection(
         RESET_REQUEST_FILE,
         CLOUD_REPLACEMENT_FILE,
       ])
-        artifacts.push(await artifact(options.stateDir, name));
+        artifacts.push(
+          await artifact(
+            options.stateDir,
+            name,
+            1024 * 1024,
+            true,
+            true,
+            name === FIRST_SETUP_FILE
+              ? () => {
+                  damage.syntax = true;
+                }
+              : undefined,
+          ),
+        );
       artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
       for (const name of [VENUE_FILE, VENUE_WAL_FILE])
         artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
@@ -361,6 +378,7 @@ export function createFirstSetupResolutionInspection(
       const result = {
         version: 2 as const,
         pair,
+        ...(damage.syntax && { setupRecordDamaged: true as const }),
         database,
         emptyDatabase,
         revision: repair?.state.revision ?? null,

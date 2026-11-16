@@ -56,16 +56,17 @@ export interface FirstSetupInspection {
   revision: number | null;
   ownerGeneration: number | null;
   emptyDatabase: boolean;
+  setupRecordDamaged?: true;
   artifacts: {
     name: string;
     status: "missing" | "present" | "invalid" | "unreadable";
     digest?: string;
   }[];
 }
-export type FirstSetupResolutionSnapshot = Pick<FirstSetupInspection, "inspectionId"> & {
-  revision: number;
-  ownerGeneration: number;
-};
+export type FirstSetupResolutionSnapshot = Pick<
+  FirstSetupInspection,
+  "inspectionId" | "revision" | "ownerGeneration"
+>;
 export interface FirstSetupUpdate {
   state: FirstSetupState;
 }
@@ -89,13 +90,16 @@ export function firstSetupHeaders(owner: FirstSetupOwner): Record<string, string
   };
 }
 
-export interface StartAgainSummary {
-  reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
-  recoveryRecordDamaged?: true;
-  databaseUnreadable?: true;
-}
+export type StartAgainSummary =
+  | { reached: "unknown"; recoveryRecordDamaged?: never; databaseUnreadable?: never }
+  | {
+      reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
+      recoveryRecordDamaged?: true;
+      databaseUnreadable?: true;
+    };
 /** What Start again sends beside the snapshot; at most one `confirm*` field. */
 export interface StartAgainConfirm {
+  confirmDamagedSetupRecord?: { shown: StartAgainSummary };
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
   confirmUnreadableDatabase?: { shown: StartAgainSummary };

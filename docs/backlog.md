@@ -413,11 +413,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
   [Audit](backlog/self-service-refusals.md#setup-reset).
 
-- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1158, A1159 and A1161 list what still refuses.
+- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1159 and A1161 list what still refuses. Start again (former A1158) and Recover from backup still have no warned way out when a damaged setup retains its installed box row, even without sales or fiscal records.
   [Audit](backlog/self-service-refusals.md#setup-state).
-
-- **A1158: a damaged setup record still dead-ends Start again.** Left open by A1099.
-  [Audit](backlog/self-service-refusals.md#a1158-a-damaged-setup-record-still-dead-ends-start-again).
 
 - **A1159: some setup databases the box cannot read still refuse Start again.** A damaged one is
   deleted since A1131bc slice 2; one it may not open, one beside a journal, and a damaged `node.db`
@@ -434,7 +431,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
-- **Restore paths run** (bundle of 2, 2 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
+- **Restore paths run** (bundle of 1, 1 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
 
 - **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
   decide whether they should place archives through `runStagedRestore`, then delete it.

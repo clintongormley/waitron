@@ -210,6 +210,8 @@ attempt's recovery-key record is damaged, pressing **Start again** shows "This s
 recovery-key record is damaged and cannot be read." above what Start again deletes; you can still
 choose **Cancel**.
 
+If the setup record’s bytes cannot be parsed as JSON, **Start again** and **Recover from backup** can show a separate warning after a full database read finds no sales or fiscal records. The warning says that Waitron cannot tell whether the setup reached AEAT. Confirming deletes the database, including any menu or staff rows; **Cancel** keeps everything. A missing, unreadable or oversized record, readable JSON with an invalid setup envelope, or unreadable or missing database stays refused. Saved trading settings, any node row, documents and outside evidence also keep their refusals. A setup that has activated and retains its box row therefore still cannot use this way out. Readable setup records keep every existing refusal. If deletion is interrupted, the existing finisher resumes fingerprinted unchanged files; changed files produce an explanation without a Move choice because no readable setup record can identify an administrator.
+
 When the venue database is missing, the box cannot check whether the attempt filed anything to
 AEAT or made a sale. Pressing **Start again**
 says so, lists what the attempt's own record says it reached — whether it did not start, started

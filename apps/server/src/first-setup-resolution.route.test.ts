@@ -214,6 +214,13 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
         status: 400,
         code: "setup.request_invalid",
       },
+      ...["start-again/summary", "start-again"].map((action) => ({
+        action,
+        headers: {},
+        body: { ...base, revision: null, ownerGeneration: null },
+        status: 409,
+        code: "setup.attempt_conflict",
+      })),
       {
         action: "start-again",
         body: { ...start, path: f.root },

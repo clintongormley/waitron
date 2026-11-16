@@ -64,7 +64,9 @@ it("confirmUnreadableDatabase beside a readable database is refused setup.attemp
     () =>
       actions.startAgainFirstSetup({
         ...ids,
-        confirmUnreadableDatabase: { shown: { ...shown, databaseUnreadable: true } },
+        confirmUnreadableDatabase: {
+          shown: { reached: "fiscal-finished", databaseUnreadable: true },
+        },
       }),
     { code: "setup.attempt_conflict" },
   );

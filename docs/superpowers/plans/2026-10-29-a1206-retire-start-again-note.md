@@ -1,5 +1,7 @@
 # A1206: retire the start-again note — Start again keeps no record of the names it deletes — implementation plan
 
+_2026-11-16: the syntax-damaged setup-record case now follows [Damaged setup record: warned way out](2026-11-16-setup-record-way-out.md). Readable-record refusals and the other exclusions stay; this plan records its earlier behavior._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`; one that passes about 150 tool calls with its task unfinished stops at a passing (or cleanly failing) point, commits, and hands over (done, left, files, each check's state).
 
 **Owner decision (2026-10-29 ~10:38, verbatim):** "I think we must remove this concept of storing the used series name on disk. It introduces too many complications. We use the current minute, with confirmed clock times, and the latest invoice numbers if we have any." Queue entry: A1206 in `~/waitron-campaign/queue.md`. This reverses the owner's 2026-10-24 A1042 decision (the note and its floor) and everything built on it: A1098's Move floor, A1099's damaged-name-record floor, and A1131's counting of every installation name a setup database held.

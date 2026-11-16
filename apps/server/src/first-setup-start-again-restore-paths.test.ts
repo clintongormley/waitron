@@ -11,6 +11,7 @@ import { diskSnapshot } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { agreeInternet, managedHttp, stageBucketRoute } from "../test/hour-recovery-host.js";
 import { join } from "node:path";
+import { rm, writeFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { runStagedRestore } from "./restore-request.js";
 
@@ -103,4 +104,16 @@ it("control: the same Waitron Cloud restore beside a held setup database that wa
 it("control: the same Waitron Cloud restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {
   const f = await missingHeldDatabase();
   await expectRefusedPlacingNothing(f, await stageCloud(f));
+}, 180_000);
+
+it("a confirmed damaged setup record, wiped, then the bucket restore writes into the usual folders", async () => {
+  const f = await heldSetup();
+  await rm(join(f.roots.venueDir, "node.db"));
+  await rm(join(f.roots.stateDir, "flows/setup/documents"), { recursive: true, force: true });
+  await writeFile(join(f.roots.stateDir, "flows/setup/record.json"), "{truncated");
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toEqual({ reached: "unknown" });
+  await actions.startAgainFirstSetup({ ...ids, confirmDamagedSetupRecord: { shown } });
+  await expectPlaced(f, await stageBucket(f));
 }, 180_000);

@@ -252,6 +252,7 @@ const labelOf = async (f: Held) => (await f.host.resolution.inspectFirstSetupRes
 async function unreadableSummary(f: Held, host: Held["host"] = f.host) {
   const { ids, actions } = await withoutSignIn(f, host);
   const shown = await actions.startAgainSummary(ids);
+  if (shown.reached === "unknown") throw new Error("expected a readable setup record");
   await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), {
     code: "setup.attempt_conflict",
   });

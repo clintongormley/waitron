@@ -13,6 +13,8 @@ export const initialOwnerStrings = {
     missingBackup: "If you have a backup, recover from it.",
     missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
     startAgain: "Start again",
+    setupRecordDamaged:
+      "This setup's record is damaged. Waitron cannot tell whether it reached AEAT. Deleting this setup also deletes its database, including any menu or staff details. Cancel keeps everything as it is.",
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
@@ -82,6 +84,8 @@ export const initialOwnerStrings = {
     missingBackup: "Si tienes una copia, recupera desde ella.",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     startAgain: "Empezar de nuevo",
+    setupRecordDamaged:
+      "El registro de esta configuración está dañado. Waitron no puede saber si llegó a la AEAT. Borrar esta configuración también borra su base de datos, incluidos los datos de menús o personal. Cancelar conserva todo como está.",
     recoveryRecordDamaged:
       "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",

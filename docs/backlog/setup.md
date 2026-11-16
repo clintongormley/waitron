@@ -258,13 +258,6 @@ for these boxes, is still open to the owner.
   completion invitation without building A250. **Build remains open**; Cloud's qualified
   trial journey is prerequisite G1 in the plan.
 
-## No Recover from backup when the setup's own record cannot be read
-
-- **No Recover from backup when the setup's own record cannot be read.** Since A1131bc slice 3,
-  Recover from backup is drawn disabled wherever Start again is disabled; before, it opened the old
-  recovery. The only way out is then a
-  reinstall. Left open by A1131bc slice 3 (plan, N2).
-
 ## `restoreFromArtifact` has no production caller
 
 - **`restoreFromArtifact` has no production caller.** Since A1131bc slice 4 deleted the repair
@@ -399,14 +392,11 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: Restore paths run
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+The remaining restore-path entry from the backlog review of 2026-11-06.
 
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
   wizard).**
   [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
-- **No Recover from backup when the setup's own record cannot be read.** The only way out is a
-  reinstall. Left open by A1131bc slice 3.
-  [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)
 
 ## Starter courses for Italy
 
@@ -414,6 +404,8 @@ When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti
 Ask the owner which fire immediately and which wait. Left open by A1458.
 
 ## Decisions and deliberate limits
+
+- **Damaged setup record, 2026-11-16:** the owner said “ok” at 19:19 to the warned way out for a fully damaged record only, relayed by the watcher at 19:20. Start again and Recover from backup may delete after an independent full database read finds no sales or fiscal records, warning that AEAT history is unknown. Menu and staff rows may be deleted. Readable records keep all refusals; missing, unreadable, oversized or valid-JSON invalid-envelope records, missing/unreadable databases, saved trading settings, node rows, documents and outside evidence remain excluded. The watcher cleared the plan at 20:31 and its narrower delivered scope at 21:23; the owner lands this change. The [A1089 setup-state bundle](self-service-refusals.md#setup-state) keeps the remaining damaged-record case with an installed box row.
 
 - **A1458’s language choice applies to initial setup only** (watcher, 2026-11-09 12:45). A department
   you add later from the dashboard keeps the language derived from the country and receipt settings.

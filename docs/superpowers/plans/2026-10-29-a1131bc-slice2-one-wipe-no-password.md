@@ -1,5 +1,7 @@
 > **A947 slice 3a, 1 November 2026:** `node.db` is no longer empty: a box's role, recovery-key check, signing key, main-box link and pinned main-box key now live there, and `node_roles` and `mirror_config` are gone, so this plan's statements about where those live, and that `node.db` has no tables, describe the tree before it ([slice 3a plan](2026-10-31-a947-3a-node-db.md)).
 
+_2026-11-16: the syntax-damaged setup-record case now follows [Damaged setup record: warned way out](2026-11-16-setup-record-way-out.md). Readable-record refusals and the other exclusions stay; this plan records its earlier behavior._
+
 # A1131b/c slice 2: one wipe, no password — Implementation Plan
 
 **Revision 7 (2026-10-30).** Folds the round-3 check of revision 6

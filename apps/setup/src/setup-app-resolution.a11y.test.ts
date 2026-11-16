@@ -70,8 +70,16 @@ for (const locale of ["en-GB", "es-ES"] as const)
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const state of ["normal", "confirmation", "unreadable", "missing"] as const)
+      for (const state of [
+        "normal",
+        "confirmation",
+        "unreadable",
+        "missing",
+        "setup-damaged",
+        "setup-damaged-recover",
+      ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible interrupted setup`, async () => {
+          const damaged = state.startsWith("setup-damaged");
           const previous = [innerWidth, innerHeight];
           try {
             await page.viewport(width, 1200);
@@ -79,16 +87,17 @@ for (const locale of ["en-GB", "es-ES"] as const)
               claimed: true,
               intercept(path) {
                 if (path.endsWith("/start-again/summary"))
-                  return Response.json({ reached: "claimed" });
+                  return Response.json({ reached: damaged ? "unknown" : "claimed" });
                 if (path.endsWith("/resolution"))
                   return Response.json({
                     version: 2,
                     inspectionId: "a".repeat(64),
-                    pair: state === "unreadable" ? "invalid" : "valid",
+                    pair: state === "unreadable" || damaged ? "invalid" : "valid",
+                    ...(damaged && { setupRecordDamaged: true }),
                     database: state === "missing" ? "missing" : "no-venue-rows",
                     emptyDatabase: !["missing", "unreadable"].includes(state),
-                    revision: state === "unreadable" ? null : 1,
-                    ownerGeneration: state === "unreadable" ? null : 1,
+                    revision: state === "unreadable" || damaged ? null : 1,
+                    ownerGeneration: state === "unreadable" || damaged ? null : 1,
                     artifacts: [],
                   });
               },
@@ -101,8 +110,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await expect
               .poll(() => el.shadowRoot!.querySelector("[data-test=start-again]"))
               .not.toBeNull();
-            if (state === "confirmation") {
-              const start = el.shadowRoot!.querySelector<WtButton>("[data-test=start-again]")!;
+            if (state === "confirmation" || damaged) {
+              const start = el.shadowRoot!.querySelector<WtButton>(
+                state === "setup-damaged-recover"
+                  ? "[data-test=recover-backup]"
+                  : "[data-test=start-again]",
+              )!;
               await userEvent.click(start.shadowRoot!.querySelector("button")!);
               await expect
                 .poll(() => el.shadowRoot!.querySelector("[data-test=retire-confirmed]"))
