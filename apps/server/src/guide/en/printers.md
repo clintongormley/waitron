@@ -11,7 +11,6 @@ A Bluetooth printer must be in pairing mode first. Choose **Pair and add** besid
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
 Wait for the current Pair or Unpair to finish before starting another on the same print agent.
-If it is busy, the message names the action and tells you when to try again.
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.

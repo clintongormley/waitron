@@ -107,8 +107,7 @@ declare module "@waitron/shared" {
     /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.
      * No free probe slot; retry after a request expires. */
     "printer.probe_busy": Record<string, never>;
-    /** A ninth distinct Bluetooth address would be queued for one print agent. */
-    "printer.bluetooth_command_busy": Record<string, never>;
+    "printer.bluetooth_command_busy": { kind: "pair" | "forget"; seconds: number };
     /** Pair names an address the named print agent has not reported in a fresh Bluetooth scan. */
     "printer.bluetooth_not_discovered": { address: string };
     /** Forget names an address the named print agent does not currently report as paired. */

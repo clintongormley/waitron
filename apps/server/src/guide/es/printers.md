@@ -12,7 +12,7 @@ junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es 
 abre el diálogo del nombre: elige **Añadir**.
 
 Espera a que termine el emparejamiento o la desvinculación antes de iniciar otra solicitud
-en el mismo agente de impresión. Si está ocupado, el mensaje indica la acción y cuándo reintentar.
+en el mismo agente de impresión.
 
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
