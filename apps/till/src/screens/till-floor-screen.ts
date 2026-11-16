@@ -1097,7 +1097,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   override updated(): void {
-    // Read by the app, which lifts its bottom toasts clear of the bar.
+    // Read by the app, which lifts the Sent and Served toasts clear of the bar.
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();

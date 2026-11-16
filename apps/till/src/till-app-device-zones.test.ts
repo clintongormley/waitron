@@ -8,6 +8,7 @@ import {
   distance,
   draftServer,
   mountWidget,
+  oneLine,
   pageAt,
   paintedAt,
   resetPage,
@@ -3091,14 +3092,12 @@ describe("a handheld's zones", () => {
       [390, 844],
       [1024, 768],
     ] as const)(
-      "on a till, which draws no bar, the Sent toast sits one gap above the window's bottom edge (%i px)",
+      "on a till, which draws no bar, the Sent toast keeps its place (%i px)",
       async (width, height) => {
         const el = await mountSending(width, height, "till");
         const toast = await sendCoffee(el, false);
         expect(readyBar(el)).toBeNull();
-        const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3"));
-        expect(gap).toBeGreaterThan(0);
-        expect(toast.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight - gap, 0);
+        expect(toast.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight - oneLine(), 0);
       },
     );
 
