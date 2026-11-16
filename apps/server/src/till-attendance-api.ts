@@ -45,6 +45,7 @@ import type { Logger } from "./logger.js";
 export interface TillAttendanceApiDeps {
   exporter?: ModuleTimeRecordExport;
   db: Database;
+  devMode?: boolean;
   cfg: { nodeId: string };
   now: () => Date;
   attemptsFor: (deviceId: string) => PinAttempts;

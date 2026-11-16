@@ -1309,7 +1309,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   if (deps.workforceEnabled === true)
     mountTillClockApi(
       app,
-      { db: deps.db, cfg: deps.cfg, now: () => deps.clock.now().instant },
+      {
+        db: deps.db,
+        devMode: deps.devMode === true,
+        cfg: deps.cfg,
+        now: () => deps.clock.now().instant,
+      },
       log,
     );
   if (deps.workforceEnabled === true && deps.attendanceResponsesEnabled !== false)
@@ -1317,6 +1322,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       app,
       {
         db: deps.db,
+        devMode: deps.devMode === true,
         cfg: deps.cfg,
         now: () => deps.clock.now().instant,
         attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
