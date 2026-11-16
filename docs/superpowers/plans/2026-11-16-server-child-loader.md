@@ -1,7 +1,7 @@
 # Server child-loader measurement plan
 
 **Goal:** Evaluate one native-stripping loader against `tsx`; keep code only after measured savings with unchanged assertions.
-**Authority:** CHILD-LOADER in `/Users/clintongormley/waitron-campaign-i/queue.md`, started 2026-11-16 20:25. Separate Sol/high draft checked by Codex; Claude reviewed the approach. Watcher clearance is pending. No owner design approval is claimed.
+**Authority:** CHILD-LOADER in `/Users/clintongormley/waitron-campaign-i/queue.md`, started 2026-11-16 20:25. Separate Sol/high draft checked by Codex; Claude reviewed the approach. Watcher clearance and the observed outcome are recorded below. No owner design approval is claimed.
 
 ## Smallest experiment first
 
@@ -28,3 +28,12 @@ No bundles, production/fiscal edits, restart-test double boots, fixed-secret/mem
 | --- | --- |
 | [Node TypeScript](https://nodejs.org/api/typescript.html#typescript-features) | “parameter properties” require transformation; native compatibility must be run, not assumed. Node 26 removed `--experimental-transform-types`; changing candidate is excluded. |
 | [Node hooks](https://nodejs.org/api/module.html#convention-of-hooks-and-chaining) | “in LIFO order”; retain child replacements after registering the preload. |
+
+
+## Result, 16 November 2026
+
+Claude's sole plan read took 221 seconds; all findings were accepted. The watcher cleared
+the compatibility-first plan and docs-only rejection at 20:39. All three real child paths
+refused constructor parameter properties under native stripping, before their crash checkpoints.
+The [recorded result](../../backlog/ci.md#native-stripping-rejected-for-three-server-test-children)
+lists exact commands and errors. No timing comparison or permanent loader was built.

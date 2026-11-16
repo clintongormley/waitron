@@ -349,7 +349,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
   [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
-  the remaining crash-helper salt, wider memo and child-loading work stays open.
+  the remaining crash-helper salt and wider memo work stays open.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
 - **Finish reusing fixed-secret hashes in remaining server test setup.**
   [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
@@ -364,6 +364,45 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 
 ## Decisions and deliberate limits
+
+### Native stripping rejected for three server test children
+
+On 16 November 2026, CHILD-LOADER tested one candidate on macOS with Node v26.13.0:
+native type stripping plus a small synchronous resolver that retries missing `.js` imports
+as `.ts`. A typed-fixture import failed with `ERR_MODULE_NOT_FOUND` under an empty preload
+and passed with this resolver. A disposable checkout of
+`c9e1c435d0108512a4750e676864f309bf49713f` then changed only the `tsx` preload argument
+in the three files below. Existing module replacements and assertions stayed unchanged.
+
+Each command exited 1, reporting one failed case. Each real child printed:
+
+```text
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript parameter property is not supported in strip-only mode
+```
+
+| Test file under `apps/server/src/` | First refused source |
+| --- | --- |
+| `handover-activation-repair.test.ts` | `packages/payments-sumup/src/provider.ts:126`, `constructor(private readonly opts: SumUpCloudProviderOptions)` |
+| `handover-stepdown.crash.test.ts` | `packages/credentials/src/backup-verification.ts:9`, `constructor(readonly status: Refusal)` |
+| `hour-recovery-placement-1.test.ts` | `packages/credentials/src/backup-verification.ts:9`, `constructor(readonly status: Refusal)` |
+
+Commands from the disposable checkout's root, after replacing each file's one `tsx` preload
+with the scratch native resolver:
+
+```sh
+node scripts/run-with-deadline.mjs 240 --diagnostics -- pnpm --filter @waitron/server exec vitest run src/handover-activation-repair.test.ts -t 'M2 killed between the venue.db commit' --maxWorkers=1
+node scripts/run-with-deadline.mjs 240 --diagnostics -- pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts -t 'after the node transaction, before the answer' --maxWorkers=1
+node scripts/run-with-deadline.mjs 240 --diagnostics -- pnpm --filter @waitron/server exec vitest run src/hour-recovery-placement-1.test.ts -t 'restarts publication after archive process death' --maxWorkers=1
+```
+
+The candidate was rejected before timing comparisons. There are no before/after medians or
+speed-up claim; `hour-recovery-placement-2` was not run because compatibility failed first.
+No loader, test edit or product change ships. The watcher cleared this rejection path at
+20:39 on 16 November; Claude reviewed the plan, not a faster-loader result. Small logs,
+commands, the scratch resolver and three-preload replacement diff are retained in Lane I's
+`receipts/child-loader-20261116/`. This rejects native stripping for these paths; it does not
+qualify another loader or settle other startup costs.
+
 
 - **Browser-console forwarding is off in every browser package’s Vitest config** (owner, 16 November 2026, “Turn it off everywhere”, recorded by the watcher in Lane I’s `questions.md` at 02:25). Keep the Vite-level `server.forwardConsole: false` setting; its placement and A902’s receipt are in the [testing guide](../developers/testing-guide.md#vitest-hides-a-passing-tests-console-output-under-an-ai-agent).
 
@@ -1006,13 +1045,6 @@ within a test file, migrated `heldSetup`'s databases once per file, sealed the t
 under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
 these, which it did not build (local figures, 2 November 2026):
 
-- **Some server tests' child processes still load through `tsx`.** Among those,
-  `hour-recovery-placement-1`, `hour-recovery-placement-2`, `handover-stepdown.crash.test.ts` and
-  `handover-activation-repair.test.ts` replace modules at load time through `registerHooks`.
-  On 16 November, a Mac probe measured six stepdown children from spawn to started at 13.070s
-  total (51% of that file's 25.534s baseline median), and five activation children from spawn to
-  imports ready at 9.168s (41% of 22.453s). These include startup beyond `tsx`, so are upper bounds
-  on loader savings; measure a concrete loader candidate before changing these children.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run
