@@ -269,6 +269,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       name: "payments",
       table: "__drizzle_migrations_payments",
       from: "../payments/drizzle",
+      migrationTriggers: ["payments_guard_update", "payments_no_delete"],
     },
     classification: PAYMENTS_CLASSIFICATION,
     backup: {

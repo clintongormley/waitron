@@ -130,6 +130,34 @@ describe("applyMigrations routes a set to the file it names", () => {
     expect((await tablesIn(venue)).node).toEqual({ table: true, journal: true });
   });
 
+  it("refuses declared migration triggers on a node set before migrating", async () => {
+    const venue = freshVenue();
+    await expect(
+      applyMigrations(venue, [
+        {
+          migrationsFolder: folderOf([MIGRATION.entry]),
+          migrationsTable: TABLE,
+          database: "node",
+          expectedTriggers: [
+            {
+              name: "probe_fixed",
+              table: "probe_node",
+              definition:
+                "probe_fixed before delete on probe_node begin select raise(abort, 'fixed'); end",
+            },
+          ],
+        },
+      ]),
+    ).rejects.toMatchObject({
+      code: "migrations.node_append_only",
+      params: { set: TABLE, tables: ["probe_node"] },
+    });
+    expect(await tablesIn(venue)).toEqual({
+      node: { table: false, journal: false },
+      venue: { table: false, journal: false },
+    });
+  });
+
   it("refuses a short node set with migrations.incomplete", async () => {
     const venue = freshVenue();
     await applyMigrations(venue, [

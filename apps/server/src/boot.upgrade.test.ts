@@ -192,6 +192,12 @@ describe("contained upgrade data checks", () => {
       code: "append_only.triggers_changed",
     },
     {
+      paymentsOff: true,
+      name: "changed payment protection while Payments is Off",
+      sql: "drop trigger payments_guard_update; create trigger payments_guard_update before update on payments begin select 1; end",
+      code: "append_only.triggers_changed",
+    },
+    {
       paymentsOff: false,
       name: "a menu with missing structure",
       sql: "update sections set role = 'section', internal_name = coalesce(internal_name, 'Lost root') where role in ('menu_root', 'home_layout')",

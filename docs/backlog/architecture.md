@@ -118,7 +118,7 @@ all.
 
 **Left open by A483: unselected provision-only fiscal modules.** Boot repairs missing triggers,
 refuses changed definitions and watches existing tables declared append-only by toggleable modules,
-even while Off. The selected migration sets still supply the rest of the protected list. No absent
+and the declared payment guards, even while Off. The selected migration sets still supply the rest of the protected list. No absent
 optional table is created by that repair.
 
 A box moved from fiscal-verifactu to fiscal-none still does not re-protect or watch the unselected

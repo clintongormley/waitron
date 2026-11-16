@@ -1,6 +1,11 @@
-# A1308 pa2b: restore and watch the payment triggers — owner decision pending
+# A1308 pa2b: restore and watch the payment triggers — owner lands
 
-**Result proposed:** Boot repairs missing payment guards, refuses altered ones, and the trading watch stops on missing or altered guards, including Payments Off. Normal capture stays allowed. Pa1 landed as `4f5b758700`; pa2 supplies the delete refusal. **Do not build: the owner has not chosen this follow-up.**
+**Decision, 16 November:** Lane E `questions.md`, watcher 08:55, records the owner's words:
+“Yes, queue pa2b”. Watcher 08:59 records pa2 landed as #3473/`8a6e3532eb` and clears this build
+on the corrected plan. The owner lands pa2b. Claude's earlier 335-second plan read covered this
+shared-mechanism approach; the scope choice it requested is now answered.
+
+**Result:** Boot repairs missing payment guards, refuses altered ones, and the trading watch stops on missing or altered guards, including Payments Off. Normal capture stays allowed. Pa1 landed as `4f5b758700`; pa2 supplies the delete refusal.
 
 **Authority:** Watcher 16 November 07:36 split the expanded pa2 plan after Claude's 335-second read: build delete-only pa2; put this restore/watch proposal to the owner. The watcher has asked the owner, recommending it. This document extracts the corrected shared-mechanism portion of that read; it records no owner approval. Apply the [slice rules](2026-11-08-a1308-slice-rules.md). Recheck the approach against the owner's answer and current source before any build.
 
@@ -54,4 +59,6 @@ Focused checks, normal hook, current-head CI; no whole-package local run solely 
 **550–720 counted lines** for the extracted follow-up. Generated output and pure cleanup deletions follow the
 slice rules' exclusions. This is an estimate; material growth goes to the watcher.
 
-**Disclosure:** This proposal restores protection that pa1's retired follow-up tables had. Existing `append_only.triggers_restored/changed` messages would also name these manual/conditional guards. No experiment or build has been run for pa2b. Owner scope and landing instructions remain pending; the earlier Claude report reviewed the expanded pa2 approach, not a built pa2b.
+**Disclosure:** This restores protection that pa1's retired follow-up tables had. Existing
+`append_only.triggers_restored/changed` messages also name these manual/conditional guards.
+The earlier Claude report reviewed the expanded pa2 approach, not a built pa2b.

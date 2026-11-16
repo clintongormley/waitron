@@ -1,6 +1,6 @@
 // A real venue directory migrated by the product's own entry point: a mock asserting
 // `installAppendOnlyTriggers` was called would pass with the triggers absent.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "@waitron/db";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
+import { triggerFaults } from "@waitron/store";
 
 /**
  * Three declared tables, from two different migration sets and both classes.
@@ -99,6 +100,48 @@ async function withVenue<T>(directory: string, body: (db: Database) => T): Promi
 }
 
 describe("applyMigrations installs the append-only triggers on the product's own path", () => {
+  it("repairs a declared migration trigger without replaying its migration or changing rows", async () => {
+    const folder = freshVenue();
+    mkdirSync(join(folder, "meta"));
+    writeFileSync(
+      join(folder, "meta", "_journal.json"),
+      JSON.stringify({ entries: [{ idx: 0, tag: "0000_probe", when: 1, breakpoints: true }] }),
+    );
+    writeFileSync(
+      join(folder, "0000_probe.sql"),
+      "create table records (id integer primary key, value text);\n--> statement-breakpoint\ncreate trigger fixed_value before update on records when old.value <> new.value begin select raise(abort, 'fixed'); end;",
+    );
+    const expectedTriggers = [
+      {
+        name: "fixed_value",
+        table: "records",
+        definition:
+          "fixed_value before update on records when old.value <> new.value begin select raise(abort, 'fixed'); end",
+      },
+    ];
+    const options = [
+      { migrationsFolder: folder, migrationsTable: "__drizzle_migrations_probe", expectedTriggers },
+    ];
+    const venue = freshVenue();
+    await applyMigrations(venue, options);
+    const journal = await withVenue(venue, (db) => {
+      db.run(sql`insert into records values (1, 'first')`);
+      db.run(sql`drop trigger fixed_value`);
+      return db.all(sql`select * from __drizzle_migrations_probe`);
+    });
+    await applyMigrations(venue, options);
+    await withVenue(venue, (db) => {
+      expect(triggerFaults(db, expectedTriggers)).toEqual({ missing: [], altered: [] });
+      expect(db.all(sql`select * from __drizzle_migrations_probe`)).toEqual(journal);
+      expect(db.all(sql`select * from records`)).toEqual([{ id: 1, value: "first" }]);
+      db.run(sql`update records set value = value`);
+      expect(refusal(() => db.run(sql`update records set value = 'changed'`))).toEqual({
+        message: "fixed",
+        errcode: 1811,
+      });
+    });
+  });
+
   it("leaves every declared table refusing an update and a delete", async () => {
     const venue = freshVenue();
     await applyMigrations(venue, migrationOptionsFor(manifestSets(), null));

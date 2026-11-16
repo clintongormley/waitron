@@ -3,7 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } from "@waitron/db";
 import { AppError, sqliteFailureOf } from "@waitron/shared";
-import { installAppendOnlyTriggers, openLock, MIGRATIONS_LOCK_FILE } from "@waitron/store";
+import {
+  installAppendOnlyTriggers,
+  installTriggers,
+  openLock,
+  MIGRATIONS_LOCK_FILE,
+} from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
 import { appliedSchemaVersion, type MigrationFiles } from "./schema-version.js";
 import "./errors.js";
@@ -62,7 +67,10 @@ export async function applyMigrations(
  * Only a fault in Waitron produces it: the node set in `migrations.manifest.json` names none.
  */
 function assertNoNodeAppendOnly(set: VenueMigrationOptions): void {
-  const tables = set.appendOnlyTables ?? [];
+  const tables = [
+    ...(set.appendOnlyTables ?? []),
+    ...(set.expectedTriggers ?? []).map((trigger) => trigger.table),
+  ];
   if (set.database === "node" && tables.length > 0) {
     throw new AppError("migrations.node_append_only", {
       set: set.migrationsTable,
@@ -88,6 +96,7 @@ async function migrateEverySet(
       // LATER set aborts the run.
       if (set.database !== "node") {
         installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
+        installTriggers(store.venue, set.expectedTriggers ?? []);
       }
     }
   } finally {

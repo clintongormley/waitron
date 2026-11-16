@@ -1,7 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { type SQL, sql } from "drizzle-orm";
-import { appendOnlyTriggerFaults, installAppendOnlyTriggers } from "./append-only.js";
+import {
+  appendOnlyTriggerFaults,
+  installAppendOnlyTriggers,
+  installTriggers,
+  triggerFaults,
+} from "./append-only.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 import { connectionPair } from "./connections.js";
 
@@ -17,6 +22,41 @@ const open = () => {
 const connections: DatabaseSync[] = [];
 afterEach(() => {
   while (connections.length > 0) connections.pop()!.close();
+});
+
+describe("conditional migration triggers", () => {
+  const triggers = [
+    {
+      name: "digest_fixed",
+      table: "immutable_records",
+      definition: `"digest_fixed" before update on "immutable_records" when old.digest <> new.digest begin select raise(abort, 'digest fixed'); end`,
+    },
+  ];
+
+  it("installs and repairs a missing rule while allowing an unchanged value", () => {
+    const db = open();
+    seed(db);
+    expect(triggerFaults(db, triggers)).toEqual({ missing: ["digest_fixed"], altered: [] });
+    installTriggers(db, triggers);
+    expect(triggerFaults(db, triggers)).toEqual({ missing: [], altered: [] });
+    db.run(sql`drop trigger digest_fixed`);
+    installTriggers(db, triggers);
+    db.run(sql`update immutable_records set digest = digest`);
+    expect(refusal(() => db.run(sql`update immutable_records set digest = 'changed'`))).toEqual({
+      message: "digest fixed",
+      errcode: 1811,
+    });
+    expect(triggerFaults(db, triggers)).toEqual({ missing: [], altered: [] });
+  });
+
+  it("leaves an altered definition intact and reports it", () => {
+    const db = open();
+    db.run(sql`create trigger digest_fixed before update on immutable_records begin select 1; end`);
+    const before = db.get(sql`select sql from sqlite_master where name = 'digest_fixed'`);
+    installTriggers(db, triggers);
+    expect(db.get(sql`select sql from sqlite_master where name = 'digest_fixed'`)).toEqual(before);
+    expect(triggerFaults(db, triggers)).toEqual({ missing: [], altered: ["digest_fixed"] });
+  });
 });
 
 const seed = (db: NodeSqliteDatabase<Record<string, never>>) => {

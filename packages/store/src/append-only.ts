@@ -14,11 +14,13 @@ export interface CatalogueTarget {
 }
 
 /** One trigger the installer creates; `definition` is its text after `create trigger`. */
-export interface AppendOnlyTrigger {
+export interface ExpectedTrigger {
   name: string;
   table: string;
   definition: string;
 }
+
+export type AppendOnlyTrigger = ExpectedTrigger;
 
 /** What a caller sees when it tries to change a row that is already written. */
 const suffix = "is append-only";
@@ -54,7 +56,14 @@ export function installAppendOnlyTriggers(
   target: StatementTarget,
   tables: readonly string[],
 ): void {
-  for (const trigger of appendOnlyTriggers(tables)) {
+  installTriggers(target, appendOnlyTriggers(tables));
+}
+
+export function installTriggers(
+  target: StatementTarget,
+  triggers: readonly ExpectedTrigger[],
+): void {
+  for (const trigger of triggers) {
     target.run(sql.raw(`create trigger if not exists ${trigger.definition}`));
   }
 }
@@ -97,7 +106,13 @@ export function appendOnlyTriggerFaults(
   target: CatalogueTarget,
   tables: readonly string[],
 ): { missing: string[]; altered: string[] } {
-  const expected = appendOnlyTriggers(tables);
+  return triggerFaults(target, appendOnlyTriggers(tables));
+}
+
+export function triggerFaults(
+  target: CatalogueTarget,
+  expected: readonly ExpectedTrigger[],
+): { missing: string[]; altered: string[] } {
   const faults = { missing: [] as string[], altered: [] as string[] };
   if (expected.length === 0) return faults;
   const names = expected.map((trigger) => sql`${trigger.name.toLowerCase()}`);
