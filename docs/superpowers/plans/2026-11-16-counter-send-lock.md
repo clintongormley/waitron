@@ -2,7 +2,7 @@
 
 Authority: watcher queue, 2026-11-16 14:09, `/Users/clintongormley/waitron-campaign-f/queue.md`.
 Separate Sol-high draft, source-checked by Codex; first Claude read: `receipts/counter-send-lock-20261116/plan-review.md` in that lane.
-No owner design approval is claimed. Build inline only after the corrected plan's sole Claude reread and watcher clearance.
+Claude reread completed; watcher cleared the smaller route on 2026-11-16 at14:26, including settling its corrections without a third read. No owner design approval is claimed.
 
 ## Finish line, reuse and limits
 
@@ -12,13 +12,13 @@ Reuse `#unconfirmedPlace`, its order/session/visit/server checks and `WorkingOrd
 `apps/till/src/till-app.ts` and `apps/till/src/state/working-order.ts`; clear/load already end locks.
 Reuse per-list failures and generations in `#refreshList`, and the existing helpers in the two app test files below.
 No generic controller, stored record, new wording, store semantic change, widget, server/API or fiscal/payment change.
-Invoice/receipt metadata remains editable; its existing refusal/replay assertions stay, with the remaining recipient issue in the PR thread.
+Invoice/receipt metadata and dining remain editable; its existing refusal/replay assertions stay, with the remaining recipient issue in the PR thread.
 
 **Collect proposal for the watcher:** drop the queued extra refresh and delete its obsolete backlog bullet, rather than refresh
 unused data. `screens/till-counter-screen.ts` receives `stationQueue` but never renders a station queue;
 its existing test asserts that absence, and `till-app.test.ts` explicitly retains queue data without drawing a prep rail.
 Run those existing checks before the deletion. Do not add a new rail or a mock card to manufacture the requested reproduction.
-The watcher must settle this narrower route before build; no runtime absence claim is made from source alone.
+Watcher14:26 cleared this cut. The two existing no-rail checks passed on 2026-11-16; no collect behavior change is built.
 
 ## Test-first build
 
@@ -33,9 +33,9 @@ The watcher must settle this narrower route before build; no runtime absence cla
    Watch the relevant cases fail, then change `#onPlaceOrder` in `apps/till/src/till-app.ts`.
    Take the scoped lock when Place's reply is lost, retain it through retries and metadata-preparation refusals,
    and release only on Place's own definite answer or clear/load; an older completion cannot unlock another basket.
-   Keep pending lock ownership when invoice preparation fails, even when the next Send must prepare a fresh attempt.
+   Keep `{id, session, visit, unlock}` in a separate transient field, so clearing retry facts cannot lose the lock after a preparation refusal.
    Add one failed waiting-order-open case; its temporary read lock must not leave the original uncertain basket editable.
-   After that read releases its lock, re-establish the pending Send lock only for the same order/session/visit.
+   One private helper re-establishes the lock for the same order/session/visit after either `#onPayWaitingOrder` or `#reloadCounterOrder` releases its temporary lock.
    Add one menu-poll version-change case; treat the edit-locked counter as busy in `#onMenuState`, postponing
    reconciliation through the existing due flag so an automatic version adoption cannot invalidate the retry.
    Keep recipient replay, receipt-language and unchanged successful-retry assertions; do not duplicate store lock mechanics.
@@ -53,5 +53,5 @@ Run the existing store lock cases and Counter no-rail checks. Keep the prepay-zo
 Inspect the existing lost-Send visual cases in English/Spanish, light/dark, phone/desktop; use the normal push hook and current-head scoped CI.
 Delete the false edit-after-Send paragraph in both `apps/server/src/guide/{en,es}/kitchen-service.md`; its preceding unchanged-basket instruction stays.
 Delete completed A1417 and Task16 list-loading entries in `docs/backlog/till.md`, and A1417's index line in `docs/backlog.md`; update the Task16 summary.
-Subject to watcher clearance, also delete the obsolete collect bullet and its history comment in `#onCollectOrder`, without changing collection behavior.
+As cleared by the watcher, also delete the obsolete collect bullet and its history comment in `#onCollectOrder`, without changing collection behavior.
 Expected production +45–80/−15–35; tests +220–340/−30–60; no new test support or generated files. Guides/backlog mainly lose text; plan about one page.
