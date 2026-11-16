@@ -1166,15 +1166,6 @@ the Ready bar's does not fit a bar that is not always at the window's foot; the 
 where the toast goes.
 
 
-## A1212. The Order screen's bar height may be read before the bar's buttons are drawn.
-
-A
-reviewer's reading in A1125's review (#2238), not run: when the bar and its buttons first appear
-together, the height the screen keeps clear under a newly added dish may be measured too early,
-so that dish could land under the bar. Run it first (add the first dish of an empty order at
-1024×768 and 390 px and check the line is wholly above the bar); fix only if it reproduces.
-
-
 ## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).
 
 Seen on a busy English bar
@@ -1916,15 +1907,11 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 
 ## Bundle: Nothing covers the order screen's bar
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **A1211. The Served toast covers the Order screen's Fire / Send all buttons.** Measured 2026-10-29
   in A1125's review (the probe was not kept); left open by A1125, #2238.
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
-- **A1212. The Order screen's bar height may be read before the bar's buttons are drawn.** Run it
-  first (add the first dish of an empty order at 1024×768 and 390 px and check the line is wholly
-  above the bar); fix only if it reproduces.
-  [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
 
