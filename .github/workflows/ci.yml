@@ -543,8 +543,8 @@ jobs:
       - run: pnpm vitest run --coverage
 
   # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is
-  # gitignored, both bin.ts files are excluded from coverage, and typecheck and test run against
-  # TypeScript source. Gated on `code` because a Markdown edit cannot change an esbuild bundle.
+  # gitignored, and typecheck and test run against TypeScript source. Gated on `code` because a
+  # Markdown edit cannot change an esbuild bundle.
   bundle-smoke:
     needs: changes
     if: (needs.changes.outputs.code == 'true')
@@ -606,10 +606,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Nothing else in this workflow builds packages/credentials's bundle: dist/ is gitignored,
-      # bin.ts is excluded from coverage, and the SDD ledger records this exact artifact shipping
-      # broken twice during development (a duplicated shebang, then pg's CJS require failing under
-      # --format=esm). typecheck and test both run against TypeScript source, never the bundle
-      # operators actually run — this is the one gate that would have caught either break.
+      # and the SDD ledger records this exact artifact shipping broken twice during development (a
+      # duplicated shebang, then pg's CJS require failing under --format=esm). typecheck and test
+      # both run against TypeScript source, never the bundle operators actually run — this is the
+      # one gate that would have caught either break.
       - run: pnpm --filter @waitron/credentials build
 
       # A smoke test, not a full run: confirms the BUILT bundle actually executes under Node with no
