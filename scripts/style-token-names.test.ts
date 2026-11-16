@@ -58,10 +58,10 @@ function isolatedGitEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Reads of undeclared names that carry a fallback and are left as they are on purpose. It is empty:
- * every read names a declared token. Each entry is a file and a name, and holds only for a read
- * WITH a fallback. An entry that is no longer needed fails the guard; nothing stops one being added,
- * so keeping the list empty is a job for review.
+ * Reads of undeclared names that carry a fallback and are left as they are on purpose. Each entry
+ * is a file and a name, and holds only for a read WITH a fallback. An entry that is no longer
+ * needed fails the guard; nothing stops one being added, so keeping the list empty is a job for
+ * review.
  */
 const FALLBACK_READS: ReadonlyArray<{ readonly file: string; readonly name: string }> = [];
 
@@ -222,13 +222,16 @@ describe("style token names", () => {
 
   it("excuses a listed read only when it carries a fallback", () => {
     const listed = {
-      file: "apps/till/src/widgets/diet-badges.ts",
-      name: "--wt-color-warning-text",
+      file: "apps/example/src/example.ts",
+      name: "--wt-example-undeclared",
     };
     expect(excused({ ...listed, fallback: true }, [listed])).toBe(true);
     expect(excused({ ...listed, fallback: false }, [listed])).toBe(false);
+    expect(excused({ ...listed, name: "--wt-example-other", fallback: true }, [listed])).toBe(
+      false,
+    );
     expect(
-      excused({ ...listed, file: "apps/till/src/widgets/other.ts", fallback: true }, [listed]),
+      excused({ ...listed, file: "apps/example/src/other.ts", fallback: true }, [listed]),
     ).toBe(false);
   });
 

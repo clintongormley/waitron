@@ -236,7 +236,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
         },
       ],
     });
-    const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    const { host, el } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    expect(el.shadowRoot!.querySelector('[data-diet="halal"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

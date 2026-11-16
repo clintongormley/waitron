@@ -34,10 +34,8 @@ their full text.
   earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
   whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
   `packages/db/src/schema` files (`menus.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
-  `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
-  "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
-  `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and
-  "(A1)"-style plan tags.
+  `orders.ts`). Stale test titles: "recordSale UNCHANGED" in `tabs.filing.test.ts`; many
+  "(KDS-…)" and "(A1)"-style plan tags.
 
 ## "resets any leftover drill/active tab on login" still passes with login's own clearing line deleted
 
@@ -49,7 +47,7 @@ their full text.
   dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
   known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
   pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
-  titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
+  titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)",
   "(SP-B2.1)").
 
 ## Test titles repeat claims the branch corrected (#618)
