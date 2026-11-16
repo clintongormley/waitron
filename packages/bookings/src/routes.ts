@@ -54,7 +54,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 const run = createErrorBoundary(STATUS, "booking.failed");
 
-/** Zero and negatives pass: `party_size > 0` is the verbs' rule (`booking.invalid`). */
+/** Any whole number passes: 1 to 999 is the verbs' rule (`booking.invalid`). */
 function requireInteger(v: unknown, field: string): number {
   if (!Number.isInteger(v)) throw new AppError("management.request_invalid", { field });
   return v as number;

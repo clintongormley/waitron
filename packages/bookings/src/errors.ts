@@ -5,8 +5,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** `bookingId` is the caller's own id, not a secret. */
     "booking.not_found": { bookingId: string };
-    /** A party size of zero or less. */
-    "booking.invalid": { partySize: number };
+    /** A party size outside 1 to 999 or not whole, or a contact name blank after trimming. */
+    "booking.invalid": { partySize: number } | { field: "contactName" };
     /** A lifecycle move the reservation's status does not allow. */
     "booking.invalid_transition": { bookingId: string };
     /** Seating named no table and the booking has none assigned. */

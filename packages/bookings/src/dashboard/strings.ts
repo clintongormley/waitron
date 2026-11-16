@@ -82,8 +82,8 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
     es: "No se ha encontrado esa reserva",
   },
   "booking.invalid": {
-    en: "The party size must be 1 or more",
-    es: "El número de comensales debe ser 1 o más",
+    en: "Check the party size, from 1 to 999, and the contact name",
+    es: "Revisa el número de comensales, de 1 a 999, y el nombre de contacto",
   },
   "booking.invalid_transition": {
     en: "That booking can't move to that state now",
@@ -94,8 +94,8 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
     es: "Elige una mesa para sentar esta reserva",
   },
   "booking.party_invalid": {
-    en: "Party size must be a whole number of 1 or more",
-    es: "Los comensales deben ser un número entero de 1 o más",
+    en: "Party size must be a whole number from 1 to 999",
+    es: "Los comensales deben ser un número entero de 1 a 999",
   },
   "table.not_found": {
     en: "That table no longer exists",

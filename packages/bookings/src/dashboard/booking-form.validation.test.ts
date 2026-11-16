@@ -135,6 +135,11 @@ describe.each([
       await change(el, "party-size", "0");
       expect(field(el, "party-size").error).toBe(codeMessage("booking.party_invalid"));
       await expectDisabled(el, true);
+      await change(el, "party-size", "999");
+      expect(field(el, "party-size").error).toBe("");
+      await change(el, "party-size", "1000");
+      expect(field(el, "party-size").error).toBe(codeMessage("booking.party_invalid"));
+      await expectDisabled(el, true);
       el.open = false;
       await el.updateComplete;
       el.open = true;

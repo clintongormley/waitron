@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "./strings.js";
 import { currentLocale, codeMessage } from "@waitron/dashboard-kit";
-import { createLabelComparator } from "@waitron/shared";
+import { createLabelComparator, isValidGuestCount } from "@waitron/shared";
 import type { Booking, BookingInput, BookingPatch, DashboardTable } from "./client.js";
 
 export function tablesInNumberOrder(tables: readonly DashboardTable[]): DashboardTable[] {
@@ -226,7 +226,7 @@ export class BookingForm extends LitElement {
     if (this.date.trim() === "") errors.date = t("booking.date_required");
     if (this.time.trim() === "") errors.time = t("booking.time_required");
     if (this.contactName.trim() === "") errors.contactName = t("booking.name_required");
-    if (!POSITIVE_INT.test(this.partySize) || Number(this.partySize) < 1) {
+    if (!POSITIVE_INT.test(this.partySize) || !isValidGuestCount(Number(this.partySize))) {
       errors.partySize = codeMessage("booking.party_invalid");
     }
     return errors;
