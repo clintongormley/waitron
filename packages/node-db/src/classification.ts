@@ -6,6 +6,7 @@ const LOCAL =
 const HANDOVER = "this box's own handover record, in node.db, keyed by this box's node id";
 
 export const NODE_CLASSIFICATION: readonly ClassifiedTable[] = [
+  classify("box", "local", LOCAL),
   classify("node_mode", "local", LOCAL),
   classify("node_mirror_link", "local", LOCAL),
   classify("node_recovery_key", "local", LOCAL),

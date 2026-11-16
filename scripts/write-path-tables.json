@@ -1,4 +1,5 @@
 {
+  "box": ["packages/node-db/src/box.ts"],
   "deployment": ["packages/db/src/deployment.ts"],
   "node_handover_events": ["packages/node-db/src/handover.ts"],
   "node_handover_operations": ["packages/node-db/src/handover.ts"],
