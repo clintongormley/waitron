@@ -2054,7 +2054,8 @@ and again with every `CLAUDE*`, `AI_AGENT` and `CODEX*` variable unset, that Vit
 but Vitest still printed a bare `PromiseRejectionEvent`. All those runs passed. The finishing
 review reported no printed rejection with both variables set and `server.forwardConsole: false`
 in the till configuration; that last result is the reviewer's report. Dashboard already disables
-forwarding. Whether the other browser packages should do so remains the owner's choice.
+forwarding. On 16 November 2026 the owner asked to turn it off everywhere; the remaining
+configuration updates are tracked in the Vitest settings backlog bundle.
 
 ## The setup optimizer comparison on Vite 8 was inconclusive
 

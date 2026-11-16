@@ -442,7 +442,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 3 entries, size M. Helper adoption and A902's guide receipt are complete; the remaining work is:
 
 - **Worker limits (A490):** compare each unqualified one-worker setting on a loaded runner; isolated package pairs do not recreate the reported condition.
-- **Browser console forwarding (A902) — OWNER'S CALL.** Decide whether the remaining browser packages should disable forwarding as dashboard does; keep the current policy until that decision.
+- **Disable browser console forwarding (A902).** The owner asked to turn it off everywhere on 16 November 2026. Apply `server.forwardConsole: false` in every browser package's Vitest config; dashboard already has it.
 - **Dependency optimizer:** qualify the remaining Vite 8 behavior; the setup control was inconclusive and dashboard, till and UI remain unmeasured.
   [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured).
 

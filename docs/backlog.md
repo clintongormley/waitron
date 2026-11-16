@@ -1816,7 +1816,7 @@ under another key fall outside that check.
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
 
-- **Vitest settings: remaining measurements and console policy** (bundle of 3, size M). Worker pins need a loaded runner, the setup optimizer control was inconclusive, and A902’s forwarding policy remains the owner’s call. [Detail](backlog/ci.md#bundle-vitest-settings-remaining-measurements-and-console-policy)
+- **Vitest settings: remaining measurements and console policy** (bundle of 3, size M). Worker pins need a loaded runner, the setup optimizer control was inconclusive, and the owner’s 16 November decision to disable A902’s browser-console forwarding remains to be applied everywhere. [Detail](backlog/ci.md#bundle-vitest-settings-remaining-measurements-and-console-policy)
 
 - **A late move or second finger can overtake the gesture hold timer.**
   [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
