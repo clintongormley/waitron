@@ -2663,7 +2663,6 @@ export async function correctJoin(
   }
 }
 
-/** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
 /** Stored times are compared as moments, since a writer may spell one with an offset; the winner
  * is returned as stored. */
 function earliestTime(times: readonly string[]): string | undefined {
@@ -2680,6 +2679,7 @@ function latestTime(times: readonly string[]): string | undefined {
   );
 }
 
+/** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
 function isWholeLine(quantity: string, stored: number): boolean {
   try {
     return stringToThousandths(quantity) === stored;
