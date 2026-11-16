@@ -327,7 +327,30 @@ function emitCue(
   if (stations.length === 0) return;
   const list = conjunctionList(stations, locale);
   const words = kitchenTicketWords(locale).goesWith.replace("{stations}", () => list);
-  for (const line of wrapText(prepareText(words), columns)) b.line(line);
+  for (const line of wrapCue(prepareText(words), stations, columns)) b.line(line);
+}
+
+/**
+ * A line after the first that holds only one station's name, or part of it, with or without the
+ * list's comma after it (on a shared printer it reads as another station's section heading), takes
+ * words from the end of the line above until it holds more; where they never fit, the plain wrap
+ * stands. Not no-break-space glue: a name wider than the paper would then split mid-word.
+ */
+function wrapCue(text: string, stations: readonly string[], columns: number): string[] {
+  const names = stations.map((name) => ` ${prepareText(name)} `);
+  const lone = (line: string): boolean =>
+    [line, line.replace(/,$/, "")].some((text) => names.some((name) => name.includes(` ${text} `)));
+  const lines = wrapText(text, columns);
+  for (let at = lines.length - 1; at > 0; at--) {
+    const above = lines[at - 1]!.split(" ");
+    let line = lines[at]!;
+    while (lone(line) && above.length > 1 && above.at(-1)!.length + 1 + line.length <= columns)
+      line = `${above.pop()!} ${line}`;
+    if (lone(line)) continue;
+    lines[at - 1] = above.join(" ");
+    lines[at] = line;
+  }
+  return lines;
 }
 
 function emitLateMark(
@@ -465,7 +488,7 @@ export function formatKitchenTicket(
   emitKitchenNote(b, ticket.kitchenNote, columns);
   if (onlyGroup !== undefined) {
     emitGroup(b, onlyGroup, lists.flat(), columns, ticket.locale);
-    emitCue(b, lists.flat(), columns, ticket.locale);
+    if (ticket.scope === "station") emitCue(b, ticket.items, columns, ticket.locale);
   }
 
   if (ticket.scope === "station") emitList(ticket.items);
@@ -473,6 +496,7 @@ export function formatKitchenTicket(
     for (const station of ticket.stations) {
       text(station.stationName);
       if (station.mark === "FIRE") text(`*** ${kitchenTicketWords(ticket.locale).fire} ***`);
+      if (onlyGroup !== undefined) emitCue(b, station.items, columns, ticket.locale);
       emitList(station.items);
     }
   }

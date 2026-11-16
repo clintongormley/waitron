@@ -2334,6 +2334,113 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     );
     expect(printed.filter((text) => text.startsWith("Goes with"))).toEqual(["Goes with Bar $& $$"]);
   });
+
+  const onPaper = (t: KitchenTicket, paper: EscSetting) =>
+    printedLines(formatKitchenTicket(t, paper, TEST_TIME_ZONE));
+  const moscatel: KitchenTicketItem = {
+    qty: 2,
+    name: "Moscatel",
+    group: 4,
+    course: desserts,
+    goesWith: ["Grill"],
+  };
+  const grillAndBar = (bar: KitchenTicketItem[], locale: string): KitchenTicket => ({
+    locale,
+    scope: "stations",
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: at,
+    stations: [
+      { stationName: "Grill", items: [{ qty: 1, name: "Burger", group: 4, course: desserts }] },
+      { stationName: "Bar", items: bar },
+    ],
+  });
+
+  it("A773 fire paper: one station prints its cue under the group heading; a shared printer prints it only in the section whose dishes go with another", () => {
+    const cue = (locale: string) =>
+      kitchenTicketWords(locale).goesWith.replace("{stations}", () => "Grill");
+    for (const paper of [KITCHEN_80, KITCHEN_58])
+      for (const locale of ["en", "es"]) {
+        const heading = `${kitchenTicketWords(locale).group} 4 · DESSERTS`;
+        expect(onPaper(ticket([moscatel], locale), paper).slice(4)).toEqual([
+          heading,
+          cue(locale),
+          "2 x Moscatel",
+          "",
+        ]);
+        expect(onPaper(grillAndBar([moscatel], locale), paper)).toEqual([
+          "Grill · Bar",
+          "Table 4",
+          "A-17",
+          "14:30",
+          heading,
+          "Grill",
+          "1 x Burger",
+          "Bar",
+          cue(locale),
+          "2 x Moscatel",
+          "",
+        ]);
+      }
+  });
+
+  it("A773 fire paper: a wrapped cue takes words down so no later line holds only one station's name or part of it, unless they cannot fit", () => {
+    const cueLines = (stations: string[], locale: string, paper: EscSetting) => {
+      const printed = onPaper(ticket([{ ...moscatel, goesWith: stations }], locale), paper);
+      return printed.slice(5, printed.indexOf("2 x Moscatel"));
+    };
+    const five = ["Grill", "Fryer", "Pastry", "Wok", "Plancha"];
+    expect(cueLines(five, "en", KITCHEN_80)).toEqual([
+      "Goes with Grill, Fryer, Pastry, Wok,",
+      "and Plancha",
+    ]);
+    expect(cueLines(five, "es", KITCHEN_80)).toEqual([
+      "Sale con Grill, Fryer, Pastry, Wok",
+      "y Plancha",
+    ]);
+    expect(cueLines(["Grill", "Fryer", "Pastry", "Cold Kitchen"], "en", KITCHEN_80)).toEqual([
+      "Goes with Grill, Fryer, Pastry,",
+      "and Cold Kitchen",
+    ]);
+    expect(cueLines(["Grill", "Fryer", "Plancha"], "en", KITCHEN_58)).toEqual([
+      "Goes with Grill, Fryer,",
+      "and Plancha",
+    ]);
+    expect(cueLines(["Grill", "Fryer", "Plancha"], "es", KITCHEN_58)).toEqual([
+      "Sale con Grill, Fryer",
+      "y Plancha",
+    ]);
+    expect(cueLines(["Grill", "Fryer", "Pastry", "Wok", "Plancha,"], "en", KITCHEN_80)).toEqual([
+      "Goes with Grill, Fryer, Pastry, Wok,",
+      "and Plancha,",
+    ]);
+    expect(
+      cueLines(["Grill", "Fryer", "Kitchen Pass Corner", "Rotisserie", "Bar"], "en", KITCHEN_58),
+    ).toEqual(["Goes with Grill,", "Fryer, Kitchen Pass Corner,", "Rotisserie, and Bar"]);
+    expect(
+      onPaper(
+        grillAndBar([{ ...moscatel, goesWith: ["Grill", "Fryer", "Plancha"] }], "en"),
+        KITCHEN_58,
+      ),
+    ).toEqual([
+      "Grill · Bar",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 4 · DESSERTS",
+      "Grill",
+      "1 x Burger",
+      "Bar",
+      "Goes with Grill, Fryer,",
+      "and Plancha",
+      "2 x Moscatel",
+      "",
+    ]);
+    expect(cueLines(["Wood Fired Oven Corner Station"], "en", KITCHEN_58)).toEqual([
+      "Goes with Wood Fired Oven",
+      "Corner Station",
+    ]);
+  });
 });
 
 describe("a takeaway order's kitchen paper", () => {

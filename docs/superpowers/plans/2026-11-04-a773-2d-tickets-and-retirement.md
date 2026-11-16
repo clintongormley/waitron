@@ -388,8 +388,9 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
   query to every slip. The formatter prints the cue once per group
   heading whose run holds such a dish, on its own line directly under the heading (picture 8), in
   the paper's kitchen language, normal case. With one shared group heading under the header, the
-  cue prints once under it. Correction, kitchen-note and MOVED slips never print it (they describe a
-  change, not a send). A reprint plans its paper afresh (`planKitchenTickets(… { reprint: true })`)
+  cue prints once under it (2026-11-16: on a printer stations share, the cue prints instead inside
+  the section of each station whose dishes go with another, worked out from that section's dishes).
+  Correction, kitchen-note and MOVED slips never print it (they describe a change, not a send). A reprint plans its paper afresh (`planKitchenTickets(… { reprint: true })`)
   and so recomputes both heading and cue: a reprint shows the group's courses and cue as they are at
   the reprint. A dish the pass releases is pass-controlled, so the pass's release ticket never
   carries the cue. `entryKey` gains the flag. Words: `goesWithKitchenFood` in
