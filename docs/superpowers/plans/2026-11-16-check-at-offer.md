@@ -5,6 +5,11 @@
 **Draft: Claude review, then watcher clearance, before build.** Proposed behavior is untested.
 One PR; no table, migration, fiscal-invariant, rotation, or recovery-workflow changes.
 Paths: `S` = `apps/server/src`, `H` = `packages/handover/src`, `D` = `apps/dashboard/src`.
+**Deployment limit:** use the same build on both boxes. Old offer shapes refuse before recording;
+an old stored final indicator cannot resume after this format change. Finish handovers before
+updating, or reset the preproduction test installation. No upgrade gate or compatibility layer:
+`CLAUDE.md` forbids that work before go-live. `S/upgrade-checks.ts` has no handover-state check
+(source read only); deployment between stepdown and placement is not prevented by this change.
 
 **Result:** refuse an undersized destination or different encryption keys before stepdown;
 the source keeps selling and the destination records no operation/event. Matching keys and room
@@ -46,14 +51,16 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    Add `venueDir` and optional existing `Statfs` seam to destination dependencies; wire `venueDir`
    in `S/boot.ts`. After existing checks, before `beginHandoverFromOffer`, compare
    `2 * copyBytes + START_FREE_SPACE_FLOOR` with `lowestFreeBytes([stateDir, venueDir], statfs)`.
-   Refuse null or insufficient room as new `handover.no_room_at_offer`; register in `S/errors.ts`
+   Refuse null or insufficient room as new `handover.no_room_at_offer`; log `neededBytes` and
+   `availableBytes` through AppError's third argument, with no public params. Register in `S/errors.ts`
    and both route status maps and the source's `OFFER_REFUSALS` whitelist. Preserve replay's
    early stored answer and source retry's original signed envelope, including its original size.
    **Tests:** `S/handover-manifest.test.ts`: “WAL-only growth is included in the offer copy budget”
    (disable auto-checkpoint, commit growth, assert main-file size < budget and an unchanged-data
    `archiveTo` copy size ≤ budget). `S/handover-destination-api.test.ts`: “one byte below two
    copies plus floor refuses without recording”, exact-boundary pass, each folder being lower,
-   neither reporting space, malformed sizes, and replay after room disappears. In
+   neither reporting space, malformed sizes, old-shape offer refusal before recording, and replay
+   after room disappears. Keep one lower-folder case to check `venueDir` wiring. In
    `S/handover-source-start-api.test.ts`, use its real spare route for “no room or wrong same-version
    key leaves the source selling and the destination unrecorded”; assert no stepdown/restriction,
    source abandonment, exact 409 code and logs excluding key bytes. Add “source growth retries the original signed offer”.
@@ -66,8 +73,9 @@ database already occupies space. Acceptance needs **one additional copy plus flo
    read-only-exemptions}.test.ts` and `S/testing/place-copy-box.ts`. Other `readOfferSettings`
    readers (`S/{adopt,spare-settings-api}.test.ts`) consume settings digests; retain those checks.
    In `D/i18n/codes.ts`, give `no_room_at_offer` EN/ES words: the spare could not confirm enough
-   room, this attempt ended while the source keeps selling, choose Stop, make room on the spare,
-   then retry. Broaden `key_ring_mismatch` to missing **or different** keys; choose Stop and rejoin
+   room for two whole copies plus the startup reserve, this attempt ended while the source keeps
+   selling, choose Stop, make room on the spare, then hand over again. Broaden `key_ring_mismatch`
+   to missing **or different** keys; choose Stop and rejoin
    before retrying, without claiming either box's selling state. Keep `no_room_to_place` confined
    to post-stepdown acceptance. Its setup consumer (`apps/setup/src/screens/handover-screen.ts:1093`)
    uses `handover.space`; no setup flow change. Add
@@ -88,3 +96,4 @@ Coordinate `handover-source-start-api.ts` with Lane K; the second branch to land
 **Forecast (changed lines, additions + deletions): production 200; behavioral tests 270;
 support/fixture wiring 80; docs 100 (including this plan); total 650.** Seek outside opinion and
 watcher clearance before exceeding 975 lines (1.5×); a table/fiscal change stops for Lane L.
+The two-copy check is deliberately conservative when the two folders are on separate disks.
