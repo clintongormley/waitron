@@ -18,6 +18,7 @@ import {
   tenderRefunds,
   tenders,
   withTransaction,
+  recordActivity,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -528,16 +529,21 @@ beforeEach(async () => {
 
   const sessionCookie = (personId: string) =>
     withTransaction(suite.db, async (tx) => {
-      const session = await startManagementSession(tx, { personId });
+      const session = await startManagementSession(tx, { method: "password", personId });
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
   cookie = await sessionCookie(marthaId);
   adminCookie = await sessionCookie(admin!.id);
-  await suite.db
-    .update(dashboardSessions)
-    .set({ createdAt: SESSION_OPENED_AT })
-    .where(eq(dashboardSessions.personId, marthaId));
+  await withTransaction(suite.db, (tx) =>
+    recordActivity(tx, {
+      kind: "dashboard.signed_in",
+      subjectId: marthaId,
+      personId: marthaId,
+      data: { method: "password" },
+      at: new Date(SESSION_OPENED_AT),
+    }),
+  );
 });
 
 type Sale = { code: string; number: number; total: number };
@@ -803,7 +809,12 @@ describe("a staff member's whole personal-data download", () => {
     const files = await download();
     expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
     const text = await readable(files);
-    expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
+    expect(JSON.parse(text["sign-in.json"]!).dashboardSignIns).toContainEqual({
+      at: SESSION_OPENED_AT,
+      event: "signed_in",
+      method: "password",
+      reason: null,
+    });
 
     expect(MARTHA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 
@@ -888,7 +899,12 @@ describe("a staff member's whole personal-data download", () => {
     );
     expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
     const text = await readable(files);
-    expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
+    expect(JSON.parse(text["sign-in.json"]!).dashboardSignIns).toContainEqual({
+      at: SESSION_OPENED_AT,
+      event: "signed_in",
+      method: "password",
+      reason: null,
+    });
 
     expect(MARTHA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 

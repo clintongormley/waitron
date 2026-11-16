@@ -54,19 +54,20 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     out: ["id", "person_id", "token_hash"],
   },
   dashboard_sessions: {
-    in: ["created_at", "last_seen_at", "ended_at", "proved_at", "proof_method"],
-    out: ["id", "person_id", "token_hash"],
+    in: [],
+    out: [
+      "id",
+      "person_id",
+      "token_hash",
+      "created_at",
+      "last_seen_at",
+      "ended_at",
+      "proved_at",
+      "proof_method",
+    ],
   },
   account_actions: {
-    in: [
-      "purpose",
-      "target_email",
-      "created_at",
-      "expires_at",
-      "used_at",
-      "code_expires_at",
-      "code_attempts",
-    ],
+    in: ["purpose", "created_at", "expires_at", "used_at", "code_expires_at", "code_attempts"],
     out: ["id", "person_id", "token_hash", "code_hash"],
   },
   sign_in_challenges: {

@@ -1,6 +1,6 @@
 import { CORE_MIGRATIONS, activityLog, outgoingMail, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { openFreshManagementSession } from "../test/fixtures.js";
 import { seedPersons } from "../test/person-rows.js";
@@ -34,7 +34,10 @@ async function fixture(own = false) {
 it("records the editor without addresses and queues the old-address notice for one day", async () => {
   const { actor, target, input } = await fixture();
   await withTransaction(suite.db, (tx) => updatePersonDetails(tx, input));
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} = 'person.email_changed'`);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({
     kind: "person.email_changed",
@@ -62,30 +65,48 @@ it("records the editor without addresses and queues the old-address notice for o
   });
   expect(Date.parse(mail[0]!.notAfter) - Date.parse(mail[0]!.queuedAt)).toBe(86400000);
 });
-it.each(["own", "unchanged"])("queues and records nothing for an %s email", async (mode) => {
-  const { target, input } = await fixture(mode === "own");
-  await withTransaction(suite.db, (tx) =>
-    updatePersonDetails(tx, {
-      ...input,
-      email: mode === "unchanged" ? target.email! : input.email,
-    }),
-  );
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
-  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
-});
+it.each(["own", "unchanged"])(
+  "queues no notice and records no email-change event for an %s email",
+  async (mode) => {
+    const { target, input } = await fixture(mode === "own");
+    await withTransaction(suite.db, (tx) =>
+      updatePersonDetails(tx, {
+        ...input,
+        email: mode === "unchanged" ? target.email! : input.email,
+      }),
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(sql`${activityLog.kind} = 'person.email_changed'`),
+    ).toEqual([]);
+    expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+  },
+);
 it("rolls back the email, log and queue together", async () => {
   const { target, input } = await fixture();
   await expect(
     withTransaction(suite.db, async (tx) => {
       await updatePersonDetails(tx, input);
-      expect(await tx.select().from(activityLog)).toHaveLength(1);
+      expect(
+        await tx
+          .select()
+          .from(activityLog)
+          .where(sql`${activityLog.kind} = 'person.email_changed'`),
+      ).toHaveLength(1);
       expect(await tx.select().from(outgoingMail)).toHaveLength(1);
       throw new Error("rollback");
     }),
   ).rejects.toThrow("rollback");
   const [person] = await suite.db.select().from(persons).where(eq(persons.id, target.id));
   expect(person!.email).toBe("old@example.test");
-  expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(
+    await suite.db
+      .select()
+      .from(activityLog)
+      .where(sql`${activityLog.kind} = 'person.email_changed'`),
+  ).toEqual([]);
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });
 
@@ -96,7 +117,10 @@ it("records a first email without queuing a notice to a nonexistent old address"
     .set({ email: null, emailFolded: null })
     .where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => updatePersonDetails(tx, input));
-  const entries = await suite.db.select().from(activityLog);
+  const entries = await suite.db
+    .select()
+    .from(activityLog)
+    .where(sql`${activityLog.kind} = 'person.email_changed'`);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({
     kind: "person.email_changed",

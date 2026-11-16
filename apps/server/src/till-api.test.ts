@@ -1351,7 +1351,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         loginWithPin(tx, { deviceId, personId: leaver!.id, pin: "8282" }),
       ));
       const manager = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: admin!.id }),
+        startManagementSession(tx, { method: "password", personId: admin!.id }),
       );
       await withTransaction(suite.db, (tx) =>
         deactivatePerson(tx, { managementSessionId: manager.token, personId: leaver!.id }),

@@ -196,7 +196,7 @@ export async function openBenchVenue(
     const read = await readSeeded(db, cookies);
     const manager = read.manager;
     const { token } = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: manager.id }),
+      startManagementSession(tx, { personId: manager.id, method: "setup" }),
     );
     const printAgentAuthorization = `Bearer ${await printAgentToken(db, cfg)}`;
     const app = mount(db, cfg, options.log ?? (() => {}));

@@ -153,5 +153,5 @@ export async function loginWithGoogle(
     .where(eq(persons.googleSubject, input.subject));
   if (person === undefined || person.status !== "active") throw new AppError("google.invalid", {});
   if (person.totpSecret !== null) throw new AppError("google.second_factor_required", {});
-  return startManagementSession(tx, { personId: person.id });
+  return startManagementSession(tx, { method: "google", personId: person.id });
 }

@@ -135,7 +135,8 @@ describe("reads of a sale's filed alta", () => {
         now,
       });
       return {
-        token: (await startManagementSession(tx, { personId: person!.id })).token,
+        token: (await startManagementSession(tx, { method: "password", personId: person!.id }))
+          .token,
         request: {
           kind: "absent-original-cancellation",
           caseId: filingCase.id,

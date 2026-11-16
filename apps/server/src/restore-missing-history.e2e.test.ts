@@ -144,7 +144,7 @@ it.each(["archive", "stream"] as const)(
         role: "admin",
       });
       const session = await withTransaction(store.venue, (tx) =>
-        startManagementSession(tx, { personId: person!.id }),
+        startManagementSession(tx, { method: "password", personId: person!.id }),
       );
       const app = new Hono();
       mountFilingOverview(

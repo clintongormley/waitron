@@ -242,8 +242,16 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
         error: { code: "sif.allocation_invalid", params: { reason: "reservation_mismatch" } },
       },
     });
-    // The sign-in's own ended session is the one row the attempt leaves.
-    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["dashboard_sessions"]);
+    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["activity_log"]);
+    const history = await store.venue.execute<{ kind: string; data: string }>(
+      sql`select kind, data from activity_log order by rowid desc limit 2`,
+    );
+    expect(
+      history.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
+    ).toEqual([
+      { kind: "dashboard.signed_in", data: { method: "password" } },
+      { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
+    ]);
     expect(changedTables(nodeBefore, allRows(store.node as unknown as Database))).toEqual([]);
     expect(await preparationHistory()).toEqual([]);
   }, 60_000);

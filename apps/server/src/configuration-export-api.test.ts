@@ -94,6 +94,7 @@ const suite = useVenueDb({
         select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')
       `);
       const session = await startManagementSession(tx, {
+        method: "password",
         personId: admin.rows[0]!.id,
       });
       await setFreshManagementSignIn(tx, session.token);

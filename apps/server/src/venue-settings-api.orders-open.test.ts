@@ -48,7 +48,7 @@ beforeAll(async () => {
     offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
   );
   const session = await withTransaction(venue.db, (tx) =>
-    startManagementSession(tx, { personId: venue.adminId }),
+    startManagementSession(tx, { method: "password", personId: venue.adminId }),
   );
   manager = `${MANAGEMENT_COOKIE}=${session.token}`;
 });

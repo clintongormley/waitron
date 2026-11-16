@@ -1160,9 +1160,11 @@ describe("Management API staff + session routes", () => {
       where id=${staffId}`),
     ).toEqual([{ status: "pending", password_hash: null, pin_hash: null }]);
     expect(
-      suite.db.all(sql`select ended_at from till_sessions where person_id=${staffId}
-      union all select ended_at from dashboard_sessions where person_id=${staffId}`),
-    ).toEqual([{ ended_at: expect.any(String) }, { ended_at: expect.any(String) }]);
+      suite.db.all(sql`select ended_at from till_sessions where person_id=${staffId}`),
+    ).toEqual([{ ended_at: expect.any(String) }]);
+    expect(suite.db.all(sql`select id from dashboard_sessions where person_id=${staffId}`)).toEqual(
+      [],
+    );
     expect(
       suite.db.all(sql`select used_at from account_actions
       where person_id=${staffId}`),

@@ -285,7 +285,10 @@ function beforeServerStarts(): void {
 async function managerCookie(): Promise<string> {
   beforeServerStarts();
   const session = await withTransaction(venue.db, async (tx) => {
-    const session = await startManagementSession(tx, { personId: venue.adminId });
+    const session = await startManagementSession(tx, {
+      method: "password",
+      personId: venue.adminId,
+    });
     await setFreshManagementSignIn(tx, session.token);
     return session;
   });

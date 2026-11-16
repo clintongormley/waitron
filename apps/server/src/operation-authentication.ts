@@ -139,7 +139,7 @@ export async function withAuthenticatedOperation<T>(
       const authorised = await withInspectorAdmitted(() =>
         authorizeManager(tx, { managementSessionId: session.token, permission }),
       );
-      await endManagementSession(tx, session.token);
+      await endManagementSession(tx, session.token, "operation_finished");
       await afterSignIn?.();
       return authorised.authorizedBy;
     });

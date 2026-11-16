@@ -59,7 +59,7 @@ beforeEach(async () => {
       role: "admin",
       pinHash: hashPin("2468"),
     });
-    token = (await startManagementSession(tx, { personId: person!.id })).token;
+    token = (await startManagementSession(tx, { method: "password", personId: person!.id })).token;
     await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,

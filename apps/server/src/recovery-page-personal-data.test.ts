@@ -191,7 +191,9 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
 }
 
 async function cookieFor(personId: string): Promise<string> {
-  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }

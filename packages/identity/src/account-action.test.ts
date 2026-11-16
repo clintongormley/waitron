@@ -1,6 +1,7 @@
-import { randomBytes, randomUUID, scrypt } from "node:crypto";
+import { randomBytes, randomUUID, randomInt, scrypt } from "node:crypto";
 import {
   CORE_MIGRATIONS,
+  readActivityForPerson,
   outgoingMail,
   captureError,
   engineErrorMessage,
@@ -32,7 +33,7 @@ import { codeOf, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures
 
 vi.mock("node:crypto", async (original) => {
   const actual = await original<typeof import("node:crypto")>();
-  return { ...actual, scrypt: vi.fn(actual.scrypt) };
+  return { ...actual, scrypt: vi.fn(actual.scrypt), randomInt: vi.fn(actual.randomInt) };
 });
 
 const suite = useVenueDb({
@@ -70,6 +71,103 @@ async function makePending(personId: string): Promise<void> {
 }
 
 describe("management account actions", () => {
+  it("refuses A's code when the pending address changed underneath it", async () => {
+    const personId = await seedManager(suite.db, { email: "hash-original@x.com" });
+    const codeKey = Buffer.alloc(32, 17);
+    await suite.db.execute(
+      sql`update persons set pending_email='hash-a@x.com' where id=${personId}`,
+    );
+    const issued = await run((tx) =>
+      issueQueuedAccountAction(
+        tx,
+        { personId, params: { purpose: "email_change" } },
+        { codeKey, now: new Date() },
+      ),
+    );
+    await suite.db.execute(
+      sql`update persons set pending_email='hash-b@x.com' where id=${personId}`,
+    );
+    expect(
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: issued!.code! })),
+    ).toBeNull();
+    expect(
+      suite.db.get(sql`select email, pending_email from persons where id=${personId}`),
+    ).toEqual({ email: "hash-original@x.com", pending_email: "hash-b@x.com" });
+    expect(
+      suite.db.get(sql`select code_attempts, used_at from account_actions where id=${issued!.id}`),
+    ).toEqual({ code_attempts: 1, used_at: null });
+  });
+
+  it("refuses A's code after a newer address was asked for, then confirms B", async () => {
+    const personId = await seedManager(suite.db, { email: "newer-original@x.com" });
+    const codeKey = Buffer.alloc(32, 18);
+    vi.mocked(randomInt)
+      .mockImplementationOnce(() => 123456)
+      .mockImplementationOnce(() => 654321);
+    await suite.db.execute(
+      sql`update persons set pending_email='newer-a@x.com' where id=${personId}`,
+    );
+    const a = await run((tx) =>
+      issueQueuedAccountAction(
+        tx,
+        { personId, params: { purpose: "email_change" } },
+        { codeKey, now: new Date() },
+      ),
+    );
+    await suite.db.execute(
+      sql`update persons set pending_email='newer-b@x.com' where id=${personId}`,
+    );
+    const b = await run((tx) =>
+      issueQueuedAccountAction(
+        tx,
+        { personId, params: { purpose: "email_change" } },
+        { codeKey, now: new Date() },
+      ),
+    );
+    expect(
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: a!.code! })),
+    ).toBeNull();
+    expect(suite.db.get(sql`select email from persons where id=${personId}`)).toEqual({
+      email: "newer-original@x.com",
+    });
+    expect(
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: b!.code! })),
+    ).toBe("newer-b@x.com");
+  });
+
+  it("completing a password reset deletes the person's dashboard sessions", async () => {
+    const personId = await seedManager(suite.db, { email: "reset-sessions@x.com" });
+    await run((tx) =>
+      loginManager(tx, {
+        email: "reset-sessions@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
+    );
+    const proof = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    await run((tx) =>
+      completeAccountAction(tx, {
+        token: proof.token,
+        purpose: "password_reset",
+        password: "a replacement password",
+      }),
+    );
+    expect(
+      suite.db.all(sql`select id from dashboard_sessions where person_id=${personId}`),
+    ).toEqual([]);
+    expect(
+      await readActivityForPerson(suite.db, personId, { kinds: ["dashboard.signed_out"] }),
+    ).toEqual([
+      expect.objectContaining({
+        personId,
+        subjectId: personId,
+        data: { reason: "account_action_completed" },
+      }),
+    ]);
+  });
+
   it("does not mint a hidden invitation code even when a code key is supplied", async () => {
     const personId = await seedManager(suite.db, { email: "no-hidden-code@x.com" });
     await makePending(personId);
@@ -119,7 +217,6 @@ describe("management account actions", () => {
         personId,
         purpose: "email_change",
         codeKey,
-        targetEmail: "changed@x.com",
       }),
     );
     expect(issued.code).toMatch(/^\d{6}$/);
@@ -230,6 +327,12 @@ describe("management account actions", () => {
     expect(completion.personId).toBe(personId);
     expect(completion.session).not.toBeNull();
     const session = completion.session!;
+    expect(
+      (await readActivityForPerson(suite.db, personId, { kinds: ["dashboard.signed_in"] })).map(
+        (entry) => entry.data,
+      ),
+    ).toEqual([{ method: "password" }, { method: "invitation" }]);
+
     await expect(
       run((tx) =>
         loginManager(tx, {
@@ -249,13 +352,22 @@ describe("management account actions", () => {
     );
     expect(sessions.rows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          token_hash: hashSessionToken(oldSession.token),
-          ended_at: expect.any(String),
-        }),
         expect.objectContaining({ token_hash: hashSessionToken(session.token), ended_at: null }),
       ]),
     );
+
+    expect(sessions.rows.some((row) => row.token_hash === hashSessionToken(oldSession.token))).toBe(
+      false,
+    );
+    expect(
+      await readActivityForPerson(suite.db, personId, { kinds: ["dashboard.signed_out"] }),
+    ).toEqual([
+      expect.objectContaining({
+        data: { reason: "account_action_completed" },
+        subjectId: personId,
+        personId,
+      }),
+    ]);
 
     const outstanding = await run((tx) =>
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
@@ -615,7 +727,7 @@ describe("issuing an account action refuses an account that cannot receive one",
     });
     for (const purpose of ["password_reset", "invitation", "email_change"] as const) {
       await expect(
-        run((tx) => issueAccountAction(tx, { personId, purpose, targetEmail: "elsewhere@x.com" })),
+        run((tx) => issueAccountAction(tx, { personId, purpose })),
       ).rejects.toMatchObject({ code: "person.suspended", params: { personId } });
     }
   });
@@ -635,7 +747,6 @@ describe("issuing an account action refuses an account that cannot receive one",
           issueAccountAction(tx, {
             personId: pendingId,
             purpose: "email_change",
-            targetEmail: "issue-pending-next@x.com",
           }),
         ),
       ),
@@ -653,10 +764,13 @@ describe("issuing an account action refuses an account that cannot receive one",
 
   it("refuses an email change whose target address is missing or malformed", async () => {
     const personId = await seedManager(suite.db, { email: "issue-target@x.com" });
-    for (const targetEmail of [undefined, "not-an-address"]) {
+    for (const pendingEmail of [null, "not-an-address"]) {
+      await suite.db.execute(
+        sql`update persons set pending_email=${pendingEmail} where id=${personId}`,
+      );
       expect(
         await codeOf(() =>
-          run((tx) => issueAccountAction(tx, { personId, purpose: "email_change", targetEmail })),
+          run((tx) => issueAccountAction(tx, { personId, purpose: "email_change" })),
         ),
       ).toBe("person.email_invalid");
     }
@@ -676,12 +790,11 @@ describe("issuing an account action keeps a person's history of that purpose bou
     state: "used" | "expired",
   ): Promise<string> {
     const id = randomUUID();
-    const targetEmail = purpose === "email_change" ? "elsewhere@x.com" : null;
     const expiresAt = state === "expired" ? "2026-10-01T11:00:00.000Z" : "2026-10-01T13:00:00.000Z";
     const usedAt = state === "used" ? "2026-10-01T10:30:00.000Z" : null;
     await suite.db.execute(sql`insert into account_actions
-      (id, person_id, purpose, target_email, token_hash, created_at, expires_at, used_at)
-      values (${id}, ${personId}, ${purpose}, ${targetEmail}, ${randomBytes(32).toString("hex")},
+      (id, person_id, purpose, token_hash, created_at, expires_at, used_at)
+      values (${id}, ${personId}, ${purpose}, ${randomBytes(32).toString("hex")},
               '2026-10-01T10:00:00.000Z', ${expiresAt}, ${usedAt})`);
     return id;
   }
@@ -1021,7 +1134,7 @@ describe("confirming an email change by code when the account moved on", () => {
       sql`update persons set pending_email = ${target}, pending_email_folded = ${target} where id = ${personId}`,
     );
     const issued = await run((tx) =>
-      issueAccountAction(tx, { personId, purpose: "email_change", codeKey, targetEmail: target }),
+      issueAccountAction(tx, { personId, purpose: "email_change", codeKey }),
     );
     return { personId, issued };
   }
@@ -1055,7 +1168,7 @@ describe("confirming an email change by code when the account moved on", () => {
     });
   });
 
-  it("consumes the proof but changes nothing when the requested address is no longer pending", async () => {
+  it("refuses without consuming the proof when the pending address is gone", async () => {
     const { personId, issued } = await requestChange("withdrawn@x.com", "withdrawn-next@x.com");
     await suite.db.execute(
       sql`update persons set pending_email = null, pending_email_folded = null where id = ${personId}`,
@@ -1067,7 +1180,7 @@ describe("confirming an email change by code when the account moved on", () => {
     const action = await suite.db.execute<{ used_at: string | null }>(
       sql`select used_at from account_actions where id = ${issued.id}`,
     );
-    expect(action.rows[0]!.used_at).not.toBeNull();
+    expect(action.rows[0]!.used_at).toBeNull();
   });
 
   it("refuses with person.email_taken when another person now holds the address", async () => {
@@ -1184,7 +1297,6 @@ describe("an account action issued before a backward clock step", () => {
           personId,
           purpose: "email_change",
           codeKey,
-          targetEmail: "step-changed@x.com",
           now,
         }),
       );

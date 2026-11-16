@@ -149,7 +149,7 @@ async function completeManagerLogin(
       throw new AppError("password.invalid", {}, { reason });
     }
   }
-  return startManagementSession(tx, { personId: person.id });
+  return startManagementSession(tx, { method: "password", personId: person.id });
 }
 
 export async function loginManager(

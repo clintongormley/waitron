@@ -83,7 +83,7 @@ describe("attendance boot with permanent workforce", () => {
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
       const administrator = (await listAdminHolders(suite.db))[0]!;
       const management = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: administrator.id }),
+        startManagementSession(tx, { method: "password", personId: administrator.id }),
       );
       const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-attendance-"));
       await copyMigrationsRoot(join(scratch, "migrations"));

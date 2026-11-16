@@ -77,7 +77,7 @@ beforeEach(async () => {
       pinHash: hashPin("2468"),
     });
     personId = person!.id;
-    const token = (await startManagementSession(tx, { personId })).token;
+    const token = (await startManagementSession(tx, { method: "password", personId })).token;
     const original = await recordSale(
       tx,
       backend,
@@ -598,7 +598,9 @@ it("refuses a saved decision replayed by a different administrator", async () =>
     pinHash: hashPin("2468"),
   });
   input.managementSessionId = (
-    await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: person!.id }))
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId: person!.id }),
+    )
   ).token;
   await refuses("filing_case.action_mismatch");
 });

@@ -121,7 +121,7 @@ async function prepareBox(
     locale: "en-GB",
   });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: admin!.id }),
+    startManagementSession(tx, { method: "password", personId: admin!.id }),
   );
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
   return { env, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };

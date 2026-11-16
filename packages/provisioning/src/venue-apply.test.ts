@@ -15,6 +15,9 @@ import type { WaitronModule } from "@waitron/module";
 import {
   BUSINESS_DAY_SETTINGS,
   activityLog,
+  dashboardSessions,
+  persons,
+  readActivityForPerson,
   dayCutoverChanges,
   readSettings,
   deviceProfiles,
@@ -647,6 +650,29 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+
+    const [admin] = await suite.db.select({ id: persons.id }).from(persons);
+    expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
+    expect(
+      (
+        await readActivityForPerson(suite.db, admin!.id, {
+          kinds: ["dashboard.signed_in", "dashboard.signed_out"],
+        })
+      ).map(({ kind, personId, subjectId, data }) => ({ kind, personId, subjectId, data })),
+    ).toEqual([
+      {
+        kind: "dashboard.signed_in",
+        personId: admin!.id,
+        subjectId: admin!.id,
+        data: { method: "setup" },
+      },
+      {
+        kind: "dashboard.signed_out",
+        personId: admin!.id,
+        subjectId: admin!.id,
+        data: { reason: "operation_finished" },
+      },
+    ]);
 
     // Through the table definition: a raw read of the JSON `capabilities` column returns the
     // encoded text.

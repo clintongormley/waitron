@@ -161,7 +161,7 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
         if (["revoked", "permission", "stale"].includes(mode)) {
           await server.requestArrived;
           await withTransaction(suite.db, async (tx) => {
-            if (mode === "revoked") await endManagementSession(tx, f.session.token);
+            if (mode === "revoked") await endManagementSession(tx, f.session.token, "signed_out");
             if (mode === "permission")
               await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             if (mode === "stale")

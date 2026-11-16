@@ -355,7 +355,7 @@ describe("the start clock gate as boot wires it", () => {
       status: "active",
     });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
     );
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
     const correct = async () => {

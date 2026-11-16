@@ -224,7 +224,7 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
       { displayName: "Mia Manager", role: "manager" },
     ]);
     const session = async (personId: string) =>
-      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`;
+      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId })).token}`;
     return {
       otherAdminId: otherAdmin!.id,
       otherAdminDashboard: await session(otherAdmin!.id),

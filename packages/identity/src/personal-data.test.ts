@@ -2,6 +2,7 @@ import { seedPersons } from "../test/person-rows.js";
 import { createHash } from "node:crypto";
 import {
   CORE_MIGRATIONS,
+  recordActivity,
   withTransaction,
   persons,
   signInChallenges,
@@ -18,6 +19,9 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
+import { openFreshManagementSession, openManagementSession } from "../test/fixtures.js";
+import { endManagementSession, startManagementSession } from "./management-session.js";
+import { deactivatePerson } from "./staff.js";
 import { codeOf } from "../test/fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -170,11 +174,34 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     },
   ]);
 
+  await withTransaction(db, async (tx) => {
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: personId,
+      personId,
+      data: { reason: "signed_out" },
+      at: new Date(t(19)),
+    });
+    await recordActivity(tx, {
+      kind: "dashboard.signed_in",
+      subjectId: personId,
+      personId,
+      data: { method: "passkey" },
+      at: new Date(t(17)),
+    });
+    await recordActivity(tx, {
+      kind: "dashboard.signed_in",
+      subjectId: personId,
+      personId,
+      data: { method: "password" },
+      at: new Date(t(15)),
+    });
+  });
+
   await db.insert(accountActions).values([
     {
       personId,
       purpose: "email_change",
-      targetEmail: `${who}.changed@example.test`,
       tokenHash: secrets.actionTokens[2]!,
       codeHash: secrets.actionCodes[2]!,
       codeExpiresAt: t(28),
@@ -186,7 +213,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     {
       personId,
       purpose: "invitation",
-      targetEmail: null,
       tokenHash: secrets.actionTokens[0]!,
       codeHash: secrets.actionCodes[0]!,
       codeExpiresAt: t(22),
@@ -198,7 +224,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     {
       personId,
       purpose: "password_reset",
-      targetEmail: null,
       tokenHash: secrets.actionTokens[1]!,
       codeHash: secrets.actionCodes[1]!,
       codeExpiresAt: t(25),
@@ -333,6 +358,31 @@ async function seedBoth() {
 }
 
 describe("IDENTITY_PERSONAL_DATA", () => {
+  it("lists sign-in events for the subject, excluding sign-outs the administrator forced on others", async () => {
+    await seedFixtureVenue(suite.db);
+    const admin = await openFreshManagementSession(suite.db, "admin");
+    const staff = await openManagementSession(suite.db, "staff");
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, staff.token, "signed_out"));
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: staff.personId, method: "passkey" }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      deactivatePerson(tx, { managementSessionId: admin.token, personId: staff.personId }),
+    );
+    const mine = (await downloadParsed(admin.personId)).signIn;
+    expect(mine).not.toHaveProperty("dashboardSessions");
+    expect(mine).toHaveProperty("dashboardSignIns", [
+      { at: expect.any(String), event: "signed_in", method: "password", reason: null },
+    ]);
+    const theirs = (await downloadParsed(staff.personId)).signIn;
+    expect(theirs).toHaveProperty("dashboardSignIns", [
+      { at: expect.any(String), event: "signed_in", method: "password", reason: null },
+      { at: expect.any(String), event: "signed_out", method: null, reason: "signed_out" },
+      { at: expect.any(String), event: "signed_in", method: "passkey", reason: null },
+      { at: expect.any(String), event: "signed_out", method: null, reason: "access_removed" },
+    ]);
+  });
+
   it("declares its two files", () => {
     expect(IDENTITY_PERSONAL_DATA.files).toEqual(["profile.json", "sign-in.json"]);
   });
@@ -365,15 +415,10 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         { provider: null, createdAt: t(4), lastUsedAt: null },
       ],
       recoveryCodes: { unused: 3, used: 2 },
-      dashboardSessions: [
-        { openedAt: t(15), lastSeenAt: t(16), endedAt: t(19), provedAt: null, proofMethod: null },
-        {
-          openedAt: t(17),
-          lastSeenAt: t(18),
-          endedAt: null,
-          provedAt: t(18),
-          proofMethod: "password",
-        },
+      dashboardSignIns: [
+        { at: t(15), event: "signed_in", method: "password", reason: null },
+        { at: t(17), event: "signed_in", method: "passkey", reason: null },
+        { at: t(19), event: "signed_out", method: null, reason: "signed_out" },
       ],
       deviceSessions: [
         { device: "marta-Bar tablet", openedAt: t(13), endedAt: t(14) },
@@ -382,7 +427,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       accountEmails: [
         {
           purpose: "invitation",
-          newEmail: null,
           createdAt: t(20),
           expiresAt: t(21),
           usedAt: t(23),
@@ -391,7 +435,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         },
         {
           purpose: "password_reset",
-          newEmail: null,
           createdAt: t(24),
           expiresAt: t(29),
           usedAt: null,
@@ -400,7 +443,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         },
         {
           purpose: "email_change",
-          newEmail: "marta.changed@example.test",
           createdAt: t(26),
           expiresAt: t(27),
           usedAt: null,
@@ -468,7 +510,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       passkeyOfferedAt: null,
       passkeys: [],
       recoveryCodes: { unused: 0, used: 0 },
-      dashboardSessions: [],
+      dashboardSignIns: [],
       deviceSessions: [],
       accountEmails: [],
       unfinishedSetups: [],

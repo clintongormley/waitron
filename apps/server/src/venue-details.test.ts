@@ -245,7 +245,7 @@ describe("venue detail edits", () => {
       sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: person!.id }),
+      startManagementSession(tx, { method: "password", personId: person!.id }),
     );
     const response = await app.request("/management-api/venue-details", {
       method: "PATCH",
@@ -1510,7 +1510,7 @@ describe("workforce facts after venue corrections", () => {
       await backend.clockOut(tx, { ...event, at: "2026-10-06T00:30:00Z" });
     });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId }),
+      startManagementSession(tx, { method: "password", personId }),
     );
     const app = new Hono();
     mountWorkforceApi(app, { db: suite.db, cfg: venue.cfg }, () => {});
@@ -1789,7 +1789,7 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
     sql`select id from persons where display_name = 'The Manager' limit 1`,
   );
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: rows[0]!.id }),
+    startManagementSession(tx, { method: "password", personId: rows[0]!.id }),
   );
   const response = await app.request("/management-api/venue-details", {
     method: "PATCH",

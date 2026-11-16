@@ -152,7 +152,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
   ] as const)("%s refuses without child work or session writes", async (mode, status, code) => {
     const f = await fixture({ filing: mode !== "not-filing" });
     await withTransaction(suite.db, async (tx) => {
-      if (mode === "revoked") await endManagementSession(tx, f.session.token);
+      if (mode === "revoked") await endManagementSession(tx, f.session.token, "signed_out");
       if (mode === "expired")
         await tx
           .update(dashboardSessions)
@@ -210,7 +210,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
         if (mode === "filing") filing = false;
         else
           await withTransaction(suite.db, async (tx) => {
-            if (mode === "revoked") await endManagementSession(tx, f.session.token);
+            if (mode === "revoked") await endManagementSession(tx, f.session.token, "signed_out");
             if (mode === "permission")
               await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             if (mode === "suspended")

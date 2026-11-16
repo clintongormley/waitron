@@ -293,7 +293,10 @@ async function setupVenue(): Promise<void> {
         role,
         email: `${role}@x.com`,
       });
-      const session = await startManagementSession(tx, { personId: inserted!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: inserted!.id,
+      });
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     };

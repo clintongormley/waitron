@@ -67,7 +67,9 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 const inTx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, fn);
 async function managerCookie() {
-  const session = await inTx((tx) => startManagementSession(tx, { personId: venue.adminId }));
+  const session = await inTx((tx) =>
+    startManagementSession(tx, { method: "password", personId: venue.adminId }),
+  );
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 const report = async (path: string) => {

@@ -40,7 +40,7 @@ async function session(role: "manager" | "staff"): Promise<Record<string, string
     role,
   });
   const started = await suite.db.transaction((tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   return { Cookie: `${MANAGEMENT_COOKIE}=${started.token}` };
 }

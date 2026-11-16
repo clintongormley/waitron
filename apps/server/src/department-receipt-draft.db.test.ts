@@ -45,7 +45,7 @@ async function fixture(role: "manager" | "staff" = "manager") {
   });
   const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   return { departmentId: department!.id, personId: person!.id, sessionId: session.token };
 }

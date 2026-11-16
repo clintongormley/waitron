@@ -452,7 +452,7 @@ it("restricted Orders scope still refuses a finished bill from an earlier day", 
   expect((await offers(staff, "receipt", issued!.id)).saleId).toBe(issued!.id);
   vi.setSystemTime(new Date("2026-11-05T12:00:00.000Z"));
   const fresh = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: venue.operatorId }),
+    startManagementSession(tx, { method: "password", personId: venue.operatorId }),
   );
   staff.managementSessionId = fresh.token;
   await expect(offers(staff, "receipt", issued!.id)).rejects.toMatchObject({

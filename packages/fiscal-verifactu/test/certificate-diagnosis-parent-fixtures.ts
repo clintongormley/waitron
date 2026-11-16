@@ -47,7 +47,7 @@ export async function parentFixture(db: Database, seal = true) {
       displayName: "Private administrator",
       role: "admin",
     });
-    return startManagementSession(tx, { personId: person!.id });
+    return startManagementSession(tx, { method: "password", personId: person!.id });
   });
   const child = makeCertificateDiagnosisChild();
   const controller = new AbortController();

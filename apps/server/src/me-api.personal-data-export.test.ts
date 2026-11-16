@@ -54,7 +54,7 @@ async function download(
   const [row] = await seedPersons(suite.db, { displayName: "Martha Canary", role: "staff" });
   await beforeRequest?.(row!.id);
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: row!.id }),
+    startManagementSession(tx, { method: "password", personId: row!.id }),
   );
   const response = await mounted(modules, patch).request(PATH, {
     headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
@@ -95,7 +95,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
       }),
     );
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: row!.id }),
+      startManagementSession(tx, { method: "password", personId: row!.id }),
     );
     const response = await mounted(["core", "identity", "workforce", "workforce-es"]).request(
       PATH,
@@ -150,7 +150,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
       voidedBy: row!.id,
     });
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: row!.id }),
+      startManagementSession(tx, { method: "password", personId: row!.id }),
     );
     const response = await mounted(["core", "identity"]).request(PATH, {
       headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },

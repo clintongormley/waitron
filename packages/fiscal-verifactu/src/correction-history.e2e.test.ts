@@ -206,7 +206,7 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     pinHash: hashPin("2468"),
   });
   const { token, caseId } = await withTransaction(suite.db, async (tx) => ({
-    token: (await startManagementSession(tx, { personId: admin!.id })).token,
+    token: (await startManagementSession(tx, { method: "password", personId: admin!.id })).token,
     caseId: (
       await openFilingCase(tx, {
         registroId: before.registro.id,

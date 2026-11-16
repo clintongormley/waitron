@@ -40,7 +40,10 @@ beforeEach(async () => {
         role,
         pinHash: fixturePinHash("1234"),
       });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       const value = `${MANAGEMENT_COOKIE}=${session.token}`;
       if (role === "supervisor") cookie = value;
       else staffCookie = value;

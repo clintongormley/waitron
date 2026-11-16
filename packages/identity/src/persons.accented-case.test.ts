@@ -134,7 +134,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
    * `pending_email` until they prove they control it. */
   async function requestAddressChange(requested: string): Promise<void> {
     const personId = await seedManager(suite.db, { email: `${randomUUID()}@example.test` });
-    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const session = await run((tx) => startManagementSession(tx, { method: "password", personId }));
     await suite.db.run(
       sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
     );

@@ -8,6 +8,7 @@ import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readActivityForPerson } from "@waitron/db";
 import type { Database, NodeDatabase } from "@waitron/db";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
@@ -221,6 +222,7 @@ describe("a spare on a real placed copy", () => {
     const nodeBefore = allRows(store.node as unknown as Database);
     expect(nodeBefore.get("node_handover_events")).toContain("copy_placed");
     const fileBefore = await readFile(join(dirs().spareState, FILE));
+    const entriesBefore = await readActivityForPerson(store.venue, ADMIN);
 
     const answer = await post(spareRoute(store, spareService(store)), {
       action: "clock-challenge",
@@ -228,7 +230,14 @@ describe("a spare on a real placed copy", () => {
     expect(answer.status, JSON.stringify(answer.body)).toBe(200);
 
     expect(await readFile(join(dirs().spareState, FILE))).not.toEqual(fileBefore);
-    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["dashboard_sessions"]);
+    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["activity_log"]);
+    const newEntries = (await readActivityForPerson(store.venue, ADMIN)).filter(
+      (entry) => !entriesBefore.some(({ id }) => id === entry.id),
+    );
+    expect(newEntries.map(({ kind, data }) => ({ kind, data }))).toEqual([
+      { kind: "dashboard.signed_in", data: { method: "password" } },
+      { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
+    ]);
     expect(changedTables(nodeBefore, allRows(store.node as unknown as Database))).toEqual([]);
   }, 60_000);
 });

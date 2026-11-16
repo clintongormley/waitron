@@ -59,8 +59,9 @@ async function setup() {
     pinHash: fixturePinHash("5678"),
   });
   const sessions = await withTransaction(suite.db, async (tx) => ({
-    manager: (await startManagementSession(tx, { personId: manager!.id })).token,
-    staff: (await startManagementSession(tx, { personId: staff!.id })).token,
+    manager: (await startManagementSession(tx, { method: "password", personId: manager!.id }))
+      .token,
+    staff: (await startManagementSession(tx, { method: "password", personId: staff!.id })).token,
   }));
   const app = new Hono();
   mountPaymentsApi(

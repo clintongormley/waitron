@@ -1141,7 +1141,11 @@ describe("a correction's cash", () => {
   it("counts the −€6.05 once in the day's sales and once in its cash", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const cookie = `${MANAGEMENT_COOKIE}=${
-      (await inTx(venue, (tx) => startManagementSession(tx, { personId: managerId }))).token
+      (
+        await inTx(venue, (tx) =>
+          startManagementSession(tx, { method: "password", personId: managerId }),
+        )
+      ).token
     }`;
     const reports = new Hono();
     mountReportApi(

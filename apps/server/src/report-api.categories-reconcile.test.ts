@@ -154,7 +154,10 @@ describe("the category report reconciles with the till's sales", () => {
         pinHash: hashPin("1234"),
         role: "manager",
       });
-      const session = await startManagementSession(tx, { personId: manager!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: manager!.id,
+      });
       return { products: ids, managerSid: session.token };
     });
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));

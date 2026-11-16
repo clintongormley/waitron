@@ -180,15 +180,26 @@ async function invalidatePersonAccountActions(tx: Transaction, personId: string)
     .where(and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)));
 }
 
-async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
+async function revokePersonAccess(
+  tx: Transaction,
+  personId: string,
+  actorId: string,
+): Promise<void> {
   await tx
     .update(tillSessions)
     .set({ endedAt: nowIso() })
     .where(and(eq(tillSessions.personId, personId), isNull(tillSessions.endedAt)));
-  await tx
-    .update(dashboardSessions)
-    .set({ endedAt: nowIso() })
-    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)));
+  const ended = await tx
+    .delete(dashboardSessions)
+    .where(and(eq(dashboardSessions.personId, personId), isNull(dashboardSessions.endedAt)))
+    .returning({ personId: dashboardSessions.personId });
+  for (const row of ended)
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: row.personId,
+      personId: actorId,
+      data: { reason: "access_removed" },
+    });
   await invalidatePersonAccountActions(tx, personId);
 }
 
@@ -296,7 +307,7 @@ export async function updatePersonDetails(
   }
   if (becomesSuspended) await deleteSignInRows(tx, person.id);
   if (email !== person.email || input.status !== person.status)
-    await revokePersonAccess(tx, person.id);
+    await revokePersonAccess(tx, person.id, authorizedBy);
   if (email !== person.email && authorizedBy !== person.id) {
     const activity = await recordActivity(tx, {
       kind: "person.email_changed",
@@ -346,7 +357,7 @@ export async function deactivatePerson(
     .set(alreadySuspended ? NO_SIGN_IN_SECRETS : { status: "suspended", ...NO_SIGN_IN_SECRETS })
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
-  if (!alreadySuspended) await revokePersonAccess(tx, person.id);
+  if (!alreadySuspended) await revokePersonAccess(tx, person.id, authorizedBy);
   await assertUsableAdminRemains(tx);
 }
 
@@ -371,7 +382,7 @@ export async function resetPersonLogin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorizePersonLoginChange(tx, input);
+  const { authorizedBy } = await authorizePersonLoginChange(tx, input);
   const [person] = await tx
     .select({
       id: persons.id,
@@ -387,7 +398,7 @@ export async function resetPersonLogin(
     .set({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS })
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
-  await revokePersonAccess(tx, person.id);
+  await revokePersonAccess(tx, person.id, authorizedBy);
   await assertUsableAdminRemains(tx);
 }
 
@@ -422,7 +433,7 @@ export async function reactivatePersonForInvitation(
     asPersonUniqueViolation(error, { displayName: person.displayName });
   }
   await deleteSignInRows(tx, person.id);
-  await revokePersonAccess(tx, person.id);
+  await revokePersonAccess(tx, person.id, authorizedBy);
 }
 
 export async function invitePerson(

@@ -625,7 +625,7 @@ describe("recordReplacement — sign-in and warnings", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { personId: supervisorId }),
+      startManagementSession(tx, { method: "password", personId: supervisorId }),
     );
 
     const { saleId } = await replace(backend, originalId, {

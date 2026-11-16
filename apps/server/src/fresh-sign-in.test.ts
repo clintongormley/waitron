@@ -100,7 +100,9 @@ const beginCheck = (token: string) =>
 describe("confirmFreshSignIn with a password", () => {
   it("records proof for only the session that just proved its password", async () => {
     const { token, personId } = await openManagementSession(suite.db, "admin");
-    const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+    const other = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId }),
+    );
     const before = Date.now();
     await confirm(token, { method: "password", password: "correct horse" });
     const rows = (

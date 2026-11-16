@@ -55,7 +55,7 @@ useVenueDb({
       () => {},
     );
     const session = await inTx(venue, (tx) =>
-      startManagementSession(tx, { personId: venue.supervisorId }),
+      startManagementSession(tx, { method: "password", personId: venue.supervisorId }),
     );
     reader = `${MANAGEMENT_COOKIE}=${session.token}`;
   },

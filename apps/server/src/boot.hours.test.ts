@@ -52,7 +52,7 @@ describe("hours boot with permanent workforce", () => {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
         const session = await withTransaction(suite.db, (tx) =>
-          startManagementSession(tx, { personId: venue.personId }),
+          startManagementSession(tx, { method: "password", personId: venue.personId }),
         );
         const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
         await stampDeployment(suite.db, "preproduction");

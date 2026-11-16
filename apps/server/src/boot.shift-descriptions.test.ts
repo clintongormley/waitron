@@ -38,7 +38,7 @@ for (const assigned of [true, false]) {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
       const session = await withTransaction(suite.db, (tx) =>
-        startManagementSession(tx, { personId: venue.personId }),
+        startManagementSession(tx, { method: "password", personId: venue.personId }),
       );
       const shiftId = await withTransaction(suite.db, async (tx) => {
         const [version] = await tx

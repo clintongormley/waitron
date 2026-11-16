@@ -80,7 +80,10 @@ async function fixture(): Promise<Fixture> {
         role,
       });
       personIds[role] = person!.id;
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       cookie[role] = `${MANAGEMENT_COOKIE}=${session.token}`;
     }
   });

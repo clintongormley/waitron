@@ -129,7 +129,7 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
 
 async function cookieFor(personId: string, fresh = true): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    const session = await startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { method: "password", personId });
     if (fresh) await setFreshManagementSignIn(tx, session.token);
     return session;
   });
@@ -1017,6 +1017,9 @@ describe("mountMeApi — set your own locale", () => {
     return row!.id;
   }
   async function cleanup(personId: string): Promise<void> {
+    await suite.db.execute(
+      sql`delete from activity_log where person_id=${personId} or (subject_kind='person' and subject_id=${personId})`,
+    );
     await suite.db.execute(sql`delete from dashboard_sessions where person_id = ${personId}`);
     await suite.db.execute(sql`delete from persons where id = ${personId}`);
   }

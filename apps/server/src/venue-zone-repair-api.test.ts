@@ -46,8 +46,11 @@ beforeEach(async () => {
   scope = { nodeId: await seedNode(suite.db) };
   const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
-  token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
-    .token;
+  token = (
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId: actor }),
+    )
+  ).token;
   admission = new TradingAdmission();
   admission.repairOnly("invalid");
   restart = vi.fn();

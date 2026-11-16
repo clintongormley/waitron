@@ -915,6 +915,8 @@ also qualifies the historical operation-description references in this section.
   and host-script and full-disk tests use shared roots. The mail sender is a settings document;
   its SMTP connection URL stays sealed. Archive and bucket-copy choices share a backup settings
   document, with only bucket keys sealed. The remaining environment slices stay open.
+  Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
+  proofs use the pending address without copying it into the proof row.
 
   Department sale rules, receipt trading-name choices and receiving profiles live on the department row.
   Menus hold their own display settings and categories their own parent and colour. Root and Home

@@ -45,7 +45,10 @@ useVenueDb({
           pinHash: hashPin("1234"),
           role,
         });
-        const session = await startManagementSession(tx, { personId: person!.id });
+        const session = await startManagementSession(tx, {
+          method: "password",
+          personId: person!.id,
+        });
         return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
       };
       return { manager: await sessionFor("manager"), supervisor: await sessionFor("supervisor") };

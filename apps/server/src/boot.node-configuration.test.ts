@@ -316,7 +316,7 @@ it.each(["mirror", "primary"] as const)(
     }
     const [person] = await seedPersons(source.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(source.db, (tx) =>
-      startManagementSession(tx, { personId: person!.id }),
+      startManagementSession(tx, { method: "password", personId: person!.id }),
     );
     await stampDeployment(source.db, "preproduction");
     if (mode === "mirror") {

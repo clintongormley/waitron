@@ -74,9 +74,15 @@ export async function provisionOrderVenue(
       personId: person!.id,
       pin: "7777",
     });
-    const dashboard = await startManagementSession(tx, { personId: person!.id });
-    const staff = await startManagementSession(tx, { personId: venue.operatorId });
-    const admin = await startManagementSession(tx, { personId: venue.adminId });
+    const dashboard = await startManagementSession(tx, {
+      method: "password",
+      personId: person!.id,
+    });
+    const staff = await startManagementSession(tx, {
+      method: "password",
+      personId: venue.operatorId,
+    });
+    const admin = await startManagementSession(tx, { method: "password", personId: venue.adminId });
     return {
       supervisorId: person!.id,
       till: till.token,

@@ -219,7 +219,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   const secret = await enrolAuthenticator(mainBox.db, ADMIN, TOTP_KEY_RING);
   const session = await withTransaction(mainBox.db, (tx) =>
-    startManagementSession(tx, { personId: ADMIN }),
+    startManagementSession(tx, { method: "password", personId: ADMIN }),
   );
   await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
   const material = mintSelfSignedServerCert({

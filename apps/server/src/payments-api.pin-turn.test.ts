@@ -39,7 +39,7 @@ async function setup(role: "manager" | "staff" = "manager") {
     pinHash: hashPin("4321"),
   });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   await seedVenue(suite.db, {
     name: "PIN venue",

@@ -44,7 +44,7 @@ beforeEach(async () => {
       pinHash: hashPin("2468"),
     });
     personId = person!.id;
-    token = (await startManagementSession(tx, { personId })).token;
+    token = (await startManagementSession(tx, { method: "password", personId })).token;
   });
   input = {
     origin: deviceOrigin(seed.deviceId),

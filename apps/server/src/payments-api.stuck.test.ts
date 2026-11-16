@@ -256,8 +256,9 @@ async function setup(
       menuItemId: offers.offerFor(coffee.id),
       zoneId: offers.zoneId,
       managerId: mgr!.id,
-      managerSid: (await startManagementSession(tx, { personId: mgr!.id })).token,
-      staffSid: (await startManagementSession(tx, { personId: stf!.id })).token,
+      managerSid: (await startManagementSession(tx, { method: "password", personId: mgr!.id }))
+        .token,
+      staffSid: (await startManagementSession(tx, { method: "password", personId: stf!.id })).token,
     };
   });
 

@@ -118,9 +118,11 @@ async function seedPrintRouteFixture(db: Database) {
       role: "staff",
     });
     const managerSession = await startManagementSession(tx, {
+      method: "password",
       personId: mgr!.id,
     });
     const staffSession = await startManagementSession(tx, {
+      method: "password",
       personId: stf!.id,
     });
     return { managerSid: managerSession.token, staffSid: staffSession.token };
@@ -1055,7 +1057,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
         pinHash: fixturePinHash("1234"),
         role: "manager",
       });
-      return (await startManagementSession(tx, { personId: mgr!.id })).token;
+      return (await startManagementSession(tx, { method: "password", personId: mgr!.id })).token;
     });
     const seenAt = new Date(Date.now() - minutesIdle * 60_000).toISOString();
     await suite.db.execute(sql`

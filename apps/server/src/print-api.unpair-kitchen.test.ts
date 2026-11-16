@@ -55,7 +55,7 @@ useVenueDb({
       return station!.id;
     });
     const session = await inTx(venue, (tx) =>
-      startManagementSession(tx, { personId: venue.adminId }),
+      startManagementSession(tx, { method: "password", personId: venue.adminId }),
     );
     managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     const pairingMode = createPairingMode();

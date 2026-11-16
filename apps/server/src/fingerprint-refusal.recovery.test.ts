@@ -72,7 +72,7 @@ beforeEach(async () => {
     return payment!.id;
   });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: venue.adminId }),
+    startManagementSession(tx, { method: "password", personId: venue.adminId }),
   );
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   app = new Hono();

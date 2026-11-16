@@ -113,7 +113,7 @@ beforeEach(async () => {
       role: "manager",
       pinHash: PIN_HASH,
     });
-    return startManagementSession(tx, { personId: person!.id });
+    return startManagementSession(tx, { method: "password", personId: person!.id });
   });
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
 });

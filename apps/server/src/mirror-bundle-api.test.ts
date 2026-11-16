@@ -1672,16 +1672,23 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       };
     }
 
-    // The credential is checked before these refusals: its sign-in adds one session row, ended,
-    // so the live count stays as it was. Nothing else changes.
-    async function expectOnlyAnEndedSignIn(before: Awaited<ReturnType<typeof venueState>>) {
+    async function expectOnlySignInHistory(before: Awaited<ReturnType<typeof venueState>>) {
       expect(await venueState()).toEqual({
         ...before,
         counts: {
           ...before.counts,
-          dashboard_sessions: Number(before.counts["dashboard_sessions"]) + 1,
+          activity_log: Number(before.counts["activity_log"]) + 2,
         },
       });
+      const entries = await db.execute<{ kind: string; data: string }>(
+        sql`select kind, data from activity_log order by rowid desc limit 2`,
+      );
+      expect(
+        entries.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
+      ).toEqual([
+        { kind: "dashboard.signed_in", data: { method: "password" } },
+        { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
+      ]);
     }
 
     describe("this box's recovery key", () => {
@@ -1705,7 +1712,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlyAnEndedSignIn(before);
+        await expectOnlySignInHistory(before);
         expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
       });
 
@@ -1725,7 +1732,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlyAnEndedSignIn(before);
+        await expectOnlySignInHistory(before);
       });
 
       it("a key in backup.env lets the join through", async () => {

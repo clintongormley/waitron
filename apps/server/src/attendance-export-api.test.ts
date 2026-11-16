@@ -46,7 +46,8 @@ function mount(exporter: ModuleTimeRecordExport | undefined = provider) {
 async function cookie(personId: string) {
   return withTransaction(
     suite.db,
-    async (tx) => `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`,
+    async (tx) =>
+      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId })).token}`,
   );
 }
 beforeEach(async () => {

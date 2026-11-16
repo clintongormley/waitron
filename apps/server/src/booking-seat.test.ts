@@ -77,7 +77,7 @@ async function setupVenue(): Promise<Venue> {
       pinHash: hashPin("1234"),
       role: "manager",
     });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     return { id: p!.id, sid: session.token };
   });
   const ctx: ModuleRouteContext = {

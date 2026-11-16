@@ -103,7 +103,7 @@ async function primary(
       sql`select id from persons where email = 'owner@example.test'`,
     );
     const personId = rows[0]!.id;
-    const session = await startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { method: "password", personId });
     await setFreshManagementSignIn(tx, session.token);
     return { adminPersonId: personId, token: session.token };
   });

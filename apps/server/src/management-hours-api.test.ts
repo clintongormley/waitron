@@ -49,7 +49,10 @@ beforeEach(async () => {
     .where(eq(persons.email, "owner@example.test"));
   owner = admin!.id;
   await withTransaction(suite.db, async (tx) => {
-    const staff = await startManagementSession(tx, { personId: venue.personId });
+    const staff = await startManagementSession(tx, {
+      method: "password",
+      personId: venue.personId,
+    });
     staffCookie = `${MANAGEMENT_COOKIE}=${staff.token}`;
     staffSession = (
       await tx
@@ -57,7 +60,7 @@ beforeEach(async () => {
         .from(dashboardSessions)
         .where(eq(dashboardSessions.tokenHash, hashSessionToken(staff.token)))
     )[0]!.id;
-    ownerCookie = `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: owner })).token}`;
+    ownerCookie = `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { method: "password", personId: owner })).token}`;
     const common = {
       ...venue.cfg,
       personId: venue.personId,

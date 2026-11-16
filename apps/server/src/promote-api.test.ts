@@ -133,7 +133,11 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       managementSessionId: SESSION_ID,
       permission: "node.manage",
     });
-    expect(endManagementSession).toHaveBeenCalledWith(expect.anything(), SESSION_ID);
+    expect(endManagementSession).toHaveBeenCalledWith(
+      expect.anything(),
+      SESSION_ID,
+      "operation_finished",
+    );
     expect(verifyBreakGlass).not.toHaveBeenCalled();
   });
 

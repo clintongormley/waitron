@@ -37,6 +37,8 @@ export async function sessionHolding(
   permissions: string[],
 ): Promise<{ cookie: string; personId: string }> {
   const personId = await personHolding(db, permissions);
-  const session = await withTransaction(db, (tx) => startManagementSession(tx, { personId }));
+  const session = await withTransaction(db, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   return { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, personId };
 }

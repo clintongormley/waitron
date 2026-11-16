@@ -186,7 +186,7 @@ async function seedPerson(name: string): Promise<string> {
 
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    const session = await startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { method: "password", personId });
     await setFreshManagementSignIn(tx, session.token);
     return session;
   });

@@ -65,7 +65,7 @@ async function prepareSale(config: ServerConfig) {
         .returning({ id: persons.id });
       await importAccessRoleMembership(tx, person!.id, (await ensureBuiltInRoles(tx))["admin"]);
       await verifyPersonCredential(tx, person!.id, pin);
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, { personId: person!.id, method: "setup" });
       const profile = await createDeviceProfile(tx, {
         managementSessionId: session.token,
         name,

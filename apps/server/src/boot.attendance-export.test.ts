@@ -52,7 +52,7 @@ for (const state of ["provider", "workforce-only"] as const) {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
         const session = await withTransaction(suite.db, (tx) =>
-          startManagementSession(tx, { personId: venue.personId }),
+          startManagementSession(tx, { method: "password", personId: venue.personId }),
         );
         await stampDeployment(suite.db, "preproduction");
         if (mode === "mirror") {

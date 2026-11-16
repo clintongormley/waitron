@@ -43,7 +43,7 @@ async function fixture() {
   await seedTaxpayer(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: "Manager", role: "manager" });
-    return startManagementSession(tx, { personId: person!.id });
+    return startManagementSession(tx, { method: "password", personId: person!.id });
   });
   const bus = new LiveEvents();
   const app = new Hono();

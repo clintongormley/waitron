@@ -182,10 +182,14 @@ beforeEach(async () => {
   manager = people[0]!.id;
   staff = people[1]!.id;
   managerToken = (
-    await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: manager }))
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId: manager }),
+    )
   ).token;
   staffToken = (
-    await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: staff }))
+    await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { method: "password", personId: staff }),
+    )
   ).token;
   scratch = await mkdtemp(join(tmpdir(), "waitron-zone-admission-"));
   await copyMigrationsRoot(join(scratch, "migrations"));

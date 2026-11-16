@@ -2,7 +2,15 @@ import "./errors.js";
 import { authorityForRoles, inspectsInvoicesOnly, type PersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
-import { nowIso, dashboardSessions, personRoles, persons, roles } from "@waitron/db";
+import {
+  recordActivity,
+  type ActivityKindData,
+  nowIso,
+  dashboardSessions,
+  personRoles,
+  persons,
+  roles,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
@@ -31,15 +39,24 @@ export interface ManagementSession {
   personId: string;
 }
 
+export type DashboardSignInMethod = ActivityKindData["dashboard.signed_in"]["method"];
+export type DashboardSignOutReason = ActivityKindData["dashboard.signed_out"]["reason"];
+
 /** The caller has already authenticated the person. */
 export async function startManagementSession(
   tx: Transaction,
-  input: { personId: string },
+  input: { personId: string; method: DashboardSignInMethod },
 ): Promise<ManagementSession> {
   const token = mintSessionToken();
   await tx
     .insert(dashboardSessions)
     .values({ personId: input.personId, tokenHash: hashSessionToken(token) });
+  await recordActivity(tx, {
+    kind: "dashboard.signed_in",
+    subjectId: input.personId,
+    personId: input.personId,
+    data: { method: input.method },
+  });
   return { token, personId: input.personId };
 }
 
@@ -123,15 +140,28 @@ export async function resolveManagementSession(
   };
 }
 
-/** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */
-export async function endManagementSession(tx: Transaction, token: string): Promise<boolean> {
-  const tokenHash = hashSessionToken(token);
-  const updated = await tx
-    .update(dashboardSessions)
-    .set({ endedAt: nowIso() })
-    .where(and(eq(dashboardSessions.tokenHash, tokenHash), isNull(dashboardSessions.endedAt)))
-    .returning({ id: dashboardSessions.id });
-  return updated.length > 0;
+export async function endManagementSession(
+  tx: Transaction,
+  token: string,
+  reason: DashboardSignOutReason,
+): Promise<boolean> {
+  const removed = await tx
+    .delete(dashboardSessions)
+    .where(
+      and(
+        eq(dashboardSessions.tokenHash, hashSessionToken(token)),
+        isNull(dashboardSessions.endedAt),
+      ),
+    )
+    .returning({ personId: dashboardSessions.personId });
+  for (const row of removed)
+    await recordActivity(tx, {
+      kind: "dashboard.signed_out",
+      subjectId: row.personId,
+      personId: row.personId,
+      data: { reason },
+    });
+  return removed.length > 0;
 }
 
 /** Refuses what `resolveManagementSession` refuses, a session holding `invoice.inspect` alone

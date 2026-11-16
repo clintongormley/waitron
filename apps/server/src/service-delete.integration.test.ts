@@ -458,7 +458,7 @@ async function mounted() {
   const app = new Hono();
   const cookie = await run(async (tx) => {
     const [admin] = await tx.select().from(persons).where(eq(persons.email, "owner@example.test"));
-    const session = await startManagementSession(tx, { personId: admin!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: admin!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });
   const removals = enabledTableRemovals(ALL_MODULES);

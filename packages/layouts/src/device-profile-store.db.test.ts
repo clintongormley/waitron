@@ -55,7 +55,7 @@ async function seedSession(role: BuiltInRoleKey): Promise<string> {
     role,
   });
   const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { personId: person!.id }),
+    startManagementSession(tx, { method: "password", personId: person!.id }),
   );
   return session.token;
 }

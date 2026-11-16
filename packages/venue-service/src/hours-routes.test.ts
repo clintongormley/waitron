@@ -100,7 +100,7 @@ async function fixture(): Promise<Fixture> {
         pinHash: hashPin("1234"),
         role,
       });
-      return (await startManagementSession(tx, { personId: row!.id })).token;
+      return (await startManagementSession(tx, { method: "password", personId: row!.id })).token;
     };
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)

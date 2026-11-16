@@ -4487,7 +4487,7 @@ async function retireProfile(profileId: string): Promise<void> {
         break;
       }
     }
-    const session = await startManagementSession(tx, { personId: admin!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: admin!.id });
     await deleteDeviceProfile(tx, { managementSessionId: session.token, id: profileId });
   });
   const [row] = await suite.db

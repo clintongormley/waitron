@@ -48,7 +48,7 @@ async function fixture() {
       pinHash: fixturePinHash("1234"),
       role: "manager",
     });
-    return startManagementSession(tx, { personId: p!.id });
+    return startManagementSession(tx, { method: "password", personId: p!.id });
   });
   const bus = new LiveEvents();
   const app = new Hono();

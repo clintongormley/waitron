@@ -78,7 +78,10 @@ export async function createClockVenue(
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.email, "owner@example.test"));
-    const management = await startManagementSession(tx, { personId: admin!.id });
+    const management = await startManagementSession(tx, {
+      method: "password",
+      personId: admin!.id,
+    });
     const [person] = await seedPersons(tx, {
       displayName: "Anna",
       pinHash: fixturePinHash("5555"),

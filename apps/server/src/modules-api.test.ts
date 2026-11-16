@@ -25,7 +25,10 @@ beforeEach(async () => {
     const cookies: string[] = [];
     for (const role of ["admin", "manager", "staff"] as const) {
       const [person] = await seedPersons(tx, { displayName: role, role });
-      const session = await startManagementSession(tx, { personId: person!.id });
+      const session = await startManagementSession(tx, {
+        method: "password",
+        personId: person!.id,
+      });
       cookies.push(`${MANAGEMENT_COOKIE}=${session.token}`);
     }
     return cookies as [string, string, string];

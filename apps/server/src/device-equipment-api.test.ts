@@ -170,7 +170,9 @@ beforeEach(async () => {
     { db: suite.db, cfg: venue.cfg, secureCookies: false, pairingMode: createPairingMode() },
     quiet,
   );
-  const session = await inTx((tx) => startManagementSession(tx, { personId: venue.adminId }));
+  const session = await inTx((tx) =>
+    startManagementSession(tx, { method: "password", personId: venue.adminId }),
+  );
   managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
 });
 

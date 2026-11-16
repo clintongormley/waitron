@@ -13,8 +13,6 @@ export const accountActions = table(
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     purpose: label("purpose").notNull(),
-    /** The replacement login address for an email-change proof. Null for invitations and resets. */
-    targetEmail: label("target_email"),
     tokenHash: label("token_hash").notNull(),
     codeHash: label("code_hash"),
     codeExpiresAt: tsString("code_expires_at"),
@@ -35,10 +33,6 @@ export const accountActions = table(
     check(
       "account_actions_purpose_ck",
       sql`${t.purpose} in ('invitation', 'password_reset', 'email_change')`,
-    ),
-    check(
-      "account_actions_target_email_ck",
-      sql`(${t.purpose} = 'email_change') = (${t.targetEmail} is not null)`,
     ),
     check("account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
     check("account_actions_code_hash_ck", sql`${t.codeHash} is null or length(${t.codeHash}) = 64`),

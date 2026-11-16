@@ -123,8 +123,14 @@ export async function setupVenue(db: Database): Promise<Venue> {
       pinHash: fixturePinHash("1234"),
       role: "staff",
     });
-    const managerSession = await startManagementSession(tx, { personId: mgr!.id });
-    const staffSession = await startManagementSession(tx, { personId: stf!.id });
+    const managerSession = await startManagementSession(tx, {
+      method: "password",
+      personId: mgr!.id,
+    });
+    const staffSession = await startManagementSession(tx, {
+      method: "password",
+      personId: stf!.id,
+    });
     return {
       coffeeId: coffee.id,
       waterId: water.id,

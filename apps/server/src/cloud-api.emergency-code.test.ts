@@ -13,7 +13,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 async function actor() {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: "Alex", role: "admin" });
-    const session = await startManagementSession(tx, { personId: p!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: p!.id });
     return { id: p!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }

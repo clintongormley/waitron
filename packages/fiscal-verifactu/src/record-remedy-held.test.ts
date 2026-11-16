@@ -53,7 +53,7 @@ beforeEach(async () => {
       pinHash: hashPin("2468"),
     });
     personId = person!.id;
-    token = (await startManagementSession(tx, { personId })).token;
+    token = (await startManagementSession(tx, { method: "password", personId })).token;
     await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
@@ -504,7 +504,7 @@ it("refuses a saved decision that belongs to another administrator", async () =>
       role: "admin",
       pinHash: hashPin("1357"),
     });
-    const session = await startManagementSession(tx, { personId: other!.id });
+    const session = await startManagementSession(tx, { method: "password", personId: other!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });

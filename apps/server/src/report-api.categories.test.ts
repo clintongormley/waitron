@@ -248,7 +248,7 @@ const suite = useVenueDb({
         role: (typeof BUILT_IN_ROLE_KEYS)[number],
       ): Promise<string> => {
         const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
-        return (await startManagementSession(tx, { personId: p!.id })).token;
+        return (await startManagementSession(tx, { method: "password", personId: p!.id })).token;
       };
       return {
         manager: await mkPerson("The Manager", "manager"),
