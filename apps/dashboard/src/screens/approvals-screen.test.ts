@@ -299,7 +299,7 @@ it("starts one stream with both queues while names are pending, then shows named
     liveData,
     listStaff: vi.fn(
       () =>
-        new Promise((r) => {
+        new Promise<PersonSummary[]>((r) => {
           finish = r;
         }),
     ),

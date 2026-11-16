@@ -2401,7 +2401,7 @@ it("starts one stream with products before the modifier lists arrive", async () 
     liveData,
     listExtraLists: vi.fn(
       () =>
-        new Promise((r) => {
+        new Promise<ExtraListRow[]>((r) => {
           finish = r;
         }),
     ),

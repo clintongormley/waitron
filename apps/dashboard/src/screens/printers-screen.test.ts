@@ -14196,7 +14196,7 @@ it("starts one stream with discovery before the printer lists arrive", async () 
     liveData,
     listPrinters: vi.fn(
       () =>
-        new Promise((r) => {
+        new Promise<Printer[]>((r) => {
           finish = r;
         }),
     ),

@@ -849,7 +849,7 @@ it("starts one stream with all lists before the roster, without showing unnamed 
     liveData,
     getStaffRoster: vi.fn(
       () =>
-        new Promise((r) => {
+        new Promise<RosterEntry[]>((r) => {
           finish = r;
         }),
     ),
