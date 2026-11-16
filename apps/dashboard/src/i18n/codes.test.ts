@@ -566,6 +566,15 @@ it("says a booking's table needs moving on the till first, in both languages", (
   );
 });
 
+it("says a booking's table is in an area with no table service, in both languages", () => {
+  expect(codeMessage("service_zone.mode_incompatible", "en")).toBe(
+    "That table's area has no table service. Edit the booking and choose a table in an area with table service",
+  );
+  expect(codeMessage("service_zone.mode_incompatible", "es")).toBe(
+    "La zona de esa mesa no tiene servicio de mesa. Edita la reserva y elige una mesa de una zona con servicio de mesa",
+  );
+});
+
 it("has a sentence of its own for an unsupported language, in both languages", () => {
   expect(codeMessage("locale.unsupported", "en")).toBe(
     "That language isn't available. Choose another.",

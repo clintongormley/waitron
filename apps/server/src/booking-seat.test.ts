@@ -1,6 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { createZone } from "./testing/service-zone.js";
+import { createDepartment, createServiceZone } from "@waitron/venue-service";
 
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -251,6 +252,37 @@ describe("bookings seat route → real seatTable", () => {
       );
       expect(table.rows[0]!.needs_clearing_since).not.toBeNull();
     });
+  });
+
+  it("refuses seating a booking at a table in a zone that does not take table bills with 400 service_zone.mode_incompatible", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const { tableId, zoneId } = await withTransaction(db, async (tx: Transaction) => {
+      const counter = await createDepartment(tx, { name: "Counter", orderStart: "counter" });
+      const zone = await createServiceZone(tx, { name: "Bar", departmentId: counter.id });
+      const { id } = await createTable(tx, v.tillCfg, { label: "B1", zoneId: zone.id });
+      return { tableId: id, zoneId: zone.id };
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "21:15",
+      partySize: 2,
+      contactName: "Sanz",
+      tableId,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "service_zone.mode_incompatible", params: { zoneId, expected: "table_tab" } },
+    });
+    const booking = await db.execute<{ status: string; tab_id: string | null }>(
+      sql`select status, tab_id from bookings where id = ${bookingId}`,
+    );
+    expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
   });
 
   it("refuses seating a booking at a table that needs moving with 409 table.needs_moving", async () => {
