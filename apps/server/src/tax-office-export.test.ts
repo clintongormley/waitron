@@ -1,5 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtempSync } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
@@ -51,6 +52,28 @@ import { invoicePdfFileName, type SaleCopy } from "./orders-invoice-pdf.js";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { renderTaxOfficeCsv } from "./tax-office-export.js";
 import type { TaxOfficeInvoice } from "./tax-office-list.js";
+
+const files = vi.hoisted(() => ({
+  opened: [] as FileHandle[],
+  /** Runs once, before the next `open` returns. */
+  whileOpening: null as (() => void) | null,
+}));
+vi.mock("node:fs/promises", async (original) => {
+  const real = await original<typeof import("node:fs/promises")>();
+  return {
+    ...real,
+    open: vi.fn(async (...args: Parameters<typeof real.open>) => {
+      const handle = await real.open(...args);
+      files.opened.push(handle);
+      const whileOpening = files.whileOpening;
+      files.whileOpening = null;
+      whileOpening?.();
+      return handle;
+    }),
+  };
+});
+/** The handles opened since the last call that are still open. */
+const stillOpen = () => files.opened.filter((handle) => handle.fd !== -1);
 
 vi.mock("./receipt-print.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./receipt-print.js")>();
@@ -486,7 +509,7 @@ describe("the month's export", () => {
     expect(logged).toEqual([
       {
         event: "tax_office.build_failed",
-        fields: { errorCode: "unknown", errorClass: "Error" },
+        fields: { errorCode: "unknown", errorClass: "Error", errno: null },
       },
     ]);
     expect(await (await monthStatus(app)).json()).toMatchObject({ status: "failed" });
@@ -755,6 +778,7 @@ describe("asking for the month's file and saving it", () => {
     const bytes = new Uint8Array(await saved.arrayBuffer());
     expect(bytes.byteLength).toBe(ready.bytes);
     expect(Object.keys(unzipSync(bytes))).toHaveLength(8);
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
     expect(await (await monthStatus(app, asker.cookie)).json()).toEqual({ status: "none" });
     const twice = await monthFile(app, { cookie: asker.cookie });
     expect(twice.status).toBe(404);
@@ -772,10 +796,44 @@ describe("asking for the month's file and saving it", () => {
     expect((await reader.read()).done).toBe(false);
     aborted.abort();
     await reader.cancel();
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
     expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
     const retried = await monthFile(app);
     expect(retried.status).toBe(200);
     expect(Object.keys(await unzipped(retried))).toHaveLength(8);
+  });
+
+  it("answers a HEAD for the file with its headers, leaves no file open and keeps the file", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    const ready = (await (await monthStatus(app)).json()) as { bytes: number };
+    files.opened.length = 0;
+    const head = await monthFile(app, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-type")).toBe("application/zip");
+    expect(head.headers.get("content-length")).toBe(String(ready.bytes));
+    expect(head.body).toBeNull();
+    // Failing case: Hono drops a HEAD's body unread and uncancelled, and an opened file is then
+    // collected open, which ends the process.
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
+    expect(Object.keys(await unzipped(await monthFile(app)))).toHaveLength(8);
+  });
+
+  it("closes the file when the download ends while the file is being opened", async () => {
+    const app = mount({ render: countingRender().render });
+    expect((await requestMonth(app, "2026-01")).status).toBe(202);
+    await runBuild(app);
+    const aborted = new AbortController();
+    const partial = await monthFile(app, { signal: aborted.signal });
+    expect(partial.status).toBe(200);
+    files.opened.length = 0;
+    files.whileOpening = () => aborted.abort();
+    await expect(partial.body!.getReader().read()).rejects.toThrow();
+    expect(files.opened).toHaveLength(1);
+    await vi.waitFor(() => expect(stillOpen()).toEqual([]));
+    expect(await (await monthStatus(app)).json()).toMatchObject({ status: "ready" });
   });
 
   it("refuses the file to the person who asked once they no longer hold invoice.inspect", async () => {
@@ -807,6 +865,26 @@ describe("asking for the month's file and saving it", () => {
     free = needed;
     expect((await requestMonth(app, "2025-06")).status).toBe(202);
     expect(await monthEntries()).toHaveLength(entriesBefore + 1);
+  });
+
+  it("answers a repeat of the person's running build with its view even once space runs low", async () => {
+    const needed = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
+    let free = needed;
+    const app = mount({
+      render: countingRender().render,
+      freeBytes: () => Promise.resolve(free),
+    });
+    const asked = await requestMonth(app, "2025-06");
+    expect(asked.status).toBe(202);
+    const view = (await asked.json()) as { id: string };
+    free = needed - 1;
+    const again = await requestMonth(app, "2025-06");
+    expect(again.status).toBe(202);
+    expect(await again.json()).toEqual(view);
+    const otherMonth = await requestMonth(app, "2025-07");
+    expect(otherMonth.status).toBe(409);
+    expect(await otherMonth.json()).toMatchObject({ error: { code: "tax_office.space_low" } });
+    await runBuild(app);
   });
 
   it("finishes a build whose requesting session ended, for the same person's next session", async () => {

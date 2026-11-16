@@ -1,5 +1,5 @@
 import "./errors.js";
-import { open } from "node:fs/promises";
+import { open, stat, type FileHandle } from "node:fs/promises";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readTaxpayer, recordActivity, withTransaction, type Database } from "@waitron/db";
@@ -219,10 +219,14 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
           managementSessionId: sessionId,
           permission: "invoice.inspect",
         });
-        const freeBytes = await deps.freeBytes();
-        const neededBytes = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
-        if (freeBytes !== null && freeBytes < neededBytes)
-          throw new AppError("tax_office.space_low", { freeBytes, neededBytes });
+        const running = deps.builds.view(authorizedBy);
+        // A repeat takes the running build's view: that build's own writing lowers free space.
+        if (running.status !== "building" || running.month !== raw) {
+          const freeBytes = await deps.freeBytes();
+          const neededBytes = SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES;
+          if (freeBytes !== null && freeBytes < neededBytes)
+            throw new AppError("tax_office.space_low", { freeBytes, neededBytes });
+        }
         const { claimed, view } = deps.builds.claim(authorizedBy, raw);
         if (!claimed) return { personId: authorizedBy, view, month: null };
         claimedBy = authorizedBy;
@@ -267,24 +271,32 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const personId = await inspectingPerson(deps.db, requireManagementSession(c));
       const file = deps.builds.file(personId);
       if (file === null) throw new AppError("tax_office.download_missing", {});
-      const handle = await open(file.path, "r").catch((error: unknown) => {
-        if ((error as { code?: unknown }).code === "ENOENT")
-          throw new AppError("tax_office.download_missing", {});
-        throw error;
-      });
+      const size = await stat(file.path).then(
+        ({ size }) => size,
+        (error: unknown) => {
+          if ((error as { code?: unknown }).code === "ENOENT")
+            throw new AppError("tax_office.download_missing", {});
+          throw error;
+        },
+      );
       const connection = c.req.raw.signal;
-      // Node ends the process when it collects an open file handle, and a connection lost before
-      // the answer is written leaves nothing to read or cancel this stream, which would close it.
+      // Node ends the process when it collects an open file handle. Hono drops a HEAD's body
+      // unread, and a connection lost before the answer is written leaves nothing to read or
+      // cancel it, so the file is opened only at the first read and closed on every way out.
+      let handle: FileHandle | null = null;
       let closed = false;
-      const closeFile = () => {
-        if (closed) return;
-        closed = true;
-        connection.removeEventListener("abort", closeFile);
-        handle.close().catch((error: unknown) => {
+      const closeHandle = (opened: FileHandle) => {
+        opened.close().catch((error: unknown) => {
           log("error", "tax_office.file_close_failed", {
             errorClass: error instanceof Error ? error.name : typeof error,
           });
         });
+      };
+      const closeFile = () => {
+        if (closed) return;
+        closed = true;
+        connection.removeEventListener("abort", closeFile);
+        if (handle !== null) closeHandle(handle);
       };
       if (connection.aborted) closeFile();
       else connection.addEventListener("abort", closeFile);
@@ -292,11 +304,24 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       const body = new ReadableStream<Uint8Array>(
         {
           async pull(controller) {
-            const buffer = new Uint8Array(FILE_CHUNK_BYTES);
-            const { bytesRead } = await handle.read(buffer, 0, FILE_CHUNK_BYTES, null);
-            if (bytesRead > 0) {
-              controller.enqueue(buffer.subarray(0, bytesRead));
-              return;
+            try {
+              if (handle === null) {
+                const opened = await open(file.path, "r");
+                if (closed) {
+                  closeHandle(opened);
+                  throw new Error("The download ended before the file was opened");
+                }
+                handle = opened;
+              }
+              const buffer = new Uint8Array(FILE_CHUNK_BYTES);
+              const { bytesRead } = await handle.read(buffer, 0, FILE_CHUNK_BYTES, null);
+              if (bytesRead > 0) {
+                controller.enqueue(buffer.subarray(0, bytesRead));
+                return;
+              }
+            } catch (error) {
+              closeFile();
+              throw error;
             }
             controller.close();
             const whole = !connection.aborted;
@@ -310,7 +335,7 @@ export function mountTaxOfficeApi(app: Hono, deps: TaxOfficeApiDeps, log: Logger
       return c.body(body, 200, {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="invoices-${file.month}.zip"`,
-        "Content-Length": String(file.bytes),
+        "Content-Length": String(size),
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       });
