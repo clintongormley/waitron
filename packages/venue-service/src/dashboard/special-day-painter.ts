@@ -4,6 +4,7 @@ import { cutoverForBusinessDay } from "@waitron/shared";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
   FormFeedback,
   saveActionState,
@@ -1591,9 +1592,7 @@ export class SpecialDayPainter extends LitElement {
     if (this.blocked()) return t("prep.fix_fields");
     return this.loadFailed
       ? t("special.load_error")
-      : this.vacated
-        ? t("special.replacement_pending")
-        : this.notice;
+      : bottomMessage(this.notice, this.vacated ? t("special.replacement_pending") : "");
   }
 
   private panel(locked: boolean) {

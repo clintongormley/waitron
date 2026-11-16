@@ -2012,12 +2012,19 @@ it("a touched reminder stays while the untouched name and other course follow", 
   newer.departments[0]!.name = "Live restaurant";
   newer.courseSettingsByDepartment.d1 = [
     { courseId: "mains", heldUntilFired: true, reminderMinutes: null },
-    { courseId: "desserts", heldUntilFired: true, reminderMinutes: 5 },
+    { courseId: "desserts", heldUntilFired: false, reminderMinutes: 5 },
   ];
   el.model = newer;
   await el.updateComplete;
   expect(field(el, "name").value).toBe("Live restaurant");
   expect(reminder(el).value).toBe("30");
+  const held = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+    "[name=course-desserts-held]",
+  )!;
+  await held.updateComplete;
+  expect(held.shadowRoot!.querySelector("[aria-checked=true]")!.textContent!.trim()).toBe(
+    "Fire now",
+  );
   expect(el.hasUnsavedChanges).toBe(true);
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
@@ -2025,7 +2032,7 @@ it("a touched reminder stays while the untouched name and other course follow", 
     name: "Live restaurant",
     courseSettings: [
       { courseId: "mains", heldUntilFired: true, reminderMinutes: 30 },
-      { courseId: "desserts", heldUntilFired: true, reminderMinutes: 5 },
+      { courseId: "desserts", heldUntilFired: false, reminderMinutes: 5 },
     ],
   });
 });

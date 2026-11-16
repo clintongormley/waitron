@@ -896,6 +896,22 @@ describe("a period deleted with a replacement before the stored day is read agai
     },
   );
 
+  it("keeps the dropped-edit notice beside unloaded replacement hours", async () => {
+    const { painter } = await deleteLunch(() => Promise.reject(new Error("offline")));
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_14, at("21:00"), at("22:00"));
+    const next = withoutLunch();
+    next.departments[0]!.zones = next.departments[0]!.zones.filter(({ id }) => id !== "z2");
+    painter.model = next;
+    await settle(painter);
+    await expect
+      .poll(() => frame(painter).refusal)
+      .toContain("Terrace was removed; its changes were dropped.");
+    expect(frame(painter).refusal).toContain(
+      "The replacement hours are not loaded yet. Save will try again.",
+    );
+  });
+
   for (const leaving of ["closed first", "switched while open"] as const)
     it(`reads nothing while a later save's write is out, after a press waiting on a hung re-read is left behind (${leaving})`, async () => {
       let hung = true;
