@@ -1772,6 +1772,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     expect(guests(el)!.error).toBe(codeMessage("management.request_invalid"));
     expect(actions(el).error).toBe(t("form.fix_fields"));
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
 
     await step(el, "1");
     expect(guests(el)!.error).toBe("");

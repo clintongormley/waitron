@@ -174,6 +174,11 @@ describe("the submission id of a confirmation", () => {
     return () => queue.shift()!;
   };
   const noAnswer = new TypeError("Failed to fetch");
+  const guestCountRefusal = {
+    code: "management.request_invalid",
+    status: 400,
+    field: "guestCount",
+  };
 
   it.each([
     { code: "server.internal", status: 502 },
@@ -341,15 +346,49 @@ describe("the submission id of a confirmation", () => {
     });
   });
 
-  it("is kept after a refusal when only the receipt's guest count changed", () => {
+  it("is kept after a refusal when only the receipt's guest count changed, sending the new count", () => {
     const original = { ...tenEuros, guestCount: 4 };
     const first = submissionFor("wo-1", original, null, ids("sub-1"));
     const refused = unansweredAfter(first, { code: "bill.tip_not_allowed", status: 409 });
 
     expect(
-      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request
-        .submissionId,
-    ).toBe("sub-1");
+      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request,
+    ).toEqual({ ...original, guestCount: 9, submissionId: "sub-1" });
+    expect(submissionFor("wo-1", tenEuros, refused, ids("sub-2")).request).toEqual({
+      ...tenEuros,
+      submissionId: "sub-1",
+    });
+  });
+
+  it("is kept after the server refuses the guest count, sending the corrected count under the same id", () => {
+    const original = { ...tenEuros, guestCount: 4 };
+    const first = submissionFor("wo-1", original, null, ids("sub-1"));
+    const refused = unansweredAfter(first, guestCountRefusal);
+
+    expect(refused).toBe(first);
+    expect(
+      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request,
+    ).toEqual({ ...original, guestCount: 9, submissionId: "sub-1" });
+  });
+
+  it("stays in doubt after the server refuses the guest count of a resend, keeping its old count", () => {
+    const original = { ...tenEuros, guestCount: 4 };
+    const unanswered = unansweredAfter(
+      submissionFor("wo-1", original, null, ids("sub-1")),
+      noAnswer,
+    );
+    const refused = unansweredAfter(unanswered!, guestCountRefusal, true);
+
+    expect(refused).toEqual({ ...unanswered, unconfirmed: true });
+    expect(
+      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request,
+    ).toEqual({ ...original, submissionId: "sub-1" });
+  });
+
+  it("keeps a submission whose first attempt got no answer after the server refuses its guest count", () => {
+    const first = submissionFor("wo-1", { ...tenEuros, guestCount: 4 }, null, ids("sub-1"));
+
+    expect(unansweredAfter(first, guestCountRefusal, true)).toBe(first);
   });
 
   it("retains the original complete body when ownership changes after an authorization refusal", () => {

@@ -148,6 +148,17 @@ async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light"
 const sent = (): BillPaymentRequest[] =>
   vi.mocked(api.takeBillPayment).mock.calls.map(([, request]) => request);
 
+async function typeGuests(el: TillApp, value: string): Promise<void> {
+  const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await stepper.updateComplete;
+  const input = stepper.shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await flush(el);
+}
+
 beforeEach(() => {
   setLocale("en");
   resetBillPayDrafts();
@@ -5114,18 +5125,80 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
     await press(el, "[data-pay-confirm]");
     await press(el, 'input[name="way"][value="contribution"]');
     await contribute(el, "70");
-    const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await stepper.updateComplete;
-    const input = stepper.shadowRoot!.querySelector("input")!;
-    input.value = "6";
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await flush(el);
+    await typeGuests(el, "6");
     await press(el, "[data-pay-confirm]");
 
     expect(sent()[0]).not.toHaveProperty("guestCount");
     expect(sent()[1]).toHaveProperty("guestCount", 6);
+  });
+
+  it("keeps the confirmation when the server refuses the count, marks the field until it changes, and takes the corrected count", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "management.request_invalid",
+        status: 400,
+        field: "guestCount",
+      })
+      .mockResolvedValueOnce(
+        takenOf(
+          { applied: "120.00", tendered: "120.00" },
+          { received: "120.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("120.00"),
+        ),
+      );
+    const { el } = await mountApp({
+      previewBillPayment: vi.fn().mockResolvedValue(cash("120.00", "0.00")),
+      takeBillPayment,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await contribute(el, "120");
+    await typeGuests(el, "6");
+    await press(el, "[data-pay-confirm]");
+
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+    expect(inDialog(el, "[data-pay-applied] dd")).not.toBeNull();
+    expect(guestsField(el)!.value).toBe("6");
+    expect(inDialog(el, '[name="guests"]')!.error).toBe(codeMessage("management.request_invalid"));
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+
+    await typeGuests(el, "5");
+    expect(inDialog(el, '[name="guests"]')!.error).toBe("");
+    expect(inDialog(el, "wt-form-actions")!.error).toBe("");
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[0]).toHaveProperty("guestCount", 6);
+    expect(sent()[1]).toHaveProperty("guestCount", 5);
+    expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);
+  });
+
+  it("reads the balance again after the count is refused, keeping the confirmation for the server to check", async () => {
+    let paidElsewhere = false;
+    const takeBillPayment = vi.fn(async () => {
+      paidElsewhere = true;
+      throw { code: "management.request_invalid", status: 400, field: "guestCount" };
+    });
+    const getBillBalance = vi.fn(async () =>
+      balanceOf(paidElsewhere ? { received: "20.00", outstanding: "100.00" } : {}),
+    );
+    const { el } = await mountApp({
+      previewBillPayment: vi.fn().mockResolvedValue(cash("120.00", "0.00")),
+      takeBillPayment,
+      getBillBalance,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await contribute(el, "120");
+    await press(el, "[data-pay-confirm]");
+
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "20.00", "100.00"));
+    expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money("120.00"));
+    expect(guestsField(el)).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("management.request_invalid"));
+    expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
   });
 
   it("starts the field empty on a split bill and sends null", async () => {
@@ -6828,6 +6901,30 @@ describe("till-app: a bill payment on the card reader", () => {
         await takenAsANewPayment(el, takeBillPayment);
       },
     );
+
+    it("a resend under the same id with only the guest count corrected, refused reader.not_held, says the server could not check it", async () => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "management.request_invalid",
+          status: 400,
+          field: "guestCount",
+        })
+        .mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
+      const el = await takeOnReader(takeBillPayment, {
+        getBillBalance: vi.fn(async () => balanceOf({ total: "40.00", outstanding: "40.00" })),
+      });
+      expect(inDialog(el, '[name="guests"]')!.error).toBe(
+        codeMessage("management.request_invalid"),
+      );
+
+      await typeGuests(el, "5");
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);
+      expect(sent()[1]).toHaveProperty("guestCount", 5);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.not_checked"));
+    });
 
     it("a locked resend refused reader.not_held says the server could not check it", async () => {
       const { el, takeBillPayment } = await lockedConfirmation();
