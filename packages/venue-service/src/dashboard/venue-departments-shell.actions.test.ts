@@ -511,9 +511,6 @@ it.each(["success", "failure"] as const)(
           orderStart: "counter",
           paidWhen: "prepay",
           collectionNumber: "none",
-          needsClearing: false,
-          lateSendNeedsManager: false,
-          courseSettings: [],
         },
       ],
     ]);

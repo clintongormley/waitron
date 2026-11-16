@@ -1088,10 +1088,7 @@ describe("period updates while painting", () => {
     expect(sent.departments).toEqual([
       {
         departmentId: "d1",
-        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
-          weekday,
-          slots: weekday === 4 ? [{ periodId: "p2", startsAt: "08:00", endsAt: "10:00" }] : [],
-        })),
+        days: [{ weekday: 4, slots: [{ periodId: "p2", startsAt: "08:00", endsAt: "10:00" }] }],
       },
     ]);
   });
@@ -1138,10 +1135,7 @@ describe("period updates while painting", () => {
     expect(sent).toEqual([
       {
         departmentId: "d1",
-        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
-          weekday,
-          slots: weekday === 1 ? [dinner("08:00", "10:00"), dinner("13:00", "16:00")] : [],
-        })),
+        days: [{ weekday: 1, slots: [dinner("08:00", "10:00"), dinner("13:00", "16:00")] }],
       },
     ]);
   });
@@ -1152,10 +1146,7 @@ describe("period updates while painting", () => {
     expect(sent).toEqual([
       {
         departmentId: "d1",
-        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
-          weekday,
-          slots: weekday === 1 ? [dinner("13:00", "14:00"), dinner("15:00", "16:00")] : [],
-        })),
+        days: [{ weekday: 1, slots: [dinner("13:00", "14:00"), dinner("15:00", "16:00")] }],
       },
     ]);
   });
@@ -1166,15 +1157,7 @@ describe("period updates while painting", () => {
     expect(sent).toEqual([
       {
         departmentId: "d1",
-        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
-          weekday,
-          slots:
-            weekday === 1
-              ? [dinner("13:00", "16:00")]
-              : weekday === 4
-                ? [dinner("08:00", "10:00")]
-                : [],
-        })),
+        days: [{ weekday: 4, slots: [dinner("08:00", "10:00")] }],
       },
     ]);
   });

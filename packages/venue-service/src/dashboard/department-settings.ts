@@ -541,29 +541,32 @@ export class DepartmentSettings extends LitElement {
             field === "name" || field === "tradingName"
               ? draft[field].trim() === baseline[field].trim()
               : draft[field] === baseline[field];
-          if (untouched) Object.assign(draft, { [field]: source[field] });
-          Object.assign(baseline, { [field]: source[field] });
+          if (untouched) {
+            Object.assign(draft, { [field]: source[field] });
+            Object.assign(baseline, { [field]: source[field] });
+          }
         }
-        draft.courseSettings = source.courseSettings.map((row) => {
+        const courses = source.courseSettings.map((row) => {
           const saved = baseline.courseSettings.find((other) => other.courseId === row.courseId);
           const edited = draft.courseSettings.find((other) => other.courseId === row.courseId);
+          const heldTouched = saved && edited && edited.heldUntilFired !== saved.heldUntilFired;
+          const reminderTouched =
+            saved && edited && edited.reminderMinutes !== saved.reminderMinutes;
           return {
-            ...row,
-            ...(saved && edited
-              ? {
-                  heldUntilFired:
-                    edited.heldUntilFired === saved.heldUntilFired
-                      ? row.heldUntilFired
-                      : edited.heldUntilFired,
-                  reminderMinutes:
-                    edited.reminderMinutes === saved.reminderMinutes
-                      ? row.reminderMinutes
-                      : edited.reminderMinutes,
-                }
-              : {}),
+            draft: {
+              ...row,
+              ...(heldTouched ? { heldUntilFired: edited.heldUntilFired } : {}),
+              ...(reminderTouched ? { reminderMinutes: edited.reminderMinutes } : {}),
+            },
+            baseline: {
+              ...row,
+              ...(heldTouched ? { heldUntilFired: saved.heldUntilFired } : {}),
+              ...(reminderTouched ? { reminderMinutes: saved.reminderMinutes } : {}),
+            },
           };
         });
-        baseline.courseSettings = source.courseSettings;
+        draft.courseSettings = courses.map(({ draft }) => draft);
+        baseline.courseSettings = courses.map(({ baseline }) => baseline);
         this.draft = draft;
         this.baseline = baseline;
         this.scope.commit(baseline);

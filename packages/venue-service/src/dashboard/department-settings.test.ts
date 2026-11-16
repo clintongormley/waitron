@@ -2026,6 +2026,11 @@ it("a touched reminder stays while the untouched name and other course follow", 
     "Fire now",
   );
   expect(el.hasUnsavedChanges).toBe(true);
+  const matching = structuredClone(newer);
+  matching.courseSettingsByDepartment.d1![0]!.reminderMinutes = 30;
+  el.model = matching;
+  await el.updateComplete;
+  expect(el.hasUnsavedChanges).toBe(true);
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.body).toMatchObject({
