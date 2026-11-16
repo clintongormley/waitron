@@ -18,6 +18,7 @@ export default defineConfig({
         },
       },
       {
+        server: { forwardConsole: false },
         test: {
           name: "browser",
           globals: true,

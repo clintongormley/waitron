@@ -35,6 +35,7 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
+  server: { forwardConsole: false },
   optimizeDeps: {
     // Pre-bundled up front rather than discovered by the optimizer partway through a run.
     include: [

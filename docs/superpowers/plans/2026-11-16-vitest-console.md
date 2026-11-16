@@ -57,3 +57,9 @@ worker qualifications and the inconclusive/unmeasured optimizer work, including
 bump, worker/optimizer sweep, console-fixture sweep or further policy question. Routine
 verification details stay with the implementer. This planning turn writes only this file;
 it runs no reviews, commits or implementation.
+
+
+Dated clearance, 16 November 2026: Claude reviewed this plan in 111 seconds; the driver applied
+all three corrections. At 04:15 Lane I’s watcher cleared it: “Build it as planned: 12 flag lines
+in the 12 remaining configs, the one-off placement check under the agent variables, no permanent
+scanner. Land #3438 (bucket copy) first, then this.” This is watcher clearance of the plan.

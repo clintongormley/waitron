@@ -76,6 +76,7 @@ const forceAutofillPseudoState: BrowserCommand<[hostId: string]> = async (contex
 };
 
 export default defineConfig({
+  server: { forwardConsole: false },
   test: {
     globals: true,
     clearMocks: false,

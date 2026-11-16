@@ -34,6 +34,7 @@ export default defineConfig({
         },
       },
       {
+        server: { forwardConsole: false },
         // The browser / Lit project: real headless Chromium via Playwright, scoped to the
         // `./dashboard` sub-path.
         test: {

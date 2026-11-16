@@ -3,6 +3,7 @@ import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 export default defineConfig({
+  server: { forwardConsole: false },
   optimizeDeps: {
     include: [
       "lit",

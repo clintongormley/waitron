@@ -21,6 +21,7 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
+  server: { forwardConsole: false },
   // Vite discovering a dependency mid-run re-optimises and reloads the in-flight test file ("Vite
   // unexpectedly reloaded a test"), which can flake CI; pre-bundling these up front prevents it.
   optimizeDeps: {
