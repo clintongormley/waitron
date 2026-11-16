@@ -762,14 +762,21 @@ export class ProductList extends LitElement {
    * input; it is no Tab stop, so Tab still leaves the box. On a phone the slot shows only while
    * naming, as `naming-frame`. */
   #nameFrame(parentId: string | null) {
-    const color = this.nameColor ?? this.#inheritedColor(parentId).color;
+    const inherited = this.#inheritedColor(parentId);
+    const color = this.nameColor ?? inherited.color;
+    const from =
+      this.nameColor === null && isStoredColor(color) ? inherited.inheritedFrom : undefined;
     return html`<span part="folder-frame naming-frame"
       ><button
         part="swatch-button"
         type="button"
         tabindex="-1"
         data-test="name-box-color"
-        aria-label=${t("folders.choose_color")}
+        aria-label=${
+          from === undefined
+            ? t("folders.choose_color")
+            : fill("folders.choose_color_inherited", { from })
+        }
         @mousedown=${(event: Event) => event.preventDefault()}
         @click=${(event: Event) => {
           event.stopPropagation();

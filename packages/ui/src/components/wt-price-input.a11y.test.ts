@@ -49,6 +49,16 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("unit button that opens a dialog", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="kg" unit-haspopup="dialog"></wt-price-input>',
+      theme,
+    );
+    const button = host.querySelector("wt-price-input")!.shadowRoot!.querySelector("button.unit")!;
+    expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+    await expectNoA11yViolations(host);
+  });
+
   test("placeholder", async () => {
     await mountThemed(
       '<wt-price-input label="Price" name="price" unit="ea" placeholder="4.50"></wt-price-input>',

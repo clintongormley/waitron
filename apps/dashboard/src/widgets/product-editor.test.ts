@@ -7,6 +7,7 @@ import {
   setHelpMode,
   type ComboboxOption,
   type WtHelpTooltip,
+  type WtTextarea,
 } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -18,7 +19,7 @@ import {
   middleWithin,
   textLines,
 } from "@waitron/ui/src/test-helpers.js";
-import { ProductEditor, productEditorField } from "./product-editor.js";
+import { EACH_CHOICE, ProductEditor, productEditorField } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft, UnitChoice } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/shared";
@@ -26,7 +27,6 @@ import { localToday, vatRateOn, formatMoney } from "@waitron/shared";
 import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
-import { EACH_CHOICE } from "./variant-table.js";
 
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
@@ -607,7 +607,7 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
 
 // A phone hides the variants table's price column and the unit button in its heading; the price
 // field's own unit button opens the same chooser.
-it("changes a product's unit from the price field when the table's heading dropdown is hidden", async () => {
+it("changes a product's unit from the price field when the table's heading unit button is hidden", async () => {
   const litre = {
     staffName: "Staff unit",
     staffAbbreviation: "su",
@@ -918,6 +918,21 @@ it("shows a refused unit beside the price's own error on the price field once th
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   await input(el, "unit-price", "4.50");
   expect(priceInput(el).error).toBe("That unit is gone");
+});
+
+it("says the price field's unit button opens a dialog, as the variant table heading's button does", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const price = priceInput(el);
+  await price.updateComplete;
+  expect(price.shadowRoot!.querySelector("button.unit")!.getAttribute("aria-haspopup")).toBe(
+    "dialog",
+  );
 });
 
 it("locks the chooser's unit dropdown while the editor is saving, so a choice then changes nothing", async () => {
@@ -4602,7 +4617,7 @@ it("hints what a variant will actually use where its parent names nothing there"
     },
   });
   expect(variantPath(el)).toBe(`${t("editor.classification")}: ${t("categories.none")}`);
-  expect(combobox(el, "product-course")!.placeholder).toBe(t("product.no_course"));
+  expect(combobox(el, "product-course")!.placeholder).toBe(t("modifiers.none_specified"));
   expect(
     combobox(el, "product-course")!
       .shadowRoot!.querySelector(".trigger .value")!
@@ -4695,7 +4710,7 @@ it.each([
     locale: "en-GB",
     unit: "Each",
     category: "No category",
-    course: "— none —",
+    course: "None specified",
     allergens: "Allergens: None",
     dietary: "Dietary: None",
     unreviewed: "Allergens: Not yet reviewed",
@@ -4704,7 +4719,7 @@ it.each([
     locale: "es-ES",
     unit: "Unidad",
     category: "Sin categoría",
-    course: "— ninguno —",
+    course: "Sin especificar",
     allergens: "Alérgenos: Ninguno",
     dietary: "Dietética: Ninguna",
     unreviewed: "Alérgenos: Sin revisar todavía",
@@ -5117,9 +5132,9 @@ it("picks the course from a shared dropdown, with none as a chosen value and a r
     expect(course.label).toBe(t("product.course"));
     expect(course.label).toBe("Course");
     expect(course.search).toBe("auto");
-    expect(course.placeholder).toBe(t("product.no_course"));
+    expect(course.placeholder).toBe(t("modifiers.none_specified"));
     expect(course.options).toEqual([
-      { value: "", label: t("product.no_course") },
+      { value: "", label: t("modifiers.none_specified") },
       { value: "course-1", label: "Starters" },
       { value: "course-2", label: "Mains" },
       { value: "edit-courses", label: t("editor.edit_courses"), action: true, primary: true },
@@ -5129,7 +5144,7 @@ it("picks the course from a shared dropdown, with none as a chosen value and a r
     await chooseOption(course, "");
     await el.updateComplete;
     expect(el.currentValue.courseId).toBeNull();
-    expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+    expect(await shownIn(el, "product-course")).toBe(t("modifiers.none_specified"));
     const courseText = course.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
     expect(courseText.classList.contains("placeholder")).toBe(false);
     expect(getComputedStyle(courseText).fontStyle).toBe("normal");
@@ -5197,7 +5212,7 @@ it("keeps no course when Edit courses… is chosen on a product with none", asyn
   const box = await clickCourseRow(el, t("editor.edit_courses"));
   expect(el.currentValue.courseId).toBeNull();
   expect(box.value).toBe("");
-  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+  expect(await shownIn(el, "product-course")).toBe(t("modifiers.none_specified"));
 });
 
 it("selects the course the courses window hands back, and clears a course it removed", async () => {
@@ -5209,7 +5224,7 @@ it("selects the course the courses window hands back, and clears a course it rem
   el.clearCourse();
   await el.updateComplete;
   expect(el.currentValue.courseId).toBeNull();
-  expect(await shownIn(el, "product-course")).toBe(t("product.no_course"));
+  expect(await shownIn(el, "product-course")).toBe(t("modifiers.none_specified"));
 });
 
 it("returns focus to the course dropdown after the courses window", async () => {
@@ -5329,6 +5344,42 @@ it("words the takeaway field as staff read it", () => {
   } finally {
     setLocale(before);
   }
+});
+
+it("locks the VAT and takeaway VAT dropdowns while a save is in flight, like the form's other fields", async () => {
+  const el = await mountTakeaway(saved);
+  expect(combobox(el, "tax")!.disabled).toBe(false);
+  expect(combobox(el, "takeaway-tax")!.disabled).toBe(false);
+  el.busy = true;
+  await el.updateComplete;
+  expect(combobox(el, "tax")!.disabled).toBe(true);
+  expect(combobox(el, "takeaway-tax")!.disabled).toBe(true);
+  el.busy = false;
+  await el.updateComplete;
+  expect(combobox(el, "tax")!.disabled).toBe(false);
+  expect(combobox(el, "takeaway-tax")!.disabled).toBe(false);
+});
+
+it("locks the course dropdown and every description while a save is in flight", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en", "es"],
+    units: [unit],
+    taxChoices: reduced,
+    courses,
+  });
+  const locked = () => [
+    combobox(el, "product-course")!.disabled,
+    ...["en", "es"].map((locale) => control<WtTextarea>(el, `description-${locale}`).disabled),
+  ];
+  expect(locked()).toEqual([false, false, false]);
+  el.busy = true;
+  await el.updateComplete;
+  expect(locked()).toEqual([true, true, true]);
+  el.busy = false;
+  await el.updateComplete;
+  expect(locked()).toEqual([false, false, false]);
 });
 
 it("draws a product's takeaway VAT class, its empty choice naming the class served here", async () => {

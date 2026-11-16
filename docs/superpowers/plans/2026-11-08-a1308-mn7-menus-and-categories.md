@@ -125,7 +125,7 @@ The watcher's original words in Lane E's `questions.md`:
 | The root section's staff name moving to `menus.name` (`sections_root_name_ck`) | mn8 |
 | `section_members.folder_overrides` split, the four triggers, the sections photo index | mn8 |
 | `menus.is_default` | slice 5 (already landed) |
-| The dashboard's display of a category's colour source (`docs/backlog/menu.md`, "A category's naming square…") | its backlog entry; no table change |
+| The dashboard's display of a category's colour source (`docs/backlog/menu.md`, "A category's naming square…") | its backlog entry; no table change (done on 2026-11-16, when its backlog entry was deleted) |
 
 ## Files
 

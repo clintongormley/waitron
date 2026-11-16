@@ -186,6 +186,8 @@ export class WtPriceInput extends LitElement {
   /** Names the field by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
+  /** The unit button's `aria-haspopup`, for a host whose unit click opens a dialog or menu. */
+  @property({ attribute: "unit-haspopup" }) unitHasPopup = "";
   /** Draws the euro sign in the amount box as this locale writes it; empty draws none. */
   @property() locale = "";
   @property({ attribute: "decimal-locale" }) decimalLocale = "";
@@ -280,6 +282,7 @@ export class WtPriceInput extends LitElement {
       return html`<button
         type="button"
         class="unit"
+        aria-haspopup=${this.unitHasPopup || nothing}
         ?disabled=${this.disabled}
         @click=${this.onUnitClick}
       >

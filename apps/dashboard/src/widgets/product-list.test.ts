@@ -3221,11 +3221,11 @@ describe("the product list as a tree", () => {
   });
 
   it.each([
-    ["en-GB", "Choose the colour"],
-    ["es-ES", "Elegir el color"],
+    ["en-GB", "Choose the colour", "Choose the colour, inherited from Drinks"],
+    ["es-ES", "Elegir el color", "Elegir el color, heredado de Drinks"],
   ])(
     "puts a colour square showing the box's colour in the named row's leading slot, for a new category and a rename (%s)",
-    async (locale, label) => {
+    async (locale, label, inheritedLabel) => {
       const before = currentLocale();
       onTestFinished(() => setLocale(before));
       setLocale(locale);
@@ -3245,13 +3245,14 @@ describe("the product list as a tree", () => {
       el.nameDraft = { kind: "create", parentId: "d" };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-      expect(square().button.getAttribute("aria-label")).toBe(label);
+      expect(square().button.getAttribute("aria-label")).toBe(inheritedLabel);
       expect(square().chip.getAttribute("part")).toBe("color-swatch inherited");
       expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
       el.nameColor = "#256bb1";
       await el.updateComplete;
       await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
       expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(37, 107, 177)");
+      expect(square().button.getAttribute("aria-label")).toBe(label);
 
       el.nameDraft = { kind: "rename", categoryId: "d" };
       el.nameColor = "#b12525";
@@ -3261,8 +3262,31 @@ describe("the product list as a tree", () => {
       expect(row.querySelector('[data-test="name-box-color"]')).toBe(square().button);
       expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
       expect(row.querySelector('[data-test="color-d"]')).toBeNull();
+      expect(square().button.getAttribute("aria-label")).toBe(label);
+      // A top-level category with no colour of its own and no default has nothing to inherit.
+      el.nameColor = null;
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      expect(square().button.getAttribute("aria-label")).toBe(label);
     },
   );
+
+  it("names no source on the naming square when the inherited colour is not one it can draw", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#B12525" }, beer, food],
+    });
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const button = root
+      .querySelector('wt-input[name="category-name"]')!
+      .closest("tr")!
+      .querySelector<HTMLButtonElement>('[part~="folder-frame"] > [data-test="name-box-color"]')!;
+    expect(button.querySelector('[part~="color-swatch"]')!.getAttribute("part")).toBe(
+      "color-swatch empty",
+    );
+    expect(button.getAttribute("aria-label")).toBe(t("folders.choose_color"));
+  });
 
   it("keeps the name box open, saving nothing, while its colour square is used, and saves on Enter once focus is back", async () => {
     const outside = document.createElement("button");
