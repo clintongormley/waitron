@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
 import {
   NODE_MIGRATIONS,
-  nodeRecoveryKey,
+  box,
   readRecoveryKeyName,
   readRecoveryKeyVerifier,
   setRecoveryKeyTx,
@@ -40,7 +40,7 @@ const database = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 const handles = () => ({ venue: database.db, node: database.node });
-const storedKeys = () => database.node.select().from(nodeRecoveryKey);
+const storedKeys = () => database.node.select().from(box);
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -270,8 +270,8 @@ it("installs the delivered verifier once and preserves it on exact publication r
   expect(before).toMatchObject([
     {
       nodeId: state.frozen.nodeId,
-      verifier: f.staged!.stage.verifier,
-      keyName: f.staged!.stage.name,
+      recoveryKeyVerifier: f.staged!.stage.verifier,
+      recoveryKeyName: f.staged!.stage.name,
     },
   ]);
   await f.coordinator.run((hold) =>
@@ -323,7 +323,7 @@ it("a first setup interrupted after pack 1 and before the key installs the key o
   const stage = f.staged!.stage;
   await stampDeployment(database.db, "preproduction");
   database.node.run(
-    sql`create trigger interrupt_key before insert on node_recovery_key begin select raise(abort, 'interrupted'); end`,
+    sql`create trigger interrupt_key before insert on box begin select raise(abort, 'interrupted'); end`,
   );
   try {
     await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(

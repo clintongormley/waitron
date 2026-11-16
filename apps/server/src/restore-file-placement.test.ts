@@ -294,12 +294,12 @@ describe("restoreDatabase consumes a database file", () => {
   });
 });
 
-/** A real SQLite file holding one `node_mode` row for `nodeId`, as node.db would. */
+/** A real SQLite file holding one `box` role group for `nodeId`, as node.db would. */
 function nodeFile(path: string, nodeId: string): void {
   const database = new DatabaseSync(path);
   try {
-    database.exec("create table node_mode (node_id text primary key)");
-    database.prepare("insert into node_mode (node_id) values (?)").run(nodeId);
+    database.exec("create table box (node_id text primary key)");
+    database.prepare("insert into box (node_id) values (?)").run(nodeId);
   } finally {
     database.close();
   }
@@ -308,7 +308,7 @@ function nodeIdsIn(path: string): unknown[] {
   const database = new DatabaseSync(path, { readOnly: true });
   try {
     return database
-      .prepare("select node_id from node_mode")
+      .prepare("select node_id from box")
       .all()
       .map((row) => row.node_id);
   } finally {

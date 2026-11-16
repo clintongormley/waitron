@@ -1,7 +1,6 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
-import { eq, ne } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import {
-  now,
   readMembershipTrustSet,
   readNodePublicKeyTx,
   setNodePublicKeyTx,
@@ -13,7 +12,7 @@ import {
   type NodeTransaction,
 } from "@waitron/db";
 import { generateNodeKeyPair, type TrustSet } from "@waitron/membership";
-import { nodeSigningKey } from "@waitron/node-db";
+import { box, writeBoxSigningKeyTx } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { aadFor, openSealedRow, seal, type SealedRow } from "./cipher.js";
 import type { KeyRing } from "./keyring.js";
@@ -45,13 +44,7 @@ export async function sealNodeSigningKeyTx(
     authTag: sealed.authTag,
     keyVersion: ring.current.version,
   };
-  await tx
-    .insert(nodeSigningKey)
-    .values({ nodeId, ...values })
-    .onConflictDoUpdate({
-      target: nodeSigningKey.nodeId,
-      set: { ...values, updatedAt: now() },
-    });
+  await writeBoxSigningKeyTx(tx, nodeId, values);
 }
 
 /**
@@ -88,17 +81,24 @@ async function readRow(
 ): Promise<SealedSigningKeyRow | null> {
   const [row] = await node
     .select({
-      ciphertext: nodeSigningKey.ciphertext,
-      iv: nodeSigningKey.iv,
-      authTag: nodeSigningKey.authTag,
-      keyVersion: nodeSigningKey.keyVersion,
+      ciphertext: box.signingKeyCiphertext,
+      iv: box.signingKeyIv,
+      authTag: box.signingKeyAuthTag,
+      keyVersion: box.signingKeyVersion,
     })
-    .from(nodeSigningKey)
-    .where(eq(nodeSigningKey.nodeId, nodeId));
-  return row ?? null;
+    .from(box)
+    .where(eq(box.nodeId, nodeId));
+  return row?.ciphertext == null
+    ? null
+    : {
+        ciphertext: row.ciphertext,
+        iv: row.iv!,
+        authTag: row.authTag!,
+        keyVersion: row.keyVersion!,
+      };
 }
 
-/** This node's private signing key, or `null` when the table has no row for that node id; a row
+/** This node's private signing key, or `null` when that node has no signing-key group; a row
  * that will not open throws as {@link openNodeSigningKeyRow} does. */
 export async function readNodeSigningKey(
   node: NodeDatabase | NodeTransaction,
@@ -106,7 +106,18 @@ export async function readNodeSigningKey(
   nodeId: string,
 ): Promise<string | null> {
   const row = await readRow(node, nodeId);
-  return row === null ? null : openNodeSigningKeyRow(row, ring, nodeId);
+  return row === null
+    ? null
+    : openNodeSigningKeyRow(
+        {
+          ciphertext: row.ciphertext!,
+          iv: row.iv!,
+          authTag: row.authTag!,
+          keyVersion: row.keyVersion!,
+        },
+        ring,
+        nodeId,
+      );
 }
 
 /**
@@ -178,33 +189,40 @@ export async function rotateNodeSigningKeysTx(
   const result = { rotated: 0, alreadyCurrent: 0 };
   // `waitron-credentials rotate` opens node.db without migrating it; a node.db no start has
   // migrated yet has nothing to re-seal.
-  if (!(await tableExists(tx, "node_signing_key"))) return result;
+  if (!(await tableExists(tx, "box"))) return result;
   // Every row, not only this box's: a re-key must leave nothing on the old key, and each row still
   // opens only under its own node id.
   const rows = await tx
     .select({
-      nodeId: nodeSigningKey.nodeId,
-      ciphertext: nodeSigningKey.ciphertext,
-      iv: nodeSigningKey.iv,
-      authTag: nodeSigningKey.authTag,
-      keyVersion: nodeSigningKey.keyVersion,
+      nodeId: box.nodeId,
+      ciphertext: box.signingKeyCiphertext,
+      iv: box.signingKeyIv,
+      authTag: box.signingKeyAuthTag,
+      keyVersion: box.signingKeyVersion,
     })
-    .from(nodeSigningKey);
+    .from(box)
+    .where(isNotNull(box.signingKeyCiphertext));
   for (const { nodeId, ...row } of rows) {
     if (row.keyVersion === ring.current.version) {
       result.alreadyCurrent += 1;
       continue;
     }
-    await sealNodeSigningKeyTx(tx, ring, nodeId, openNodeSigningKeyRow(row, ring, nodeId));
+    await sealNodeSigningKeyTx(
+      tx,
+      ring,
+      nodeId,
+      openNodeSigningKeyRow(
+        {
+          ciphertext: row.ciphertext!,
+          iv: row.iv!,
+          authTag: row.authTag!,
+          keyVersion: row.keyVersion!,
+        },
+        ring,
+        nodeId,
+      ),
+    );
     result.rotated += 1;
   }
   return result;
-}
-
-/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
-export async function deleteNodeSigningKeyOtherThanTx(
-  tx: NodeTransaction,
-  nodeId: string,
-): Promise<void> {
-  await tx.delete(nodeSigningKey).where(ne(nodeSigningKey.nodeId, nodeId));
 }

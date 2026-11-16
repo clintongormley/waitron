@@ -5,6 +5,9 @@ describe("the public surface", () => {
   it("exports exactly the intended names", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
+        "box",
+        "deleteBoxRowsOtherThanTx",
+        "writeBoxSigningKeyTx",
         "NODE_CLASSIFICATION",
         "NODE_MIGRATIONS",
         "HANDOVER_CLOSED_STATES",
@@ -19,12 +22,7 @@ describe("the public surface", () => {
         "nodeHandoverEvents",
         "nodeHandoverOperations",
         "nodeHandoverRestriction",
-        "nodeMirrorLink",
-        "nodeMode",
         "nodePairLink",
-        "nodePrimaryKey",
-        "nodeRecoveryKey",
-        "nodeSigningKey",
         "nodeTakeFailures",
         "readMirrorLink",
         "writeMirrorLink",
@@ -43,10 +41,6 @@ describe("the public surface", () => {
         "pinPrimaryKeyTx",
         "readPinnedPrimaryKey",
         "readPairLink",
-        "deleteNodeMirrorLinkOtherThanTx",
-        "deleteNodeModeOtherThanTx",
-        "deleteNodePrimaryKeyOtherThanTx",
-        "deleteNodeRecoveryKeyOtherThanTx",
         "clearTakeFailuresTx",
         "deleteNodeTakeFailuresOtherThanTx",
         "readTakeFailures",

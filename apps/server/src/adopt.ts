@@ -7,10 +7,7 @@ import {
   type NodeTransaction,
 } from "@waitron/db";
 import {
-  deleteNodeMirrorLinkOtherThanTx,
-  deleteNodeModeOtherThanTx,
-  deleteNodePrimaryKeyOtherThanTx,
-  deleteNodeRecoveryKeyOtherThanTx,
+  deleteBoxRowsOtherThanTx,
   deleteNodeTakeFailuresOtherThanTx,
   NODE_CLASSIFICATION,
   pinPrimaryKeyTx,
@@ -19,7 +16,6 @@ import {
 } from "@waitron/node-db";
 import {
   deleteNodePairLinkOtherThanTx,
-  deleteNodeSigningKeyOtherThanTx,
   listCredentials,
   loadKeyRing,
   sealNodeSigningKeyTx,
@@ -55,11 +51,7 @@ import "./errors.js";
 const ABANDONED_ROW_SWEEPS: Readonly<
   Record<string, (tx: NodeTransaction, nodeId: string) => Promise<void>>
 > = {
-  node_mode: deleteNodeModeOtherThanTx,
-  node_mirror_link: deleteNodeMirrorLinkOtherThanTx,
-  node_recovery_key: deleteNodeRecoveryKeyOtherThanTx,
-  node_signing_key: deleteNodeSigningKeyOtherThanTx,
-  node_primary_key: deleteNodePrimaryKeyOtherThanTx,
+  box: deleteBoxRowsOtherThanTx,
   node_pair_link: deleteNodePairLinkOtherThanTx,
   node_take_failures: deleteNodeTakeFailuresOtherThanTx,
 };

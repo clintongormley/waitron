@@ -44,9 +44,9 @@ function facts(): FinalStateFacts {
         sha256: "f".repeat(64),
         ringKeys: [10, 2, 9].map((version) => ({ version, sha256: "a".repeat(64) })),
       },
-      { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
+      { item: "box", where: "node.db", class: "destination-owned", treatment: "own" },
       {
-        item: "node_signing_key",
+        item: "box.signing_key",
         where: "node.db",
         class: "source-only",
         treatment: "never",
@@ -169,8 +169,8 @@ describe("assembleIndicator", () => {
       "payments",
     ]);
     expect(indicator.nodeLocal.map((row) => `${row.where}/${row.item}`)).toEqual([
-      "node.db/node_mode",
-      "node.db/node_signing_key",
+      "node.db/box",
+      "node.db/box.signing_key",
       "state/venue-keys.json",
     ]);
     expect(indicator.nodeLocal[2].ringKeys).toEqual(
@@ -206,9 +206,9 @@ describe("assembleIndicator", () => {
         ],
       },
       nodeLocal: [
-        { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
+        { item: "box", where: "node.db", class: "destination-owned", treatment: "own" },
         {
-          item: "node_signing_key",
+          item: "box.signing_key",
           where: "node.db",
           class: "source-only",
           treatment: "never",
@@ -234,7 +234,7 @@ describe("assembleIndicator", () => {
       ...input,
       nodeLocal: [
         {
-          item: "node_mode",
+          item: "box",
           where: "node.db",
           class: "destination-owned",
           treatment: "own",
@@ -304,7 +304,7 @@ describe("assembleIndicator", () => {
     };
     expect(faultFrom(() => assembleIndicator(twiceModule)).message).toContain("payments");
     const twiceItem = { ...input, nodeLocal: [...input.nodeLocal, input.nodeLocal[1]] };
-    expect(faultFrom(() => assembleIndicator(twiceItem)).message).toContain("node.db/node_mode");
+    expect(faultFrom(() => assembleIndicator(twiceItem)).message).toContain("node.db/box");
   });
 
   it("keeps one item name in two places as two items", () => {
@@ -346,7 +346,7 @@ describe("signIndicator", () => {
       snapshot: { ...input.snapshot, schema: [...input.snapshot.schema].reverse() },
       nodeLocal: [
         {
-          item: "node_mode",
+          item: "box",
           where: "node.db",
           class: "destination-owned",
           treatment: "own",

@@ -107,9 +107,9 @@ vi.mock("./mirror-bundle-api.js", async (importOriginal) => {
 });
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
-// `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
+// `box`'s mirror-link group. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
 // same identity booted as primary — the control that the mirror's absences are real; `noConfig`,
-// mirror-stamped with no `node_mirror_link` row, which must refuse to boot; and `adopting`, which
+// mirror-stamped with no `box` mirror-link group, which must refuse to boot; and `adopting`, which
 // holds no venue rows.
 // Nothing is reset between tests, and the four directories never meet.
 const VENUES = ["mirror", "primary", "noConfig", "adopting"] as const;
@@ -300,7 +300,7 @@ beforeAll(async () => {
   await seedIdentity(db.primary);
   await seedIdentity(db.noConfig);
   await seedPersons(db.mirror, { id: MIRROR_STAFF_ID, displayName: "Martha", role: "staff" });
-  // The primary directory writes no `node_mode` row: `readNodeMode` reads it as 'primary'.
+  // The primary directory writes no role group: `readNodeMode` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
   await setNodeMode(
     { venue: db.mirror, node: stores.mirror.node },
@@ -371,7 +371,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
+describe("mirror-mode boot (box.mode = 'mirror')", () => {
   it("issues no session locally and keeps the remote staff entrance closed", async () => {
     const [localPort, staffPort] = await freePorts(2);
     const certificate = mintSelfSignedServerCert({
@@ -978,7 +978,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("refuses a mirror boot that has no node_mirror_link row (a mirror REQUIRES its DB connection config)", async () => {
+  it("refuses a mirror boot with no mirror-link group", async () => {
     let caught: unknown;
     try {
       await startServer({
@@ -993,7 +993,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     expect(isAppError(caught)).toBe(true);
     expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
     expect(isAppError(caught) && caught.params).toEqual({
-      variable: "node_mirror_link",
+      variable: "box",
       reason: "mirror_requires_mirror_link",
     });
   }, 60_000);

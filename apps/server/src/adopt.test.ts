@@ -274,12 +274,12 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
     await suite.node.execute(
-      sql.raw(`create trigger refuse_mirror_link before insert on node_mirror_link
+      sql.raw(`create trigger refuse_mirror_link before insert on box
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
       await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow();
-      const roles = await suite.node.execute(sql`select node_id, mode from node_mode`);
+      const roles = await suite.node.execute(sql`select node_id, mode from box`);
       expect(roles.rows).toEqual([]);
     } finally {
       await suite.node.execute(sql`drop trigger if exists refuse_mirror_link`);
@@ -288,15 +288,13 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   it("leaves no mirror role or link behind when its signing key cannot be sealed", async () => {
     await suite.node.execute(
-      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+      sql.raw(`create trigger refuse_signing_key before insert on box
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
       await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
-      expect((await suite.node.execute(sql`select node_id from node_mode`)).rows).toEqual([]);
-      expect((await suite.node.execute(sql`select node_id from node_mirror_link`)).rows).toEqual(
-        [],
-      );
+      expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
+      expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
     } finally {
       await suite.node.execute(sql`drop trigger if exists refuse_signing_key`);
     }
@@ -475,14 +473,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     standbyIdentity = STANDBY;
     await adoptFromPrimary(deps(), REQ, NO_HOOKS);
 
-    for (const table of [
-      "node_mode",
-      "node_mirror_link",
-      "node_signing_key",
-      "node_recovery_key",
-      "node_primary_key",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect(
         (await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows,
         table,
@@ -879,21 +870,14 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     ).catch((e: unknown) => e);
     expect((error as Error).message).toBe("disk refused");
-    for (const table of ["node_mode", "node_signing_key", "node_primary_key"]) {
+    for (const table of ["box", "box", "box"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
   });
 
   async function writtenNothing(): Promise<void> {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
-    for (const table of [
-      "node_mode",
-      "node_mirror_link",
-      "node_signing_key",
-      "node_recovery_key",
-      "node_primary_key",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
     expect(await readdir(stateDir)).toEqual([]);
@@ -1149,14 +1133,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toMatchObject({
       code: "EEXIST",
     });
-    for (const table of [
-      "node_mode",
-      "node_mirror_link",
-      "node_signing_key",
-      "node_recovery_key",
-      "node_primary_key",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
   });
@@ -1178,18 +1155,12 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   it("leaves no role, signing key, recovery key or link behind when the main box's key cannot be pinned", async () => {
     await suite.node.execute(
-      sql.raw(`create trigger refuse_pin before insert on node_primary_key
+      sql.raw(`create trigger refuse_pin before insert on box
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
       await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
-      for (const table of [
-        "node_mode",
-        "node_signing_key",
-        "node_recovery_key",
-        "node_mirror_link",
-        "node_pair_link",
-      ]) {
+      for (const table of ["box", "box", "box", "box", "node_pair_link"]) {
         expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual(
           [],
         );

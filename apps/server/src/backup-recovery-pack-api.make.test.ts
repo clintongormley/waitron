@@ -641,7 +641,7 @@ describe("a made pack", () => {
   });
 
   it("with no key in force and the box ticked, fails the page and writes no key", async () => {
-    suite.node.run(sql`delete from node_recovery_key`);
+    suite.node.run(sql`delete from box`);
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
@@ -1113,7 +1113,7 @@ describe("the status route", () => {
   it("a key replacement whose verifier save fails keeps the old key working and reports the new pack out of date", async () => {
     const f = fixture();
     suite.node.run(
-      sql`create trigger refuse_recovery_key before update on node_recovery_key begin select raise(abort, 'recovery key save refused'); end`,
+      sql`create trigger refuse_recovery_key before update on box begin select raise(abort, 'recovery key save refused'); end`,
     );
     try {
       const response = await f.make(true);

@@ -41,7 +41,7 @@ afterEach(async () => {
 
 it("an archive carries node.db's rows as node.dump", async () => {
   suite.node.run(
-    sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values ('node-a', 'mirror', 'secondary', 0)`,
+    sql`insert into box (node_id, mode, singleton_role, role_changed_at) values ('node-a', 'mirror', 'secondary', 0)`,
   );
   const scratch = join(stateDir, "scratch");
   const parts = await collectStateParts({
@@ -63,9 +63,7 @@ it("an archive carries node.db's rows as node.dump", async () => {
   const opened = await openBackupQuery(copy);
   try {
     const rows = [];
-    for await (const row of opened.query.rows(
-      "select node_id, mode, singleton_role from node_mode",
-    ))
+    for await (const row of opened.query.rows("select node_id, mode, singleton_role from box"))
       rows.push({ ...row });
     expect(rows).toEqual([{ node_id: "node-a", mode: "mirror", singleton_role: "secondary" }]);
   } finally {

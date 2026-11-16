@@ -943,6 +943,8 @@ also qualifies the historical operation-description references in this section.
   The menu table, identifiers, routes and wording now use menu names; the Products screen uses
   products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Periods hold their ordered staff-menu ids. Photo metadata lives on each photo; original and replacement bytes share one immutable blob store, and deleting or replacing a photo prunes bytes no photo names.
   Membership reads its term from the signed document, and an alert's handler references a person.
+  The box's role, recovery key, signing key, mirror link and pinned main-box key share one local
+  row; replaced-key and role-change events remain in vb9's follow-on pull request.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

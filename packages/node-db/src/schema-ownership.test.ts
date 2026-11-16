@@ -9,15 +9,11 @@ import * as schema from "./schema/index.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = [
+  "box",
   "node_handover_events",
   "node_handover_operations",
   "node_handover_restriction",
-  "node_mirror_link",
-  "node_mode",
   "node_pair_link",
-  "node_primary_key",
-  "node_recovery_key",
-  "node_signing_key",
   "node_take_failures",
 ];
 

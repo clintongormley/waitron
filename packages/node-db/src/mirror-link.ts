@@ -1,6 +1,7 @@
-import { eq, ne } from "drizzle-orm";
-import { now, withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
-import { nodeMirrorLink } from "./schema/node-mirror-link.js";
+import { eq } from "drizzle-orm";
+import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import { box } from "./schema/box.js";
+import { writeBoxMirrorLinkTx } from "./box.js";
 
 /**
  * A mirror's non-secret link to its box: where it dials to reach the box and how it trusts the
@@ -13,21 +14,28 @@ export interface MirrorConnection {
   originNodeId: string;
 }
 
-/** This node's mirror link, or `null` when this node has no row: nothing has adopted it as a mirror. */
+/** This node's mirror link, or `null` when this node has no mirror-link group: nothing has adopted it as a mirror. */
 export async function readMirrorLink(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<MirrorConnection | null> {
   const [row] = await node
     .select({
-      originUrl: nodeMirrorLink.originUrl,
-      boxHostname: nodeMirrorLink.boxHostname,
-      boxCaPem: nodeMirrorLink.boxCaPem,
-      originNodeId: nodeMirrorLink.originNodeId,
+      originUrl: box.mirrorOriginUrl,
+      boxHostname: box.mirrorBoxHostname,
+      boxCaPem: box.mirrorBoxCaPem,
+      originNodeId: box.mirrorOriginNodeId,
     })
-    .from(nodeMirrorLink)
-    .where(eq(nodeMirrorLink.nodeId, nodeId));
-  return row ?? null;
+    .from(box)
+    .where(eq(box.nodeId, nodeId));
+  return row?.originUrl == null
+    ? null
+    : {
+        originUrl: row.originUrl,
+        boxHostname: row.boxHostname!,
+        boxCaPem: row.boxCaPem!,
+        originNodeId: row.originNodeId!,
+      };
 }
 
 /** Writes this node's mirror link on its own node transaction; see {@link writeMirrorLinkTx}. */
@@ -41,26 +49,12 @@ export async function writeMirrorLink(
 
 /**
  * Upserts this node's mirror link on a caller's node transaction. A second write for the same node
- * replaces its row.
+ * replaces only that group.
  */
 export async function writeMirrorLinkTx(
   tx: NodeTransaction,
   nodeId: string,
   link: MirrorConnection,
 ): Promise<void> {
-  await tx
-    .insert(nodeMirrorLink)
-    .values({ nodeId, ...link })
-    .onConflictDoUpdate({
-      target: nodeMirrorLink.nodeId,
-      set: { ...link, adoptedAt: now() },
-    });
-}
-
-/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
-export async function deleteNodeMirrorLinkOtherThanTx(
-  tx: NodeTransaction,
-  nodeId: string,
-): Promise<void> {
-  await tx.delete(nodeMirrorLink).where(ne(nodeMirrorLink.nodeId, nodeId));
+  await writeBoxMirrorLinkTx(tx, nodeId, link);
 }

@@ -30,9 +30,9 @@ afterEach(async () => {
 
 async function readName(node = suite.node, nodeId = NODE): Promise<unknown> {
   const rows = await node.execute<Record<string, unknown>>(
-    sql`select * from node_recovery_key where node_id = ${nodeId}`,
+    sql`select * from box where node_id = ${nodeId}`,
   );
-  return rows.rows[0]?.key_name;
+  return rows.rows[0]?.recovery_key_name;
 }
 
 it("stores a non-secret name beside each newly minted verifier", async () => {
@@ -117,7 +117,7 @@ it("a refused replacement leaves both the paper name and the original verifier",
   const original = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const oldName = await readRecoveryKeyName(suite.node, NODE);
   await suite.node.execute(
-    sql`create trigger refuse_recovery_key_update before update on node_recovery_key begin select raise(abort, 'key replacement refused'); end`,
+    sql`create trigger refuse_recovery_key_update before update on box begin select raise(abort, 'key replacement refused'); end`,
   );
   try {
     await expect(mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE)).rejects.toThrow(
@@ -136,6 +136,6 @@ it("a paper name is not a credential, and the name reader is scoped to its node"
   expect(name).toEqual(expect.any(String));
   expect(await readRecoveryKeyName(suite.node, OTHER)).toBeNull();
   expect(await verifyBreakGlass(suite.node, NODE, name!)).toBe(false);
-  const rows = await suite.node.execute(sql`select * from node_recovery_key`);
+  const rows = await suite.node.execute(sql`select * from box`);
   expect(JSON.stringify(rows)).not.toContain(secret);
 });

@@ -201,7 +201,7 @@ it("refuses a wrong node key before hooks or restored identity are published", a
 it("identifies the chosen backup's paper key before authentication can refuse it", async () => {
   const f = await fixture(regime(async () => ({ report: "restored" })));
   const archivedName = await suite.node.execute<Record<string, unknown>>(
-    sql`select * from node_recovery_key where node_id = ${NODE}`,
+    sql`select * from box where node_id = ${NODE}`,
   );
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
@@ -217,7 +217,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
   });
   expect(entries).toContainEqual({
     code: "restore.recovery_key_selected",
-    params: { name: archivedName.rows[0]!.key_name },
+    params: { name: archivedName.rows[0]!.recovery_key_name },
   });
   expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });

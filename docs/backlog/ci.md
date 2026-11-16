@@ -127,7 +127,14 @@ runtime or test. Sixty recent failed CI runs were inspected; none of the earlier
 read from non-Dependabot runs held this same assertion. A separate Linux Node 26.13.0 probe of the same worker
 and 15,000-row fixture passed twenty samples, without reproducing zero ticks. This is one retained
 sighting, not a diagnosed cause or a repair. Preserve the timing and event-loop state on recurrence;
-a clean rerun of unrelated work does not close it. Receipts: `~/waitron-campaign-k/receipts/b3-wifi-controls/ci-server17.log`,
+a clean rerun of unrelated work does not close it.
+16 November 2026: the same zero-tick assertion recurred on PR #3488,
+[run 43838318475, server shard 17](https://github.com/clintongormley/waitron/actions/runs/43838318475/job/133200741162),
+after returning the expected intact result; 1,911 other cases passed. The branch changes only the
+node-table fixture and a copied-role query in this file; `git blame` dates every line of the timer
+case to `af36b82132` (#2540). The earlier local focused run passed this case. No fix is claimed.
+The failed log is retained at `~/waitron-campaign-h/receipts/a1308-vb9/ci-failed-133200741162.log`.
+ Receipts: `~/waitron-campaign-k/receipts/b3-wifi-controls/ci-server17.log`,
 `server-failure-history.json` and `timer-probe-linux.jsonl`.
 
 15 November 2026: PR #3399's `root-guards` job

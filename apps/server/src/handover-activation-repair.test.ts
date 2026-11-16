@@ -205,7 +205,7 @@ async function readDisk() {
         ).state,
         activatedEvents: count(node, "node_handover_events where kind = 'activated'"),
         mode: (
-          node.prepare("select mode from node_mode where node_id = ?").get(standby.nodeId) as {
+          node.prepare("select mode from box where node_id = ?").get(standby.nodeId) as {
             mode: string;
           }
         ).mode,

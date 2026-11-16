@@ -13,19 +13,18 @@ import {
   readRecoveryKey,
   readRecoveryKeyName,
   readRecoveryKeyVerifier,
-  deleteNodeRecoveryKeyOtherThanTx,
   setRecoveryKeyTx,
 } from "./recovery-key.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
-// A node file with NO migration set applied, so `node_recovery_key` does not exist.
+// A node file with NO migration set applied, so `box` does not exist.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
   it("is refused rather than read as holding no key, for the verifier and the name alike", async () => {
-    const absent = /no such table: node_recovery_key/;
+    const absent = /no such table: box/;
     await expect(readRecoveryKeyVerifier(bare.node, NODE)).rejects.toThrow(absent);
     await expect(readRecoveryKeyName(bare.node, NODE)).rejects.toThrow(absent);
     await expect(readRecoveryKey(bare.node, NODE)).rejects.toThrow(absent);
@@ -71,7 +70,7 @@ describe("the node recovery-key check", () => {
     await withNodeTransaction(suite.node, (tx) =>
       setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
     );
-    expect(suite.node.all(sql`select node_id from node_recovery_key`)).toEqual([{ node_id: NODE }]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: NODE }]);
   });
 
   it("reads a recovery-key check only for the node it was written for", async () => {
@@ -88,17 +87,17 @@ describe("the node recovery-key check", () => {
       setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
     );
     const [first] = suite.node.all<{ updated_at: string }>(
-      sql`select updated_at from node_recovery_key`,
+      sql`select recovery_key_changed_at as updated_at from box`,
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await withNodeTransaction(suite.node, (tx) =>
       setRecoveryKeyTx(tx, NODE, "scrypt$cc$dd", "2026-10-31-second"),
     );
-    expect(suite.node.all(sql`select count(*) as n from node_recovery_key`)).toEqual([{ n: 1 }]);
+    expect(suite.node.all(sql`select count(*) as n from box`)).toEqual([{ n: 1 }]);
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$cc$dd");
     expect(await readRecoveryKeyName(suite.node, NODE)).toBe("2026-10-31-second");
     const [second] = suite.node.all<{ updated_at: string }>(
-      sql`select updated_at from node_recovery_key`,
+      sql`select recovery_key_changed_at as updated_at from box`,
     );
     expect(second!.updated_at > first!.updated_at).toBe(true);
   });
@@ -107,7 +106,7 @@ describe("the node recovery-key check", () => {
     await withNodeTransaction(suite.node, (tx) =>
       setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
     );
-    suite.node.run(sql`update node_recovery_key set key_name = ${blank} where node_id = ${NODE}`);
+    suite.node.run(sql`update box set recovery_key_name = ${blank} where node_id = ${NODE}`);
     expect(await readRecoveryKeyName(suite.node, NODE)).toBeNull();
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$aa$bb");
     expect(await readRecoveryKey(suite.node, NODE)).toEqual({
@@ -123,24 +122,10 @@ describe("the node recovery-key check", () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_recovery_key (node_id, verifier, key_name, updated_at) values (${NODE}, 'x', 'x', ${new Date().toISOString()})`,
+          sql`insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values (${NODE}, 'x', 'x', ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-  });
-});
-
-describe("deleteNodeRecoveryKeyOtherThanTx", () => {
-  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  it("deletes every row but this node id's, and keeps this one's", async () => {
-    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
-      await withNodeTransaction(sweep.node, (tx) =>
-        setRecoveryKeyTx(tx, nodeId, `verifier-${nodeId}`, `key-${nodeId}`),
-      );
-    }
-    await withNodeTransaction(sweep.node, (tx) => deleteNodeRecoveryKeyOtherThanTx(tx, NODE));
-    expect(sweep.node.all(sql`select node_id from node_recovery_key`)).toEqual([{ node_id: NODE }]);
   });
 });

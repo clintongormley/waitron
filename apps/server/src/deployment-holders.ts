@@ -2,7 +2,7 @@ import type { DeploymentMode, NodeDatabase, SingletonRole } from "@waitron/db";
 import { readNodeMode } from "@waitron/node-db";
 
 /**
- * This node's two role axes (node.db's `node_mode`), each in a cell read live per request / per
+ * This node's two role axes (node.db's `box` role group), each in a cell read live per request / per
  * pass so a promotion needs no restart.
  */
 export interface DeploymentHolders {
@@ -20,7 +20,7 @@ export function createDeploymentHolders(
 
 /**
  * Re-reads this node's two axes into the holders. Both come from a SINGLE read of one row, so the
- * holders can never hold a torn `(mode, singleton_role)` pair that `node_mode_role_valid_ck`
+ * holders can never hold a torn `(mode, singleton_role)` pair that `box_role_valid_ck`
  * forbids.
  */
 export async function refreshDeploymentHolders(

@@ -1,22 +1,25 @@
-import { eq, ne } from "drizzle-orm";
-import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
-import { nodePrimaryKey } from "./schema/node-primary-key.js";
+import { eq } from "drizzle-orm";
+import { type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import { box } from "./schema/box.js";
+import { writeBoxPinnedKeyTx } from "./box.js";
 
 export interface PinnedPrimaryKey {
   primaryNodeId: string;
   publicKey: string;
 }
 
-/** The main box's key this node pinned, or `null` when the table holds none for it. */
+/** The main box's key this node pinned, or `null` when its pinned-key group is empty. */
 export async function readPinnedPrimaryKey(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<PinnedPrimaryKey | null> {
   const [row] = await node
-    .select({ primaryNodeId: nodePrimaryKey.primaryNodeId, publicKey: nodePrimaryKey.publicKey })
-    .from(nodePrimaryKey)
-    .where(eq(nodePrimaryKey.nodeId, nodeId));
-  return row ?? null;
+    .select({ primaryNodeId: box.primaryNodeId, publicKey: box.primaryPublicKey })
+    .from(box)
+    .where(eq(box.nodeId, nodeId));
+  return row?.primaryNodeId == null
+    ? null
+    : { primaryNodeId: row.primaryNodeId, publicKey: row.publicKey! };
 }
 
 /** Upserts the main box's key for this node on a caller's node transaction. */
@@ -25,19 +28,5 @@ export async function pinPrimaryKeyTx(
   nodeId: string,
   pinned: PinnedPrimaryKey,
 ): Promise<void> {
-  await tx
-    .insert(nodePrimaryKey)
-    .values({ nodeId, ...pinned })
-    .onConflictDoUpdate({
-      target: nodePrimaryKey.nodeId,
-      set: { ...pinned, pinnedAt: now() },
-    });
-}
-
-/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
-export async function deleteNodePrimaryKeyOtherThanTx(
-  tx: NodeTransaction,
-  nodeId: string,
-): Promise<void> {
-  await tx.delete(nodePrimaryKey).where(ne(nodePrimaryKey.nodeId, nodeId));
+  await writeBoxPinnedKeyTx(tx, nodeId, pinned);
 }

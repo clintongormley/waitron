@@ -110,7 +110,7 @@ it("accepts an empty venue database when node.db's set is required, since that s
   expect(await inspect(undefined, null, ["core", "node"])).toBe(true);
 });
 it.each([
-  ["node table", "create table `node_mode` (`node_id` text primary key not null)"],
+  ["node table", "create table `box` (`node_id` text primary key not null)"],
   ["node journal", 'create table "__drizzle_migrations_node" (hash text)'],
 ])("refuses a venue database carrying a %s", async (_name, edit) => {
   expect(await inspect((connection) => connection.exec(edit), null, ["core", "node"])).toBe(false);

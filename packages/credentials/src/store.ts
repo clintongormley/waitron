@@ -252,7 +252,7 @@ export interface RotationResult {
 }
 
 /**
- * Re-seals every credential, and every row of `node`'s `node_signing_key`, onto the ring's current
+ * Re-seals every credential, and every populated signing-key group in `node`'s `box`, onto the ring's current
  * key, counting both in one result.
  *
  * Refuses `credentials.rotation_spare_joined`, re-sealing nothing, while `node` holds a pair link

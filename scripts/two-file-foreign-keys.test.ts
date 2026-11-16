@@ -158,7 +158,7 @@ describe("negative controls", () => {
 
   it("says nothing about a key that stays on one side", () => {
     expect(violationOf(edge("webauthn_credentials", "persons"), classes)).toBeNull();
-    expect(violationOf(edge("join_requests", "node_mirror_link"), classes)).toBeNull();
+    expect(violationOf(edge("join_requests", "box"), classes)).toBeNull();
   });
 
   it("reports an endpoint no module classifies, rather than skipping it", () => {

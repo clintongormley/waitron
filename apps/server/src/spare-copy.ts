@@ -97,7 +97,7 @@ export async function readSpareGeneration(
  * Every `intervalMs`, restores the generation the main box's signed pointer names from this box's
  * own store into `<state>/pair-copy/venue.db`, until a copy passes its checks; then writes
  * `ready.json` beside it and asks for a restart. A pointer the key pinned at the join
- * (`node_primary_key`) did not sign is ignored. Rejects with the signal's reason once it aborts.
+ * (`box.primary_public_key`) did not sign is ignored. Rejects with the signal's reason once it aborts.
  */
 export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   const intervalMs = deps.intervalMs ?? INTERVAL_MS;

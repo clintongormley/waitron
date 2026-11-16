@@ -1,9 +1,42 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
 import { stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
+import { useVenueDb } from "../../../packages/db/src/testing/venue-db.js";
+import { withNodeTransaction } from "../../../packages/db/src/index.js";
+import { NODE_MIGRATIONS, setNodeModeTx } from "../../../packages/node-db/src/index.js";
+
+describe("upgrade admission against the current node schema", () => {
+  const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("refuses the role written by the product and accepts its sole-primary and empty-role forms", async () => {
+    const fs = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { DatabaseSync } = await import("node:sqlite");
+    const { onTestFinished } = await import("vitest");
+    const { holdUpgradeState } = await import("./host.mjs");
+    const root = await fs.mkdtemp(join(tmpdir(), "upgrade-current-role-"));
+    onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+    await fs.mkdir(join(root, "venue"));
+    await fs.writeFile(join(root, "trading.env"), "WAITRON_NODE_ID=one\n");
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, "one", "mirror"));
+    const path = join(root, "venue", "node.db");
+    await suite.node.archiveTo(path);
+    await expect(holdUpgradeState(root)).rejects.toThrow("paired upgrades are not available");
+    const copy = new DatabaseSync(path);
+    try {
+      copy.exec("update box set mode='primary', singleton_role='primary'");
+      (await holdUpgradeState(root))();
+      copy.exec("update box set mode=null, singleton_role=null, role_changed_at=null");
+      (await holdUpgradeState(root))();
+    } finally {
+      copy.close();
+    }
+  });
+});
 
 function dockerFixture({
   event = "server.shutdown_complete",
@@ -496,7 +529,7 @@ it("holds the existing state and venue lock files and refuses a paired venue bef
   sole();
   const local = new DatabaseSync(join(root, "venue", "node.db"));
   local.exec(
-    "create table node_mode (node_id text, mode text, singleton_role text); insert into node_mode values ('one', 'mirror', 'secondary')",
+    "create table box (node_id text, mode text, singleton_role text); insert into box values ('one', 'mirror', 'secondary')",
   );
   local.close();
   await expect(holdUpgradeState(root)).rejects.toThrow("paired upgrades are not available");

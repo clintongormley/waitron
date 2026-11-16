@@ -133,7 +133,7 @@ describe("node identity establishment", () => {
   it("stamps nothing in venue.db when node.db refuses to seal the key", async () => {
     const unsealedNodeId = await seedNode(db);
     await node.execute(
-      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+      sql.raw(`create trigger refuse_signing_key before insert on box
         begin select raise(abort, 'refused by test'); end`),
     );
     try {

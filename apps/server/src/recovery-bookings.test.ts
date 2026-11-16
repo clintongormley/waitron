@@ -27,7 +27,7 @@ import { BOOKINGS_RECOVERY_WORDS } from "./i18n/recovery-page.js";
 import * as recoveryState from "./recovery-state.js";
 import { MODULES_SETTINGS } from "./modules.js";
 
-import { NODE_MIGRATIONS, nodeMode } from "@waitron/node-db";
+import { NODE_MIGRATIONS, box } from "@waitron/node-db";
 
 const NODE_ID = "99999999-9999-4999-8999-999999999999";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
@@ -60,10 +60,11 @@ async function fixture(
   await suite.db.archiveTo(join(venueDir, "venue.db"));
   if (role !== "sole")
     await withNodeTransaction(suite.node, (tx) =>
-      tx.insert(nodeMode).values({
+      tx.insert(box).values({
         nodeId: NODE_ID,
         mode: role === "mirror" ? "mirror" : "primary",
         singletonRole: role === "primary" ? "primary" : "secondary",
+        roleChangedAt: new Date("2026-10-31T00:00:00.000Z"),
       }),
     );
   await suite.node.archiveTo(join(venueDir, "node.db"));

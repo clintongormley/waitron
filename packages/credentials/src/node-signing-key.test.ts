@@ -8,14 +8,13 @@ import {
   setNodePublicKey,
   withNodeTransaction,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
+import { NODE_MIGRATIONS, box } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import {
-  deleteNodeSigningKeyOtherThanTx,
   establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
@@ -50,7 +49,7 @@ describe("before the node set has run", () => {
 
   it("refuses a read when node.db has no signing-key table", async () => {
     await expect(readNodeSigningKey(bare.node, RING_V1, NODE)).rejects.toThrow(
-      /no such table: node_signing_key/,
+      /no such table: box/,
     );
   });
 
@@ -68,13 +67,20 @@ describe("the box's signing key in node.db", () => {
   });
 
   beforeEach(() => {
-    suite.node.run(sql`delete from node_signing_key`);
+    suite.node.run(sql`delete from box`);
   });
 
   async function insertRaw(nodeId: string, aad: string, plaintext: string, keyVersion = 1) {
     const sealed = seal(Buffer.from(K1, "base64"), aadFor(aad), plaintext);
     await withNodeTransaction(suite.node, (tx) =>
-      tx.insert(nodeSigningKey).values({ nodeId, ...sealed, keyVersion }),
+      tx.insert(box).values({
+        nodeId,
+        signingKeyCiphertext: sealed.ciphertext,
+        signingKeyIv: sealed.iv,
+        signingKeyAuthTag: sealed.authTag,
+        signingKeyVersion: keyVersion,
+        signingKeyChangedAt: new Date(),
+      }),
     );
   }
 
@@ -83,11 +89,11 @@ describe("the box's signing key in node.db", () => {
       sealNodeSigningKeyTx(tx, RING_V1, NODE, PRIVATE_KEY),
     );
     expect(await readNodeSigningKey(suite.node, RING_V1, NODE)).toBe(PRIVATE_KEY);
-    expect(suite.node.all(sql`select node_id, key_version from node_signing_key`)).toEqual([
-      { node_id: NODE, key_version: 1 },
-    ]);
+    expect(
+      suite.node.all(sql`select node_id, signing_key_version as key_version from box`),
+    ).toEqual([{ node_id: NODE, key_version: 1 }]);
 
-    suite.node.run(sql`update node_signing_key set node_id = ${OTHER} where node_id = ${NODE}`);
+    suite.node.run(sql`update box set node_id = ${OTHER} where node_id = ${NODE}`);
     const error = await captured(() => readNodeSigningKey(suite.node, RING_V1, OTHER));
     expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
     expect(error.params).toEqual({ purpose: "membership.node_key" });
@@ -114,13 +120,13 @@ describe("the box's signing key in node.db", () => {
     await withNodeTransaction(suite.node, (tx) =>
       sealNodeSigningKeyTx(tx, RING_V1, NODE, PRIVATE_KEY),
     );
-    suite.node.run(sql`update node_signing_key set updated_at = '2000-01-01T00:00:00.000Z'`);
+    suite.node.run(sql`update box set signing_key_changed_at = '2000-01-01T00:00:00.000Z'`);
     await withNodeTransaction(suite.node, (tx) =>
       sealNodeSigningKeyTx(tx, RING_V2_ONLY, NODE, second),
     );
     expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(second);
     const rows = suite.node.all<{ key_version: number; updated_at: string }>(
-      sql`select key_version, updated_at from node_signing_key`,
+      sql`select signing_key_version as key_version, signing_key_changed_at as updated_at from box`,
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.key_version).toBe(2);
@@ -218,7 +224,7 @@ describe("establishing the box's signing key", () => {
   it("stamps nothing in venue.db when node.db refuses to seal the key", async () => {
     const nodeId = await freshNode();
     suite.node.run(
-      sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
+      sql.raw(`create trigger refuse_signing_key before insert on box
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
@@ -269,19 +275,5 @@ describe("openNodeSigningKeyRow", () => {
 describe("nodeSigningPublicKey", () => {
   it("derives the base64 SPKI public half of a base64 PKCS8 private key", () => {
     expect(nodeSigningPublicKey(PRIVATE_KEY)).toBe(PUBLIC_KEY);
-  });
-});
-
-describe("deleteNodeSigningKeyOtherThanTx", () => {
-  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  it("deletes every row but this node id's, and keeps this one's", async () => {
-    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
-      await withNodeTransaction(sweep.node, (tx) =>
-        sealNodeSigningKeyTx(tx, RING_V1, nodeId, PRIVATE_KEY),
-      );
-    }
-    await withNodeTransaction(sweep.node, (tx) => deleteNodeSigningKeyOtherThanTx(tx, NODE));
-    expect(sweep.node.all(sql`select node_id from node_signing_key`)).toEqual([{ node_id: NODE }]);
   });
 });

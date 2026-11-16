@@ -171,12 +171,8 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
     node_handover_events: 0,
     node_handover_operations: 0,
     node_handover_restriction: 0,
-    node_mirror_link: 0,
-    node_mode: 0,
     node_pair_link: 0,
-    node_primary_key: 0,
-    node_recovery_key: 1,
-    node_signing_key: 1,
+    box: 1,
     node_take_failures: 0,
   });
   const { ids, actions } = await withoutSignIn(f);
@@ -187,13 +183,13 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
 it("in the held state, a node.db whose recovery-key check names another node refuses Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
-  node.exec(`update node_recovery_key set node_id = '${crypto.randomUUID()}'`);
+  node.exec(`update box set node_id = '${crypto.randomUUID()}'`);
   node.close();
-  expect(nodeHoldings(f)).toMatchObject({ node_recovery_key: 1 });
+  expect(nodeHoldings(f)).toMatchObject({ box: 1 });
   holdingsRead.calls = 0;
   await expectRefused(f, {
     code: "setup.not_ready",
-    reason: "node.db holds another node's row: node_recovery_key",
+    reason: "node.db holds another node's row: box",
   });
   expect(holdingsRead.calls).toBe(0);
 });
@@ -202,13 +198,13 @@ it("in the held state, a node.db holding a mirror link refuses Start again setup
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
   node.exec(
-    `insert into node_mirror_link values ('${crypto.randomUUID()}', 'https://relay.test', 'box', 'pem', '${crypto.randomUUID()}', '2026-10-31T00:00:00.000Z')`,
+    `update box set mirror_origin_url='https://relay.test', mirror_box_hostname='box', mirror_box_ca_pem='pem', mirror_origin_node_id='${crypto.randomUUID()}', mirror_adopted_at='2026-10-31T00:00:00.000Z'`,
   );
   node.close();
   holdingsRead.calls = 0;
   await expectRefused(f, {
     code: "setup.not_ready",
-    reason: "node.db holds a row: node_mirror_link",
+    reason: "node.db holds a row: box",
   });
   expect(holdingsRead.calls).toBe(0);
 });

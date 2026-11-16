@@ -583,10 +583,10 @@ describe("a mirror's promotion whose role write is lost", () => {
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     await node.execute(
-      sql`create trigger refuse_role_update before update on node_mode begin select raise(abort, 'role refused'); end`,
+      sql`create trigger refuse_role_update before update on box begin select raise(abort, 'role refused'); end`,
     );
     await node.execute(
-      sql`create trigger refuse_role_insert before insert on node_mode begin select raise(abort, 'role refused'); end`,
+      sql`create trigger refuse_role_insert before insert on box begin select raise(abort, 'role refused'); end`,
     );
 
     try {

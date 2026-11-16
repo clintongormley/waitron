@@ -172,7 +172,7 @@ describe("node.db's backup verification", () => {
       await sealKey(SOURCE, privateKey);
       source.node.run(sql`pragma ignore_check_constraints=on`);
       try {
-        source.node.run(sql`update node_signing_key set key_version=${version}`);
+        source.node.run(sql`update box set signing_key_version=${version}`);
       } finally {
         source.node.run(sql`pragma ignore_check_constraints=off`);
       }
@@ -234,7 +234,7 @@ describe("node.db's backup verification", () => {
   it("marks invalid a key-less source whose node copy still holds its recovery key", async () => {
     seedSourceNode(null);
     source.node.run(
-      sql`insert into node_recovery_key (node_id, verifier, key_name, updated_at) values (${SOURCE}, 'verifier', 'Key 1', '2026-10-31T08:00:00Z')`,
+      sql`insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values (${SOURCE}, 'recovery_key_verifier', 'Key 1', '2026-10-31T08:00:00Z')`,
     );
     await expect(run()).resolves.toEqual(result("passed", "invalid"));
   });
@@ -242,7 +242,7 @@ describe("node.db's backup verification", () => {
   it("marks invalid a key-less source whose node copy still holds its role", async () => {
     seedSourceNode(null);
     source.node.run(
-      sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${SOURCE}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
+      sql`insert into box (node_id, mode, singleton_role, role_changed_at) values (${SOURCE}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
     );
     await expect(run()).resolves.toEqual(result("passed", "invalid"));
   });
@@ -250,10 +250,10 @@ describe("node.db's backup verification", () => {
   it("passes a key-less source when only another node's role is in the node copy", async () => {
     seedSourceNode(null);
     source.node.run(
-      sql`insert into node_mode (node_id, mode, singleton_role, updated_at) values (${OTHER}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
+      sql`insert into box (node_id, mode, singleton_role, role_changed_at) values (${OTHER}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
     );
     source.node.run(
-      sql`insert into node_recovery_key (node_id, verifier, key_name, updated_at) values (${OTHER}, 'verifier', 'Key 1', '2026-10-31T08:00:00Z')`,
+      sql`update box set recovery_key_verifier='verifier', recovery_key_name='Key 1', recovery_key_changed_at='2026-10-31T08:00:00Z' where node_id=${OTHER}`,
     );
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
@@ -265,36 +265,38 @@ describe("node.db's backup verification", () => {
     cipher.setAAD(Buffer.from(`membership.node_key/${SOURCE}`));
     const ciphertext = Buffer.concat([cipher.update("null"), cipher.final()]);
     source.node.run(
-      sql`update node_signing_key set ciphertext=${ciphertext}, iv=${Buffer.alloc(12, 3)}, auth_tag=${cipher.getAuthTag()}`,
+      sql`update box set signing_key_ciphertext=${ciphertext}, signing_key_iv=${Buffer.alloc(12, 3)}, signing_key_auth_tag=${cipher.getAuthTag()}`,
     );
     await expect(run()).resolves.toEqual(result("passed", "invalid"));
   });
 
-  it.each(["ciphertext", "iv", "auth_tag", "key_version"])(
-    "marks invalid a key row whose %s is not shaped as a sealed row's",
-    async (column) => {
-      seedSourceNode(publicKey);
-      const copy = new DatabaseSync(":memory:");
-      try {
-        copy.exec(
-          "create table node_signing_key (node_id text primary key, ciphertext blob, iv blob, auth_tag blob, key_version integer)",
-        );
-        copy
-          .prepare("insert into node_signing_key values (?, ?, ?, ?, 1)")
-          .run(SOURCE, Buffer.alloc(8), Buffer.alloc(12), Buffer.alloc(16));
-        copy.exec(`update node_signing_key set ${column} = 'not a sealed value'`);
-        await expect(run(copy.serialize())).resolves.toEqual(result("passed", "invalid"));
-      } finally {
-        copy.close();
-      }
-    },
-  );
+  it.each([
+    "signing_key_ciphertext",
+    "signing_key_iv",
+    "signing_key_auth_tag",
+    "signing_key_version",
+  ])("marks invalid a key row whose %s is not shaped as a sealed row's", async (column) => {
+    seedSourceNode(publicKey);
+    const copy = new DatabaseSync(":memory:");
+    try {
+      copy.exec(
+        "create table box (node_id text primary key, signing_key_ciphertext blob, signing_key_iv blob, signing_key_auth_tag blob, signing_key_version integer)",
+      );
+      copy
+        .prepare("insert into box values (?, ?, ?, ?, 1)")
+        .run(SOURCE, Buffer.alloc(8), Buffer.alloc(12), Buffer.alloc(16));
+      copy.exec(`update box set ${column} = 'not a sealed value'`);
+      await expect(run(copy.serialize())).resolves.toEqual(result("passed", "invalid"));
+    } finally {
+      copy.close();
+    }
+  });
 
   it("does not swallow a failed read of the node copy's key row as a missing key", async () => {
     seedSourceNode(null);
     const copy = new DatabaseSync(":memory:");
     try {
-      copy.exec("create table node_signing_key (node_id text primary key, iv blob)");
+      copy.exec("create table box (node_id text primary key, signing_key_iv blob)");
       await expect(run(copy.serialize())).rejects.toThrow("no such column");
     } finally {
       copy.close();
@@ -323,7 +325,7 @@ describe("node.db's backup verification", () => {
   ])("cannot decide when the key row meets %s", async (_name, env, version) => {
     seedSourceNode(publicKey);
     await sealKey(SOURCE, privateKey);
-    source.node.run(sql`update node_signing_key set key_version=${version}`);
+    source.node.run(sql`update box set signing_key_version=${version}`);
     const attempt = run(undefined, { ...secretEntries, "secrets/secrets.env": Buffer.from(env) });
     await expect(attempt).rejects.toBeInstanceOf(BackupCheckUnavailable);
     await expect(attempt).rejects.toMatchObject({ reason: "decryption_unavailable" });

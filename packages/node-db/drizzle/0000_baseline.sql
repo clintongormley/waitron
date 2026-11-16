@@ -1,3 +1,37 @@
+CREATE TABLE `box` (
+	`node_id` text PRIMARY KEY NOT NULL,
+	`recovery_key_verifier` text,
+	`recovery_key_name` text,
+	`recovery_key_changed_at` text,
+	`signing_key_ciphertext` blob,
+	`signing_key_iv` blob,
+	`signing_key_auth_tag` blob,
+	`signing_key_version` integer,
+	`signing_key_changed_at` text,
+	`mode` text,
+	`singleton_role` text,
+	`role_changed_at` text,
+	`mirror_origin_url` text,
+	`mirror_box_hostname` text,
+	`mirror_box_ca_pem` text,
+	`mirror_origin_node_id` text,
+	`mirror_adopted_at` text,
+	`primary_node_id` text,
+	`primary_public_key` text,
+	`primary_pinned_at` text,
+	CONSTRAINT "box_recovery_key_group_ck" CHECK(("box"."recovery_key_verifier" is null and "box"."recovery_key_name" is null and "box"."recovery_key_changed_at" is null) or ("box"."recovery_key_verifier" is not null and "box"."recovery_key_name" is not null and "box"."recovery_key_changed_at" is not null)),
+	CONSTRAINT "box_signing_key_group_ck" CHECK(("box"."signing_key_ciphertext" is null and "box"."signing_key_iv" is null and "box"."signing_key_auth_tag" is null and "box"."signing_key_version" is null and "box"."signing_key_changed_at" is null) or ("box"."signing_key_ciphertext" is not null and "box"."signing_key_iv" is not null and "box"."signing_key_auth_tag" is not null and "box"."signing_key_version" is not null and "box"."signing_key_changed_at" is not null)),
+	CONSTRAINT "box_signing_key_version_ck" CHECK("box"."signing_key_version" >= 1),
+	CONSTRAINT "box_signing_key_iv_len_ck" CHECK(octet_length("box"."signing_key_iv") = 12),
+	CONSTRAINT "box_signing_key_auth_tag_len_ck" CHECK(octet_length("box"."signing_key_auth_tag") = 16),
+	CONSTRAINT "box_role_group_ck" CHECK(("box"."mode" is null and "box"."singleton_role" is null and "box"."role_changed_at" is null) or ("box"."mode" is not null and "box"."singleton_role" is not null and "box"."role_changed_at" is not null)),
+	CONSTRAINT "box_mode_ck" CHECK("box"."mode" in ('primary', 'mirror')),
+	CONSTRAINT "box_singleton_role_ck" CHECK("box"."singleton_role" in ('primary', 'secondary')),
+	CONSTRAINT "box_role_valid_ck" CHECK(not ("box"."mode" = 'mirror' and "box"."singleton_role" = 'primary')),
+	CONSTRAINT "box_mirror_group_ck" CHECK(("box"."mirror_origin_url" is null and "box"."mirror_box_hostname" is null and "box"."mirror_box_ca_pem" is null and "box"."mirror_origin_node_id" is null and "box"."mirror_adopted_at" is null) or ("box"."mirror_origin_url" is not null and "box"."mirror_box_hostname" is not null and "box"."mirror_box_ca_pem" is not null and "box"."mirror_origin_node_id" is not null and "box"."mirror_adopted_at" is not null)),
+	CONSTRAINT "box_primary_key_group_ck" CHECK(("box"."primary_node_id" is null and "box"."primary_public_key" is null and "box"."primary_pinned_at" is null) or ("box"."primary_node_id" is not null and "box"."primary_public_key" is not null and "box"."primary_pinned_at" is not null))
+);
+--> statement-breakpoint
 CREATE TABLE `node_handover_events` (
 	`event_id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -38,25 +72,6 @@ CREATE TABLE `node_handover_restriction` (
 	CONSTRAINT "node_handover_restriction_kind_ck" CHECK("node_handover_restriction"."kind" in ('handed-over', 'superseded'))
 );
 --> statement-breakpoint
-CREATE TABLE `node_mirror_link` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`origin_url` text NOT NULL,
-	`box_hostname` text NOT NULL,
-	`box_ca_pem` text NOT NULL,
-	`origin_node_id` text NOT NULL,
-	`adopted_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `node_mode` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`mode` text DEFAULT 'primary' NOT NULL,
-	`singleton_role` text DEFAULT 'primary' NOT NULL,
-	`updated_at` text NOT NULL,
-	CONSTRAINT "node_mode_mode_ck" CHECK("node_mode"."mode" in ('primary', 'mirror')),
-	CONSTRAINT "node_mode_singleton_role_ck" CHECK("node_mode"."singleton_role" in ('primary', 'secondary')),
-	CONSTRAINT "node_mode_role_valid_ck" CHECK(not ("node_mode"."mode" = 'mirror' and "node_mode"."singleton_role" = 'primary'))
-);
---> statement-breakpoint
 CREATE TABLE `node_pair_link` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`role` text NOT NULL,
@@ -78,32 +93,6 @@ CREATE TABLE `node_pair_link` (
 	CONSTRAINT "node_pair_link_key_version_ck" CHECK("node_pair_link"."key_version" >= 1),
 	CONSTRAINT "node_pair_link_secret_iv_len_ck" CHECK(octet_length("node_pair_link"."secret_iv") = 12),
 	CONSTRAINT "node_pair_link_secret_auth_tag_len_ck" CHECK(octet_length("node_pair_link"."secret_auth_tag") = 16)
-);
---> statement-breakpoint
-CREATE TABLE `node_primary_key` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`primary_node_id` text NOT NULL,
-	`public_key` text NOT NULL,
-	`pinned_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `node_recovery_key` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`verifier` text NOT NULL,
-	`key_name` text NOT NULL,
-	`updated_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `node_signing_key` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`ciphertext` blob NOT NULL,
-	`iv` blob NOT NULL,
-	`auth_tag` blob NOT NULL,
-	`key_version` integer NOT NULL,
-	`updated_at` text NOT NULL,
-	CONSTRAINT "node_signing_key_key_version_ck" CHECK("node_signing_key"."key_version" >= 1),
-	CONSTRAINT "node_signing_key_iv_len_ck" CHECK(octet_length("node_signing_key"."iv") = 12),
-	CONSTRAINT "node_signing_key_auth_tag_len_ck" CHECK(octet_length("node_signing_key"."auth_tag") = 16)
 );
 --> statement-breakpoint
 CREATE TABLE `node_take_failures` (

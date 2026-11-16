@@ -9,25 +9,19 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import {
-  deleteNodePrimaryKeyOtherThanTx,
-  pinPrimaryKeyTx,
-  readPinnedPrimaryKey,
-} from "./primary-key.js";
+import { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PRIMARY = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const NEXT_PRIMARY = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
-// A node file with NO migration set applied, so `node_primary_key` does not exist.
+// A node file with NO migration set applied, so `box` does not exist.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
   it("is refused rather than read as holding no key", async () => {
-    await expect(readPinnedPrimaryKey(bare.node, NODE)).rejects.toThrow(
-      /no such table: node_primary_key/,
-    );
+    await expect(readPinnedPrimaryKey(bare.node, NODE)).rejects.toThrow(/no such table: box/);
   });
 });
 
@@ -52,7 +46,7 @@ describe("the main box's pinned public key", () => {
       primaryNodeId: PRIMARY,
       publicKey: "PUB-1",
     });
-    expect(suite.node.all(sql`select node_id from node_primary_key`)).toEqual([{ node_id: NODE }]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: NODE }]);
   });
 
   it("reads a pinned key only for the node that pinned it", async () => {
@@ -67,19 +61,19 @@ describe("the main box's pinned public key", () => {
       pinPrimaryKeyTx(tx, NODE, { primaryNodeId: PRIMARY, publicKey: "PUB-1" }),
     );
     const [first] = suite.node.all<{ pinned_at: string }>(
-      sql`select pinned_at from node_primary_key`,
+      sql`select primary_pinned_at as pinned_at from box`,
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await withNodeTransaction(suite.node, (tx) =>
       pinPrimaryKeyTx(tx, NODE, { primaryNodeId: NEXT_PRIMARY, publicKey: "PUB-2" }),
     );
-    expect(suite.node.all(sql`select count(*) as n from node_primary_key`)).toEqual([{ n: 1 }]);
+    expect(suite.node.all(sql`select count(*) as n from box`)).toEqual([{ n: 1 }]);
     expect(await readPinnedPrimaryKey(suite.node, NODE)).toEqual({
       primaryNodeId: NEXT_PRIMARY,
       publicKey: "PUB-2",
     });
     const [second] = suite.node.all<{ pinned_at: string }>(
-      sql`select pinned_at from node_primary_key`,
+      sql`select primary_pinned_at as pinned_at from box`,
     );
     expect(second!.pinned_at > first!.pinned_at).toBe(true);
   });
@@ -91,24 +85,10 @@ describe("the main box's pinned public key", () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_primary_key (node_id, primary_node_id, public_key, pinned_at) values (${NODE}, ${PRIMARY}, 'x', ${new Date().toISOString()})`,
+          sql`insert into box (node_id, primary_node_id, primary_public_key, primary_pinned_at) values (${NODE}, ${PRIMARY}, 'x', ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-  });
-});
-
-describe("deleteNodePrimaryKeyOtherThanTx", () => {
-  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  it("deletes every row but this node id's, and keeps this one's", async () => {
-    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
-      await withNodeTransaction(sweep.node, (tx) =>
-        pinPrimaryKeyTx(tx, nodeId, { primaryNodeId: PRIMARY, publicKey: "PUB-1" }),
-      );
-    }
-    await withNodeTransaction(sweep.node, (tx) => deleteNodePrimaryKeyOtherThanTx(tx, NODE));
-    expect(sweep.node.all(sql`select node_id from node_primary_key`)).toEqual([{ node_id: NODE }]);
   });
 });

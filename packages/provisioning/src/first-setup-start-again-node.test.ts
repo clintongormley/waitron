@@ -76,7 +76,7 @@ async function sealedSigningKey(roots: { venueDir: string }) {
 }
 
 const signingKeyRow = (nodeId: string) =>
-  `insert into node_signing_key (node_id, ciphertext, iv, auth_tag, key_version, updated_at)
+  `insert into box (node_id, signing_key_ciphertext, signing_key_iv, signing_key_auth_tag, signing_key_version, signing_key_changed_at)
    values ('${nodeId}', x'00', zeroblob(12), zeroblob(16), 1, '2026-10-31T00:00:00.000Z')`;
 
 /** Overwrites the root page of every node.db index with junk, leaving the tables' own pages whole. */
@@ -151,7 +151,7 @@ it.each<[string, string, string]>([
   ["a table outside the node set", "create table t(x)", "node.db holds a table"],
   [
     "an index of its own",
-    "create index node_mode_extra on node_mode(updated_at)",
+    "create index box_extra on box(role_changed_at)",
     "node.db holds a table",
   ],
   [
@@ -161,7 +161,7 @@ it.each<[string, string, string]>([
   ],
   [
     "the handover index's name on another table",
-    "drop index node_handover_one_open_uq; create unique index node_handover_one_open_uq on node_mode(node_id)",
+    "drop index node_handover_one_open_uq; create unique index node_handover_one_open_uq on box(node_id)",
     "node.db holds a table",
   ],
   [
@@ -172,22 +172,18 @@ it.each<[string, string, string]>([
   ["a view", "create view v as select 1", "node.db holds a table"],
   [
     "a trigger",
-    "create trigger tr after insert on node_mode begin select 1; end",
+    "create trigger tr after insert on box begin select 1; end",
     "node.db holds a table",
   ],
-  [
-    "only part of the node set",
-    "drop table node_primary_key",
-    "node.db lacks the node set's tables or indexes",
-  ],
+  ["only part of the node set", "drop table box", "node.db lacks the node set's tables or indexes"],
   [
     "another table in place of one of the node set's",
-    "drop table node_primary_key; create table t(x)",
+    "drop table box; create table t(x)",
     "node.db holds a table",
   ],
   [
     "a view under a node set table's name",
-    "drop table node_mode; create view node_mode as select 1",
+    "drop table box; create view box as select 1",
     "node.db holds a table",
   ],
   [
@@ -197,8 +193,8 @@ it.each<[string, string, string]>([
   ],
   [
     "a mirror link",
-    `insert into node_mirror_link values ('${NODE_ID}', 'https://relay', 'box', 'pem', '${randomUUID()}', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row: node_mirror_link",
+    `insert into box (node_id, mirror_origin_url, mirror_box_hostname, mirror_box_ca_pem, mirror_origin_node_id, mirror_adopted_at) values ('${NODE_ID}', 'https://relay', 'box', 'pem', '${randomUUID()}', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: box",
   ],
   [
     "a pair link",
@@ -209,13 +205,13 @@ it.each<[string, string, string]>([
   ],
   [
     "a role",
-    `insert into node_mode (node_id, updated_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row: node_mode",
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${NODE_ID}', 'primary', 'primary', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: box",
   ],
   [
     "a main box's key",
-    `insert into node_primary_key values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row: node_primary_key",
+    `insert into box (node_id, primary_node_id, primary_public_key, primary_pinned_at) values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: box",
   ],
   [
     "a handover operation",
@@ -240,24 +236,24 @@ it.each<[string, string, string]>([
   ],
   [
     "two recovery-key checks",
-    `insert into node_recovery_key values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
+    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
        ('${randomUUID()}', 'v', 'Two', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row: node_recovery_key",
+    "node.db holds a row: box",
   ],
   [
     "another node's recovery-key check",
-    `insert into node_recovery_key values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
-    "node.db holds another node's row: node_recovery_key",
+    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds another node's row: box",
   ],
   [
     "two signing keys",
     `${signingKeyRow(NODE_ID)}, ('${randomUUID()}', x'00', zeroblob(12), zeroblob(16), 1, '2026-10-31T00:00:00.000Z')`,
-    "node.db holds a row: node_signing_key",
+    "node.db holds a row: box",
   ],
   [
     "another node's signing key",
     signingKeyRow(randomUUID()),
-    "node.db holds another node's row: node_signing_key",
+    "node.db holds another node's row: box",
   ],
 ])(
   "Start again refuses a migrated node.db holding %s, and nothing changes",
@@ -280,7 +276,7 @@ it("Start again names a node.db holding another node's row as unexpected", async
   await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject({
     code: "setup.not_ready",
     params: { cause: "unexpected" },
-    reason: "node.db holds another node's row: node_signing_key",
+    reason: "node.db holds another node's row: box",
   });
 });
 
@@ -288,7 +284,7 @@ it("Start again told no attempt's node refuses a node.db holding a recovery-key 
   const roots = await attemptWithMigratedNode();
   await recoveryKeyRow(roots);
   await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(
-    notReady("node.db holds another node's row: node_recovery_key"),
+    notReady("node.db holds another node's row: box"),
   );
 });
 
@@ -296,11 +292,11 @@ it("Start again counts a node.db table's rows from the table itself, not from a 
   const roots = await attemptWithMigratedNode();
   await withNode(
     roots,
-    `insert into node_mode (node_id, updated_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${NODE_ID}', 'primary', 'primary', '2026-10-31T00:00:00.000Z')`,
   );
   damageNodeIndexes(roots);
   await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject(
-    notReady("node.db holds a row: node_mode"),
+    notReady("node.db holds a row: box"),
   );
 });
 

@@ -261,7 +261,7 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
   it("would have been refused had it read the copied venue.db", async () => {
     const box = await bHoldingAsVenue();
     await expect(readNodeMode(box.venue as unknown as NodeDatabase, b.id)).rejects.toThrow(
-      /no such table: node_mode/,
+      /no such table: box/,
     );
   });
 

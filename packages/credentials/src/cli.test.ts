@@ -357,7 +357,7 @@ describe("waitron-credentials rotate", () => {
     const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     beforeEach(async () => {
-      await suite.node.execute(sql`delete from node_signing_key`);
+      await suite.node.execute(sql`delete from box`);
       await runCli(["set", "--purpose", "payments.stripe"], harness(STRIPE_JSON).deps);
       await withNodeTransaction(suite.node, (tx) =>
         sealNodeSigningKeyTx(tx, RING, NODE, SIGNING_KEY),
@@ -367,7 +367,7 @@ describe("waitron-credentials rotate", () => {
     function keyVersions(): unknown[] {
       return [
         ...suite.db.all(sql`select key_version from venue_credentials`),
-        ...suite.node.all(sql`select key_version from node_signing_key`),
+        ...suite.node.all(sql`select signing_key_version as key_version from box`),
         ...suite.node.all(sql`select key_version from node_pair_link`),
       ];
     }

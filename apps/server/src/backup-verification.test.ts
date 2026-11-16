@@ -295,7 +295,7 @@ describe("complete backup verification", () => {
       expect(result.status).toBe("passed");
     } finally {
       suite.db.run(sql`update nodes set public_key = null where id = ${sourceNodeId}`);
-      suite.node.run(sql`delete from node_signing_key`);
+      suite.node.run(sql`delete from box`);
     }
   });
   it.each(["sha256", "bytes"] as const)(

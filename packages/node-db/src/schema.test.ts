@@ -2,18 +2,14 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import { nodeMode, nodePairLink, nodeSigningKey } from "./schema/index.js";
+import { box, nodePairLink } from "./schema/index.js";
 
 const NODE_TABLES = [
+  "box",
   "node_handover_events",
   "node_handover_operations",
   "node_handover_restriction",
-  "node_mirror_link",
-  "node_mode",
   "node_pair_link",
-  "node_primary_key",
-  "node_recovery_key",
-  "node_signing_key",
   "node_take_failures",
 ];
 
@@ -28,37 +24,46 @@ describe("node.db's tables", () => {
   it("refuses a mode row that is a mirror holding the singleton duties", () => {
     expect(() =>
       suite.node
-        .insert(nodeMode)
-        .values({ nodeId: "node-a", mode: "mirror", singletonRole: "primary" })
+        .insert(box)
+        .values({
+          nodeId: "node-a",
+          mode: "mirror",
+          singletonRole: "primary",
+          roleChangedAt: new Date(),
+        })
         .run(),
-    ).toThrow(/node_mode_role_valid_ck/);
+    ).toThrow(/box_role_valid_ck/);
     suite.node
-      .insert(nodeMode)
-      .values({ nodeId: "node-a", mode: "mirror", singletonRole: "secondary" })
+      .insert(box)
+      .values({
+        nodeId: "node-a",
+        mode: "mirror",
+        singletonRole: "secondary",
+        roleChangedAt: new Date(),
+      })
       .run();
-    expect(suite.node.all(sql`select node_id from node_mode`)).toEqual([{ node_id: "node-a" }]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: "node-a" }]);
   });
 
   it("refuses a signing key whose iv is not 12 bytes", () => {
     const row = {
       nodeId: "node-a",
-      ciphertext: new Uint8Array([1, 2, 3]),
-      authTag: new Uint8Array(16),
-      keyVersion: 1,
+      signingKeyChangedAt: new Date(),
+      signingKeyCiphertext: new Uint8Array([1, 2, 3]),
+      signingKeyAuthTag: new Uint8Array(16),
+      signingKeyVersion: 1,
     };
     expect(() =>
       suite.node
-        .insert(nodeSigningKey)
-        .values({ ...row, iv: new Uint8Array(11) })
+        .insert(box)
+        .values({ ...row, signingKeyIv: new Uint8Array(11) })
         .run(),
-    ).toThrow(/node_signing_key_iv_len_ck/);
+    ).toThrow(/box_signing_key_iv_len_ck/);
     suite.node
-      .insert(nodeSigningKey)
-      .values({ ...row, iv: new Uint8Array(12) })
+      .insert(box)
+      .values({ ...row, signingKeyIv: new Uint8Array(12) })
       .run();
-    expect(suite.node.all(sql`select node_id from node_signing_key`)).toEqual([
-      { node_id: "node-a" },
-    ]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: "node-a" }]);
   });
 
   it("creates node_pair_link in node.db and not in venue.db", () => {
