@@ -5,6 +5,7 @@ import { dayCutoverChanges, newId } from "@waitron/db";
 import { executeAttendanceCommand } from "./attendance-response-commands.js";
 import { readAttendanceRevision } from "./attendance-responses.js";
 import { attendanceFixture } from "../test/attendance-fixture.js";
+import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { shifts } from "./schema/shifts.js";
 import { recordStaffActivity, readStaffActivityFacts } from "./staff-activity.js";
 import { staffActivity } from "./schema/attendance.js";
@@ -12,6 +13,11 @@ import { attendanceDayWork } from "./schema/attendance.js";
 import { appendToChain } from "./chain.js";
 import { enqueueAttendanceDay } from "./attendance-state.js";
 
+const nextDay = {
+  businessDay: "2026-01-06",
+  startAt: "2026-01-06T04:00:00.000Z",
+  endAt: "2026-01-07T04:00:00.000Z",
+};
 const f = attendanceFixture();
 beforeEach(() => seedBusinessDay(f.suite.db, { timeZone: "UTC", dayCutover: "04:00" }));
 const record = (at: string) => f.run((tx) => recordStaffActivity(tx, f.personId, new Date(at)));
@@ -222,49 +228,48 @@ it("a changed latest endpoint after confirmation asks about the newly uncovered 
   ]);
 });
 
-it("a superseded overnight shift leaves its later real endpoint available as unscheduled work", async () => {
-  await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
-  await record("2026-01-06T02:30:00Z");
-  await record("2026-01-06T05:30:00Z");
-  await f.run(async (tx) => {
-    const replacement = await f.backend.createRosterVersion(tx, { period: "2026-01-05" });
-    await f.backend.publishRoster(tx, { versionId: replacement });
-  });
-  const nextDay = {
-    businessDay: "2026-01-06",
-    startAt: "2026-01-06T04:00:00.000Z",
-    endAt: "2026-01-07T04:00:00.000Z",
-  };
-  expect((await f.run((tx) => readStaffActivityFacts(tx, nextDay))).map((r) => r.at)).toEqual([
-    "2026-01-06T05:30:00.000Z",
-  ]);
-});
-
-it("publishing an overnight rota moves a real endpoint's question from its former unscheduled day", async () => {
-  const nextDay = {
-    businessDay: "2026-01-06",
-    startAt: "2026-01-06T04:00:00.000Z",
-    endAt: "2026-01-07T04:00:00.000Z",
-  };
-  await record("2026-01-06T05:30:00Z");
-  const nextFacts = () => f.run((tx) => readStaffActivityFacts(tx, nextDay));
-  await f.run((tx) => enqueueAttendanceDay(tx, nextDay));
-  await f.process({ day: nextDay, facts: await nextFacts(), now: new Date(nextDay.endAt) });
-  expect(await f.questions()).toMatchObject([{ day: { businessDay: "2026-01-06" } }]);
-  const [id] = await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
-  await f.process({
-    planned: [f.plan(id!, "2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z")],
-    facts: await facts(),
-    now: new Date(nextDay.endAt),
-  });
-  await f.process({ day: nextDay, facts: await nextFacts(), now: new Date(nextDay.endAt) });
-  expect(await f.questions()).toMatchObject([
-    {
-      day: { businessDay: "2026-01-05" },
-      evidenceKeys: [expect.stringContaining(":2026-01-06T05:30:00.000Z")],
-    },
-  ]);
-});
+it.each([false, true])(
+  "publishing an overnight rota moves its endpoint without a second reminder, former day first=%s",
+  async (formerFirst) => {
+    await record("2026-01-06T05:30:00Z");
+    const following = async () =>
+      f.process({
+        day: nextDay,
+        facts: await f.run((tx) => readStaffActivityFacts(tx, nextDay)),
+        now: new Date(nextDay.endAt),
+      });
+    await f.run((tx) => enqueueAttendanceDay(tx, nextDay));
+    await following();
+    expect(await f.questions()).toMatchObject([{ day: { businessDay: "2026-01-06" } }]);
+    const [old] = await f.questions();
+    await setAttendanceMail(f.suite.db, old!.id, { status: "sent", outcome: "sent" });
+    const [id] = await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
+    const night = async () =>
+      f.process({
+        planned: [f.plan(id!, "2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z")],
+        facts: await facts(),
+        now: new Date(nextDay.endAt),
+      });
+    if (formerFirst) {
+      await following();
+      await night();
+    } else {
+      await night();
+      await following();
+    }
+    expect(await f.questions()).toMatchObject([
+      {
+        day: { businessDay: "2026-01-05" },
+        evidenceKeys: [expect.stringContaining(":2026-01-06T05:30:00.000Z")],
+      },
+    ]);
+    const mail = await attendanceMailRows(f.suite.db);
+    expect(mail.find((row) => row.questionId === old!.id)?.status).toBe("sent");
+    expect(mail.filter((row) => row.questionId !== old!.id).map((row) => row.status)).toEqual([
+      "cancelled",
+    ]);
+  },
+);
 
 it("an overnight shift's finish includes its later overrun and the overrun requeues that shift's day", async () => {
   const [id] = await rota([
@@ -273,16 +278,11 @@ it("an overnight shift's finish includes its later overrun and the overrun reque
   ]);
   await f.open("2026-01-06T02:00:00Z");
   await record("2026-01-06T03:00:00Z");
-  const before = (await f.suite.db.select().from(attendanceDayWork))[0]!.dirtyRevision;
+  const revision = async () =>
+    (await f.state()).work.find((row) => row.businessDay === "2026-01-05")!.dirtyRevision;
+  const before = await revision();
   await record("2026-01-06T06:30:00Z");
-  expect(
-    (
-      await f.suite.db
-        .select()
-        .from(attendanceDayWork)
-        .where(eq(attendanceDayWork.businessDay, "2026-01-05"))
-    )[0]!.dirtyRevision,
-  ).toBeGreaterThan(before);
+  expect(await revision()).toBeGreaterThan(before);
   await record("2026-01-06T10:00:00Z");
   await f.process({
     planned: [f.plan(id!, "2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z")],
@@ -295,22 +295,23 @@ it("an overnight shift's finish includes its later overrun and the overrun reque
   });
 });
 
-it.each([false, true])(
-  "a superseded overnight shift retains work after an earlier-day clock-in, closed=%s",
-  async (closed) => {
+it.each([
+  ["none", 2, ["2026-01-06T02:30:00.000Z", "2026-01-06T05:30:00.000Z"]],
+  ["open", 1, ["2026-01-06T02:30:00.000Z", "2026-01-06T05:30:00.000Z"]],
+  ["closed", 0, []],
+] as const)(
+  "superseded overnight endpoints remain accounted for with a %s clock interval",
+  async (state, count, evidence) => {
     await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
-    await f.open("2026-01-06T02:00:00Z");
+    if (state !== "none") await f.open("2026-01-06T02:00:00Z");
+    await record("2026-01-06T02:30:00Z");
     await record("2026-01-06T05:30:00Z");
     await f.run(async (tx) => {
       const versionId = await f.backend.createRosterVersion(tx, { period: "2026-01-05" });
       await f.backend.publishRoster(tx, { versionId });
     });
-    if (closed) await f.run((tx) => f.backend.clockOut(tx, f.event("2026-01-06T06:00:00Z")));
-    const nextDay = {
-      businessDay: "2026-01-06",
-      startAt: "2026-01-06T04:00:00.000Z",
-      endAt: "2026-01-07T04:00:00.000Z",
-    };
+    if (state === "closed")
+      await f.run((tx) => f.backend.clockOut(tx, f.event("2026-01-06T06:00:00Z")));
     await f.run((tx) => enqueueAttendanceDay(tx, nextDay));
     await f.process({ facts: await facts(), now: new Date(nextDay.endAt) });
     await f.process({
@@ -318,8 +319,32 @@ it.each([false, true])(
       facts: await f.run((tx) => readStaffActivityFacts(tx, nextDay)),
       now: new Date(nextDay.endAt),
     });
-    expect((await f.questions()).flatMap((q) => q.evidenceKeys)).toEqual(
-      closed ? [] : [expect.stringContaining(":2026-01-06T05:30:00.000Z")],
-    );
+    const pending = await f.questions();
+    expect(pending).toHaveLength(count);
+    expect(
+      pending
+        .flatMap((q) => q.evidenceKeys)
+        .map((key) => key.slice(-24))
+        .sort(),
+    ).toEqual(evidence);
   },
 );
+
+it("a new unscheduled clock-in bounds the preceding night's overrun", async () => {
+  await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
+  await f.open("2026-01-06T02:00:00Z");
+  await record("2026-01-06T03:00:00Z");
+  await f.run((tx) => f.backend.clockOut(tx, f.event("2026-01-06T06:00:00Z")));
+  await f.open("2026-01-06T15:00:00Z");
+  await record("2026-01-06T15:30:00Z");
+  await record("2026-01-06T20:00:00Z");
+  await f.process({
+    day: nextDay,
+    facts: await f.run((tx) => readStaffActivityFacts(tx, nextDay)),
+    now: new Date(nextDay.endAt),
+  });
+  expect((await f.entries()).at(-1)).toMatchObject({
+    entryKind: "out",
+    eventAt: "2026-01-06T20:00:00.000Z",
+  });
+});

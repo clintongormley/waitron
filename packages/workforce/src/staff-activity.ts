@@ -5,6 +5,12 @@ import { attendanceDayWork, staffActivity } from "./schema/attendance.js";
 import { shifts } from "./schema/shifts.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { timeEntries } from "./schema/time-entries.js";
+import { readRecordedEntries } from "./record-reads.js";
+import {
+  effectiveClockEntries,
+  compareEvents,
+  automaticEntryIdsWithoutMarker,
+} from "./effective-entries.js";
 import { enqueueAttendanceDay } from "./attendance-state.js";
 import type { AttendanceDay, AttendanceFact } from "./attendance-types.js";
 import "./errors.js";
@@ -145,6 +151,19 @@ export async function readStaffActivityFacts(
         and(lt(staffActivity.firstAt, rangeEnd), gte(staffActivity.lastAt, day.startAt)),
       ),
     );
+  const clocks = new Map<
+    string,
+    { events: ReturnType<typeof effectiveClockEntries>; unmarked: Set<string> }
+  >();
+  for (const personId of new Set(rows.map((row) => row.personId))) {
+    const entries = await readRecordedEntries(tx, { personId });
+    clocks.set(personId, {
+      events: effectiveClockEntries(entries)
+        .filter((e) => e.entryKind === "in" || e.entryKind === "out")
+        .sort(compareEvents),
+      unmarked: automaticEntryIdsWithoutMarker(entries),
+    });
+  }
   return rows
     .flatMap((row) =>
       [
@@ -162,14 +181,33 @@ export async function readStaffActivityFacts(
           const previous = planned
             .filter((p) => p.personId === row.personId && Date.parse(p.endsAt) <= time)
             .at(-1);
+          const context = clocks.get(row.personId)!;
+          const preceding = context.events.filter((e) => Date.parse(e.eventAt) <= time);
+          const latest = preceding.at(-1),
+            latestIn = preceding.findLast((e) => e.entryKind === "in");
+          const open = !latest || latest.entryKind === "in" || context.unmarked.has(latest.entryId);
           const assigned =
             own ??
             (previous &&
+            open &&
+            (!latestIn || Date.parse(latestIn.eventAt) < Date.parse(previous.endsAt)) &&
             businessDayAt(clock, new Date(previous.startsAt)) !==
               businessDayAt(clock, new Date(previous.endsAt))
               ? previous
               : undefined);
-          const anchor = assigned ? Date.parse(assigned.startsAt) : time;
+          const capturedNight =
+            row.shiftStartAt &&
+            row.shiftEndAt &&
+            businessDayAt(clock, new Date(row.shiftStartAt)) !==
+              businessDayAt(clock, new Date(row.shiftEndAt));
+          const anchor = assigned
+            ? Date.parse(assigned.startsAt)
+            : capturedNight &&
+                open &&
+                latestIn &&
+                businessDayAt(clock, new Date(latestIn.eventAt)) === row.businessDay
+              ? Date.parse(latestIn.eventAt)
+              : time;
           return anchor >= start && anchor < end;
         })
         .map(({ side, at }): AttendanceFact => ({
