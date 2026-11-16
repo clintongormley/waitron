@@ -22,6 +22,7 @@ describe("the package barrel", () => {
       "insertHandoverActivationTx",
       "isOpen",
       "isOperationId",
+      "isRingKeys",
       "isSha256Hex",
       "nextState",
       "parseBinding",
