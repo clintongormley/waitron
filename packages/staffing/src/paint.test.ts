@@ -272,17 +272,15 @@ describe("season staffing", () => {
           .values({ departmentId, menuId, name: "Service" })
           .returning({ id: menuPeriods.id });
         periodIds.set(departmentId, period!.id);
-        await tx
-          .insert(openingHours)
-          .values({
-            kind: "period",
-            seasonId: v.seasonId,
-            weekday,
-            departmentId,
-            periodId: period!.id,
-            startsAt,
-            endsAt,
-          });
+        await tx.insert(openingHours).values({
+          kind: "period",
+          seasonId: v.seasonId,
+          weekday,
+          departmentId,
+          periodId: period!.id,
+          startsAt,
+          endsAt,
+        });
       }
     });
     await switchOff({ kind: "department", id: closed!.id }, false);
@@ -386,15 +384,13 @@ describe("special-day staffing", () => {
         ranges: [periodId: string | null, startsAt: string, endsAt: string][],
       ) => {
         for (const [periodId, startsAt, endsAt] of ranges)
-          await tx
-            .insert(openingHours)
-            .values({
-              ...values,
-              kind: periodId === null ? "closed" : "period",
-              periodId,
-              startsAt,
-              endsAt,
-            });
+          await tx.insert(openingHours).values({
+            ...values,
+            kind: periodId === null ? "closed" : "period",
+            periodId,
+            startsAt,
+            endsAt,
+          });
       };
       // 2026-08-14 is a Friday (5) and 2026-08-15 a Saturday (6).
       await paint({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 }, [
@@ -443,17 +439,15 @@ describe("special-day staffing", () => {
         .insert(menuPeriods)
         .values({ departmentId: v.departmentId, menuId, name: "Service" })
         .returning({ id: menuPeriods.id });
-      await tx
-        .insert(openingHours)
-        .values({
-          kind: "period",
-          seasonId: v.seasonId,
-          weekday: 5,
-          departmentId: v.departmentId,
-          periodId: period!.id,
-          startsAt: "19:00:00",
-          endsAt: "23:30:00",
-        });
+      await tx.insert(openingHours).values({
+        kind: "period",
+        seasonId: v.seasonId,
+        weekday: 5,
+        departmentId: v.departmentId,
+        periodId: period!.id,
+        startsAt: "19:00:00",
+        endsAt: "23:30:00",
+      });
       const [feria] = await tx
         .insert(specialDays)
         .values({ name: "Feria", repeatsYearly: true })
@@ -784,17 +778,15 @@ async function guideVenue() {
         colour: "blue",
       })
       .returning();
-    await tx
-      .insert(openingHours)
-      .values({
-        kind: "period",
-        seasonId: v.seasonId,
-        weekday: 5,
-        departmentId: v.departmentId,
-        periodId: period!.id,
-        startsAt: "12:00:00",
-        endsAt: "16:00:00",
-      });
+    await tx.insert(openingHours).values({
+      kind: "period",
+      seasonId: v.seasonId,
+      weekday: 5,
+      departmentId: v.departmentId,
+      periodId: period!.id,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
     await setRoutingCell(
       tx,
       { row: { kind: "all" }, zoneId: zone!.id },
@@ -902,17 +894,15 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(menuPeriods)
       .values({ departmentId: department!.id, menuId: v.menuId, name: "Evening", colour: "green" })
       .returning();
-    await tx
-      .insert(openingHours)
-      .values({
-        kind: "period",
-        seasonId: v.seasonId,
-        weekday: 5,
-        departmentId: department!.id,
-        periodId: period!.id,
-        startsAt: "13:00:00",
-        endsAt: "17:00:00",
-      });
+    await tx.insert(openingHours).values({
+      kind: "period",
+      seasonId: v.seasonId,
+      weekday: 5,
+      departmentId: department!.id,
+      periodId: period!.id,
+      startsAt: "13:00:00",
+      endsAt: "17:00:00",
+    });
     await setRoutingCell(
       tx,
       { row: { kind: "all" }, zoneId: zone!.id },
@@ -976,17 +966,15 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
 it("A724 a closed own date wins over a repeating open date with sending hours", async () => {
   const v = await guideVenue();
   await inTx(async (tx) => {
-    await tx
-      .insert(openingHours)
-      .values({
-        kind: "period",
-        seasonId: v.seasonId,
-        weekday: 6,
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        startsAt: "12:00:00",
-        endsAt: "16:00:00",
-      });
+    await tx.insert(openingHours).values({
+      kind: "period",
+      seasonId: v.seasonId,
+      weekday: 6,
+      departmentId: v.departmentId,
+      periodId: v.periodId,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
     await tx
       .update(specialDayDates)
       .set({ closedAllDay: true })
