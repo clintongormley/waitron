@@ -147,6 +147,25 @@ describe("declared migration triggers", () => {
   });
 
   it.each([
+    [
+      "t",
+      "create trigger t before update on records begin select 1; end;",
+      "t before update on records begin select 1; end",
+    ],
+    [
+      "fixed_value",
+      "create trigger fixed_value before update on records begin select 1; end \n;",
+      "fixed_value before update on records begin select 1; end",
+    ],
+  ])("resolves the matched name and final END for %s", (name, statement, definition) => {
+    const options = migrationOptionsFor(
+      [{ ...set, migrationTriggers: [name] }],
+      rootFor(statement),
+    );
+    expect(options[0]?.expectedTriggers).toEqual([{ name, table: "records", definition }]);
+  });
+
+  it.each([
     "create table records (value text)",
     `CREATE TRIGGER ${definition};\n--> statement-breakpoint\nCREATE TRIGGER ${definition};`,
     `CREATE TEMP TRIGGER ${definition};`,

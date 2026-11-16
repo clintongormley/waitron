@@ -146,16 +146,16 @@ function migrationTriggersFor(set: MigrationSet, migrationsFolder: string): Expe
   const definitions = statements.flatMap((statement) => {
     const text = statement.replace(/^(?:\s|--[^\n]*(?:\n|$))*/u, "");
     const header =
-      /^create\s+trigger\s+((?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*))\s+(?:before|after|instead\s+of)\s+(?:insert|delete|update)\s+on\s+((?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*))(?=\s)/iu.exec(
+      /^(create\s+trigger\s+)((?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*))\s+(?:before|after|instead\s+of)\s+(?:insert|delete|update)\s+on\s+((?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*))(?=\s)/iu.exec(
         text,
       );
     if (header === null || !/\bend\s*;?\s*$/iu.test(text)) return [];
     const unquote = (name: string) => name.replace(/^"|"$/gu, "");
     return [
       {
-        name: unquote(header[1]!),
-        table: unquote(header[2]!),
-        definition: text.slice(text.indexOf(header[1]!)).replace(/;?\s*$/u, ""),
+        name: unquote(header[2]!),
+        table: unquote(header[3]!),
+        definition: text.slice(header[1]!.length).replace(/\s*;?\s*$/u, ""),
       },
     ];
   });

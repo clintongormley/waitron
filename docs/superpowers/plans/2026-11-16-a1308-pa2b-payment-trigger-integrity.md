@@ -7,7 +7,7 @@ shared-mechanism approach; the scope choice it requested is now answered.
 
 **Result:** Boot repairs missing payment guards, refuses altered ones, and the trading watch stops on missing or altered guards, including Payments Off. Normal capture stays allowed. Pa1 landed as `4f5b758700`; pa2 supplies the delete refusal.
 
-**Authority:** Watcher 16 November 07:36 split the expanded pa2 plan after Claude's 335-second read: build delete-only pa2; put this restore/watch proposal to the owner. The watcher has asked the owner, recommending it. This document extracts the corrected shared-mechanism portion of that read; it records no owner approval. Apply the [slice rules](2026-11-08-a1308-slice-rules.md). Recheck the approach against the owner's answer and current source before any build.
+**Authority:** Watcher 16 November 07:36 split the expanded pa2 plan after Claude's 335-second read: build delete-only pa2; put this restore/watch proposal to the owner. This document extracts the corrected shared-mechanism portion of that read. Apply the [slice rules](2026-11-08-a1308-slice-rules.md).
 
 ## Smallest approach
 
