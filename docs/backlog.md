@@ -1210,7 +1210,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   #827, owner decision 2026-09-28).**
   [Detail](backlog/dashboard.md#what-c38-left-as-it-was-a-generated-display-name-is-the-first-given-name-and-first-surname-827-owner-decision-2026-09-28)
 
-- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — remaining PIN-slot saturation, refusal log reasons, form focus and reset timing.
+- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — remaining PIN-slot saturation, form focus and reset timing.
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
 - **Move remaining dashboard tables onto shared database-backed requests.** Users, Orders and returned invoices now have

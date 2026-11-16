@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { nowIso, openVenueDatabase, type Database } from "@waitron/db";
+import { nowIso, openVenueDatabase, webauthnChallenges, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { verifyPassword, webauthnCredentials } from "@waitron/identity";
@@ -193,7 +193,21 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
           values (${randomUUID()}, ${adminId}, ${"a".repeat(64)}, ${nowIso()})`,
     );
 
+    const [bystander] = await seedPersons(suite.db, {
+      displayName: "Bystander",
+      pinHash: fixturePinHash("5678"),
+      role: "staff",
+    });
+    await suite.db.insert(webauthnChallenges).values([
+      { personId: adminId, challenge: "target", purpose: "registration" },
+      { personId: bystander!.id, challenge: "bystander", purpose: "registration" },
+    ]);
+    const pinBefore = suite.db.all(sql`select pin_hash from persons where id=${adminId}`);
     expect((await run(baseEnv())).code).toBe(0);
+    expect(suite.db.all(sql`select pin_hash from persons where id=${adminId}`)).toEqual(pinBefore);
+    expect(suite.db.all(sql`select person_id, challenge from webauthn_challenges`)).toEqual([
+      { person_id: bystander!.id, challenge: "bystander" },
+    ]);
 
     const state = await suite.db.execute<{
       totp_secret: string | null;

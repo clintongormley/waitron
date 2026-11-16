@@ -27,7 +27,7 @@ passkey. A PIN alone only gives access to the till.
 Managers can add a person and send their invitation, resend an invitation, reset their
 PIN or login, and disable or re-enable their account. Resetting a PIN clears it; the person
 chooses its replacement. Resetting a login clears their credentials and sends a new invitation if
-email is set up; for when Waitron refuses it or it changes nothing, see
+email is set up; for when Waitron refuses it, see
 [Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
 PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. You can change another person's sign-in only when you
 hold every permission they hold.

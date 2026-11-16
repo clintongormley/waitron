@@ -765,11 +765,17 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
   it("refuses a non-string email with 401 password.invalid and no params", async () => {
     const { designated } = await setupVenue();
-    const app = mountApp(designated);
+    const log = vi.fn();
+    const app = mountApp(designated, log);
 
     const res = await post(app, { email: 42, password: ADMIN_PASSWORD, ...validStandby() });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("signs in by email whatever its letter case and surrounding spaces", async () => {

@@ -347,15 +347,19 @@ interface PreparationAnswer {
   error: { code: string };
 }
 
-function route(s: Service, requestFromBox: () => boolean = () => false) {
+function route(s: Service, requestFromBox: () => boolean = () => false, log = vi.fn()) {
   const app = new Hono();
-  mountHandoverPreparationApi(app, {
-    node: suite.node,
-    nodeId: standby.nodeId,
-    appDb: suite.db,
-    nodePreparation: s,
-    requestFromBox,
-  });
+  mountHandoverPreparationApi(
+    app,
+    {
+      node: suite.node,
+      nodeId: standby.nodeId,
+      appDb: suite.db,
+      nodePreparation: s,
+      requestFromBox,
+    },
+    log,
+  );
   return app;
 }
 async function post(
@@ -891,7 +895,8 @@ describe("the handover's preparation route", () => {
 
     it("malformed sign-ins are all password.invalid, and a person id or break-glass secret signs nobody in", async () => {
       await controlledAtFilingAssumed();
-      const app = route(service());
+      const log = vi.fn();
+      const app = route(service(), undefined, log);
       for (const who of [
         undefined,
         null,
@@ -906,12 +911,18 @@ describe("the handover's preparation route", () => {
         { personId: ADMIN, password: PASSWORD },
         { breakGlass: "any-secret" },
       ]) {
+        log.mockClear();
         const answer = await attempt(app, who as Record<string, unknown>);
         expect([who, answer.status, answer.body.error.code]).toEqual([
           who,
           401,
           "password.invalid",
         ]);
+        expect(log).toHaveBeenCalledWith(
+          "warn",
+          "password.invalid",
+          expect.objectContaining({ logReason: "malformed" }),
+        );
       }
     });
 

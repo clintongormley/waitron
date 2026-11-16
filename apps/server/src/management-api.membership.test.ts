@@ -111,7 +111,7 @@ async function seedStaff(): Promise<string> {
   });
 }
 
-function mountApp(designated: AdoptResult): Hono {
+function mountApp(designated: AdoptResult, log = vi.fn()): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -123,7 +123,7 @@ function mountApp(designated: AdoptResult): Hono {
       origin: "http://localhost:5191",
       credentialKeyRing: TOTP_KEY_RING,
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -240,16 +240,23 @@ describe("GET /management-api/membership", () => {
 
   it("refuses a missing credential header with 401", async () => {
     const { designated } = await setupVenue();
-    const app = mountApp(designated);
+    const log = vi.fn();
+    const app = mountApp(designated, log);
 
     const res = await getMembership(app, undefined);
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("refuses a malformed credential header (unparseable / wrong shape) with 401", async () => {
     const { designated } = await setupVenue();
-    const app = mountApp(designated);
+    const log = vi.fn();
+    const app = mountApp(designated, log);
 
     // Not JSON at all.
     const garbage = await app.request("/management-api/membership", {
@@ -262,12 +269,23 @@ describe("GET /management-api/membership", () => {
     // Well-formed JSON but a non-UUID personId.
     const badShape = await getMembership(app, { personId: "not-a-uuid", password: "x" });
     expect(badShape.status).toBe(401);
-    expect((await badShape.json()).error.code).toBe("password.invalid");
+    expect(await badShape.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    expect(log).toHaveBeenLastCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "invalid_json" }),
+    );
   });
 
   it("refuses a credential header whose JSON is not an object with 401", async () => {
     const { designated } = await setupVenue();
-    const app = mountApp(designated);
+    const log = vi.fn();
+    const app = mountApp(designated, log);
     for (const raw of ["null", "[]", "42", '"text"']) {
       const res = await app.request("/management-api/membership", {
         method: "GET",
@@ -276,11 +294,17 @@ describe("GET /management-api/membership", () => {
       expect(res.status).toBe(401);
       expect((await res.json()).error.code).toBe("password.invalid");
     }
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("refuses an otherwise correct credential whose totp is not a string with 401", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const app = mountApp(designated);
+    const log = vi.fn();
+    const app = mountApp(designated, log);
     const res = await getMembership(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
@@ -288,6 +312,11 @@ describe("GET /management-api/membership", () => {
     });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("lets another writer commit while it derives the key", async () => {

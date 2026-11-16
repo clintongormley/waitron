@@ -129,6 +129,7 @@ export {
   normalizeAndValidateEmail,
   reactivatePersonForInvitation,
   resetPersonLogin,
+  deleteSignInRows,
   setPersonLocale,
   updatePersonDetails,
 } from "./staff.js";

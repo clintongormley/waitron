@@ -146,7 +146,7 @@ export function mountMirrorBundleApi(
         typeof password !== "string" ||
         (totp !== undefined && typeof totp !== "string")
       ) {
-        throw new AppError("password.invalid", {});
+        throw new AppError("password.invalid", {}, { reason: "malformed" });
       }
 
       // The contact URL is signed into the org chart and every till dials it, so the primary screens

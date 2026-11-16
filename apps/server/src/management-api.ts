@@ -860,7 +860,7 @@ export function mountManagementApi(
         (body.totp !== undefined && typeof body.totp !== "string") ||
         (body.recoveryCode !== undefined && typeof body.recoveryCode !== "string")
       ) {
-        throw new AppError("password.invalid", {});
+        throw new AppError("password.invalid", {}, { reason: "malformed" });
       }
       const { email, password, totp, recoveryCode } = body;
       const finishAttempt = passwordThrottle.begin(email);
@@ -1020,10 +1020,10 @@ export function mountManagementApi(
         try {
           parsed = JSON.parse(raw);
         } catch {
-          throw new AppError("password.invalid", {});
+          throw new AppError("password.invalid", {}, { reason: "invalid_json" });
         }
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          throw new AppError("password.invalid", {});
+          throw new AppError("password.invalid", {}, { reason: "malformed" });
         }
         credential = parsed as { personId?: string; password?: string; totp?: string };
       }
@@ -1033,7 +1033,7 @@ export function mountManagementApi(
         typeof credential.password !== "string" ||
         (credential.totp !== undefined && typeof credential.totp !== "string")
       ) {
-        throw new AppError("password.invalid", {});
+        throw new AppError("password.invalid", {}, { reason: "malformed" });
       }
       const { personId, password, totp } = credential;
       const checked = await checkManagerPassword(deps.db, { personId }, password);
@@ -1297,18 +1297,12 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
-      await withTransaction(deps.db, async (tx) => {
+      const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
-      });
-      if (!acceptInvitation(personId)) {
-        return c.json({ invitationSent: false });
-      }
-      const delivery = await withTransaction(deps.db, async (tx) => {
-        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
-        await requireFreshManagementSignIn(tx, sessionId);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
+        if (!acceptInvitation(personId)) return { invitationSent: false };
         return queueInvitationAnswer(tx, deps, {
           managementSessionId: sessionId,
           personId,

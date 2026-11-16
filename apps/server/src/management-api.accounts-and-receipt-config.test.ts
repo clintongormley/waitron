@@ -4,6 +4,7 @@ import {
   seedPersons,
   setBuiltInRoleForTest,
 } from "@waitron/identity/test/person-rows.js";
+import { seedSessionDevice } from "@waitron/identity/test/fixtures.js";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { departments, readPrintedDepartmentReceipt } from "@waitron/venue-service";
@@ -21,11 +22,18 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { outgoingMail, roles, withTransaction, type Transaction } from "@waitron/db";
+import {
+  managementAccountActions,
+  outgoingMail,
+  roles,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   encryptTotpSecret,
+  loginWithPin,
   ensureBuiltInRoles,
   defaultPermissionsFor,
   persons,
@@ -1106,8 +1114,60 @@ describe("Management API staff + session routes", () => {
       headers: { cookie },
     });
     expect(await repeated.json()).toEqual({ invitationSent: false });
+    expect(
+      suite.db.all(sql`select used_at from management_account_actions
+      where person_id=${staffId}`),
+    ).toEqual([{ used_at: expect.any(String) }]);
     await app.flushMail();
     expect(sent).toHaveLength(1);
+  });
+
+  it("reset login revokes access even just after an invitation was sent", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await login(app, STAFF_EMAIL);
+    const deviceId = await seedSessionDevice(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: staffId, pin: "1234" }),
+    );
+    const invitation = await app.request(`/management-api/staff/${staffId}/invitation`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(await invitation.json()).toEqual({ invitationSent: true, delivery: "queued" });
+    await suite.db.insert(managementAccountActions).values({
+      personId: staffId,
+      purpose: "password_reset",
+      tokenHash: "a".repeat(64),
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    const queuedBefore = await suite.db.select().from(outgoingMail);
+    expect(queuedBefore).toHaveLength(1);
+    expect(
+      suite.db.all(sql`select used_at from management_account_actions
+      where person_id=${staffId}`),
+    ).toEqual([{ used_at: null }]);
+
+    const reset = await app.request(`/management-api/staff/${staffId}/reset-login`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toEqual({ invitationSent: false });
+    expect(
+      suite.db.all(sql`select status, password_hash, pin_hash from persons
+      where id=${staffId}`),
+    ).toEqual([{ status: "pending", password_hash: null, pin_hash: null }]);
+    expect(
+      suite.db.all(sql`select ended_at from sessions where person_id=${staffId}
+      union all select ended_at from management_sessions where person_id=${staffId}`),
+    ).toEqual([{ ended_at: expect.any(String) }, { ended_at: expect.any(String) }]);
+    expect(
+      suite.db.all(sql`select used_at from management_account_actions
+      where person_id=${staffId}`),
+    ).toEqual([{ used_at: expect.any(String) }]);
+    expect(await suite.db.select().from(outgoingMail)).toEqual(queuedBefore);
   });
 
   it("screens malformed bodies and ids on the gated write routes", async () => {
@@ -1186,7 +1246,8 @@ describe("Management API staff + session routes", () => {
 
   it("login with a non-string totp → 401 password.invalid (screened before loginManager)", async () => {
     await setupVenue();
-    const app = mountApp();
+    const log = vi.fn();
+    const app = mountApp(undefined, undefined, undefined, log);
 
     // The manager is not TOTP-enrolled, so without the route's screen `loginManager` would ignore
     // `totp` and sign in.
@@ -1200,6 +1261,11 @@ describe("Management API staff + session routes", () => {
       error: { code: "password.invalid" },
     });
     expect(res.headers.get("set-cookie")).toBeNull();
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("create with a null JSON body → 400 management.request_invalid", async () => {
@@ -3413,7 +3479,7 @@ describe("queued invitation answers", () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
   });
 
-  it("reports the immediate retry as unchanged and preserves a throttled reset's credentials", async () => {
+  it("resets credentials again during cooldown without queueing another invitation", async () => {
     const { staffId } = await setupVenue();
     let actionUrl = "";
     const app = mountApp(async (message) => {
@@ -3456,7 +3522,7 @@ describe("queued invitation answers", () => {
         .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
         .from(persons)
         .where(eq(persons.id, staffId)),
-    ).toEqual(before);
+    ).toEqual([{ password: null, pin: null, status: "pending" }]);
   });
 });
 

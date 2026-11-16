@@ -203,7 +203,8 @@ const NO_SIGN_IN_SECRETS = {
   googleSubject: null,
 } as const;
 
-async function deleteSignInRows(tx: Transaction, personId: string): Promise<void> {
+/** Callers own admission and last-administrator checks; this removes factor rows only. */
+export async function deleteSignInRows(tx: Transaction, personId: string): Promise<void> {
   await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, personId));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, personId));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, personId));

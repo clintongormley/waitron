@@ -1015,11 +1015,10 @@ one, since the lookup never reads the user handle), the deletion cases in
 `apps/server/src/management-api-passkey.test.ts`.
 Identity's password and PIN refusals carry the real cause for the server log only:
 `new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`
-(`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. No reason is
-carried by the refusals `apps/server` throws itself — a malformed id or body, a missing credential,
-the setup Reset's proof check (`till-api.ts`, `management-api.ts`, `mirror-bundle-api.ts`,
-`promote-api.ts`, `setup-api.ts`) — nor by the standby box's relayed `password.invalid`
-(`mirror-bundle-fetch.ts`), nor by the passkey and Google refusals. Validation that does not depend
+(`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. The server's own password/PIN refusals use fixed private reasons for malformed input,
+invalid credential-header JSON and a setup Reset proof mismatch; the standby's relayed
+`password.invalid` records `primary_refused` without accepting upstream details.
+Passkey and Google refusals still carry no reason. Validation that does not depend
 on the account (an empty required field, a malformed code) may still sit under its field; a
 signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
 answers are reachable only after a credential was proved and stay: `totp.required` (the

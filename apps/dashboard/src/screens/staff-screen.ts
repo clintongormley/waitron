@@ -125,8 +125,8 @@ export class StaffScreen extends LitElement {
   @state() private errorField: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private invitationStatus: "sent" | "captured" | "unconfigured" | "throttled" | null =
-    null;
+  @state() private invitationStatus:
+    "sent" | "captured" | "unconfigured" | "throttled" | "reset_throttled" | null = null;
   @state() private search = "";
   @state() private roleFilter: string[] = [];
   @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
@@ -207,7 +207,10 @@ export class StaffScreen extends LitElement {
     </div>`;
   }
 
-  #showInvitation(result: Awaited<ReturnType<DashboardApi["resendInvitation"]>>): void {
+  #showInvitation(
+    result: Awaited<ReturnType<DashboardApi["resendInvitation"]>>,
+    reset = false,
+  ): void {
     this.invitationStatus =
       result.problem === "email.unconfigured"
         ? "unconfigured"
@@ -215,7 +218,9 @@ export class StaffScreen extends LitElement {
           ? "captured"
           : result.invitationSent
             ? "sent"
-            : "throttled";
+            : reset
+              ? "reset_throttled"
+              : "throttled";
   }
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
@@ -252,7 +257,7 @@ export class StaffScreen extends LitElement {
             : action === "reactivate"
               ? this.api.reactivatePerson(person.personId)
               : this.api.resendInvitation(person.personId));
-      if (result) this.#showInvitation(result);
+      if (result) this.#showInvitation(result, action === "reset-login");
       this.rowAction = null;
       await this.#load();
     } catch (error) {

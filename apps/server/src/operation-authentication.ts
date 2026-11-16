@@ -114,7 +114,7 @@ export async function withAuthenticatedOperation<T>(
   afterSignIn?: () => Promise<void>,
 ): Promise<T> {
   if (typeof credentials !== "object" || credentials === null || Array.isArray(credentials))
-    throw new AppError("password.invalid", {});
+    throw new AppError("password.invalid", {}, { reason: "malformed" });
   const { personId, password, totp } = credentials as Record<string, unknown>;
   if (
     typeof personId !== "string" ||
@@ -122,7 +122,7 @@ export async function withAuthenticatedOperation<T>(
     typeof password !== "string" ||
     (totp !== undefined && typeof totp !== "string")
   )
-    throw new AppError("password.invalid", {});
+    throw new AppError("password.invalid", {}, { reason: "malformed" });
   const binding = { ...operation.binding };
   const permission = operation.permission;
   const operatorId = await inTurn(deps.db, personId, async () => {

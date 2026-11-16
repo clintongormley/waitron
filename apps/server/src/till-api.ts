@@ -733,10 +733,10 @@ export function parseDrawerOverride(
 ): { personId: string; pin: string } | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw.personId !== "string" || !isUuid(raw.personId)) {
-    throw new AppError("pin.invalid", {});
+    throw new AppError("pin.invalid", {}, { reason: "malformed" });
   }
   if (typeof raw.pin !== "string") {
-    throw new AppError("pin.invalid", {});
+    throw new AppError("pin.invalid", {}, { reason: "malformed" });
   }
   return { personId: raw.personId, pin: raw.pin };
 }
@@ -1362,7 +1362,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // and the `text` id column folds no spellings (`canonicaliseUuid`).
       const personId = canonicaliseUuid(rawPersonId);
       // Not throttled: this id never reaches the lookup, so no PIN is being tried against anyone.
-      if (personId === null) throw new AppError("pin.invalid", {});
+      if (personId === null) throw new AppError("pin.invalid", {}, { reason: "malformed" });
       const proof = await requireDeviceProof(deps, c);
       const { device } = proof;
       // Before the PIN work, and again under the lock: the profile can change while the PIN is
@@ -1375,7 +1375,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return inPinTurn(attempts, personId, async () => {
           pinThrottle.check(device.deviceId, personId);
           pinThrottle.recordFailure(device.deviceId, personId);
-          throw new AppError("pin.invalid", {});
+          throw new AppError("pin.invalid", {}, { reason: "malformed" });
         });
       }
       const session = await withPinCheckAhead(

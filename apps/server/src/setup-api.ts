@@ -1171,7 +1171,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         } finally {
           finish(outcome);
         }
-        if (outcome === "invalid") throw new AppError("password.invalid", {});
+        if (outcome === "invalid")
+          throw new AppError("password.invalid", {}, { reason: "reset_proof_mismatch" });
 
         await stageReset(record.id);
         const response = c.json({ resetStaged: true, restarting: true }, 202);

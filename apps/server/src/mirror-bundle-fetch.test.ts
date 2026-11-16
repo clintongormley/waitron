@@ -244,6 +244,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "password.invalid")).toBe(true);
     expect(isAppError(error) && error.params).toEqual({});
+    expect(isAppError(error) && error.reason).toBe("primary_refused");
   });
 
   it.each([

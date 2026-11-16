@@ -555,10 +555,7 @@ cierra sus sesiones de caja; una sesión del panel pertenece a la persona. Por e
 abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones,
 borra su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de
 recuperación y su vínculo con Google, y le envía una nueva invitación si el correo está
-configurado. Waitron no lo permite para el único administrador activo del local que pueda entrar al panel. Si en el último
-minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió **Habilitar
-y enviar invitación**, no cambia nada y te indica que esperes un minuto antes de volver a
-intentarlo. El navegador también guarda la dirección de correo de la persona si eligió **Recordar
+configurado. Waitron no lo permite para el único administrador activo del local que pueda entrar al panel. El acceso se restablece de inmediato. Cualquier invitación enviada en el último minuto ya no funciona; espera un minuto y vuelve a enviar la invitación. El navegador también guarda la dirección de correo de la persona si eligió **Recordar
 mi correo en este dispositivo** al iniciar sesión. Si el móvil o el portátil se usaba también como
 caja, sigue además los pasos para un dispositivo de caja robado.
 
@@ -618,9 +615,7 @@ pantalla muestra quién descargó una exportación.
 PIN, su contraseña, su verificación en dos pasos, su vínculo con Google, sus llaves de acceso y
 sus códigos de recuperación. **Restablecer acceso** envía una nueva invitación si el correo está
 configurado, y **Deshabilitar** mantiene fuera a la persona hasta que un administrador elija
-**Habilitar y enviar invitación**. Si en el último minuto ya se envió una invitación a esa
-persona, se restableció su acceso o se eligió **Habilitar y enviar invitación**, **Restablecer
-acceso** no cambia nada y te indica que esperes un minuto antes de volver a intentarlo. Después
+**Habilitar y enviar invitación**. El acceso se restablece de inmediato. Cualquier invitación enviada en el último minuto ya no funciona; espera un minuto y vuelve a enviar la invitación. Después
 revisa lo que se hizo con la cuenta: descarga la copia de los datos de la persona y revisa
 **Pedidos**. Consulta [Acceso a la cuenta](staff.md#account-access).
 

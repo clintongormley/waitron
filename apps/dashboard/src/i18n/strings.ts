@@ -1384,6 +1384,8 @@ export const en = {
     "The invitation is on its way to the server inbox. Open Email inbox to read it.",
   "staff.invitation_unconfigured":
     "No invitation was sent because email is not set up. Open Email settings, then send a new invitation.",
+  "staff.invitation_reset_throttled":
+    "The login was reset. Any invitation sent in the last minute no longer works. Wait a minute, then send the invitation again.",
   "staff.invitation_throttled":
     "Nothing changed and no new invitation was sent. Wait a minute before trying again.",
   "profile.email_sent":
@@ -5736,6 +5738,8 @@ export const es: Record<StringKey, string> = {
     "La invitación va a la bandeja de correo del servidor. Abre la bandeja de correo para leerla.",
   "staff.invitation_unconfigured":
     "No se ha enviado la invitación porque el correo no está configurado. Abre Correo y envía una nueva invitación.",
+  "staff.invitation_reset_throttled":
+    "Se ha restablecido el acceso. Cualquier invitación enviada en el último minuto ya no funciona. Espera un minuto y vuelve a enviar la invitación.",
   "staff.invitation_throttled":
     "No ha cambiado nada ni se ha enviado otra invitación. Espera un minuto antes de volver a intentarlo.",
   "profile.email_sent":

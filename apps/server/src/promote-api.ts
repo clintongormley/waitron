@@ -261,7 +261,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
             });
           } else {
             // The same code a wrong password gets, so the response never says which field failed.
-            throw new AppError("password.invalid", {});
+            throw new AppError("password.invalid", {}, { reason: "malformed" });
           }
 
           const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });

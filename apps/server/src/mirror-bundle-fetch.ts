@@ -125,7 +125,12 @@ async function refusalFrom(response: Response): Promise<AppError> {
   }
   const { code } = error;
   const params = isRecord(error.params) ? error.params : {};
-  if (isRelayedBare(code)) return new AppError(code, {});
+  if (isRelayedBare(code))
+    return new AppError(
+      code,
+      {},
+      code === "password.invalid" ? { reason: "primary_refused" } : undefined,
+    );
   if (
     code === "mirror.clocks_apart" &&
     isIsoTime(params.primaryAt) &&

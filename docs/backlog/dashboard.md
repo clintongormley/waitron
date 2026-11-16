@@ -80,7 +80,6 @@ Review #559 also recorded no test reaching `management_session.required` in
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
   re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
   - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
     existing test pins that), while Reset and the dashboard sign-in move it to the password; the
     owner's rule covers marking fields, not the cursor, so whether Connect should match is the
