@@ -28,8 +28,7 @@ import {
   specialDayDates,
   specialDays,
   withTransaction,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
   type Transaction,
   floorZones,
 } from "@waitron/db";
@@ -167,22 +166,22 @@ async function fixture(
         .set({ departmentId: departmentId })
         .where(eq(floorZones.id, zoneId));
       if (ranges.length && specialDayId) {
-        const dayId = randomUUID();
-        await tx.insert(zoneDays).values({ id: dayId, zoneId, specialDayDateId });
-        await tx.insert(zoneDayRanges).values(
+        await tx.insert(openingHours).values(
           ranges.map((r) => ({
-            dayId,
+            zoneId,
+            specialDayDateId,
             kind: "closed" as const,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
           })),
         );
       } else if (ranges.length) {
-        const dayId = randomUUID();
-        await tx.insert(zoneDays).values({ id: dayId, zoneId, seasonId, weekday: 3 });
-        await tx.insert(zoneDayRanges).values(
+        await tx.insert(openingHours).values(
           ranges.map((r) => ({
-            dayId,
+            zoneId,
+            seasonId,
+            weekday: 3,
+            kind: "closed" as const,
             startsAt: `${r.startsAt}:00`,
             endsAt: `${r.endsAt}:00`,
           })),
@@ -714,13 +713,12 @@ describe("a waiting change checks the hours written while it waits", () => {
       (
         await tx
           .select({
-            weekday: zoneDays.weekday,
-            startsAt: zoneDayRanges.startsAt,
-            endsAt: zoneDayRanges.endsAt,
+            weekday: openingHours.weekday,
+            startsAt: openingHours.startsAt,
+            endsAt: openingHours.endsAt,
           })
-          .from(zoneDayRanges)
-          .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-          .where(eq(zoneDays.zoneId, v.zoneId!))
+          .from(openingHours)
+          .where(eq(openingHours.zoneId, v.zoneId!))
       )
         .map((row) => `${row.weekday} ${row.startsAt}-${row.endsAt}`)
         .sort(),
@@ -2069,13 +2067,13 @@ describe("clock compatibility reads special-day paint", () => {
         .select({ id: specialDayDates.id })
         .from(specialDayDates)
         .where(eq(specialDayDates.specialDayId, specialDayId));
-      const dayId = randomUUID();
-      await tx
-        .insert(zoneDays)
-        .values({ id: dayId, zoneId: v.zoneId!, specialDayDateId: date!.id });
-      await tx
-        .insert(zoneDayRanges)
-        .values({ dayId, kind: "closed", startsAt: "22:00:00", endsAt: "04:30:00" });
+      await tx.insert(openingHours).values({
+        zoneId: v.zoneId!,
+        specialDayDateId: date!.id,
+        kind: "closed",
+        startsAt: "22:00:00",
+        endsAt: "04:30:00",
+      });
     });
     expect((await conflicts("03:00")).conflicts).toEqual([
       {

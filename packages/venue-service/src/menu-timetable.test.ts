@@ -1617,7 +1617,7 @@ describe("statements", () => {
         expect(
           spy.mock.calls
             .map(([query]) => (query as unknown as { sql: string }).sql)
-            .filter((text) => /"(zone_days|zone_day_ranges)"/.test(text)),
+            .filter((text) => /"opening_hours"/.test(text)),
         ).toEqual([]);
       } finally {
         spy.mockRestore();

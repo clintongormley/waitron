@@ -923,6 +923,7 @@ also qualifies the historical operation-description references in this section.
   suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
   complete job views. The remaining jobs still need moving onto the runner.
+  Zone hours now use one painted-range table; the department half still needs moving in vb8.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Floor splits now check the parties the till read, separately from the room layout revision;
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;

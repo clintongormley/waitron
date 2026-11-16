@@ -54,8 +54,7 @@ const TABLES = [
   "special_day_dates",
   "department_days",
   "department_day_ranges",
-  "zone_days",
-  "zone_day_ranges",
+  "opening_hours",
 ];
 
 /** One row of `pragma table_info`. `pk` is 0 for a non-key column and the 1-based position in the
@@ -356,17 +355,15 @@ describe("the venue-service tables carry no taxpayer column", () => {
           "(period_id, department_id) -> menu_periods(id, department_id)",
         ],
       },
-      zone_days: {
+      opening_hours: {
         primaryKey: ["id"],
         foreignKeys: [
+          "(department_id) -> departments(id) on delete cascade",
+          "(period_id, department_id) -> menu_periods(id, department_id)",
           "(season_id) -> seasons(id) on delete cascade",
           "(special_day_date_id) -> special_day_dates(id) on delete cascade",
           "(zone_id) -> floor_zones(id) on delete cascade",
         ],
-      },
-      zone_day_ranges: {
-        primaryKey: ["id"],
-        foreignKeys: ["(day_id) -> zone_days(id) on delete cascade"],
       },
     });
   });
@@ -807,19 +804,14 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         (id, day_id, department_id, period_id, starts_at, ends_at)
       values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
     const zoneDayId = randomUUID();
-    await db.execute(sql`insert into zone_days (id, zone_id, season_id, weekday)
-      values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6)`);
-    await db.execute(sql`insert into zone_day_ranges (id, day_id, starts_at, ends_at)
-      values (${randomUUID()}, ${zoneDayId}, '15:00:00', '17:00:00')`);
+    await db.execute(sql`insert into opening_hours (id, zone_id, season_id, weekday, kind, starts_at, ends_at)
+      values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6, 'closed', '15:00:00', '17:00:00')`);
     expect(
-      (await db.execute(sql`select id from zone_day_ranges where day_id = ${zoneDayId}`)).rows,
+      (await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows,
     ).toHaveLength(1);
     await db.execute(sql`delete from seasons where id = ${seasonId}`);
-    expect((await db.execute(sql`select id from zone_days where id = ${zoneDayId}`)).rows).toEqual(
-      [],
-    );
     expect(
-      (await db.execute(sql`select id from zone_day_ranges where day_id = ${zoneDayId}`)).rows,
+      (await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows,
     ).toEqual([]);
     expect(
       (await db.execute(sql`select id from department_days where id = ${weekDayId}`)).rows,

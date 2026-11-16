@@ -373,8 +373,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("special_day_dates", "state", SERVICE_STATE),
   classify("department_days", "state", SERVICE_STATE),
   classify("department_day_ranges", "state", SERVICE_STATE),
-  classify("zone_days", "state", SERVICE_STATE),
-  classify("zone_day_ranges", "state", SERVICE_STATE),
+  classify("opening_hours", "state", SERVICE_STATE),
 
   // media
   classify("media_images", "state", "shared image metadata; copied to standbys"),

@@ -6,6 +6,7 @@ export {
   billNumberAllocations,
   departmentDayRanges,
   departmentDays,
+  openingHours,
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
@@ -36,8 +37,6 @@ export {
   specialDays,
   workingLineContexts,
   ZONE_PAINT_KINDS,
-  zoneDayRanges,
-  zoneDays,
 } from "@waitron/db";
 export type { ServiceStepStart } from "@waitron/db";
 export * from "./operations.js";

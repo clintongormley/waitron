@@ -580,6 +580,10 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 ## Opening hours store "no claim" as no row
 
+**2026-11-16, A1308 vb7:** your zone's season closures and special-day paint now live in
+`opening_hours`, one row per range with `zone_id` set. An empty week stores no rows.
+Departments still use `department_days` and `department_day_ranges` until vb8.
+
 **2026-10-13, A506-5:** named days are gone, and special days hold the calendar's dated choices
 (see "Special days" below). A special-day date stores only what it changes: a department or zone
 with no paint on that date follows the season's day, and each painted stretch replaces only its
@@ -805,6 +809,10 @@ A different authored or demo schedule is not described as that first weekday sch
 
 ### Zone closed times
 
+**2026-11-16, A1308 vb7:** zone paint uses `opening_hours`; the earlier season and special-day
+storage accounts below name the retired `zone_days` and `zone_day_ranges` tables.
+Configuration format 44 carries the new table and refuses format 43 as outdated.
+
 You subtract a zone's closed times from its department's service day, rather than writing another
 opening schedule. A zone's week of closed times is in the season tables (see "Seasons and season
 weeks" below), and a special-day date's zone paint is in the same tables (see "Special days"
@@ -852,6 +860,9 @@ acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.te
 `configuration-transfer.test.ts` under `packages/venue-service/src/`.
 
 ### Seasons and season weeks
+
+**2026-11-16, A1308 vb7:** the day-container descriptions in this earlier account now apply
+only to departments. Zones use the `opening_hours` range rows described above.
 
 **2026-10-12, A506-1.** `seasons` holds the venue's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
@@ -947,6 +958,9 @@ are under "Special days" below. The cases are under "season weeks in a configura
 `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Special days
+
+**2026-11-16, A1308 vb7:** the account below predates the zone storage move. Current zone
+paint names its date directly on each `opening_hours` range; department day rows remain.
 
 **2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and a list of dates, possibly empty
 (`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which

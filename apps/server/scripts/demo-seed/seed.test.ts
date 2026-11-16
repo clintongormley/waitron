@@ -65,11 +65,11 @@ describe("seedDemoRestaurant", () => {
       await withTransaction(suite.db, (tx) => seedBusinessDay(tx, { dayCutover: cutover }));
       const readClosures = () =>
         suite.db.execute<{ zone: string; weekday: number; starts_at: string; ends_at: string }>(sql`
-          select z.name as zone, c.weekday, r.starts_at, r.ends_at
-          from zone_day_ranges r join zone_days c on c.id = r.day_id
-          join seasons se on se.id = c.season_id and se.starts_on = '12-01'
-          join floor_zones z on z.id = c.zone_id
-          order by z.name, c.weekday, r.starts_at`);
+          select z.name as zone, r.weekday, r.starts_at, r.ends_at
+          from opening_hours r
+          join seasons se on se.id = r.season_id and se.starts_on = '12-01'
+          join floor_zones z on z.id = r.zone_id
+          order by z.name, r.weekday, r.starts_at`);
       const realSeedSales = salesSeed.seedSales;
       let closuresAfterSales: unknown;
       let saleCount = 0;

@@ -27,8 +27,7 @@ import {
   serviceSteps,
   withTransaction,
   type Transaction,
-  zoneDayRanges,
-  zoneDays,
+  openingHours,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -409,18 +408,16 @@ it("delete takes the department's season days and their ranges before its period
         endsAt: "16:00:00",
       })),
     );
-    const zoneDaysWritten = await tx
-      .insert(zoneDays)
-      .values([
-        { zoneId: f.gone, seasonId: winter!.id, weekday: 2 },
-        { zoneId: f.elsewhere, seasonId: winter!.id, weekday: 2 },
-      ])
-      .returning();
-    await tx
-      .insert(zoneDayRanges)
-      .values(
-        zoneDaysWritten.map((day) => ({ dayId: day.id, startsAt: "17:00:00", endsAt: "19:00:00" })),
-      );
+    await tx.insert(openingHours).values(
+      [f.gone, f.elsewhere].map((zoneId) => ({
+        zoneId,
+        seasonId: winter!.id,
+        weekday: 2,
+        kind: "closed" as const,
+        startsAt: "17:00:00",
+        endsAt: "19:00:00",
+      })),
+    );
 
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
 
@@ -449,9 +446,9 @@ it("delete takes the department's season days and their ranges before its period
     ).toEqual([{ periodId: other!.id }]);
     expect(
       await tx
-        .select({ zoneId: zoneDays.zoneId })
-        .from(zoneDays)
-        .where(eq(zoneDays.seasonId, winter!.id)),
+        .select({ zoneId: openingHours.zoneId })
+        .from(openingHours)
+        .where(eq(openingHours.seasonId, winter!.id)),
     ).toEqual([{ zoneId: f.elsewhere }]);
   });
 });
@@ -552,8 +549,7 @@ it("a department delete clears a week painted in Winter only and a Winter closur
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
     expect(await tx.select().from(departmentDays)).toEqual([]);
     expect(await tx.select().from(departmentDayRanges)).toEqual([]);
-    expect(await tx.select().from(zoneDays)).toEqual([]);
-    expect(await tx.select().from(zoneDayRanges)).toEqual([]);
+    expect(await tx.select().from(openingHours)).toEqual([]);
   });
 });
 

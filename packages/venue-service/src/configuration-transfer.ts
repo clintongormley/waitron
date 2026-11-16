@@ -171,6 +171,14 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
   return dates;
 }
 
+const rangeDayKey = (row: Row, owner: string) =>
+  JSON.stringify([
+    row[owner],
+    row.season_id ?? null,
+    row.weekday ?? null,
+    row.special_day_date_id ?? null,
+  ]);
+
 type DayRows = Map<unknown, { ownerId: unknown; seasonId: unknown; weekday: number }>;
 
 /**
@@ -184,6 +192,7 @@ function dayRows(
   owners: Set<unknown>,
   seasonIds: Set<unknown>,
   specialDates: ReadonlyMap<unknown, ImportedSpecialDate>,
+  ranges = false,
 ): { seasonDays: DayRows; specialDays: Map<unknown, { ownerId: unknown; dateId: unknown }> } {
   const seasonDays: DayRows = new Map();
   const specialDays = new Map<unknown, { ownerId: unknown; dateId: unknown }>();
@@ -196,9 +205,9 @@ function dayRows(
       if ((row.season_id ?? null) !== null) refuse(`${table}.season_id`);
       if ((row.weekday ?? null) !== null) refuse(`${table}.weekday`);
       const key = JSON.stringify([row[owner], dateId]);
-      if (held.has(key)) refuse(`${table}.special_day_date_id`);
+      if (!ranges && held.has(key)) refuse(`${table}.special_day_date_id`);
       held.add(key);
-      specialDays.set(row.id, { ownerId: row[owner], dateId });
+      specialDays.set(ranges ? rangeDayKey(row, owner) : row.id, { ownerId: row[owner], dateId });
       continue;
     }
     if (!seasonIds.has(row.season_id)) refuse(`${table}.season_id`);
@@ -206,9 +215,13 @@ function dayRows(
     if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
       refuse(`${table}.weekday`);
     const key = JSON.stringify([row[owner], row.season_id, weekday]);
-    if (held.has(key)) refuse(`${table}.weekday`);
+    if (!ranges && held.has(key)) refuse(`${table}.weekday`);
     held.add(key);
-    seasonDays.set(row.id, { ownerId: row[owner], seasonId: row.season_id, weekday });
+    seasonDays.set(ranges ? rangeDayKey(row, owner) : row.id, {
+      ownerId: row[owner],
+      seasonId: row.season_id,
+      weekday,
+    });
   }
   return { seasonDays, specialDays };
 }
@@ -259,18 +272,19 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
   );
   const zones = new Set((tables.floor_zones ?? []).map((row) => row.id));
   const zoneDays = dayRows(
-    tables.zone_days,
-    "zone_days",
+    tables.opening_hours,
+    "opening_hours",
     "zone_id",
     zones,
     seasonIds,
     specialDates,
+    true,
   );
   const departmentRanges = tables.department_day_ranges ?? [];
-  const zoneRanges = tables.zone_day_ranges ?? [];
+  const zoneRanges = tables.opening_hours ?? [];
   if (departmentRanges.length + zoneRanges.length === 0) return;
   if (bundle === undefined || !CUTOVER.test(bundle.dayCutover))
-    refuse(departmentRanges.length > 0 ? "department_day_ranges" : "zone_day_ranges");
+    refuse(departmentRanges.length > 0 ? "department_day_ranges" : "opening_hours");
 
   const periodDepartment = new Map(
     (tables.menu_periods ?? []).map((row) => [row.id, row.department_id]),
@@ -304,22 +318,23 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     [...zoneDays.specialDays.keys()].map((id) => [id, []]),
   );
   for (const row of zoneRanges) {
-    const paint = zonePaint.get(row.day_id);
-    if (paint === undefined && !zoneDays.seasonDays.has(row.day_id))
-      refuse("zone_day_ranges.day_id");
+    if ((row.department_id ?? null) !== null) refuse("opening_hours.department_id");
+    if ((row.period_id ?? null) !== null) refuse("opening_hours.period_id");
+    const dayId = rangeDayKey(row, "zone_id");
+    const paint = zonePaint.get(dayId);
     // "open" belongs to a special-day date only; an export always carries the not-null column.
     if (
       !(paint !== undefined && ZONE_PAINT_KINDS.includes(row.kind as never)) &&
       row.kind !== "closed"
     )
-      refuse("zone_day_ranges.kind");
-    const stored = storedRange(row, "zone_day_ranges");
-    (paint ?? zoneWeeks.get(row.day_id)!).push(stored);
+      refuse("opening_hours.kind");
+    const stored = storedRange(row, "opening_hours");
+    (paint ?? zoneWeeks.get(dayId)!).push(stored);
   }
   for (const ranges of departmentWeeks.values())
     parsedAs("department_day_ranges", () => parseServiceDay(ranges, "slots", bundle.dayCutover));
   for (const ranges of [...zoneWeeks.values(), ...zonePaint.values()])
-    parsedAs("zone_day_ranges", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
+    parsedAs("opening_hours", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
   for (const ranges of departmentPaint.values())
     parsedAs("department_day_ranges", () =>
       parseClosedRanges(
@@ -335,7 +350,7 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     bundle,
     "department_day_ranges",
   );
-  refuseSkippedPaint(zoneDays.specialDays, zonePaint, specialDates, bundle, "zone_day_ranges");
+  refuseSkippedPaint(zoneDays.specialDays, zonePaint, specialDates, bundle, "opening_hours");
 }
 
 /** Refuses special-day paint at a time the clocks skip on its business day; a repeating date is
@@ -683,8 +698,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "seasons" },
     { name: "department_days" },
     { name: "department_day_ranges" },
-    { name: "zone_days" },
-    { name: "zone_day_ranges" },
+    { name: "opening_hours" },
   ],
   validate: validateVenueServiceConfiguration,
 } as const;

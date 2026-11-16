@@ -12,10 +12,11 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  zoneDays,
+  openingHours,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { targetSeasons } from "./season-weeks.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
@@ -178,7 +179,7 @@ describe("saveSpecialDay", () => {
       await db.select().from(departmentDays).where(eq(departmentDays.specialDayDateId, removed.id)),
     ).toEqual([]);
     expect(
-      await db.select().from(zoneDays).where(eq(zoneDays.specialDayDateId, removed.id)),
+      await db.select().from(openingHours).where(eq(openingHours.specialDayDateId, removed.id)),
     ).toEqual([]);
   });
 
@@ -513,6 +514,18 @@ describe("saveSpecialDay", () => {
       paint: [],
       zonePaint: [],
     });
+    const [season] = await scoped((tx) => targetSeasons(tx, undefined));
+    const [week] = await db
+      .insert(openingHours)
+      .values({
+        zoneId: v.sala,
+        seasonId: season!.id,
+        weekday: 2,
+        kind: "closed",
+        startsAt: "23:00:00",
+        endsAt: "02:00:00",
+      })
+      .returning();
     const before = await christmasDinners(v);
     const after = await save(before.id, {
       name: "Christmas company dinners",
@@ -522,6 +535,9 @@ describe("saveSpecialDay", () => {
     });
     expect(after.zonePaint).toEqual([]);
     expect(after.paint).toEqual(before.paint);
+    expect(await db.select().from(openingHours).where(eq(openingHours.id, week!.id))).toEqual([
+      week,
+    ]);
   });
 
   it("stores touching paint of one period, or of Closed, as one range, and of two periods as two", async () => {
@@ -900,9 +916,9 @@ describe("deleteSpecialDay", () => {
     expect(
       await db.select().from(departmentDays).where(inArray(departmentDays.specialDayDateId, ids)),
     ).toEqual([]);
-    expect(await db.select().from(zoneDays).where(inArray(zoneDays.specialDayDateId, ids))).toEqual(
-      [],
-    );
+    expect(
+      await db.select().from(openingHours).where(inArray(openingHours.specialDayDateId, ids)),
+    ).toEqual([]);
   });
 
   it("refuses a stale revision and an unknown id, deleting nothing", async () => {

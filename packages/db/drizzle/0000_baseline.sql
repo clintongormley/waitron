@@ -2571,33 +2571,6 @@ CREATE TABLE `special_days` (
 	CONSTRAINT "special_days_name_ck" CHECK(trim("special_days"."name") <> '')
 );
 --> statement-breakpoint
-CREATE TABLE `zone_day_ranges` (
-	`id` text PRIMARY KEY NOT NULL,
-	`day_id` text NOT NULL,
-	`kind` text DEFAULT 'closed' NOT NULL,
-	`starts_at` text NOT NULL,
-	`ends_at` text NOT NULL,
-	FOREIGN KEY (`day_id`) REFERENCES `zone_days`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "zone_day_ranges_kind_ck" CHECK("zone_day_ranges"."kind" in ('closed', 'open')),
-	CONSTRAINT "zone_day_ranges_step_ck" CHECK(substr("zone_day_ranges"."starts_at", 4, 2) in ('00', '15', '30', '45') and substr("zone_day_ranges"."ends_at", 4, 2) in ('00', '15', '30', '45'))
-);
---> statement-breakpoint
-CREATE INDEX `zone_day_ranges_day_idx` ON `zone_day_ranges` (`day_id`,`starts_at`);--> statement-breakpoint
-CREATE TABLE `zone_days` (
-	`id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`season_id` text,
-	`weekday` integer,
-	`special_day_date_id` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "zone_days_one_day_ck" CHECK(("zone_days"."season_id" is null) <> ("zone_days"."special_day_date_id" is null) and ("zone_days"."season_id" is null) = ("zone_days"."weekday" is null)),
-	CONSTRAINT "zone_days_weekday_ck" CHECK("zone_days"."weekday" is null or "zone_days"."weekday" between 0 and 6)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `zone_days_season_key` ON `zone_days` (`zone_id`,`season_id`,`weekday`) WHERE "zone_days"."season_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `zone_days_date_key` ON `zone_days` (`zone_id`,`special_day_date_id`) WHERE "zone_days"."special_day_date_id" is not null;--> statement-breakpoint
 CREATE TABLE `order_kitchen_notes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text,
@@ -2727,6 +2700,34 @@ CREATE TABLE `department_courses` (
 );
 --> statement-breakpoint
 CREATE INDEX `department_courses_course_idx` ON `department_courses` (`course_id`);--> statement-breakpoint
+CREATE TABLE `opening_hours` (
+	`id` text PRIMARY KEY NOT NULL,
+	`department_id` text,
+	`zone_id` text,
+	`season_id` text,
+	`weekday` integer,
+	`special_day_date_id` text,
+	`kind` text NOT NULL,
+	`period_id` text,
+	`starts_at` text NOT NULL,
+	`ends_at` text NOT NULL,
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`period_id`,`department_id`) REFERENCES `menu_periods`(`id`,`department_id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "opening_hours_one_owner_ck" CHECK(("opening_hours"."department_id" is null) <> ("opening_hours"."zone_id" is null)),
+	CONSTRAINT "opening_hours_one_day_ck" CHECK(("opening_hours"."season_id" is null) <> ("opening_hours"."special_day_date_id" is null) and ("opening_hours"."season_id" is null) = ("opening_hours"."weekday" is null)),
+	CONSTRAINT "opening_hours_weekday_ck" CHECK("opening_hours"."weekday" is null or "opening_hours"."weekday" between 0 and 6),
+	CONSTRAINT "opening_hours_step_ck" CHECK(substr("opening_hours"."starts_at", 4, 2) in ('00', '15', '30', '45') and substr("opening_hours"."ends_at", 4, 2) in ('00', '15', '30', '45')),
+	CONSTRAINT "opening_hours_kind_ck" CHECK("opening_hours"."kind" in ('period', 'closed', 'open')),
+	CONSTRAINT "opening_hours_kind_by_owner_ck" CHECK(("opening_hours"."department_id" is not null and (("opening_hours"."kind" = 'period' and "opening_hours"."period_id" is not null) or ("opening_hours"."kind" = 'closed' and "opening_hours"."period_id" is null and "opening_hours"."special_day_date_id" is not null))) or ("opening_hours"."zone_id" is not null and "opening_hours"."period_id" is null and ("opening_hours"."kind" = 'closed' or ("opening_hours"."kind" = 'open' and "opening_hours"."special_day_date_id" is not null))))
+);
+--> statement-breakpoint
+CREATE INDEX `opening_hours_department_day_idx` ON `opening_hours` (`department_id`,`season_id`,`weekday`,`starts_at`) WHERE "opening_hours"."department_id" is not null;--> statement-breakpoint
+CREATE INDEX `opening_hours_zone_day_idx` ON `opening_hours` (`zone_id`,`season_id`,`weekday`,`starts_at`) WHERE "opening_hours"."zone_id" is not null;--> statement-breakpoint
+CREATE INDEX `opening_hours_special_day_date_idx` ON `opening_hours` (`special_day_date_id`);--> statement-breakpoint
+CREATE INDEX `opening_hours_season_idx` ON `opening_hours` (`season_id`);--> statement-breakpoint
 CREATE TABLE `document_delivery_requests` (
 	`node_id` text NOT NULL,
 	`recovery_epoch` text NOT NULL,

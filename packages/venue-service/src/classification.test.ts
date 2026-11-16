@@ -75,8 +75,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       "special_day_dates",
       "department_days",
       "department_day_ranges",
-      "zone_days",
-      "zone_day_ranges",
+      "opening_hours",
     ];
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => seasons.includes(entry.table)).map((entry) => [

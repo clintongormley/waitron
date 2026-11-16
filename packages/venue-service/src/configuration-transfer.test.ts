@@ -135,7 +135,7 @@ describe("validateHolidayConfiguration", () => {
   });
   it("excludes holiday geographies and the retired local entries from transferred tables", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names.at(-1)).toBe("zone_day_ranges");
+    expect(names.at(-1)).toBe("opening_hours");
     expect(names).not.toContain("holiday_geographies");
     expect(names).not.toContain("local_holidays");
   });
@@ -1105,19 +1105,15 @@ describe("season weeks in a configuration bundle", () => {
         range("w-sat", LUNCH, "06:00:00", "09:00:00"),
         range("a-sat", LUNCH, "06:00:00", "09:00:00"),
       ],
-      zone_days: [
+      opening_hours: [
         {
-          id: "z-fri",
+          id: "z-fri-1",
+          department_id: null,
+          period_id: null,
           zone_id: "terrace",
           season_id: "s-winter",
           weekday: 5,
           special_day_date_id: null,
-        },
-      ],
-      zone_day_ranges: [
-        {
-          id: "z-fri-1",
-          day_id: "z-fri",
           kind: "closed",
           starts_at: "23:00:00",
           ends_at: "02:00:00",
@@ -1128,19 +1124,18 @@ describe("season weeks in a configuration bundle", () => {
 
   it("accepts raw zone closures beyond department hours", () => {
     const tables = seasonTables();
-    tables.zone_day_ranges![0]!.ends_at = "04:00:00";
+    tables.opening_hours![0]!.ends_at = "04:00:00";
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
   it("are transferred after the periods and zone policies they name, parents first", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     const at = names.indexOf("seasons");
-    expect(names.slice(at, at + 5)).toEqual([
+    expect(names.slice(at, at + 4)).toEqual([
       "seasons",
       "department_days",
       "department_day_ranges",
-      "zone_days",
-      "zone_day_ranges",
+      "opening_hours",
     ]);
     expect(at).toBeGreaterThan(names.indexOf("menu_periods"));
     expect(at).toBeGreaterThan(names.indexOf("departments"));
@@ -1243,14 +1238,15 @@ describe("season weeks in a configuration bundle", () => {
   });
 
   it.each([
-    ["zone_days.zone_id", "zone_days", { zone_id: "missing" }],
-    ["zone_days.season_id", "zone_days", { season_id: "missing" }],
-    ["zone_days.weekday", "zone_days", { weekday: -1 }],
-    ["zone_days.special_day_date_id", "zone_days", { special_day_date_id: "sd-1" }],
-    ["zone_day_ranges.day_id", "zone_day_ranges", { day_id: "missing" }],
-    ["zone_day_ranges.kind", "zone_day_ranges", { kind: "open" }],
-    ["zone_day_ranges.starts_at", "zone_day_ranges", { starts_at: "23:00" }],
-    ["zone_day_ranges", "zone_day_ranges", { ends_at: "23:10:00" }],
+    ["opening_hours.zone_id", "opening_hours", { zone_id: "missing" }],
+    ["opening_hours.season_id", "opening_hours", { season_id: "missing" }],
+    ["opening_hours.weekday", "opening_hours", { weekday: -1 }],
+    ["opening_hours.special_day_date_id", "opening_hours", { special_day_date_id: "sd-1" }],
+    ["opening_hours.period_id", "opening_hours", { period_id: "missing" }],
+    ["opening_hours.department_id", "opening_hours", { department_id: RESTAURANT }],
+    ["opening_hours.kind", "opening_hours", { kind: "open" }],
+    ["opening_hours.starts_at", "opening_hours", { starts_at: "23:00" }],
+    ["opening_hours", "opening_hours", { ends_at: "23:10:00" }],
   ])("refuses a zone row with a wrong %s", (field, table, change) => {
     const tables = seasonTables();
     Object.assign(tables[table]![0]!, change);
@@ -1270,7 +1266,7 @@ describe("season weeks in a configuration bundle", () => {
     delete tables.menu_periods;
     tables.department_days = [];
     tables.department_day_ranges = [];
-    tables.zone_day_ranges = [];
+    tables.opening_hours = [];
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
@@ -1278,7 +1274,7 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(seasonTables())).toThrowError(refusal("department_day_ranges"));
     const zoneOnly = seasonTables();
     zoneOnly.department_day_ranges = [];
-    expect(() => validate(zoneOnly)).toThrowError(refusal("zone_day_ranges"));
+    expect(() => validate(zoneOnly)).toThrowError(refusal("opening_hours"));
   });
 });
 
@@ -1425,17 +1421,19 @@ describe("special days in a configuration bundle", () => {
         range("dd-15", BAR_PERIOD, "20:00:00", "23:00:00"),
         range("dd-15", null, "12:00:00", "16:00:00"),
       ],
-      zone_days: [
+      opening_hours: [
         {
-          id: "zd-15",
+          id: "zr-15",
+          department_id: null,
+          period_id: null,
           zone_id: "terrace",
           season_id: null,
           weekday: null,
           special_day_date_id: "fiesta-15",
+          kind: "open",
+          starts_at: "12:00:00",
+          ends_at: "14:00:00",
         },
-      ],
-      zone_day_ranges: [
-        { id: "zr-15", day_id: "zd-15", kind: "open", starts_at: "12:00:00", ends_at: "14:00:00" },
       ],
     };
   }
@@ -1447,8 +1445,7 @@ describe("special days in a configuration bundle", () => {
     tables.special_day_dates = [tables.special_day_dates![0]!];
     tables.special_day_dates[0]!.date = date;
     tables.department_day_ranges = [range("dd-15", BAR_PERIOD, startsAt, endsAt)];
-    tables.zone_days = [];
-    tables.zone_day_ranges = [];
+    tables.opening_hours = [];
     return tables;
   }
 
@@ -1463,7 +1460,7 @@ describe("special days in a configuration bundle", () => {
     });
     expect(names.indexOf("special_days")).toBeLessThan(names.indexOf("special_day_dates"));
     expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("department_days"));
-    expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("zone_days"));
+    expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("opening_hours"));
   });
 
   it("accepts paint, a Closed range, open zone time and a Closed-all-day date", () => {
@@ -1545,8 +1542,8 @@ describe("special days in a configuration bundle", () => {
   it.each([
     ["department_days", "weekday", { weekday: 3 }],
     ["department_days", "season_id", { season_id: "s-autumn" }],
-    ["zone_days", "weekday", { weekday: 3 }],
-    ["zone_days", "season_id", { season_id: "s-autumn" }],
+    ["opening_hours", "weekday", { weekday: 3 }],
+    ["opening_hours", "season_id", { season_id: "s-autumn" }],
   ])("refuses a special-day %s row with a %s", (table, field, change) => {
     const tables = specialTables();
     tables.seasons = [
@@ -1561,15 +1558,20 @@ describe("special days in a configuration bundle", () => {
     expect(() => validate(tables, clock)).toThrowError(refusal(`${table}.${field}`));
   });
 
-  it("refuses a second day for one department or zone on one special-day date", () => {
+  it("refuses duplicate department days and accepts several zone ranges on one date", () => {
     const departments = specialTables();
     departments.department_days!.push({ ...departments.department_days![0]!, id: "dd-again" });
     expect(() => validate(departments, clock)).toThrowError(
       refusal("department_days.special_day_date_id"),
     );
     const zones = specialTables();
-    zones.zone_days!.push({ ...zones.zone_days![0]!, id: "zd-again" });
-    expect(() => validate(zones, clock)).toThrowError(refusal("zone_days.special_day_date_id"));
+    zones.opening_hours!.push({
+      ...zones.opening_hours![0]!,
+      id: "zr-again",
+      starts_at: "15:00:00",
+      ends_at: "16:00:00",
+    });
+    expect(() => validate(zones, clock)).not.toThrow();
   });
 
   it("refuses special-day paint a writer could not have saved", () => {
@@ -1583,17 +1585,22 @@ describe("special days in a configuration bundle", () => {
     offStep.department_day_ranges![0]!.starts_at = "20:10:00";
     expect(() => validate(offStep, clock)).toThrowError(refusal("department_day_ranges"));
     const kind = specialTables();
-    kind.zone_day_ranges![0]!.kind = "half";
-    expect(() => validate(kind, clock)).toThrowError(refusal("zone_day_ranges.kind"));
+    kind.opening_hours![0]!.kind = "half";
+    expect(() => validate(kind, clock)).toThrowError(refusal("opening_hours.kind"));
     const zoneOverlap = specialTables();
-    zoneOverlap.zone_day_ranges!.push({
+    zoneOverlap.opening_hours!.push({
       id: "zr-again",
-      day_id: "zd-15",
+      department_id: null,
+      period_id: null,
+      zone_id: "terrace",
+      season_id: null,
+      weekday: null,
+      special_day_date_id: "fiesta-15",
       kind: "closed",
       starts_at: "13:00:00",
       ends_at: "15:00:00",
     });
-    expect(() => validate(zoneOverlap, clock)).toThrowError(refusal("zone_day_ranges"));
+    expect(() => validate(zoneOverlap, clock)).toThrowError(refusal("opening_hours"));
   });
 
   // With the 06:00 changeover, 02:15 on Sunday 29 March 2026 belongs to business day 28 March and
@@ -1609,19 +1616,39 @@ describe("special days in a configuration bundle", () => {
       validate(repeating, { ...clock, createdAt: new Date("2026-01-10T10:00:00Z") }),
     ).toThrowError(refusal("department_day_ranges"));
     const zone = painted("2026-03-28", 0, "22:00:00", "03:00:00");
-    zone.zone_days = specialTables().zone_days!;
-    zone.zone_day_ranges = [
-      { id: "zr", day_id: "zd-15", kind: "closed", starts_at: "02:15:00", ends_at: "03:00:00" },
+    zone.opening_hours = [
+      {
+        id: "zr",
+        department_id: null,
+        period_id: null,
+        zone_id: "terrace",
+        season_id: null,
+        weekday: null,
+        special_day_date_id: "fiesta-15",
+        kind: "closed",
+        starts_at: "02:15:00",
+        ends_at: "03:00:00",
+      },
     ];
     zone.special_day_dates![0]!.id = "fiesta-15";
-    expect(() => validate(zone, clock)).toThrowError(refusal("zone_day_ranges"));
+    expect(() => validate(zone, clock)).toThrowError(refusal("opening_hours"));
   });
 
   it("accepts special-date closure tails independently of department paint", () => {
     const tables = painted("2026-11-20", 0, "20:00:00", "23:00:00");
-    tables.zone_days = specialTables().zone_days!;
-    tables.zone_day_ranges = [
-      { id: "zr", day_id: "zd-15", kind: "closed", starts_at: "18:00:00", ends_at: "05:00:00" },
+    tables.opening_hours = [
+      {
+        id: "zr",
+        department_id: null,
+        period_id: null,
+        zone_id: "terrace",
+        season_id: null,
+        weekday: null,
+        special_day_date_id: "fiesta-15",
+        kind: "closed",
+        starts_at: "18:00:00",
+        ends_at: "05:00:00",
+      },
     ];
     expect(() => validate(tables, clock)).not.toThrow();
     tables.department_day_ranges = [range("dd-15", null, "18:00:00", "05:00:00")];
