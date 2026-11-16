@@ -6362,6 +6362,60 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
   },
 );
 
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "signs in on the Floor, not a table-less order page, after a reload on a %s's order",
+  async (formFactor) => {
+    history.replaceState(null, "", "/tabs/order");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    try {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+      });
+      await toCounter(el);
+      expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+      expect(location.pathname).toBe("/tabs/floor");
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  },
+);
+
+it("says the till is loading while the first read after a sign-in waits", async () => {
+  let answer!: (value: unknown) => void;
+  const { el } = await mountApp({
+    listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
+    login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null }),
+    listDefaultZoneOffers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+  });
+  await flush(el);
+  const screen = lock(el)!;
+  screen
+    .shadowRoot!.querySelector<HTMLElement>('wt-button.operator-button[data-person="p1"]')!
+    .click();
+  await screen.updateComplete;
+  const pad = screen.shadowRoot!.querySelector("till-numeric-pad")!;
+  await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  pad.shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!.click();
+  await screen.updateComplete;
+  screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+  await flush(el);
+  expect(lock(el)).toBe(screen);
+  expect(screen.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()).toBe(
+    t("login.loading"),
+  );
+  answer(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"));
+  await flush(el);
+  expect(lock(el)).toBeNull();
+});
+
 it.each([
   ["till", "order", "counter", "till-counter-screen"],
   ["till", "retired-custom", "counter", "till-counter-screen"],

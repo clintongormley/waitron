@@ -878,17 +878,12 @@ server's check; "Madrid" passed both). The address search writes a comma-free pr
 provider's locality could still hold one. Left open by A1171 part 3.
 
 
-## A1421. Three till oddities seen once and not looked into
+## A1421. The Downstairs map drawn tiny at phone width
 
-Each was seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots
-in `~/waitron-campaign-c/a1386-shots/`), and none was investigated:
-
-- At phone width (390 px), the Downstairs bar's map draws its tables as three 10-pixel dots in a
-  map 29 pixels tall (`e13-next-signin-390-light-en.png`).
-- Reloading the page while on a table's order lands on an empty order page reading "Review (0)",
-  with no table (`e3-order-390-light-en.png`). A797 slice 10 replaced that Review button with the
-  Menu / Order switch.
-- A slow first read at sign-in leaves the PIN pad on screen with nothing saying the till is waiting.
+Seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots in
+`~/waitron-campaign-c/a1386-shots/`), and not investigated: at phone width (390 px), the Downstairs
+bar's map draws its tables as three 10-pixel dots in a map 29 pixels tall
+(`e13-next-signin-390-light-en.png`).
 
 
 ## A1082. At 390 px the counter till's top bar is cut off.

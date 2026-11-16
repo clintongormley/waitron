@@ -98,6 +98,10 @@ export class TillLockScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .pin-status {
+        margin: 0 0 var(--wt-space-3);
+      }
+
       .servers,
       .clock {
         margin-top: var(--wt-space-4);
@@ -210,6 +214,8 @@ export class TillLockScreen extends LitElement {
   @state() private errorKey?: StringKey | "storage.disk_full";
   /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. */
   @state() private throttleRemaining = 0;
+  /** Stays set after a successful login: the till keeps this screen up while its first reads wait. */
+  @state() private signingIn = false;
 
   readonly #venueLogo = new VenueLogoController(this);
   #throttleTimer?: ReturnType<typeof setInterval>;
@@ -245,6 +251,7 @@ export class TillLockScreen extends LitElement {
     this.selected = undefined;
     this.staff = undefined;
     this.errorKey = undefined;
+    this.signingIn = false;
     this.throttleRemaining = 0;
     this.#clearThrottle();
   }
@@ -290,6 +297,7 @@ export class TillLockScreen extends LitElement {
     this.selected = undefined;
     this.pin = "";
     this.errorKey = undefined;
+    this.signingIn = false;
     this.#clearThrottle();
     this.throttleRemaining = 0;
   }
@@ -305,9 +313,11 @@ export class TillLockScreen extends LitElement {
    * `logged-in`: those are side effects, not state writes. */
   async #submit(): Promise<void> {
     const person = this.selected;
-    if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
+    if (person === undefined || this.pin === "" || this.throttleRemaining > 0 || this.signingIn)
+      return;
     const connection = this.#connection;
     const submitted = this.pin;
+    this.signingIn = true;
     try {
       const { personId, permissions, locale } = await this.api.login(person.personId, submitted);
       if (!this.isConnected || connection !== this.#connection) return;
@@ -322,6 +332,7 @@ export class TillLockScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || connection !== this.#connection) return;
+      this.signingIn = false;
       const code = (error as { code?: string }).code ?? "server.internal";
       if (code === "pin.throttled") {
         this.#startThrottle((error as { retryAfterSeconds?: number }).retryAfterSeconds);
@@ -536,11 +547,13 @@ export class TillLockScreen extends LitElement {
           ? html`<p class="throttle" role="alert">
               ${t("login.throttled").replace("{n}", String(this.throttleRemaining))}
             </p>`
-          : this.errorKey
-            ? html`<p class="error" role="alert">
-                ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
-              </p>`
-            : nothing
+          : this.signingIn
+            ? html`<p class="status pin-status" role="status">${t("login.loading")}</p>`
+            : this.errorKey
+              ? html`<p class="error" role="alert">
+                  ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
+                </p>`
+              : nothing
       }
       <div class="pad-wrap" ?inert=${throttled}>
         <till-numeric-pad
@@ -557,6 +570,7 @@ export class TillLockScreen extends LitElement {
           class="submit"
           variant="primary"
           ?disabled=${this.pin === "" || throttled}
+          .loading=${this.signingIn}
           @click=${() => void this.#submit()}
         >
           ${t("action.login")}

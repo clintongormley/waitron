@@ -687,10 +687,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   zones (`apps/server/src/till-api.ts`); a till's holds every profile zone. Unchanged by A797 slice
   4 (its plan's D4).
 
-- **A1421. Three till oddities seen once and not looked into.** At phone width the Downstairs
-  bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and a slow
-  first read at sign-in leaves the PIN pad up with no sign of waiting.
-  [Detail](backlog/till.md#a1421-three-till-oddities-seen-once-and-not-looked-into)
+- **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
+  [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 
