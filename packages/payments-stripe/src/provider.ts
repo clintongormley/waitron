@@ -107,7 +107,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
-  /** Guard: `no-bare-transaction.test.ts` refuses a bare `.transaction(` in this package's sources. */
+  /** Guard: `scripts/no-bare-transaction.test.ts` refuses a `.transaction(` here. */
   private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
