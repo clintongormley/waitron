@@ -1,5 +1,6 @@
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { encodeMachine } from "@waitron/contract";
-import { createPrivateKey, randomUUID, sign } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { CloudRegistration, SavedCloudState } from "./cloud-client.js";
 import "./errors.js";
@@ -278,15 +279,7 @@ export function installationClient(
     if (!p) return;
     try {
       const bytes = machinePayload(state, p),
-        signature = sign(
-          null,
-          bytes,
-          createPrivateKey({
-            key: Buffer.from(state.privateKey, "base64url"),
-            format: "der",
-            type: "pkcs8",
-          }),
-        ).toString("base64url");
+        signature = signCloudPayload(bytes, state.privateKey);
       const response = await fetch(`${state.origin}/api/installations/${p.action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -296,16 +289,9 @@ export function installationClient(
           ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
           : AbortSignal.timeout(8000),
       });
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      if (!response.body) unavailable();
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > 65536) unavailable();
-        chunks.push(chunk);
-      }
+      const replyBytes = await readCloudResponseBytes(response, 65536);
       const value: unknown = JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
+        new TextDecoder("utf-8", { fatal: true }).decode(replyBytes),
       );
       if (!response.ok) {
         if (

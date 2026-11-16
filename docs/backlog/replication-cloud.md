@@ -748,17 +748,6 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   "Alicante/Alacant" is not recognised there and is left to the server's postcode check at Save.
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
-## Bundle: One signed request helper; strict reply readers
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
-  the field into text before checking it, so `["ready"]` passes as `"ready"`.
-  [Detail](replication-cloud.md#four-cloud-reply-and-state-readers-accept-a-one-item-list-where-they-want-text)
-- **The signing and size-capped reading of a request to Cloud is repeated across the
-  `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
-  as a refactor larger than that PR (its simplify review, 2026-10-15).
-
 ## Decisions and deliberate limits
 
 **A1321 retiring a spare, 2026-11-14:** Servers' Remove takes a spare that finished joining once
@@ -1125,16 +1114,6 @@ with `ignoreHTTPSErrors: false`; it did not install an authority in the operatin
   storage and owner recovery. Connected does not mean those services are configured. Cloud service
   ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
   behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work.
-
-## Four Cloud reply and state readers accept a one-item list where they want text
-
-Each turns
-the field into text before checking it, so `["ready"]` passes as `"ready"`:
-`apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
-`cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
-`cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
-`cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Not measured against a
-real Cloud.
 
 ## Loose ends left by the SQLite failover-loop prototype gate
 

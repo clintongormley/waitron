@@ -1,13 +1,7 @@
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, readRestoreFlowPhase, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_RECOVERY_FILE } from "@waitron/store";
-import {
-  createHash,
-  createPrivateKey,
-  generateKeyPairSync,
-  randomInt,
-  randomUUID,
-  sign,
-} from "node:crypto";
+import { createHash, generateKeyPairSync, randomInt, randomUUID } from "node:crypto";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -277,15 +271,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
           );
     return {
       payload: bytes.toString("base64url"),
-      signature: sign(
-        null,
-        bytes,
-        createPrivateKey({
-          key: Buffer.from(state.privateKey, "base64url"),
-          format: "der",
-          type: "pkcs8",
-        }),
-      ).toString("base64url"),
+      signature: signCloudPayload(bytes, state.privateKey),
     };
   }
   async function post(
@@ -314,15 +300,11 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       if (response.status === 410 && (action === "status" || action === "info"))
         throw new ExpiredRequest();
       if (!response.ok) unavailable();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      if (!response.body) unavailable();
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > (state.version === 2 ? 65536 : 16384)) unavailable();
-        chunks.push(chunk);
-      }
-      const raw = Buffer.concat(chunks, size).toString();
+      const replyBytes = await readCloudResponseBytes(
+        response,
+        state.version === 2 ? 65536 : 16384,
+      );
+      const raw = replyBytes.toString();
       const result: unknown =
         state.version === 2 ? parseBackupVerificationJson(raw, 65536) : JSON.parse(raw);
       if (state.version === 2 && (!record(result) || result.version !== 2)) unavailable();
@@ -382,7 +364,8 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       !record(result) ||
       result.requestId !== state.requestId ||
       !validDate(result.expiresAt) ||
-      !["awaiting_owner", "approved"].includes(String(result.state)) ||
+      typeof result.state !== "string" ||
+      !["awaiting_owner", "approved"].includes(result.state) ||
       result.operationId !== (result.state === "approved" ? state.requestId : null) ||
       (state.expiresAt && state.expiresAt !== result.expiresAt)
     )

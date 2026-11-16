@@ -1,5 +1,5 @@
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { encodeMachine } from "@waitron/contract";
-import { createPrivateKey, sign } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
 import "./errors.js";
@@ -64,17 +64,12 @@ async function exchange(
       lease: JSON.stringify(state.lifecycle.lease),
       body: encoded,
     });
-    const key = createPrivateKey({
-      key: Buffer.from(state.privateKey, "base64url"),
-      type: "pkcs8",
-      format: "der",
-    });
     const response = await fetch(state.origin + "/api/installations/" + action, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         payload: payload.toString("base64url"),
-        signature: sign(null, payload, key).toString("base64url"),
+        signature: signCloudPayload(payload, state.privateKey),
       }),
       redirect: "error",
       signal: signal
@@ -85,17 +80,8 @@ async function exchange(
       await response.body?.cancel();
       unavailable();
     }
-    if (!response.body) unavailable();
-    let size = 0;
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of response.body) {
-      size += chunk.length;
-      if (size > 65536) unavailable();
-      chunks.push(chunk);
-    }
-    const value: unknown = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)),
-    );
+    const replyBytes = await readCloudResponseBytes(response, 65536);
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(replyBytes));
     if (
       !record(value) ||
       value.id !== id ||

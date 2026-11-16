@@ -214,7 +214,8 @@ export async function readCloudRecoveryState(
       (value.expiresAt !== undefined && !date(value.expiresAt)) ||
       (value.pointId !== undefined && !uuid(value.pointId)) ||
       (value.phase !== undefined &&
-        !["staged", "restored", "reported"].includes(String(value.phase)))
+        (typeof value.phase !== "string" ||
+          !["staged", "restored", "reported"].includes(value.phase)))
     )
       cloudRecoveryUnavailable();
     if (value.version === 1) {

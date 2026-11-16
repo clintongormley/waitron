@@ -647,3 +647,20 @@ describe("Cloud recovery client exclusion", () => {
     expect((await client.status()).state).toBe("approved");
   });
 });
+
+it("refuses a list-valued recovery approval even with a null operation ID", async () => {
+  const f = await fixture();
+  const client = createCloudRecoveryClient(f.options);
+  await expect(client.start()).rejects.toThrow("Cloud recovery is unavailable. Try again.");
+  await client.start();
+  const original = f.options.fetch;
+  f.options.fetch = (async (url, init) => {
+    const response = await original(url, init);
+    return String(url).endsWith("/status")
+      ? Response.json({ ...(await response.json()), state: ["approved"], operationId: null })
+      : response;
+  }) as typeof fetch;
+  await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(
+    "Cloud recovery is unavailable. Try again.",
+  );
+});

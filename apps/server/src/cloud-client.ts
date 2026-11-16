@@ -1,3 +1,4 @@
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
 import { pairingPayload } from "@waitron/contract";
@@ -38,7 +39,6 @@ import {
   generateKeyPairSync,
   randomInt,
   randomUUID,
-  sign,
 } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -154,7 +154,8 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     value.environment !== state.environment ||
     typeof value.expiresAt !== "string" ||
     !Number.isFinite(Date.parse(value.expiresAt)) ||
-    !["awaiting_cloud", "awaiting_local", "complete"].includes(String(value.state))
+    typeof value.state !== "string" ||
+    !["awaiting_cloud", "awaiting_local", "complete"].includes(value.state)
   )
     throw new AppError("cloud.unavailable", {});
   const view: CloudPairingView = {
@@ -358,15 +359,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       legalBusinessId: choice?.legalBusinessId ?? "",
       issuedAt: Date.now(),
     });
-    const signature = sign(
-      null,
-      bytes,
-      createPrivateKey({
-        key: Buffer.from(state.privateKey, "base64url"),
-        format: "der",
-        type: "pkcs8",
-      }),
-    ).toString("base64url");
+    const signature = signCloudPayload(bytes, state.privateKey);
     try {
       const response = await fetch(`${options.origin}/api/pairing/${action}`, {
         method: "POST",
@@ -375,15 +368,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         redirect: "error",
         signal: AbortSignal.timeout(8000),
       });
-      let size = 0;
-      const chunks: Uint8Array[] = [];
-      if (!response.body) throw new Error();
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > 16384) throw new Error();
-        chunks.push(chunk);
-      }
-      const value: unknown = JSON.parse(Buffer.concat(chunks).toString());
+      const replyBytes = await readCloudResponseBytes(response, 16384);
+      const value: unknown = JSON.parse(replyBytes.toString());
       if (!response.ok) {
         if (record(value) && value.error === "pairing_unavailable")
           throw new AppError("cloud.request_unavailable", {});

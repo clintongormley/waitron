@@ -1,10 +1,11 @@
+import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, syncFolderHolding, writeFileDurable } from "@waitron/provisioning";
 import {
   CLOUD_DIR,
   CLOUD_REPLACEMENT_FILE,
   CLOUD_REPLACEMENT_SET_ASIDE_PREFIX,
 } from "@waitron/store";
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { link, lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -228,7 +229,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
       value.environment !== "test" ||
       value.publicKey !== state.publicKey ||
       value.peerPublicKey !== state.peerPublicKey ||
-      !["awaiting_owner", "complete"].includes(String(value.state)) ||
+      typeof value.state !== "string" ||
+      !["awaiting_owner", "complete"].includes(value.state) ||
       !date(value.expiresAt) ||
       !name(value.organisationName) ||
       !name(value.legalBusinessName)
@@ -304,16 +306,6 @@ export function createCloudReplacement(options: ReplacementOptions) {
         Date.now(),
       ]),
     );
-    const signWith = (privateKey: string) =>
-      sign(
-        null,
-        bytes,
-        createPrivateKey({
-          key: Buffer.from(privateKey, "base64url"),
-          format: "der",
-          type: "pkcs8",
-        }),
-      ).toString("base64url");
     let value: unknown;
     try {
       const response = await fetchImpl(`${options.origin}/api/replacement/${sent}`, {
@@ -322,23 +314,17 @@ export function createCloudReplacement(options: ReplacementOptions) {
         body: JSON.stringify({
           id: saved.requestId,
           payload: bytes.toString("base64url"),
-          signature: signWith(proof.privateKey),
-          keySignature: signWith(saved.privateKey),
+          signature: signCloudPayload(bytes, proof.privateKey),
+          keySignature: signCloudPayload(bytes, saved.privateKey),
         }),
         redirect: "error",
         signal: AbortSignal.timeout(8000),
       });
       if (response.status >= 400 && response.status < 500)
         throw new AppError("cloud.replacement_refused", {});
-      if (!response.ok || !response.body) unavailable();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > 16384) unavailable();
-        chunks.push(chunk);
-      }
-      value = JSON.parse(Buffer.concat(chunks).toString());
+      if (!response.ok) unavailable();
+      const replyBytes = await readCloudResponseBytes(response, 16384);
+      value = JSON.parse(replyBytes.toString());
     } catch (error) {
       if (error instanceof AppError && error.code === "cloud.replacement_refused") throw error;
       unavailable();

@@ -4,8 +4,9 @@ Codex proposal for Lane J. Watcher queue instruction, 2026-11-16 02:06,
 `/Users/clintongormley/waitron-campaign-j/queue.md`, CLOUD-SIGNED-REQUEST-HELPER:
 “put the repeated signing and size-capped reading of requests to Cloud into one shared helper,
 and make the readers refuse a one-item list where they want text”. Separate Sol/high writer;
-Claude initial/corrections reads complete; watcher clearance pending. No owner plan
-approval is claimed. **No build before Claude review and watcher clearance.**
+Claude initial/corrections reads complete; watcher cleared this plan on 2026-11-16 at 02:26
+(whose note in the lane questions file names all seven callers, the staff-certificate reader
+and the valid-JSON cap checks). No owner plan approval is claimed.
 
 **Smallest usable result:** existing Cloud operations share signing and capped HTTP response
 reading, and refuse lists masquerading as state text. Deliver one PR and remove the completed

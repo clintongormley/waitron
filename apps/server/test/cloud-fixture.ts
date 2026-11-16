@@ -24,6 +24,7 @@ export async function cloudFixture(machine?: MachineHandler) {
   let lose = false;
   let unavailable = false;
   let oversized = false;
+  let replyBytes = 0;
   let redirect = false;
   const organisationId = randomUUID(),
     legalBusinessId = randomUUID(),
@@ -113,27 +114,26 @@ export async function cloudFixture(machine?: MachineHandler) {
       }
     }
     res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        requestId: bad ? randomUUID() : values[3],
-        venueId: values[5],
-        environment: values[6],
-        expiresAt: new Date(Date.now() + 600000).toISOString(),
-        state: complete ? "complete" : approved ? "awaiting_local" : "awaiting_cloud",
-        ...(approved
-          ? {
-              organisationId,
-              legalBusinessId,
-              organisationName: "Café Sol",
-              legalBusinessName: "Sol SL",
-            }
-          : {}),
-        ...(complete
-          ? { registration: { venueId, installationId, organisationId, legalBusinessId } }
-          : {}),
-        ...replyPatch,
-      }),
-    );
+    const reply = JSON.stringify({
+      requestId: bad ? randomUUID() : values[3],
+      venueId: values[5],
+      environment: values[6],
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+      state: complete ? "complete" : approved ? "awaiting_local" : "awaiting_cloud",
+      ...(approved
+        ? {
+            organisationId,
+            legalBusinessId,
+            organisationName: "Café Sol",
+            legalBusinessName: "Sol SL",
+          }
+        : {}),
+      ...(complete
+        ? { registration: { venueId, installationId, organisationId, legalBusinessId } }
+        : {}),
+      ...replyPatch,
+    });
+    res.end(reply + " ".repeat(Math.max(0, replyBytes - Buffer.byteLength(reply))));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -155,6 +155,9 @@ export async function cloudFixture(machine?: MachineHandler) {
       replyPatch = patch;
     },
     requests,
+    padReply: (bytes: number) => {
+      replyBytes = bytes;
+    },
     options,
     organisationId,
     legalBusinessId,

@@ -759,3 +759,26 @@ it.each([false, true])(
     }
   },
 );
+
+it.each([{ version: 1 }, { version: 2 }])(
+  "refuses a saved list-valued phase in version $version",
+  async ({ version }) => {
+    const f = await fixture();
+    await createCloudRecoveryClient(f.options).start();
+    const saved = await f.saved();
+    saved.version = version;
+    if (version === 1) {
+      delete saved.protocol;
+      delete saved.target;
+    } else {
+      saved.pointId = point.id;
+      saved.snapshotVerification = verification();
+    }
+    const path = join(f.stateDir, "cloud/recovery.json");
+    await writeFile(path, JSON.stringify(saved));
+    await expect(v2.readCloudRecoveryState(f.stateDir)).resolves.toMatchObject({ version });
+    saved.phase = ["staged"];
+    await writeFile(path, JSON.stringify(saved));
+    await expect(v2.readCloudRecoveryState(f.stateDir)).rejects.toThrow(unavailable);
+  },
+);
