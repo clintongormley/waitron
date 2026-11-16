@@ -163,6 +163,7 @@ describe("A773 pass board: reads", () => {
             orderId: venue.party.tabId,
             orderNumber: 1,
             kitchenNote: null,
+            dining: "eat_in",
             tableLabel: "Split extras",
             tableShortNames: ["Split extras"],
           },

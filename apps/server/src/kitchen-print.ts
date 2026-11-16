@@ -485,6 +485,7 @@ interface OrderHeader {
   id: string;
   partyId: string | null;
   deliveryTableId: string | null;
+  takeAway: boolean;
 }
 
 /** Each order's number and table ({@link orderTableLabels}), keyed by order. */
@@ -500,6 +501,7 @@ async function readOrderHeaders(
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
       label: workingOrders.label,
+      dining: workingOrders.dining,
     })
     .from(workingOrders)
     .where(inArray(workingOrders.id, [...orderIds]));
@@ -514,6 +516,7 @@ async function readOrderHeaders(
         orderNumber: String(order.orderNumber),
         billLabel: order.label,
         tableLabel: labels.get(order.id)!,
+        takeAway: order.dining === "takeaway",
       },
     ]),
   );
@@ -760,6 +763,7 @@ async function planKitchenTickets(
     tableLabel: order.tableLabel ?? "",
     orderNumber: order.orderNumber,
     firedAt: new Date(),
+    takeAway: order.takeAway,
   };
   for (const route of routes) {
     const onTicket = route.stationIds.map((id) => stationById.get(id)!);
@@ -1689,6 +1693,7 @@ async function printCorrectionSlips(
           stationName: stationNames.get(stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
+          takeAway: header.takeAway,
           at,
           item: { ...item, qty: thousandthsToDecimal(thousandths) },
         },

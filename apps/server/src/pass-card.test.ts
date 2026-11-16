@@ -84,7 +84,12 @@ function row(ask: RowAsk): PassRow {
     extra: false,
     remaining: 1000,
     lineNo: 1,
-    order: { orderNumber: 1, kitchenNote: null, openedAt: openedAt[orderId] ?? at("12:00") },
+    order: {
+      orderNumber: 1,
+      kitchenNote: null,
+      dining: "eat_in",
+      openedAt: openedAt[orderId] ?? at("12:00"),
+    },
     ...rest,
   };
 }
@@ -106,7 +111,7 @@ function caseOneRows(): PassRow[] {
       stationId: cold,
       state: "preparing",
       lineNo: 1,
-      order: { orderNumber: 2, kitchenNote: null, openedAt: at("12:01") },
+      order: { orderNumber: 2, kitchenNote: null, dining: "eat_in", openedAt: at("12:01") },
     }),
     released({ id: "bar-1", stationId: bar, state: "ready", passControlled: false, lineNo: 2 }),
   ];

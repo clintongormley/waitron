@@ -1848,6 +1848,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       {
         bumpMode: "line",
         kitchenNote: null,
+        dining: "eat_in",
         orderId: workingOrderId,
         orderNumber: expect.any(Number),
         label: "Mesa 9",

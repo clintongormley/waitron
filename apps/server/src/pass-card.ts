@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { OrderGroupRequestKind } from "@waitron/db";
+import type { Dining } from "@waitron/shared";
 import { initiatedAt, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
 import { passSees, type PassScope } from "./pass-board.js";
 import { canonicalJson } from "./parties.js";
@@ -57,6 +58,7 @@ export interface PassRow {
     tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
+    dining: Dining;
     openedAt: string;
   };
 }
@@ -96,6 +98,7 @@ export interface PassCard {
     tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
+    dining: Dining;
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
