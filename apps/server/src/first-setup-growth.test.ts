@@ -7,11 +7,16 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import { emptyDrainResult } from "@waitron/fiscal";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+
+vi.mock("@hono/node-server", async () =>
+  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
+);
+const { startServer, httpPort } = ephemeralServerFixture();
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import {
@@ -75,7 +80,6 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     venueDir = join(root, "venue"),
     migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
-  const [port] = await freePorts(1);
   const testClock = createHourTestClock(Date.now());
   time.clock = testClock;
   const env = {
@@ -84,7 +88,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_MIGRATIONS_DIR: migrations,
     WAITRON_HTTP_HOST: "127.0.0.1",
-    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_PORT: "3000",
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_RP_ID: "localhost",
     WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
@@ -106,7 +110,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
           }
         : {};
     const post = async (path: string, body: unknown) => {
-      const response = await fetch(`https://127.0.0.1:${port}${path}`, {
+      const response = await fetch(`https://127.0.0.1:${httpPort()}${path}`, {
         dispatcher: agent,
         method: "POST",
         headers: { "Content-Type": "application/json", ...headers() },
@@ -163,7 +167,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     expect(chosen.status, JSON.stringify(chosen.body)).toBe(200);
     expect(chosen.preparation).toBeUndefined();
     state = chosen.body.state;
-    const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/request`, {
+    const response = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/first-setup/request`, {
       dispatcher: agent,
       headers: headers(),
     } as RequestInit);
@@ -246,13 +250,16 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
         startServer: (environment, base) => startServer(environment, base, { testClock }),
       });
       try {
-        const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, {
+        const status = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, {
           dispatcher: agent,
         } as RequestInit);
         expect(status.status).toBe(404);
         expect(
-          (await fetch(`https://127.0.0.1:${port}/health`, { dispatcher: agent } as RequestInit))
-            .status,
+          (
+            await fetch(`https://127.0.0.1:${httpPort()}/health`, {
+              dispatcher: agent,
+            } as RequestInit)
+          ).status,
         ).toBe(200);
       } finally {
         await handle.close();

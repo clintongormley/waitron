@@ -4,7 +4,6 @@ import { Agent } from "undici";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { serveRecovery } from "./node-entry.js";
-import { freePorts } from "./testing/free-ports.js";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -406,13 +405,15 @@ it("HTTPS hour restart takes local observations without a register declaration",
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
     startAgain: (request) => actions.startAgainFirstSetup(request),
   });
-  const [port] = await freePorts(1);
   const server = await serveRecovery(app, {
     stateDir: f.stateDir,
-    port,
+    port: 0,
     httpHost: "127.0.0.1",
     log: () => {},
   });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("Expected TCP listener");
+  const port = address.port;
   const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
   try {
     const inspected = await f.host.resolution.inspectFirstSetupResolution();

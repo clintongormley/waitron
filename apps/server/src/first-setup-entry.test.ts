@@ -35,7 +35,6 @@ import { startServer } from "./boot.js";
 import { writeValidated, validateDatabaseEntries } from "./restore.js";
 import { runStagedRestore } from "./restore-request.js";
 import { runStagedReset } from "./reset-request.js";
-import { freePorts } from "./testing/free-ports.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { parseEnvFile } from "./env-file.js";
@@ -65,7 +64,6 @@ it.each(["same"])(
   "the real boot refuses an unresolved fixed marker with %s state root",
   async (root) => {
     const f = await fixture();
-    const [port] = await freePorts(1);
     let server: Awaited<ReturnType<typeof startServer>> | undefined;
     try {
       await expect(
@@ -75,7 +73,7 @@ it.each(["same"])(
             WAITRON_STATE_DIR:
               root === "omitted" ? undefined : root === "same" ? f.stateDir : join(f.root, "wrong"),
             WAITRON_HTTP_HOST: "127.0.0.1",
-            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_PORT: "3000",
           });
         })(),
       ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
@@ -355,7 +353,6 @@ async function abandonedConsumedClaim(kind = "consumed-abandoned") {
 }
 it("does not treat a consumed abandoned marker as permission to trade", async () => {
   const f = await abandonedConsumedClaim();
-  const [port] = await freePorts(1);
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   try {
     await expect(
@@ -364,7 +361,7 @@ it("does not treat a consumed abandoned marker as permission to trade", async ()
           WAITRON_VENUE_DIR: f.venueDir,
           WAITRON_STATE_DIR: f.stateDir,
           WAITRON_HTTP_HOST: "127.0.0.1",
-          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_PORT: "3000",
           WAITRON_NODE_ID: "11111111-1111-4111-8111-111111111111",
         });
       })(),
