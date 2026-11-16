@@ -5929,11 +5929,7 @@ export class TillTableOrderScreen extends LitElement {
       this.moveDishesTo = undefined;
       const opening = ++this.#actionOpening;
       const ready = () => {
-        if (
-          !this.isConnected ||
-          opening !== this.#actionOpening ||
-          this.actionVerb !== verb
-        )
+        if (!this.isConnected || opening !== this.#actionOpening || this.actionVerb !== verb)
           return;
         this.actionStep = "move-dishes";
         this.#stepFocus = "step";
