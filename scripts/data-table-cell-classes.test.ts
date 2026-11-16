@@ -17,15 +17,18 @@ import { describe, expect, it } from "vitest";
  * call, followed transitively: `this.foo(…)` or `this.#foo(…)` is the member of the class `this`
  * belongs to, and `foo(…)` the function the nearest enclosing scope of the file declares under that
  * name. It misses a method inherited from a superclass, a function passed as a value
- * (`.map(this.#row)`) rather than called, and a helper imported from another file; it never looks
- * inside an event listener (`@click=${…}`). Classes are read from the static text of `class="…"` in
+ * (`.map(this.#row)`) rather than called, a getter read as `this.name`, a static method called
+ * through the class name, and a helper imported from another file; it skips the placeholder of an
+ * `@event=${…}` binding, but follows every other call written in the cell or in a function it
+ * reaches, whether or not that call runs while the cell renders. Classes are read from the static text of `class="…"` in
  * `html` templates and the keys of `classMap({…})`; a class built in an expression (`class=${…}`,
  * or part of a name joined to a placeholder) is invisible. Styled classes are the `.name` selectors
  * in rule preludes of the file's own `css` templates; a selector built by an interpolation, a
  * stylesheet imported from another module and one held in a plain string are never read. It can
  * wrongly refuse a class that another element in the same file styles, since it does not know which
  * `css` belongs to the element rendering the table; markup a function the cell calls stores
- * elsewhere rather than returns; the arguments of an unrelated function named `cell`; and an outer
+ * elsewhere rather than returns; markup reached through a callback the cell builds but does not
+ * run (a listener held in a variable, a menu item's callback); the arguments of an unrelated function named `cell`; and an outer
  * function whose name a destructured or loop variable reuses at the call.
  */
 
@@ -135,9 +138,9 @@ function placeholders(template: ts.TemplateExpression): [string, ts.Expression][
 
 /**
  * The class names a `css` template styles: the `.name` selectors of each rule's prelude, leaving
- * out at-rules, comments, strings, declaration values and the argument of `:host()`,
+ * out at-rules, comments, strings, declaration values, the argument of `:host()`,
  * `:host-context()` or `::slotted()`, which select the host or its own children, never markup
- * inside another shadow root.
+ * inside another shadow root, and the argument of `:not()`, which styles what lacks the class.
  */
 function styledClasses(template: ts.TaggedTemplateExpression): string[] {
   const text = staticText(template)
@@ -146,7 +149,7 @@ function styledClasses(template: ts.TaggedTemplateExpression): string[] {
   const names: string[] = [];
   for (const [, prelude] of text.matchAll(/([^{};]*)\{/g)) {
     if (prelude!.trim().startsWith("@")) continue;
-    const selector = prelude!.replace(/(?::host(?:-context)?|::slotted)\([^)]*\)/g, "");
+    const selector = prelude!.replace(/(?::host(?:-context)?|::slotted|:not)\([^)]*\)/g, "");
     for (const match of selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) names.push(match[1]!);
   }
   return names;
@@ -428,11 +431,11 @@ describe("the matcher", () => {
     expect(cellClassesStyledInFile(source)).toEqual([]);
   });
 
-  it("passes a class named only in a declaration value or a :host() or ::slotted() argument", () => {
+  it("passes a class named only in a declaration value or a :host(), ::slotted() or :not() argument", () => {
     const source = [
       "class S extends LitElement {",
-      '  static styles = css`button::after { content: ".y"; } :host(.z) { width: 1px; } :host-context(.q) { width: 1px; } ::slotted(.s) { width: 1px; }`;',
-      "  columns = [{ key: 'c', cell: (r) => html`<span class=\"y z q s\"></span>` }];",
+      '  static styles = css`button::after { content: ".y"; } :host(.z) { width: 1px; } :host-context(.q) { width: 1px; } ::slotted(.s) { width: 1px; } span:not(.n) { width: 1px; }`;',
+      "  columns = [{ key: 'c', cell: (r) => html`<span class=\"y z q s n\"></span>` }];",
       TABLE,
       "}",
     ].join("\n");

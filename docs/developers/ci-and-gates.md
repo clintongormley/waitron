@@ -4151,8 +4151,8 @@ compiler is installed, because **`tsc` is never asked to emit here**: every use 
 `typecheck` script, the bundles are esbuild's, and Vitest strips types without typechecking — a
 claim the tree also makes in `packages/payments-stripe/src/wiring.test.ts`'s barrel test, and one
 you can check directly by running a package's suite with no `tsc` involved. That is what bounds a
-TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint` and every root script that imports
-`typescript` (`git grep -l 'from "typescript"' -- scripts`).
+TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint`, every root script that imports
+`typescript` (`git grep -l 'from "typescript"' -- scripts`) and the suites that run those scripts.
 
 One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
 of its own package is `error TS6059` ("not under `rootDir`"). Exactly one **typechecked** file in
