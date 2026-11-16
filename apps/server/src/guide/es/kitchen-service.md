@@ -33,10 +33,6 @@ continúa con el pedido enviado. No añade otra comanda de estación ni otro res
 de recogida. Si el servidor no tiene espacio en disco, el reintento se rechaza y el terminal dice
 que no se ha guardado, aunque el primer envío ya llegara al servidor.
 
-Si cambias la cesta después del primer envío, el terminal debe guardar esos cambios antes de
-enviarla. Si el pedido ya está enviado, conserva tus cambios en pantalla y muestra un error en
-vez de dar a entender que la estación los recibió. Revisa el pedido enviado antes de continuar.
-
 ## Lee la copia de alergias junto al plato {#allergy-copies}
 
 Un plato asignado lleva el nombre de la persona, los alérgenos que evita y su nota para la estación.
