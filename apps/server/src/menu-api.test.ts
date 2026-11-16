@@ -689,7 +689,18 @@ describe("content-language configuration", () => {
 
   it("saves menu-root names in the venue language when content languages are unset", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Venue fallback menu");
+    const created = await send(app, "POST", "/management-api/menus", {
+      body: { name: "Venue fallback menu", names: { en: "Stored English menu" } },
+    });
+    expect(created.status).toBe(201);
+    const { id: menuId } = (await created.json()) as { id: string };
+    const disabledEdit = await send(app, "PATCH", `/management-api/menus/${menuId}`, {
+      body: { names: { en: "Changed English menu" } },
+    });
+    expect(disabledEdit.status).toBe(400);
+    expect(await disabledEdit.json()).toMatchObject({
+      error: { code: "content.translation_invalid" },
+    });
     const response = await send(app, "PATCH", `/management-api/menus/${menuId}`, {
       body: { names: { es: "Spanish menu" } },
     });
@@ -697,7 +708,7 @@ describe("content-language configuration", () => {
     const root = await menuRootVia(app, menuId);
     expect(await (await send(app, "GET", `/management-api/sections/${root}`)).json()).toMatchObject(
       {
-        names: { es: "Spanish menu" },
+        names: { en: "Stored English menu", es: "Spanish menu" },
       },
     );
   });
