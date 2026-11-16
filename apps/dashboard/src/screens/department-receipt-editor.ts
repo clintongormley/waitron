@@ -18,6 +18,7 @@ import {
   type DraftScope,
 } from "@waitron/ui";
 import type { ReceiptPreview, PrintPaperWidth } from "../api/client.js";
+import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { PrintPaper, paperStrut, paperStyles } from "../widgets/print-paper.js";
 import { columnsFor } from "@waitron/printing/src/layout.js";
@@ -45,6 +46,8 @@ export const departmentReceiptSettingFields = [
   { name: "headerSubtitle", labelKey: "receipts.subtitle", tab: "receipt" },
   { name: "footerMessage", labelKey: "receipt.footer_message", tab: "receipt" },
 ] as const;
+/** How long the preview waits after the last change before it asks the server. */
+export const PREVIEW_DELAY_MS = 300;
 
 function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrite {
   return {
@@ -156,6 +159,8 @@ export class DepartmentReceiptEditor extends LitElement {
   #previewFlight?: object;
   #previewDue = false;
   #previewSource?: unknown;
+  /** The paper widths last answered, by the widths read or by a preview drawn. */
+  #knownWidths?: readonly PrintPaperWidth[];
   #paper = new PrintPaper();
   #marked = false;
   #announcedMarked = false;
@@ -253,7 +258,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#feedback.reset();
     this.errors = {};
     this.actionError = this.readError = this.previewError = "";
-    this.preview = undefined;
+    this.preview = this.#knownWidths = undefined;
     this.previewLanguage = "";
     this.#explicitPreviewLanguage = false;
     this.previewWidth = undefined;
@@ -265,6 +270,8 @@ export class DepartmentReceiptEditor extends LitElement {
     if (this.department) {
       this.requestUpdate();
       this.#registerDraft();
+      // Detaching dropped the failed reads, so a recovery would never clear their line.
+      this.readError = "";
       void this.#load();
     }
   }
@@ -309,6 +316,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#previewSource = undefined;
     this.#queries.release("receipt");
     this.#queries.release("theme");
+    this.#queries.release("paperWidths");
     this.#scope?.dispose();
     this.#scope = undefined;
   }
@@ -334,10 +342,9 @@ export class DepartmentReceiptEditor extends LitElement {
     const department = this.department;
     if (!department) return;
     const opening = this.#opening;
-    // The preview's venue logo comes from the theme in use, which the receipt read does not carry.
-    // The value counts reads (a theme change, or a refresh after a reconnect); its first answer is
-    // the opening read. Started before the await below, so a close while the receipt read is
-    // pending releases it.
+    // The receipt read does not carry the venue logo, which comes from the theme in use, nor the
+    // offered paper widths. The theme watch's first answer is the opening read. Started before the
+    // await below, so a close while the receipt read is pending releases them.
     let themeReads = 0;
     void this.#queries.watch(
       "theme",
@@ -352,17 +359,34 @@ export class DepartmentReceiptEditor extends LitElement {
         this.#queuePreview();
       },
     );
+    // Every print-job write and every device's last-seen stamp reports a change to these tables, far
+    // more often than the widths change, so only a change in the widths themselves redraws the
+    // preview.
+    void this.#queries
+      .watch(
+        "paperWidths",
+        {
+          key: `department-receipt-editor-paper-widths:${department.id}:${opening}`,
+          dependencies: QUERY_DEPENDENCIES.getReceiptPaperWidths.map((type) => ({ type })),
+          read: () => (this.api.background ?? this.api).getReceiptPaperWidths(),
+        },
+        ({ paperWidths }) => {
+          if (opening !== this.#opening) return;
+          const known = this.#knownWidths;
+          this.#knownWidths = paperWidths;
+          if (known === undefined || sameValue(paperWidths, known)) return;
+          this.#previewSource = undefined;
+          this.#queuePreview();
+        },
+      )
+      .catch(() => {});
     let initialRead = true;
     await this.#queries
       .watch(
         "receipt",
         {
           key: `department-receipt-editor:${department.id}:${opening}`,
-          dependencies: [
-            { type: "departments" },
-            { type: "settings.business_day" },
-            { type: "settings.venue" },
-          ],
+          dependencies: QUERY_DEPENDENCIES.getDepartmentReceipt.map((type) => ({ type })),
           read: () => {
             const client = initialRead ? this.api : (this.api.background ?? this.api);
             initialRead = false;
@@ -371,7 +395,6 @@ export class DepartmentReceiptEditor extends LitElement {
         },
         (model) => {
           if (opening !== this.#opening) return;
-          this.readError = "";
           this.#saved = structuredClone({ receipt: model.receipt, policy: model.policy });
           const first = this.model === undefined;
           if (!first && !this.busy && this.#scope?.isDirty()) this.#adoptUntouched(model);
@@ -559,7 +582,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#previewTimer = setTimeout(() => {
       this.#previewDue = true;
       void this.#drawPreview(generation);
-    }, 300);
+    }, PREVIEW_DELAY_MS);
   }
   async #drawPreview(generation: number): Promise<void> {
     if (
@@ -576,6 +599,7 @@ export class DepartmentReceiptEditor extends LitElement {
       const answer = await this.api.previewReceiptDraft(this.#previewBody(), { passive: true });
       if (generation !== this.#previewGeneration) return;
       this.preview = answer;
+      this.#knownWidths = answer.paperWidths;
       this.previewError = "";
     } catch {
       if (generation === this.#previewGeneration) this.previewError = t("receipts.preview_error");

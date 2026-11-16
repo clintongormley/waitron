@@ -17,7 +17,7 @@ it("quiets only the audited database queries while connected", () => {
     listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
     getVenueDefaults getVenuePrivacy listPurchaseInvoices
     getContentLanguages getContentTranslationGaps getContentTranslationTargets getContentTranslationCells
-    getGoogleConfig getLocales getDepartmentReceipt pairingMode`.split(/\s+/);
+    getGoogleConfig getLocales getDepartmentReceipt getReceiptPaperWidths pairingMode`.split(/\s+/);
   const api = new DashboardApi();
   const quiet = (Object.keys(QUERY_DEPENDENCIES) as DashboardQueryName[]).filter((name) => {
     const args = name === "getMenuRead" ? ["menu-1", ["status"]] : [];

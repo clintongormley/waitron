@@ -262,6 +262,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     }),
     getVenuePrivacy: vi.fn().mockResolvedValue({ privacyNoticeUrl: null, privacyEmail: null }),
     previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),
+    getReceiptPaperWidths: vi.fn(() => new Promise(() => undefined)),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
     listPendingSwaps: vi.fn().mockResolvedValue([]),
     listPendingAbsences: vi.fn().mockResolvedValue([]),

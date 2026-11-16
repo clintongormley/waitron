@@ -144,6 +144,13 @@ async function activeReceiptSettings(tx: Transaction): Promise<EscSetting[]> {
   });
 }
 
+/** The widths `settings` offers, narrowest first. */
+function offeredWidths(settings: EscSetting[]): PaperWidth[] {
+  return printPaperWidth.enumValues.filter((width) =>
+    settings.some((setting) => setting.paperWidth === width),
+  );
+}
+
 /**
  * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
  * devices print on, a tie going to the device first by name. A width's resolution is that of the
@@ -267,9 +274,7 @@ async function renderDraftPreview(
   return {
     preview,
     paperWidth: printer.paperWidth,
-    paperWidths: printPaperWidth.enumValues.filter((width) =>
-      available.some((setting) => setting.paperWidth === width),
-    ),
+    paperWidths: offeredWidths(available),
     marks: previewMarks(preview, drawn),
     venueLogo: filename === undefined && venueLogo !== null,
   };
@@ -286,6 +291,19 @@ export function mountReceiptPreviewApi(
   log: Logger,
 ): void {
   const logoCache = createLogoCache();
+  app.get("/management-api/receipt-preview/paper-widths", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const paperWidths = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "venue.configure",
+        });
+        return offeredWidths(await activeReceiptSettings(tx));
+      });
+      return c.json({ paperWidths });
+    }),
+  );
   app.post("/management-api/receipt-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { cleanupWidgets, reattachAfterDetachedUpdate } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
+import { codeMessage } from "../i18n/codes.js";
+import { PREVIEW_DELAY_MS } from "./department-receipt-editor.js";
 import {
   deferred,
   editReceipt,
@@ -51,7 +54,7 @@ it("coalesces edits behind one in-flight preview and sends only the latest draft
   // A new live snapshot drives the same desired preview; it must not dispatch a second request.
   api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
-  await new Promise<void>((resolve) => setTimeout(resolve, 350));
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
   expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
   old.resolve(preview("OUTDATED"));
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
@@ -72,7 +75,7 @@ it("an unchanged live snapshot leaves an in-flight preview current and does not 
   await expect
     .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
     .toContain("CURRENT");
-  await new Promise<void>((resolve) => setTimeout(resolve, 350));
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
   expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
 });
 it("keeps the last paper when the newest preview refuses, then recovers without clearing a save refusal", async () => {
@@ -366,12 +369,66 @@ it("redraws the preview when the theme in use changes, with the draft unchanged"
   await expect.poll(() => receiptRoot(el).querySelector("[data-test=venue-logo]")).toBeTruthy();
   expect(el.hasUnsavedChanges).toBe(false);
 });
-it("a closed editor keeps no theme watch, even when it closes before the receipt read answers", async () => {
+const WIDTH_TABLES = [
+  "printers",
+  "printer_holders",
+  "devices",
+  "device_profiles",
+  "device_profile_printers",
+] as const;
+it.each(WIDTH_TABLES)(
+  "offers the widths a fresh preview names after a %s change moves them",
+  async (type) => {
+    const api = receiptApi();
+    api.previewReceiptDraft.mockResolvedValueOnce({ ...preview(), paperWidths: ["80mm"] });
+    api.getReceiptPaperWidths.mockResolvedValue({ paperWidths: ["80mm"] });
+    const { el } = await mountReceiptEditor(api);
+    await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+    expect(receiptRoot(el).querySelector("[name=previewWidth]")).toBeNull();
+    api.getReceiptPaperWidths.mockResolvedValue({ paperWidths: ["58mm", "80mm"] });
+    api.previewReceiptDraft.mockResolvedValueOnce({
+      ...preview(),
+      paperWidths: ["58mm", "80mm"],
+    });
+    api.liveData.invalidate([{ type }]);
+    await expect
+      .poll(() =>
+        receiptRoot(el)
+          .querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")
+          ?.options.map((option) => option.value),
+      )
+      .toEqual(["58mm", "80mm"]);
+    expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
+    expect(api.previewReceiptDraft.mock.calls[1]![0]).toEqual(
+      api.previewReceiptDraft.mock.calls[0]![0],
+    );
+    expect(el.hasUnsavedChanges).toBe(false);
+  },
+);
+it.each(WIDTH_TABLES)(
+  "asks for no new preview when a %s change leaves the offered widths as they were",
+  async (type) => {
+    const api = receiptApi();
+    const { el } = await mountReceiptEditor(api);
+    await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+    await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(1);
+    expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
+    api.liveData.invalidate([{ type }]);
+    await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(2);
+    await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+    expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
+  },
+);
+it("a closed editor keeps no theme or paper-width watch, even when it closes before the receipt read answers", async () => {
   const api = receiptApi();
   const { el } = await mountReceiptEditor(api);
-  const themes = () =>
-    api.liveData.interests.filter((interest) => interest.type === "custom_themes");
-  await expect.poll(themes).toEqual([{ type: "custom_themes" }]);
+  const types: readonly string[] = ["custom_themes", ...QUERY_DEPENDENCIES.getReceiptPaperWidths];
+  const watched = () =>
+    api.liveData.interests
+      .map((interest) => interest.type)
+      .filter((type) => types.includes(type))
+      .sort();
+  await expect.poll(watched).toEqual([...types].sort());
   const held = deferred<typeof receiptModel>();
   api.getDepartmentReceipt.mockImplementationOnce(() => held.promise);
   el.subject = undefined;
@@ -383,5 +440,139 @@ it("a closed editor keeps no theme watch, even when it closes before the receipt
   held.resolve(structuredClone(receiptModel));
   await held.promise;
   await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(themes()).toEqual([]);
+  expect(watched()).toEqual([]);
+});
+it("offers the new widths after a printer change when the opening widths read failed", async () => {
+  const api = receiptApi();
+  api.getReceiptPaperWidths.mockRejectedValueOnce({ code: "server.internal_error" });
+  api.previewReceiptDraft.mockResolvedValueOnce({ ...preview(), paperWidths: ["80mm"] });
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+  expect(receiptRoot(el).querySelector("[name=previewWidth]")).toBeNull();
+  api.getReceiptPaperWidths.mockResolvedValue({ paperWidths: ["58mm", "80mm"] });
+  api.liveData.invalidate([{ type: "printers" }]);
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(2);
+  await expect
+    .poll(() =>
+      receiptRoot(el)
+        .querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")
+        ?.options.map((option) => option.value),
+    )
+    .toEqual(["58mm", "80mm"]);
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
+});
+it("an unchanged widths answer leaves the opening preview in flight to be drawn", async () => {
+  const api = receiptApi();
+  const held = deferred<ReturnType<typeof preview>>();
+  api.previewReceiptDraft.mockImplementationOnce(() => held.promise);
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
+  api.previewReceiptDraft.mockResolvedValue(preview("SUPERSEDING"));
+  api.liveData.invalidate([{ type: "devices" }]);
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(2);
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+  held.resolve(preview("CURRENT"));
+  await expect
+    .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
+    .toContain("CURRENT");
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
+  expect(receiptRoot(el).querySelector(".paper")?.textContent).toContain("CURRENT");
+});
+it("a discarded preview's widths are not taken as the ones on offer", async () => {
+  const api = receiptApi();
+  const opening = deferred<ReturnType<typeof preview>>();
+  const fresh = deferred<ReturnType<typeof preview>>();
+  api.previewReceiptDraft
+    .mockImplementationOnce(() => opening.promise)
+    .mockImplementationOnce(() => fresh.promise);
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
+  api.getReceiptPaperWidths.mockResolvedValue({ paperWidths: ["80mm"] });
+  api.liveData.invalidate([{ type: "printers" }]);
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(2);
+  opening.resolve(preview("OUTDATED"));
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
+  api.liveData.invalidate([{ type: "devices" }]);
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(3);
+  fresh.resolve({ ...preview("LATEST"), paperWidths: ["80mm"] });
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("LATEST");
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
+  expect(receiptRoot(el).querySelector("[name=previewWidth]")).toBeNull();
+});
+it("a failed opening widths read stays shown, with Retry, after the receipt loads, and Retry clears it", async () => {
+  const api = receiptApi();
+  api.getReceiptPaperWidths.mockRejectedValueOnce({ code: "server.internal_error" });
+  const receipt = deferred<typeof receiptModel>();
+  api.getDepartmentReceipt.mockImplementationOnce(() => receipt.promise);
+  const mounting = mountReceiptEditor(api);
+  await expect
+    .poll(() =>
+      document
+        .querySelector("receipt-editor-test-host")
+        ?.shadowRoot?.querySelector("dashboard-department-receipt-editor")
+        ?.shadowRoot?.querySelector(".error[role=alert]"),
+    )
+    .toBeTruthy();
+  receipt.resolve(structuredClone(receiptModel));
+  const { el } = await mounting;
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+  expect(receiptRoot(el).querySelector(".error[role=alert]")?.textContent).toBe(
+    codeMessage("server.internal_error"),
+  );
+  const retry = Array.from(receiptRoot(el).querySelectorAll("wt-button")).find(
+    (button) => button.textContent?.trim() === t("venue_settings.retry"),
+  );
+  expect(retry).toBeTruthy();
+  await userEvent.click(page.elementLocator(retry!));
+  await expect.poll(() => receiptRoot(el).querySelector(".error[role=alert]")).toBeNull();
+  expect(api.getReceiptPaperWidths).toHaveBeenCalledTimes(2);
+});
+it("a widths read that fails after opening is shown until a later widths read answers", async () => {
+  const api = receiptApi();
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+  api.getReceiptPaperWidths.mockRejectedValueOnce({ code: "server.internal_error" });
+  api.liveData.invalidate([{ type: "devices" }]);
+  await expect.poll(() => receiptRoot(el).querySelector(".error[role=alert]")).toBeTruthy();
+  api.liveData.invalidate([{ type: "departments" }]);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  expect(receiptRoot(el).querySelector(".error[role=alert]")).toBeTruthy();
+  api.liveData.invalidate([{ type: "devices" }]);
+  await expect.poll(() => receiptRoot(el).querySelector(".error[role=alert]")).toBeNull();
+});
+it("an error line from before the editor was taken off the page clears once its reads answer after it is put back", async () => {
+  const api = receiptApi();
+  api.getReceiptPaperWidths.mockRejectedValueOnce({ code: "server.internal_error" });
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector(".error[role=alert]")).toBeTruthy();
+  await reattachAfterDetachedUpdate(el);
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(2);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await expect.poll(() => receiptRoot(el).querySelector(".error[role=alert]")).toBeNull();
+});
+it("another department's first widths answer asks for no second preview, whatever the last department offered", async () => {
+  const api = receiptApi();
+  api.getReceiptPaperWidths.mockResolvedValue({ paperWidths: ["80mm"] });
+  api.previewReceiptDraft.mockResolvedValueOnce({ ...preview(), paperWidths: ["80mm"] });
+  const { el } = await mountReceiptEditor(api);
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+  await expect.poll(() => api.getReceiptPaperWidths.mock.calls.length).toBe(1);
+  const opening = deferred<ReturnType<typeof preview>>();
+  const widths = deferred<{ paperWidths: ("58mm" | "80mm")[] }>();
+  api.previewReceiptDraft.mockImplementationOnce(() => opening.promise);
+  api.getReceiptPaperWidths.mockImplementationOnce(() => widths.promise);
+  el.subject = { id: "kitchen", name: "Kitchen" };
+  await expect.poll(() => api.previewReceiptDraft.mock.lastCall?.[0].departmentId).toBe("kitchen");
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
+  widths.resolve({ paperWidths: ["58mm", "80mm"] });
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+  opening.resolve({ ...preview("KITCHEN"), paperWidths: ["58mm", "80mm"] });
+  await expect
+    .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
+    .toContain("KITCHEN");
+  await new Promise<void>((resolve) => setTimeout(resolve, PREVIEW_DELAY_MS + 50));
+  expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
 });

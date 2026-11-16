@@ -463,6 +463,14 @@ export const QUERY_DEPENDENCIES = {
   listPrinterStations: ["kitchen_stations"],
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getDepartmentReceipt: ["departments", "settings.business_day", "settings.venue"],
+  // Each active device's resolved receipt printer (`activeReceiptSettings` in receipt-preview-api.ts).
+  getReceiptPaperWidths: [
+    "printers",
+    "printer_holders",
+    "devices",
+    "device_profiles",
+    "device_profile_printers",
+  ],
   getVenueDetails: [
     "settings.business_day",
     "settings.venue",
@@ -569,6 +577,7 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getGoogleConfig",
   "getLocales",
   "getDepartmentReceipt",
+  "getReceiptPaperWidths",
   "pairingMode",
 ]);
 
