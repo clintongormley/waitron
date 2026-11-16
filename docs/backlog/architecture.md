@@ -1086,8 +1086,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`packages/provisioning` code found by #561 and not changed.** The coverage config leaves
   `src/bin.ts` out with no reason stated any more, which may hide code a test could reach.
   [Detail](box.md#packagesprovisioning-code-found-by-561-and-not-changed)
-- **Loose ends left by the comment-pruning pull requests (#559 to #624).**
-  [Detail](ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
+- **The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
+  measured false.**
+  [Detail](ci.md#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false).
 - **Fiscal source comments still describe the migration sets A760 retired.**
   `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
   `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);

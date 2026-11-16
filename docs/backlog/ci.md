@@ -194,29 +194,12 @@ were the legitimate shape where a block comment heads a group of members rather 
 the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
 header-then-member shape, and its own tests, rather than re-running a scratch script.
 
-## Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
-
-- Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
-  parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass,
-  so they check less than their titles say. Test titles left open by #624: "(T12b)" in
-  `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
-  `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
-  `health.test.ts`, "the new guard" in `config.test.ts`.
-
 ## The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was measured false
 
 - #585 took the reason out of
-  `packages/db/src/schema`; the ignore pairs there stay. Four identity schema files and six in
+  `packages/db/src/schema`; the ignore pairs there stay. Six files in
   `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
   code change, for whoever next changes that package's code.
-
-## Printing error test wording and profile-store session setup
-
-Left open by #588: `packages/printing/src/errors.test.ts:5` says the error construction typechecks
-"ONLY because" of one import; #588's review measured that claim false. The remaining layouts
-profile-store suite creates a manager session in `beforeAll`, while `useVenueDb` resets data per
-test, so that session belongs only to its first case. The canvas-store suite and its old
-PostgreSQL-number title are retired with A182 part 2.
 
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 
@@ -865,12 +848,6 @@ shape above has yet been seen in a real run.
   no-progress failure the wall time.
   [Measurement](../developers/ci-and-gates.md#reducing-repeated-upgrade-test-setup-work-a736)
 
-## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
-
-Since #602 the comment at `.github/workflows/ci.yml` about line 268 says the three-shell receipt is
-in `.husky/pre-push`; that file holds no such receipt. Restore the receipt there or cut the pointer
-from the comment.
-
 ## The runner's action-repository download at job setup remains unqualified (A935)
 
 Step limits for cache, Docker and CodeQL do not qualify the earlier “Download action
@@ -966,28 +943,6 @@ Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
 `src/bill-payments-api.test.ts` and `src/attendance-till-api.test.ts`, plus the shared
 `src/testing/handover-placed-copy.ts`. The two staged-hour salt helpers remain in
 [the existing speed-up entry](#server-test-time-levers-left-after-a1297).
-
-
-## Loose ends left by the comment-pruning pull requests (#559 to #624)
-
-- Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
-  (#624).
-  [Detail](#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
-- `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-  `.husky/pre-push` beside the same loop; it is not there (#602).
-  [Detail](#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
-- The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-  measured false (#562, #585).
-  [Detail](#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
-- The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
-  `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
-  0.45.4 names an unnamed `unique()` itself, so nothing reaches it
-  (`packages/db/src/testing/schema-conformance.ts`) (#559).
-- In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES
-  ANYTHING" repeats the first case under another name (a test change, not a comment one; #589).
-- The printing error test overstates its import requirement, and profile-store setup keeps a
-  session across per-test resets (#588; the canvas-store test itself is retired).
-  [Detail](#printing-error-test-wording-and-profile-store-session-setup)
 
 
 ## `packages/db`'s static mutants are not in its mutation score
