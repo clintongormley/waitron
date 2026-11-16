@@ -57,6 +57,16 @@ export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8A
   return zipSync(entries);
 }
 
+function addEntry(zip: Zip, name: string, content: string | Uint8Array, mtime: Date): void {
+  const data = typeof content === "string" ? strToU8(content) : content;
+  const entry = /\.pdf$/i.test(name)
+    ? new ZipPassThrough(name)
+    : new ZipDeflate(name, { level: 6 });
+  entry.mtime = mtime;
+  zip.add(entry);
+  entry.push(data, true);
+}
+
 /** `zipArchive`'s ZIP built one entry at a time with a turn of the event loop after each, so the
  * longest block while adding is one entry; the final join still copies the whole archive once.
  * Each `content` is read only when its entry is added. */
@@ -72,17 +82,50 @@ export async function zipArchiveInTurns(
   });
   const mtime = zipTime(at);
   for (const file of files) {
-    const content = file.content;
-    const data = typeof content === "string" ? strToU8(content) : content;
-    const entry = /\.pdf$/i.test(file.name)
-      ? new ZipPassThrough(file.name)
-      : new ZipDeflate(file.name, { level: 6 });
-    entry.mtime = mtime;
-    zip.add(entry);
-    entry.push(data, true);
+    addEntry(zip, file.name, file.content, mtime);
     if (failure) throw failure;
     await nextTurn();
   }
   zip.end();
   return Buffer.concat(chunks);
+}
+
+/** `zipArchiveInTurns`' ZIP as a stream that takes the next entry only when the reader asks for
+ * more, so no more than one entry's bytes wait in memory. */
+export function zipStream(
+  entries: AsyncIterable<{ name: string; content: string | Uint8Array }>,
+  at: Date,
+): ReadableStream<Uint8Array> {
+  const iterator = entries[Symbol.asyncIterator]();
+  const mtime = zipTime(at);
+  let chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  const zip = new Zip((error, chunk) => {
+    if (error) failure = error;
+    else chunks.push(chunk);
+  });
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        // A pull that enqueues nothing is not called again, so keep going until a chunk is out.
+        while (chunks.length === 0) {
+          const next = await iterator.next();
+          if (next.done) {
+            zip.end();
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+            return;
+          }
+          addEntry(zip, next.value.name, next.value.content, mtime);
+          if (failure) throw failure;
+        }
+        for (const chunk of chunks) controller.enqueue(chunk);
+        chunks = [];
+      },
+      async cancel() {
+        await iterator.return?.();
+      },
+    },
+    { highWaterMark: 0 },
+  );
 }

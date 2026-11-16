@@ -2,7 +2,7 @@ import { strFromU8, strToU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { PersonalDataFile } from "@waitron/module";
-import { archiveFileName, zipArchive, zipArchiveInTurns } from "./download-archive.js";
+import { archiveFileName, zipArchive, zipArchiveInTurns, zipStream } from "./download-archive.js";
 
 const AT = new Date("2026-10-04T22:30:00Z");
 
@@ -219,5 +219,114 @@ describe("zipArchiveInTurns", () => {
     await nextTurn();
     expect(seen).toEqual([[], [0], [0, 1], [0, 1, 2], [0, 1, 2, 3]]);
     expect(ran).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe("zipStream", () => {
+  type Entry = { name: string; content: string | Uint8Array };
+  const pdfBytes = new Uint8Array(40_000).map((_, index) => (index * 7) & 0xff);
+  const entries: Entry[] = [
+    { name: "README.txt", content: "Facturas de marzo\n".repeat(50) },
+    { name: "invoices/FF-1.pdf", content: pdfBytes },
+    { name: "invoices.csv", content: "number;total\nFF-1;12.10\n" },
+  ];
+
+  /** An iterator over `items` that counts how many it has handed out and whether it was told
+   * to stop. */
+  function counting(items: readonly Entry[], failAt?: number) {
+    const state = { pulled: 0, returned: false };
+    const iterable: AsyncIterable<Entry> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          if (state.pulled === failAt) throw new Error("the month's sales could not be read");
+          const value = items[state.pulled];
+          if (value === undefined) return { done: true, value: undefined };
+          state.pulled++;
+          return { done: false, value };
+        },
+        return: async () => {
+          state.returned = true;
+          return { done: true, value: undefined };
+        },
+      }),
+    };
+    return { state, iterable };
+  }
+
+  async function readAll(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+
+  it("unzips to exactly the entries given, a PDF stored and text deflated, dated as zipArchive", async () => {
+    const zip = await readAll(zipStream(counting(entries).iterable, AT));
+    const unzipped = unzipSync(zip);
+    expect(Object.keys(unzipped)).toEqual(entries.map((entry) => entry.name));
+    expect(strFromU8(unzipped["README.txt"]!)).toBe(entries[0]!.content);
+    expect(unzipped["invoices/FF-1.pdf"]).toEqual(pdfBytes);
+    expect(strFromU8(unzipped["invoices.csv"]!)).toBe(entries[2]!.content);
+    const date = ((AT.getFullYear() - 1980) << 9) | ((AT.getMonth() + 1) << 5) | AT.getDate();
+    const time = (AT.getHours() << 11) | (AT.getMinutes() << 5) | (AT.getSeconds() >> 1);
+    expect(centralEntries(zip)).toEqual({
+      "README.txt": { method: 8, time, date },
+      "invoices/FF-1.pdf": { method: 0, time, date },
+      "invoices.csv": { method: 8, time, date },
+    });
+  });
+
+  it("dates its entries inside 1980-2099", async () => {
+    const one = [{ name: "a.json", content: "{}" }];
+    const zip = await readAll(zipStream(counting(one).iterable, new Date("1970-01-01T00:00:00Z")));
+    expect(centralEntries(zip)["a.json"]!.date).toBe((1 << 5) | 1);
+  });
+
+  it("takes the next entry only once the reader has read what the previous one gave", async () => {
+    const many = Array.from({ length: 8 }, (_, index) => ({
+      name: `invoices/FF-${index}.pdf`,
+      content: pdfBytes,
+    }));
+    const { state, iterable } = counting(many);
+    const reader = zipStream(iterable, AT).getReader();
+    for (let turn = 0; turn < 5; turn++) await nextTurn();
+    expect(state.pulled).toBeLessThanOrEqual(1);
+    const chunks: Uint8Array[] = [];
+    let reads = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      reads++;
+      for (let turn = 0; turn < 5; turn++) await nextTurn();
+      expect(state.pulled).toBeLessThanOrEqual(reads + 1);
+    }
+    expect(state.pulled).toBe(many.length);
+    expect(Object.keys(unzipSync(Buffer.concat(chunks)))).toHaveLength(many.length);
+  });
+
+  it("tells the iterator to stop when the reader cancels", async () => {
+    const { state, iterable } = counting(entries);
+    const reader = zipStream(iterable, AT).getReader();
+    await reader.read();
+    expect(state.returned).toBe(false);
+    await reader.cancel();
+    expect(state.returned).toBe(true);
+    expect(state.pulled).toBeLessThan(entries.length);
+  });
+
+  it("errors the stream when the iterator fails", async () => {
+    const reader = zipStream(counting(entries, 1).iterable, AT).getReader();
+    await expect(
+      (async () => {
+        for (;;) if ((await reader.read()).done) return;
+      })(),
+    ).rejects.toThrow("the month's sales could not be read");
+  });
+
+  it("errors the stream on an entry fflate refuses", async () => {
+    const long = [{ name: `${"a".repeat(70_000)}.json`, content: "{}" }];
+    await expect(readAll(zipStream(counting(long).iterable, AT))).rejects.toThrow(
+      "filename too long",
+    );
   });
 });
