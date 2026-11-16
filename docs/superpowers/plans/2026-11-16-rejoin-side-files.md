@@ -1,6 +1,6 @@
 # Rejoin side files implementation plan
 
-**Status:** Implemented and cleared by the watcher on 2026-11-16 in this PR. No owner design approval is claimed.
+**Status:** Implemented in this PR; plan cleared by the watcher on 2026-11-16. No owner design approval is claimed.
 **Source:** `/Users/clintongormley/waitron-campaign-f/queue.md`, REJOIN-SIDE-FILES, watcher 2026-11-16 01:35.
 **Verbatim ask:** “`docs/backlog.md:1881` (detail `docs/backlog/ci.md:6`): `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe; add the rejoin-level case with the database's side files present on disk (the wipe itself is pinned by `db-wipe.test.ts`). Test only; small; one PR; delete the entry.”
 
@@ -21,7 +21,7 @@
 - [x] Leave `migrate` unchanged; it records the directory without recreating files. Preserve its target assertion.
 - [x] Reuse the driver’s already-created detached shared clone, which already has its own `pnpm install --frozen-lockfile` install.
 - [x] There only, change `apps/server/src/db-wipe.ts`'s suffix loop to `[""]`, omitting side-file removal. Run the original case: expect PASS without side files at wipe time.
-- [x] Apply the strengthened test there: expect FAIL on the remaining `venue.db-wal` absence assertion, not setup/cleanup. Record output.
+- [x] Apply the strengthened test there: expect FAIL on the remaining `venue.db-wal` absence assertion, not setup/cleanup. Record output in the PR’s validation section.
 - [x] Restore `db-wipe.ts`; rerun for PASS. Remove only that disposable clone and its temporary parent after collecting receipts. Feature-branch production stays untouched.
 - [x] Delete the backlog entry by its exact heading, “`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe”, in `docs/backlog.md` and `docs/backlog/ci.md`; the quoted ask’s line number has drifted. Preserve adjacent entries.
 
