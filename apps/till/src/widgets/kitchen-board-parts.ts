@@ -2,7 +2,7 @@ import { registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { ExpoItem } from "../api/client.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
 import {
   type BoardMeasure,
@@ -248,13 +248,24 @@ export function dishNote(item: DishLines, prefix: string): TemplateResult | type
 
 /** The dish's own allergen profile; each extra's own allergens are drawn beside the extra. */
 export function dishAllergens(item: DishLines, prefix: string): TemplateResult | typeof nothing {
-  const codes = item.asServed ? Object.keys(item.asServed.allergens).sort() : [];
+  const allergens = item.asServed?.allergens ?? {};
+  const codes = Object.keys(allergens).sort();
   if (codes.length === 0) return nothing;
   const locale = currentLocale();
+  // wt-icon reads no label of its own; role and aria-label keep each allergen in the line's
+  // accessible name.
   return html`<span class="${prefix}-allergens" data-item-allergens=${item.id}>
-    <span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
-      (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
-    )}
+    <span class="allergen-label">${t("allergens.contains")}</span>
+    <span class="nutrition-icons">
+      ${codes.map(
+        (code) =>
+          html`<wt-icon
+            name=${`allergen-${code}`}
+            role="img"
+            aria-label=${allergenLabel(code, allergens[code]!, locale)}
+          ></wt-icon>`,
+      )}
+    </span>
   </span>`;
 }
 

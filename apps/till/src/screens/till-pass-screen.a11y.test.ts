@@ -69,7 +69,8 @@ const detailed = {
 function expectDishDetails(root: ShadowRoot): void {
   expect(root.querySelectorAll("[data-crossref]")).toHaveLength(3);
   expect(root.querySelector(".item-modifiers .modifier")).not.toBeNull();
-  expect(root.querySelector("[data-item-allergens] .allergen-chip")).not.toBeNull();
+  expect(root.querySelector('[data-item-allergens] wt-icon[name="allergen-milk"]')).not.toBeNull();
+  expect(root.querySelector("[data-item-allergens] .allergen-chip")).toBeNull();
   expect(root.querySelector(".extra-allergens .allergen-chip")).not.toBeNull();
   expect(root.querySelector('[data-diet="vegetarian"]')).not.toBeNull();
   expect(root.querySelector('[data-diet="halal"]')).not.toBeNull();

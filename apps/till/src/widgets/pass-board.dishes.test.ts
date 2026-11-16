@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { DietProfile, PassBoard, PassCard, PassCardItem } from "../api/client.js";
@@ -161,17 +161,28 @@ describe("A773 pass board widget: dishes", () => {
     expect(itemOf(el, "keyless").querySelector(".item-customisation")).toBeNull();
   });
 
-  it("draws the dish's own allergen chips and no not-reviewed warning", async () => {
+  it("draws the dish's own allergen icons and no not-reviewed warning", async () => {
     const el = await inProgress([
-      passItem({ id: "milk", asServed: { allergens: { milk: {} }, pending: false } }),
+      passItem({
+        id: "milk",
+        asServed: { allergens: { milk: {}, gluten: { kinds: ["wheat"] } }, pending: false },
+      }),
       passItem({ id: "pending", asServed: { allergens: {}, pending: true } }),
       passItem({ id: "plain" }),
     ]);
-    const chips = itemOf(el, "milk").querySelector('[data-item-allergens="milk"]')!;
-    expect(chips.querySelector(".allergen-chip")!.textContent).toBe(
-      allergenName("milk", currentLocale()),
-    );
-    expect(chips.textContent).toContain(t("allergens.contains"));
+    const row = itemOf(el, "milk").querySelector('[data-item-allergens="milk"]')!;
+    expect(
+      [...row.querySelectorAll("wt-icon")].map((icon) => [
+        icon.getAttribute("name"),
+        icon.getAttribute("role"),
+        icon.getAttribute("aria-label"),
+      ]),
+    ).toEqual([
+      ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+      ["allergen-milk", "img", allergenName("milk", currentLocale())],
+    ]);
+    expect(row.querySelector(".allergen-chip")).toBeNull();
+    expect(row.textContent).toContain(t("allergens.contains"));
     expect(itemOf(el, "pending").querySelector(".item-allergens")).toBeNull();
     expect(itemOf(el, "pending").textContent).not.toMatch(/review|revisi/i);
     expect(itemOf(el, "plain").querySelector(".item-allergens")).toBeNull();
@@ -574,7 +585,9 @@ describe("A773 pass board widget: dishes", () => {
     const extraDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-burger-0"]')!;
     expect(extraDiet.querySelector("[data-diet='halal']")).not.toBeNull();
     const dish = el.shadowRoot!.querySelector('[data-item-allergens="burger"]')!;
-    expect(dish.textContent).toContain(allergenName("gluten", currentLocale()));
+    expect(
+      [...dish.querySelectorAll("wt-icon")].map((icon) => icon.getAttribute("aria-label")),
+    ).toEqual([allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())]);
     expect(dish.textContent).not.toContain(milk);
   });
 

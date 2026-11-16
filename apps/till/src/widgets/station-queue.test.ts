@@ -4,7 +4,7 @@ import { setContentLanguages, setHelpMode } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "../i18n/help-strings.js";
 import { es } from "../i18n/strings.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
@@ -517,9 +517,19 @@ describe("till-station-queue", () => {
       expect(optDiet).not.toBeNull();
       expect(optDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
       // The dish's OWN allergen row shows its gluten, a node distinct from the extra's milk (no fold).
-      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]');
-      expect(dishAllergens!.textContent).toMatch(/gluten/i);
-      expect(dishAllergens!.textContent).not.toContain(milkName);
+      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]')!;
+      expect(
+        [...dishAllergens.querySelectorAll("wt-icon")].map((icon) => [
+          icon.getAttribute("name"),
+          icon.getAttribute("role"),
+          icon.getAttribute("aria-label"),
+        ]),
+      ).toEqual([
+        ["allergen-gluten", "img", allergenLabel("gluten", { kinds: ["wheat"] }, currentLocale())],
+      ]);
+      expect(dishAllergens.querySelector(".allergen-chip")).toBeNull();
+      expect(dishAllergens.textContent).toContain(t("allergens.contains"));
+      expect(dishAllergens.textContent).not.toContain(milkName);
     });
     it("draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
       const item = {
@@ -617,7 +627,7 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
+  describe("as-served allergens: the dish's own allergen icons + not-reviewed note", () => {
     const withAllergens: StationQueueGroup = {
       kitchenNote: null,
       orderId: "wo-a",
@@ -676,13 +686,15 @@ describe("till-station-queue", () => {
       ],
     };
 
-    it("shows the dish's own localised 'Milk' contains chip", async () => {
+    it("shows the dish's own milk icon, named in the screen's language", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
         stationId: "st-a",
       });
       const item = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(item.textContent).toMatch(/milk/i);
+      const icon = item.querySelector('[data-item-allergens="ti-a"] wt-icon[name="allergen-milk"]');
+      expect(icon!.getAttribute("aria-label")).toBe(allergenName("milk", currentLocale()));
+      expect(icon!.getAttribute("aria-label")).toMatch(/milk/i);
     });
 
     it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {

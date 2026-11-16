@@ -21,6 +21,7 @@ import {
 } from "../state/pass-view.js";
 import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { nutritionIconStyles } from "./nutrition-icons.js";
 import { dishLine } from "./dish-format.js";
 import { groupName } from "./group-name.js";
 import { helpBadge, kitchenHelpStyles } from "./help-badge.js";
@@ -90,6 +91,7 @@ export class TillPassBoard extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    nutritionIconStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
     kitchenBoardStyles,

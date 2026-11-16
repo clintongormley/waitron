@@ -17,6 +17,7 @@ import {
 } from "@waitron/shared";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { nutritionIconStyles } from "./nutrition-icons.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, quantityText } from "./dish-format.js";
 import {
@@ -185,6 +186,7 @@ export class TillStationQueue extends LitElement {
   static override styles = [
     baseStyles,
     dietBadgeStyles,
+    nutritionIconStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
     segmentedOptionStyles,
