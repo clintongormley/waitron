@@ -14,8 +14,31 @@ import {
   tsString,
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import type { ActivityKind, AttendanceSource } from "../attendance-types.js";
 import { timeEntries } from "./time-entries.js";
+
+export const staffActivity = table(
+  "staff_activity",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    personId: id("person_id").notNull(),
+    businessDay: day("business_day").notNull(),
+    shiftKey: label("shift_key").notNull(),
+    shiftStartAt: tsString("shift_start_at"),
+    shiftEndAt: tsString("shift_end_at"),
+    firstAt: tsString("first_at").notNull(),
+    lastAt: tsString("last_at").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "staff_activity_person_fk",
+    }).onDelete("restrict"),
+    uniqueIndex("staff_activity_person_shift_uq").on(t.personId, t.shiftKey),
+    index("staff_activity_day_idx").on(t.businessDay, t.personId),
+    check("staff_activity_bounds_ck", sql`${t.firstAt} <= ${t.lastAt}`),
+  ],
+);
 
 export const attendanceDayWork = table(
   "attendance_day_work",
@@ -37,84 +60,6 @@ export const attendanceDayWork = table(
       "attendance_day_work_revision_ck",
       sql`${t.dirtyRevision} > 0 and ${t.evaluatedRevision} >= 0 and ${t.evaluatedRevision} <= ${t.dirtyRevision}`,
     ),
-  ],
-);
-
-const sourceKind = enumType(["scan", "watch"]);
-const discoverySource = enumType([
-  "session",
-  "draft",
-  "order",
-  "group",
-  "whole-payment",
-  "bill-payment",
-  "refund",
-  "clock",
-  "rota",
-  "operation",
-]);
-export const attendanceSourceState = table(
-  "attendance_source_state",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    source: discoverySource("source").notNull(),
-    key: label("key").notNull(),
-    recordKind: sourceKind("record_kind").notNull(),
-    generation: label("generation"),
-    cursor: count("cursor"),
-    endpoint: count("endpoint"),
-    completed: flag("completed"),
-    fingerprint: label("fingerprint"),
-    previousDays: json<string[]>("previous_days").notNull().default([]),
-    nextDueAt: tsString("next_due_at"),
-  },
-  (t) => [
-    uniqueIndex("attendance_source_state_scope_uq").on(t.source, t.recordKind, t.key),
-    index("attendance_source_state_watch_idx").on(t.recordKind, t.nextDueAt, t.id),
-    check("attendance_source_state_source_ck", enumCheck(t.source)),
-    check("attendance_source_state_kind_ck", enumCheck(t.recordKind)),
-    check(
-      "attendance_source_state_shape_ck",
-      sql`(${t.recordKind} = 'scan' and ${t.generation} is not null and ${t.cursor} is not null and ${t.endpoint} is not null and ${t.completed} is not null and ${t.cursor} >= 0 and ${t.endpoint} >= 0 and ${t.cursor} <= ${t.endpoint}) or (${t.recordKind} = 'watch' and ${t.generation} is null and ${t.cursor} is null and ${t.endpoint} is null and ${t.completed} is null)`,
-    ),
-  ],
-);
-
-const activityKind = enumType(["sign-in", "order", "payment", "break"]);
-const operationSource = enumType([
-  "session",
-  "draft",
-  "order",
-  "whole-payment",
-  "bill-payment",
-  "refund",
-  "clock",
-]);
-const operationOutcome = enumType(["pending", "qualifying", "refused"]);
-export const attendanceOperationFacts = table(
-  "attendance_operation_facts",
-  {
-    sequence: count("sequence").primaryKey({ autoIncrement: true }),
-    source: operationSource("source").$type<AttendanceSource>().notNull(),
-    key: label("key").notNull(),
-    personId: id("person_id")
-      .notNull()
-      .references(() => persons.id, { onDelete: "restrict" }),
-    kind: activityKind("kind").$type<ActivityKind>().notNull(),
-    at: tsString("at").notNull(),
-    offsetMinutes: count("offset_minutes").notNull(),
-    businessDay: day("business_day").notNull(),
-    outcome: operationOutcome("outcome").notNull(),
-  },
-  (t) => [
-    uniqueIndex("attendance_operation_facts_source_uq").on(t.source, t.key),
-    index("attendance_operation_facts_day_idx").on(t.businessDay, t.personId, t.at),
-    index("attendance_operation_facts_pending_idx").on(t.outcome, t.sequence),
-    index("attendance_operation_facts_person_idx").on(t.personId, t.at, t.sequence),
-    check("attendance_operation_facts_source_ck", enumCheck(t.source)),
-    check("attendance_operation_facts_kind_ck", enumCheck(t.kind)),
-    check("attendance_operation_facts_outcome_ck", enumCheck(t.outcome)),
-    check("attendance_operation_facts_offset_ck", sql`${t.offsetMinutes} between -840 and 840`),
   ],
 );
 

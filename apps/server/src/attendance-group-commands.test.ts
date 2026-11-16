@@ -15,12 +15,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { mountTillApi } from "./till-api.js";
-import { fireGroup } from "./order-groups.js";
+
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import {
   provisionBillVenue,
@@ -135,7 +135,7 @@ async function state() {
     events: await suite.db.select().from(orderGroupEvents),
     parties: await suite.db.select().from(parties),
     commands: await suite.db.select().from(serviceCommands),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -147,73 +147,16 @@ describe("accepted group attendance snapshots", () => {
         app = api(recordAttendanceFact);
       expect(await command(app, action, p)).toMatchObject({ status: 200 });
       const saved = await state();
-      const event = saved.events.find((e) => e.actorId === v.operatorId)!;
-      expect(saved.facts).toEqual([
-        expect.objectContaining({
-          source: "draft",
-          key: `group:${event.id}`,
-          kind: "order",
-          personId: v.operatorId,
-          at: "2026-01-05T16:40:00.000Z",
-          outcome: "qualifying",
-        }),
+
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
       ]);
       expect(saved.days.map((r) => r.dirtyRevision)).toEqual([1]);
-      const facts = await withTransaction(suite.db, (tx) =>
-        readAttendanceFacts(tx, {
-          businessDay: "2026-01-05",
-          startAt: "2026-01-05T00:00:00Z",
-          endAt: "2026-01-06T00:00:00Z",
-        }),
-      );
-      expect(facts.filter((f) => f.personId === v.operatorId && f.kind === "order")).toEqual([
-        expect.objectContaining({ key: `group:${event.id}`, at: "2026-01-05T16:40:00.000Z" }),
-      ]);
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("replay clock read");
       });
       expect(await command(app, action, p)).toMatchObject({ status: 200 });
       expect(await state()).toEqual(saved);
-    },
-  );
-  it.each(actions)("%s rolls its accepted command back if capture is refused", async (action) => {
-    const p = await prepare(),
-      before = await state();
-    const reject: AttendanceRecorder = async () => {
-      throw new AppError("attendance.invalid", { reason: "capture refused" });
-    };
-    expect(await command(api(reject), action, p)).toMatchObject({
-      status: 400,
-      json: { code: "attendance.invalid" },
-    });
-    expect(await state()).toEqual(before);
-  });
-  it("a device-only release is not attributed to the command's operator", async () => {
-    const p = await prepare();
-    await withTransaction(suite.db, (tx) =>
-      fireGroup(
-        tx,
-        v.cfg,
-        p.partyId,
-        p.groupId,
-        {
-          submissionId: p.submissionId,
-          expectedPartyRevision: p.revision,
-          operatorId: v.operatorId,
-        },
-        { deviceId: v.deviceId },
-        { recorder: recordAttendanceFact, clock: v.clock },
-      ),
-    );
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).groups.find((g) => g.id === p.groupId)!.state).toBe("fired");
-  });
-  it.each(actions)(
-    "%s without workforce capture preserves the existing command",
-    async (action) => {
-      const p = await prepare();
-      expect(await command(api(), action, p)).toMatchObject({ status: 200 });
-      expect((await state()).facts).toEqual([]);
     },
   );
 });

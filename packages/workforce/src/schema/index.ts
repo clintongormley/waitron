@@ -12,12 +12,7 @@ export { shiftSwaps, shiftSwapStatus } from "./shift-swaps.js";
 
 export { payPeriodSettings } from "./pay-period-settings.js";
 export { payPeriodClosures } from "./pay-period-closures.js";
-export {
-  attendanceDayWork,
-  attendanceSourceState,
-  attendanceOperationFacts,
-  attendanceQuestions,
-} from "./attendance.js";
+export { staffActivity, attendanceDayWork, attendanceQuestions } from "./attendance.js";
 
 export { attendanceResponseCommands } from "./attendance-responses.js";
 

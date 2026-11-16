@@ -1,4 +1,3 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -7,12 +6,7 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import {
-  attendanceDayWork,
-  attendanceOperationFacts,
-  attendanceSourceState,
-  enqueueAttendanceDay,
-} from "./index.js";
+import { attendanceDayWork, enqueueAttendanceDay } from "./index.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -98,67 +92,5 @@ describe("durable attendance day work", () => {
       }),
     ).rejects.toThrow("after enqueue");
     expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
-  });
-  it("never reuses a captured operation sequence after its highest row is removed", async () => {
-    const [person] = await seedPersons(suite.db, {
-      displayName: "Worker",
-      pinHash: "scrypt$00$00",
-    });
-    const fact = {
-      source: "order" as const,
-      key: "one",
-      personId: person!.id,
-      kind: "order" as const,
-      at: "2026-01-05T09:00:00.000Z",
-      offsetMinutes: 0,
-      businessDay: "2026-01-05",
-      outcome: "qualifying" as const,
-    };
-    const [first] = await suite.db.insert(attendanceOperationFacts).values(fact).returning();
-    const [second] = await suite.db
-      .insert(attendanceOperationFacts)
-      .values({ ...fact, key: "two" })
-      .returning();
-    expect([first!.sequence, second!.sequence]).toEqual([1, 2]);
-    await suite.db
-      .delete(attendanceOperationFacts)
-      .where(eq(attendanceOperationFacts.sequence, second!.sequence));
-    const [third] = await suite.db
-      .insert(attendanceOperationFacts)
-      .values({ ...fact, key: "three" })
-      .returning();
-    expect(third!.sequence).toBe(3);
-  });
-  it("keeps a source scan and row watch in separate namespaces even with identical keys", async () => {
-    await suite.db.insert(attendanceSourceState).values([
-      {
-        source: "clock",
-        key: "chain",
-        recordKind: "scan",
-        generation: "boot",
-        cursor: 0,
-        endpoint: 2,
-        completed: false,
-      },
-      {
-        source: "clock",
-        key: "chain",
-        recordKind: "watch",
-        fingerprint: "before",
-        previousDays: ["2026-01-05"],
-        nextDueAt: "2026-01-06T04:00:00.000Z",
-      },
-    ]);
-    expect(
-      (await suite.db.select().from(attendanceSourceState)).map((r) => ({
-        kind: r.recordKind,
-        cursor: r.cursor,
-        endpoint: r.endpoint,
-        completed: r.completed,
-      })),
-    ).toEqual([
-      { kind: "scan", cursor: 0, endpoint: 2, completed: false },
-      { kind: "watch", cursor: null, endpoint: null, completed: null },
-    ]);
   });
 });

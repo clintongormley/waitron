@@ -324,7 +324,6 @@ async function recordRefundOutcome(
         })
         .where(eq(billPaymentRefunds.id, refundId))
         .returning();
-      await captureRefundAttendance(tx, failed!, deps.attendance, "refused");
       return failed!;
     }
     const [completed] = await tx
@@ -344,7 +343,6 @@ async function recordRefundOutcome(
       authorizedBy: refund.authorizedBy,
       ...(providerRefundRef === null ? {} : { providerRefundRef }),
     });
-    await captureRefundAttendance(tx, completed!, deps.attendance, "qualified");
     return completed!;
   });
 }

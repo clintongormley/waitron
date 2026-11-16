@@ -31,7 +31,7 @@ import { listDepartments, setProfileServiceAccess, setRoutingCell } from "@waitr
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { AppError } from "@waitron/shared";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -1468,24 +1468,8 @@ describe("the public cancellation read and command", () => {
     );
     const first = await post(p, body, venue.cookie.staff, app);
     expect(first.status).toBe(200);
-    const key = `service:${p.billId}:party:${p.partyId}:${body.submissionId}`;
-    const facts = await venue.db
-      .select()
-      .from(attendanceOperationFacts)
-      .where(eq(attendanceOperationFacts.key, key));
-    expect(facts).toHaveLength(1);
-    expect(facts[0]).toMatchObject({
-      source: "order",
-      personId: venue.staffId,
-      kind: "order",
-    });
+
     expect((await post(p, body, venue.cookie.staff, app)).json).toEqual(first.json);
-    expect(
-      await venue.db
-        .select()
-        .from(attendanceOperationFacts)
-        .where(eq(attendanceOperationFacts.key, key)),
-    ).toEqual(facts);
   });
 
   it("refuses take-orders revoked during a manager PIN check", async () => {

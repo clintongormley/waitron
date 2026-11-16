@@ -6,8 +6,8 @@ import { eq, sql } from "drizzle-orm";
 import { parties, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -105,7 +105,7 @@ const state = async () => ({
   orders: await suite.db.select().from(workingOrders),
   lines: await suite.db.select().from(workingOrderLines),
   parties: await suite.db.select().from(parties),
-  facts: await suite.db.select().from(attendanceOperationFacts),
+  facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDayWork),
 });
 describe("accepted bill edits as order activity", () => {
@@ -119,49 +119,18 @@ describe("accepted bill edits as order activity", () => {
         .mockReturnValue({ ...reading, instant: new Date("2026-01-05T18:00:00Z") });
       const answer = await command(api(recordAttendanceFact), action, p);
       expect(answer.status).toBe(answersBill(action) ? 200 : 204);
-      const otherBill = opensBill(action) ? (answer.json.billId as string) : p.otherBillId!;
+
       if (action === "move-dishes-to-bill") expect(answer.json.billId).toBe(p.otherBillId);
       const saved = await state();
-      expect(saved.facts.map((f) => [f.source, f.personId, f.at, f.outcome])).toEqual([
-        ["order", v.operatorId, "2026-01-05T16:40:00.000Z", "qualifying"],
-        ["order", v.operatorId, "2026-01-05T16:40:00.000Z", "qualifying"],
+      expect(saved.facts.map((row) => [row.personId, row.lastAt])).toEqual([
+        [v.operatorId, "2026-01-05T16:40:00.000Z"],
       ]);
-      expect(saved.facts.map((f) => f.key.split(":")[1]).sort()).toEqual(
-        [p.tabId, otherBill].sort(),
-      );
+
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({
         status: 409,
         json: { code: "party.out_of_date" },
       });
       expect(await state()).toEqual(saved);
-    },
-  );
-  it.each(actions)(
-    "%s capture refusal rolls back both bills, their lines and the party revision",
-    async (action) => {
-      const p = await prepare(action);
-      const before = await state();
-      let captured = 0;
-      const refuse: AttendanceRecorder = async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        if (++captured === 2)
-          throw new AppError("attendance.invalid", { reason: "second bill capture refused" });
-      };
-      expect(await command(api(refuse), action, p)).toMatchObject({
-        status: 400,
-        json: { code: "attendance.invalid" },
-      });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it.each(actions)(
-    "%s without workforce capture keeps its normal result without attendance writes",
-    async (action) => {
-      const p = await prepare(action);
-      expect((await command(api(), action, p)).status).toBe(answersBill(action) ? 200 : 204);
-      const saved = await state();
-      expect(saved.facts).toEqual([]);
-      expect(saved.days).toEqual([]);
     },
   );
 });

@@ -28,7 +28,7 @@ import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import {
   markServed,
   markOrderPlaced,
@@ -753,16 +753,7 @@ describe("unpaid departure stops kitchen work", () => {
         .collectedAt,
     ).toBe(before!.collectedAt);
     expect(await cancellations(line!.id)).toEqual([]);
-    const facts = await venue.db
-      .select()
-      .from(attendanceOperationFacts)
-      .where(eq(attendanceOperationFacts.personId, venue.managerId));
-    expect(
-      facts.filter((fact) => fact.key.startsWith(`service:${paid.billId}:unpaid-departure:`)),
-    ).toHaveLength(0);
-    expect(
-      facts.filter((fact) => fact.key.startsWith(`service:${order.billId}:unpaid-departure:`)),
-    ).toHaveLength(0);
+
     const placements = await venue.db
       .select()
       .from(orderAmendments)
@@ -773,11 +764,6 @@ describe("unpaid departure stops kitchen work", () => {
         ),
       );
     expect(placements).toHaveLength(1);
-    expect(
-      facts.filter(
-        (fact) => fact.key === placements[0]!.id || fact.key.startsWith(`service:${owing.billId}:`),
-      ),
-    ).toEqual([expect.objectContaining({ source: "order", key: placements[0]!.id })]);
   });
 
   it("refuses unfired uninvoiced work before changing any kitchen state or print job", async () => {

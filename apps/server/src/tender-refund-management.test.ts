@@ -88,8 +88,6 @@ async function snapshot() {
   return inTx(venue, async (tx) => ({
     refunds: await tx.select().from(tenderRefunds),
     evidence: await tx.select().from(paymentRefunds),
-    attendance: (await tx.execute(sql`select * from attendance_operation_facts order by sequence`))
-      .rows,
     drawers: await tx.select().from(drawerOpens),
     prints: await tx.select().from(printJobs),
   }));
@@ -387,12 +385,6 @@ it.each(["completed", "failed"] as const)(
     expect(effects.evidence).toHaveLength(outcome === "completed" ? 1 : 0);
     if (outcome === "completed")
       expect(effects.evidence[0]).toMatchObject({ amount: 200, authorizedBy: venue.adminId });
-    expect(effects.attendance).toContainEqual(
-      expect.objectContaining({
-        key: t.id,
-        outcome: outcome === "completed" ? "qualifying" : "refused",
-      }),
-    );
     expect(venue.card.lookupCalls).toHaveLength(0);
     expect(venue.card.refundCalls).toHaveLength(1);
     expect(await originalFacts()).toEqual(before);
@@ -460,18 +452,6 @@ it("excludes and refuses a live attempt until its actual resolver releases it", 
     status: 200,
     json: { outcome: "failed" },
   });
-});
-
-it("rolls back attestation, provider evidence and terminal state if attendance fails", async () => {
-  const t = await pending(),
-    before = await snapshot();
-  attendance = async () => {
-    throw new Error("attendance fault");
-  };
-  expect((await attest(t.id)).status).toBe(500);
-  expect(await snapshot()).toEqual(before);
-  attendance = recordAttendanceFact;
-  expect((await attest(t.id)).status).toBe(200);
 });
 
 it("derives the manager PIN outside the writer and rechecks suspension before recording", async () => {

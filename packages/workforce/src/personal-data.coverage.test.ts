@@ -109,9 +109,9 @@ const CLASSIFIED: Record<string, Classification> = {
     in: ["action", "requested_by_person_id", "authorized_by_person_id", "input", "created_at"],
     out: ["id", "person_id", "question_id", "entry_ids"],
   },
-  attendance_operation_facts: {
-    in: ["source", "kind", "at", "offset_minutes", "business_day", "outcome"],
-    out: ["sequence", "person_id", "key"],
+  staff_activity: {
+    in: ["business_day", "shift_start_at", "shift_end_at", "first_at", "last_at"],
+    out: ["id", "person_id", "shift_key"],
   },
   time_entries: "working-time record",
   workforce_chains: {

@@ -199,8 +199,6 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   special_day_dates: ["location_id"],
   bookings: ["location_id"],
   attendance_day_work: ["location_id"],
-  attendance_source_state: ["location_id"],
-  attendance_operation_facts: ["location_id"],
   attendance_questions: ["location_id"],
   attendance_response_commands: ["location_id"],
   roster_versions: ["location_id"],
@@ -213,6 +211,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
 const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
+  "staff_activity",
   "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
@@ -241,6 +240,8 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "attendance_source_state",
+  "attendance_operation_facts",
   "device_kitchen_screens",
   "device_kitchen_screen_stations",
   "device_kitchen_screen_zones",

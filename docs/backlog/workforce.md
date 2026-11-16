@@ -33,18 +33,6 @@ late answers and corrections that move a session across period boundaries.
 Optimise the remaining period paths with their cross-window
 and frozen-history assertions intact; do not replace them with a bare event-time filter.
 
-## Attendance discovery invalidation
-
-The A1308 write-path marking audit in `tables-people.md` §8 remains open. A direct-insert probe
-scanned a draft/group event before its party had a working order, then added the order. The old
-event became readable for its original day, but an ordinary restart did not dirty that day.
-No real route reproduced this sequence. Trace admitted writers and test any reachable transition
-before changing invalidation; preserve the original event time and every legal-record assertion.
-
-When changing an existing discovery rule without a migration, explicitly invalidate the retained
-scan marker if already-scanned rows need the new rule. The marker currently binds the physical
-file, schema counter and applied migration versions, not the discovery code version.
-
 ## A708. Special-day staffing on a date with its own changeover
 
 The special-day staffing painter draws every date's column, and the blocks in it, on the read's one
@@ -342,6 +330,22 @@ exists unused. Shown in A585's picker and warnings. After A586.
   [Detail](workforce.md#a-colour-chooser-left-open-while-its-window-narrows-may-hide-the-chosen-colour).
 
 ## Decisions and deliberate limits
+
+### First and latest staff activity per planned shift (owner, 2026-11-15)
+
+The owner said “all we need to know is the time of the first user action and the latest user action”
+and “We definitely do NOT need to record every action immutably”; when the watcher proposed keeping
+those times per planned shift, the owner answered “sounds good” (Lane H `queue.md`, copied from the
+watcher's window at about 21:10–21:17). This overrides A1543's Keep for the two attendance-copy tables.
+
+`staff_activity` keeps first/latest instants per person and captured planned shift, or per gap between
+shifts; without a rota it keeps a person/day pair. Clock-ins, clock-outs and corrections stay in the
+legal record. Under the watcher-cleared plan, payment attempts count when staff start them, including failed attempts; outcome and
+recovery workers add no staff activity. The checker reads these endpoints and legal clock entries,
+not per-action history or source-table discovery. Earlier endpoint detail is deliberately unavailable.
+The implementation and remaining log-retention work are in the
+[DB-GROWTH plan](../superpowers/plans/2026-11-15-db-growth.md).
+
 
 ### Pay-period cadence after closure (owner, 2026-10-15)
 

@@ -36,7 +36,7 @@ import { departments } from "@waitron/venue-service";
 import {
   WorkforceBackend,
   absences,
-  attendanceOperationFacts,
+  staffActivity,
   attendanceQuestions,
   availability,
   employments,
@@ -103,7 +103,7 @@ const COLLEAGUE = {
   questionCreatedAt: "2026-04-26T04:02:00.000Z",
   reminderRecipient: "ruiz.mail@example.test",
   responseReason: "Colleague was on a delivery run",
-  fact: { at: "2026-04-25T20:47:00.000Z", offsetMinutes: 180 },
+  fact: { at: "2026-04-25T20:47:00.000Z" },
   staffRole: "Sommelier",
   area: "Cellar",
   clockInAt: "2026-03-04T09:07:00.000Z",
@@ -178,7 +178,7 @@ const COLLEAGUE_VALUES = [
   COLLEAGUE.questionCreatedAt,
   COLLEAGUE.reminderRecipient,
   COLLEAGUE.responseReason,
-  localWallClock(COLLEAGUE.fact.at, COLLEAGUE.fact.offsetMinutes),
+  "2026-04-25T22:47:00+02:00",
   COLLEAGUE.staffRole,
   COLLEAGUE.area,
   localWallClock(COLLEAGUE.clockInAt, CLOCK_OFFSET_MINUTES),
@@ -475,26 +475,20 @@ beforeEach(async () => {
     },
     createdAt: "2026-04-27T09:11:00.000Z",
   });
-  await suite.db.insert(attendanceOperationFacts).values([
+  await suite.db.insert(staffActivity).values([
     {
-      source: "clock",
-      key: "clock:marta-2",
       personId: marthaId,
-      kind: "break",
-      at: "2026-03-07T21:30:00.000Z",
-      offsetMinutes: 60,
       businessDay: "2026-03-07",
-      outcome: "pending",
+      shiftKey: `gap:${"2026-03-07"}:start`,
+      firstAt: "2026-03-07T21:30:00.000Z",
+      lastAt: "2026-03-07T21:30:00.000Z",
     },
     {
-      source: "order",
-      key: "order:colleague-1",
       personId: colleagueId,
-      kind: "order",
-      at: COLLEAGUE.fact.at,
-      offsetMinutes: COLLEAGUE.fact.offsetMinutes,
       businessDay: "2026-04-25",
-      outcome: "refused",
+      shiftKey: `gap:${"2026-04-25"}:start`,
+      firstAt: COLLEAGUE.fact.at,
+      lastAt: COLLEAGUE.fact.at,
     },
   ]);
 

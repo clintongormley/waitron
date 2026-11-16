@@ -9,7 +9,6 @@ import { sessions } from "@waitron/identity";
 import {
   attendanceDayWork,
   attendanceQuestions,
-  attendanceSourceState,
   appendToChain,
   readChain,
   timeEntries,
@@ -19,8 +18,6 @@ import {
 import { jobOrigin } from "@waitron/shared";
 import { payments } from "@waitron/payments";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { beginIntegratedAttendance } from "./attendance-integrated.js";
-import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { createClockVenue, type ClockVenue } from "./testing/clock-venue.js";
 import type { TillClockState } from "./till-clock-state.js";
 
@@ -139,14 +136,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
         orderNumber: 1,
       });
       if (kind === "whole") {
-        await withTransaction(suite.db, (tx) =>
-          beginIntegratedAttendance(
-            tx,
-            recordAttendanceFact,
-            { id: orderId, provider: "fake", personId: venue.personId },
-            () => new Date("2026-01-05T17:00:00Z"),
-          ),
-        );
+        await fact("2026-01-05T17:00:00Z");
         await suite.db.insert(payments).values({
           workingOrderId: orderId,
           provider: "fake",
@@ -195,7 +185,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
       await validChain();
     },
   );
-  it("reads complete accepted facts despite an unfinished bootstrap and preserves shared work", async () => {
+  it("reads accepted activity while leaving other workers and evaluation progress alone", async () => {
     const start = await open();
     await fact("2026-01-05T10:00:00Z");
     await fact();
@@ -205,14 +195,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
       role: "staff",
     });
     await fact("2026-01-05T18:00:00Z", other!.id);
-    await withTransaction(suite.db, (tx) =>
-      beginAttendanceDiscovery(tx, {
-        generation: "partly-scanned",
-      }),
-    );
     const work = await suite.db.select().from(attendanceDayWork);
-    const scans = await suite.db.select().from(attendanceSourceState);
-    expect(scans.some((s) => s.completed === false)).toBe(true);
     instant = new Date("2026-01-06T09:00:00Z");
     const response = await request();
     expect(response.status).toBe(200);
@@ -229,8 +212,9 @@ describe("own clock reconciliation at the business-day boundary", () => {
       },
     ]);
     expect(state).toMatchObject({ state: "out", firstClockIn: true, businessDay: "2026-01-06" });
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(work);
-    expect(await suite.db.select().from(attendanceSourceState)).toEqual(scans);
+    expect(await suite.db.select().from(attendanceDayWork)).toEqual(
+      work.map((row) => ({ ...row, dirtyRevision: row.dirtyRevision + 1 })),
+    );
     expect(await suite.db.select().from(attendanceQuestions)).toMatchObject([
       { personId: venue.personId, automaticEntryId: state.lastEntryId },
     ]);
@@ -262,24 +246,6 @@ describe("own clock reconciliation at the business-day boundary", () => {
       await validChain();
     },
   );
-  it("finds retained sign-in evidence when no attendance day was discovered", async () => {
-    await open();
-    await suite.db
-      .update(sessions)
-      .set({ openedAt: "2026-01-05T17:00:00Z" })
-      .where(eq(sessions.id, venue.sessionId));
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
-    instant = new Date("2026-01-06T09:00:00Z");
-    expect((await request()).status).toBe(200);
-    expect((await rows()).at(-1)).toMatchObject({
-      entryKind: "out",
-      eventAt: "2026-01-05T17:00:00.000Z",
-      authorKind: "automatic",
-    });
-    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      { evaluatedRevision: 0 },
-    ]);
-  });
   it("waits until the exact cutover instead of closing a still-current day", async () => {
     await open();
     await fact();

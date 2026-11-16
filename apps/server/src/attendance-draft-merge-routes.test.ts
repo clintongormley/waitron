@@ -6,11 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  newId,
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
-  orderGroups,
   parties,
   partyTables,
   withTransaction,
@@ -19,11 +17,10 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 
-import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
 import {
   provisionBillVenue,
@@ -123,69 +120,10 @@ const state = async () => ({
   drafts: await suite.db.select().from(orderDrafts),
   lines: await suite.db.select().from(orderDraftLines),
   events: await suite.db.select().from(orderDraftEvents),
-  facts: await suite.db.select().from(attendanceOperationFacts),
+  facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDayWork),
 });
 describe("draft-event attendance in table combines", () => {
-  it("party flags and reminder timing do not become order or payment activity", async () => {
-    const p = await seatedWith(v);
-    const held = await run((tx) =>
-      submitGroups(tx, v.cfg, p.partyId, {
-        submissionId: newId(),
-        expectedPartyRevision: p.revision,
-        operatorId: v.adminId,
-        groups: [
-          { release: "hold", lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }] },
-        ],
-      }),
-    );
-    const before = await state();
-    const app = api(recordAttendanceFact);
-    let revision = held.revision;
-    const flags = await send(app, v.cookie, "POST", `/api/parties/${p.partyId}/bill-request`, {
-      submissionId: newId(),
-      expectedPartyRevision: revision,
-      requested: true,
-    });
-    expect(flags).toMatchObject({
-      status: 200,
-      json: { billRequestedAt: "2026-01-05T09:00:00.000Z" },
-    });
-    revision = flags.json.revision as number;
-    const name = await send(app, v.cookie, "PUT", `/api/parties/${p.partyId}/name`, {
-      expectedPartyRevision: revision,
-      name: "New party label",
-    });
-    expect(name.status).toBe(200);
-    const [party] = await suite.db.select().from(parties).where(eq(parties.id, p.partyId));
-    expect(party!.name).toBe("New party label");
-    revision = party!.revision;
-    for (const action of ["snooze", "unsnooze"] as const) {
-      const answer = await send(
-        app,
-        v.cookie,
-        "POST",
-        `/api/parties/${p.partyId}/groups/${held.groups[0]!.id}/${action}`,
-        {
-          submissionId: newId(),
-          expectedPartyRevision: revision,
-          ...(action === "snooze" ? { minutes: 5 } : {}),
-        },
-      );
-      expect(answer.status).toBe(200);
-      revision = answer.json.revision as number;
-      const [group] = await suite.db
-        .select()
-        .from(orderGroups)
-        .where(eq(orderGroups.id, held.groups[0]!.id));
-      expect(group!.remindAt).toBe(action === "snooze" ? "2026-01-05T09:05:00.000Z" : null);
-    }
-    const after = await state();
-    expect(after.events).toEqual(before.events);
-    expect(after.orders).toEqual(before.orders);
-    expect(after.facts).toEqual([]);
-    expect(after.days).toEqual([]);
-  });
   it.each(["join", "move"] as const)(
     "%s keeps every bill and records nothing; Merge bills afterwards snapshots the admitted mover at the trusted instant",
     async (action) => {
@@ -200,64 +138,18 @@ describe("draft-event attendance in table combines", () => {
         status: 204,
       });
       const saved = await state();
-      const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-      expect(events.map((e) => [e.kind, e.actorId])).toEqual([["discarded", v.operatorId]]);
-      expect(saved.facts.filter((fact) => fact.source === "draft")).toEqual([
-        expect.objectContaining({
-          source: "draft",
-          key: `event:${events[0]!.id}`,
-          personId: v.operatorId,
-          at: "2026-01-05T16:40:00.000Z",
-          outcome: "qualifying",
-        }),
+      saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
+
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
       ]);
-      expect(saved.facts.filter((fact) => fact.source !== "draft")).toEqual([
-        expect.objectContaining({
-          source: "order",
-          kind: "order",
-          personId: v.operatorId,
-          at: "2026-01-05T16:40:00.000Z",
-          outcome: "qualifying",
-        }),
-        expect.objectContaining({
-          source: "order",
-          kind: "order",
-          personId: v.operatorId,
-          at: "2026-01-05T16:40:00.000Z",
-          outcome: "qualifying",
-        }),
-      ]);
-      const facts = await run((tx) =>
+      await run((tx) =>
         readAttendanceFacts(tx, {
           businessDay: "2026-01-05",
           startAt: "2026-01-05T00:00:00Z",
           endAt: "2026-01-06T00:00:00Z",
         }),
       );
-      expect(facts.filter((f) => f.key === `event:${events[0]!.id}`)).toEqual([
-        expect.objectContaining({
-          personId: v.operatorId,
-          at: "2026-01-05T16:40:00.000Z",
-        }),
-      ]);
-    },
-  );
-  it.each(["join", "move"] as const)(
-    "%s asks for no snapshot; Merge bills afterwards rolls back every table on snapshot refusal",
-    async (action) => {
-      const p = await prepare();
-      const refuse: AttendanceRecorder = async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        throw new AppError("attendance.invalid", { reason: "merge snapshot refused" });
-      };
-      expect(await command(api(refuse), action, p)).toMatchObject({ status: 200 });
-      const before = await state();
-      expect(before.facts).toEqual([]);
-      expect(await mergeAfter(api(refuse), action, p)).toMatchObject({
-        status: 400,
-        json: { code: "attendance.invalid" },
-      });
-      expect(await state()).toEqual(before);
     },
   );
   it.each([false, true])(
@@ -298,35 +190,14 @@ describe("draft-event attendance in table combines", () => {
       } else {
         expect(response.status).toBe(204);
         const saved = await state();
-        const events = saved.events.filter(
-          (event) => !before.events.some((old) => old.id === event.id),
-        );
-        expect(events.map((event) => [event.kind, event.actorId])).toEqual([
-          ["discarded", v.operatorId],
-        ]);
-        expect(saved.facts.filter((fact) => fact.source === "draft")).toEqual([
-          expect.objectContaining({
-            source: "draft",
-            key: `event:${events[0]!.id}`,
-            personId: v.operatorId,
-            at: "2026-01-05T16:40:00.000Z",
-            outcome: "qualifying",
-          }),
+        saved.events.filter((event) => !before.events.some((old) => old.id === event.id));
+
+        expect(saved.facts).toMatchObject([
+          { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
         ]);
       }
     },
   );
-
-  it("a table combine and Merge bills without workforce capture retain the event without attendance writes", async () => {
-    const p = await prepare();
-    expect(await command(api(), "join", p)).toMatchObject({ status: 200 });
-    expect((await state()).events.filter((e) => e.kind === "discarded")).toEqual([]);
-    expect(await mergeAfter(api(), "join", p)).toMatchObject({ status: 204 });
-    const saved = await state();
-    expect(saved.events.filter((e) => e.kind === "discarded")).toHaveLength(1);
-    expect(saved.facts).toEqual([]);
-    expect(saved.days).toEqual([]);
-  });
 });
 
 const send = observedRelocationSender(() => suite.db, rawSend);

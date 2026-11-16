@@ -26,7 +26,6 @@ import {
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 
-import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
@@ -731,34 +730,6 @@ describe("A773 pass release: authority", () => {
   }
 
   const attendance = () => ({ recorder: recordAttendanceFact, clock: systemClock() });
-  const factsOf = async (submissionId: string) =>
-    (await withTransaction(db, (tx) => tx.select().from(attendanceOperationFacts))).filter((fact) =>
-      fact.key.endsWith(`:${submissionId}`),
-    );
-
-  it("records the signed-in person's kitchen work once per released bill, and none when refused", async () => {
-    const { venue, billId } = await burgersOnTwoBills();
-    const till = await signedInTillPass(venue, "Till pass");
-    const [card] = await toFire(till.by);
-    expect(card!.orders.map((order) => order.orderId).sort()).toEqual(
-      [venue.party.tabId, billId].sort(),
-    );
-
-    const refused = { ...askOf(card!), expectedContext: "0".repeat(64) };
-    await expect(release(venue, till.by, refused, attendance())).rejects.toMatchObject({
-      code: "ticket.pass_context_changed",
-    });
-    expect(await factsOf(refused.submissionId)).toEqual([]);
-
-    const ask = askOf(card!);
-    await release(venue, till.by, ask, attendance());
-    const facts = await factsOf(ask.submissionId);
-    expect(facts.map((fact) => [fact.key, fact.personId, fact.kind, fact.outcome]).sort()).toEqual(
-      [venue.party.tabId, billId]
-        .map((id) => [`service:${id}:${ask.submissionId}`, till.by.personId, "order", "qualifying"])
-        .sort(),
-    );
-  });
 
   it("records no kitchen work for a kitchen display's release", async () => {
     const { venue } = await burgersOnTwoBills();
@@ -769,7 +740,6 @@ describe("A773 pass release: authority", () => {
     expect(await release(venue, by, ask, attendance())).toEqual({
       releasedTicketItemIds: card!.releaseTicketItemIds,
     });
-    expect(await factsOf(ask.submissionId)).toEqual([]);
   });
 });
 

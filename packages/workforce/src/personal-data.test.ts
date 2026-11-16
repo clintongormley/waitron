@@ -18,7 +18,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
 import { planningEveryStatement } from "../test/query-plans.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
-import { attendanceOperationFacts, attendanceQuestions } from "./schema/attendance.js";
+import { staffActivity, attendanceQuestions } from "./schema/attendance.js";
 import { absences } from "./schema/absences.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
@@ -548,26 +548,19 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     createdAt: "2026-04-19T08:30:00.000Z",
   });
 
-  // Inserted, so numbered, in the reverse of their times.
-  await db.insert(attendanceOperationFacts).values({
-    source: "whole-payment",
-    key: "payment:marta-1",
+  await db.insert(staffActivity).values({
     personId: marta,
-    kind: "payment",
-    at: "2026-04-18T22:58:00.000Z",
-    offsetMinutes: 120,
     businessDay: "2026-04-18",
-    outcome: "qualifying",
+    shiftKey: `gap:${"2026-04-18"}:start`,
+    firstAt: "2026-04-18T22:58:00.000Z",
+    lastAt: "2026-04-18T22:58:00.000Z",
   });
-  await db.insert(attendanceOperationFacts).values({
-    source: "clock",
-    key: "clock:marta-2",
+  await db.insert(staffActivity).values({
     personId: marta,
-    kind: "break",
-    at: "2026-03-07T21:30:00.000Z",
-    offsetMinutes: 60,
     businessDay: "2026-03-07",
-    outcome: "pending",
+    shiftKey: `gap:${"2026-03-07"}:start`,
+    firstAt: "2026-03-07T21:30:00.000Z",
+    lastAt: "2026-03-07T21:30:00.000Z",
   });
 
   const colleagueQuestion = "00000000-0000-4000-8000-0000000000c1";
@@ -608,15 +601,12 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     entryIds: [automaticEntry],
     createdAt: "2026-04-27T09:11:00.000Z",
   });
-  await db.insert(attendanceOperationFacts).values({
-    source: "order",
-    key: "order:colleague-1",
+  await db.insert(staffActivity).values({
     personId: colleague,
-    kind: "order",
-    at: "2026-04-25T20:47:00.000Z",
-    offsetMinutes: 180,
     businessDay: "2026-04-25",
-    outcome: "refused",
+    shiftKey: `gap:${"2026-04-25"}:start`,
+    firstAt: "2026-04-25T20:47:00.000Z",
+    lastAt: "2026-04-25T20:47:00.000Z",
   });
 
   return { nodeId };
@@ -695,18 +685,18 @@ const MARTA_ATTENDANCE = {
   ],
   activity: [
     {
-      source: "clock",
-      kind: "break",
-      at: "2026-03-07T22:30:00+01:00",
       businessDay: "2026-03-07",
-      outcome: "pending",
+      shiftStartAt: null,
+      shiftEndAt: null,
+      firstAt: "2026-03-07T22:30:00+01:00",
+      lastAt: "2026-03-07T22:30:00+01:00",
     },
     {
-      source: "whole-payment",
-      kind: "payment",
-      at: "2026-04-19T00:58:00+02:00",
       businessDay: "2026-04-18",
-      outcome: "qualifying",
+      shiftStartAt: null,
+      shiftEndAt: null,
+      firstAt: "2026-04-19T00:58:00+02:00",
+      lastAt: "2026-04-19T00:58:00+02:00",
     },
   ],
 };
@@ -722,8 +712,7 @@ const COLLEAGUE_ATTENDANCE_VALUES = [
   "disagree",
   "Colleague was on a delivery run",
   "2026-04-27T09:11:00.000Z",
-  "2026-04-25T23:47:00+03:00",
-  "refused",
+  "2026-04-25T22:47:00+02:00",
 ];
 
 const attendanceOf = (files: { name: string; text: string }[]) => {
@@ -934,7 +923,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     const files = await download(nobody);
     expect(files.map((f) => f.name)).toEqual(["employment.json"]);
   });
-  it("builds exactly her attendance file, times local from each stored offset", async () => {
+  it("builds exactly her attendance file with local times", async () => {
     const people = await seedAll(suite.db);
     await seedAttendance(suite.db, people);
     const files = await download(people.marta);
@@ -1091,7 +1080,8 @@ describe("prepare's reads", () => {
       "shift_swaps",
       "attendance_questions",
       "attendance_response_commands",
-      "attendance_operation_facts",
+      "staff_activity",
+      "settings",
       "time_entries",
     ]);
     expect(plans.flatMap((p) => p.plan.filter((line) => line.startsWith("SCAN")))).toEqual([]);

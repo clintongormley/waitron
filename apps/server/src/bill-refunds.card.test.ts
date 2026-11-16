@@ -1670,27 +1670,34 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
           where state = 'pending' and id <> ${refundId}`,
     );
-    const pass = (ms: number) =>
-      withProvider(
-        {
-          lookups: {
-            kind: "match",
-            providerRefundRef: randomUUID(),
-            outcome: "completed",
-            providerStatus: "SUCCESSFUL",
+    const pass = async (ms: number) => {
+      venue.db
+        .run(sql`create trigger fail_recovered_bill_refund before update of state on bill_payment_refunds
+        when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
+      try {
+        return await withProvider(
+          {
+            lookups: {
+              kind: "match",
+              providerRefundRef: randomUUID(),
+              outcome: "completed",
+              providerStatus: "SUCCESSFUL",
+            },
           },
-        },
-        () =>
-          settlePendingBillPayments({
-            admission: testTradingAdmission(),
-            db: venue.db,
-            backend: venue.backend,
-            clock: clockPlus(ms),
-            cfg: venue.cfg,
-            refundProviderFor: (name) => venue.pool.get(name),
-            attendance: () => Promise.reject(new Error("attendance unavailable")),
-          }),
-      );
+          () =>
+            settlePendingBillPayments({
+              admission: testTradingAdmission(),
+              db: venue.db,
+              backend: venue.backend,
+              clock: clockPlus(ms),
+              cfg: venue.cfg,
+              refundProviderFor: (name) => venue.pool.get(name),
+            }),
+        );
+      } finally {
+        venue.db.run(sql`drop trigger fail_recovered_bill_refund`);
+      }
+    };
     const alerts = () =>
       inTx(venue, (tx) =>
         tx.select().from(incidents).where(eq(incidents.code, "payment.refund_unresolved")),
@@ -1700,7 +1707,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     const raised = await alerts();
     const again = await pass(HOUR + 31 * 60_000);
 
-    expect(over.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(over.errors).toContainEqual({ refundId, error: "Error: refund storage unavailable" });
     expect(raised).toMatchObject([
       {
         source: "payment_check",
@@ -1715,7 +1722,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       },
     ]);
     expect(over.refundsUnresolved).toBe(1);
-    expect(again.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(again.errors).toContainEqual({ refundId, error: "Error: refund storage unavailable" });
     expect(await alerts()).toHaveLength(1);
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending" });
   });

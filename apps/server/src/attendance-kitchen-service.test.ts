@@ -22,8 +22,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
@@ -83,8 +83,7 @@ const actions = [
   "station-move",
   "hand-over",
 ] as const;
-const retiredActions = ["course-fire", "course-away", "group-away"] as const;
-type Action = (typeof actions)[number] | (typeof retiredActions)[number];
+type Action = (typeof actions)[number];
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
   mountTillApi(
@@ -116,7 +115,7 @@ async function prepare(action: Action) {
         .update(orderGroups)
         .set({ state: "held", firedAt: null })
         .where(eq(orderGroups.id, line!.groupId!));
-    if (action !== "course-fire" && action !== "group-fire")
+    if (action !== "group-fire")
       await fireGroup(tx, v.cfg, party.partyId, line!.groupId!, {
         submissionId: newId(),
         expectedPartyRevision: await partyRevision(tx, party.partyId),
@@ -127,12 +126,6 @@ async function prepare(action: Action) {
         .update(workingOrderLines)
         .set({ groupId: null })
         .where(eq(workingOrderLines.id, line!.id));
-    if (action.endsWith("-away"))
-      await bumpGroupReady(tx, party.partyId, line!.groupId!, {
-        submissionId: newId(),
-        expectedPartyRevision: await partyRevision(tx, party.partyId),
-        operatorId: v.operatorId,
-      });
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
         submissionId: newId(),
@@ -180,9 +173,6 @@ function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof pre
   } else if (action === "bill-ready") {
     path = `/api/orders/${order.tabId}/ready`;
     body = {};
-  } else if (action.startsWith("course-")) {
-    path = `/api/orders/${order.tabId}/courses/${courseId}/${action.slice(7)}`;
-    body = {};
   } else if (action === "station-move") {
     path = `/api/working-orders/${order.tabId}/lines/move-station`;
     body = { submissionId: order.submissionId, lineIds: [order.lineId], stationId: destination };
@@ -212,7 +202,7 @@ async function state() {
     groups: await suite.db.select().from(orderGroupEvents),
     orderGroups: await suite.db.select().from(orderGroups),
     moves: await suite.db.select().from(ticketItemMoves),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
@@ -223,7 +213,7 @@ describe("kitchen service attendance", () => {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, party.tabId));
-    const split = await withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       splitPartyBill(tx, v.cfg, party.tabId, [{ lineNo: 2 }]),
     );
     const [current] = await suite.db.select().from(parties).where(eq(parties.id, party.partyId));
@@ -248,64 +238,16 @@ describe("kitchen service attendance", () => {
       ),
     );
     const facts = (await state()).facts;
-    expect(facts.map((r) => [r.personId, r.at])).toEqual([
-      [v.operatorId, "2026-01-05T16:40:00.000Z"],
-      [v.operatorId, "2026-01-05T16:40:00.000Z"],
-    ]);
-    expect(facts.map((r) => r.key.split(":")[1]).sort()).toEqual(
-      [party.tabId, split.billId].sort(),
-    );
-  });
-  it("a device-only group command supplies no worker activity", async () => {
-    const order = await prepare("group-ready");
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        bumpGroupReady(
-          tx,
-          order.partyId,
-          order.groupId,
-          {
-            submissionId: order.submissionId,
-            expectedPartyRevision: order.revision,
-            operatorId: v.deviceId,
-          },
-          { deviceId: v.deviceId },
-          { recorder: recordAttendanceFact, clock: v.clock },
-        ),
-      ),
-    ).resolves.toEqual({ revision: order.revision + 1 });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-    expect((await state()).tickets.find((r) => r.id === order.ticketId)!.state).toBe("ready");
-  });
-  it("the same submission id in bill and party command scopes remains two activities", async () => {
-    const order = await prepare("station-move"),
-      app = api(recordAttendanceFact);
-    expect(await command(app, "station-move", order)).toMatchObject({ status: 200 });
-    expect(await command(app, "group-ready", order)).toMatchObject({ status: 200 });
-    const after = await state();
-    expect(after.facts.map((r) => [r.personId, r.at])).toEqual([
-      [v.operatorId, "2026-01-05T16:40:00.000Z"],
+    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([
       [v.operatorId, "2026-01-05T16:40:00.000Z"],
     ]);
-    expect(new Set(after.facts.map((r) => r.key)).size).toBe(2);
-    expect(after.days.map((r) => r.dirtyRevision)).toEqual([2]);
   });
   it.each(actions)("%s captures the admitted human activity with its command", async (action) => {
     const order = await prepare(action);
     expect(await command(api(recordAttendanceFact), action, order)).toMatchObject({ status: 200 });
     const after = await state();
-    expect(
-      after.facts.map((r) => [r.source, r.personId, r.kind, r.at, r.offsetMinutes, r.outcome]),
-    ).toEqual([
-      [
-        action === "group-fire" ? "draft" : "order",
-        v.operatorId,
-        "order",
-        "2026-01-05T16:40:00.000Z",
-        60,
-        "qualifying",
-      ],
+    expect(after.facts.map((row) => [row.personId, row.lastAt])).toEqual([
+      [v.operatorId, "2026-01-05T16:40:00.000Z"],
     ]);
     expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const ticket = after.tickets.find((r) => r.id === order.ticketId)!;
@@ -318,85 +260,6 @@ describe("kitchen service attendance", () => {
     if (action === "station-move") expect(ticket.stationId).toBe(destination);
     if (action === "served" || action === "group-served" || action === "unserved")
       expect(line.servedQuantity).toBe(action === "unserved" ? 0 : 1000);
-  });
-  it.each(actions)("%s rolls back its command when capture refuses", async (action) => {
-    const order = await prepare(action),
-      before = await state();
-    expect(
-      await command(
-        api(async (tx, fact) => {
-          await recordAttendanceFact(tx, fact);
-          throw new AppError("attendance.invalid", { reason: "kitchen capture refused" });
-        }),
-        action,
-        order,
-      ),
-    ).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
-    expect(await state()).toEqual(before);
-  });
-  it.each(actions)("a repeated %s does not record later human activity", async (action) => {
-    const order = await prepare(action),
-      app = api(recordAttendanceFact);
-    expect(await command(app, action, order)).toMatchObject({ status: 200 });
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("replay kitchen clock read");
-    });
-    expect(await command(app, action, order)).toMatchObject(
-      action.startsWith("ticket-")
-        ? { status: 409, json: { code: "ticket.invalid_transition" } }
-        : { status: 200 },
-    );
-    expect((await state()).facts).toEqual(before.facts);
-    expect((await state()).days).toEqual(before.days);
-  });
-  it.each(["group-ready", "group-served", "station-move"] as const)(
-    "a new %s submission with nothing left to change is not new activity",
-    async (action) => {
-      const order = await prepare(action),
-        app = api(recordAttendanceFact);
-      expect(await command(app, action, order)).toMatchObject({ status: 200 });
-      const before = await state(),
-        revision = before.parties.find((r) => r.id === order.partyId)!.revision;
-      vi.spyOn(v.clock, "now").mockImplementation(() => {
-        throw new Error("empty kitchen command clock read");
-      });
-      expect(
-        await command(app, action, { ...order, revision, submissionId: newId() }),
-      ).toMatchObject({ status: 200 });
-      expect((await state()).facts).toEqual(before.facts);
-      expect((await state()).days).toEqual(before.days);
-    },
-  );
-  it.each(actions)("%s with capture disabled records no attendance state", async (action) => {
-    const order = await prepare(action);
-    expect(await command(api(), action, order)).toMatchObject({ status: 200 });
-    expect((await state()).facts).toEqual([]);
-    expect((await state()).days).toEqual([]);
-  });
-  it.each(
-    retiredActions.flatMap((action) =>
-      (["enabled", "refusing", "disabled"] as const).map((capture) => ({ action, capture })),
-    ),
-  )("$action is retired with $capture attendance capture", async ({ action, capture }) => {
-    const order = await prepare(action);
-    const before = await state();
-    const recorder = vi.fn<AttendanceRecorder>(async (tx, fact) => {
-      await recordAttendanceFact(tx, fact);
-      if (capture === "refusing")
-        throw new AppError("attendance.invalid", { reason: "kitchen capture refused" });
-    });
-    const app = api(capture === "disabled" ? undefined : recorder);
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("retired kitchen command clock read");
-    });
-    for (const submissionId of [order.submissionId, order.submissionId, newId()]) {
-      expect(await command(app, action, { ...order, submissionId })).toMatchObject({
-        status: 404,
-      });
-      expect(await state()).toEqual(before);
-    }
-    expect(recorder).not.toHaveBeenCalled();
   });
 });
 

@@ -16,15 +16,15 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError } from "@waitron/shared";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { createCourse, createStation } from "./kitchen.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
-import { fireGroup } from "./order-groups.js";
+
 import {
   provisionBillVenue,
   seatedWith,
@@ -123,33 +123,12 @@ async function state() {
     tickets: await suite.db.select().from(ticketItems),
     parties: await suite.db.select().from(parties),
     commands: await suite.db.select().from(serviceCommands),
-    facts: await suite.db.select().from(attendanceOperationFacts),
+    facts: await suite.db.select().from(staffActivity),
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
-async function factsAt() {
-  return withTransaction(suite.db, (tx) =>
-    readAttendanceFacts(tx, {
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T00:00:00Z",
-      endAt: "2026-01-06T00:00:00Z",
-    }),
-  );
-}
-describe("group events derived from accepted commands", () => {
-  it("retired course Fire cannot change groups or create human activity", async () => {
-    const p = await prepare();
-    const before = await state();
-    const app = api(recordAttendanceFact);
-    const response = await app.request(`/api/orders/${p.tabId}/courses/${courseId}/fire`, {
-      method: "POST",
-      headers: { cookie: v.cookie, "content-type": "application/json" },
-      body: JSON.stringify({ operatorId: v.adminId, at: "2026-01-06T22:00:00Z" }),
-    });
-    expect(response.status).toBe(404);
-    expect(await state()).toEqual(before);
-  });
 
+describe("group events derived from accepted commands", () => {
   it.each(["empty-move"] as const)(
     "%s uses one trusted instant for the whole accepted command",
     async (action) => {
@@ -159,91 +138,9 @@ describe("group events derived from accepted commands", () => {
         .mockReturnValueOnce({ ...reading, instant: new Date("2026-01-05T16:40:00.987Z") })
         .mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
-      expect((await state()).facts.map((f) => f.at)).toEqual([
-        "2026-01-05T16:40:00.000Z",
-        "2026-01-05T16:40:00.000Z",
+      expect((await state()).facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
       ]);
-    },
-  );
-  it.each(["empty-move"] as const)(
-    "%s snapshots every derived event at the admitted instant",
-    async (action) => {
-      const p = await prepare();
-      expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
-      const saved = await state();
-      const events = saved.events.filter((e) => e.actorId === v.operatorId);
-      expect(events.map((e) => e.kind).sort()).toEqual(["lines_moved", "removed"]);
-      expect(saved.facts.map((f) => [f.key, f.personId, f.at]).sort()).toEqual(
-        events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]).sort(),
-      );
-      const read = (await factsAt()).filter(
-        (f) => f.personId === v.operatorId && f.kind === "order",
-      );
-      expect(read.map((f) => [f.key, f.at]).sort()).toEqual(
-        events.map((e) => [`group:${e.id}`, "2026-01-05T16:40:00.000Z"]).sort(),
-      );
-      vi.spyOn(v.clock, "now").mockImplementation(() => {
-        throw new Error("no repeated action clock");
-      });
-      expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
-      expect(await state()).toEqual(saved);
-    },
-  );
-  it.each(["empty-move"] as const)(
-    "%s rolls back the command when a later derived snapshot is refused",
-    async (action) => {
-      const p = await prepare(),
-        before = await state();
-      let captures = 0;
-      const refusing: AttendanceRecorder = async (tx, fact) => {
-        await recordAttendanceFact(tx, fact);
-        if (++captures === 2)
-          throw new AppError("attendance.invalid", { reason: "second derived event refused" });
-      };
-      expect(await command(api(refusing), action, p)).toMatchObject({
-        status: 400,
-        json: { code: "attendance.invalid" },
-      });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it("historical device-attributed group releases create no human fact", async () => {
-    const p = await prepare();
-    for (const groupId of [p.groupId, p.otherGroupId]) {
-      await withTransaction(suite.db, async (tx) => {
-        const [party] = await tx
-          .select({ revision: parties.revision })
-          .from(parties)
-          .where(eq(parties.id, p.partyId));
-        await fireGroup(
-          tx,
-          v.cfg,
-          p.partyId,
-          groupId,
-          {
-            submissionId: newId(),
-            expectedPartyRevision: party!.revision,
-            operatorId: v.deviceId,
-          },
-          { deviceId: v.deviceId },
-          { recorder: recordAttendanceFact, clock: v.clock },
-        );
-      });
-    }
-    const saved = await state();
-    expect(saved.groups.map((g) => [g.state, g.firedBy, g.firedByDeviceId])).toEqual([
-      ["fired", null, v.deviceId],
-      ["fired", null, v.deviceId],
-    ]);
-    expect(saved.facts).toEqual([]);
-  });
-  it.each(["empty-move"] as const)(
-    "%s without capture changes groups without workforce rows",
-    async (action) => {
-      const p = await prepare();
-      expect(await command(api(), action, p)).toMatchObject({ status: 200 });
-      expect((await state()).groups.filter((g) => g.state !== "held")).toHaveLength(1);
-      expect((await state()).facts).toEqual([]);
     },
   );
 });

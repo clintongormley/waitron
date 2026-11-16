@@ -1,15 +1,9 @@
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
-import { newId, readVenueClock } from "@waitron/db";
+import { newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
-import { offsetMinutes } from "@waitron/venue-service";
-import {
-  attendanceDayWork,
-  attendanceOperationFacts,
-  enqueueAttendanceDay,
-} from "@waitron/workforce";
+import { AppError } from "@waitron/shared";
+import { recordStaffActivity } from "@waitron/workforce";
 import type { ActivityKind, AttendanceFact, AttendanceSource } from "@waitron/workforce";
 
 export type AttendanceRecorder = (
@@ -61,69 +55,5 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   ) {
     throw new AppError("attendance.invalid", { reason: "operation evidence" });
   }
-  const [existing] = await tx
-    .select()
-    .from(attendanceOperationFacts)
-    .where(
-      and(
-        eq(attendanceOperationFacts.source, fact.source),
-        eq(attendanceOperationFacts.key, fact.key),
-      ),
-    );
-  const outcome = fact.outcome === "qualified" ? "qualifying" : fact.outcome;
-  if (existing) {
-    if (
-      existing.outcome === outcome ||
-      existing.outcome === "qualifying" ||
-      (existing.outcome === "refused" && outcome === "pending")
-    )
-      return;
-    await tx
-      .update(attendanceOperationFacts)
-      .set({ outcome })
-      .where(eq(attendanceOperationFacts.sequence, existing.sequence));
-    const scope = eq(attendanceDayWork.businessDay, existing.businessDay);
-    const [work] = await tx.select().from(attendanceDayWork).where(scope);
-    if (work) {
-      await tx
-        .update(attendanceDayWork)
-        .set({ dirtyRevision: sql`${attendanceDayWork.dirtyRevision} + 1` })
-        .where(scope);
-    } else {
-      const clock = await readVenueClock(tx);
-      await enqueueAttendanceDay(tx, {
-        businessDay: existing.businessDay,
-        ...businessDayBounds(clock, existing.businessDay),
-      });
-    }
-    return;
-  }
-  const at = new Date(Math.floor(instant.getTime() / 1000) * 1000);
-  const clock = await readVenueClock(tx);
-  const businessDay = businessDayAt(clock, at);
-  await tx.insert(attendanceOperationFacts).values({
-    source: fact.source,
-    key: fact.key,
-    personId: fact.personId,
-    kind: fact.kind,
-    at: at.toISOString(),
-    offsetMinutes: offsetMinutes(at.getTime(), clock.timeZone),
-    businessDay,
-    outcome,
-  });
-  const [savedDay] = await tx
-    .select({
-      businessDay: attendanceDayWork.businessDay,
-      startAt: attendanceDayWork.startAt,
-      endAt: attendanceDayWork.endAt,
-    })
-    .from(attendanceDayWork)
-    .where(eq(attendanceDayWork.businessDay, businessDay));
-  await enqueueAttendanceDay(
-    tx,
-    savedDay ?? {
-      businessDay,
-      ...businessDayBounds(clock, businessDay),
-    },
-  );
+  await recordStaffActivity(tx, fact.personId, instant);
 };

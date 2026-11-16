@@ -1,6 +1,6 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { attendanceOperationFacts } from "@waitron/workforce";
+
 import { systemClock } from "./till-backend.js";
 import { applyPartyAllergyPatch, allergyTargets, readAllergySendView } from "./party-allergy.js";
 import { serviceDishCondition } from "./service-dishes.js";
@@ -269,18 +269,7 @@ describe("set lunch course service", () => {
       });
       const [afterSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
       expect(afterSend!.revision).toBe(beforeSend!.revision + 1);
-      expect(
-        await tx
-          .select({
-            key: attendanceOperationFacts.key,
-            personId: attendanceOperationFacts.personId,
-            outcome: attendanceOperationFacts.outcome,
-          })
-          .from(attendanceOperationFacts)
-          .where(eq(attendanceOperationFacts.source, "order")),
-      ).toEqual([
-        { key: `${id}:${afterSend!.revision}:send`, personId: OPERATOR, outcome: "qualifying" },
-      ]);
+
       expect(
         (await tickets(tx, id)).find((item) => item.workingOrderLineId === rings.id),
       ).toMatchObject({

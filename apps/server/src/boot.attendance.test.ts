@@ -25,20 +25,19 @@ import { jobOrigin } from "@waitron/shared";
 import {
   WorkforceBackend,
   attendanceQuestions,
-  attendanceOperationFacts,
-  attendanceSourceState,
+  staffActivity,
   readChain,
   timeEntries,
 } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
-import { schemaVersionsByModule } from "./backup-manifest.js";
+
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import * as discovery from "./attendance-discovery.js";
+
 import * as attendance from "./attendance-loop.js";
 import * as mailSender from "./mail-sender.js";
 import type { MailTransport } from "./mail-sender.js";
@@ -111,14 +110,13 @@ describe("attendance boot with permanent workforce", () => {
         },
       };
     }
-    it("starts both real duties, catches up, captures a real login and reopens with retained discovery progress", async () => {
+    it("starts both real duties, catches up, captures a real login and reopens without another legal finish", async () => {
       const f = await prepared();
       let server: StartedServer | undefined;
       const sender = vi.fn<MailTransport>(async () => ({ status: "sent" }));
       const sendSpy = vi.spyOn(smtpSend, "sendSmtpMessage").mockImplementation(sender);
       const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
       const mailSpy = vi.spyOn(mailSender, "startMailSender");
-      const discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
       const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
       let other: string | undefined;
       {
@@ -171,13 +169,13 @@ describe("attendance boot with permanent workforce", () => {
         expect(
           mailSpy.mock.calls[0]![0].owners.some((owner) => owner.kind === "attendance_question"),
         ).toBe(true);
-        expect(discoverSpy).toHaveBeenCalledTimes(1);
         const deviceDeps = deviceSpy.mock.calls[0]![1];
         expect(deviceDeps.attendance).toBe(recordAttendanceFact);
         expect(deviceDeps.attendanceClock).toBeDefined();
         const deviceCookie = f.venue.cookie
           .split("; ")
           .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
+        const beforeLogin = await suite.db.select().from(staffActivity);
         const login = await fetch(`http://127.0.0.1:${httpPort()}/api/session`, {
           method: "POST",
           headers: { cookie: deviceCookie, "Content-Type": "application/json" },
@@ -212,8 +210,10 @@ describe("attendance boot with permanent workforce", () => {
             }),
           });
           expect(
-            (await suite.db.select().from(attendanceOperationFacts)).some(
-              (fact) => fact.source === "session" && fact.personId === f.venue.personId,
+            (await suite.db.select().from(staffActivity)).some(
+              (fact) =>
+                fact.personId === f.venue.personId &&
+                !beforeLogin.some((row) => row.id === fact.id),
             ),
           ).toBe(true);
           expect(
@@ -225,28 +225,8 @@ describe("attendance boot with permanent workforce", () => {
           const before = await readChain(suite.db, {
             nodeId: f.venue.cfg.nodeId,
           });
-          const generation = (await suite.db.select().from(attendanceSourceState)).find(
-            (s) => s.recordKind === "scan",
-          )!.generation;
-          const rotaScan = (await suite.db.select().from(attendanceSourceState)).find(
-            (row) => row.recordKind === "scan" && row.source === "rota" && row.key === "shifts",
-          )!;
-          const storedVersions = (
-            JSON.parse(JSON.parse(rotaScan.fingerprint!).store) as unknown[]
-          )[3];
-          expect(storedVersions).toEqual(
-            Object.entries(
-              await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES),
-            ).sort(([a], [b]) => a.localeCompare(b)),
-          );
-
           server = await startServer(f.env);
           await awaitListening(httpPort());
-          expect(discoverSpy).toHaveBeenCalledTimes(2);
-          const reopened = (await suite.db.select().from(attendanceSourceState)).find(
-            (s) => s.recordKind === "scan",
-          )!.generation;
-          expect(reopened).toBe(generation);
           await server.close();
           server = undefined;
           beforeServerStarts();
@@ -262,7 +242,6 @@ describe("attendance boot with permanent workforce", () => {
         sendSpy.mockRestore();
         loopSpy.mockRestore();
         mailSpy.mockRestore();
-        discoverSpy.mockRestore();
         deviceSpy.mockRestore();
         await rm(f.scratch, { recursive: true, force: true });
       }
@@ -307,8 +286,7 @@ describe("attendance boot with permanent workforce", () => {
             );
           }
           const loopSpy = vi.spyOn(attendance, "runAttendanceLoop"),
-            mailSpy = vi.spyOn(mailSender, "startMailSender"),
-            discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
+            mailSpy = vi.spyOn(mailSender, "startMailSender");
           try {
             server = await startServer(
               mode === "setup" ? { ...f.env, WAITRON_NODE_ID: undefined } : f.env,
@@ -316,12 +294,10 @@ describe("attendance boot with permanent workforce", () => {
             await awaitListening(httpPort());
             expect(loopSpy).not.toHaveBeenCalled();
             expect(mailSpy).not.toHaveBeenCalled();
-            expect(discoverSpy).not.toHaveBeenCalled();
           } finally {
             await server?.close();
             loopSpy.mockRestore();
             mailSpy.mockRestore();
-            discoverSpy.mockRestore();
             await rm(f.scratch, { recursive: true, force: true });
           }
         },

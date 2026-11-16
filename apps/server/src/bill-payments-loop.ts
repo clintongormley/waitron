@@ -108,11 +108,11 @@ export async function settleFromProviderRow(
     // runs `insertAttempting` first) and the simulator charges nothing real, so no row means no
     // reader was asked to charge. The on-device provider writes its row after the money moves, and
     // nothing under `apps/` builds it (design §5.4).
-    await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
+    await failBillPayment(tx, billPaymentId, now, undefined);
     return { settled: "failed" };
   }
   if (provided.state === "refunded") {
-    await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
+    await failBillPayment(tx, billPaymentId, now, undefined);
     return { settled: "failed" };
   }
   if (provided.state === "failed") {
@@ -127,7 +127,7 @@ export async function settleFromProviderRow(
         ),
       );
     if (resolved !== undefined) {
-      await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
+      await failBillPayment(tx, billPaymentId, now, undefined);
       return { settled: "failed" };
     }
   }

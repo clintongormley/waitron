@@ -55,3 +55,27 @@ No current production semantic business branch reading log history was found. Ma
 Attendance branch: remove both old attendance-copy tables with their columns, keys, indexes, checks and change-feed triggers from the six venue headers. Add `staff_activity` with `id`, `person_id`, `business_day`, `shift_key`, `shift_start_at`, `shift_end_at`, `first_at`, `last_at`; id primary key, `staff_activity_person_fk`, unique person/shift key, `staff_activity_day_idx` on day/person, and first≤last check. Add its three change-feed triggers. Update workforce classification/exports and generated baseline; questions keep their schema. Legal clock/fiscal protections stay unchanged. The no-rota replay measures outside pairs; per-gap attribution behavior awaits implementation tests.
 
 Core branch (PR 2, pruning only): retire `activity_log_append_only_delete` and the log's generated append-only manifest entry; replace `activity_log_append_only_update` with `activity_log_refuse_update` declared in core SQL and explicitly pinned in `scripts/behavioural-triggers.test.ts`. Remove `startAgainDeletable` and its composition assertion, retaining ledger classification; update schema refusal tests, Start again behavior tests and `conventions-data.md`'s explanation. This avoids both composition refusal and falsely protected import history. No print schema, codec or runtime changes are planned. Rebuild starting migrations rather than editing generated SQL. Run before/after `protection-list`, inspect the actual differences and stop on unpredicted changes. No broader guard exclusion is planned. Prune-only estimate: about 60 production and 180 test/fixture-port counted lines for this existing work and the bounded writer/housekeeping changes, with generated output separate; each PR retains its own three-hour checkpoint.
+
+**2026-11-15 23:52, watcher-cleared protection correction.** All six venue builds also print `missing table sqlite_sequence`: the retired `attendance_operation_facts` was the only AUTOINCREMENT table in the workforce baseline. The before/after report observes this alongside the planned old-table removal and new `staff_activity` objects. No replacement sequence table is built.
+
+
+## 2026-11-16 — implemented attendance month, before branch review
+
+The real builder completed **30 days × 250 bills = 7,500 bills**, seed 1, with the compact activity
+writer. It produced **120 `staff_activity` rows** for 120 staff-days, **120 questions with 240 endpoint
+keys** (maximum two each), and neither retired table. The earlier measured month held 184,911
+operation facts and 252,595 discovery rows. This is a fresh runtime build, not the storage replay above.
+
+After the same production seven-day print cleanup, both builds retain **176,465,211 print-payload
+bytes** in 8,703 jobs out of 37,122. Compacted database size is **628,916,224 → 421,470,208 bytes**,
+a **207,446,016-byte** reduction for this synthetic month. The new live file stays at its
+**1,025,150,976-byte** high-water size after cleanup; compacting was a separate disposable copy.
+No latency comparison or continuing monthly growth slope is claimed.
+
+Receipts are Lane H `receipts/db-growth-attendance/implemented-{month-build.log,before-sweep.json,
+sweep.log,after-sweep.json}`. The process started at 00:03 on the pre-review candidate; the endpoint
+storage writer matches checkpoint `a4bc610345` modulo formatting (`git diff -w --ignore-blank-lines
+ a4bc610345 4385eb0547 -- packages/workforce/src/staff-activity.ts` was empty). Later review fixes to
+overnight assignment, questions and export formatting are outside this run. The workload has **no
+rota shifts and no legal clock rows**; its storage figures do not verify those behaviors. Focused real
+rota/clock tests and the independent Claude reviews supply that evidence.

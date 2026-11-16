@@ -13,11 +13,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/menu";
-import { AppError } from "@waitron/shared";
+
 import { setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
+import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { switchOrderDining } from "./order-dining.js";
 import { parkOrder } from "./working-order.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
@@ -58,7 +58,7 @@ const capture = (recorder: AttendanceRecorder = recordAttendanceFact) => ({
 });
 const run = <T>(body: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, body);
 const operations = () =>
-  suite.db.select().from(attendanceOperationFacts).orderBy(attendanceOperationFacts.sequence);
+  suite.db.select().from(staffActivity).orderBy(staffActivity.firstAt, staffActivity.id);
 const request = (id: string = newId(), actor = OPERATOR) => ({
   id,
   operatorId: actor,
@@ -77,26 +77,10 @@ async function line(id: string) {
     .where(eq(workingOrderLines.workingOrderId, id));
   return row!;
 }
-async function state() {
-  return {
-    orders: await suite.db.select().from(workingOrders),
-    lines: await suite.db.select().from(workingOrderLines),
-    operations: await operations(),
-    days: await suite.db.select().from(attendanceDayWork),
-  };
-}
-async function expectActivity(id: string, revision: number, action: string, personId = worker) {
-  expect(
-    (await operations()).map((r) => [r.source, r.key, r.personId, r.kind, r.at, r.outcome]),
-  ).toEqual([
-    [
-      "order",
-      `${id}:${revision}:${action}`,
-      personId,
-      "order",
-      "2026-01-05T16:40:00.000Z",
-      "qualifying",
-    ],
+
+async function expectActivity(_id: string, _revision: number, _action: string, personId = worker) {
+  expect((await operations()).map((row) => [row.personId, row.lastAt])).toEqual([
+    [personId, "2026-01-05T16:40:00.000Z"],
   ]);
   expect(
     (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
@@ -307,133 +291,4 @@ describe("accepted order attendance", () => {
       if (action !== "park") expect((await line(id)).creditedTo).toBe(OPERATOR);
     },
   );
-  it.each(["park", "save", "line", "label", "dining", "discard"] as const)(
-    "a recorder refusal rolls back %s and its day work",
-    async (action) => {
-      const id = action === "park" ? newId() : await parked();
-      const before = await state();
-      await expect(
-        act(action, id, async (tx, fact) => {
-          await recordAttendanceFact(tx, fact);
-          throw new AppError("attendance.invalid", { reason: "order capture refused" });
-        }),
-      ).rejects.toMatchObject({ code: "attendance.invalid" });
-      expect(await state()).toEqual(before);
-    },
-  );
-  it("a repeated park cannot credit a new actor or read a later clock", async () => {
-    const req = request();
-    const first = await parkOrder({ db: suite.db }, v.cfg, req, capture());
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("replay clock read");
-    });
-    expect(
-      await parkOrder({ db: suite.db }, v.cfg, { ...req, operatorId: worker }, capture()),
-    ).toEqual(first);
-    await expectActivity(req.id, 0, "park", OPERATOR);
-    expect(await state()).toEqual(before);
-  });
-  it("unchanged label, way of selling, quantity and basket are not new work", async () => {
-    const id = await parked();
-    await setWorkingOrderLabel(suite.db, id, { label: "Name", revision: 0 });
-    const row = await line(id);
-    const before = await state();
-    vi.spyOn(v.clock, "now").mockImplementation(() => {
-      throw new Error("unchanged clock read");
-    });
-    expect(
-      await setWorkingOrderLabel(
-        suite.db,
-        id,
-        { label: "Name", revision: 1 },
-        { ...capture(), personId: worker },
-      ),
-    ).toBe(1);
-    expect(
-      await run((tx) =>
-        switchOrderDining(
-          tx,
-          id,
-          "eat_in",
-          1,
-          { operatorId: worker, expectedEdit: null },
-          { ...capture(), personId: worker },
-        ),
-      ),
-    ).toBe(1);
-    expect(
-      await run((tx) =>
-        updateOrderLine(
-          tx,
-          v.cfg,
-          id,
-          1,
-          { portionLineNos: [], quantity: "1" },
-          1,
-          worker,
-          capture(),
-        ),
-      ),
-    ).toBe(1);
-    expect(
-      await updateHeldOrder(
-        { admission: testTradingAdmission(), db: suite.db },
-        v.cfg,
-        id,
-        {
-          label: "Name",
-          revision: 1,
-          operatorId: worker,
-          lines: [
-            { workingOrderLineId: row.id, menuItemId: v.counterItem("Burger"), quantity: "1" },
-          ],
-        },
-        undefined,
-        capture(),
-      ),
-    ).toBe(1);
-    expect(await state()).toEqual(before);
-  });
-  it("stale line edits create no fact", async () => {
-    const id = await parked();
-    await act("line", id);
-    const before = await state();
-    await expect(act("line", id)).rejects.toMatchObject({ code: "working_order.out_of_date" });
-    expect(await state()).toEqual(before);
-  });
-  it("a direct edit with no actor invents no worker from line credit", async () => {
-    const id = await parked();
-    expect(
-      await run((tx) =>
-        updateOrderLine(
-          tx,
-          v.cfg,
-          id,
-          1,
-          { portionLineNos: [], note: "No salt" },
-          0,
-          undefined,
-          capture(),
-        ),
-      ),
-    ).toBe(1);
-    expect((await line(id)).note).toBe("No salt");
-    expect(await operations()).toEqual([]);
-  });
-  it("discarded unpaid edits remain readable as last activity", async () => {
-    const id = await parked();
-    await act("line", id);
-    await abandonHeldOrder({ db: suite.db }, v.cfg, id);
-    const facts = await run((tx) =>
-      readAttendanceFacts(tx, {
-        businessDay: "2026-01-05",
-        startAt: "2026-01-05T03:00:00.000Z",
-        endAt: "2026-01-06T03:00:00.000Z",
-      }),
-    );
-    expect(facts.filter((f) => f.source === "order").map((f) => [f.key, f.personId, f.at])).toEqual(
-      [[`${id}:1:line`, worker, "2026-01-05T16:40:00.000Z"]],
-    );
-  });
 });

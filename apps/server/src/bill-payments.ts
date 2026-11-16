@@ -1294,13 +1294,9 @@ async function beginBillPayment(
       items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })),
     );
   }
-  await captureBillPaymentAttendance(
-    tx,
-    payment!,
-    attendance,
-    state === "received" ? "qualified" : "pending",
-    { at: reading.instant.toISOString() },
-  );
+  await captureBillPaymentAttendance(tx, payment!, attendance, {
+    at: reading.instant.toISOString(),
+  });
   return { payment: payment!, total };
 }
 
@@ -1308,8 +1304,7 @@ async function captureBillPaymentAttendance(
   tx: Transaction,
   payment: PaymentRow,
   attendance: AttendanceRecorder | undefined,
-  outcome: "pending" | "qualified" | "refused",
-  requested?: { at: string },
+  requested: { at: string },
 ): Promise<void> {
   if (attendance === undefined) return;
   await attendance(tx, {
@@ -1317,9 +1312,9 @@ async function captureBillPaymentAttendance(
     key: payment.id,
     personId: payment.requestedBy,
     kind: "payment",
-    at: requested?.at ?? payment.createdAt,
+    at: requested.at,
     offsetMinutes: 0,
-    outcome,
+    outcome: "qualified",
   });
 }
 
@@ -1580,7 +1575,6 @@ export async function completeBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
-  await captureBillPaymentAttendance(tx, payment!, deps.attendance, "qualified");
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
@@ -1600,7 +1594,6 @@ export async function failBillPayment(
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
-  attendance?: AttendanceRecorder,
 ): Promise<PaymentRow> {
   const [payment] = await tx
     .update(billPayments)
@@ -1611,7 +1604,6 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
-  await captureBillPaymentAttendance(tx, payment!, attendance, "refused");
   return payment!;
 }
 
@@ -1681,7 +1673,7 @@ export async function takeReaderBillPayment(
     const { payment } = begun;
     if (deps.disk?.noted() === true) {
       await withTransaction(deps.db, (tx) =>
-        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
+        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
       );
       refuseForDiskStop(deps.log, workingOrderId);
     }
@@ -1703,13 +1695,7 @@ export async function takeReaderBillPayment(
       if (isAppError(error) && REFUSED_START.has(error.code)) {
         await withTransaction(deps.db, async (tx) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
-          return failBillPayment(
-            tx,
-            payment.id,
-            deps.clock.now().instant,
-            undefined,
-            deps.attendance,
-          );
+          return failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
         });
       }
       throw collectFailure(deps, workingOrderId, error);
@@ -1760,13 +1746,7 @@ export async function takeReaderBillPayment(
         const answer = await resultOf(tx, deps, cfg, payment, null);
         return { ...answer, outcome: "timeout" };
       }
-      const failed = await failBillPayment(
-        tx,
-        payment.id,
-        deps.clock.now().instant,
-        undefined,
-        deps.attendance,
-      );
+      const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",

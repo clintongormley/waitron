@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "28f427ad-5920-4149-a3aa-304c0b3ff697",
+  "id": "4cc35a90-5807-4ac8-b68a-4034a101d2b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -224,145 +224,6 @@
         "attendance_day_work_revision_ck": {
           "name": "attendance_day_work_revision_ck",
           "value": "\"attendance_day_work\".\"dirty_revision\" > 0 and \"attendance_day_work\".\"evaluated_revision\" >= 0 and \"attendance_day_work\".\"evaluated_revision\" <= \"attendance_day_work\".\"dirty_revision\""
-        }
-      }
-    },
-    "attendance_operation_facts": {
-      "name": "attendance_operation_facts",
-      "columns": {
-        "sequence": {
-          "name": "sequence",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "at": {
-          "name": "at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "offset_minutes": {
-          "name": "offset_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "business_day": {
-          "name": "business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "attendance_operation_facts_source_uq": {
-          "name": "attendance_operation_facts_source_uq",
-          "columns": [
-            "source",
-            "key"
-          ],
-          "isUnique": true
-        },
-        "attendance_operation_facts_day_idx": {
-          "name": "attendance_operation_facts_day_idx",
-          "columns": [
-            "business_day",
-            "person_id",
-            "at"
-          ],
-          "isUnique": false
-        },
-        "attendance_operation_facts_pending_idx": {
-          "name": "attendance_operation_facts_pending_idx",
-          "columns": [
-            "outcome",
-            "sequence"
-          ],
-          "isUnique": false
-        },
-        "attendance_operation_facts_person_idx": {
-          "name": "attendance_operation_facts_person_idx",
-          "columns": [
-            "person_id",
-            "at",
-            "sequence"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "attendance_operation_facts_person_id_persons_id_fk": {
-          "name": "attendance_operation_facts_person_id_persons_id_fk",
-          "tableFrom": "attendance_operation_facts",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "attendance_operation_facts_source_ck": {
-          "name": "attendance_operation_facts_source_ck",
-          "value": "\"attendance_operation_facts\".\"source\" in ('session', 'draft', 'order', 'whole-payment', 'bill-payment', 'refund', 'clock')"
-        },
-        "attendance_operation_facts_kind_ck": {
-          "name": "attendance_operation_facts_kind_ck",
-          "value": "\"attendance_operation_facts\".\"kind\" in ('sign-in', 'order', 'payment', 'break')"
-        },
-        "attendance_operation_facts_outcome_ck": {
-          "name": "attendance_operation_facts_outcome_ck",
-          "value": "\"attendance_operation_facts\".\"outcome\" in ('pending', 'qualifying', 'refused')"
-        },
-        "attendance_operation_facts_offset_ck": {
-          "name": "attendance_operation_facts_offset_ck",
-          "value": "\"attendance_operation_facts\".\"offset_minutes\" between -840 and 840"
         }
       }
     },
@@ -756,126 +617,6 @@
         "attendance_response_commands_entries_ck": {
           "name": "attendance_response_commands_entries_ck",
           "value": "json_valid(\"attendance_response_commands\".\"entry_ids\") and json_type(\"attendance_response_commands\".\"entry_ids\") = 'array' and json_array_length(\"attendance_response_commands\".\"entry_ids\") > 0"
-        }
-      }
-    },
-    "attendance_source_state": {
-      "name": "attendance_source_state",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "record_kind": {
-          "name": "record_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "generation": {
-          "name": "generation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cursor": {
-          "name": "cursor",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "endpoint": {
-          "name": "endpoint",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "completed": {
-          "name": "completed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "fingerprint": {
-          "name": "fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "previous_days": {
-          "name": "previous_days",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "next_due_at": {
-          "name": "next_due_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "attendance_source_state_scope_uq": {
-          "name": "attendance_source_state_scope_uq",
-          "columns": [
-            "source",
-            "record_kind",
-            "key"
-          ],
-          "isUnique": true
-        },
-        "attendance_source_state_watch_idx": {
-          "name": "attendance_source_state_watch_idx",
-          "columns": [
-            "record_kind",
-            "next_due_at",
-            "id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "attendance_source_state_source_ck": {
-          "name": "attendance_source_state_source_ck",
-          "value": "\"attendance_source_state\".\"source\" in ('session', 'draft', 'order', 'group', 'whole-payment', 'bill-payment', 'refund', 'clock', 'rota', 'operation')"
-        },
-        "attendance_source_state_kind_ck": {
-          "name": "attendance_source_state_kind_ck",
-          "value": "\"attendance_source_state\".\"record_kind\" in ('scan', 'watch')"
-        },
-        "attendance_source_state_shape_ck": {
-          "name": "attendance_source_state_shape_ck",
-          "value": "(\"attendance_source_state\".\"record_kind\" = 'scan' and \"attendance_source_state\".\"generation\" is not null and \"attendance_source_state\".\"cursor\" is not null and \"attendance_source_state\".\"endpoint\" is not null and \"attendance_source_state\".\"completed\" is not null and \"attendance_source_state\".\"cursor\" >= 0 and \"attendance_source_state\".\"endpoint\" >= 0 and \"attendance_source_state\".\"cursor\" <= \"attendance_source_state\".\"endpoint\") or (\"attendance_source_state\".\"record_kind\" = 'watch' and \"attendance_source_state\".\"generation\" is null and \"attendance_source_state\".\"cursor\" is null and \"attendance_source_state\".\"endpoint\" is null and \"attendance_source_state\".\"completed\" is null)"
         }
       }
     },
@@ -1718,6 +1459,108 @@
         "shifts_interval_ck": {
           "name": "shifts_interval_ck",
           "value": "\"shifts\".\"ends_at\" > \"shifts\".\"starts_at\""
+        }
+      }
+    },
+    "staff_activity": {
+      "name": "staff_activity",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "business_day": {
+          "name": "business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shift_key": {
+          "name": "shift_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shift_start_at": {
+          "name": "shift_start_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shift_end_at": {
+          "name": "shift_end_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_at": {
+          "name": "first_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_at": {
+          "name": "last_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "staff_activity_person_shift_uq": {
+          "name": "staff_activity_person_shift_uq",
+          "columns": [
+            "person_id",
+            "shift_key"
+          ],
+          "isUnique": true
+        },
+        "staff_activity_day_idx": {
+          "name": "staff_activity_day_idx",
+          "columns": [
+            "business_day",
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "staff_activity_person_fk": {
+          "name": "staff_activity_person_fk",
+          "tableFrom": "staff_activity",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "staff_activity_bounds_ck": {
+          "name": "staff_activity_bounds_ck",
+          "value": "\"staff_activity\".\"first_at\" <= \"staff_activity\".\"last_at\""
         }
       }
     },

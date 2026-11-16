@@ -19,6 +19,17 @@ type QuestionRow = typeof attendanceQuestions.$inferSelect;
 type QuestionInput = Omit<AttendanceQuestion, "id" | "createdAt">;
 const union = <T extends string>(a: readonly T[], b: readonly T[]): T[] =>
   [...new Set([...a, ...b])].sort();
+function endpointEvidence(keys: readonly string[]): string[] {
+  const kept = new Map<string, string>();
+  for (const key of keys) {
+    const endpoint = /^(order:staff:[^:]+:(first|latest):)(.+)$/.exec(key);
+    const group = endpoint?.[1] ?? key;
+    const previous = kept.get(group);
+    if (!previous || !endpoint || (endpoint[2] === "first" ? key < previous : key > previous))
+      kept.set(group, key);
+  }
+  return [...kept.values()].sort();
+}
 const invalid = (reason: string) => new AppError("attendance.invalid", { reason });
 
 function validate(input: QuestionInput, at: Date) {
@@ -99,7 +110,7 @@ function mergedFields(row: QuestionRow, input: QuestionInput) {
     openEntryId: row.openEntryId ?? input.openEntryId,
     automaticEntryId,
     missingKinds: automaticEntryId === null ? union(row.missingKinds, input.missingKinds) : [],
-    evidenceKeys: union(row.evidenceKeys, input.evidenceKeys),
+    evidenceKeys: endpointEvidence([...row.evidenceKeys, ...input.evidenceKeys]),
   };
 }
 

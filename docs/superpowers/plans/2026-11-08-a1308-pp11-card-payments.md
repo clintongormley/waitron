@@ -1,5 +1,10 @@
 # A1308 pp11 — card payments counted from `payments`, the in-flight poller goes, and `staff_activity` is narrowed: implementation plan
 
+> **2026-11-16, DB-GROWTH supersedes the attendance design below.** The owner's first/latest
+> per-planned-shift decision replaces per-action copies and source discovery. Follow the
+> [cleared DB-GROWTH plan](2026-11-15-db-growth.md) for attendance; this historical plan no longer
+> directs that work. The separate one-payment-route decision remains in force.
+
 > **2026-11-12, payment decisions recorded by the watcher at 11:38:** asked whether every payment,
 > whole or part, should go through the Pay window's route, the owner answered "Yes, one way". The counter's quick
 > sale becomes "save, then pay" in one request. For a bill comped to €0.00, "Comp closes it": the

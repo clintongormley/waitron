@@ -34,7 +34,7 @@ export type PlannedAttendanceShift = Readonly<{
   rosterVersionId: string;
 }>;
 export type AttendanceDayInput = Readonly<{
-  // A clock caller has complete evidence for one worker, not a completed scan of the day.
+  // A clock caller supplies one worker’s evidence without completing the day’s evaluation.
   personId?: string;
   day: AttendanceDay;
   facts: readonly AttendanceFact[];
