@@ -3435,6 +3435,15 @@ async function bootServer(
     },
     log,
   );
+  const taxOfficeMonthBuilds = createTaxOfficeMonthBuilds({
+    dir: join(config.stateDir, TAX_OFFICE_DOWNLOADS_DIR),
+    now,
+    entries: taxOfficeMonthSource({ db, backend: nodeBackend, tradingContext, log }),
+    changed: () => publishState(liveEvents, "tax_office_download", log),
+    wake: () => jobRunner.wake("tax_office.month_zip"),
+    log,
+  });
+  jobRunner.add(taxOfficeMonthBuilds.job());
   mountTaxOfficeApi(
     app,
     {
@@ -3443,14 +3452,7 @@ async function bootServer(
       backend: nodeBackend,
       tradingContext,
       venueLocale,
-      builds: createTaxOfficeMonthBuilds({
-        dir: join(config.stateDir, TAX_OFFICE_DOWNLOADS_DIR),
-        now,
-        entries: taxOfficeMonthSource({ db, backend: nodeBackend, tradingContext, log }),
-        changed: () => publishState(liveEvents, "tax_office_download", log),
-        wake: () => jobRunner.wake("tax_office.month_zip"),
-        log,
-      }),
+      builds: taxOfficeMonthBuilds,
       freeBytes: () => lowestFreeBytes([config.stateDir, config.venueDir]),
     },
     log,
