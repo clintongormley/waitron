@@ -1421,6 +1421,9 @@ export interface ModuleBackupContribution {
       readonly evidence: Readonly<Record<string, unknown>>;
     },
   ) => Promise<RecoveryPackPageResult>;
+  /** The secret a server key typed as printed on this module's recovery pack stands for, or
+   * undefined when the text is not one. */
+  readonly serverKeyAsTyped?: (typed: string) => string | undefined;
 }
 
 /** What `recoveryPackPage` answers: the page, and the key file when it was asked for a new key. */

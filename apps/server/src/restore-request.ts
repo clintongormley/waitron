@@ -172,12 +172,21 @@ async function readStagedNodeKey(stateDir: string): Promise<string> {
   }
 }
 
-/** Whether `sent` is the staged node recovery key; with none staged, or none readable, nothing is. */
+function secretFor(sent: string): string {
+  for (const module of ALL_MODULES) {
+    const secret = module.backup?.serverKeyAsTyped?.(sent);
+    if (secret !== undefined) return secret;
+  }
+  return sent;
+}
+
+/** Whether `sent`, as printed on a module's recovery pack or as the secret itself, is the staged
+ * node recovery key; with none staged, or none readable, nothing is. */
 export async function matchesStagedNodeKey(stateDir: string, sent: unknown): Promise<boolean> {
   let held: string;
   let given: string;
   try {
-    given = nodeKey(sent);
+    given = secretFor(nodeKey(sent));
     held = await readStagedNodeKey(stateDir);
   } catch {
     return false;
