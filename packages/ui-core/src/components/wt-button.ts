@@ -105,14 +105,10 @@ export class WtButton extends LitElement {
       @media (forced-colors: active) {
         :host([variant="link"]) button {
           border-color: Canvas;
-          color: ButtonText;
         }
         :host([variant="link"]) button:disabled,
         :host([variant="link"]) button[aria-disabled="true"] {
           color: GrayText;
-        }
-        :host([variant="link"]) button:focus-visible {
-          outline-color: Highlight;
         }
       }
 
