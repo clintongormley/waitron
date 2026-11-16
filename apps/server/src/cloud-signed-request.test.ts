@@ -29,15 +29,19 @@ it("collects exactly the byte limit across streamed chunks", async () => {
 
 it("refuses one byte over the limit and cancels unread stream data", async () => {
   let cancelled = false;
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(Uint8Array.of(1, 2));
-      controller.enqueue(Uint8Array.of(3, 4));
+  let chunks = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (chunks++ < 2) controller.enqueue(Uint8Array.of(1, 2));
+        else controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
     },
-    cancel() {
-      cancelled = true;
-    },
-  });
+    { highWaterMark: 0 },
+  );
   await expect(readCloudResponseBytes(new Response(stream), 3)).rejects.toThrow();
   expect(cancelled).toBe(true);
 });

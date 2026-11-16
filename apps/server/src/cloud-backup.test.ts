@@ -309,3 +309,21 @@ it("cancels a capture waiting behind another connection operation without waitin
     await f.close();
   }
 });
+
+it.each([
+  { bytes: 65536, accepted: true },
+  { bytes: 65537, accepted: false },
+])("bounds valid backup JSON at $bytes bytes", async ({ bytes, accepted }) => {
+  const f = await installationFixture(async (values, saved, _req, res) => {
+    const text = JSON.stringify(grant(values, saved));
+    res.end(text + " ".repeat(bytes - Buffer.byteLength(text)));
+  });
+  try {
+    const id = randomUUID();
+    const result = f.client.reserveCapture(id);
+    if (accepted) expect((await result).id).toBe(id);
+    else await expect(result).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    await f.close();
+  }
+});

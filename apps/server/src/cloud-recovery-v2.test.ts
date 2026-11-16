@@ -782,3 +782,43 @@ it.each([{ version: 1 }, { version: 2 }])(
     await expect(v2.readCloudRecoveryState(f.stateDir)).rejects.toThrow(unavailable);
   },
 );
+
+it.each([
+  { bytes: 65536, accepted: true },
+  { bytes: 65537, accepted: false },
+])(
+  "bounds streamed recovery JSON before strict parsing at $bytes bytes",
+  async ({ bytes, accepted }) => {
+    const f = await fixture();
+    const original = f.options.fetch!;
+    let cancelled = false;
+    f.options.fetch = (async (url, init) => {
+      const response = await original(url, init);
+      const text = await response.text();
+      let sent = false;
+      return new Response(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (sent) controller.close();
+              else {
+                sent = true;
+                controller.enqueue(Buffer.from(text + " ".repeat(bytes - Buffer.byteLength(text))));
+              }
+            },
+            cancel() {
+              cancelled = true;
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      );
+    }) as typeof fetch;
+    const result = createCloudRecoveryClient(f.options).start();
+    if (accepted) expect((await result).state).toBe("awaiting_owner");
+    else {
+      await expect(result).rejects.toThrow("Cloud recovery is unavailable. Try again.");
+      expect(cancelled, "the HTTP cap must cancel before the strict JSON parser runs").toBe(true);
+    }
+  },
+);
