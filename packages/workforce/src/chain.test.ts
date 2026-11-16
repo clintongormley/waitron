@@ -99,7 +99,7 @@ describe("appendToChain", () => {
       last_entry_hash: string;
       last_recorded_at: string | null;
     }>(sql`
-      select sequence_no, last_entry_id, last_entry_hash, last_recorded_at from workforce_chains
+      select sequence_no, id as last_entry_id, entry_hash as last_entry_hash, recorded_at as last_recorded_at from time_entries
       where node_id = ${nodeId}`);
     expect(rows[0]).toMatchObject({
       sequence_no: 1,
@@ -254,21 +254,23 @@ describe("appendToChain", () => {
   });
 
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
-    // Occupy position 1 directly, so every attempt collides. Weaker than its name: replacing the
-    // savepoint in ./chain.ts with a plain `attemptAppend(tx, …)` leaves this case passing, and the
-    // stubbed cases below fail under that change only because their stub has nothing but
-    // `transaction`.
-    await suite.db.execute(sql`
-      insert into time_entries (
-        id, person_id, node_id, entry_kind, event_at, event_offset_minutes,
-        recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
-        is_first_entry
-      ) values (${newId()}, ${personId}, ${nodeId}, 'in',
-        '2026-01-05T08:00:00.000Z', 0,
-        ${personId}, 'dashboard', '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
-
     const error = await suite.db
-      .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
+      .transaction(async (tx) => {
+        await tx.execute(
+          sql.raw(`create trigger collide_append before insert on time_entries
+      when new.id <> 'competing'
+      begin
+        insert into time_entries (id, person_id, node_id, entry_kind, event_at,
+          event_offset_minutes, recorded_by_person_id, captured_by_source, recorded_at,
+          entry_hash, prev_entry_hash, sequence_no, is_first_entry)
+        values ('competing', new.person_id, new.node_id, new.entry_kind, new.event_at,
+          new.event_offset_minutes, new.recorded_by_person_id, new.captured_by_source,
+          new.recorded_at, new.entry_hash, new.prev_entry_hash, new.sequence_no, new.is_first_entry);
+      end`),
+        );
+
+        return appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z"));
+      })
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
@@ -306,10 +308,6 @@ describe("appendToChain", () => {
   });
 
   it("lands the entry on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
-    // The first attempt's savepoint gets an entry planted at position 1 before the attempt runs, so
-    // the attempt's own insert is refused by the position's unique index. Rolling back to the
-    // savepoint removes the planted entry, and the second attempt writes at position 1.
-    // The controls that fail it are in the pull request that added it.
     let calls = 0;
     let firstRefusal: unknown;
 
@@ -320,20 +318,18 @@ describe("appendToChain", () => {
           if (calls > 1) return tx.transaction(body);
           return tx
             .transaction(async (nested) => {
-              await nested.insert(timeEntries).values({
-                personId,
-                nodeId,
-                entryKind: "in",
-                eventAt: "2026-01-05T08:00:00.000Z",
-                eventOffsetMinutes: 0,
-                recordedByPersonId: personId,
-                capturedBySource: "dashboard",
-                recordedAt: "2026-01-05T08:00:00.000Z",
-                entryHash: "1".repeat(64),
-                prevEntryHash: null,
-                sequenceNo: 1,
-                isFirstEntry: true,
-              });
+              await nested.execute(
+                sql.raw(`create trigger collide_append before insert on time_entries
+                when new.id <> 'competing'
+                begin
+                  insert into time_entries (id, person_id, node_id, entry_kind, event_at,
+                    event_offset_minutes, recorded_by_person_id, captured_by_source, recorded_at,
+                    entry_hash, prev_entry_hash, sequence_no, is_first_entry)
+                  values ('competing', new.person_id, new.node_id, new.entry_kind, new.event_at,
+                    new.event_offset_minutes, new.recorded_by_person_id, new.captured_by_source,
+                    new.recorded_at, new.entry_hash, new.prev_entry_hash, new.sequence_no, new.is_first_entry);
+                end`),
+              );
               return body(nested);
             })
             .catch((error: unknown) => {
@@ -375,7 +371,7 @@ describe("appendToChain", () => {
       last_entry_id: string;
       last_entry_hash: string;
     }>(sql`
-      select sequence_no, last_entry_id, last_entry_hash from workforce_chains
+      select sequence_no, id as last_entry_id, entry_hash as last_entry_hash from time_entries
       where node_id = ${nodeId}`);
     expect(head).toEqual([
       { sequence_no: 1, last_entry_id: result.id, last_entry_hash: result.entryHash },
@@ -474,7 +470,15 @@ describe("appendToChain commits the correction and capture content to the hash",
 });
 
 describe("readChainHead", () => {
-  it("creates the chain head row from scratch when a node has none yet", async () => {
+  it("reads a chain's head through the chain-position index", async () => {
+    const { rows } = await suite.db.execute<{ detail: string }>(sql`
+      explain query plan select id, entry_hash, recorded_at, sequence_no from time_entries
+      where node_id = ${nodeId} order by sequence_no desc limit 1`);
+    expect(rows.some((row) => row.detail.includes("time_entries_chain_position_uq"))).toBe(true);
+    expect(rows.some((row) => row.detail.includes("SCAN time_entries"))).toBe(false);
+  });
+
+  it("reads an empty chain without creating a head row", async () => {
     const head = await suite.db.transaction((tx) => readChainHead(tx, key()));
     expect(head).toEqual({
       sequenceNo: 0,
@@ -483,9 +487,9 @@ describe("readChainHead", () => {
       lastRecordedAt: null,
     });
     const { rows } = await suite.db.execute<{ count: number }>(sql`
-      select count(*) as count from workforce_chains
+      select count(*) as count from time_entries
       where node_id = ${nodeId}`);
-    expect(rows[0]?.count).toBe(1);
+    expect(rows[0]?.count).toBe(0);
   });
 
   it("reads the existing head rather than creating a second one", async () => {
@@ -496,7 +500,7 @@ describe("readChainHead", () => {
     expect(head.lastEntryHash).not.toBeNull();
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await suite.db.execute<{ count: number }>(sql`
-      select count(*) as count from workforce_chains
+      select count(*) as count from time_entries
       where node_id = ${nodeId}`);
     expect(rows[0]?.count).toBe(1);
   });

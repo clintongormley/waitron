@@ -29,7 +29,7 @@ import { stampDeployment } from "@waitron/db";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
-import { appendToChain, readChain, workforceChains } from "@waitron/workforce";
+import { appendToChain, readChain, readChainHead } from "@waitron/workforce";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { encodeArchiveRecoveryPack, type ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { archiveNamespace } from "./archive-settings.js";
@@ -435,7 +435,7 @@ describe("waitron-restore restore --from-archive", () => {
     const expectedSettings = await suite.db.select().from(settings).orderBy(settings.module);
     const chainKey = { nodeId: ids.node };
     const expectedChain = await readChain(suite.db, chainKey);
-    const expectedHead = await suite.db.select().from(workforceChains);
+    const expectedHead = await suite.db.transaction((tx) => readChainHead(tx, chainKey));
     expect(expectedChain.map((e) => e.sequenceNo)).toEqual([1, 2]);
     expect(await chainHead(suite.db)).toEqual([{ ultimaHuella: HUELLA, secuencia: 1 }]);
     expect(await seriesOfNode(suite.db)).toEqual([
@@ -489,7 +489,7 @@ describe("waitron-restore restore --from-archive", () => {
       ]);
       // The working-time chain continues from the backup's head.
       expect(await readChain(db, chainKey)).toEqual(expectedChain);
-      expect(await db.select().from(workforceChains)).toEqual(expectedHead);
+      expect(await db.transaction((tx) => readChainHead(tx, chainKey))).toEqual(expectedHead);
       const appended = await db.transaction((tx) =>
         appendToChain(tx, chainKey, {
           personId,

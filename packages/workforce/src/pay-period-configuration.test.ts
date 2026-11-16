@@ -16,7 +16,7 @@ it("includes the saved venue cadence in transferable configuration without clock
   );
   const names = WORKFORCE_CONFIGURATION_TRANSFER.tables.map((t) => t.name);
   expect(names).toContain("pay_period_settings");
-  for (const forbidden of ["time_entries", "workforce_chains", "pay_period_closures"])
+  for (const forbidden of ["time_entries", "pay_period_closures"])
     expect(names).not.toContain(forbidden);
   const settings = WORKFORCE_CONFIGURATION_TRANSFER.tables.find(
     (t) => t.name === "pay_period_settings",

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4cc35a90-5807-4ac8-b68a-4034a101d2b5",
+  "id": "334adef5-ab82-4256-8069-19bf042803a7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -1962,91 +1962,6 @@
         "time_entries_correction_status_ck": {
           "name": "time_entries_correction_status_ck",
           "value": "\"time_entries\".\"correction_status\" in ('requested', 'approved', 'declined', 'disputed')"
-        }
-      }
-    },
-    "workforce_chains": {
-      "name": "workforce_chains",
-      "columns": {
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sequence_no": {
-          "name": "sequence_no",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "last_entry_id": {
-          "name": "last_entry_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_entry_hash": {
-          "name": "last_entry_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_recorded_at": {
-          "name": "last_recorded_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "workforce_chains_node_id_nodes_id_fk": {
-          "name": "workforce_chains_node_id_nodes_id_fk",
-          "tableFrom": "workforce_chains",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "workforce_chains_last_entry_id_time_entries_id_fk": {
-          "name": "workforce_chains_last_entry_id_time_entries_id_fk",
-          "tableFrom": "workforce_chains",
-          "tableTo": "time_entries",
-          "columnsFrom": [
-            "last_entry_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "workforce_chains_pointer_ck": {
-          "name": "workforce_chains_pointer_ck",
-          "value": "(\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_entry_hash\" is null)\n          and (\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_recorded_at\" is null)"
         }
       }
     },

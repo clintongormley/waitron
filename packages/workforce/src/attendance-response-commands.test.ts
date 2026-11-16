@@ -34,7 +34,6 @@ import * as api from "./index.js";
 import type { AttendanceCommand, AttendanceCommandPayload } from "./attendance-contract.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
 import { timeEntries } from "./schema/time-entries.js";
-import { workforceChains } from "./schema/workforce-chains.js";
 import { readChain } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 
@@ -207,7 +206,7 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    heads: await suite.db.select().from(workforceChains).orderBy(workforceChains.nodeId),
+    heads: await suite.db.select().from(timeEntries).orderBy(timeEntries.nodeId, timeEntries.sequenceNo),
     receipts: await suite.db
       .select()
       .from(attendanceResponseCommands)

@@ -1536,7 +1536,7 @@ describe("workforce facts after venue corrections", () => {
     });
     const retained = () => ({
       entries: suite.db.all(sql`select * from time_entries order by sequence_no`),
-      chain: suite.db.all(sql`select * from workforce_chains`),
+      chain: suite.db.all(sql`select * from time_entries order by node_id, sequence_no`),
       shifts: suite.db.all(sql`select * from shifts`),
       versions: suite.db.all(sql`select * from roster_versions`),
     });

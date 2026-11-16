@@ -12,7 +12,6 @@ const OWNED = [
   "pay_period_settings",
   "pay_period_closures",
   "time_entries",
-  "workforce_chains",
   "roster_versions",
   "shifts",
   "absences",

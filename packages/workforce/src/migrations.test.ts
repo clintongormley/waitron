@@ -479,7 +479,6 @@ describe("the workforce set carries no taxpayer column", () => {
   const TABLES = [
     "employments",
     "time_entries",
-    "workforce_chains",
     "roster_versions",
     "shifts",
     "absences",
@@ -507,14 +506,6 @@ describe("the workforce set carries no taxpayer column", () => {
       for (const column of await columnsOf(table))
         if (column.name === "tenant_id") found.push(`${table}.${column.name}`);
     expect(found).toEqual([]);
-  });
-
-  it("keys the working-time chain head by node_id alone", async () => {
-    const key = (await columnsOf("workforce_chains"))
-      .filter((column) => column.pk > 0)
-      .sort((left, right) => left.pk - right.pk)
-      .map((column) => column.name);
-    expect(key).toEqual(["node_id"]);
   });
 
   /**

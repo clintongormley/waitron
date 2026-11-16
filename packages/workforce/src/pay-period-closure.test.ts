@@ -225,7 +225,7 @@ it("rolls back closure, markers and time-chain head when a second marker is refu
   await automatic();
   await automatic(other);
   const entries = await suite.db.select().from(api.timeEntries),
-    heads = await suite.db.select().from(api.workforceChains);
+    heads = await suite.db.select().from(api.timeEntries);
   await suite.db.execute(sql`CREATE TRIGGER test_refuse_second_marker BEFORE INSERT ON time_entries
     WHEN NEW.entry_kind = 'confirmation' AND (SELECT count(*) FROM time_entries WHERE entry_kind = 'confirmation') > 0
     BEGIN SELECT RAISE(ABORT, 'test marker failure'); END`);
@@ -236,7 +236,7 @@ it("rolls back closure, markers and time-chain head when a second marker is refu
   }
   expect(await suite.db.select().from(api.payPeriodClosures)).toEqual([]);
   expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
-  expect(await suite.db.select().from(api.workforceChains)).toEqual(heads);
+  expect(await suite.db.select().from(api.timeEntries)).toEqual(heads);
 });
 it("records a late automatic end and counting marker against the unchanged closure", async () => {
   const openEntryId = await open();
@@ -275,7 +275,7 @@ it("rolls back a late automatic end when its marker is refused", async () => {
   const openEntryId = await open();
   const frozen = await close();
   const entries = await suite.db.select().from(api.timeEntries),
-    heads = await suite.db.select().from(api.workforceChains);
+    heads = await suite.db.select().from(api.timeEntries);
   await suite.db.execute(
     sql`CREATE TRIGGER test_refuse_late_marker BEFORE INSERT ON time_entries WHEN NEW.entry_kind='confirmation' BEGIN SELECT RAISE(ABORT,'test late marker failure'); END`,
   );
@@ -289,7 +289,7 @@ it("rolls back a late automatic end when its marker is refused", async () => {
     await suite.db.execute(sql`DROP TRIGGER test_refuse_late_marker`);
   }
   expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
-  expect(await suite.db.select().from(api.workforceChains)).toEqual(heads);
+  expect(await suite.db.select().from(api.timeEntries)).toEqual(heads);
   expect(await close()).toEqual(frozen);
 });
 it("keeps a closed 480 frozen after a later accepted 540 and worker confirmation", async () => {

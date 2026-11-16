@@ -995,7 +995,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).

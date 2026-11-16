@@ -114,17 +114,6 @@ const CLASSIFIED: Record<string, Classification> = {
     out: ["id", "person_id", "shift_key"],
   },
   time_entries: "working-time record",
-  workforce_chains: {
-    in: [],
-    out: [
-      "node_id",
-      "sequence_no",
-      "last_entry_id",
-      "last_entry_hash",
-      "last_recorded_at",
-      "updated_at",
-    ],
-  },
 };
 
 /** Workforce's own tables; staffing's, which its schema also exports, are classified by staffing's test. */

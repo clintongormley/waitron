@@ -316,19 +316,6 @@ CREATE INDEX `time_entries_person_event_idx` ON `time_entries` (`person_id`,`eve
 CREATE INDEX `time_entries_person_chain_idx` ON `time_entries` (`person_id`,`node_id`,`sequence_no`);--> statement-breakpoint
 CREATE INDEX `time_entries_corrects_entry_idx` ON `time_entries` (`corrects_entry_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `time_entries_chain_position_uq` ON `time_entries` (`node_id`,`sequence_no`);--> statement-breakpoint
-CREATE TABLE `workforce_chains` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`sequence_no` integer DEFAULT 0 NOT NULL,
-	`last_entry_id` text,
-	`last_entry_hash` text,
-	`last_recorded_at` text,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`last_entry_id`) REFERENCES `time_entries`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "workforce_chains_pointer_ck" CHECK(("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_entry_hash" is null)
-          and ("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_recorded_at" is null))
-);
---> statement-breakpoint
 CREATE TABLE `shift_assignments` (
 	`shift_id` text PRIMARY KEY NOT NULL,
 	`department_id` text,

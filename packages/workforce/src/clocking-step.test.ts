@@ -286,7 +286,7 @@ describe("clocking across a backward step of the box's clock", () => {
         "SEARCH head USING INDEX time_entries_person_chain_idx (person_id=? AND node_id=?)",
       );
       expect(
-        plans.filter((line) => line.startsWith("SCAN") && !/^SCAN workforce_chains\b/.test(line)),
+        plans.filter((line) => line.startsWith("SCAN") && !/^SCAN nodes\b/.test(line)),
       ).toEqual([]);
     }
   });

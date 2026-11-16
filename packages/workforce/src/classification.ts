@@ -4,20 +4,10 @@ import type { ChangeSource } from "@waitron/shared";
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
-/**
- * `time_entries` is `appendOnly` and `workforce_chains` is not: the chain table holds the head row
- * that every append updates (`appendToChain`, chain.ts), so a refusal on it would stop every clock-in.
- */
 export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("time_entries", "ledger", LEDGER),
   appendOnly("pay_period_closures", "ledger", LEDGER),
   classify("pay_period_settings", "state", STATE),
-  classify(
-    "workforce_chains",
-    "ledger",
-    "per-node working-time hash chain; drained back from a returned box",
-  ),
-
   classify("employments", "state", STATE),
   classify("shifts", "state", STATE),
   classify("shift_templates", "state", STATE),
