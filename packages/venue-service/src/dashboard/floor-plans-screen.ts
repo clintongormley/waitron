@@ -141,10 +141,11 @@ export class FloorPlansScreen extends LitElement {
         align-items: center;
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        white-space: nowrap;
+        /* A long name wraps on a phone, where a pill would turn into an oval. */
+        border-radius: var(--wt-radius-md);
       }
       wt-data-table::part(swatch) {
+        flex: none;
         display: inline-block;
         inline-size: var(--wt-space-3);
         block-size: var(--wt-space-3);

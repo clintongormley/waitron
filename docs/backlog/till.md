@@ -1177,21 +1177,6 @@ full name — and never its short name (`tableLabel`, from `orderTableLabels` in
 `packages/db/src/party-table-labels.ts`). Ask the owner first.
 
 
-## A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's heading.
-
-Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-390-light-en.png` in
-`~/waitron-campaign-c/a797-1-shots/`): after a refused save the Name field is scrolled only partly
-into view, and its "Name *" label sits under the panel's sticky heading ("W1 ⌄"), so only the
-value and the refusal under it show; scrolled by hand, the label shows
-(`r-refusal-field-390-light-en.png`). Slice 1 changed which sentence the editor shows, not where
-it scrolls. Slice 2's look (2026-10-26, `~/waitron-campaign-c/a797-2-shots/`) found the cause:
-the phone sheet keeps its scroll when the refusal selects a table, and nothing brings the field
-into view. With the sheet at its top the refused Short name shows whole under the heading;
-scrolled down to the list before Save, the whole field, label, value and refusal, is above the
-visible part of the sheet and only the list shows (`c2-refused-390-light-en.png`). Tapping a row
-in the list leaves the form scrolled the same way (`a0-select-as-lands-390-light-en.png`).
-
-
 ## A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".
 
 Seen, 2026-10-25 (the
@@ -1199,14 +1184,6 @@ A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-10
 `~/waitron-campaign-c/a797-1-shots/`): a space before the "!" ("Sent !", «Enviado !»), and the
 Held line ends in a separator with nothing after it, where the Served line above reads
 "Served · 0 · €0.00".
-
-
-## A1109. The floor plan editor opens Terrace as an empty grid, and its phone Tables panel has a large blank gap.
-
-Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-1280-light-en.png` and
-`r-tables-panel-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): at 1280 the demo's
-Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
-panel leaves a large blank space between Add tables / Add joined table and the list.
 
 
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
@@ -1935,24 +1912,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 - **Pass screen unused values.** `operatorSession` is unread, and the server still works out the
   unread age colour D68 keeps.
   [Detail](till.md#pass-screen-unused-values)
-
-## Bundle: Floor plan editor at phone width
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **At 390 px the Floor plans screen cuts period names in its "Used by" column.** Seen on the demo
-  venue on 2026-10-18 by A783's look: a set's period chips are cut off by the column, both themes,
-  English and Spanish (`floor-plans-{light,dark}-390[-es].png` in `~/waitron-campaign-b/a783-shots/`;
-  `packages/venue-service/src/dashboard/floor-plans-screen.ts`). Left open by A783.
-- **A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's
-  heading.** Slice 1 changed which sentence the editor shows, not where it scrolls.
-  [Detail](till.md#a1103-at-390-px-the-floor-plan-editor-leaves-a-refused-name-field-half-under-the-panels-heading)
-- **A1109. The floor plan editor opens Terrace as an empty grid, and its phone Tables panel has a
-  large blank gap.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-1280-light-en.png` and
-  `r-tables-panel-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): at 1280 the demo's
-  Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
-  panel leaves a large blank space between Add tables / Add joined table and the list.
-  [Detail](till.md#a1109-the-floor-plan-editor-opens-terrace-as-an-empty-grid-and-its-phone-tables-panel-has-a-large-blank-gap)
 
 ## Bundle: Take over offered where it is needed
 

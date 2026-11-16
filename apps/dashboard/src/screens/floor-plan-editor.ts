@@ -153,6 +153,16 @@ const SERVER_FIELDS: Record<string, FloorPlanField> = {
   partKeys: "parts",
 };
 
+/** Where each field sits in the table panel, label included. */
+const FIELD_SELECTORS: Record<FloorPlanField, string> = {
+  label: "[name=table-name]",
+  shortName: "[name=short-name]",
+  seats: "[name=seats]",
+  fixed: ".moveable",
+  shape: ".shape",
+  parts: "[name=made-of]",
+};
+
 function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
   if (field === "shape") return table.placement?.shape ?? null;
   return table[field];
@@ -338,10 +348,14 @@ export class FloorPlanEditor extends LitElement {
         overscroll-behavior: contain;
       }
       .table-slot {
-        /* Keep the list still across plain, joined and empty selections; errors scroll inside. */
+        /* Beside the plan, keep the list still across plain, joined and empty selections; errors scroll inside. */
         block-size: calc(4 * var(--wt-field-height) + 5 * var(--wt-space-3));
         overflow-y: auto;
         flex: none;
+      }
+      /* In the sheet the slot gives way to the list. */
+      .layout.narrow .table-slot:empty {
+        display: none;
       }
       .layout.narrow {
         display: block;
@@ -462,6 +476,11 @@ export class FloorPlanEditor extends LitElement {
   /** Set when a check or refusal points at a table, which may already be selected, with the sheet
    *  already open: what it draws beside the table (a reason) still has to be lifted. */
   #flagged = false;
+  /** Set when a check, a refusal or a row of the list selects a table: the phone sheet keeps its
+   *  scroll, so its form, or the field marked on it, has to be brought into view. */
+  #showForm = false;
+  /** Set by each load, so the canvas opens where the zone's tables are. */
+  #showPlan = false;
   readonly #userScrolls = (): void => {
     this.#revealing = false;
   };
@@ -509,6 +528,7 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-select", (event) => {
       this.selected = (event as CustomEvent<FloorPlanSelect>).detail.key;
+      this.#showForm = this.selected !== null;
     });
     this.addEventListener("floor-plan-delete-ask", (event) => {
       this.deleteAsk = (event as CustomEvent<FloorPlanDeleteAsk>).detail.key;
@@ -580,6 +600,28 @@ export class FloorPlanEditor extends LitElement {
       this.#revealing = true;
       void this.#reveal();
     }
+    const canvas = this.renderRoot.querySelector<WtFloorPlanCanvas>("wt-floor-plan-canvas");
+    if (this.#showPlan && canvas !== null) {
+      this.#showPlan = false;
+      void canvas.updateComplete.then(() => canvas.showTables());
+    }
+    if (this.#showForm) {
+      this.#showForm = false;
+      void this.#scrollToForm();
+    }
+  }
+
+  async #scrollToForm(): Promise<void> {
+    const sheet = this.#watchedSheet;
+    const panel = this.renderRoot.querySelector("floor-plan-table-panel");
+    if (sheet === null || panel === null) return;
+    await Promise.all([sheet.updateComplete, panel.updateComplete]);
+    const mark = this.fieldError;
+    const field =
+      mark === null || mark.key !== this.selected
+        ? null
+        : panel.shadowRoot!.querySelector(FIELD_SELECTORS[mark.field]);
+    (field ?? panel.closest(".table-slot") ?? panel).scrollIntoView({ block: "nearest" });
   }
 
   /** On a phone, keeps the selected table in the part of the canvas the sheet leaves showing. */
@@ -679,6 +721,7 @@ export class FloorPlanEditor extends LitElement {
       this.#opened = draft;
       this.#history = new UndoHistory(draft);
       this.draft = draft;
+      this.#showPlan = true;
     } catch (error) {
       if (request !== this.#request) return;
       const code = codeOf(error);
@@ -759,6 +802,7 @@ export class FloorPlanEditor extends LitElement {
   /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
   #selectFlagged(key: string): void {
     this.#flagged = true;
+    this.#showForm = true;
     this.requestUpdate();
     this.selected = key;
     if (this.narrow) this.sheetOpen = true;

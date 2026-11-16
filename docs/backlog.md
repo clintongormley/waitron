@@ -872,8 +872,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   press; whether a number pad or a choice picker counts as a form is open. Left open by C47.
   [Detail](backlog/till.md#other-till-surfaces-have-not-been-checked-against-the-forms-rule)
 
-- **Floor plan editor at phone width** (bundle of 3, size S). Holds A1103, A1109. [Detail](backlog/till.md#bundle-floor-plan-editor-at-phone-width)
-
 - **Guest-facing QR, online ordering, delivery, online booking** (bundle of 4, size L, waits for another entry). Holds A508, A509, A1012, A1013. [Detail](backlog/till.md#bundle-guest-facing-qr-online-ordering-delivery-online-booking)
 
 - **A1513. Take orders from the delivery apps: Glovo, Uber Eats, Just Eat (owner, 2026-11-11).**

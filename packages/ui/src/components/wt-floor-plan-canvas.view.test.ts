@@ -1357,3 +1357,87 @@ it("unscrolled at zoom 1, arrow keys that bring a table back inside a box that i
   expect(alone.scrollWidth).toBe(alone.clientWidth);
   expect(alone.scrollHeight).toBe(alone.clientHeight);
 });
+
+it("showTables scrolls a plan none of whose tables shows to its tables", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("A", 60, 40), table("B", 75, 52)];
+  await settled(el);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  for (const key of ["A", "B"]) {
+    const box = el.shadowRoot!.querySelector(`[data-key="${key}"]`)!.getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(view.left);
+    expect(box.right).toBeLessThanOrEqual(view.right);
+    expect(box.top).toBeGreaterThanOrEqual(view.top);
+    expect(box.bottom).toBeLessThanOrEqual(view.bottom);
+  }
+});
+
+it("showTables keeps the top left corner of a plan wider than the view", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("A", 60, 40), table("B", 200, 120)];
+  await settled(el);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  const box = el.shadowRoot!.querySelector('[data-key="A"]')!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  expect(box.right).toBeLessThanOrEqual(view.right);
+  expect(box.bottom).toBeLessThanOrEqual(view.bottom);
+});
+
+it("showTables shows whole the table nearest the plan's top left when tables in opposite corners cannot fit together", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("A", 60, 120), table("B", 200, 40)];
+  await settled(el);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  const box = el.shadowRoot!.querySelector('[data-key="A"]')!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  expect(box.right).toBeLessThanOrEqual(view.right);
+  expect(box.bottom).toBeLessThanOrEqual(view.bottom);
+});
+
+it("showTables leaves a view where a table already shows whole, and moves one where none does", async () => {
+  const el = await canvas();
+  el.showTables();
+  expect(part(el, "viewport").scrollLeft).toBe(0);
+  expect(part(el, "viewport").scrollTop).toBe(0);
+  part(el, "viewport").scrollTo(0, 600);
+  expect(part(el, "viewport").scrollTop).toBe(600);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  const box = button(el).getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
+  expect(box.bottom).toBeLessThanOrEqual(view.bottom);
+});
+
+it("showTables on a canvas with no tables does nothing", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  await settled(el);
+  el.showTables();
+  expect(part(el, "viewport").scrollLeft).toBe(0);
+});
+
+it("showTables counts a table under the bottom inset as not shown", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 360px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("A", 2, 16)];
+  el.bottomInset = 100;
+  await settled(el);
+  el.showTables();
+  const view = part(el, "viewport").getBoundingClientRect();
+  const box = el.shadowRoot!.querySelector('[data-key="A"]')!.getBoundingClientRect();
+  expect(part(el, "viewport").scrollTop).toBeGreaterThan(0);
+  expect(box.bottom).toBeLessThanOrEqual(view.bottom - 100);
+});
