@@ -2440,6 +2440,39 @@ describe("till-app: sending the draft", () => {
       expect(tableOrder(el)!.printProblems).toEqual(problems);
     });
 
+    it("keeps the groups and current orders the recovery read when an older read answers later", async () => {
+      const reprintOrder = vi.fn().mockResolvedValue(undefined);
+      const { el, store, detail, listGroups } = await raced("submit", { reprintOrder });
+      let finishOlder!: () => void;
+      listGroups.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOlder = () =>
+              resolve({ revision: 3, groups: [mains, desserts], printProblems: [] });
+          }),
+      );
+      api.readCurrentOrders!.mockResolvedValueOnce({ ...current, nextDisplayNumber: 3 });
+      const groupReads = listGroups.mock.calls.length;
+      emit(tableOrder(el)!, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+      await vi.waitFor(() => expect(finishOlder).toBeTypeOf("function"));
+      api.readCurrentOrders!.mockResolvedValue({ ...current, nextDisplayNumber: 12 });
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain("Group 7"));
+      const recovered = [
+        { ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" },
+        desserts,
+      ];
+      expect(tableOrder(el)!.groups).toEqual(recovered);
+      expect(tableOrder(el)!.currentOrders?.nextDisplayNumber).toBe(12);
+      finishOlder();
+      await flush(el, 6);
+      expect(reprintOrder).toHaveBeenCalledOnce();
+      expect(listGroups).toHaveBeenCalledTimes(groupReads + 2);
+      expect(tableOrder(el)!.groups).toEqual(recovered);
+      expect(tableOrder(el)!.currentOrders?.nextDisplayNumber).toBe(12);
+    });
+
     it.each([
       ["whose groups read fails", "submit"],
       ["that finds every target still held", "save"],

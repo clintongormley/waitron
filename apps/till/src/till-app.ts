@@ -3608,7 +3608,7 @@ export class TillApp extends LitElement {
    * of the read whose printing problems are on screen, and {@link #groupsShown} the one whose groups
    * and current orders are, so an answer from a read that started before it is dropped and a read
    * that ends without an answer drops nothing. */
-  #printProblemsRead = 0;
+  #groupsRead = 0;
   #printProblemsShown = 0;
   #groupsShown = 0;
   /** Identifies the latest {@link #rereadAmounts} or {@link #readSettlementBills}, so once a
@@ -4642,7 +4642,7 @@ export class TillApp extends LitElement {
     if (view.snapshot.revision === this.orderParty.revision) return;
     if (view.snapshot.revision < this.orderParty.revision) throw { code: "party.out_of_date" };
     const tablesRead = this.#startTablesRead();
-    const problemsRead = ++this.#printProblemsRead;
+    const groupsRead = ++this.#groupsRead;
     const [tables, groups, orders] = await this.#allergyRequest((signal) =>
       Promise.all([
         api.getTablesState({ signal }),
@@ -4662,8 +4662,12 @@ export class TillApp extends LitElement {
     if (party.revision < this.orderParty!.revision) return;
     this.#applyTables(tablesRead, tables);
     this.orderParty = party;
-    this.#showGroups(problemsRead, groups.groups, orders);
-    this.#showPrintProblems(problemsRead, groups.printProblems);
+    if (this.#showGroups(groupsRead, groups.groups, orders)) {
+      this.#groupsUnread = false;
+      this.#groupsReadFor = view.partyId;
+      this.currentOrdersUnread = false;
+    }
+    this.#showPrintProblems(groupsRead, groups.printProblems);
   }
 
   async #confirmTableAllergy(
@@ -13244,11 +13248,11 @@ export class TillApp extends LitElement {
     const read = ++this.#tabLinesRead;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
-    const problemsRead = ++this.#printProblemsRead;
+    const groupsRead = ++this.#groupsRead;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
-      this.#showGroups(problemsRead, [], null);
-      this.#showPrintProblems(problemsRead, []);
+      this.#showGroups(groupsRead, [], null);
+      this.#showPrintProblems(groupsRead, []);
       this.currentOrdersUnread = false;
       this.#groupsUnread = false;
       this.#groupsReadFor = partyId;
@@ -13275,8 +13279,8 @@ export class TillApp extends LitElement {
     const partyOrders = await orders;
     if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
     this.requestUpdate();
-    this.#showPrintProblems(problemsRead, partyProblems);
-    if (!this.#showGroups(problemsRead, partyGroups ?? [], partyOrders)) return;
+    this.#showPrintProblems(groupsRead, partyProblems);
+    if (!this.#showGroups(groupsRead, partyGroups ?? [], partyOrders)) return;
     this.#groupsUnread = partyGroups === null;
     this.#groupsReadFor = partyId;
     this.currentOrdersUnread = partyId !== null && partyOrders === null;
@@ -14380,7 +14384,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const tablesRead = this.#startTablesRead();
-      const problemsRead = ++this.#printProblemsRead;
+      const groupsRead = ++this.#groupsRead;
       const refreshed = await Promise.race([
         Promise.all([
           this.api.getTablesState(),
@@ -14457,8 +14461,8 @@ export class TillApp extends LitElement {
       if (party.revision < this.orderParty!.revision) return true;
       this.#applyTables(tablesRead, tables);
       this.orderParty = party;
-      this.#showPrintProblems(problemsRead, groups.printProblems);
-      if (this.#showGroups(problemsRead, groups.groups, orders)) {
+      this.#showPrintProblems(groupsRead, groups.printProblems);
+      if (this.#showGroups(groupsRead, groups.groups, orders)) {
         this.#groupsUnread = false;
         this.#groupsReadFor = partyId;
         this.currentOrdersUnread = false;
@@ -20307,7 +20311,7 @@ export class TillApp extends LitElement {
     this.orderParty = null;
     this.#tabLinesRead++;
     this.#partyBillsRead++;
-    this.#printProblemsShown = ++this.#printProblemsRead;
+    this.#printProblemsShown = ++this.#groupsRead;
     this.#groupsShown = this.#printProblemsShown;
     this.tabLines = [];
     this.tabGroups = [];
