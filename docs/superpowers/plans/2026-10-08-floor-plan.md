@@ -5830,6 +5830,7 @@ if it is wrong.
     `api/tables` there finds none); only `apps/server/src/till-api.tables.test.ts` and
     `till-api.profile-zones.test.ts:1262`, `:1317` do. It is not an old placement piece; its answer
     loses the old columns with `listTables`' (Task 5.2k), and a backlog line asks whether to retire it.
+    (2026-11-17: removed by TILL-TABLES-ROUTE-RETIRE.)
 16. **The migration is three files**: a custom one that drops `parties_clear_table_status`, the
     generated rebuild, and a custom one that re-creates the trigger unchanged, as `0043`, `0044` and
     `0045` did — so a later regeneration cannot drop the hand-written SQL with the generated file. It
