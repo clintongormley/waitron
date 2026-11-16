@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands } from "vitest/browser";
 import { mountThemed } from "../a11y-helpers.js";
 import { cleanup, host, mount } from "../test-helpers.js";
+import { setMediaServer } from "../media-server.js";
 import { THEME_STORAGE_KEY, chooseTheme, startThemeChoice } from "../theme-choice.js";
 import type { WtVenueLogo } from "./wt-venue-logo.js";
 import "./wt-venue-logo.js";
@@ -331,5 +332,20 @@ describe("wt-venue-logo", () => {
     expect(img(named)!.getAttribute("alt")).toBe("Bar Lucía");
     expect(img(named)!.getAttribute("part")).toBe("image");
     expect(box(named).getAttribute("part")).toBe("box");
+  });
+
+  it("draws a media path from the set media server and follows a change", async () => {
+    try {
+      const el = await logo(`light="/media/logo.webp"`, "light");
+      expect(img(el)!.getAttribute("src")).toBe("/media/logo.webp");
+      setMediaServer("https://spare.deli.test");
+      await el.updateComplete;
+      expect(img(el)!.getAttribute("src")).toBe("https://spare.deli.test/media/logo.webp");
+      setMediaServer("https://main.deli.test");
+      await el.updateComplete;
+      expect(img(el)!.getAttribute("src")).toBe("https://main.deli.test/media/logo.webp");
+    } finally {
+      setMediaServer("");
+    }
   });
 });

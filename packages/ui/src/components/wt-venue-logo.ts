@@ -4,6 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
 import { ColorSchemeController } from "../color-scheme.js";
+import { mediaAddress, onMediaServerChange } from "../media-server.js";
 
 export type WtVenueLogoSize = "banner" | "bar" | "sign-in";
 
@@ -90,9 +91,10 @@ export class WtVenueLogo extends LitElement {
   readonly #scheme = new ColorSchemeController(this);
   #drawn!: string;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #stopFollowingServer: (() => void) | undefined;
 
   get #src(): string {
-    return this.#scheme.dark && this.dark ? this.dark : this.light;
+    return mediaAddress(this.#scheme.dark && this.dark ? this.dark : this.light);
   }
 
   // Not willUpdate: Lit runs that before the controller's hostUpdate reads the scheme.
@@ -111,11 +113,13 @@ export class WtVenueLogo extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#stopFollowingServer = onMediaServerChange(() => this.requestUpdate());
     if (this.broken) this.#startTimer();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#stopFollowingServer!();
     this.#stopTimer();
   }
 
