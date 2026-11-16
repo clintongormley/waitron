@@ -3991,6 +3991,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
         partyBill("wo-10", "v-2", 2),
       ]);
       await nameParty(el, "Ana");
+      expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-8", "wo-10"]);
       expect(tableOrder(el)!.orderId).toBe("wo-8");
       expect(payingDialog(el)).toBe(panel);
       expect(state === "busy" ? panel.busy : panel.confirmationLocked).toBe(true);
@@ -4017,11 +4018,21 @@ describe("A803 action results: the bill on screen after a table action", () => {
       partyBill("wo-9", "v-2", 2),
     ]);
     await nameParty(el, "Ana");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual([
+      "wo-8",
+      "wo-10",
+      "wo-9",
+    ]);
     expect(tableOrder(el)!.orderId).toBe("wo-10");
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-switch-bill="wo-8"]')!.click();
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-8");
     await nameParty(el, "Eva");
+    expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual([
+      "wo-8",
+      "wo-10",
+      "wo-9",
+    ]);
     expect(tableOrder(el)!.orderId).toBe("wo-8");
   });
 

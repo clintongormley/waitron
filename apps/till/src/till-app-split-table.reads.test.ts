@@ -271,7 +271,10 @@ describe("a refusal's own reads have a time limit", () => {
   it("a successful split's follow-up floor read expires at 25 seconds and ignores a late answer", async () => {
     const el = await billTwoTicked();
     const floorRead = held<ReturnType<typeof atFloor>>();
-    api.getTablesState!.mockReset().mockImplementationOnce(floorRead.read);
+    api
+      .getTablesState!.mockReset()
+      .mockResolvedValue(atFloor(9))
+      .mockImplementationOnce(floorRead.read);
     await press(el, "[data-split-confirm]");
     expect(api.splitTable).toHaveBeenCalledOnce();
     const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
@@ -282,6 +285,7 @@ describe("a refusal's own reads have a time limit", () => {
       await vi.advanceTimersByTimeAsync(1);
       await flush(el);
       expect(tableOrder(el)!.tables).toEqual([]);
+      expect(api.getTablesState).toHaveBeenCalledOnce();
       floorRead.calls[0]!.answer(atFloor(9));
       await flush(el);
       expect(tableOrder(el)!.tables).toEqual([]);
@@ -936,6 +940,32 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
     expect(tableOrder(el)!.orderId).toBeUndefined();
     return { el, floors };
   }
+
+  it.each(["first bill", "split follow-up"] as const)(
+    "the %s draft read has its own 25-second limit",
+    async (scope) => {
+      const opened = scope === "first bill" ? await reloadOut() : { el: await billTwoTicked() };
+      const el = opened.el;
+      const signals: AbortSignal[] = [];
+      api
+        .listDrafts!.mockReset()
+        .mockImplementation((_party: string, options?: { signal?: AbortSignal }) => {
+          signals.push(options!.signal!);
+          return new Promise(() => {});
+        });
+      if ("floors" in opened) opened.floors.calls[0]!.answer(stillTogether());
+      else await press(el, "[data-split-confirm]");
+      await flush(el);
+      await flush(el);
+      expect(signals).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(24_999);
+      await flush(el);
+      expect(signals[0]!.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await flush(el);
+      expect(signals[0]!.aborted).toBe(true);
+    },
+  );
 
   it("an ordinary bills read keeps its budget while the panel's first-bill lines are out", async () => {
     const { el, floors } = await reloadOut();

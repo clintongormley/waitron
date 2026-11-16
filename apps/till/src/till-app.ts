@@ -13111,7 +13111,7 @@ export class TillApp extends LitElement {
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(splitRead = false): Promise<void> {
-    await this.#followPartyDraft();
+    await this.#followPartyDraft(splitRead);
     const read = ++this.#tabLinesRead;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
@@ -13447,7 +13447,7 @@ export class TillApp extends LitElement {
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
   }
 
-  async #openDraft(session: number): Promise<OpenedDraft> {
+  async #openDraft(session: number, splitRead = false): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
@@ -13536,7 +13536,7 @@ export class TillApp extends LitElement {
         if (this.#tableMenuPending) this.#followTableMenu();
       }
     });
-    return { sync, read: await sync.load(this.#draftReadBounds()) };
+    return { sync, read: await sync.load(this.#draftReadBounds(splitRead)) };
   }
 
   #syncDraftBillStatus(): void {
@@ -13675,7 +13675,7 @@ export class TillApp extends LitElement {
       : { limitMs: SPLIT_REFUSAL_READ_LIMIT_MS, stop: refusal?.ended.signal };
   }
 
-  async #refreshBillDraft(): Promise<void> {
+  async #refreshBillDraft(splitRead = false): Promise<void> {
     const sync = this.#draftSync;
     if (
       sync === undefined ||
@@ -13695,7 +13695,7 @@ export class TillApp extends LitElement {
     });
     try {
       const loaded = await sync.load(
-        this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
+        this.#draftReadBounds(splitRead) ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
       );
       if (
         !loaded ||
@@ -13756,7 +13756,7 @@ export class TillApp extends LitElement {
   }
 
   /** Relocation invalidates the old party's write scope; retain its candidate for review. */
-  async #followPartyDraft(): Promise<void> {
+  async #followPartyDraft(splitRead = false): Promise<void> {
     const sync = this.#draftSync;
     if (
       sync === undefined ||
@@ -13770,7 +13770,7 @@ export class TillApp extends LitElement {
     const party = this.orderParty?.id;
     await this.#savesOutFor(party);
     if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
-    this.#showDraft(await this.#openDraft(session));
+    this.#showDraft(await this.#openDraft(session, splitRead));
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
@@ -14111,7 +14111,7 @@ export class TillApp extends LitElement {
       this.#draftSync?.billId === next
     )
       return;
-    this.#showDraft(await this.#openDraft(session));
+    this.#showDraft(await this.#openDraft(session, splitRead));
   }
 
   /** The unsaved lines a dropped draft kept for `from`, offered for review on `to` instead, unless
@@ -18411,7 +18411,7 @@ export class TillApp extends LitElement {
       asked.session === this.#operatorSession &&
       !this.#hasLeftParty(party.id, sent)
     )
-      await this.#refreshBillDraft();
+      await this.#refreshBillDraft(true);
   }
 
   /** D16: works out what to say, runs the row's reads, and only then says it. Answers true when the
