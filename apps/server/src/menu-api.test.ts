@@ -687,6 +687,32 @@ describe("content-language configuration", () => {
     );
   });
 
+  it("uses the venue fallback with unset languages and preserves stored names in other languages", async () => {
+    const app = mountApp("es-ES");
+    const created = await send(app, "POST", "/management-api/menus", {
+      body: { name: "Venue fallback menu", names: { en: "Stored English menu" } },
+    });
+    expect(created.status).toBe(201);
+    const { id: menuId } = (await created.json()) as { id: string };
+    const disabledEdit = await send(app, "PATCH", `/management-api/menus/${menuId}`, {
+      body: { names: { en: "Changed English menu" } },
+    });
+    expect(disabledEdit.status).toBe(400);
+    expect(await disabledEdit.json()).toMatchObject({
+      error: { code: "content.translation_invalid" },
+    });
+    const response = await send(app, "PATCH", `/management-api/menus/${menuId}`, {
+      body: { names: { es: "Spanish menu" } },
+    });
+    expect(response.status).toBe(204);
+    const root = await menuRootVia(app, menuId);
+    expect(await (await send(app, "GET", `/management-api/sections/${root}`)).json()).toMatchObject(
+      {
+        names: { en: "Stored English menu", es: "Spanish menu" },
+      },
+    );
+  });
+
   it("starts from the configured site language and saves additional content languages", async () => {
     const app = mountApp("en-GB");
     const initial = await send(app, "GET", "/management-api/content-languages");

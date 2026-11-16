@@ -159,26 +159,15 @@ A349's Preview, price-table and navigation suites also logged the message.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not looked for.
 
-## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
-
-- It calls `resolveSnapshotText(variant, locale,
-locale)` (`packages/shared/src/menu-document/product-presentation.ts`), the shape A172 fixed in
-  `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
-  language alphabetically rather than the default. The order path freezes the variant's text in
-  the default content language, under every receipt-language key, before it gets there
-  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
-  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
-  reproduce before fixing.
-
 ## Language resolution follow-ons
 
 - **Language resolution follow-ons**
   ([original design](../superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
-  there is still no single shared rule: the receipt's `lineName`
-  (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
-  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
-  Read in the code and not run: `resolveContentText` moves to another region of the same language
-  (es-ES to es-MX), which the design rules out. Adding content translations does not translate
+  the receipt's `lineName`
+  (`apps/server/src/receipt-document.ts`) tries the exact language and then takes the first stored one.
+  `resolveContentText` moves to another region of the same language (es-ES to es-MX), which the
+  design rules out. These remaining changes affect invoice preparation or receipt rendering
+  and belong to the invoice owner. Adding content translations does not translate
   Waitron's interface.
 
 ## Product folders, menus that include menus, and prep station routing: partly built (design approved 2026-09-30)
@@ -294,26 +283,6 @@ the 2026-09-30 folders design; what remains:
   `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
   directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
 
-## A name stored under a regional code such as `en-GB` is read by the forms as the plain code first, then its regional ones
-
-Left open by W77 (a folded Customer-facing names section shows every language's name, inherited
-ones in italic, owner 2026-10-04; #1197; W77a #1206):
-
-The only other folded section holding customer-facing names is the Product editor's Descriptors
-section, whose Name row says "None specified" for a blank language by A211's decision; left as it
-is (asked of the owner, 2026-10-04).
-A name stored under a regional code such as `en-GB` is read by the forms as the plain code first,
-then its regional ones (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or
-receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one name in the
-form and serve the other. An option's label, a variant and a menu section reach the same helper
-through `optionalTextFields` but have no case of their own. Still reading the plain code only: the
-unit form's names, the adjustment reasons' names
-(`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image library's names
-(`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional tidying: the
-Product editor keeps a private `text()` helper doing what `languageText` does, and
-`product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
-names; folding them into the one helper was not part of W77a.
-
 ## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
@@ -405,9 +374,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 From **The product editor and menu (#345, #379, #387) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
-- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
-  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
-  can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
+- **Smaller things #379 surfaced and did not take.** `wt-price-input` was built from scratch
   rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
   ones. And three interface faults seen then: the products list heads its Name column "Description",
   "Top sellers" is rendered
@@ -551,14 +518,6 @@ page, not the table's scroll box, and gave its root label `position: relative`; 
 label has no such rule. **Next action:** measure at phone width with a long name before changing
 anything.
 
-## Menu-root enabled-language fallback when content languages are unset (A420 review)
-
-`updateMenuDetails` checks map keys using English as its fallback; section and include-folder
-writers use their supplied venue fallback. Decide whether the menu-root writer should take
-that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
-maps optional with %s configuration”, retains the unset-configuration difference. Inline saves
-use their resolved venue context.
-
 ## A case the content-language decisions leave open, built with the plan's default unless the owner says otherwise
 
 **A case the content-language decisions leave open, built with the plan's default unless the owner
@@ -656,23 +615,13 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: One language fallback rule
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+The invoice owner's remaining lookup work and the unrelated #379 followups.
 
-- **Menu-root enabled-language fallback when content languages are unset (A420 review).**
-  [Detail](menu.md#menu-root-enabled-language-fallback-when-content-languages-are-unset-a420-review)
-- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).**
-  [Detail](menu.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
-- **Language resolution follow-ons** — there is still no single shared rule: the receipt's
-  `lineName` (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
-  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
+- **Language resolution follow-ons** — the receipt's `lineName` and the shared resolver's
+  sibling-region fallback still need the invoice owner's changes.
   [Detail](menu.md#language-resolution-follow-ons)
-- **A name stored under a regional code such as `en-GB` is read by the forms as the plain code
-  first, then its regional ones**
-  [Detail](menu.md#a-name-stored-under-a-regional-code-such-as-en-gb-is-read-by-the-forms-as-the-plain-code-first-then-its-regional-ones)
-- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
-  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
-  can mix languages when a locale exists on one half only.
+- **Smaller things #379 surfaced and did not take.** The price input, modifier rules and three
+  interface faults remain outside the language cleanup.
   [Detail](menu.md#smaller-things-379-surfaced-and-did-not-take)
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
@@ -800,6 +749,9 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- **Folded customer names** (owner, 2026-10-04, W77/#1197): show every language's name, with inherited ones in italic. The Product editor's Descriptors section has a Name row saying “None specified” for a blank language by A211's decision; left as it is (asked of the owner, 2026-10-04).
+
 
 - **Structure branch changes (watcher, 2026-11-16).** Keep the current-path redraw check: no production code needs a new expansion event, and the controller remains for fitting, focus and paint.
 
