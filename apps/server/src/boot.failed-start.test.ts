@@ -1209,17 +1209,15 @@ describe("append-only triggers at boot", () => {
     let before;
     try {
       const order = await seedWorkingOrder(store.venue, { source: "operator_script" });
-      await store.venue
-        .insert(payments)
-        .values({
-          workingOrderId: order.id,
-          source: "operator_script",
-          nodeId: TILL_ENV.WAITRON_NODE_ID,
-          provider: "fake",
-          paymentRef: "retained",
-          amount: 1000,
-          state: "failed",
-        });
+      await store.venue.insert(payments).values({
+        workingOrderId: order.id,
+        source: "operator_script",
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
+        provider: "fake",
+        paymentRef: "retained",
+        amount: 1000,
+        state: "failed",
+      });
       before = {
         payments: store.venue.all(sql`select * from payments`),
         journal: store.venue.all(sql`select * from __drizzle_migrations_payments`),
