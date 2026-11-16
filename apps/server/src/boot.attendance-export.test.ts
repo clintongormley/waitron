@@ -56,7 +56,12 @@ for (const state of ["provider", "workforce-only"] as const) {
         );
         await stampDeployment(suite.db, "preproduction");
         if (mode === "mirror") {
-          await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
+          await setNodeMode(
+            { venue: suite.db, node: suite.node },
+            venue.cfg.nodeId,
+            "mirror",
+            "adopt",
+          );
           await writeMirrorLink(suite.node, venue.cfg.nodeId, {
             originUrl: "https://127.0.0.1:1/",
             boxHostname: "box.test",
@@ -65,7 +70,7 @@ for (const state of ["provider", "workforce-only"] as const) {
           });
         } else if (mode === "secondary")
           await withNodeTransaction(suite.node, (tx) =>
-            setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"),
+            setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary", "fenced"),
           );
         else if (mode === "fenced") {
           // A box its chart lists holds its signing key.

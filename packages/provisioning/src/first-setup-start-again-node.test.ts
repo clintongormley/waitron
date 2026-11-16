@@ -57,7 +57,7 @@ async function recoveryKeyRow(roots: { venueDir: string }, nodeId = NODE_ID) {
   const store = await openVenueDatabase(roots.venueDir);
   try {
     await withNodeTransaction(store.node, (tx) =>
-      setRecoveryKeyTx(tx, nodeId, "scrypt$verifier", "Olive"),
+      setRecoveryKeyTx(tx, nodeId, "scrypt$verifier", "Olive", null),
     );
   } finally {
     await store.close();

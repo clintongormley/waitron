@@ -118,7 +118,7 @@ beforeAll(async () => {
   });
   const aId = await seedNode(aStore.venue);
   await establishNodeIdentity({ ownerDb: aStore.venue, node: aStore.node, ring: RING_A }, aId);
-  await setNodeMode({ venue: aStore.venue, node: aStore.node }, aId, "primary");
+  await setNodeMode({ venue: aStore.venue, node: aStore.node }, aId, "primary", "promote");
   const aSecret = await mintBreakGlassSecret({ venue: aStore.venue, node: aStore.node }, aId);
   const aKey = (await readNodeSigningKey(aStore.node, RING_A, aId))!;
 

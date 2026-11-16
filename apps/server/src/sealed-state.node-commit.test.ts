@@ -87,7 +87,7 @@ async function verifierInSealedRow(nodeId: string, scratch: string): Promise<str
 
 async function putVerifier(node: NodeDatabase, nodeId: string, verifier: string): Promise<void> {
   await withNodeTransaction(node, async (tx) => {
-    await setRecoveryKeyTx(tx, nodeId, verifier, "key-one");
+    await setRecoveryKeyTx(tx, nodeId, verifier, "key-one", null);
   });
 }
 

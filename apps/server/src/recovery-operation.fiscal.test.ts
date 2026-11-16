@@ -220,8 +220,8 @@ async function promote(
   );
   if (overrides.priorActivation !== "committed")
     await withNodeTransaction(suite.node, async (tx) => {
-      await setNodeModeTx(tx, target.nodeId, "primary");
-      await setSingletonRoleTx(tx, target.nodeId, "primary");
+      await setNodeModeTx(tx, target.nodeId, "primary", "promote");
+      await setSingletonRoleTx(tx, target.nodeId, "primary", "fenced");
     });
   return result;
 }
@@ -251,7 +251,9 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((series) => ({ ...series, nodeId: primary.nodeId })));
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, target.nodeId, "mirror"));
+  await withNodeTransaction(suite.node, (tx) =>
+    setNodeModeTx(tx, target.nodeId, "mirror", "adopt"),
+  );
   await withTransaction(suite.db, (tx) =>
     establishDormantAllocation(tx, primary, target, reservation, trust, {
       allocationId: candidate.allocationId,

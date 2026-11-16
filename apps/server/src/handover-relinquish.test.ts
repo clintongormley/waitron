@@ -738,7 +738,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       "destination",
       offer,
     );
-    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spareId, "mirror");
+    await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spareId, "mirror", "adopt");
     await writeMirrorLink(spareBox.node, spareId, {
       originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",

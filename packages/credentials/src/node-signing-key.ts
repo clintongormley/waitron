@@ -12,7 +12,7 @@ import {
   type NodeTransaction,
 } from "@waitron/db";
 import { generateNodeKeyPair, type TrustSet } from "@waitron/membership";
-import { box, writeBoxSigningKeyTx } from "@waitron/node-db";
+import { box, writeBoxSigningKeyTx, appendHandoverEventTx } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { aadFor, openSealedRow, seal, type SealedRow } from "./cipher.js";
 import type { KeyRing } from "./keyring.js";
@@ -222,6 +222,13 @@ export async function rotateNodeSigningKeysTx(
         nodeId,
       ),
     );
+    await appendHandoverEventTx(tx, {
+      nodeId,
+      operationId: null,
+      kind: "box.signing_key_rotated",
+      detail: { keyVersion: ring.current.version },
+      envelope: null,
+    });
     result.rotated += 1;
   }
   return result;

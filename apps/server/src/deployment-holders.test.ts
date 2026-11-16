@@ -20,8 +20,8 @@ beforeAll(() => {
 describe("refreshDeploymentHolders", () => {
   it("re-reads both axes from the database into the holder", async () => {
     await stampDeployment(db, "preproduction");
-    await setNodeMode({ venue: db, node: suite.node }, NODE, "primary");
-    await setSingletonRole({ venue: db, node: suite.node }, NODE, "secondary"); // a local secondary: (primary, secondary)
+    await setNodeMode({ venue: db, node: suite.node }, NODE, "primary", "promote");
+    await setSingletonRole({ venue: db, node: suite.node }, NODE, "secondary", "fenced"); // a local secondary: (primary, secondary)
 
     // A holder built from a STALE snapshot...
     const holders = createDeploymentHolders("mirror", "primary");
@@ -33,7 +33,7 @@ describe("refreshDeploymentHolders", () => {
     expect(holders.singletonRole.current).toBe("secondary");
 
     // ...and it tracks a subsequent write.
-    await setSingletonRole({ venue: db, node: suite.node }, NODE, "primary");
+    await setSingletonRole({ venue: db, node: suite.node }, NODE, "primary", "fenced");
     await refreshDeploymentHolders(suite.node, NODE, holders);
     expect(holders.singletonRole.current).toBe("primary");
   });

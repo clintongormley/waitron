@@ -149,10 +149,10 @@ beforeEach(async () => {
   self = await seedNode(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
-  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror", "adopt");
   await pinMainBoxKey(suite.node, self, { nodeId: SOURCE.nodeId, publicKey: SOURCE.publicKey });
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, self, hashSecret(KEY), "paper-1"),
+    setRecoveryKeyTx(tx, self, hashSecret(KEY), "paper-1", null),
   );
   const selfKey = await readNodeIdentityKey(suite.node, RING, self);
   const body: MembershipDocumentBody = {
@@ -371,8 +371,6 @@ async function recorded(): Promise<{ operations: unknown[]; events: unknown[] }>
   };
 }
 
-const NOTHING_RECORDED = { operations: [], events: [] };
-
 async function openOperation(): Promise<void> {
   const store = { node: suite.node, nodeId: self };
   await beginHandover(store, binding, "destination");
@@ -500,6 +498,7 @@ describe("an offer and a promotion take turns on one box", () => {
   }
 
   it("an offer meeting a promotion past its check is refused and recorded nowhere, on every way in", async () => {
+    const before = await recorded();
     const answered: Record<string, unknown> = {};
     for (const [name, sent] of Object.entries(promotions())) {
       const hold = holdThePromotion();
@@ -513,7 +512,7 @@ describe("an offer and a promotion take turns on one box", () => {
     const expected = {
       offer: refusal(409, "handover.promotion_running"),
       promote: { status: 200, body: RESTARTING },
-      recorded: NOTHING_RECORDED,
+      recorded: before,
     };
     expect(answered).toEqual(
       Object.fromEntries(Object.keys(promotions()).map((name) => [name, expected])),
@@ -521,6 +520,7 @@ describe("an offer and a promotion take turns on one box", () => {
   });
 
   it("an offer arriving just after the promote read for an open operation is refused too", async () => {
+    const before = await recorded();
     let met: unknown;
     holds.afterReadingOpenOperation = async () => {
       holds.afterReadingOpenOperation = undefined;
@@ -532,7 +532,7 @@ describe("an offer and a promotion take turns on one box", () => {
     expect({ met, promoted, recorded: await recorded() }).toEqual({
       met: refusal(409, "handover.promotion_running"),
       promoted: { status: 200, body: RESTARTING },
-      recorded: NOTHING_RECORDED,
+      recorded: before,
     });
   });
 

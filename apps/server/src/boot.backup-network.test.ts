@@ -568,7 +568,7 @@ describe("stream encryption checks at the real trading boot", () => {
         observeApp: (app) => {
           app.post("/test-node-commit", async (c) => {
             await withNodeTransaction(sealing.node!, (tx) =>
-              setNodeModeTx(tx, venue.cfg.nodeId, "primary"),
+              setNodeModeTx(tx, venue.cfg.nodeId, "primary", "promote"),
             );
             return c.json({});
           });

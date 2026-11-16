@@ -151,7 +151,7 @@ beforeAll(async () => {
   secondaryVenueDir = await migratedVenueDir(async (db, node) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
-    await setSingletonRole({ venue: db, node }, TILL_ENV.WAITRON_NODE_ID, "secondary");
+    await setSingletonRole({ venue: db, node }, TILL_ENV.WAITRON_NODE_ID, "secondary", "fenced");
   });
   // No recorded role group: `readNodeMode` reads it as ('primary', 'primary').
   primaryVenueDir = await migratedVenueDir(async (db) => {

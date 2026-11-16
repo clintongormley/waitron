@@ -66,7 +66,7 @@ it("boot keeps an adoption whose copy has not arrived pending, with no ambient s
     taxModule: "vat",
   });
   await stampDeployment(suite.db, "preproduction");
-  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror", "adopt");
   const pending: PendingAdoption = {
     originNodeId: PRIMARY,
     standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
@@ -140,7 +140,7 @@ it("the pending-adoption start answers the main box's signed query", async () =>
     taxModule: "vat",
   });
   await stampDeployment(suite.db, "preproduction");
-  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror", "adopt");
   const keyEnv = {
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -209,7 +209,7 @@ it("the pending-adoption start is handed a chart through its own route", async (
   await seedVenue(suite.db);
   const origin = await seedNode(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror", "adopt");
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-membership-"));
   let server: StartedServer | undefined;
   try {
@@ -266,7 +266,7 @@ async function seedJoiningSpare() {
     { id: STANDBY, name: "Spare", publicKey: standby.publicKey },
   ]);
   await stampDeployment(suite.db, "preproduction");
-  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror", "adopt");
   const keyEnv = {
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",

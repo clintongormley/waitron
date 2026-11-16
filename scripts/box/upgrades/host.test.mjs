@@ -22,7 +22,7 @@ describe("upgrade admission against the current node schema", () => {
     onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
     await fs.mkdir(join(root, "venue"));
     await fs.writeFile(join(root, "trading.env"), "WAITRON_NODE_ID=one\n");
-    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, "one", "mirror"));
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, "one", "mirror", "adopt"));
     const path = join(root, "venue", "node.db");
     await suite.node.archiveTo(path);
     await expect(holdUpgradeState(root)).rejects.toThrow("paired upgrades are not available");

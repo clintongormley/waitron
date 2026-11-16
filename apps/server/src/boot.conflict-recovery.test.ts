@@ -55,7 +55,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   });
   const key = "synthetic-boot-current-recovery-key";
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, liveConflictNode.nodeId, hashSecret(key), "boot-key-1"),
+    setRecoveryKeyTx(tx, liveConflictNode.nodeId, hashSecret(key), "boot-key-1", null),
   );
   const scratch = await mkdtemp(join(tmpdir(), "conflict-boot-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));

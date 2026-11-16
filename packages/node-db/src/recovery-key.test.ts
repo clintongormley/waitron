@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
+import { nodeHandoverEvents } from "./schema/node-handover.js";
 import {
   readRecoveryKey,
   readRecoveryKeyName,
@@ -36,6 +37,56 @@ describe("the node recovery-key check", () => {
     migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
+  it("records only replacements, with the new name and actor and no verifier", async () => {
+    suite.node.run(sql`insert into box (node_id, mode, singleton_role, role_changed_at)
+      values (${NODE}, 'primary', 'primary', ${new Date().toISOString()})`);
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setRecoveryKeyTx(tx, NODE, "first-verifier", "first", null);
+      await setRecoveryKeyTx(tx, NODE, "first-verifier", "renamed", "actor");
+      expect(await tx.select().from(nodeHandoverEvents)).toEqual([]);
+      await setRecoveryKeyTx(tx, NODE, "second-verifier", "second", "actor");
+      await setRecoveryKeyTx(tx, NODE, "third-verifier", "third", null);
+    });
+    const events = await suite.node
+      .select({
+        nodeId: nodeHandoverEvents.nodeId,
+        operationId: nodeHandoverEvents.operationId,
+        kind: nodeHandoverEvents.kind,
+        detail: nodeHandoverEvents.detail,
+        envelope: nodeHandoverEvents.envelope,
+      })
+      .from(nodeHandoverEvents)
+      .orderBy(sql`rowid`);
+    expect(events).toEqual([
+      {
+        nodeId: NODE,
+        operationId: null,
+        kind: "box.recovery_key_replaced",
+        detail: { keyName: "second", personId: "actor" },
+        envelope: null,
+      },
+      {
+        nodeId: NODE,
+        operationId: null,
+        kind: "box.recovery_key_replaced",
+        detail: { keyName: "third", personId: null },
+        envelope: null,
+      },
+    ]);
+    const before = await suite.node.select().from(nodeHandoverEvents);
+    await expect(
+      withNodeTransaction(suite.node, async (tx) => {
+        await setRecoveryKeyTx(tx, NODE, "rolled-back", "fourth", "actor");
+        throw new Error("abandoned");
+      }),
+    ).rejects.toThrow("abandoned");
+    expect(await readRecoveryKey(suite.node, NODE)).toEqual({
+      verifier: "third-verifier",
+      keyName: "third",
+    });
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual(before);
+  });
+
   it("reads null before anything is written", async () => {
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBeNull();
     expect(await readRecoveryKeyName(suite.node, NODE)).toBeNull();
@@ -44,7 +95,7 @@ describe("the node recovery-key check", () => {
 
   it("reads the verifier and name together, on a caller's node transaction too", async () => {
     await withNodeTransaction(suite.node, async (tx) => {
-      await setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first");
+      await setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null);
       expect(await readRecoveryKey(tx, NODE)).toEqual({
         verifier: "scrypt$aa$bb",
         keyName: "2026-10-31-first",
@@ -59,7 +110,7 @@ describe("the node recovery-key check", () => {
 
   it("round-trips the verifier and name written on a caller's node transaction", async () => {
     await withNodeTransaction(suite.node, async (tx) => {
-      await setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first");
+      await setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null);
       expect(await readRecoveryKeyVerifier(tx, NODE)).toBe("scrypt$aa$bb");
     });
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$aa$bb");
@@ -68,14 +119,14 @@ describe("the node recovery-key check", () => {
 
   it("writes into node.db", async () => {
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null),
     );
     expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: NODE }]);
   });
 
   it("reads a recovery-key check only for the node it was written for", async () => {
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null),
     );
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$aa$bb");
     expect(await readRecoveryKeyVerifier(suite.node, OTHER)).toBeNull();
@@ -84,14 +135,14 @@ describe("the node recovery-key check", () => {
 
   it("a second write for the same node replaces its verifier, name and time in place", async () => {
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null),
     );
     const [first] = suite.node.all<{ updated_at: string }>(
       sql`select recovery_key_changed_at as updated_at from box`,
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$cc$dd", "2026-10-31-second"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$cc$dd", "2026-10-31-second", null),
     );
     expect(suite.node.all(sql`select count(*) as n from box`)).toEqual([{ n: 1 }]);
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe("scrypt$cc$dd");
@@ -104,7 +155,7 @@ describe("the node recovery-key check", () => {
 
   it.each(["", "   "])("reads a blank name %j as no name, keeping the verifier", async (blank) => {
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null),
     );
     suite.node.run(sql`update box set recovery_key_name = ${blank} where node_id = ${NODE}`);
     expect(await readRecoveryKeyName(suite.node, NODE)).toBeNull();
@@ -117,7 +168,7 @@ describe("the node recovery-key check", () => {
 
   it("permits at most one row per node — the primary key refuses a second", async () => {
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first"),
+      setRecoveryKeyTx(tx, NODE, "scrypt$aa$bb", "2026-10-31-first", null),
     );
     const error = await captureError(() =>
       Promise.resolve(

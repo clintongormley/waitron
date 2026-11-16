@@ -433,6 +433,7 @@ export function mountBackupRecoveryPackMakeApi(
                 nodeId,
                 made.replacement.verifier,
                 made.replacement.name,
+                personId,
               );
             }
             return made;

@@ -438,6 +438,7 @@ describe("startServer, against a migrated venue directory", () => {
           { venue: db, node: venue.store.node },
           TILL_ENV.WAITRON_NODE_ID,
           "mirror",
+          "adopt",
         );
       const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {

@@ -187,7 +187,12 @@ async function boxes(
     );
   }
   if (options.chart === "none") await newBox.db.run(sql`delete from node_membership`);
-  await setNodeMode({ venue: newBox.db, node: newBox.node }, m2, options.mode ?? "primary");
+  await setNodeMode(
+    { venue: newBox.db, node: newBox.node },
+    m2,
+    options.mode ?? "primary",
+    (options.mode ?? "primary") === "mirror" ? "adopt" : "promote",
+  );
   if (options.link !== "none") {
     await writeMirrorLink(newBox.node, m2, {
       originUrl: "http://127.0.0.1:1/",

@@ -8,7 +8,7 @@ import {
   setNodePublicKey,
   withNodeTransaction,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, box } from "@waitron/node-db";
+import { NODE_MIGRATIONS, box, nodeHandoverEvents } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -89,6 +89,7 @@ describe("the box's signing key in node.db", () => {
       sealNodeSigningKeyTx(tx, RING_V1, NODE, PRIVATE_KEY),
     );
     expect(await readNodeSigningKey(suite.node, RING_V1, NODE)).toBe(PRIVATE_KEY);
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
     expect(
       suite.node.all(sql`select node_id, signing_key_version as key_version from box`),
     ).toEqual([{ node_id: NODE, key_version: 1 }]);
@@ -186,6 +187,7 @@ describe("establishing the box's signing key", () => {
   it("makes and seals a key, then stamps its public half on the node's row", async () => {
     const nodeId = await freshNode();
     await establishNodeSigningKey(suite.db, suite.node, RING_V1, nodeId);
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
     const privateKey = await readNodeSigningKey(suite.node, RING_V1, nodeId);
     expect(privateKey).not.toBeNull();
     expect((await readMembershipTrustSet(suite.db))[nodeId]).toBe(

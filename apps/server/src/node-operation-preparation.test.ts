@@ -37,7 +37,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "node-operation-preparation-"));
   await stampDeployment(suite.db, "preproduction");
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, hashSecret(secret), "paper-1"),
+    setRecoveryKeyTx(tx, node.nodeId, hashSecret(secret), "paper-1", null),
   );
 });
 afterEach(async () => {
@@ -116,7 +116,7 @@ const prepare = (context: Record<string, unknown>) =>
   );
 
 it("hands a mirror's promotion that says the old box relinquished to the module as relinquished, not offline, without the live-box check", async () => {
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror"));
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror", "adopt"));
   expect(await prepare({ oldMachineRelinquished: true })).toMatchObject({
     oldMachineOffline: false,
     oldMachineRelinquished: true,
@@ -132,7 +132,7 @@ it("hands a promotion that does not mention relinquishment to the module as offl
 });
 
 it("refuses to set the clock under the recovery key, which names no person, and never asks the setter", async () => {
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror"));
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror", "adopt"));
   const set = vi.fn();
   const answer = await service({ clockCorrection: { set, steps: () => 0 } }).prepare(
     promote,
@@ -146,7 +146,7 @@ it("refuses to set the clock under the recovery key, which names no person, and 
 });
 
 it("hands boot's setter the agreement limit the module sent, as the signed-in person", async () => {
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror"));
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror", "adopt"));
   await seedPersons(suite.db, {
     id: ADMIN,
     displayName: "Administrator",
@@ -230,7 +230,7 @@ it.each([
     seen.push(step);
     if (rotateAfter === step) {
       await withNodeTransaction(suite.node, (tx) =>
-        setRecoveryKeyTx(tx, node.nodeId, hashSecret("replacement"), "paper-2"),
+        setRecoveryKeyTx(tx, node.nodeId, hashSecret("replacement"), "paper-2", null),
       );
     }
   };

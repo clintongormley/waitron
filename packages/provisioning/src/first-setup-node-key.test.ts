@@ -227,6 +227,7 @@ it.each(["verifier", "name", "both"])(
         stage.nodeId,
         part === "name" ? stage.verifier : "another-verifier",
         part === "verifier" ? stage.name : "another-name",
+        null,
       ),
     );
     const before = await storedKeys();
@@ -352,7 +353,7 @@ it.each([
   await stampDeployment(database.db, "preproduction");
   if (key === "staged")
     await withNodeTransaction(database.node, (tx) =>
-      setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, stage.name),
+      setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, stage.name, null),
     );
   if (packName !== null)
     await withTransaction(database.db, (tx) =>
@@ -386,6 +387,7 @@ it.each(["verifier", "name"])(
         stage.nodeId,
         part === "name" ? stage.verifier : "another-verifier",
         part === "verifier" ? stage.name : "another-name",
+        null,
       ),
     );
     await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({

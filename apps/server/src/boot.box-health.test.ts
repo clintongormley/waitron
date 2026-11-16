@@ -225,7 +225,12 @@ describe("the running server's Box status read and free-space deletion", () => {
       const box = await start(async (venue) => {
         await stampDeployment(suite.db, "preproduction");
         if (mode === "mirror") {
-          await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
+          await setNodeMode(
+            { venue: suite.db, node: suite.node },
+            venue.cfg.nodeId,
+            "mirror",
+            "adopt",
+          );
           await writeMirrorLink(suite.node, venue.cfg.nodeId, {
             originUrl: "https://127.0.0.1:1/",
             boxHostname: "box.test",

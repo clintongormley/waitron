@@ -288,7 +288,12 @@ export function placeCopyBoxes(deps: {
     };
     const store = { node: suite.node, nodeId };
     await beginHandover(store, binding, "destination");
-    await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
+    await setNodeMode(
+      { venue: suite.db, node: suite.node },
+      nodeId,
+      mode,
+      mode === "mirror" ? "adopt" : "promote",
+    );
     await writeMirrorLink(suite.node, nodeId, {
       originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",

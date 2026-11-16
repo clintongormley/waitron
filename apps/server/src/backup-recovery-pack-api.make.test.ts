@@ -1,4 +1,5 @@
 import { storeArchivePart } from "./testing/backup-settings.js";
+import { nodeHandoverEvents } from "@waitron/node-db";
 import { ensureStreamId } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -501,6 +502,25 @@ describe("a made pack", () => {
     const [record] = await packs();
     expect(record!.parts[3]).toMatchObject({ keyName: carried.name, carriedKey: true });
     expect(JSON.stringify(record)).not.toContain(carried.secret);
+    expect(
+      await suite.node
+        .select({
+          nodeId: nodeHandoverEvents.nodeId,
+          operationId: nodeHandoverEvents.operationId,
+          kind: nodeHandoverEvents.kind,
+          detail: nodeHandoverEvents.detail,
+          envelope: nodeHandoverEvents.envelope,
+        })
+        .from(nodeHandoverEvents),
+    ).toEqual([
+      {
+        nodeId: node.nodeId,
+        operationId: null,
+        kind: "box.recovery_key_replaced",
+        detail: { keyName: carried.name, personId: admin.personId },
+        envelope: null,
+      },
+    ]);
   });
 
   it("never gives a new key the name of the key in force or of a key an earlier pack carried", async () => {

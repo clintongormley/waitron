@@ -218,7 +218,7 @@ it("uses a typed archive key without changing the saved key", async () => {
 it("keeps the placed source after a second selection is interrupted", async () => {
   const venueDir = join(root, "live");
   await mkdir(venueDir);
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror", "adopt"));
   await suite.node.archiveTo(join(venueDir, "node.db"));
   const first = await stage();
   expect(await placeFirstCopy({ stateDir: root, venueDir, nodeId, log: () => {} })).toBe(true);

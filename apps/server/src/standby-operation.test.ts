@@ -195,7 +195,7 @@ it("does not promote or open series after the standby's outside source refuses",
 
 async function mirror(activate: StandbyProvisioning["activate"]) {
   await suite.db.insert(nodes).values({ id: TARGET, name: "Standby" });
-  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   return {
     db: suite.db,
@@ -344,7 +344,7 @@ describe("opaque authenticated standby carriers", () => {
 
   it("activates a dormant module before reading series and commits with the role change", async () => {
     await suite.db.insert(nodes).values({ id: TARGET, name: "Standby" });
-    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
     const scope = { ...binding, action: "promote" };
     const module = regime(
@@ -768,7 +768,7 @@ describe("opaque authenticated standby carriers", () => {
   );
 
   it("refuses a mirror whose configured node has no venue row", async () => {
-    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
     await expect(
       promoteMirrorToPrimary(
         {

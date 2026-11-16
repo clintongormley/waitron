@@ -598,7 +598,7 @@ describe("startup zone admission", () => {
     async (mode) => {
       await rawZone("Invalid/Zone");
       if (mode === "mirror") {
-        await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
+        await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror", "adopt");
         await writeMirrorLink(suite.node, NODE, {
           originUrl: "https://127.0.0.1:1/",
           boxHostname: "box.test",
@@ -644,7 +644,7 @@ describe("startup zone admission", () => {
   });
   it("starts no sender and refuses account mail on a local secondary in repair", async () => {
     await rawZone("Invalid/Zone");
-    await setSingletonRole({ venue: suite.db, node: suite.node }, NODE, "secondary");
+    await setSingletonRole({ venue: suite.db, node: suite.node }, NODE, "secondary", "fenced");
     await boot();
     await refusal(
       await request(

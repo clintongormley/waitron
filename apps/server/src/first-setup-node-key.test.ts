@@ -138,6 +138,7 @@ it.each([
         state.frozen.nodeId,
         why === "existing verifier" ? "other" : stage.verifier,
         why === "existing name" ? "other" : stage.name,
+        null,
       ),
     );
   const before = await readRecoveryKeyVerifier(suite.node, state.frozen.nodeId);
@@ -184,7 +185,7 @@ it("refuses an existing verifier without its name rather than overwriting half a
     { stage } = await f.stage(),
     state = await committed(f);
   await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, ""),
+    setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, "", null),
   );
   await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",

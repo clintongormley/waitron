@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership, type Database } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
@@ -36,7 +37,7 @@ describe("finishPromotedRole", () => {
     });
     const nodeId = await seedNode(db);
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
-    await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror");
+    await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror", "adopt");
     const privateKey = await readNodeSigningKey(suite.node, RING, nodeId);
     return { nodeId, privateKey: privateKey! };
   }
@@ -97,6 +98,17 @@ describe("finishPromotedRole", () => {
     expect(entries).toEqual([
       { level: "warn", event: "promotion.role_finished", detail: { term: 4 } },
     ]);
+    expect(
+      suite.node
+        .all<{ detail: string }>(
+          sql`select detail from node_handover_events
+      where node_id = ${nodeId} and kind = 'box.role_changed' order by rowid`,
+        )
+        .map(({ detail }) => JSON.parse(detail)),
+    ).toEqual([
+      { mode: "mirror", singletonRole: "secondary", cause: "adopt" },
+      { mode: "primary", singletonRole: "primary", cause: "promote" },
+    ]);
   });
 
   it("decides on the axes and chart the caller read, reading neither again", async () => {
@@ -128,6 +140,14 @@ describe("finishPromotedRole", () => {
         held,
       }),
     ).toBe("finished");
+    const events = suite.node.all(sql`select * from node_handover_events`);
+    expect(
+      await finishPromotedRole(deps, {
+        axes: { mode: "mirror", singletonRole: "secondary" },
+        held,
+      }),
+    ).toBe("finished");
+    expect(suite.node.all(sql`select * from node_handover_events`)).toEqual(events);
     expect(await readNodeMode(suite.node, nodeId)).toEqual({
       mode: "primary",
       singletonRole: "primary",
@@ -136,8 +156,8 @@ describe("finishPromotedRole", () => {
 
   it("finishes a local secondary's singleton role the same way", async () => {
     const { nodeId, privateKey } = await mirrorBox();
-    await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, "primary");
-    await setSingletonRole({ venue: suite.db, node: suite.node }, nodeId, "secondary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, "primary", "promote");
+    await setSingletonRole({ venue: suite.db, node: suite.node }, nodeId, "secondary", "fenced");
     await hold(suite.db, chart(nodeId, "serving-primary"), privateKey);
 
     expect(await run(nodeId).result).toBe("finished");
@@ -149,8 +169,8 @@ describe("finishPromotedRole", () => {
 
   it("does nothing for a box already primary/primary", async () => {
     const { nodeId } = await mirrorBox();
-    await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, "primary");
-    await setSingletonRole({ venue: suite.db, node: suite.node }, nodeId, "primary");
+    await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, "primary", "promote");
+    await setSingletonRole({ venue: suite.db, node: suite.node }, nodeId, "primary", "fenced");
     // Any use of the venue handle throws, so a chart read would fail the call.
     const untouchable = new Proxy(suite.db, {
       get() {
@@ -249,7 +269,7 @@ describe("finishPromotedRole", () => {
   it("does nothing when this box holds no signing key", async () => {
     const { privateKey } = await mirrorBox();
     const keyless = "keyless-spare";
-    await setNodeMode({ venue: suite.db, node: suite.node }, keyless, "mirror");
+    await setNodeMode({ venue: suite.db, node: suite.node }, keyless, "mirror", "adopt");
     await hold(suite.db, chart(keyless, "serving-primary"), privateKey);
 
     expect(await run(keyless).result).toBe("nothing");

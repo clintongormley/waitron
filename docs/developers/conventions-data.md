@@ -1103,7 +1103,9 @@ id from those node tables and `node_take_failures`; the emergency
 switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `box`'s role group; first setup and replacing the recovery key reach its recovery-key group; first setup
-and `waitron-credentials rotate` reach its signing-key group; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+and `waitron-credentials rotate` reach its signing-key group; `mode.ts`, `recovery-key.ts` and
+credentials' `node-signing-key.ts` append role-change, replacement and rotation events through
+`appendHandoverEventTx`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `taxpayer` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`) and configuration imports use

@@ -513,7 +513,7 @@ describe("the database supplied by the placement runner", () => {
     await stampDeployment(placed.db, "preproduction");
     const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
     await withNodeTransaction(placed.node, (tx) =>
-      setRecoveryKeyTx(tx, node.nodeId, verifier!, "different-copy-key"),
+      setRecoveryKeyTx(tx, node.nodeId, verifier!, "different-copy-key", null),
     );
     await expect(
       runRestoreHooks({

@@ -468,10 +468,11 @@ describe("a destination whose activation committed and whose node.db record was 
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
     await holdActivationRow(b.nodeId);
-    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, b.nodeId, "mirror"));
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, b.nodeId, "mirror", "adopt"));
+    const before = await suite.node.select().from(nodeHandoverEvents);
     await repair(b.nodeId);
     expect(await stateOf(b.nodeId)).toBe("filing_assumed");
-    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual(before);
   });
 
   describe("on a chart another box signed, where only the record leaves the silent source uncounted", () => {

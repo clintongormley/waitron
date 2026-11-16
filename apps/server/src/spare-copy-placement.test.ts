@@ -90,7 +90,9 @@ describe("placeFirstCopy", () => {
     "a selected backup replaces only a mirror, with mode %s",
     async (mode) => {
       spareWithReadyCopy();
-      await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, mode));
+      await withNodeTransaction(suite.node, (tx) =>
+        setNodeModeTx(tx, nodeId, mode, mode === "mirror" ? "adopt" : "promote"),
+      );
       await rm(join(venueDir, NODE_FILE));
       await suite.node.archiveTo(join(venueDir, NODE_FILE));
       const selection = { source: "selected-backup", sourceId: "a".repeat(64) };
@@ -110,7 +112,9 @@ describe("placeFirstCopy", () => {
         );
         expect(await place()).toBe(false);
         expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
-        await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "primary"));
+        await withNodeTransaction(suite.node, (tx) =>
+          setNodeModeTx(tx, nodeId, "primary", "promote"),
+        );
         await rm(join(venueDir, NODE_FILE));
         await suite.node.archiveTo(join(venueDir, NODE_FILE));
         expect(await place()).toBe(false);
@@ -122,7 +126,7 @@ describe("placeFirstCopy", () => {
 
   it("places a staged followed copy on a mirror and keeps its marker until activation", async () => {
     spareWithReadyCopy();
-    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror", "adopt"));
     await rm(join(venueDir, NODE_FILE));
     await suite.node.archiveTo(join(venueDir, NODE_FILE));
     await rm(join(copyFolder(), VENUE_FILE));
@@ -150,7 +154,7 @@ describe("placeFirstCopy", () => {
 
   it("finishes selected provenance after a crash just after the live rename", async () => {
     spareWithReadyCopy();
-    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror", "adopt"));
     await rm(join(venueDir, NODE_FILE));
     await suite.node.archiveTo(join(venueDir, NODE_FILE));
     const selection = { source: "selected-backup", sourceId: "a".repeat(64) };

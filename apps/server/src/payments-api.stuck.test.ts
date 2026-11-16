@@ -565,7 +565,12 @@ describe("A1381 manager collection ownership", () => {
     });
     const key = generateNodeKeyPair();
     await stampDeployment(suite.db, "preproduction");
-    await setSingletonRole({ venue: suite.db, node: suite.node }, v.cfg.nodeId, "secondary");
+    await setSingletonRole(
+      { venue: suite.db, node: suite.node },
+      v.cfg.nodeId,
+      "secondary",
+      "fenced",
+    );
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, v.cfg.nodeId);
     await pinMainBoxKey(suite.node, v.cfg.nodeId, { nodeId: previous, publicKey: key.publicKey });
     await writeNodeMembership(

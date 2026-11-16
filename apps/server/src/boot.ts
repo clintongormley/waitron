@@ -2379,7 +2379,12 @@ async function bootServer(
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis, which stops every singleton duty. `mode` stays 'primary'; the
     // read-only gate below, not the mode, enforces the fence.
-    await setSingletonRole({ venue: db, node: store.node }, config.node.nodeId, "secondary");
+    await setSingletonRole(
+      { venue: db, node: store.node },
+      config.node.nodeId,
+      "secondary",
+      "fenced",
+    );
     // Re-read rather than synthesize: both axes from one read of the current row, so `mode` cannot
     // be stale if it flipped since the initial read.
     axes = await readNodeMode(store.node, config.node.nodeId);

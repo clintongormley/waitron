@@ -154,7 +154,7 @@ it.each(["legacy", "module", "preparation"])(
   async (kind) => {
     const made = await makeBreakGlassSecret();
     await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, made.verifier, "test-key"),
+      setRecoveryKeyTx(tx, NODE, made.verifier, "test-key", null),
     );
     const service = app();
     const request = (breakGlass: string) =>

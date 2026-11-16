@@ -8,12 +8,21 @@ import {
   type Database,
   venueCredentials,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, readRecoveryKey, setRecoveryKeyTx } from "@waitron/node-db";
+import {
+  NODE_MIGRATIONS,
+  readRecoveryKey,
+  setRecoveryKeyTx,
+  nodeHandoverEvents,
+} from "@waitron/node-db";
 import { hasCode, type AppError } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { writePairLinkTx, type NewPairLink } from "./node-pair-link.js";
-import { readNodeSigningKey, sealNodeSigningKeyTx } from "./node-signing-key.js";
+import {
+  readNodeSigningKey,
+  sealNodeSigningKeyTx,
+  rotateNodeSigningKeysTx,
+} from "./node-signing-key.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { captured } from "./testing/captured.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -226,7 +235,7 @@ describe("rotateCredentials", () => {
 
   it("rotation skips recovery-only boxes and still re-seals a populated signing group", async () => {
     await withNodeTransaction(suite.node, async (tx) => {
-      await setRecoveryKeyTx(tx, OTHER_NODE, "verifier", "Recovery only");
+      await setRecoveryKeyTx(tx, OTHER_NODE, "verifier", "Recovery only", null);
       await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);
     });
     expect(await rotateCredentials(suite.db, RING_BOTH, suite.node)).toEqual({
@@ -238,6 +247,25 @@ describe("rotateCredentials", () => {
       keyName: "Recovery only",
     });
     expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(SIGNING_KEY);
+    expect(
+      await suite.node
+        .select({
+          nodeId: nodeHandoverEvents.nodeId,
+          operationId: nodeHandoverEvents.operationId,
+          kind: nodeHandoverEvents.kind,
+          detail: nodeHandoverEvents.detail,
+          envelope: nodeHandoverEvents.envelope,
+        })
+        .from(nodeHandoverEvents),
+    ).toEqual([
+      {
+        nodeId: NODE,
+        operationId: null,
+        kind: "box.signing_key_rotated",
+        detail: { keyVersion: 2 },
+        envelope: null,
+      },
+    ]);
   });
 
   it("rotation re-seals the signing key, and it opens once the previous key is dropped", async () => {
@@ -254,6 +282,79 @@ describe("rotateCredentials", () => {
 
     const again = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(again).toEqual({ rotated: 0, alreadyCurrent: 1 });
+    expect(
+      await suite.node
+        .select({
+          nodeId: nodeHandoverEvents.nodeId,
+          operationId: nodeHandoverEvents.operationId,
+          kind: nodeHandoverEvents.kind,
+          detail: nodeHandoverEvents.detail,
+          envelope: nodeHandoverEvents.envelope,
+        })
+        .from(nodeHandoverEvents),
+    ).toEqual([
+      {
+        nodeId: NODE,
+        operationId: null,
+        kind: "box.signing_key_rotated",
+        detail: { keyVersion: 2 },
+        envelope: null,
+      },
+    ]);
+  });
+
+  it("records a rotation for each old box, leaves a current box alone, and rolls events back with keys", async () => {
+    const current = "current-box";
+    await withNodeTransaction(suite.node, async (tx) => {
+      await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);
+      await sealNodeSigningKeyTx(tx, RING_V1, OTHER_NODE, "other-private-key");
+      await sealNodeSigningKeyTx(tx, RING_BOTH, current, "current-private-key");
+    });
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    await expect(
+      withNodeTransaction(suite.node, async (tx) => {
+        await rotateNodeSigningKeysTx(tx, RING_BOTH);
+        throw new Error("abandoned");
+      }),
+    ).rejects.toThrow("abandoned");
+    expect(await readNodeSigningKey(suite.node, RING_V1, NODE)).toBe(SIGNING_KEY);
+    expect(await readNodeSigningKey(suite.node, RING_V1, OTHER_NODE)).toBe("other-private-key");
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    expect(await rotateCredentials(suite.db, RING_BOTH, suite.node)).toEqual({
+      rotated: 2,
+      alreadyCurrent: 1,
+    });
+    expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, OTHER_NODE)).toBe(
+      "other-private-key",
+    );
+    expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, current)).toBe("current-private-key");
+    expect(
+      await suite.node
+        .select({
+          nodeId: nodeHandoverEvents.nodeId,
+          operationId: nodeHandoverEvents.operationId,
+          kind: nodeHandoverEvents.kind,
+          detail: nodeHandoverEvents.detail,
+          envelope: nodeHandoverEvents.envelope,
+        })
+        .from(nodeHandoverEvents)
+        .orderBy(nodeHandoverEvents.nodeId),
+    ).toEqual([
+      {
+        nodeId: NODE,
+        operationId: null,
+        kind: "box.signing_key_rotated",
+        detail: { keyVersion: 2 },
+        envelope: null,
+      },
+      {
+        nodeId: OTHER_NODE,
+        operationId: null,
+        kind: "box.signing_key_rotated",
+        detail: { keyVersion: 2 },
+        envelope: null,
+      },
+    ]);
   });
 
   it("refuses while node.db holds a pair link, and re-seals nothing", async () => {

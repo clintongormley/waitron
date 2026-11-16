@@ -189,7 +189,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
       invoiceLocales: ["es-ES"],
     });
     const nodeId = await seedNode(db);
-    await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary");
+    await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary", "fenced");
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     const holders = createDeploymentHolders("primary", "secondary");
     return {
@@ -227,14 +227,27 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
     expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY);
+    expect(
+      suite.node
+        .all<{ detail: string }>(
+          sql`select detail from node_handover_events
+      where node_id = ${nodeId} and kind = 'box.role_changed' order by rowid`,
+        )
+        .map(({ detail }) => JSON.parse(detail)),
+    ).toEqual([
+      { mode: "primary", singletonRole: "secondary", cause: "fenced" },
+      { mode: "primary", singletonRole: "primary", cause: "promote" },
+    ]);
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
     const { deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
     await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
+    const events = suite.node.all(sql`select * from node_handover_events`);
     const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(second).toEqual({ alreadyPrimary: true });
+    expect(suite.node.all(sql`select * from node_handover_events`)).toEqual(events);
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
   });
 
@@ -433,7 +446,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const db = suite.db;
     const nodeId = "n";
     await stampDeployment(db, "preproduction");
-    await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror");
+    await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror", "adopt");
     const holders = createDeploymentHolders("mirror", "secondary");
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
@@ -545,7 +558,7 @@ describe("promoteMirrorToPrimary", () => {
       privateKey: standby.privateKey,
     });
     await sealAdoptedStandbyKey(suite.node, RING, standby);
-    await setNodeMode({ venue: db, node: suite.node }, standby.nodeId, "mirror");
+    await setNodeMode({ venue: db, node: suite.node }, standby.nodeId, "mirror", "adopt");
     const endorsement: Endorsement = {
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,

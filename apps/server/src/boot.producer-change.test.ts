@@ -199,7 +199,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
       boxCaPem: "unused-ca-pem",
       originNodeId: ORIGIN_NODE_ID,
     });
-    await setNodeMode({ venue: db, node }, NODE_ID, "mirror");
+    await setNodeMode({ venue: db, node }, NODE_ID, "mirror", "adopt");
     const { server, cleanUp } = await startWith(undefined);
     try {
       await poll(() => server.health.lastPassAt ?? undefined);

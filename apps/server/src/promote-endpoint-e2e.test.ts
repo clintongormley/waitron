@@ -243,7 +243,7 @@ async function seedMirror(
   }
 
   await stampDeployment(admin, "production");
-  await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror");
+  await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror", "adopt");
   return { nodeId: standby.nodeId, fixture, origin };
 }
 

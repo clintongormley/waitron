@@ -666,7 +666,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   }
   m1Files.db.run(sql`vacuum into ${join(m2Dir, "venue.db")}`);
   const m2Files = await openVenueDatabase(m2Dir);
-  await setNodeMode({ venue: m2Files.venue, node: m2Files.node }, m2Id, "mirror");
+  await setNodeMode({ venue: m2Files.venue, node: m2Files.node }, m2Id, "mirror", "adopt");
   await writeMirrorLink(m2Files.node, m2Id, {
     originUrl: "http://127.0.0.1:1/",
     boxHostname: "localhost",
