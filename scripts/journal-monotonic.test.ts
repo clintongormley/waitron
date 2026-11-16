@@ -10,7 +10,7 @@ import { migrationJournal } from "../packages/sync-enrolment/src/testing/migrati
  * or below one a database has already recorded is a migration that will never run — silently, with
  * no error.
  *
- * In `drizzle-orm@0.45.3`, `sqlite-core/dialect.js` is the dialect that runs
+ * In `drizzle-orm@0.45.4`, `sqlite-core/dialect.js` is the dialect that runs
  * (`packages/db/src/migrate.ts` imports `drizzle-orm/better-sqlite3/migrator`).
  * `SQLiteSyncDialect.migrate` takes the watermark with
  * `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` (lines 653-655)

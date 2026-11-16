@@ -34,7 +34,7 @@ const nextSavepoint = () => `wt_sp_${(savepointsTaken += 1)}`;
 const ENDED_UNDER_SAVEPOINT = "the engine ended the transaction this savepoint was in";
 
 /**
- * Lets Drizzle's SQLite session drive Node's own SQLite. Drizzle 0.45.2 publishes no driver for
+ * Lets Drizzle's SQLite session drive Node's own SQLite. Drizzle 0.45.4 publishes no driver for
  * `node:sqlite`, and `better-sqlite3` would add a compiled module to the box image for an engine
  * Node already contains.
  */

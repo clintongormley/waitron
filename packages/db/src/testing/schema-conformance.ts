@@ -242,7 +242,7 @@ export function fromDeclaration(table: SQLiteTable): TableShape {
     }),
     ...config.uniqueConstraints.map((constraint) => {
       // The narrowing the TYPE asks for: `UniqueConstraint.name` is declared `name?: string`. No
-      // declaration reaches the throw on drizzle-orm 0.45.2, whose constructor fills an omitted
+      // declaration reaches the throw on drizzle-orm 0.45.4, whose constructor fills an omitted
       // name in with a derived one; the case beside this file pins that reading.
       /* v8 ignore start */
       if (constraint.name === undefined) {

@@ -501,9 +501,9 @@ emitted SQL with `.toSQL()`.
 
 `writeItems` in `packages/menu/src/extras.ts` inserted each of an extras list's items with a
 bare `.onConflictDoNothing()` and read "nothing came back" as "another transaction already holds
-this id". Verified with `.toSQL()` on drizzle 0.45.2: the untargeted call emits
+this id". Verified with `.toSQL()` on drizzle 0.45.4 (2026-11-16): the untargeted call emits
 `… on conflict do nothing`, and the same insert with `{ target: extraListItems.id }` emits
-`… on conflict ("id") do nothing`. The table also carries
+`… on conflict ("extra_list_items"."id") do nothing`. The table also carries
 `extra_list_items_list_product_uq` over `(list_id, product_id)`, so the bare clause swallowed a
 PRODUCT collision too: a body adding an item for the product a retained item was moving away from
 came back as `extras.invalid` naming `items.0.id`, an `id` field that body never sent, which breaks
@@ -4189,7 +4189,7 @@ against such an edit: the 2026-10-02 one passed the old guard
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database
 already recorded never runs, and DRIZZLE raises nothing — it applies part of a set and returns
-cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.3/sqlite-core/dialect.js`,
+cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.4/sqlite-core/dialect.js`,
 `SQLiteSyncDialect.migrate` takes the watermark with
 `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` at lines 653-655 and
 applies a migration only when
@@ -4226,7 +4226,7 @@ that every journal is on disk.
 ## A migration file's last statement takes no trailing `--> statement-breakpoint`
 
 Drizzle's migrator splits each file on `--> statement-breakpoint` and keeps every piece, empty ones
-included (`drizzle-orm` 0.45.3, `migrator.js`, the `query.split(...)` in `readMigrationFiles`), and
+included (`drizzle-orm` 0.45.4, `migrator.js:16`, the `query.split(...)` in `readMigrationFiles`), and
 this engine refuses an empty statement: measured 2026-10-03 on `node:sqlite`, Node v26.7.0,
 `prepare("").run()` and `prepare("\n").run()` each threw `statement has been finalized`, while
 `prepare("create table t(a)\n").run()` ran. So a hand-written migration whose last statement ends in a

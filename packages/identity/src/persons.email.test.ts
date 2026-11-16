@@ -27,10 +27,6 @@ function insertPerson(db: Database, displayName: string, email: string | null): 
   return withTransaction(db, (tx) => seedPersons(tx, { displayName, pinHash: PIN, email }));
 }
 
-/**
- * The refusal the DRIVER raised, dug out of the chain Drizzle wraps it in. Drizzle's own message
- * quotes the statement, so a match on it passes whether the index fired or not.
- */
 function driverRefusal(error: unknown): object {
   let layer: unknown = error;
   while (layer !== null && typeof layer === "object") {

@@ -87,11 +87,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 ## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
 
 - A count past 99999999999999 cents
-  that reaches `centsToDecimal` by another route is still turned into an amount without refusal. Comments
-  saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
-every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
-  `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
-  `DrizzleQueryError` entry [in this file](#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)).
+  that reaches `centsToDecimal` by another route is still turned into an amount without refusal.
 
 ## Comments and test titles still cite sections of specs that were deleted
 
@@ -157,18 +153,6 @@ The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pa
   `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
-
-## Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce
-
-On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
-  while `db.all`, `db.get`, `db.execute` and an awaited query builder reject with the engine's own
-  error (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against
-  the path it actually takes, then rewording. The candidates are what
-  `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
-  also includes test fixtures that build a wrapped error by hand. `engineErrorMessage` in
-  `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
-  test.
-
 
 ## A394-5, A394-10, A394-16 and A394-20 to A394-22 — refusal statuses by one rule
 
@@ -1067,7 +1051,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-22 entries, size M.
+20 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
@@ -1104,8 +1088,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](box.md#packagesprovisioning-code-found-by-561-and-not-changed)
 - **Loose ends left by the comment-pruning pull requests (#559 to #624).**
   [Detail](ci.md#loose-ends-left-by-the-comment-pruning-pull-requests-559-to-624).
-- **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.
-  [Detail](dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
 - **Fiscal source comments still describe the migration sets A760 retired.**
   `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
   `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
@@ -1135,8 +1117,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   **Next action:** fold into the comment-pruning sweeps: re-point each to
   the pull request that built the work, or drop the tag.
   [Detail](architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
-- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.**
-  [Detail](architecture.md#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 

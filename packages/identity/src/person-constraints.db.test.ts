@@ -40,10 +40,6 @@ async function collision(
   return captureError(() => insertPerson(suite.db, second));
 }
 
-/**
- * The DRIVER's message, dug out of the chain Drizzle wraps it in. Drizzle's own message quotes the
- * statement, so a match on it passes whether the index fired or not.
- */
 function driverMessage(error: unknown): string {
   let layer: unknown = error;
   while (layer !== null && typeof layer === "object") {
