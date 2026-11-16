@@ -8,13 +8,13 @@ Elige **Hacer paquete de recuperación** y completa la identificación que te pi
 
 Revisa esta tarjeta después de cambiar los ajustes de las copias o las claves. Sigue sus indicaciones para hacer un paquete nuevo y conserva los anteriores que aún nombre. Si pierdes un paquete o queda expuesto, sigue [Pérdidas habituales](data-protection.md#breach-losses). Para el inicio de emergencia, consulta [Consultar el inicio de emergencia en Cloud](servers.md#cloud-emergency).
 
-## Exportación de configuración {#configuration-export}
+## Exportar la configuración {#configuration-export}
 
 Para reutilizar tu configuración en un local nuevo, introduce y confirma una contraseña de exportación de al menos 12 caracteres y elige **Descargar configuración**. Guarda el archivo descargado y su contraseña en un lugar seguro. Si lo que necesitas es recuperar este local desde una copia, sigue [Recuperar desde una copia](backup-recovery.md#source).
 
 ## Copias programadas {#archives}
 
-Elige una carpeta de este servidor, un bucket compatible con S3 o ambos. Para un bucket, introduce sus datos de conexión y elige una carpeta distinta de la de la copia continua.
+Elige una carpeta de este servidor, un bucket compatible con S3 o ambos. Para un bucket, introduce sus datos de conexión.
 
 Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de recuperación como se indica abajo y elige **Activar las copias**.
 

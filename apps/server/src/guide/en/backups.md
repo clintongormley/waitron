@@ -14,7 +14,7 @@ To reuse your setup for a new venue, enter and confirm an export passphrase of a
 
 ## Scheduled backups {#archives}
 
-Choose a folder on the box, an S3-compatible bucket, or both. For a bucket, enter its connection details and choose a folder separate from the continuous copy's folder.
+Choose a folder on the box, an S3-compatible bucket, or both. For a bucket, enter its connection details.
 
 Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the recovery key as described below, then choose **Turn on backups**.
 

@@ -1404,8 +1404,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **What pack part 1's reviews left** (bundle, size M). Holds A1187. [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
-
-
 - **Backups screen leftovers** (bundle of 2, 1 important, size S). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
