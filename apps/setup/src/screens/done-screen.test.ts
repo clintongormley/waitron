@@ -576,7 +576,7 @@ describe("setup-done-screen", () => {
     async (locale, line, confirm, thisDevice) => {
       setLocale(locale);
       const clock = clockApi();
-      const el = await mountWaiting(clock, { rebuilt: true });
+      const el = await mountWaiting(clock, { restored: "bucket" });
       await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(line));
       await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
       expect(q(el, "[data-test=clock-confirm]")?.textContent?.trim()).toBe(confirm);
@@ -598,7 +598,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(getStatus, {
       api: clockApiWith(clock, getStatus),
       nodeRecoveryKey: "node-key-secret",
-      rebuilt: true,
+      restored: "bucket",
     });
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
     expect(q(el, "[data-test=clock-step]")).toBeNull();
@@ -606,7 +606,7 @@ describe("setup-done-screen", () => {
   });
 
   it("draws no clock step while the server has not said it waits", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    const el = await mountDone(() => new Promise(() => {}), { restored: "bucket" });
     expect(q(el, "[data-test=clock-step]")).toBeNull();
   });
 

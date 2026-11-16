@@ -77,9 +77,9 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it.each([false, true])(
-    "has no violations asking for the time, then once it is confirmed (rebuilt: %s)",
-    async (rebuilt) => {
+  it.each([undefined, "bucket"] as const)(
+    "has no violations asking for the time, then once it is confirmed (restored: %s)",
+    async (restored) => {
       const times = {
         deviceMs: Date.UTC(2026, 10, 14, 9, 30, 7),
         serverMs: Date.UTC(2026, 10, 14, 9, 30, 5),
@@ -93,7 +93,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       } as unknown as SetupApi;
       const { host, el } = await mountWidget<SetupDoneScreen>(
         "setup-done-screen",
-        { api, startDelayMs: 0, pollIntervalMs: 100000, rebuilt, nodeRecoveryKey: "key" },
+        { api, startDelayMs: 0, pollIntervalMs: 100000, restored, nodeRecoveryKey: "key" },
         theme,
       );
       await vi.waitFor(() => expect(q(el, "[data-test=clock-server]")?.textContent).not.toBe(""));
