@@ -5,7 +5,7 @@ import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
 import { completeRun, readSnapshot, reclaimStale } from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
-import { scheduledRuns } from "../schema/scheduled-runs.js";
+import { reconciliationRuns } from "../schema/reconciliation-runs.js";
 import { FakeDuty } from "./testing/fake-duty.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
@@ -79,7 +79,7 @@ describe("resweepAfter", () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new ResweepingDuty(DUTY, async (call) => {
       await withTransaction(suite.db, (tx) =>
-        tx.insert(scheduledRuns).values({
+        tx.insert(reconciliationRuns).values({
           duty: DUTY,
           periodFrom: call.period.from.toISOString(),
           periodTo: call.period.to.toISOString(),
@@ -148,7 +148,7 @@ describe("resweepAfter", () => {
     const old = new Date("2026-04-20T00:00:00Z");
     const duty = new ResweepingDuty(DUTY, () => Promise.resolve({ summary: {} }));
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(scheduledRuns).values({
+      await tx.insert(reconciliationRuns).values({
         duty: DUTY,
         periodFrom: old.toISOString(),
         periodTo: new Date(old.getTime() + 86_400_000).toISOString(),

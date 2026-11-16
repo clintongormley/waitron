@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -114,6 +115,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provision(db);
+    await seedPerson(db, { id: OPERATOR, displayName: "Operator" });
   },
 });
 

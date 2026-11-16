@@ -41,14 +41,13 @@ CREATE UNIQUE INDEX `device_profile_card_readers_profile_default_key` ON `device
 CREATE TABLE `payment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
-	`provider` text NOT NULL,
-	`payment_ref` text NOT NULL,
 	`amount` integer NOT NULL,
 	`state` text NOT NULL,
 	`authorized_by` text,
 	`provider_refund_ref` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`payment_id`) REFERENCES `payments`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "payment_refunds_amount_ck" CHECK("payment_refunds"."amount" > 0),
 	CONSTRAINT "payment_refunds_state_ck" CHECK("payment_refunds"."state" in ('succeeded', 'failed'))
 );
@@ -90,7 +89,9 @@ CREATE TABLE `payments` (
 	`hold_note` text,
 	`hold_decided_by` text,
 	`hold_decided_at` text,
+	`requested_by` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
@@ -125,7 +126,7 @@ CREATE INDEX `payments_reconcile_idx` ON `payments` (`provider`,`settled_at`);--
 CREATE INDEX `payments_open_hold_idx` ON `payments` (`held_at`) WHERE "payments"."held_at" is not null and "payments"."hold_outcome" is null;--> statement-breakpoint
 CREATE INDEX `payments_unfiled_resolution_idx` ON `payments` (`working_order_id`) WHERE "payments"."resolution_outcome" = 'captured' and "payments"."resolved_by" is null and "payments"."sale_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX `payments_provider_ref_key` ON `payments` (`provider`,`payment_ref`);--> statement-breakpoint
-CREATE TABLE `scheduled_runs` (
+CREATE TABLE `reconciliation_runs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`duty` text NOT NULL,
 	`period_from` text NOT NULL,
@@ -140,13 +141,13 @@ CREATE TABLE `scheduled_runs` (
 	`error_code` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	CONSTRAINT "scheduled_runs_state_ck" CHECK("scheduled_runs"."state" in ('pending', 'running', 'succeeded', 'failed', 'parked')),
-	CONSTRAINT "scheduled_runs_period_ck" CHECK("scheduled_runs"."period_from" < "scheduled_runs"."period_to"),
-	CONSTRAINT "scheduled_runs_generation_ck" CHECK("scheduled_runs"."generation" >= 0),
-	CONSTRAINT "scheduled_runs_attempts_ck" CHECK("scheduled_runs"."attempts" >= 0)
+	CONSTRAINT "reconciliation_runs_state_ck" CHECK("reconciliation_runs"."state" in ('pending', 'running', 'succeeded', 'failed', 'parked')),
+	CONSTRAINT "reconciliation_runs_period_ck" CHECK("reconciliation_runs"."period_from" < "reconciliation_runs"."period_to"),
+	CONSTRAINT "reconciliation_runs_generation_ck" CHECK("reconciliation_runs"."generation" >= 0),
+	CONSTRAINT "reconciliation_runs_attempts_ck" CHECK("reconciliation_runs"."attempts" >= 0)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `scheduled_runs_key` ON `scheduled_runs` (`duty`,`period_from`,`generation`);
+CREATE UNIQUE INDEX `reconciliation_runs_key` ON `reconciliation_runs` (`duty`,`period_from`,`generation`);
 --> statement-breakpoint
 CREATE TRIGGER payments_guard_update
 BEFORE UPDATE ON payments
@@ -164,6 +165,7 @@ BEGIN
     AND new.payment_ref IS old.payment_ref
     AND (old.requested_amount IS NULL OR new.requested_amount IS old.requested_amount)
     AND new.created_at IS old.created_at
+    AND new.requested_by IS old.requested_by
     -- Short-capture recovery first links a whole-order payment to its bill contribution.
     AND (old.bill_payment_id IS NULL OR new.bill_payment_id IS old.bill_payment_id)
     AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id)

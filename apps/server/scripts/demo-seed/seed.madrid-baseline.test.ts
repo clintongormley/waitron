@@ -252,6 +252,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
   taxpayer: ["privacy_notice_url", "privacy_email"],
+  payment_refunds: ["provider", "payment_ref"],
   node_membership: ["term"],
   persons: ["role"],
   device_profile_admission_roles: ["role"],
@@ -700,7 +701,11 @@ for (const locale of ["en", "es"] as const) {
         row.name = name;
       }
     }
-    const tableRenames = { tenants: "taxpayer", tenant_credentials: "venue_credentials" };
+    const tableRenames = {
+      tenants: "taxpayer",
+      tenant_credentials: "venue_credentials",
+      scheduled_runs: "reconciliation_runs",
+    };
     for (const phase of ["before", "provisioned", "seeded"] as const)
       expected[phase] = madridWithRenamedTables(expected[phase], tableRenames);
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
@@ -2143,11 +2148,31 @@ for (const locale of ["en", "es"] as const) {
       ]);
       const paymentTable = expected[phase].tables.payments!;
       for (const column of paymentTable.columns.slice(-11)) column.notnull = 0;
+      paymentTable.columns.push({
+        name: "requested_by",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      for (const row of Object.values(paymentTable.rows)) row.requested_by = null;
+      const refundTable = expected[phase].tables.payment_refunds!;
+      refundTable.foreignKeys = [
+        personKey("authorized_by", 0),
+        ...refundTable.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
+      expected[phase].tables = byName(expected[phase].tables);
+
       paymentTable.foreignKeys = [
         personKey("hold_decided_by", 0),
         personKey("resolved_by", 1),
-        ...paymentTable.foreignKeys.map((key) => ({ ...key, id: key.id + 2 })),
+        ...paymentTable.foreignKeys.map((key) => ({
+          ...key,
+          id: key.id + (key.from === "device_id" ? 3 : 2),
+        })),
+        personKey("requested_by", paymentTable.foreignKeys.length + 1),
       ];
+      paymentTable.foreignKeys.sort((a, b) => a.id - b.id);
 
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
       phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;

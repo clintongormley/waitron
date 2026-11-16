@@ -14,6 +14,7 @@ BEGIN
     AND new.payment_ref IS old.payment_ref
     AND (old.requested_amount IS NULL OR new.requested_amount IS old.requested_amount)
     AND new.created_at IS old.created_at
+    AND new.requested_by IS old.requested_by
     -- Short-capture recovery first links a whole-order payment to its bill contribution.
     AND (old.bill_payment_id IS NULL OR new.bill_payment_id IS old.bill_payment_id)
     AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id)

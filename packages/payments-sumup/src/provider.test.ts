@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { deferredClient } from "./card-provider.js";
@@ -90,7 +91,14 @@ const suite = useVenueDb({
 describe("SumUpCloudProvider.collect", () => {
   it("captures: T1 attempting → checkout keyed by our payment_ref → poll → T2 captured with SumUp's transaction id", async () => {
     const { fake, provider, params, row } = await setup(suite);
-    const result = await provider.collect(params);
+    await seedPerson(suite.db, {
+      id: "22222222-2222-4222-8222-222222222222",
+      displayName: "Starter",
+    });
+    const result = await provider.collect({
+      ...params,
+      requestedBy: "22222222-2222-4222-8222-222222222222",
+    });
     expect(result).toMatchObject({
       provider: "sumup",
       state: "captured",
@@ -104,6 +112,11 @@ describe("SumUpCloudProvider.collect", () => {
       foreignTransactionId: result.paymentRef,
     });
     const r = await row(result.paymentRef);
+    const [stored] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.paymentRef, result.paymentRef));
+    expect(stored?.requestedBy).toBe("22222222-2222-4222-8222-222222222222");
     expect(r.state).toBe("captured");
     expect(r.externalRef).toMatch(/^txn_/); // the REFUNDABLE id, not the ctx_ poll key
   });

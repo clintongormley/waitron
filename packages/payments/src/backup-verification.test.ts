@@ -77,7 +77,7 @@ beforeEach(() => {
       sql`insert into payments (id,working_order_id,source,sale_id,node_id,reader_id,provider,payment_ref,amount,state,created_at,updated_at,resolution_outcome,resolution_cancelled_at_provider,resolution_provider_status,resolved_by,resolved_at,hold_provider_amount,held_at,hold_outcome,hold_note,hold_decided_by,hold_decided_at) values ('payment','order','operator_script','sale','source','reader','stripe','ref',1000,'captured','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z','captured',0,'succeeded','manager','2026-10-20T08:00:00.000Z',999,'2026-10-20T08:00:00.000Z','kept','Retained note','manager','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into payment_refunds (id,payment_id,provider,payment_ref,amount,state,created_at) values ('refund','payment','stripe','ref',100,'succeeded','2026-10-20T08:00:00.000Z')`,
+      sql`insert into payment_refunds (id,payment_id,amount,state,created_at) values ('refund','payment',100,'succeeded','2026-10-20T08:00:00.000Z')`,
     );
     db.run(sql`insert into device_card_readers (device_id,reader_id) values ('device','reader')`);
     db.run(
@@ -229,7 +229,7 @@ it("declares every classified table, its immutable evidence, private inputs and 
   expect(owner.data).toEqual({
     kind: "custom",
     tables,
-    immutableTables: [],
+    immutableTables: ["payment_refunds"],
     checks: ["data", "immutable", "secret"],
   });
   expect(owner.secrets).toEqual(["vault:payments.stripe", "vault:payments.sumup"]);
@@ -269,6 +269,8 @@ it.each(["sale_id", "reader_id", "node_id", "working_order_id"])(
 );
 it.each([
   ["payment_refunds", "payment_id"],
+  ["payments", "requested_by"],
+  ["payment_refunds", "authorized_by"],
   ["payments", "resolved_by"],
   ["payments", "hold_decided_by"],
   ["device_card_readers", "device_id"],

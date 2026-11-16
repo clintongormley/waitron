@@ -13,6 +13,7 @@ import type { PaymentRow } from "./store.js";
 export const MANUAL_PROVIDER = "manual";
 
 export interface ManualCardPaymentParams {
+  requestedBy?: string;
   /** The device the card payment was keyed on. */
   origin: DeviceOrigin;
   workingOrderId: string;
@@ -58,6 +59,7 @@ export async function recordManualCardPayment(
     externalProvider: params.externalProvider,
     externalMachine: params.externalMachine,
     billPaymentId: params.billPaymentId,
+    requestedBy: params.requestedBy,
   });
   return { provider: MANUAL_PROVIDER, paymentRef, settledAt: params.settledAt };
 }

@@ -725,7 +725,7 @@ carries the duty, period and `errorCode`.
 `payments.reconcile.stripe` uses the identical `skipped`/`parked` mechanism with a 26-hour staleness
 budget (a daily period plus slack) rather than drain's ~75 minutes, so the same reading applies to
 it for payment audits instead of a fiscal submission. This health label covers the selected
-Stripe and SumUp duties together, retaining its existing name and budget. `scheduled_runs.duty`
+Stripe and SumUp duties together, retaining its existing name and budget. `reconciliation_runs.duty`
 keeps `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each runs only while the
 `payments` module is on and its own credential is provisioned; credentials are checked each pass.
 

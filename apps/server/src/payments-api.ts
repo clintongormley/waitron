@@ -47,7 +47,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   PAYMENTS_SETTINGS,
-  scheduledRuns,
+  reconciliationRuns,
   listRefundAuditRows,
   listPaymentAuditRuns,
   type BackupPaymentMatch,
@@ -779,18 +779,18 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const bounds = businessDayBounds(clock, day);
         const runs = await tx
           .select({
-            periodFrom: scheduledRuns.periodFrom,
-            periodTo: scheduledRuns.periodTo,
-            generation: scheduledRuns.generation,
-            summary: scheduledRuns.summary,
+            periodFrom: reconciliationRuns.periodFrom,
+            periodTo: reconciliationRuns.periodTo,
+            generation: reconciliationRuns.generation,
+            summary: reconciliationRuns.summary,
           })
-          .from(scheduledRuns)
+          .from(reconciliationRuns)
           .where(
             and(
-              eq(scheduledRuns.duty, "payments.reconcile.sumup"),
-              eq(scheduledRuns.state, "succeeded"),
-              lt(scheduledRuns.periodFrom, bounds.endAt),
-              gte(scheduledRuns.periodTo, bounds.startAt),
+              eq(reconciliationRuns.duty, "payments.reconcile.sumup"),
+              eq(reconciliationRuns.state, "succeeded"),
+              lt(reconciliationRuns.periodFrom, bounds.endAt),
+              gte(reconciliationRuns.periodTo, bounds.startAt),
             ),
           );
         const period = { from: new Date(bounds.startAt), to: new Date(bounds.endAt) };

@@ -1079,7 +1079,14 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(payments).where(eq(payments.billPaymentId, paymentId)),
     );
     expect(rows).toMatchObject([
-      { provider: "manual", state: "captured", amount: 4000, externalRef: "OP-7781", saleId: null },
+      {
+        provider: "manual",
+        state: "captured",
+        amount: 4000,
+        externalRef: "OP-7781",
+        saleId: null,
+        requestedBy: venue.staffId,
+      },
     ]);
     const opens = await inTx((tx) =>
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),

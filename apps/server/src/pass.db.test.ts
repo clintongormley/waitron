@@ -107,9 +107,9 @@ describe("one composed pass against a migrated database", () => {
       .filter((entry) => entry.level !== "info");
     expect(nonInfo).toEqual([]);
 
-    // A `succeeded` row means the read, the insert and the update on `scheduled_runs` each landed.
+    // A `succeeded` row means the read, the insert and the update on `reconciliation_runs` each landed.
     const rows = await suite.db.execute<{ count: string }>(
-      sql`select count(*) as count from scheduled_runs
+      sql`select count(*) as count from reconciliation_runs
           where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
     );
     expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);

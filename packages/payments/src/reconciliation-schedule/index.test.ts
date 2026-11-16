@@ -10,7 +10,7 @@ describe("the public surface", () => {
         "SCHEDULER_BACKUP_VERIFICATION",
         "SCHEDULER_TABLES",
         "runDue",
-        "scheduledRuns",
+        "reconciliationRuns",
       ].sort(),
     );
   });
@@ -28,13 +28,13 @@ describe("the public surface", () => {
  * drizzle runs a table's extraConfig callback lazily; `getTableConfig` forces it. Reached through
  * the package root, the surface a host gets.
  */
-describe("scheduled_runs constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares scheduled_runs' unique index and check constraints, and no foreign key", () => {
-    const config = getTableConfig(api.scheduledRuns);
+describe("reconciliation_runs constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares reconciliation_runs' unique index and check constraints, and no foreign key", () => {
+    const config = getTableConfig(api.reconciliationRuns);
 
-    // `scheduled_runs_key` is a `uniqueIndex(...)`, not a `unique(...)` table constraint — it
+    // `reconciliation_runs_key` is a `uniqueIndex(...)`, not a `unique(...)` table constraint — it
     // shows up in `config.indexes` (with `unique: true`), not in `config.uniqueConstraints`.
-    const key = config.indexes.find((i) => i.config.name === "scheduled_runs_key");
+    const key = config.indexes.find((i) => i.config.name === "reconciliation_runs_key");
     expect(key?.config.unique).toBe(true);
     expect(key?.config.columns.map((c) => ("name" in c ? c.name : null))).toEqual([
       "duty",
@@ -45,14 +45,14 @@ describe("scheduled_runs constraint declarations (forces the lazy extraConfig ca
     // And it is the ONLY index on this table: derivation reads by the unique key's own leading
     // columns and filters `next_attempt_at` in JavaScript, every claim keys on `id`, so a second
     // index would be read by nothing while costing every INSERT and claim UPDATE its maintenance.
-    expect(config.indexes.map((i) => i.config.name)).toEqual(["scheduled_runs_key"]);
+    expect(config.indexes.map((i) => i.config.name)).toEqual(["reconciliation_runs_key"]);
 
     expect(config.foreignKeys).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
-    expect(checkNames).toContain("scheduled_runs_state_ck");
-    expect(checkNames).toContain("scheduled_runs_period_ck");
-    expect(checkNames).toContain("scheduled_runs_generation_ck");
-    expect(checkNames).toContain("scheduled_runs_attempts_ck");
+    expect(checkNames).toContain("reconciliation_runs_state_ck");
+    expect(checkNames).toContain("reconciliation_runs_period_ck");
+    expect(checkNames).toContain("reconciliation_runs_generation_ck");
+    expect(checkNames).toContain("reconciliation_runs_attempts_ck");
   });
 });

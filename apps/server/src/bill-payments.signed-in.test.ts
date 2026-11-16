@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -52,6 +53,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provision(db);
+    await seedPerson(db, { id: OPERATOR, displayName: "Operator" });
   },
 });
 

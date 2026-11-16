@@ -87,19 +87,15 @@ it("lists each manual payment once on its box's business day, with current state
   await suite.db.insert(paymentRefunds).values([
     {
       paymentId: included.id,
-      provider: "manual",
-      paymentRef: "r1",
       amount: 101,
       state: "succeeded",
     },
     {
       paymentId: included.id,
-      provider: "manual",
-      paymentRef: "r2",
       amount: 202,
       state: "succeeded",
     },
-    { paymentId: included.id, provider: "manual", paymentRef: "r3", amount: 400, state: "failed" },
+    { paymentId: included.id, amount: 400, state: "failed" },
   ]);
   const older = await payment(
     "2026-11-03T04:00:00.000Z",

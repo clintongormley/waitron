@@ -1,3 +1,4 @@
+import { payments } from "@waitron/payments";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
@@ -137,7 +138,8 @@ describe("reversals through real HTTP", () => {
           await suite.db
             .select({ amount: paymentRefunds.amount, state: paymentRefunds.state })
             .from(paymentRefunds)
-            .where(eq(paymentRefunds.paymentRef, captured.paymentRef)),
+            .innerJoin(payments, eq(paymentRefunds.paymentId, payments.id))
+            .where(eq(payments.paymentRef, captured.paymentRef)),
         ).toEqual(
           status === 204 || status === 404
             ? [{ amount: 1250, state: status === 204 ? "succeeded" : "failed" }]

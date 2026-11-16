@@ -79,10 +79,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
   given in the configs of workforce, credentials, bookings, workforce-es, server-kit,
   dashboard-kit and fiscal-none (not re-measured there); `payments-sumup` keeps its
-  `src/dashboard/index.ts` exclude with the reason deleted by #597, also not measured. `claimGap`
-  uses an untargeted `.onConflictDoNothing()` on a table with two unique constraints (the `id`
-  primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named target there, though `id`
-  is freshly generated (read, not run).
+  `src/dashboard/index.ts` exclude with the reason deleted by #597, also not measured.
 
 ## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
 
@@ -993,7 +990,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind

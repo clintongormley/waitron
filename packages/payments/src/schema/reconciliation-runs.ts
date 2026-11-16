@@ -19,8 +19,8 @@ export type RunState = (typeof runState)[number];
  * `generation` is in the unique key because a re-sweep or a parked period's retry must run a
  * period AGAIN without overwriting what the first sweep recorded.
  */
-export const scheduledRuns = table(
-  "scheduled_runs",
+export const reconciliationRuns = table(
+  "reconciliation_runs",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     /** `PeriodDuty.name`. */
@@ -50,13 +50,13 @@ export const scheduledRuns = table(
   (t) => [
     // The claim-by-INSERT depends on this: ON CONFLICT DO NOTHING against this key is what makes
     // "the insert IS the lock" true.
-    uniqueIndex("scheduled_runs_key").on(t.duty, t.periodFrom, t.generation),
+    uniqueIndex("reconciliation_runs_key").on(t.duty, t.periodFrom, t.generation),
     check(
-      "scheduled_runs_state_ck",
+      "reconciliation_runs_state_ck",
       sql`${t.state} in ('pending', 'running', 'succeeded', 'failed', 'parked')`,
     ),
-    check("scheduled_runs_period_ck", sql`${t.periodFrom} < ${t.periodTo}`),
-    check("scheduled_runs_generation_ck", sql`${t.generation} >= 0`),
-    check("scheduled_runs_attempts_ck", sql`${t.attempts} >= 0`),
+    check("reconciliation_runs_period_ck", sql`${t.periodFrom} < ${t.periodTo}`),
+    check("reconciliation_runs_generation_ck", sql`${t.generation} >= 0`),
+    check("reconciliation_runs_attempts_ck", sql`${t.attempts} >= 0`),
   ],
 );

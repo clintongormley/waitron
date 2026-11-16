@@ -164,8 +164,6 @@ async function refund(state: "completed" | "pending" | "failed", refundNode = no
   if (state === "completed")
     await suite.db.insert(paymentRefunds).values({
       paymentId,
-      provider: "fake",
-      paymentRef: saleId,
       amount: 10725,
       state: "succeeded",
       providerRefundRef: id,

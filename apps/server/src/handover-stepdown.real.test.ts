@@ -15,7 +15,7 @@ import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures
 import type { HandoverBinding } from "@waitron/handover";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { scheduledRuns } from "@waitron/payments";
+import { reconciliationRuns } from "@waitron/payments";
 import { readHandoverRestriction } from "@waitron/node-db";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -276,7 +276,7 @@ describe("a card sale in flight when the box steps down", () => {
       new Date().getUTCDate(),
     );
     const oldPeriod = new Date(dayStart - 20 * 24 * 60 * 60_000);
-    await suite.db.insert(scheduledRuns).values({
+    await suite.db.insert(reconciliationRuns).values({
       duty: "payments.reconcile.stripe",
       periodFrom: oldPeriod.toISOString(),
       periodTo: new Date(oldPeriod.getTime() + 24 * 60 * 60_000).toISOString(),

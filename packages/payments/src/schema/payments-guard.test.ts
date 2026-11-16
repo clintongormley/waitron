@@ -109,6 +109,44 @@ describe("a payment's fixed columns", () => {
   });
 });
 
+it.each([null, "11111111-1111-4111-8111-111111111111"])(
+  "keeps the initiating person fixed from insertion: %s",
+  async (requestedBy) => {
+    await seedPerson(suite.db, {
+      id: "11111111-1111-4111-8111-111111111111",
+      displayName: "Starter",
+    });
+    await seedPerson(suite.db, {
+      id: "22222222-2222-4222-8222-222222222222",
+      displayName: "Other person",
+    });
+    const seeded = await seedWorkingOrder(suite.db);
+    const [row] = await suite.db
+      .insert(payments)
+      .values({
+        workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
+        provider: "fake",
+        paymentRef: "fixed-starter",
+        amount: 1000,
+        state: "attempting",
+        requestedBy,
+      })
+      .returning({ id: payments.id });
+    for (const replacement of requestedBy === null
+      ? ["22222222-2222-4222-8222-222222222222"]
+      : [null, "22222222-2222-4222-8222-222222222222"]) {
+      const error = await captureError(() =>
+        suite.db.execute(
+          sql`update payments set requested_by = ${replacement} where id = ${row!.id}`,
+        ),
+      );
+      expect(triggerRaised(error, PAYMENT_CHANGE_REFUSAL)).toBe(true);
+    }
+  },
+);
+
 it.each(["attempting", "captured"])("never deletes a payment in state %s", async (state) => {
   await suite.db.execute(
     sql`update payments set state = ${state}, settled_at = ${state === "captured" ? AT : null} where id = ${paymentId}`,

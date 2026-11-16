@@ -15,6 +15,6 @@ describeSchemaConformance({
   declarations: barrel,
   declaresClosedVocabularies: true,
   // Scheduler's table, whose own set declared none: `state` is a plain `label()` beside its own
-  // hand-written check, `scheduled_runs_state_ck`.
-  tablesWithoutClosedVocabularies: ["scheduled_runs"],
+  // hand-written check, `reconciliation_runs_state_ck`.
+  tablesWithoutClosedVocabularies: ["reconciliation_runs"],
 });

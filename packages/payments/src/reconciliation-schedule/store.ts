@@ -2,7 +2,7 @@ import { and, asc, eq, gt, gte, inArray, lt, lte, notInArray, or, sql } from "dr
 import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { FINAL_STATES, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
-import { scheduledRuns, type RunState } from "../schema/scheduled-runs.js";
+import { reconciliationRuns, type RunState } from "../schema/reconciliation-runs.js";
 
 /** A row this runner now owns. Returned only by a claim that actually won. `startedAt` is what
  * `completeRun`'s ownership fence keys on — carried here so the caller never has to re-read it. */
@@ -16,14 +16,14 @@ export interface ClaimedRun {
 }
 
 const CLAIMED = {
-  id: scheduledRuns.id,
-  periodFrom: scheduledRuns.periodFrom,
-  periodTo: scheduledRuns.periodTo,
-  generation: scheduledRuns.generation,
-  attempts: scheduledRuns.attempts,
+  id: reconciliationRuns.id,
+  periodFrom: reconciliationRuns.periodFrom,
+  periodTo: reconciliationRuns.periodTo,
+  generation: reconciliationRuns.generation,
+  attempts: reconciliationRuns.attempts,
   // Never null here: every statement that selects via CLAIMED sets started_at in the same
   // statement. The COLUMN is nullable, so selecting it plainly would infer `string | null`.
-  startedAt: sql<string>`${scheduledRuns.startedAt}`,
+  startedAt: sql<string>`${reconciliationRuns.startedAt}`,
 } as const;
 
 /** Everything derivation needs about one duty; `LedgerSnapshot` says why the row read spans two
@@ -33,39 +33,39 @@ export async function readSnapshot(
   params: { duty: string; horizonStart: Date },
 ): Promise<LedgerSnapshot> {
   const horizon = params.horizonStart.toISOString();
-  const scope = eq(scheduledRuns.duty, params.duty);
+  const scope = eq(reconciliationRuns.duty, params.duty);
 
   const rows = await tx
     .select({
-      id: scheduledRuns.id,
-      periodFrom: scheduledRuns.periodFrom,
-      periodTo: scheduledRuns.periodTo,
-      generation: scheduledRuns.generation,
-      state: scheduledRuns.state,
-      attempts: scheduledRuns.attempts,
-      nextAttemptAt: scheduledRuns.nextAttemptAt,
-      startedAt: scheduledRuns.startedAt,
+      id: reconciliationRuns.id,
+      periodFrom: reconciliationRuns.periodFrom,
+      periodTo: reconciliationRuns.periodTo,
+      generation: reconciliationRuns.generation,
+      state: reconciliationRuns.state,
+      attempts: reconciliationRuns.attempts,
+      nextAttemptAt: reconciliationRuns.nextAttemptAt,
+      startedAt: reconciliationRuns.startedAt,
     })
-    .from(scheduledRuns)
+    .from(reconciliationRuns)
     .where(
       and(
         scope,
         // Copied: `notInArray`'s column overload refuses a readonly array, unlike `inArray`'s.
         or(
-          gte(scheduledRuns.periodFrom, horizon),
-          notInArray(scheduledRuns.state, [...FINAL_STATES]),
+          gte(reconciliationRuns.periodFrom, horizon),
+          notInArray(reconciliationRuns.state, [...FINAL_STATES]),
         ),
       ),
     )
-    .orderBy(asc(scheduledRuns.periodFrom));
+    .orderBy(asc(reconciliationRuns.periodFrom));
 
   const [bounds] = await tx
     .select({
       // NULL when the duty has never run.
-      earliest: sql<string | null>`min(${scheduledRuns.periodFrom})`,
-      below: sql<number>`count(distinct ${scheduledRuns.periodFrom}) filter (where ${scheduledRuns.periodFrom} < ${horizon})`,
+      earliest: sql<string | null>`min(${reconciliationRuns.periodFrom})`,
+      below: sql<number>`count(distinct ${reconciliationRuns.periodFrom}) filter (where ${reconciliationRuns.periodFrom} < ${horizon})`,
     })
-    .from(scheduledRuns)
+    .from(reconciliationRuns)
     .where(scope);
 
   return {
@@ -78,7 +78,7 @@ export async function readSnapshot(
 
 /**
  * Claim a gap by INSERTING its row. The insert IS the lock: two runners deriving the same gap
- * collide on `scheduled_runs_key`, and exactly one gets a row back. No read-then-write, so there
+ * collide on `reconciliation_runs_key`, and exactly one gets a row back. No read-then-write, so there
  * is no window between checking and claiming.
  */
 export async function claimGap(
@@ -86,7 +86,7 @@ export async function claimGap(
   params: { duty: string; period: RunPeriod; now: Date },
 ): Promise<ClaimedRun | null> {
   const [row] = await tx
-    .insert(scheduledRuns)
+    .insert(reconciliationRuns)
     .values({
       duty: params.duty,
       periodFrom: params.period.from.toISOString(),
@@ -96,7 +96,13 @@ export async function claimGap(
       attempts: 1,
       startedAt: params.now.toISOString(),
     })
-    .onConflictDoNothing()
+    .onConflictDoNothing({
+      target: [
+        reconciliationRuns.duty,
+        reconciliationRuns.periodFrom,
+        reconciliationRuns.generation,
+      ],
+    })
     .returning(CLAIMED);
   return row ?? null;
 }
@@ -112,10 +118,10 @@ export async function claimRow(
   const now = params.now.toISOString();
   const ceiling = new Date(params.now.getTime() + params.longestWaitMs).toISOString();
   const [row] = await tx
-    .update(scheduledRuns)
+    .update(reconciliationRuns)
     .set({
       state: "running",
-      attempts: sql`${scheduledRuns.attempts} + 1`,
+      attempts: sql`${reconciliationRuns.attempts} + 1`,
       startedAt: now,
       // Cleared, not carried: the column means "when this row becomes claimable", and a running
       // row is not.
@@ -124,12 +130,15 @@ export async function claimRow(
     })
     .where(
       and(
-        eq(scheduledRuns.id, params.id),
-        inArray(scheduledRuns.state, ["pending", "failed"]),
+        eq(reconciliationRuns.id, params.id),
+        inArray(reconciliationRuns.state, ["pending", "failed"]),
         // Inclusive: a row due at exactly `now` is claimable. `lt()` would silently defer it by a
         // whole tick, and `derive` uses `<=` — the two must agree (`retryDue`) or the runner
         // derives work it then refuses to claim.
-        or(lte(scheduledRuns.nextAttemptAt, now), gt(scheduledRuns.nextAttemptAt, ceiling)),
+        or(
+          lte(reconciliationRuns.nextAttemptAt, now),
+          gt(reconciliationRuns.nextAttemptAt, ceiling),
+        ),
       ),
     )
     .returning(CLAIMED);
@@ -148,18 +157,18 @@ export async function reclaimStale(
   const cutoff = new Date(params.now.getTime() - params.staleAfterMs).toISOString();
   const ahead = new Date(params.now.getTime() + params.staleAfterMs).toISOString();
   const [row] = await tx
-    .update(scheduledRuns)
+    .update(reconciliationRuns)
     .set({
-      attempts: sql`${scheduledRuns.attempts} + 1`,
+      attempts: sql`${reconciliationRuns.attempts} + 1`,
       startedAt: now,
       updatedAt: nowIso(),
     })
     .where(
       and(
-        eq(scheduledRuns.id, params.id),
-        eq(scheduledRuns.state, "running"),
+        eq(reconciliationRuns.id, params.id),
+        eq(reconciliationRuns.state, "running"),
         // `claimLapsed` in `derive.ts`, which reports these rows stale.
-        or(lt(scheduledRuns.startedAt, cutoff), gt(scheduledRuns.startedAt, ahead)),
+        or(lt(reconciliationRuns.startedAt, cutoff), gt(reconciliationRuns.startedAt, ahead)),
       ),
     )
     .returning(CLAIMED);
@@ -188,7 +197,7 @@ export async function completeRun(
   },
 ): Promise<boolean> {
   const [row] = await tx
-    .update(scheduledRuns)
+    .update(reconciliationRuns)
     .set({
       state: params.state,
       summary: params.summary,
@@ -199,12 +208,12 @@ export async function completeRun(
     })
     .where(
       and(
-        eq(scheduledRuns.id, params.id),
-        eq(scheduledRuns.state, "running"),
-        eq(scheduledRuns.startedAt, params.startedAt),
+        eq(reconciliationRuns.id, params.id),
+        eq(reconciliationRuns.state, "running"),
+        eq(reconciliationRuns.startedAt, params.startedAt),
       ),
     )
-    .returning({ id: scheduledRuns.id });
+    .returning({ id: reconciliationRuns.id });
   return row !== undefined;
 }
 
@@ -216,7 +225,7 @@ export async function completeRun(
  * list, so a `failed` row awaiting its own retry blocks it too. The caller runs this in the SAME
  * transaction as `completeRun`, so the guard sees the run that is finishing as already terminal.
  * The chain stays LINEAR — one unresolved finding cannot fan out into an exponential number of
- * rows. A unique violation on `scheduled_runs_key` is read as "already enqueued".
+ * rows. A unique violation on `reconciliation_runs_key` is read as "already enqueued".
  *
  * Returns whether it inserted.
  */
@@ -225,16 +234,19 @@ export async function enqueueSuccessor(
   params: { duty: string; period: RunPeriod; dueAt: Date },
 ): Promise<boolean> {
   const periodFrom = params.period.from.toISOString();
-  const scope = and(eq(scheduledRuns.duty, params.duty), eq(scheduledRuns.periodFrom, periodFrom));
+  const scope = and(
+    eq(reconciliationRuns.duty, params.duty),
+    eq(reconciliationRuns.periodFrom, periodFrom),
+  );
 
   const [state] = await tx
     .select({
       // The SAME `FINAL_STATES` list `readSnapshot` and `derive` key on, not restated as literal SQL
       // that a new terminal state would leave behind.
-      unfinished: sql<number>`count(*) filter (where ${notInArray(scheduledRuns.state, [...FINAL_STATES])})`,
-      highest: sql<number>`coalesce(max(${scheduledRuns.generation}), -1)`,
+      unfinished: sql<number>`count(*) filter (where ${notInArray(reconciliationRuns.state, [...FINAL_STATES])})`,
+      highest: sql<number>`coalesce(max(${reconciliationRuns.generation}), -1)`,
     })
-    .from(scheduledRuns)
+    .from(reconciliationRuns)
     .where(scope);
 
   if (state === undefined || Number(state.unfinished) > 0) return false;
@@ -244,7 +256,7 @@ export async function enqueueSuccessor(
     // backs out by itself when refused, leaving the transaction usable, so today it changes nothing
     // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need").
     await tx.transaction(async (attempt) => {
-      await attempt.insert(scheduledRuns).values({
+      await attempt.insert(reconciliationRuns).values({
         duty: params.duty,
         periodFrom,
         periodTo: params.period.to.toISOString(),

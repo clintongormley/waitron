@@ -77,6 +77,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       paymentRef,
       amount: params.amount,
       billPaymentId: params.billPaymentId,
+      requestedBy: params.requestedBy,
     };
 
     if (outcome.outcome === "network_unavailable") {

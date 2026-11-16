@@ -111,11 +111,19 @@ describe("StripeTerminalProvider.collect", () => {
   it("captures: attempting -> captured, settledAt set, external_ref = the PI id", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    const result = await providerFor(fake).collect(p);
+    const result = await providerFor(fake).collect({
+      ...p,
+      requestedBy: "22222222-2222-4222-8222-222222222222",
+    });
     expect(result.state).toBe("captured");
     expect(result.settledAt).not.toBeNull();
     expect(result.paymentRef).toMatch(/^[0-9a-f-]{36}$/); // a uuid, NOT the pi id
     const row = await rowFor(result.paymentRef);
+    const [stored] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.paymentRef, result.paymentRef));
+    expect(stored?.requestedBy).toBe("22222222-2222-4222-8222-222222222222");
     expect(row?.state).toBe("captured");
     expect(row?.externalRef).toMatch(/^pi_/);
   });
@@ -404,7 +412,7 @@ describe("StripeTerminalProvider reversals", () => {
     for (const key of keys) expect(key).not.toBe("");
     expect(
       suite.db.all(
-        sql`select amount, state from payment_refunds where payment_ref = ${paid.paymentRef}`,
+        sql`select payment_refunds.amount, payment_refunds.state from payment_refunds join payments on payments.id = payment_refunds.payment_id where payments.payment_ref = ${paid.paymentRef}`,
       ),
     ).toEqual([
       { amount: 200, state: "succeeded" },
@@ -424,7 +432,7 @@ describe("StripeTerminalProvider reversals", () => {
     expect((await rowFor(paid.paymentRef))!.state).toBe("refunded");
     expect(
       suite.db.all(
-        sql`select amount, state from payment_refunds where payment_ref = ${paid.paymentRef}`,
+        sql`select payment_refunds.amount, payment_refunds.state from payment_refunds join payments on payments.id = payment_refunds.payment_id where payments.payment_ref = ${paid.paymentRef}`,
       ),
     ).toEqual([{ amount: 1210, state: "succeeded" }]);
   });
