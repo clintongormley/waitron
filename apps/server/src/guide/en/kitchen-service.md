@@ -31,10 +31,6 @@ It adds no second station ticket or collection-number slip. While the server is 
 the retry is refused and the till says the order was not saved, even if the first send already
 reached the server.
 
-If you edit the basket after the first send, the till must save those edits before placing it.
-When the order has already been placed, it keeps your edits on screen and shows an error instead
-of pretending the station received them. Check the placed order before continuing.
-
 ## Read the allergy copy with its dish {#allergy-copies}
 
 An assigned dish carries the guest's name, the allergens they avoid and their station note.

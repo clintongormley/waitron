@@ -6171,7 +6171,12 @@ export class TillApp extends LitElement {
     if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
     this.#syncDepartmentTransfers();
-    this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
+    this.errorKey =
+      offerLoadFailed === false
+        ? this.#heldPlaceEditLock() === undefined
+          ? undefined
+          : "place.unconfirmed"
+        : offerLoadFailed;
     if (!clocking) this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
@@ -6216,33 +6221,34 @@ export class TillApp extends LitElement {
     }
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
+    const reads: Promise<void>[] = [];
     if (showsCounterLists) {
-      // Each list says its own failure, so one that fails never stops the others loading.
       const lists = [
         ["held", "refresh.held"],
         ["station", "refresh.station"],
         ["waiting", "refresh.waiting"],
       ] as const;
-      for (const [list, messageKey] of lists) {
-        await this.#refreshList(list, messageKey);
-        if (replaced()) return;
-      }
+      for (const [list, messageKey] of lists) reads.push(this.#refreshList(list, messageKey));
     }
     if (showsCounterLists || this.#affordances().includes("schedule")) {
-      // Loaded after the landing screen is shown, and a failure is swallowed, so the roster never blocks a sale.
-      try {
-        const staff = await this.api.listStaff({ everyone: true });
-        if (replaced()) return;
-        this.staff = staff;
-      } catch {
-        // Non-fatal: the picker keeps the roster it had.
-      }
+      reads.push(
+        (async () => {
+          try {
+            const staff = await this.api.listStaff({ everyone: true });
+            if (replaced()) return;
+            this.staff = staff;
+          } catch {
+            // A failed read keeps the roster it had.
+          }
+        })(),
+      );
     }
     // A restored floor tab needs its data on first paint, unless the landing already loaded it.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
       if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData(replaced);
     }
+    await Promise.all(reads);
   }
 
   #refreshHeldOrders(): Promise<void> {
@@ -6599,6 +6605,11 @@ export class TillApp extends LitElement {
       Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
+    if (this.#heldPlaceEditLock() !== undefined) {
+      // Keep the pending Send's menu versions until its answer or a replacement basket.
+      this.#counterOffersDue = true;
+      return;
+    }
     const deferGrid =
       loaded &&
       (this.#pendingCounterMenus !== undefined ||
@@ -6832,7 +6843,7 @@ export class TillApp extends LitElement {
         keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen) ||
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
       this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
-      const busy = this.#requestsOut();
+      const busy = this.#requestsOut() || this.#store.editsLocked;
       const counterMoved =
         menusMoved(this.menus, state.menus) || state.liveFields !== this.#counterOffers.liveFields;
       if ((counterMoved || serviceMoved) && busy) {
@@ -8369,6 +8380,25 @@ export class TillApp extends LitElement {
     invoice: string | undefined;
   };
 
+  #placeEditLock?: { id: string; visit: number; unlock: () => void };
+
+  #releasePlaceEditLock(): void {
+    this.#placeEditLock?.unlock();
+    this.#placeEditLock = undefined;
+  }
+
+  #heldPlaceEditLock() {
+    const held = this.#placeEditLock;
+    return held?.id === this.#store.id && held.visit === this.#store.loadGeneration
+      ? held
+      : undefined;
+  }
+
+  #restorePlaceEditLock(): void {
+    const held = this.#heldPlaceEditLock();
+    if (held !== undefined) held.unlock = this.#store.lockEdits();
+  }
+
   async #onPlaceOrder(
     retried = false,
     refusalRetry = false,
@@ -8477,6 +8507,7 @@ export class TillApp extends LitElement {
         ? api.placeOrder(id, null)
         : api.placeOrder(id, null, lateSend));
       if (!current()) return;
+      this.#releasePlaceEditLock();
       this.#unconfirmedPlace = undefined;
       this.stage = "collect";
       placed = true;
@@ -8484,6 +8515,15 @@ export class TillApp extends LitElement {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
       if (!current()) return;
+      if (reachedPlace) {
+        if (isNetworkFailure(error))
+          this.#placeEditLock = {
+            id,
+            visit: basketVisit,
+            unlock: this.#store.lockEdits(),
+          };
+        else this.#releasePlaceEditLock();
+      }
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
       const stored = storedLateSendAsked(error, basketLines);
       const asked = stored === undefined ? lateSendAsked(error, basketLines) : undefined;
@@ -8581,10 +8621,6 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (!collected || session !== this.#operatorSession) return;
-    // A collect settles the order, and the counter's prep-queue card offers Collect only on a
-    // settled order. Only a collect opened from the waiting list re-reads the queue
-    // (docs/backlog/till.md, "A collect straight after Place order does not re-read the kitchen
-    // queue").
     void this.#refreshListsAfterWrite(session, [
       ...(fromWaitingList ? [["station", "refresh.station_after_sale"] as const] : []),
       ["waiting", "refresh.waiting_after_sale"],
@@ -9731,6 +9767,7 @@ export class TillApp extends LitElement {
       limit.done();
       unlock();
       if (this.#payWaitingLoading?.request === request) this.#payWaitingLoading = undefined;
+      this.#restorePlaceEditLock();
     }
     await this.#refreshWaiting();
   }
@@ -10145,6 +10182,7 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
       unlock();
+      this.#restorePlaceEditLock();
     }
     const said = failure !== undefined && !movedOn();
     if (said) this.errorKey = failure;

@@ -307,6 +307,22 @@ const stationGroup = {
   ],
 };
 
+const waitingOrder: CounterWaitingOrder = {
+  items: [],
+  id: "wo-sent",
+  orderNumber: 12,
+  label: null,
+  status: "placed",
+  openedAt: "2026-10-01T10:02:00.000Z",
+  settledAt: null,
+  collectedAt: null,
+  total: "3.00",
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
+  canHandOver: true,
+  serviceMode: "ticket_then_pay",
+  movableDishes: [],
+};
+
 const defaultStation = {
   id: "st-default",
   name: "Cocina",
@@ -2717,6 +2733,31 @@ describe("till-app", () => {
       }
       const notice = (el: TillApp, list: "held" | "station" | "waiting") =>
         el.shadowRoot!.querySelector<HTMLElement>(`[data-refresh-notice="${list}"]`)!;
+
+      it("a held-orders read that never answers still installs station queue, waiting list and staff at sign-in", async () => {
+        let release!: (rows: HeldOrderSummary[]) => void;
+        const held = new Promise<HeldOrderSummary[]>((done) => (release = done));
+        const staff = [{ personId: "p2", displayName: "Ben" }];
+        let el: TillApp | undefined;
+        try {
+          el = await logIn("till", {
+            listWorkingOrders: vi.fn(() => held),
+            getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
+            listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+            listStaff: vi.fn().mockResolvedValueOnce([]).mockResolvedValue(staff),
+          });
+          await flush(el);
+
+          expect(counter(el)!.stationQueue).toEqual([stationGroup]);
+          expect(counter(el)!.counterWaiting).toEqual([waitingOrder]);
+          expect((el as unknown as { staff: unknown[] }).staff).toEqual(staff);
+          expect(counter(el)!.heldOrders).toEqual([]);
+        } finally {
+          release([heldSummary]);
+          if (el) await flush(el);
+        }
+        expect(counter(el!)!.heldOrders).toEqual([heldSummary]);
+      });
 
       it.each(["till", "handheld"] as const)(
         "on a %s, a failed read of the held orders still loads the other lists and the roster, and says which failed",
@@ -16477,22 +16518,36 @@ describe("the device profile decides which screens a device offers", () => {
       },
     );
 
-    it("asks for no further counter list once a logout comes while the held orders load", async () => {
-      let release!: (rows: never[]) => void;
+    it("installs no counter-list replies that arrive after logout", async () => {
+      let held!: (rows: HeldOrderSummary[]) => void;
+      let station!: (queue: { items: (typeof stationGroup)[]; notices: unknown[] }) => void;
+      let waiting!: (rows: CounterWaitingOrder[]) => void;
       const { el } = await mountApp({
-        // Not pay-first, so the station queue is a real read the counter lists would make next.
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        listWorkingOrders: vi.fn(() => new Promise((done) => (release = done))),
+        listWorkingOrders: vi.fn(() => new Promise((done) => (held = done))),
+        getStationQueue: vi.fn(() => new Promise((done) => (station = done))),
+        listCounterWaiting: vi.fn(() => new Promise((done) => (waiting = done))),
       });
       await toCounter(el);
       expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
+      expect(currentApi.getStationQueue).toHaveBeenCalledOnce();
+      expect(currentApi.listCounterWaiting).toHaveBeenCalledOnce();
       emit(shell(el)!, "logout");
       await flush(el);
-      release([]);
+      held([heldSummary]);
+      station({ items: [stationGroup], notices: [] });
+      waiting([waitingOrder]);
       await flush(el);
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(currentApi.listCounterWaiting).not.toHaveBeenCalled();
+
+      expect(lock(el)).not.toBeNull();
+      const lists = el as unknown as Pick<
+        TillCounterScreen,
+        "heldOrders" | "stationQueue" | "counterWaiting"
+      >;
+      expect(lists.heldOrders).toEqual([]);
+      expect(lists.stationQueue).toEqual([]);
+      expect(lists.counterWaiting).toEqual([]);
     });
 
     it("keeps the roster it had when a logout comes while the sign-in's roster loads", async () => {

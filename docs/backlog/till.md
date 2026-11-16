@@ -416,16 +416,6 @@ Left open:
 
 Open:
 
-- **A collect straight after Place order does not re-read the kitchen queue.** The till
-  re-reads it after a collect only when the collect was opened from the waiting list, so the
-  prep-queue card can keep showing the order without Collect until the queue is next read
-  (read in `#onCollectOrder`, `apps/till/src/till-app.ts`, and `#collectAction`,
-  `apps/till/src/widgets/station-queue.ts`; not run). Re-reading after every collect would stop
-  the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
-  does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
-  says, so B16 left it.
-- At login the counter's three lists are read one after another, so a read that hangs delays
-  the rest (left open by B31, #1018). Load them side by side.
 - A till profile saved before C130, and one newly created on the Device profiles
   screen, has the three switches off until a manager turns them on; a till with no device reads
   no capabilities, so it shows none of the three buttons. A change to a device profile reaches
@@ -1553,34 +1543,6 @@ answer, which `docs/developers/modifiers.md` records as a decision and the guide
 sends would silently drop a real change from a till that could not read the lines, whose line window
 stays editable (`#lineReadOnly`, by reading). The other routes, such as a mark from the till that the
 line was not touched or an id on the answer, change what the till and the box agree on.
-
-## A1417. After a lost counter Send reply, a basket changed since cannot be sent and the till says only try again
-
-Left open by A1382. A counter Send reaches the box, so the kitchen has the order, but its reply is
-lost. The till says "The server did not answer. Send again: the kitchen will not get the order twice."
-If the person changes the basket first, the box answers `working_order.not_open` and `#onPlaceOrder`
-shows `place.error`: "Could not send the order, try again", on every Send.
-
-- A dish just added and taken back off: the next Send goes through.
-- A raised dish already sent: it has no `−`, so the change cannot be taken back.
-- Park: the basket empties with no sentence, so the change is dropped and nobody is told.
-
-**Why no sentence fixes it.** A1382's review refused "The order may already have been sent, so this
-change was not saved. Undo the change, then press Send" (`place.changed_after_send`, never landed). Its
-finding, in its own words: `"Undo the change" is impossible for several changes`. Those are `+` on a sent, unstarted
-dish; `×` on a stored dish ("Adding it back gives a line with no stored id, placed last"); `×` on any
-dish of a new order except the last ("because the order of lines is compared"); and a menu refresh
-that changes a line's version ("The person changed nothing and cannot undo it"). On those paths "Send
-repeats the same sentence forever. The only way out I found is Park, which swallows the
-`working_order.not_open` refusal ... and silently drops the change".
-
-**Receipt.** A focused till test with stubbed answers on #2542 before its rebase, printed the sentences and
-the three results above. The `×` and menu-refresh paths are the review's own, not run here. A throwaway
-server test on main 59be31e3b7 printed `refused working_order.not_open` for a save of a placed order.
-Taking an added dish back off also went through on the demo stack, in A1382's live run.
-
-**State of the fix.** Not built. The review's proposal: lock the basket with `store.lockEdits()` while
-the answer is unknown, so no change can be made, and add no sentence.
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 

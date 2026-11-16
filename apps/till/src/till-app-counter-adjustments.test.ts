@@ -1411,6 +1411,7 @@ describe("till-app: comping a stored counter order", () => {
     await flush(el);
     expect(counter(el).stage).toBe("order");
     expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
+    expect(counter(el).store.editsLocked).toBe(true);
 
     emit(counter(el), "place-order");
     await flush(el);
@@ -1421,6 +1422,7 @@ describe("till-app: comping a stored counter order", () => {
     ]);
     expect(counter(el).stage).toBe("collect");
     expect(banner(el)).toBeNull();
+    expect(counter(el).store.editsLocked).toBe(false);
   });
 
   it("keeps an edited second attempt when its save says the order was already placed", async () => {
@@ -1494,7 +1496,7 @@ describe("till-app: comping a stored counter order", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("does not replay an uncertain placement after the basket changes", async () => {
+  it("keeps a lost-Send basket unchanged when a dish is added", async () => {
     const placeOrder = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Network reply lost"))
@@ -1506,15 +1508,207 @@ describe("till-app: comping a stored counter order", () => {
     expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
+    expect(store.lines.map((line) => [line.product.id, line.quantity.toString()])).toEqual([
+      ["croquetas", "1"],
+      ["cana", "1"],
+    ]);
 
     emit(counter(el), "place-order");
     await flush(el);
 
-    expect(updateWorkingOrder).toHaveBeenCalledOnce();
-    expect(placeOrder).toHaveBeenCalledOnce();
-    expect(counter(el).stage).toBe("order");
-    expect(banner(el)?.textContent).toContain(t("place.error"));
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+    expect(placeOrder).toHaveBeenCalledTimes(2);
+    expect(counter(el).stage).toBe("collect");
+    expect(banner(el)).toBeNull();
   });
+
+  it("keeps a lost-Send basket unchanged when a sent dish is raised", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network reply lost"))
+      .mockResolvedValue({ id: "wo-9", status: "placed" });
+    const el = await placeCounter({ placeOrder });
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
+    const increase = inBasket(el, ".line .step-inc")!;
+    const button = increase.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    button.click();
+    await flush(el);
+
+    expect(counter(el).store.lines[0]!.quantity.toString()).toBe("1");
+    expect(button.disabled).toBe(true);
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(counter(el).stage).toBe("collect");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("Park after a lost Send clears only the unchanged basket", async () => {
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const el = await placeCounter({
+      placeOrder: vi.fn().mockRejectedValue(new TypeError("Network reply lost")),
+      updateWorkingOrder,
+      retrievePlacedOrder: vi.fn().mockRejectedValue(new TypeError("Read reply lost")),
+    });
+    emit(counter(el), "place-order");
+    await flush(el);
+    const store = counter(el).store;
+    store.addProduct(store.lines[1]!.product, "1");
+    expect(store.lines).toHaveLength(2);
+
+    emit(counter(el), "park-order", {});
+    await flush(el);
+
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+    expect(store.lines).toHaveLength(0);
+    expect(store.editsLocked).toBe(false);
+    expect(banner(el)).toBeNull();
+    emit(counter(el), "pay-waiting-order", { id: "wo-other" });
+    await flush(el);
+
+    expect(banner(el)?.textContent).toContain(t("waiting.pay_error"));
+    expect(store.editsLocked).toBe(false);
+    store.addProduct(product("coffee", "Coffee", "1.00"), "1");
+    expect(store.lines).toHaveLength(1);
+  });
+
+  it("keeps the lost-Send basket locked after a dining reread fails", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Network reply lost"))
+      .mockResolvedValue({ id: "wo-9", status: "placed" });
+    const el = await placeCounter({
+      placeOrder,
+      switchDining: vi.fn().mockRejectedValue({ code: "order.dining_locked", reason: "sent" }),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockRejectedValue(new TypeError("Read reply lost")),
+    });
+    emit(counter(el), "place-order");
+    await flush(el);
+    emit(counter(el), "dining-change", { dining: "takeaway" });
+    await flush(el);
+
+    expect(banner(el)?.textContent).toContain(t("held.reread_failed"));
+    const store = counter(el).store;
+    expect(store.editsLocked).toBe(true);
+    store.setLineQuantity(0, "2");
+    expect(store.lines[0]!.quantity).toBe("1");
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(counter(el).stage).toBe("collect");
+    expect(store.editsLocked).toBe(false);
+  });
+
+  it.each(["the same session", "the next session"] as const)(
+    "keeps the lost-Send basket locked after opening a waiting order fails in %s",
+    async (session) => {
+      const placeOrder = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Network reply lost"))
+        .mockResolvedValue({ id: "wo-9", status: "placed" });
+      const el = await placeCounter({
+        placeOrder,
+        retrievePlacedOrder: vi.fn().mockRejectedValue(new TypeError("Read reply lost")),
+      });
+      emit(counter(el), "place-order");
+      await flush(el);
+      expect(counter(el).store.editsLocked).toBe(true);
+      if (session === "the next session") {
+        emit(counter(el), "logout");
+        await flush(el);
+        emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ben", permissions: [] });
+        await flush(el);
+      }
+      expect.soft(banner(el)?.textContent).toContain(t("place.unconfirmed"));
+
+      emit(counter(el), "pay-waiting-order", { id: "wo-other" });
+      await flush(el);
+
+      expect(banner(el)?.textContent).toContain(t("waiting.pay_error"));
+      const store = counter(el).store;
+      store.addProduct(store.lines[1]!.product, "1");
+      expect(store.lines).toHaveLength(2);
+      expect(store.editsLocked).toBe(true);
+      emit(counter(el), "place-order");
+      await flush(el);
+      expect(counter(el).stage).toBe("collect");
+      expect(store.editsLocked).toBe(false);
+    },
+  );
+
+  it.each(["a menu poll", "the next sign-in"] as const)(
+    "postpones a menu version refresh from %s while a lost Send still needs its answer",
+    async (source) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const placeOrder = vi
+          .fn()
+          .mockRejectedValueOnce(new TypeError("Network reply lost"))
+          .mockResolvedValue({ id: "wo-9", status: "placed" });
+        const menuState = vi.fn().mockResolvedValue({
+          service: offers.service,
+          menus: [
+            { menuId: "cat-default", versionId: "v2", orderable: true, endedPeriodName: null },
+          ],
+          unavailable: { products: [], optionLabels: [] },
+          defaultMenuId: "cat-default",
+          liveFields: "v2",
+        });
+        const el = await placeCounter({
+          placeOrder,
+          menuState,
+          parkOrder: vi.fn().mockResolvedValue(undefined),
+          getKitchenNote: vi.fn(async (scope: { workingOrderId: string }) => ({
+            scope,
+            note: null,
+            revision: 0,
+            ownerRevision: 0,
+          })),
+        });
+        const store = counter(el).store;
+        const item = { ...store.lines[1]!.product, menuVersionId: "v1" };
+        store.clear();
+        store.addProduct(item, "1");
+        emit(counter(el), "place-order");
+        await flush(el);
+        expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
+        const menu = await api.listZoneOffers("zone-counter");
+        const nextMenu = {
+          ...menu,
+          menus: menu.menus.map((entry) => ({ ...entry, versionId: "v2" })),
+        };
+        vi.mocked(api.listZoneOffers).mockResolvedValue(nextMenu);
+        vi.mocked(api.listDefaultZoneOffers).mockResolvedValue(nextMenu);
+
+        if (source === "a menu poll") await vi.advanceTimersByTimeAsync(15_000);
+        else {
+          emit(counter(el), "logout");
+          await flush(el);
+          emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ben", permissions: [] });
+        }
+        await flush(el);
+
+        if (source === "a menu poll") expect(menuState).toHaveBeenCalled();
+        expect(
+          store.lines.map((line) => [line.product.id, line.product.menuVersionId, line.quantity]),
+        ).toEqual([["cana", "v1", "1"]]);
+        expect(store.dirty).toBe(false);
+        const send = counter(el)
+          .shadowRoot!.querySelector("till-tender-pay")!
+          .shadowRoot!.querySelector("wt-button.place")!
+          .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+        expect(send.disabled).toBe(false);
+        await userEvent.click(send);
+        await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
+        expect(banner(el)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it.each(["same values", "new recipient", "new delivery"] as const)(
     "checks %s after a lost placing reply",
@@ -1578,6 +1772,7 @@ describe("till-app: comping a stored counter order", () => {
         expect(placeOrder).toHaveBeenCalledOnce();
         expect(counter(el).stage).toBe("order");
         expect(banner(el)?.textContent).toContain(t("place.error"));
+        expect(counter(el).store.editsLocked).toBe(true);
       }
     },
   );
@@ -1604,6 +1799,7 @@ describe("till-app: comping a stored counter order", () => {
     await flush(el);
     expect(banner(el)?.textContent).toContain(t("place.error"));
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(store.editsLocked).toBe(false);
 
     emit(counter(el), "place-order");
     await flush(el);
@@ -1658,7 +1854,7 @@ describe("till-app: comping a stored counter order", () => {
     expect(counter(el).stage).toBe("collect");
   });
 
-  it("saves an edited basket to a replacement server before placing there", async () => {
+  it("prepares the unchanged lost-Send basket afresh on a replacement server", async () => {
     const placeOrder = vi.fn().mockRejectedValue(new TypeError("Network reply lost"));
     const el = await placeCounter({ placeOrder });
     emit(counter(el), "place-order");
@@ -1666,6 +1862,7 @@ describe("till-app: comping a stored counter order", () => {
     expect(banner(el)?.textContent).toContain(t("place.unconfirmed"));
     const replacement = {
       ...api,
+      askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: true, deadEnds: [], stations: [] }),
       updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 5 }),
       placeOrder: vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" }),
     };
@@ -1677,7 +1874,9 @@ describe("till-app: comping a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
 
-    expect(replacement.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(store.lines).toHaveLength(2);
+    expect(replacement.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(replacement.askSaleDeadEnds).toHaveBeenCalledOnce();
     expect(replacement.placeOrder).toHaveBeenCalledWith("wo-9", null);
     expect(placeOrder).toHaveBeenCalledOnce();
     expect(counter(el).stage).toBe("collect");

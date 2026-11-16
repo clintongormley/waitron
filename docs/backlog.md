@@ -747,11 +747,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   started dish's saved answer means.
   [Detail](backlog/till.md#a1416-a-started-or-served-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
 
-- **A1417. After a lost counter Send reply, a basket changed since cannot be sent and the till says
-  only try again (left open by A1382).** A sentence failed review because not every change can be
-  undone; the proposal is to lock the basket while the answer is unknown.
-  [Detail](backlog/till.md#a1417-after-a-lost-counter-send-reply-a-basket-changed-since-cannot-be-sent-and-the-till-says-only-try-again)
-
 - **A till request refused for naming someone not signed in locks the screen with no sentence (left
   open by A1382).** #2534 built the check on every such request; the owner's words are not in yet.
   [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
@@ -930,7 +925,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 - **Loose ends left by service Task 16 (#981, counter handover).**
-  A collect straight after Place order does not re-read the kitchen queue.
+  Till-profile defaults and staff-list scrolling.
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **Loose ends left by service Task 17 (#991, a bill left unpaid).**
