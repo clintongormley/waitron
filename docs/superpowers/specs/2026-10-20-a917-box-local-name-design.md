@@ -411,6 +411,12 @@ by a mirror's copy was found (round 3, not exhaustive). Delivering the new chart
 later work: backlog "A mirror keeps a renamed server's old chart (A917)" in _Replication, failover
 and the cloud_.
 
+_2026-11-16 (SPARE-LATER-CHARTS): since 2026-11-03 (#2436) a spare also keeps a newer chart handed
+to `POST /api/node/membership` (`apps/server/src/node-membership-api.ts`), and a spare asks the main
+box at the address its held chart lists (`askMainBox` in `apps/server/src/boot.ts`, `sourceSilent`
+in `apps/server/src/handover-emergency-api.ts`). The backlog entry named here was folded into A917's
+own entry in `docs/backlog/box.md`._
+
 ### 7.3 What each device actually sees
 
 Measured (M14, Chromium 153 trusting only the old authority):

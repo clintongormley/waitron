@@ -479,6 +479,18 @@ named once on the server's first page, before its certificate authority is made;
 a planned "re-trust every device" event — devices pair again in place of their old entries, and the
 old name only points at the new one for 14 days. Five slices; no migration.
 
+If it is built, the rename's new chart must reach a joined spare. Today a box at `waitron.local`
+takes its chart address from its node id (`ownContactUrl`, `apps/server/src/box-name.ts`); any other
+configured address is used as set. A spare's held chart changes when a till's `#handChart`
+(`apps/till/src/api/server-router.ts`) posts a newer one to `POST /api/node/membership`, which keeps
+a newer chart (`apps/server/src/node-membership-api.test.ts`, "a newer chart that does not fence it
+is held, and the box keeps selling"), or, found by reading, when it joins again. Found by reading: a
+spare asks the main box at the address its held chart lists (`askMainBox` in
+`apps/server/src/boot.ts`), and so does an emergency switch's check that the old box is silent
+(`sourceSilent` in `apps/server/src/handover-emergency-api.ts`), which counts an unreachable box as
+silent. An emergency switch on a spare still holding the old address would count a live main box as
+silent once the old address stops answering.
+
 ## A1483. Native ARM image and installer before go-live
 
 The owner asked on 2026-11-10 at 17:17: “for go live we should support ARM too”. At 21:45: “arm is slow to build and can wait until we are ready to go live. backlog it for now”. Start when go-live is near.
