@@ -1,16 +1,11 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  endManagementSession,
-  hashPassword,
-  hashPin,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { endManagementSession, persons, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { loadKeyRing } from "@waitron/credentials";
@@ -60,8 +55,8 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Owner",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -73,7 +68,7 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
     const start = async (role: Role): Promise<Signed> => {
       const [inserted] = await seedPersons(tx, {
         displayName: `The ${role}`,
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role,
         email: `${role}-${nif}@example.test`,
       });

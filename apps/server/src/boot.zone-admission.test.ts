@@ -1,3 +1,4 @@
+import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -31,12 +32,7 @@ import {
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  hashPassword,
-  persons,
-  startManagementSession,
-  managementSessions,
-} from "@waitron/identity";
+import { persons, startManagementSession, managementSessions } from "@waitron/identity";
 import { AppError, decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
@@ -174,13 +170,13 @@ beforeEach(async () => {
       displayName: "Manager",
       role: "manager",
       email: "manager@example.test",
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: fixturePasswordHash(PASSWORD),
     },
     {
       displayName: "Staff",
       role: "staff",
       email: "staff@example.test",
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: fixturePasswordHash(PASSWORD),
     },
   ]);
   manager = people[0]!.id;

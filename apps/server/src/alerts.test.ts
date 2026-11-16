@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 // Reads on one transaction.
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
-import { hashPin } from "@waitron/identity";
+
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import { AppError, backupOrigin, deviceOrigin, type DeviceId } from "@waitron/shared";
@@ -547,7 +548,7 @@ describe("readHandledAlerts", () => {
     const person = await asApp(async (tx) => {
       const [p] = await seedPersons(tx, {
         displayName: "Ada",
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role: "manager",
       });
       return p!.id;

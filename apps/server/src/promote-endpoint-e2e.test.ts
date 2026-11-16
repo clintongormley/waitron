@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
@@ -37,13 +38,7 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import {
-  hashPassword,
-  hashPin,
-  hashDeviceToken,
-  managementSessions,
-  persons,
-} from "@waitron/identity";
+import { hashDeviceToken, managementSessions, persons } from "@waitron/identity";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   canonicalize,
@@ -239,8 +234,8 @@ async function seedMirror(
       id: ADMIN_ID,
       displayName: "Promote Admin",
       email: ADMIN_EMAIL,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(ADMIN_PW),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(ADMIN_PW),
       role: "admin",
     });
   }
@@ -258,7 +253,7 @@ async function seedSaleVenue(admin: Database): Promise<string> {
     await seedPersons(admin, {
       id: STAFF_ID,
       displayName: "Cashier",
-      pinHash: hashPin(STAFF_PIN),
+      pinHash: fixturePinHash(STAFF_PIN),
       role: "staff",
     });
   }

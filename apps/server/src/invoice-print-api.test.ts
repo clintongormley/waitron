@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -29,7 +30,7 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
 } from "@waitron/printing";
-import { hashDeviceToken, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createClient, createAgent, FakeSink } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
@@ -647,7 +648,7 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
   const session = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, {
       displayName: "Printer manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     return startManagementSession(tx, { personId: person!.id });

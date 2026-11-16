@@ -1,6 +1,7 @@
+import { fixturePasswordHash, fixturePinHash } from "../../src/testing/known-secret-hashes.js";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { openVenueDatabase } from "@waitron/db";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 
@@ -36,8 +37,8 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
           rectificativeSeriesCode: "R",
           admin: {
             displayName: "Administrator",
-            pinHash: hashPin("5555"),
-            passwordHash: hashPassword("scripts-fixture-password"),
+            pinHash: fixturePinHash("5555"),
+            passwordHash: fixturePasswordHash("scripts-fixture-password"),
             email: "admin@scripts.test",
           },
         },

@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -5,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  hashPin,
   hashSessionToken,
   managementSessions,
   persons,
@@ -52,7 +52,7 @@ async function seedPerson(role: BuiltInRoleKey, name: string, id?: string): Prom
     const [p] = await seedPersons(tx, {
       ...(id === undefined ? {} : { id }),
       displayName: name,
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role,
     });
     const session = await startManagementSession(tx, { personId: p!.id });

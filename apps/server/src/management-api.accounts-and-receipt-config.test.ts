@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import {
   builtInRoleForTest,
   seedPersons,
@@ -27,8 +28,6 @@ import {
   encryptTotpSecret,
   ensureBuiltInRoles,
   defaultPermissionsFor,
-  hashPassword,
-  hashPin,
   persons,
   webauthnCredentials,
 } from "@waitron/identity";
@@ -124,8 +123,8 @@ async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -147,15 +146,15 @@ async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
     const [manager] = await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(PASSWORD),
       role: "manager",
     });
     const [staff] = await seedPersons(tx, {
       displayName: "The Clerk",
       email: STAFF_EMAIL,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(PASSWORD),
       role: "staff",
     });
     return { managerId: manager!.id, staffId: staff!.id };
@@ -414,8 +413,8 @@ describe("Management API staff + session routes", () => {
       await seedPersons(tx, {
         displayName: "Factor Manager",
         email: "factor@example.com",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(PASSWORD),
         role: "manager",
         totpSecret: encryptTotpSecret("JBSWY3DPEHPK3PXP", {
           version: 1,

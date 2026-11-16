@@ -1,7 +1,8 @@
+import { fixturePasswordHash, fixturePinHash } from "../../../src/testing/known-secret-hashes.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { type Database } from "@waitron/db";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../../src/modules.js";
@@ -87,8 +88,8 @@ export function createDemoVenueProvisioner(
           rectificativeSeriesCode: "R",
           admin: {
             displayName: "Administrator",
-            pinHash: hashPin(options.adminPin ?? "1234"),
-            passwordHash: hashPassword("dashPass123"),
+            pinHash: fixturePinHash(options.adminPin ?? "1234"),
+            passwordHash: fixturePasswordHash("dashPass123"),
             email: options.adminEmail ?? "owner@example.test",
           },
         },

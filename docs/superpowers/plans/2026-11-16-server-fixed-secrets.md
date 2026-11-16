@@ -79,3 +79,11 @@ exhausted. Update the bundle bullet/count and index together; if its title chang
 link to the old anchor. Keep any remaining salt point precise.
 Complete `finish-branch` and its required review for one PR with measured savings and unchanged
 behavioural assertions; landing is already authorised by the campaign instruction.
+
+**16 November execution note.** Claude reviewed this plan once; the driver accepted every finding
+before signed revision `5a06f0d081`. The watcher cleared it at 05:14 in Lane I's questions,
+inside the queued ask, and requested one-hash cost beside the sample medians. No separate owner
+design approval is claimed. The branch inventory also holds `attendance-till-api.test.ts`,
+both staged-hour salt helpers and both named salt consumers; leave them unchanged and keep the
+attendance sample as an unchanged comparison. The bounded pass converts four shared helpers
+and 52 unheld test files. It adds no new behaviour or assertions.

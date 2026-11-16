@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -5,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
@@ -51,8 +52,8 @@ async function provisionVenue(): Promise<TradingContext> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -68,8 +69,8 @@ async function provisionVenue(): Promise<TradingContext> {
       await seedPersons(tx, {
         displayName,
         email,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(PASSWORD),
         role,
       });
     }

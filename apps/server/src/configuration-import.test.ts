@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +11,7 @@ import { createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing } from "@waitron/credentials";
 import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
@@ -638,8 +639,8 @@ describe("routing cells in a staged import", () => {
       admin: {
         displayName: "Admin",
         email: `${taxId.toLowerCase()}@example.test`,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("a secure password"),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash("a secure password"),
       },
     };
   }

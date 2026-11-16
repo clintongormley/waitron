@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, pagePrinters, stationPrinterPairs, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
@@ -62,12 +63,12 @@ beforeEach(async () => {
   const sessions = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     const [stf] = await seedPersons(tx, {
       displayName: "The Clerk",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "staff",
     });
     return {

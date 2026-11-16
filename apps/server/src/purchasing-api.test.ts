@@ -1,10 +1,11 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -29,12 +30,12 @@ const suite = useVenueDb({
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await seedPersons(tx, {
         displayName: "The Manager",
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role: "manager",
       });
       const [stf] = await seedPersons(tx, {
         displayName: "The Clerk",
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role: "staff",
       });
       const managerSession = await startManagementSession(tx, { personId: mgr!.id });

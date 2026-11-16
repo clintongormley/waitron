@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 // The management-session permission gate over a migrated venue database: a real session row, a real
 // person row and a real permission lookup, with only the Mailpit client faked.
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -7,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { roles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -46,8 +47,8 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Admin",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -62,7 +63,7 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
     const start = async (role: "manager" | "staff") => {
       const [inserted] = await seedPersons(tx, {
         displayName: role,
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role,
       });
       return startManagementSession(tx, {

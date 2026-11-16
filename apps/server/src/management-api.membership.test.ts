@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+
 import { generateSync } from "otplib";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
@@ -69,8 +70,8 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
         rectificativeSeriesCode: "RF",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(ADMIN_PASSWORD),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
           email: "owner@example.test",
         },
       },
@@ -97,8 +98,8 @@ async function seedStaff(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, {
       displayName: "Cashier",
-      pinHash: hashPin("4321"),
-      passwordHash: hashPassword(STAFF_PASSWORD),
+      pinHash: fixturePinHash("4321"),
+      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
       role: "staff",
     });
     return person!.id;

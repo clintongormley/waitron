@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sendSmtpMessage } from "./smtp-send.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -11,13 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPassword,
-  hashPin,
-  loginWithPin,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import "@waitron/payments-sumup";
@@ -160,8 +155,8 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Owner",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -180,15 +175,15 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
     await seedPersons(tx, {
       displayName: MARTHA_NAME,
       email: MARTHA_EMAIL,
-      pinHash: hashPin("1111"),
-      passwordHash: hashPassword("martaPass123"),
+      pinHash: fixturePinHash("1111"),
+      passwordHash: fixturePasswordHash("martaPass123"),
       role: "staff",
     });
     const [clerk] = await seedPersons(tx, {
       displayName: "Clerk",
       email: "clerk@example.test",
-      pinHash: hashPin("2222"),
-      passwordHash: hashPassword("clerkPass123"),
+      pinHash: fixturePinHash("2222"),
+      passwordHash: fixturePasswordHash("clerkPass123"),
       role: "staff",
     });
     return { adminId: admin!.id, clerkId: clerk!.id };
@@ -669,7 +664,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const session = await inTx(v, async (tx) => {
       const [person] = await seedPersons(tx, {
         displayName: "Anna",
-        pinHash: hashPin("5555"),
+        pinHash: fixturePinHash("5555"),
         role: "staff",
       });
       return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });

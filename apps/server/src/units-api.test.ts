@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { inArray, sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { createExtraList } from "@waitron/menu";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountUnitsApi } from "./units-api.js";
@@ -31,7 +32,7 @@ beforeEach(async () => {
     // Every fixture insert goes through the table definition so each column's `$defaultFn` runs.
     const [person] = await seedPersons(tx, {
       displayName: "Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     const session = await startManagementSession(tx, { personId: person!.id });

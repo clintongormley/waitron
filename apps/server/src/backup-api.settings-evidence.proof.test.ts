@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { storeArchivePart } from "./testing/backup-settings.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -21,7 +22,7 @@ import {
   venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue } from "@waitron/provisioning";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -275,8 +276,8 @@ async function setupVenue(): Promise<void> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "admin@x.com",
         },
       },
@@ -288,7 +289,7 @@ async function setupVenue(): Promise<void> {
     const start = async (role: "manager" | "staff") => {
       const [inserted] = await seedPersons(tx, {
         displayName: role,
-        pinHash: hashPin("1234"),
+        pinHash: fixturePinHash("1234"),
         role,
         email: `${role}@x.com`,
       });

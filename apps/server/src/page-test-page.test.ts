@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -15,7 +16,7 @@ import {
   taxpayer,
   withTransaction,
 } from "@waitron/db";
-import { hashPin, hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
+import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { createClient } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -94,12 +95,12 @@ async function venue(opts: { render?: Render } = {}) {
   const cookies = await withTransaction(suite.db, async (tx) => {
     const [manager] = await seedPersons(tx, {
       displayName: "The Manager",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "manager",
     });
     const [staff] = await seedPersons(tx, {
       displayName: "The Clerk",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       role: "staff",
     });
     return {

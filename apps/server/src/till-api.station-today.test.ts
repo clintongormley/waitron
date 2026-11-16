@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql, and, isNotNull } from "drizzle-orm";
@@ -25,7 +26,6 @@ import { seedDevice, seedDeviceProfiles, seedActivityActor } from "@waitron/db/t
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
-  hashPin,
   loginWithPin,
   persons,
   registerModulePermissions,
@@ -73,7 +73,7 @@ beforeEach(async () => {
     const [operator] = await seedPersons(tx, {
       displayName: "Waiter",
       role: "staff",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
     });
     const [fallback] = await tx
       .select({ id: kitchenStations.id })

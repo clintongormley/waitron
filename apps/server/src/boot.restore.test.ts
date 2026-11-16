@@ -1,7 +1,8 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as atomic from "./fs-atomic.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { X509Certificate } from "node:crypto";
 import { connect as tlsConnect } from "node:tls";
@@ -192,8 +193,8 @@ describe("startServer, against a migrated venue directory", () => {
     await seedTradingVenue(db);
     const [admin] = await seedPersons(db, {
       displayName: "Sealed Admin",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword("dashPass123"),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash("dashPass123"),
       email: "sealed-admin@example.test",
       role: "admin",
     });
@@ -498,8 +499,8 @@ describe("startServer, against a migrated venue directory", () => {
     await seedTradingVenue(db);
     const [admin] = await seedPersons(db, {
       displayName: "First Start Admin",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword("dashPass123"),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash("dashPass123"),
       email: "first-start-admin@example.test",
       role: "admin",
     });
@@ -634,8 +635,8 @@ describe("startServer, against a migrated venue directory", () => {
           await seedTradingVenue(db);
           const [admin] = await seedPersons(db, {
             displayName: "Restored Trigger Admin",
-            pinHash: hashPin("1234"),
-            passwordHash: hashPassword("dashPass123"),
+            pinHash: fixturePinHash("1234"),
+            passwordHash: fixturePasswordHash("dashPass123"),
             email: "restored-trigger-admin@example.test",
             role: "admin",
           });

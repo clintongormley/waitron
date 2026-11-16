@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -10,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { nowIso, openVenueDatabase, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, hashPin, verifyPassword, webauthnCredentials } from "@waitron/identity";
+import { verifyPassword, webauthnCredentials } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
@@ -49,8 +50,8 @@ async function setupVenue(adminPassword: string = OLD_PASSWORD): Promise<{ admin
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(adminPassword),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash(adminPassword),
           email: "owner@example.test",
         },
       },
@@ -258,8 +259,8 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     // Through the table definition, for the `$defaultFn` reason above (`persons.id`).
     const [inserted] = await seedPersons(suite.db, {
       displayName: "Second Admin",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(OLD_PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(OLD_PASSWORD),
       role: "admin",
     });
     const secondId = inserted!.id;
@@ -302,7 +303,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
       displayName: "Locked manager",
       role: "manager",
       status: "suspended",
-      passwordHash: hashPassword(OLD_PASSWORD),
+      passwordHash: fixturePasswordHash(OLD_PASSWORD),
     });
     const before = await readPerson(manager!.id);
     const { code } = await run(baseEnv(), ["--person", manager!.id]);
@@ -337,7 +338,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
     // The suspended admin's name is outside the live-name index, so another person may take it.
     await seedPersons(suite.db, {
       displayName: "Administrator",
-      pinHash: hashPin("5678"),
+      pinHash: fixturePinHash("5678"),
       role: "staff",
     });
 
@@ -416,8 +417,8 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
       const seeded = await openVenueDatabase(directory);
       const [admin] = await seedPersons(seeded.venue, {
         displayName: "Live Admin",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(OLD_PASSWORD),
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(OLD_PASSWORD),
         role: "admin",
       });
       await seeded.close();

@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import {
   CORE_MIGRATIONS,
   outgoingMail,
@@ -7,7 +8,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -39,7 +40,7 @@ async function fixture(
       displayName: "Manager",
       role: "manager",
       email: "manager@example.test",
-      passwordHash: hashPassword("correct horse"),
+      passwordHash: fixturePasswordHash("correct horse"),
     },
     {
       displayName: "Target",
@@ -47,7 +48,7 @@ async function fixture(
       lastNames: "Person",
       role: targetKind === "admin" ? "admin" : "staff",
       email: "target@example.test",
-      pinHash: hashPin("1234"),
+      pinHash: fixturePinHash("1234"),
       status:
         operation === "reactivate"
           ? "suspended"
@@ -77,7 +78,7 @@ async function fixture(
   await seedPersons(suite.db, {
     displayName: "Other Admin",
     role: "admin",
-    passwordHash: hashPassword("other admin password"),
+    passwordHash: fixturePasswordHash("other admin password"),
   });
   const app = new Hono();
   mountManagementApi(

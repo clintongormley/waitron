@@ -1,3 +1,4 @@
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
@@ -7,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
+import { encryptTotpSecret, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -112,8 +113,8 @@ async function setupVenue(): Promise<{ managerId: string }> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -128,8 +129,8 @@ async function setupVenue(): Promise<{ managerId: string }> {
     const [manager] = await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash(PASSWORD),
       role: "manager",
     });
     return { managerId: manager!.id };
