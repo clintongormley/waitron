@@ -1873,6 +1873,32 @@ describe("account email outcome messages", () => {
     );
   }
 
+  it("says a throttled reset revoked the login and the recent invitation", async () => {
+    setLocale("en-GB");
+    const api = stubApi({ resetLogin: vi.fn().mockResolvedValue({ invitationSent: false }) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api,
+      canAdminister: true,
+    });
+    await flush(el);
+    list(el).dispatchEvent(
+      new CustomEvent("person-action", {
+        detail: { personId: "p1", action: "reset-login" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent?.trim(),
+      ).toBe(
+        "The login was reset. Invitations already delivered no longer work. If a new invitation does not arrive, check Email settings and send it again after a minute.",
+      ),
+    );
+  });
+
   it("distinguishes an immediate invitation retry from email not being configured", async () => {
     const api = stubApi({
       resendInvitation: vi

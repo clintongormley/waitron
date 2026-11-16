@@ -438,7 +438,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   ) => {
     pinThrottle.check(DASHBOARD_PIN_SLOT, personId);
     try {
-      if (typeof pin !== "string") throw new AppError("pin.invalid", {});
+      if (typeof pin !== "string") throw new AppError("pin.invalid", {}, { reason: "malformed" });
       await verifyPersonCredential(tx, personId, pin, checked);
     } catch (error) {
       if (isAppError(error) && error.code === "pin.invalid") {

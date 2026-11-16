@@ -195,35 +195,17 @@ by the answers):
     carrying the number is in the download, and the dialog shows each row's name first. Example:
     staff typed Jordi's NIF, 12345678Z, on an invoice for Maria Puig at her address; Jordi's ZIP
     holds Maria's name and address.
-- **Reset login resets nothing within a minute of an earlier invitation.** The route checks the
-  invitation cooldown before it resets anything
-  (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
-  early with `invitationSent: false`), and the cooldown is 60 seconds per person
-  (`apps/server/src/account-rate-limit.ts`). So a press within a minute of an invitation, a reset or
-  **Enable and send invitation** for the same person leaves the PIN, password, two-factor secret, passkeys, recovery codes, Google link and
-  open sign-ins in place, which matters when the reset answers a stolen account (the guide's breach
-  section, which for now tells an admin to choose it again after a minute). Next action: a failing
-  route test first, then reset before the cooldown, and drop the guide's workaround sentences, in
-  the stolen-phone and misused-account paragraphs of both languages, and the "or it changes
-  nothing" pointer in each language's Users guide (`staff.md`, `#account-access`).
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).
 - **Receipts and invoices** — a privacy line waits for the specialist's answer to Q59 (design
   §4.1.1). Receipt Email omits the existing full-invoice notice; the processing-guide entries also
   need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
-- **Emergency admin recovery keeps its own wipe** — `apps/server/src/break-glass-command.ts` clears
-  sign-in details with its own SQL rather than identity's shared helper (left out of S4, #2032),
-  and does not delete pending passkey challenges. Next action: route it through the helper, or say
-  at the command why not.
 - **S10 follow-ups (from #2094's review, not taken there):**
   - **Rename the SumUp merchant's `name` to `merchantName`.** That removes the log mask's one path
     rule (`merchants[].name`, `apps/server/src/log-personal-data.ts`) and the guard's array check
     that goes with it. Touches `packages/payments-sumup` and the dashboard's connect form, which
     S10 kept out of scope.
-  - **Account-mail routes log unregistered values in `errorCode`** (`email.send_refused`,
-    `email.unconfigured` and `email.send_timeout`, from `AccountEmailFailure`). Register them or
-    rename the field in both the profile and invitation routes.
   - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
     `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
     three similar allow-list checks; reuse the existing fake mail server in

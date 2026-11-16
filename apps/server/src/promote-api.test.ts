@@ -88,16 +88,21 @@ function appWith(
     alreadyPrimary: false,
     restarting: true,
   })),
-): { app: Hono; run: typeof run } {
+): { app: Hono; run: typeof run; log: ReturnType<typeof vi.fn> } {
   const app = new Hono();
-  mountPromoteApi(app, {
-    appDb: fakeDb,
-    nodeDb: fakeNode,
-    nodeId: NODE,
-    run,
-    credentialKeyRing: TOTP_KEY_RING,
-  });
-  return { app, run };
+  const log = vi.fn();
+  mountPromoteApi(
+    app,
+    {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run,
+      credentialKeyRing: TOTP_KEY_RING,
+    },
+    log,
+  );
+  return { app, run, log };
 }
 
 async function post(app: Hono, body: unknown): Promise<Response> {
@@ -151,15 +156,20 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
   });
 
   it("no credential is refused 401 and never calls run", async () => {
-    const { app, run } = appWith();
+    const { app, run, log } = appWith();
     const res = await post(app, { oldNodeNeutralised: true });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
     expect(run).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("a login credential whose totp is not a string is refused 401 without trying the login", async () => {
-    const { app, run } = appWith();
+    const { app, run, log } = appWith();
     const res = await post(app, {
       oldNodeNeutralised: true,
       personId: PERSON,
@@ -170,6 +180,11 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect((await res.json()).error.code).toBe("password.invalid");
     expect(loginManagerById).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "password.invalid",
+      expect.objectContaining({ logReason: "malformed" }),
+    );
   });
 
   it("passes a string totp through to the login", async () => {

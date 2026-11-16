@@ -10,6 +10,7 @@ import {
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
+  deleteSignInRows,
   assertPinLength,
   hashPassword,
   hashPin,
@@ -31,11 +32,11 @@ export async function openBreakGlassVenue(
 
 /**
  * `waitron-break-glass`: the physical admin reset for an admin locked out of every gated reset. It
- * resets the password (and optionally the PIN), clears the admin's other login factors and
+ * resets the password (and optionally the PIN), clears the admin's other login factors and pending passkey challenges, and
  * reactivates the account.
  *
- * The ungated reset lives here, not in `@waitron/identity`, because an importable ungated reset
- * would be a permission bypass. Secrets come from the environment, never argv, which `ps` shows.
+ * Physical recovery has no management session for identity's gated reset.
+ * Secrets come from the environment, never argv, which `ps` shows.
  *
  * Returns the exit code: 0 on success, 2 on a usage or config error, 1 on an operational error.
  */
@@ -131,9 +132,7 @@ export async function runBreakGlassReset(deps: {
           return 1;
         }
 
-        await tx.execute(sql`delete from webauthn_credentials where person_id=${targetId}`);
-        await tx.execute(sql`delete from recovery_codes where person_id=${targetId}`);
-        await tx.execute(sql`delete from totp_enrollments where person_id=${targetId}`);
+        await deleteSignInRows(tx, targetId);
         // `nowIso`, because raw SQL never reaches a column's write mapping and these three columns
         // are `tsString`.
         const revokedAt = nowIso();

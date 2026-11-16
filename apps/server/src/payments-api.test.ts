@@ -441,6 +441,28 @@ describe("connect", () => {
   });
 });
 
+it("keeps a malformed manager PIN private and records its reason", async () => {
+  const venue = await seedVenueWithStaff();
+  const log = vi.fn();
+  const app = mountApp(venue, PROVIDERS, suite.db, { log });
+  const response = await send(
+    app,
+    "POST",
+    `/management-api/payments/held/${randomUUID()}/outcome`,
+    {
+      cookie: venue.managerCookie,
+      body: { outcome: "kept", note: "Provider confirmed the charge", pin: null },
+    },
+  );
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ error: { code: "pin.invalid", params: {} } });
+  expect(log).toHaveBeenCalledWith(
+    "warn",
+    "pin.invalid",
+    expect.objectContaining({ logReason: "malformed" }),
+  );
+});
+
 describe("providers list", () => {
   it("reports not_connected before and connected after, with the seat's fields", async () => {
     const venue = await seedVenueWithStaff();

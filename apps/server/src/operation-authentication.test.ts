@@ -101,7 +101,7 @@ describe("host-issued authority after fresh operator authentication", () => {
         perform(async () => {
           entered = true;
         }, credentials),
-      ).rejects.toMatchObject({ code: "password.invalid" });
+      ).rejects.toMatchObject({ code: "password.invalid", params: {}, reason: expect.any(String) });
       expect(entered).toBe(false);
       expect(await suite.db.select().from(managementSessions)).toEqual([]);
     },

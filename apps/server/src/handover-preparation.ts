@@ -115,9 +115,11 @@ export async function signInCredentials(
     const { email, password, totp } = request;
     return { personId: await personIdForLoginEmail(db, email), password, totp };
   }
-  if (typeof signIn !== "object" || signIn === null) throw new AppError("password.invalid", {});
+  if (typeof signIn !== "object" || signIn === null)
+    throw new AppError("password.invalid", {}, { reason: "malformed" });
   const { email, password, totp } = signIn as Record<string, unknown>;
-  if (typeof email !== "string") throw new AppError("password.invalid", {});
+  if (typeof email !== "string")
+    throw new AppError("password.invalid", {}, { reason: "malformed" });
   return { personId: await personIdForLoginEmail(db, email), password, totp };
 }
 

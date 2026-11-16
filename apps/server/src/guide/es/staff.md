@@ -28,7 +28,7 @@ llave de acceso. Un PIN solo permite entrar en la caja.
 Los encargados pueden añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
-nueva invitación si el correo está configurado; si Waitron no lo permite o no cambia nada,
+nueva invitación si el correo está configurado; si Waitron no lo permite,
 consulta [Pérdidas habituales](data-protection.md#breach-losses). Deshabilitar una cuenta también
 borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, códigos de recuperación y
 vínculo con Google. Al volver a habilitarla se envía una nueva

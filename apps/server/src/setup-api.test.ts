@@ -4178,15 +4178,21 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       writeRecord(dir, "adopt", "venue_committed");
       const stageReset = vi.fn(async () => {});
       const app = new Hono();
+      const log = vi.fn();
       mountSetup(
         app,
         makeAdoptDeps({ operations: createSetupOperationStore(dir), stageReset }).deps,
-        noopLog,
+        log,
       );
       const response = await postReset(app, resetBody());
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual(invalid);
       expect(stageReset).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(
+        "warn",
+        "password.invalid",
+        expect.objectContaining({ logReason: "reset_proof_mismatch" }),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

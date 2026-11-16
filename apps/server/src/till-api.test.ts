@@ -2628,7 +2628,8 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 describe("POST /api/session refusals say nothing about the account", () => {
   it("answers an unknown person, a suspended one, a wrong PIN and an id that is no UUID identically", async () => {
     const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    mountTillApi(app, deps(suite.db), collect(lines));
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const [zoe] = await suite.db
       .select({ id: persons.id })
@@ -2659,6 +2660,9 @@ describe("POST /api/session refusals say nothing about the account", () => {
       notAUuid: refused,
       notAString: refused,
     });
+    expect(
+      lines.filter((line) => line.event === "pin.invalid").map((line) => line.fields.logReason),
+    ).toEqual(["unknown_person", "suspended", "wrong_pin", "malformed", "malformed"]);
   });
 
   it("counts an unknown person's wrong attempts toward the back-off exactly as a known person's", async () => {
