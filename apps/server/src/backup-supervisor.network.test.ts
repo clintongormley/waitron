@@ -574,7 +574,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     const closed: string[] = [];
     vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
       this: LocalFsBackend,
-      prefix,
+      _prefix,
       call,
     ) {
       return this.id === "remote" ? stall(call) : Promise.resolve([]);
