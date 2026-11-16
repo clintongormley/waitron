@@ -440,25 +440,14 @@
       },
       "customerEnglish": "White tuna belly (per kg)"
     },
-    "coca-cola-lata.png": {
-      "staff": {
-        "en": "Coca-Cola",
-        "es": "Coca-Cola"
-      },
-      "kitchen": {
-        "en": "COCA-COLA · DELI",
-        "es": "COCA-COLA · CHARCUTERÍA"
-      },
-      "customerEnglish": "Coca-Cola can (33 cl)"
-    },
     "coca-cola-zero-lata.png": {
       "staff": {
         "en": "Coca-Cola Zero",
         "es": "Coca-Cola Zero"
       },
       "kitchen": {
-        "en": "COCA-COLA ZERO · DELI",
-        "es": "COCA-COLA ZERO · CHARCUTERÍA"
+        "en": "COCA-COLA ZERO · BAR",
+        "es": "COCA-COLA ZERO · BARRA"
       },
       "customerEnglish": "Coca-Cola Zero can (33 cl)"
     },
@@ -468,8 +457,8 @@
         "es": "Botellín"
       },
       "kitchen": {
-        "en": "BOTTLED BEER · DELI",
-        "es": "BOTELLÍN · CHARCUTERÍA"
+        "en": "BOTTLED BEER · BAR",
+        "es": "BOTELLÍN · BARRA"
       },
       "customerEnglish": "Bottle of lager (33 cl)"
     },

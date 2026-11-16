@@ -176,6 +176,7 @@ export async function seedMenus(
           ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
+          takeawayVatClass: product.takeawayVatClass,
         });
         productIds.push(created.id);
         if (product.variants?.length) {
@@ -208,6 +209,27 @@ export async function seedMenus(
       if (rows.length !== productIds.length)
         throw new Error(`demo-seed: a product of '${plain(cat.name)}' has no row on its menu`);
       for (const row of rows) menuItemsByProduct.set(row.productId, row.id);
+    }
+    if (data.listedSection !== undefined) {
+      const listed = data.listedSection.productImages.map((image) => {
+        const productId = productsByImage.get(image);
+        if (productId === undefined)
+          throw new Error(
+            `demo-seed: listed product '${image}' was not created by an earlier menu`,
+          );
+        return productId;
+      });
+      const section = await createSectionIn(
+        tx,
+        rootSectionId,
+        {
+          internalName: plain(data.listedSection.name),
+          names: translated(data.listedSection.name),
+        },
+        undefined,
+        locale,
+      );
+      await addProducts(tx, section.id, listed);
     }
     return menu.id;
   };

@@ -59,6 +59,7 @@ export interface SeedSalesProduct {
   /** GROSS (VAT-inclusive). */
   unitPrice: string;
   vatClass: VatClass;
+  takeawayVatClass?: VatClass | null;
 }
 
 export interface BackDatingClock {
@@ -77,10 +78,13 @@ export interface SeedSalesInput {
   days: number;
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
   products: readonly SeedSalesProduct[];
+  /** The deli's pool; when non-empty, a share of sales are deli takeaway sales drawn from it. */
+  deliProducts?: readonly SeedSalesProduct[];
   clock?: BackDatingClock;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DELI_SHARE = 0.2;
 
 /** `anchor`/`currentAnchor` are never called by `recordSale`, so they throw / return null. */
 function backDatingClock(): BackDatingClock {
@@ -154,7 +158,7 @@ export function demoSeedEnvironment(env: NodeJS.ProcessEnv): DeploymentEnvironme
 /** Returns how many sales were recorded. */
 export async function seedSales(
   db: Database,
-  { venue, invoiceLocale, days, products, clock }: SeedSalesInput,
+  { venue, invoiceLocale, days, products, deliProducts = [], clock }: SeedSalesInput,
 ): Promise<{ count: number }> {
   const environment = demoSeedEnvironment(process.env);
   if (days <= 0) {
@@ -177,7 +181,12 @@ export async function seedSales(
 
   const rng = makeLcg(0x9e3779b9);
   const now = Date.now();
-  const inputs: { instant: Date; chosen: SeedSalesProduct[]; method: string }[] = [];
+  const inputs: {
+    instant: Date;
+    chosen: SeedSalesProduct[];
+    method: string;
+    takeaway: boolean;
+  }[] = [];
 
   for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
     // The calendar date `dayIndex` days ago (UTC). Sales are placed at UTC hours safely inside the
@@ -206,17 +215,18 @@ export async function seedSales(
         continue;
       }
 
+      const takeaway = deliProducts.length > 0 && rng() < DELI_SHARE;
+      const pool = takeaway ? deliProducts : products;
       const lineCount = randInt(rng, 1, 4);
       const chosen: SeedSalesProduct[] = [];
-      for (let l = 0; l < lineCount; l += 1)
-        chosen.push(products[randInt(rng, 0, products.length - 1)]!);
+      for (let l = 0; l < lineCount; l += 1) chosen.push(pool[randInt(rng, 0, pool.length - 1)]!);
       const method = rng() < 0.6 ? "cash" : "card";
-      inputs.push({ instant, chosen, method });
+      inputs.push({ instant, chosen, method, takeaway });
     }
   }
 
   inputs.sort((a, b) => a.instant.getTime() - b.instant.getTime());
-  for (const { instant, chosen, method } of inputs) {
+  for (const { instant, chosen, method, takeaway } of inputs) {
     await withIssuanceTransaction(db, async (tx) => {
       backDating.set(instant, 0);
       const clock = await prepareIssueClock(tx, { nodeId }, backDating.clock);
@@ -244,7 +254,7 @@ export async function seedSales(
             defaultLanguage,
           ),
           quantity: "1",
-          vatClass: product.vatClass,
+          vatClass: takeaway ? (product.takeawayVatClass ?? product.vatClass) : product.vatClass,
           grossUnitPrice: price,
           lineGross: price,
         });

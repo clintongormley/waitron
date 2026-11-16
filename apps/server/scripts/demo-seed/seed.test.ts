@@ -321,6 +321,42 @@ describe("seedDemoRestaurant", () => {
     }
   });
 
+  it("rates a seeded deli sale's cola at 21% and a seeded restaurant sale's cola at 10%", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-08T22:00:00.000Z") });
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 7,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const { rows } = await suite.db.execute<{ sale_id: string; name: string; vat_rate: number }>(
+      sql`select sale_id, name, vat_rate from sale_lines`,
+    );
+    const deli = CASA_DELGADO_ES.menus.deli;
+    const deliNames = new Set([
+      ...deli.categories.flatMap((category) =>
+        category.products.map((product) => product.staffName?.en ?? product.customerName.en),
+      ),
+      "Cola",
+      "Coca-Cola Zero",
+      "Bottled beer",
+    ]);
+    const cola = rows.filter((row) => row.name === "Cola");
+    const linesOf = (saleId: string) => rows.filter((row) => row.sale_id === saleId);
+    const deliCola = cola.filter((row) => Number(row.vat_rate) === 2100);
+    expect(deliCola.length).toBeGreaterThan(0);
+    for (const row of deliCola)
+      expect(linesOf(row.sale_id).filter((line) => !deliNames.has(line.name))).toEqual([]);
+    const restaurantCola = cola.filter((row) =>
+      linesOf(row.sale_id).some((line) => !deliNames.has(line.name)),
+    );
+    expect(restaurantCola.length).toBeGreaterThan(0);
+    expect(new Set(restaurantCola.map((row) => Number(row.vat_rate)))).toEqual(new Set([1000]));
+    expect(new Set(cola.map((row) => Number(row.vat_rate)))).toEqual(new Set([1000, 2100]));
+  });
+
   it("refuses a production environment before writing anything", async () => {
     const venue = await provisionVenue();
     const before = await withTransaction(suite.db, async (tx) => ({
@@ -777,7 +813,9 @@ describe("seedDemoRestaurant", () => {
     expect(read.cocktailRoutes).toEqual([
       { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
       { category: "Coffee", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
+      { category: "Soft drinks", zone_name: "Deli counter", station_name: "Deli prep" },
       { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
+      { category: "Wine and beer", zone_name: "Deli counter", station_name: "Deli prep" },
       { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
     ]);
 

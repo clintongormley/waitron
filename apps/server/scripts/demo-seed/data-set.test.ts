@@ -125,7 +125,7 @@ describe("demo data sets", () => {
             "ca-ES-valencia": "Vi i cervesa",
             gl: "Viño e cervexa",
           },
-          ["vino-tinto.png", "cana-cerveza.png"],
+          ["vino-tinto.png", "cana-cerveza.png", "botellin-cerveza.png"],
         ],
         [
           {
@@ -135,7 +135,7 @@ describe("demo data sets", () => {
             "ca-ES-valencia": "Refrescos",
             gl: "Refrescos",
           },
-          ["refresco-cola.png", "agua-mineral.png", "zumo-naranja.png"],
+          ["refresco-cola.png", "agua-mineral.png", "zumo-naranja.png", "coca-cola-zero-lata.png"],
         ],
         [
           { en: "Coffee", es: "Café", ca: "Cafè", "ca-ES-valencia": "Café", gl: "Café" },

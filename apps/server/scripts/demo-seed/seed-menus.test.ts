@@ -63,6 +63,46 @@ describe("seedMenus", () => {
     expect(new Set(rows.map((row) => row.color)).size).toBe(rows.length);
   });
 
+  it("offers the restaurant's own cola, Coca-Cola Zero and bottled beer in the deli, taken away at the general class", async () => {
+    await provisionVenue();
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { menuIds, productsByImage } = await seedMenus(tx, {
+        locale: LOCALE,
+        dataSet: CASA_DELGADO_ES,
+      });
+      const deli = await readMenuStructure(tx, menuIds.deli);
+      const drinksMenu = await readMenuStructure(tx, menuIds.drinks);
+      const { rows: classes } = await tx.execute<{
+        name: string;
+        vat_class: string;
+        takeaway_vat_class: string | null;
+      }>(sql`
+        select name, vat_class, takeaway_vat_class from products
+        where name in ('Cola', 'Coca-Cola', 'Coca-Cola Zero', 'Bottled beer', 'Beer')
+        order by name`);
+      return { deli, drinksMenu, productsByImage, classes };
+    });
+    const drinks = ["refresco-cola.png", "coca-cola-zero-lata.png", "botellin-cerveza.png"].map(
+      (image) => read.productsByImage.get(image),
+    );
+    expect(drinks.every((id) => id !== undefined)).toBe(true);
+    expect(read.productsByImage.has("coca-cola-lata.png")).toBe(false);
+    const section = read.deli.nodes.find((node) => node.internalName === "Drinks");
+    const productOf = (node: { ref: { kind: string; productId?: string } }) =>
+      node.ref.kind === "product" ? node.ref.productId : undefined;
+    expect(section?.children?.map(productOf)).toEqual(drinks);
+    const offeredInDrinks = read.drinksMenu.nodes
+      .flatMap((node) => node.children ?? [])
+      .map(productOf);
+    for (const id of drinks) expect(offeredInDrinks).toContain(id);
+    expect(read.classes).toEqual([
+      { name: "Beer", vat_class: "reduced", takeaway_vat_class: null },
+      { name: "Bottled beer", vat_class: "reduced", takeaway_vat_class: "general" },
+      { name: "Coca-Cola Zero", vat_class: "reduced", takeaway_vat_class: "general" },
+      { name: "Cola", vat_class: "reduced", takeaway_vat_class: "general" },
+    ]);
+  });
+
   it("finds the provisioned default station by its default flag, whatever setup named it", async () => {
     await provisionVenue();
     const stations = await withTransaction(suite.db, async (tx) => {
@@ -183,7 +223,7 @@ describe("seedMenus", () => {
       ["Starters", { en: "Starters", es: "Primeros" }],
       ["Mains", { en: "Mains", es: "Segundos" }],
     ]);
-    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves", "Drinks to take away"]);
+    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves", "Drinks"]);
     expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00" });
     expect(read.lunchNegroni?.placements).toContainEqual([]);
     expect(read.lunchNegroni?.placements).toContainEqual(read.drinksPath);

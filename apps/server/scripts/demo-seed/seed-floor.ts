@@ -65,6 +65,7 @@ export async function seedFloor(
       name: plain(floor.departmentNames.deli),
       tradingName: departmentTradingNames.deli,
       active: true,
+      dining: "takeaway",
     })
     .returning({ id: departments.id });
   const deliDepartmentId = deliRow?.id;
@@ -166,6 +167,30 @@ export async function seedFloor(
     displayOrder: 4,
   });
   if (menuIds !== undefined) {
+    const [deliStation] = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, plain(dataSet.stations.deli)));
+    if (deliStation === undefined) throw new Error("seedFloor: no deli preparation station");
+    const deliOwnCategories = dataSet.menus.deli.categories.map((category) =>
+      plain(category.categoryName ?? category.name),
+    );
+    const { rows: listedCategories } = await tx.execute<{ id: string }>(sql`
+      select distinct c.id from menu_items i
+      join products p on p.id = i.product_id
+      join categories c on c.id = p.category_id
+      where i.menu_id = ${menuIds.deli}
+        and c.name not in (${sql.join(
+          deliOwnCategories.map((name) => sql`${name}`),
+          sql`, `,
+        )})
+      order by c.id`);
+    for (const category of listedCategories)
+      await setRoutingCell(
+        tx,
+        { row: { kind: "category", categoryId: category.id }, zoneId: deliCounterZone.id },
+        { kind: "station", stationId: deliStation.id },
+      );
     const restaurantId = defaultPolicy.department_id;
     const [existing] = await tx
       .select({ id: menuPeriods.id })

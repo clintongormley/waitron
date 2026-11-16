@@ -31,6 +31,7 @@ interface CountryDemoProductFields<L extends string = string> {
 
   unitPrice: string;
   vatClass: string;
+  takeawayVatClass?: string;
 
   image: string;
 }
@@ -48,6 +49,8 @@ interface CountryDemoMenuFields<L extends string = string> {
   name: DemoPlainText<L>;
   customerName: DemoText<L>;
   categories: CountryDemoCategory<L>[];
+  /** A section offering products another menu creates, named by image; it creates none. */
+  listedSection?: { name: DemoText<L>; productImages: string[] };
 }
 
 interface CountryDemoOptionLabelFields<L extends string = string> {
