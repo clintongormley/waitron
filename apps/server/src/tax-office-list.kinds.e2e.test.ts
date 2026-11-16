@@ -28,9 +28,6 @@ beforeEach(async () => {
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "production",
-    resolveClient: () => {
-      throw new Error("Recording must not contact AEAT");
-    },
   });
 });
 

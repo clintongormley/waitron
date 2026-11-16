@@ -92,7 +92,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
 import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { es } from "./i18n/strings.js";
-import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveConnection, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { DashboardApi, type AlertView, type PersonSummary } from "./api/client.js";
