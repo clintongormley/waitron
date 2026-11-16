@@ -2663,6 +2663,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             });
             expect(provisioned.status, await provisioned.clone().text()).toBe(200);
             await poll(() => (kills.length > 0 ? kills.length : undefined));
+            expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
             expect(await readdir(join(stateDir, "flows/setup/import"))).toEqual([]);
           },
         );
@@ -2741,6 +2742,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           });
           expect(prepared.status, await prepared.clone().text()).toBe(200);
           await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
           const kept = JSON.parse(
             await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
           ) as { attempt: { status: string; frozen: { request: { taxId: string } } } };

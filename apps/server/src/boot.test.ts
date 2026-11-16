@@ -2399,9 +2399,8 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("serves the built till at / and dashboard at /manage when the app dirs are configured, without shadowing the APIs", async () => {
-    // The one boot that sets WAITRON_TILL_APP_DIR and WAITRON_DASHBOARD_APP_DIR. Distinctive markers
-    // catch a swapped /manage-vs-/ mapping; `boot.spa-mount.test.ts` pins the mount order, and this
-    // shows the catch-alls do not shadow /health or /api/staff in a real boot.
+    // Distinctive markers catch a swapped /manage-vs-/ mapping; `boot.spa-mount.test.ts` pins the
+    // mount order, and this shows the catch-alls do not shadow /health or /api/staff in a real boot.
     const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-till-spa-"));
     const dashApp = mkdtempSync(join(tmpdir(), "waitron-boot-dash-spa-"));
     writeFileSync(join(tillApp, "index.html"), "<html>till-spa-root</html>");

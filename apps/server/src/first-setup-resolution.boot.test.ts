@@ -499,7 +499,6 @@ function overHttps(
 }
 
 const STATUS_EN = "Level: recovery. This start was refused before it began, and was not counted.";
-// The Spanish status line has no exported table to read it from; the titles and actions do.
 const STATUS_ES = "Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.";
 const REFUSED_TEXT = {
   "setup.start_again_incomplete": {
