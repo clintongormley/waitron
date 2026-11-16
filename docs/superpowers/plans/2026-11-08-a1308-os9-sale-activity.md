@@ -77,7 +77,7 @@ this cannot be restored or imported."
   `.test.ts`
 - Modify: `packages/db/src/index.ts`, `packages/db/src/classification.ts:21, :31`,
   `packages/migrations/migrations.manifest.json:13, :15`
-- Modify (tests): the 9 test files naming `receiptReprints` and the 9 naming `invoicePdfDownloads`
+- Modify (tests): the test files naming `receiptReprints` and those naming `invoicePdfDownloads`
   (`git grep -l`), including `orders-reprint.test.ts`, `orders-reprint.issue-clock.test.ts`,
   `printer-delete-history.test.ts`, `tender-refund-receipt-api.test.ts`, `orders-invoice-pdf.test.ts`,
   `invoice-customer-data-api.test.ts`, `print-api.printer-wiring.test.ts`, `receipt-language.test.ts`;

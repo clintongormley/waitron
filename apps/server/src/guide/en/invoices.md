@@ -21,6 +21,10 @@ Choose an invoice's number to see it as a PDF, then print or save it from there.
 invoice stays in the list, marked with the day it was cancelled. If the list ends with
 **Show more invoices**, choose it to see the rest.
 
+To hand over a whole month, choose **Download** beside the dates: it saves one file holding a
+copy of every invoice issued in the month that **Issued from** falls in, and a spreadsheet of
+those invoices.
+
 ## Give an inspector their own sign-in {#inspector-sign-in}
 
 An inspector can have their own sign-in when the box's email is set up
@@ -33,4 +37,6 @@ An inspector can have their own sign-in when the box's email is set up
   invitation; see [Account access](staff.md#account-access).
 - They sign in at the venue or, with [remote access](servers.md#remote-access) on, through
   Waitron Cloud.
+- They can choose **Download** beside the dates to save a month's invoices, each as a copy, with
+  a spreadsheet of them.
 - When the visit ends, disable their account in **Users**.

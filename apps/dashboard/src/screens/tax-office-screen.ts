@@ -8,7 +8,7 @@ import {
   pageTitleStyles,
   type DataTableColumn,
 } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, isCalendarDate } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -168,6 +168,8 @@ export class TaxOfficeScreen extends LitElement {
   /** An Open that failed; kept apart from a read's message so neither clears the other. */
   @state() private actionError = "";
   @state() private opening: ReadonlySet<string> = new Set();
+  /** The `YYYY-MM` being downloaded: the month pressed, which a later Issued from change does not move. */
+  @state() private downloadingMonth: string | null = null;
   #read = 0;
   /** The filter of the read last sent, so the address change this screen writes does not send it twice. */
   #requested?: string;
@@ -327,6 +329,59 @@ export class TaxOfficeScreen extends LitElement {
       rest.delete(invoice.id);
       this.opening = rest;
     }
+  }
+
+  /** The `YYYY-MM` of the issue range's start, or null while that date is not a calendar day. */
+  #month(): string | null {
+    const from = this.filter.from;
+    return from !== undefined && isCalendarDate(from) ? from.slice(0, 7) : null;
+  }
+
+  async #downloadMonth(): Promise<void> {
+    const month = this.#month();
+    if (month === null || this.downloadingMonth !== null) return;
+    this.downloadingMonth = month;
+    this.actionError = "";
+    try {
+      const file = await this.api.downloadTaxOfficeMonth(month);
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? `invoices-${month}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.actionError = codeMessage(codeOf(error));
+    } finally {
+      this.downloadingMonth = null;
+    }
+  }
+
+  #monthAction() {
+    const busy = this.downloadingMonth;
+    const month = busy ?? this.#month();
+    const label = (key: StringKey, yearMonth: string) =>
+      fill(key, {
+        month: new Intl.DateTimeFormat(currentLocale(), {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(`${yearMonth}-01T00:00:00Z`)),
+      });
+    return html`<wt-button
+      data-test="download-month"
+      variant=${month === null ? "secondary" : "primary"}
+      ?disabled=${month === null}
+      ?loading=${busy !== null}
+      @click=${() => void this.#downloadMonth()}
+      >${
+        busy !== null
+          ? label("tax_office.downloading_month", busy)
+          : month === null
+            ? t("tax_office.download_no_month")
+            : label("tax_office.download_month", month)
+      }</wt-button
+    >`;
   }
 
   #columns(): DataTableColumn<TaxOfficeInvoiceDto>[] {
@@ -494,7 +549,7 @@ export class TaxOfficeScreen extends LitElement {
       </p>
       <div class="filters">
         ${this.#dateField("from", "tax_office.issued_from", true)}
-        ${this.#dateField("to", "tax_office.issued_to", true)}
+        ${this.#dateField("to", "tax_office.issued_to", true)} ${this.#monthAction()}
         ${this.#textField("q", "tax_office.search", "tax_office.search_hint", false)}
         ${this.#textField("amount", "tax_office.amount", "tax_office.amount_hint", true)}
         ${this.#textField("rate", "tax_office.rate", null, true)}

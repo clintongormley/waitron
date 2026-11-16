@@ -76,6 +76,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This server is no longer the main server, so it cannot add new records for the tax agency. Open this page on the main server.",
     es: "Este servidor ya no es el servidor principal, así que no puede añadir registros nuevos para Hacienda. Abre esta página en el servidor principal.",
   },
+  "tax_office.export_running": {
+    en: "Another month of invoices is already downloading. Try again once that download finishes.",
+    es: "Ya se está descargando otro mes de facturas. Vuelve a intentarlo cuando termine esa descarga.",
+  },
   "invoice_customer.not_found": {
     en: "No full invoice names that tax number.",
     es: "Ninguna factura completa lleva ese NIF.",

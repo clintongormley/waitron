@@ -483,6 +483,7 @@ const INSPECTOR_ROUTES = [
   "GET /management-api/me/personal-data/export",
   "GET /management-api/tax-office/invoices",
   "POST /management-api/tax-office/invoices/:saleId/pdf",
+  "POST /management-api/tax-office/months/:month",
 ];
 
 const INSPECTOR_REFUSAL = { status: 403, code: "authorization.inspection_only", params: {} };
@@ -603,7 +604,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
     );
   });
 
-  it("serves its own account and the tax office's list", async () => {
+  it("serves its own account and the tax office's list and month", async () => {
     let inspector = "";
     await withServer(
       {},
@@ -620,6 +621,12 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           await response.body?.cancel();
           answers[path] = response.status;
         }
+        const month = await fetch(url("/management-api/tax-office/months/2026-11"), {
+          method: "POST",
+          headers: { cookie: inspector },
+        });
+        await month.body?.cancel();
+        answers["POST month"] = month.status;
         const locale = await fetch(url("/management-api/session/me/locale"), {
           method: "PUT",
           headers: { cookie: inspector, "content-type": "application/json" },
@@ -642,6 +649,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           "/management-api/passkey/signals": 200,
           "/management-api/me/personal-data/export": 200,
           "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30": 200,
+          "POST month": 200,
           "PUT locale": 204,
           "DELETE session": 204,
           "after signing out": 401,

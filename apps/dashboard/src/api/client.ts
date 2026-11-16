@@ -4815,6 +4815,16 @@ export class DashboardApi {
     );
   }
 
+  /** Every invoice issued in `month` (`YYYY-MM`) as one ZIP; the server records who downloaded it. */
+  downloadTaxOfficeMonth(month: string): Promise<DownloadedFile> {
+    return this.#request<DownloadedFile>(
+      `/management-api/tax-office/months/${encodeURIComponent(month)}`,
+      "POST",
+      undefined,
+      { as: "file" },
+    );
+  }
+
   downloadDeferredPayments(range: { from: string; to: string }): Promise<Blob> {
     return this.#request<Blob>(
       `/management-api/reports/deferred-payment-export?from=${range.from}&to=${range.to}`,

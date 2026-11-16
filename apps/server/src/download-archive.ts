@@ -57,6 +57,16 @@ export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8A
   return zipSync(entries);
 }
 
+function addEntry(zip: Zip, name: string, content: string | Uint8Array, mtime: Date): void {
+  const data = typeof content === "string" ? strToU8(content) : content;
+  const entry = /\.pdf$/i.test(name)
+    ? new ZipPassThrough(name)
+    : new ZipDeflate(name, { level: 6 });
+  entry.mtime = mtime;
+  zip.add(entry);
+  entry.push(data, true);
+}
+
 /** `zipArchive`'s ZIP built one entry at a time with a turn of the event loop after each, so the
  * longest block while adding is one entry; the final join still copies the whole archive once.
  * Each `content` is read only when its entry is added. */
@@ -72,17 +82,84 @@ export async function zipArchiveInTurns(
   });
   const mtime = zipTime(at);
   for (const file of files) {
-    const content = file.content;
-    const data = typeof content === "string" ? strToU8(content) : content;
-    const entry = /\.pdf$/i.test(file.name)
-      ? new ZipPassThrough(file.name)
-      : new ZipDeflate(file.name, { level: 6 });
-    entry.mtime = mtime;
-    zip.add(entry);
-    entry.push(data, true);
+    addEntry(zip, file.name, file.content, mtime);
     if (failure) throw failure;
     await nextTurn();
   }
   zip.end();
   return Buffer.concat(chunks);
+}
+
+/** fflate writes no ZIP64: its end record's entry count is two bytes and every offset and size
+ * four, each written without a check, so a larger value wraps and the archive reads back wrong. A
+ * count of 0xFFFF or an offset of 0xFFFFFFFF itself tells a reader to look for ZIP64. */
+export const ZIP_LIMITS = { entries: 0xfffe, bytesBeforeDirectory: 0xfffffffe };
+
+/** `zipArchiveInTurns`' ZIP as a stream that takes the next entry only when the reader asks for
+ * more, so no more than one entry's bytes wait in memory. It gives the event loop no turn of its
+ * own between entries: a source whose entries are slow to make must give those turns itself. An
+ * entry past `limits` errors the stream instead of being written. A refusal of the stream's own
+ * is thrown into the source, so its `catch` sees it as it sees a failure of its own. */
+export function zipStream(
+  entries: AsyncIterable<{ name: string; content: string | Uint8Array }>,
+  at: Date,
+  limits: typeof ZIP_LIMITS = ZIP_LIMITS,
+): ReadableStream<Uint8Array> {
+  const iterator = entries[Symbol.asyncIterator]();
+  const mtime = zipTime(at);
+  let chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  let added = 0;
+  let written = 0;
+  const zip = new Zip((error, chunk) => {
+    if (error) failure = error;
+    else chunks.push(chunk);
+  });
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const next = await iterator.next();
+          if (next.done) zip.end();
+          else {
+            if (added === limits.entries)
+              throw new Error(
+                `a ZIP without ZIP64 holds at most ${limits.entries.toLocaleString("en")} entries`,
+              );
+            added++;
+            addEntry(zip, next.value.name, next.value.content, mtime);
+            if (failure) throw failure;
+            for (const chunk of chunks) written += chunk.length;
+            if (written > limits.bytesBeforeDirectory)
+              throw new Error(
+                `a ZIP without ZIP64 holds at most ${limits.bytesBeforeDirectory.toLocaleString("en")} bytes of entries`,
+              );
+          }
+          for (const chunk of chunks) controller.enqueue(chunk);
+          chunks = [];
+          if (next.done) controller.close();
+        } catch (error) {
+          // An erroring stream does not call `cancel`. A generator that failed by itself has
+          // finished, so `throw` reaches no `catch` of its own a second time.
+          try {
+            await iterator.throw?.(error);
+          } catch {
+            // The reader needs the first failure, not this one.
+          }
+          // A source whose `catch` carried on, or that has no `throw`, still holds what its
+          // `finally` releases.
+          try {
+            await iterator.return?.();
+          } catch {
+            // As above.
+          }
+          throw error;
+        }
+      },
+      async cancel() {
+        await iterator.return?.();
+      },
+    },
+    { highWaterMark: 0 },
+  );
 }

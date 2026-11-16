@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: **PR 1 (Tasks 1–5) and PR 1b (Task 3b) built; PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
+Status: **PR 1 (Tasks 1–5), PR 1b (Task 3b) and PR 2 (Tasks 6–8) built**. Written at main `e98aaa981d`.
 2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
 2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
@@ -365,6 +365,12 @@ test lines, the test helper included.
 
 **Files:** `tax-office-api.ts`, `tax-office-export.ts` (create), tests; the screen; i18n; the
 guide sections from Task 5.
+
+Amended 2026-11-16 (Task 8 review): the CSV writes money with the decimal mark of its language, a comma in Spanish, through `deferred-payment-export.ts`'s `amountCell`, not always a decimal point: LibreOffice set to Spanish (3082) read `"3.00"` as text and `"3,00"` and `"-3,00"` as numbers.
+
+Amended 2026-11-16 (Task 8a): the route is `POST /management-api/tax-office/months/:month`, not GET, because the download writes its activity entry and the own-page check covers POSTs, as Task 3's review made the single PDF a POST.
+
+Amended 2026-11-16 (Task 8 review): the path has no `.zip`; each copy comes from `copyOfSale` (split out of `readSaleCopy`), which, unlike `readSaleCopy`, writes no `invoice_pdf_downloads` row (the month writes one `tax_office.month_downloaded` activity entry instead); a sale whose copy cannot be made is left out, logged as `tax_office.copy_failed` and listed in `failed.txt`, instead of ending the month.
 
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,
   `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included, each
