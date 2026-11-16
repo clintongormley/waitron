@@ -149,6 +149,19 @@ describe("liveSteps", () => {
     ]);
   });
 
+  it("a repeat's Done up to 30 seconds after an order counts as made before it", () => {
+    const rules = [rule("Drinks?", "since_last_order", 20)];
+    const ordered = { firstOrderAt: at("21:00"), lastOrderAt: at("22:00") };
+    const doneAt = (ms: number) => new Map([["Drinks?", at("22:00") + ms]]);
+    const within = facts({ ...ordered, doneAt: doneAt(30_000) });
+    expect(liveSteps(rules, within, at("22:20"))).toEqual([live("Drinks?", "22:20", "22:20")]);
+    expect(
+      stepsClearedByDone(rules, within, { stepId: "Drinks?", dueAt: at("22:20") }, at("22:20")),
+    ).toEqual(["Drinks?"]);
+    const beyond = facts({ ...ordered, doneAt: doneAt(30_001) });
+    expect(liveSteps(rules, beyond, at("22:20"))).toEqual([live("Drinks?", "22:40", "22:40")]);
+  });
+
   it("a Done after a step's trigger clears it; one before its next trigger does not", () => {
     const rules = [rule("Check", "course_served", 5, "mains")];
     const ordered = { firstOrderAt: at("20:40"), lastOrderAt: at("20:40") };

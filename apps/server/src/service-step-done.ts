@@ -1,21 +1,15 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { parties, partyTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
+  readStepCompletions,
   readTableStepRules,
   recordStepCompletions,
-  serviceStepCompletions,
 } from "@waitron/venue-service";
-import { stepsClearedByDone, type StepRule } from "./service-step-reckoning.js";
+import { CLOCK_AHEAD_MS, stepsClearedByDone, type StepRule } from "./service-step-reckoning.js";
 import { readStepFacts } from "./service-step-signals.js";
 import { assertSubjectZones } from "./zone-access.js";
 import "./errors.js";
-
-/**
- * Below the shortest repeat interval (one minute, `service_steps_minutes_ck`), so a Done accepted
- * early can only be for the repeat the server shows next, never one beyond it.
- */
-const CLOCK_AHEAD_MS = 30_000;
 
 /**
  * Records Done for a live step and for every live step of its department due no later, the ones
@@ -72,18 +66,21 @@ export async function markServiceStepDone(
   return { cleared };
 }
 
-const CARRIED_STARTS: ReadonlySet<StepRule["start"]> = new Set([
-  "course_served",
-  "all_served",
-  "after_step",
-]);
+/** Whether a serving starts the step, or a step it follows at any remove. */
+function startsFromServing(rule: StepRule, byId: ReadonlyMap<string, StepRule>): boolean {
+  const seen = new Set<string>();
+  let step: StepRule | undefined = rule;
+  while (step?.start === "after_step" && !seen.has(step.id)) {
+    seen.add(step.id);
+    step = step.afterStepId === null ? undefined : byId.get(step.afterStepId);
+  }
+  return step?.start === "course_served" || step?.start === "all_served";
+}
 
 /**
- * Gives party `to` the Done rows party `from` holds for the steps of `tableIds`' departments that
- * start from a serving or from another step's Done: a moved bill's dishes keep their serving
- * times, so without them a step already done, or one following it, would be asked again. A
- * repeating step counts afresh from the arrival, and a seated step clears on it, so their Done
- * stays behind.
+ * Gives party `to` party `from`'s latest Done of each step of `tableIds`' departments that
+ * {@link startsFromServing}, unless `to` holds one as late. The dishes `to` takes keep their
+ * serving times, so without it such a step would be asked again.
  */
 export async function carryDoneWithBill(
   tx: Transaction,
@@ -91,25 +88,28 @@ export async function carryDoneWithBill(
   to: string,
   tableIds: readonly string[],
 ): Promise<void> {
-  const stepIds = [...(await readTableStepRules(tx, tableIds)).values()].flatMap((table) =>
-    table.rules.filter((rule) => CARRIED_STARTS.has(rule.start)).map((rule) => rule.id),
-  );
-  if (stepIds.length === 0) return;
-  const rows = await tx
-    .select({
-      stepId: serviceStepCompletions.stepId,
-      doneAt: serviceStepCompletions.doneAt,
-      doneBy: serviceStepCompletions.doneBy,
-    })
-    .from(serviceStepCompletions)
-    .where(
-      and(
-        eq(serviceStepCompletions.partyId, from),
-        inArray(serviceStepCompletions.stepId, stepIds),
-      ),
-    );
+  const carried = new Set<string>();
+  for (const { rules } of (await readTableStepRules(tx, tableIds)).values()) {
+    const byId = new Map(rules.map((rule) => [rule.id, rule]));
+    for (const rule of rules) if (startsFromServing(rule, byId)) carried.add(rule.id);
+  }
+  if (carried.size === 0) return;
+  const fromLatest = new Map<string, { doneAt: string; doneBy: string }>();
+  const toLatest = new Map<string, number>();
+  for (const row of await readStepCompletions(tx, [from, to])) {
+    if (!carried.has(row.stepId)) continue;
+    const at = Date.parse(row.doneAt);
+    if (row.partyId === to) {
+      toLatest.set(row.stepId, Math.max(toLatest.get(row.stepId) ?? at, at));
+      continue;
+    }
+    const kept = fromLatest.get(row.stepId);
+    if (kept === undefined || at > Date.parse(kept.doneAt)) fromLatest.set(row.stepId, row);
+  }
   await recordStepCompletions(
     tx,
-    rows.map((row) => ({ partyId: to, ...row })),
+    [...fromLatest]
+      .filter(([stepId, { doneAt }]) => Date.parse(doneAt) > (toLatest.get(stepId) ?? -Infinity))
+      .map(([stepId, { doneAt, doneBy }]) => ({ partyId: to, stepId, doneAt, doneBy })),
   );
 }

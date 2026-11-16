@@ -31,6 +31,7 @@ import {
   readPartiesSentWork,
 } from "./kitchen-print.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
+import { carryDoneWithBill } from "./service-step-done.js";
 import {
   copyHeldGroups,
   copyWaitingGroups,
@@ -282,6 +283,7 @@ export async function combineParties(
       .insert(partyTables)
       .values(tables.map((tableId, i) => ({ partyId: into, tableId, joinedAt: joinedAt(i) })));
   }
+  await carryDoneWithBill(tx, from, into, await memberTables(tx, into));
   await tx
     .update(parties)
     .set({
@@ -456,6 +458,7 @@ export async function splitTable(
   }
   await copyWaitingGroups(tx, partyId, newParty, waitingLineIds, options.operatorId, activity);
   await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
+  await carryDoneWithBill(tx, partyId, newParty, [tableId]);
   await printHoldTickets(tx, cfg, heldGroups);
   if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);
   await leaveMergesRestoring(tx, [tableId]);

@@ -1,7 +1,7 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -296,6 +296,27 @@ describe("markServiceStepDone", () => {
       expect(await dueMinutesAt(v, partyId, tableId, next + MINUTE, ordered)).toEqual([
         { stepId: drinks, dueMinutes: 60 },
       ]);
+    });
+
+    it("an order sent between an early Done and the time it was recorded at still starts the next repeat", async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { drinks, tableId, partyId, next } = await repeatAfterDone(v);
+      expect(await done(v, partyId, drinks, next, next - 20_000)).toEqual({ cleared: [drinks] });
+
+      vi.useFakeTimers({ toFake: ["Date"], now: next - 10_000 });
+      try {
+        await orderForParty(v, partyId, ["Caña"]);
+      } finally {
+        vi.useRealTimers();
+      }
+      const reordered = await lastOrderAt(v, partyId);
+      expect(reordered).toBe(next - 10_000);
+
+      const repeat = reordered + 20 * MINUTE;
+      expect(await dueMinutesAt(v, partyId, tableId, repeat, reordered)).toEqual([
+        { stepId: drinks, dueMinutes: 20 },
+      ]);
+      expect(await done(v, partyId, drinks, repeat, repeat)).toEqual({ cleared: [drinks] });
     });
 
     it("clears nothing for a repeat it shows 31 seconds before the server reaches it", async () => {

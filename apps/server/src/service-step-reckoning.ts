@@ -36,6 +36,22 @@ export interface DishServing {
 
 const MINUTE_MS = 60_000;
 
+/**
+ * Below the shortest repeat interval (one minute, `service_steps_minutes_ck`), so a Done accepted
+ * early can only be for the repeat the server shows next, never one beyond it.
+ */
+export const CLOCK_AHEAD_MS = 30_000;
+
+/**
+ * Whether a repeating step's Done at `done` was made after the order at `last`. A Done on a repeat
+ * shown early is recorded at the repeat's due time, so an order sent meanwhile can precede it by
+ * up to {@link CLOCK_AHEAD_MS}; a till shows a repeat counted from an order only once its own clock
+ * reaches it, a minute or more after that order.
+ */
+function doneAfterOrder(done: number | undefined, last: number): done is number {
+  return done !== undefined && done - last > CLOCK_AHEAD_MS;
+}
+
 function triggerOf(
   rules: readonly StepRule[],
   index: number,
@@ -58,7 +74,7 @@ function triggerOf(
       const every = rule.minutes * MINUTE_MS;
       const repeat = repeatShownAt(last, every, nowMs);
       const done = facts.doneAt.get(rule.id);
-      if (done === undefined || done <= last) return repeat;
+      if (!doneAfterOrder(done, last)) return repeat;
       return Math.max(repeat, repeatShownAt(last, every, done) + every);
     }
   }
@@ -131,11 +147,11 @@ function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boo
   }
   if (last === null || dueAt <= last) return true;
   const every = rule.minutes * MINUTE_MS;
-  return done !== undefined && done > last && repeatShownAt(last, every, done) >= dueAt;
+  return doneAfterOrder(done, last) && repeatShownAt(last, every, done) >= dueAt;
 }
 
 /**
- * What a Done arriving at `nowMs` records for the occurrence of `shown.stepId` the till showed as
+ * What a Done reckoned at `nowMs` records for the occurrence of `shown.stepId` the till showed as
  * due at `shown.dueAt`: nothing when that occurrence is already cleared, the step is not live, or
  * a Done now would leave it as it is (a second tap on a repeat already done), else the step and
  * every live step due no later that a Done now would clear, the ones it was hiding.
@@ -159,7 +175,7 @@ export function stepsClearedByDone(
     const done = Math.max(facts.doneAt.get(step.stepId) ?? nowMs, nowMs);
     if (rule.start !== "since_last_order") return done > step.triggeredAt;
     const last = facts.lastOrderAt!;
-    if (done <= last) return false;
+    if (!doneAfterOrder(done, last)) return false;
     const every = rule.minutes * MINUTE_MS;
     const next = Math.max(
       repeatShownAt(last, every, nowMs),

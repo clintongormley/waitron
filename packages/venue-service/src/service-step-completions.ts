@@ -63,13 +63,14 @@ export async function readTableStepRules(
 export async function readStepCompletions(
   tx: Transaction,
   partyIds: readonly string[],
-): Promise<{ partyId: string; stepId: string; doneAt: string }[]> {
+): Promise<{ partyId: string; stepId: string; doneAt: string; doneBy: string }[]> {
   if (partyIds.length === 0) return [];
   return tx
     .select({
       partyId: serviceStepCompletions.partyId,
       stepId: serviceStepCompletions.stepId,
       doneAt: serviceStepCompletions.doneAt,
+      doneBy: serviceStepCompletions.doneBy,
     })
     .from(serviceStepCompletions)
     .where(inArray(serviceStepCompletions.partyId, [...partyIds]));
