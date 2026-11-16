@@ -213,13 +213,6 @@ Investigate the monitor's observed phase timing and its
 missing diagnostic match separately from the mutation fixture's elapsed-time limit. The new
 failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
-## Switching the till's language mid-screen with `setLocale` left no error banner in some browser tests.
-
-The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
-were changed to start the till in the language instead; the table-service and parties cases
-switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
-hides. Left open by A798-B slice 8 (#2012).
-
 ## IPP timing fixture completion after its wait fails
 
 A1251’s review of the #2092 cleanup repair observed no print outcome for the 2100 ms reply

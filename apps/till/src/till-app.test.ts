@@ -8147,10 +8147,12 @@ describe("till-app", () => {
     "park-order refused by a clock stop says it can't be recorded (%s, %s)",
     async (locale, code) => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
         parkOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
       });
-      const c = await toCounter(el);
+      await toCounter(el);
+      setLocale(locale);
+      await flush(el);
+      const c = counter(el)!;
       expect(currentLocale()).toBe(locale);
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -8158,6 +8160,7 @@ describe("till-app", () => {
       emit(c, "park-order", { label: "Table 4" });
       await flush(el);
 
+      expect(currentApi.parkOrder).toHaveBeenCalledOnce();
       const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
       expect(shown).toBe(codeMessage(code, locale));
       expect(shown).not.toBe(codeMessage("server.internal", locale));

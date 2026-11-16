@@ -1621,10 +1621,6 @@ values rather than PIN substrings inside random IDs. See the
 The cited refund test checks `setItem` calls and its own final entry; direct property assignments
 under another key fall outside that check.
 
-- **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
-  tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
-  [Detail](backlog/ci.md#switching-the-tills-language-mid-screen-with-setlocale-left-no-error-banner-in-some-browser-tests)
-
 - **Whether the checkout stalls were a GitHub-side incident remains unverified (A935).**
   A1178 adds checkout-stage traces and stored-pack measurements in CI and licence jobs;
   a hosted recurrence reached `fetch_refs` with an unfinished `index-pack`, without distinguishing
