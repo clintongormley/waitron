@@ -3985,8 +3985,7 @@ which is the process's working directory. `apps/server/src/config.ts` states it 
 `venueDir` and `logDir`. The refusal shape is the other half, for a reader with no default to fall
 back to: `resolveVenueDir` (`packages/provisioning/src/cli.ts`) takes `--venue-dir`, then
 `WAITRON_VENUE_DIR`, then a prompt, and throws `provisioning.venue_dir_missing` when all three give
-nothing — because every path the store builds is `join(directory, …)`, so an empty directory is the
-RELATIVE `venue.db` rather than no directory at all.
+nothing.
 
 An env or prompt value set to `""` falls back to its default exactly as an unset one does (in
 `apps/server`, through `isUnset` in `apps/server/src/env-value.ts`; the log folder through

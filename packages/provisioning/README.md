@@ -244,10 +244,7 @@ WAITRON_VENUE_DIR=/var/lib/waitron/venue \
 
 If nothing supplies the venue directory — no flag, no variable, and a prompt that answers nothing,
 which is what an exhausted stdin or a Ctrl+D gives — the run stops with
-`provisioning.venue_dir_missing`. It does not fall back to a default, and specifically not to the
-empty string: every path the store builds is `join(directory, ...)`, so an empty one is the RELATIVE
-`venue.db` and would mint a taxpayer, a node and its invoice series into whatever directory the
-process was started from.
+`provisioning.venue_dir_missing`. It does not fall back to a default.
 
 **Nothing this tool prints carries a secret.** The plan summary names the venue directory and the
 environment stamped on it, both operator-supplied configuration, and the admin's PIN and password

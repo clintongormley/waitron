@@ -116,7 +116,7 @@ describe("waitron-credentials against a real venue directory", () => {
     expect(h.out).toEqual([]);
   });
 
-  it("refuses an EMPTY WAITRON_VENUE_DIR rather than resolving it to the working directory", async () => {
+  it("refuses with exit 2, naming the variable, when WAITRON_VENUE_DIR is EMPTY", async () => {
     const h = capture();
     expect(await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: "" }, h.io)).toBe(2);
     expect(h.err.join("\n")).toContain("WAITRON_VENUE_DIR");
