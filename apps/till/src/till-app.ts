@@ -14242,29 +14242,38 @@ export class TillApp extends LitElement {
     const kept = this.#draftCandidates.get(fromKey);
     if (kept === undefined) return false;
     const destination = this.#draftCandidates.get(toKey);
-    const lines = structuredClone([...(destination?.lines ?? [])]);
-    const courses = new Map([
-      ...[...lines, ...kept.lines].flatMap((line) =>
-        line.course === undefined ? [] : [[line.course.id, line.course] as const],
-      ),
-      ...(this.currentOrders?.retainedCourses ?? []).map((course) => [course.id, course] as const),
-      ...this.courses.map((course) => [course.id, course] as const),
-    ]);
-    for (const line of kept.lines) {
-      const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
-        zoneId: this.#tableZoneId,
-        courses: [...courses.values()],
-        held: heldViews(this.currentOrders, this.tabGroups),
-        firstOrder: this.currentOrders?.hasGroups === false,
-        placed: lines.map((row) => ({
-          courseId: row.courseId ?? row.product.courseId ?? null,
-          place: row.place ?? { kind: "fire" },
-        })),
-      });
-      if (placement.shift !== undefined)
-        for (const row of lines)
-          if (row.place?.kind === "new" && row.place.slot >= placement.shift.from) row.place.slot++;
-      lines.push({ ...line, place: placement.place });
+    const lines = structuredClone([...(destination?.lines ?? kept.lines)]);
+    if (destination !== undefined) {
+      const courses = new Map([
+        ...[...lines, ...kept.lines].flatMap((line) =>
+          line.course === undefined ? [] : [[line.course.id, line.course] as const],
+        ),
+        ...(this.currentOrders?.retainedCourses ?? []).map(
+          (course) => [course.id, course] as const,
+        ),
+        ...this.courses.map((course) => [course.id, course] as const),
+      ]);
+      for (const line of kept.lines) {
+        if (line.place?.kind === "fire") {
+          lines.push({ ...line });
+          continue;
+        }
+        const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
+          zoneId: this.#tableZoneId,
+          courses: [...courses.values()],
+          held: heldViews(this.currentOrders, this.tabGroups),
+          firstOrder: this.currentOrders?.hasGroups === false,
+          placed: lines.map((row) => ({
+            courseId: row.courseId ?? row.product.courseId ?? null,
+            place: row.place ?? { kind: "fire" },
+          })),
+        });
+        if (placement.shift !== undefined)
+          for (const row of lines)
+            if (row.place?.kind === "new" && row.place.slot >= placement.shift.from)
+              row.place.slot++;
+        lines.push({ ...line, place: placement.place });
+      }
     }
     this.#draftCandidates.delete(fromKey);
     this.#draftCandidates.set(toKey, {
@@ -19071,7 +19080,7 @@ export class TillApp extends LitElement {
       billId === this.activeTabId &&
       visit === this.#orderVisit;
     if (billId === undefined || !current()) return;
-    const read = await this.#loadPartyBills();
+    const read = await this.#loadPartyBills(undefined, true, true);
     const balanced = await read.balance;
     if (!current() || read.read !== this.#partyBillsRead) return;
     if (read.bills === null || balanced !== true) {

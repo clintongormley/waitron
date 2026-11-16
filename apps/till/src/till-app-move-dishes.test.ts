@@ -282,25 +282,31 @@ describe("A803 move dishes app:", () => {
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
-  it("a failed opening balance leaves Move dishes closed and lets the waiter retry", async () => {
-    const { el, order } = await open({
-      getPartyBills: vi.fn().mockResolvedValue(partPaid()),
-      getBillBalance: vi.fn().mockResolvedValue(balance()),
-    });
-    const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
-    await userEvent.click(menu);
-    await flush(el);
-    api.getBillBalance.mockRejectedValueOnce(new TypeError("offline"));
-    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
-    await flush(el, 6);
-    expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
-    expect(bannerText(el)).toContain(t("table.reread_failed"));
-    await userEvent.click(menu);
-    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
-    await flush(el, 6);
-    expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
-    expect(api.moveDishes).not.toHaveBeenCalled();
-  });
+  it.each(["bills", "balance"])(
+    "a failed opening %s read leaves Move dishes closed and lets the waiter retry",
+    async (read) => {
+      const { el, order } = await open({
+        getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+        getBillBalance: vi.fn().mockResolvedValue(balance()),
+      });
+      const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      await userEvent.click(menu);
+      await flush(el);
+      (read === "bills" ? api.getPartyBills : api.getBillBalance).mockRejectedValueOnce(
+        new TypeError("offline"),
+      );
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
+      expect(bannerText(el)).toContain(t("table.reread_failed"));
+      await userEvent.click(menu);
+      expect(menu.querySelector('[data-action="move-dishes"]')).not.toBeNull();
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+      await flush(el, 6);
+      expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
+      expect(api.moveDishes).not.toHaveBeenCalled();
+    },
+  );
 
   it("bill.line_paid shows its sentence and reads the party's bills and the bill's balance again, not its lines", async () => {
     const { el, order } = await open({

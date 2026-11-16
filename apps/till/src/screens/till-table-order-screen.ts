@@ -5928,12 +5928,10 @@ export class TillTableOrderScreen extends LitElement {
       this.moveDishesPicks = new Set();
       this.moveDishesTo = undefined;
       const opening = ++this.#actionOpening;
-      const billId = this.orderId;
       const ready = () => {
         if (
           !this.isConnected ||
           opening !== this.#actionOpening ||
-          billId !== this.orderId ||
           this.actionVerb !== verb
         )
           return;

@@ -4266,6 +4266,23 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     let merged = false;
     const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
     const el = await onBillTwo(bills, {
+      getTill: vi
+        .fn()
+        .mockResolvedValue({
+          ...till,
+          courses: [{ id: "desserts", name: "Desserts", displayOrder: 1, fireNowZoneIds: [] }],
+        }),
+      readCurrentOrders: vi
+        .fn()
+        .mockResolvedValue({
+          revision: 3,
+          hasGroups: false,
+          nextDisplayNumber: 1,
+          retainedCourses: [],
+          reminder: null,
+          groups: [],
+          ungrouped: [],
+        }),
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
         if (merged && args[1].billId === "wo-check")
           throw { code: "tab.not_open", status: 409, tabId: "wo-check" };
@@ -4273,7 +4290,10 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
       }),
     });
     const before = vi.mocked(api.saveDraft).mock.calls.length;
-    partyDraft(tableOrder(el)!).addProduct(dish, "1");
+    const store = partyDraft(tableOrder(el)!);
+    store.addProduct({ ...dish, courseId: "desserts" }, "1");
+    expect(store.lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+    store.setLinePlaces([0], { kind: "fire" });
     merged = true;
     bills.mockResolvedValue([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
 
@@ -4289,6 +4309,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     expect(toBillOne.flatMap(([, save]) => save.lines)).toEqual([]);
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+    expect(tableOrder(el)!.retainedDraft?.lines[0]!.place).toEqual({ kind: "fire" });
   });
 
   it("keeps both bills' retained dishes together for review when the shown bill vanishes", async () => {
@@ -4303,17 +4324,15 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
           { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
         ],
       }),
-      readCurrentOrders: vi
-        .fn()
-        .mockResolvedValue({
-          revision: 3,
-          hasGroups: false,
-          nextDisplayNumber: 1,
-          retainedCourses: [],
-          reminder: null,
-          groups: [],
-          ungrouped: [],
-        }),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
         if (merged && args[1].billId === "wo-check")
           throw { code: "tab.not_open", status: 409, tabId: "wo-check" };
@@ -4345,6 +4364,12 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
       { ...dish, id: "tea", menuItemId: "tea", name: "Tea", courseId: "starters" },
       "3",
     );
+    const incoming = partyDraft(tableOrder(el)!);
+    incoming.addProduct(
+      { ...dish, id: "coffee", menuItemId: "coffee", name: "Coffee", courseId: "starters" },
+      "1",
+    );
+    incoming.setLinePlaces([1], { kind: "fire" });
     merged = true;
     bills.mockResolvedValue([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -4361,6 +4386,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
       ["Flan", "1", { kind: "fire" }],
       ["Cake", "2", { kind: "new", slot: 2 }],
       ["Tea", "3", { kind: "new", slot: 1 }],
+      ["Coffee", "1", { kind: "fire" }],
     ]);
     expect(gone(el)!.textContent!.trim()).toBe(
       "Bill 2 is no longer at this table. Now showing Bill 1.",
@@ -4371,6 +4397,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
       "Flan",
       "Cake",
       "Tea",
+      "Coffee",
     ]);
     expect(
       vi
@@ -4390,6 +4417,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
       ["Flan", "1"],
       ["Cake", "2"],
       ["Tea", "3"],
+      ["Coffee", "1"],
     ]);
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el, 6);
@@ -4405,6 +4433,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
           ["flan", "1"],
           ["cake", "2"],
           ["tea", "3"],
+          ["coffee", "1"],
         ],
       ],
     ]);
