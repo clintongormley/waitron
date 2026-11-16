@@ -21,6 +21,6 @@ it("links mail settings and removal to both guide languages", () => {
 });
 
 it("links the Invoices screen to the tax office guide in both languages", () => {
-  expect(guideHref("invoices.tax-office", "en-GB")).toBe("/help/en/invoices");
-  expect(guideHref("invoices.tax-office", "es")).toBe("/help/es/invoices");
+  expect(guideHref("invoices.overview", "en-GB")).toBe("/help/en/invoices");
+  expect(guideHref("invoices.overview", "es")).toBe("/help/es/invoices");
 });

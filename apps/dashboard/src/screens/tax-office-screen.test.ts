@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { NavigationGuard } from "@waitron/ui";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
   DashboardApi,
@@ -16,6 +17,7 @@ const locale = currentLocale();
 beforeEach(() => {
   setLocale("en-GB");
   history.replaceState(null, "", "/manage/invoices");
+  localStorage.removeItem("waitron.invoices.table:columns");
 });
 afterEach(() => {
   cleanupWidgets();
@@ -130,6 +132,37 @@ it("writes each rate as Spanish writes a percentage, under the Spanish headings"
       (column) => es[`tax_office.col.${column}`],
     ),
   );
+});
+
+it("offers every column but the invoice number in a translated chooser, and remembers a hidden one", async () => {
+  setLocale("es-ES");
+  const el = await mount({ listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([twoRates])) });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+  await table(el).updateComplete;
+  const root = table(el).shadowRoot!;
+
+  expect(root.querySelector(".columns-trigger")?.getAttribute("aria-label")).toBe(
+    es["table.customise_columns"],
+  );
+  expect(
+    [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+      box.dataset.column,
+      box.checked,
+    ]),
+  ).toEqual(
+    ["kind", "issued", "customer", "total", "base", "rate", "tax"].map((key) => [key, true]),
+  );
+  const box = root.querySelector<HTMLInputElement>('input[data-column="customer"]')!;
+  box.checked = false;
+  box.dispatchEvent(new Event("change"));
+  await table(el).updateComplete;
+
+  expect([...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim())).not.toContain(
+    es["tax_office.col.customer"],
+  );
+  expect(JSON.parse(localStorage.getItem("waitron.invoices.table:columns")!)).toEqual({
+    customer: false,
+  });
 });
 
 it("links to the guide page on showing invoices to the tax office", async () => {
@@ -493,3 +526,123 @@ it.each(["from", "to"] as const)(
     expect(field(el, name).error).toBe("");
   },
 );
+
+const changeField = (el: TaxOfficeScreen, name: string, value: string) =>
+  field(el, name).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+
+it("keeps a text filter edited moments before another one", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  changeField(el, "q", "Ruiz");
+  vi.advanceTimersByTime(100);
+  changeField(el, "amount", "34.10");
+  vi.advanceTimersByTime(400);
+  await el.updateComplete;
+
+  expect(lastQuery(listTaxOfficeInvoices)).toEqual({
+    from: "2026-11-01",
+    to: "2026-11-30",
+    q: "Ruiz",
+    amount: "34.10",
+  });
+  expect(field(el, "q").value).toBe("Ruiz");
+  expect(location.pathname).toBe(
+    "/manage/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz/amount/34.10",
+  );
+});
+
+it("drops an edit still waiting to be sent when Back restores an earlier search", async () => {
+  const base = "/manage/invoices/from/2026-11-01/to/2026-11-30/q/";
+  history.replaceState(null, "", `${base}Restored`);
+  history.pushState(null, "", `${base}Current`);
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  changeField(el, "q", "Pending");
+  const back = new Promise<void>((resolve) =>
+    window.addEventListener("popstate", () => resolve(), { once: true }),
+  );
+  history.back();
+  await back;
+  vi.advanceTimersByTime(400);
+  await el.updateComplete;
+
+  expect(listTaxOfficeInvoices.mock.calls.map((call) => (call[0] as TaxOfficeQuery).q)).toEqual([
+    "Current",
+    "Restored",
+  ]);
+  expect(field(el, "q").value).toBe("Restored");
+  expect(location.pathname).toBe(`${base}Restored`);
+});
+
+it("reads nothing and leaves the address alone while an issue date is empty, whichever filter changes", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-10-01/to/2026-10-31");
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice()]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  changeField(el, "from", "");
+  changeField(el, "q", "Ruiz");
+  vi.advanceTimersByTime(400);
+  changeField(el, "kind", "F1");
+  await el.updateComplete;
+
+  expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(1);
+  expect(location.pathname).toBe("/manage/invoices/from/2026-10-01/to/2026-10-31");
+  expect(field(el, "from").value).toBe("");
+  expect(field(el, "from").error).toBe(en["tax_office.date_required"]);
+  expect(field(el, "q").value).toBe("Ruiz");
+
+  changeField(el, "from", "2026-09-01");
+  await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(2));
+  expect(lastQuery(listTaxOfficeInvoices)).toEqual({
+    from: "2026-09-01",
+    to: "2026-10-31",
+    q: "Ruiz",
+    kind: "F1",
+  });
+});
+
+it("keeps a space still being typed once the app's guarded address takes the search, and reads each search once", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async (proceed) => {
+      await proceed();
+      return "proceeded";
+    },
+  });
+  onTestFinished(() => guard.dispose());
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  changeField(el, "q", "Comidas ");
+  vi.advanceTimersByTime(400);
+  await el.updateComplete;
+
+  expect(location.pathname).toBe("/manage/invoices/from/2026-11-01/to/2026-11-30/q/Comidas");
+  expect(field(el, "q").value).toBe("Comidas ");
+
+  changeField(el, "q", "Ruiz");
+  await el.updateComplete;
+  field(el, "q").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  await el.updateComplete;
+
+  expect(location.pathname).toBe("/manage/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz");
+  expect(listTaxOfficeInvoices.mock.calls.map((call) => (call[0] as TaxOfficeQuery).q)).toEqual([
+    undefined,
+    "Comidas",
+    "Ruiz",
+  ]);
+});

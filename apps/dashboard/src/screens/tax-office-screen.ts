@@ -29,7 +29,8 @@ import { dashboardPath } from "../navigation.js";
 import { pdfFileName } from "../widgets/order-detail-dialog.js";
 
 type Filter = Omit<TaxOfficeQuery, "after">;
-type TextField = "q" | "rate" | "amount";
+const TEXT_FIELDS = ["q", "rate", "amount"] as const;
+type TextField = (typeof TEXT_FIELDS)[number];
 
 const FILTER_KEYS = [
   "from",
@@ -54,6 +55,7 @@ const FIELD_OF: Record<string, { control: string; message: StringKey }> = {
   kind: { control: "kind", message: "tax_office.refused.kind" },
 };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const keyOf = (filter: Filter) => JSON.stringify(FILTER_KEYS.map((name) => filter[name] ?? null));
 
 /** The current month on the browser's own calendar. */
 function currentMonth(): { from: string; to: string } {
@@ -153,6 +155,7 @@ export class TaxOfficeScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  /** The fields as the person left them, text untrimmed; a read waits until both issue dates are filled. */
   @state() private filter: Filter = currentMonth();
   @state() private invoices: TaxOfficeInvoiceDto[] = [];
   @state() private next: TaxOfficeCursor | null = null;
@@ -165,10 +168,8 @@ export class TaxOfficeScreen extends LitElement {
   /** An Open that failed; kept apart from a read's message so neither clears the other. */
   @state() private actionError = "";
   @state() private opening: ReadonlySet<string> = new Set();
-  /** Issue dates emptied by the person; the read waits until both are filled again. */
-  @state() private missing: ReadonlySet<"from" | "to"> = new Set();
   #read = 0;
-  /** The filter of the read last sent, so the address change an apply writes does not send it twice. */
+  /** The filter of the read last sent, so the address change this screen writes does not send it twice. */
   #requested?: string;
   #textTimer?: ReturnType<typeof setTimeout>;
   /** The filter the listed rows answer; a half-typed range must not change what the next page reads. */
@@ -178,9 +179,12 @@ export class TaxOfficeScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "invoices") return;
-      this.filter = this.#readAddress();
-      this.missing = new Set();
-      void this.#load();
+      clearTimeout(this.#textTimer);
+      const address = this.#readAddress();
+      const fields = this.#query(this.filter);
+      // The address this screen just wrote leaves the fields' own spelling, such as a space still being typed, alone.
+      if (fields === null || keyOf(fields) !== keyOf(address)) this.filter = address;
+      void this.#load(address);
     },
     dashboardPath,
   );
@@ -213,34 +217,39 @@ export class TaxOfficeScreen extends LitElement {
     return filter;
   }
 
-  #apply(next: Filter, force = false): void {
-    this.filter = next;
-    this.#url.write(Object.fromEntries(FILTER_KEYS.map((key) => [key, next[key] ?? null])));
-    void this.#load(force);
+  /** The read the fields ask for, or null while an issue date is empty. */
+  #query(fields: Filter): Filter | null {
+    if (fields.from === undefined || fields.to === undefined) return null;
+    const query: Filter = { ...fields };
+    for (const key of TEXT_FIELDS) {
+      const value = fields[key]?.trim();
+      if (value) query[key] = value;
+      else delete query[key];
+    }
+    return query;
   }
 
-  #set(key: keyof Filter, value: string, force = false): void {
+  #edit(key: keyof Filter, value: string): void {
     const next: Filter = { ...this.filter };
     if (value === "") delete next[key];
     else (next as Record<string, string>)[key] = value;
-    if (key === "from" || key === "to") {
-      const missing = new Set(this.missing);
-      if (value === "") missing.add(key);
-      else missing.delete(key);
-      this.missing = missing;
-      if (next.from === undefined || next.to === undefined) {
-        this.filter = next;
-        return;
-      }
-    }
-    this.#apply(next, force);
+    this.filter = next;
+  }
+
+  #send(force = false): void {
+    clearTimeout(this.#textTimer);
+    const query = this.#query(this.filter);
+    if (query === null) return;
+    // Read first: the address change that follows then finds this read already sent.
+    void this.#load(query, force);
+    this.#url.write(Object.fromEntries(FILTER_KEYS.map((key) => [key, query[key] ?? null])));
   }
 
   #text(key: TextField, value: string, immediate = false): void {
+    this.#edit(key, value);
     clearTimeout(this.#textTimer);
-    const apply = () => this.#set(key, value.trim(), immediate);
-    if (immediate) apply();
-    else this.#textTimer = setTimeout(apply, 400);
+    if (immediate) this.#send(true);
+    else this.#textTimer = setTimeout(() => this.#send(), 400);
   }
 
   #failure(error: unknown): { field: string | null; message: string } {
@@ -254,9 +263,8 @@ export class TaxOfficeScreen extends LitElement {
       : { field: field.control, message: t(field.message) };
   }
 
-  async #load(force = false): Promise<void> {
-    const filter = this.filter;
-    const key = JSON.stringify(FILTER_KEYS.map((name) => filter[name] ?? null));
+  async #load(filter: Filter, force = false): Promise<void> {
+    const key = keyOf(filter);
     if (!force && key === this.#requested) return;
     this.#requested = key;
     const read = ++this.#read;
@@ -375,12 +383,14 @@ export class TaxOfficeScreen extends LitElement {
       {
         key: "kind",
         label: t("tax_office.col.kind"),
+        choosable: "shown",
         cell: (invoice) =>
           html`<abbr title=${t(`tax_office.kind.${invoice.kind}`)}>${invoice.kind}</abbr>`,
       },
       {
         key: "issued",
         label: t("tax_office.col.issued"),
+        choosable: "shown",
         cell: (invoice) =>
           html`${venueDay(invoice.issuedAt)}<span part="mark"
               >${new Intl.DateTimeFormat(locale, {
@@ -398,6 +408,7 @@ export class TaxOfficeScreen extends LitElement {
       {
         key: "customer",
         label: t("tax_office.col.customer"),
+        choosable: "shown",
         cell: (invoice) =>
           html`<span part="customer">${invoice.customerName ?? ""}</span
             >${invoice.customerTaxId === null ? nothing : html`<span part="mark">${invoice.customerTaxId}</span>`}`,
@@ -405,18 +416,21 @@ export class TaxOfficeScreen extends LitElement {
       {
         key: "total",
         label: t("tax_office.col.total"),
+        choosable: "shown",
         align: "end",
         cell: (invoice) => money(invoice.total),
       },
       {
         key: "base",
         label: t("tax_office.col.base"),
+        choosable: "shown",
         align: "end",
         cell: (invoice) => lines(invoice, "base", (line) => money(line.base)),
       },
       {
         key: "rate",
         label: t("tax_office.col.rate"),
+        choosable: "shown",
         align: "end",
         cell: (invoice) =>
           lines(invoice, "rate", (line) => percent.format(Number(line.rate) / 100)),
@@ -424,6 +438,7 @@ export class TaxOfficeScreen extends LitElement {
       {
         key: "tax",
         label: t("tax_office.col.tax"),
+        choosable: "shown",
         align: "end",
         cell: (invoice) => lines(invoice, "tax", (line) => money(line.tax)),
       },
@@ -441,14 +456,17 @@ export class TaxOfficeScreen extends LitElement {
       label=${t(label)}
       ?required=${required}
       .error=${
-        (key === "from" || key === "to") && this.missing.has(key)
+        (key === "from" || key === "to") && this.filter[key] === undefined
           ? t("tax_office.date_required")
           : this.refusal?.field === key
             ? this.refusal.message
             : ""
       }
       .value=${this.filter[key] ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#set(key, event.detail.value)}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        this.#edit(key, event.detail.value);
+        this.#send();
+      }}
     ></wt-input>`;
   }
 
@@ -472,7 +490,7 @@ export class TaxOfficeScreen extends LitElement {
     const error = (field: string) => (this.refusal?.field === field ? this.refusal.message : "");
     return html`<h1>${t("tax_office.title")}</h1>
       <p class="guide-line">
-        <a class="guide" href=${guideHref("invoices.tax-office")}>${t("tax_office.guide")}</a>
+        <a class="guide" href=${guideHref("invoices.overview")}>${t("tax_office.guide")}</a>
       </p>
       <div class="filters">
         ${this.#dateField("from", "tax_office.issued_from", true)}
@@ -495,7 +513,10 @@ export class TaxOfficeScreen extends LitElement {
             })),
           ]}
           .value=${this.filter.kind ?? ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#set("kind", event.detail.value)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.#edit("kind", event.detail.value);
+            this.#send();
+          }}
         ></wt-combobox>
         ${this.#dateField("operationFrom", "tax_office.operation_from", false)}
         ${this.#dateField("operationTo", "tax_office.operation_to", false)}
@@ -509,6 +530,17 @@ export class TaxOfficeScreen extends LitElement {
       }
       <wt-data-table
         aria-label=${t("tax_office.title")}
+        viewKey="waitron.invoices.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${this.invoices}
         .columns=${this.#columns()}
         .rowKey=${(invoice: TaxOfficeInvoiceDto) => invoice.id}
