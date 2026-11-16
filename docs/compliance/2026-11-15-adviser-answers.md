@@ -408,9 +408,9 @@ own bucket can be with any provider in any country. Nothing warns about this or 
 EU, or warn that one established outside it must first be notified to AEAT.
 
 **Your decision (D8).** *Owner, 16 November: Waitron Cloud uses EU data centres, so the question is
-not put to the adviser.* Still open: a venue's own bucket, which can be with any provider in any
-country. Allow only providers established in the EU, or warn that one outside it must first be
-notified to AEAT?
+not put to the adviser. For a venue's own bucket: allow any provider, and warn that one established
+outside the EU must first be notified to AEAT (procedure GZ05), because Waitron cannot tell where a
+provider is established.*
 
 ### B10. Rebuilding invoice copies after a restore
 
@@ -559,7 +559,7 @@ Each is explained in full in its section.
 | D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 16 |
 | D6 | Wrong VAT rate: who works out the difference | B6 | Decided 16 November: a corrections report the accountant files |
 | D7 | Supplier invoice duplicates: number and date | B7 | Yes |
-| D8 | Own backup bucket outside the EU | B9 | Cloud: EU data centres (16 November). A venue's own bucket: open |
+| D8 | Own backup bucket outside the EU | B9 | Decided 16 November: Cloud in EU data centres; a venue's own bucket allows any provider, with a warning |
 | D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 19 |
 | D10 | Date of the sale on lane L's branch | B11 | Decided: after Thursday |
 | D11 | Goodwill refunds without a corrective | B12 | After question 18 |
