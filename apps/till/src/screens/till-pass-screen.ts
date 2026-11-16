@@ -344,17 +344,31 @@ export class TillPassScreen extends LitElement {
   override updated(changed: PropertyValues): void {
     if (this.#revealStale) {
       this.#revealStale = false;
-      this.#reveal("[data-stale]");
+      void this.#reveal("[data-stale]");
     }
-    if (changed.has("tableChanged") && this.tableChanged) this.#reveal("[data-table-changed]");
-    if (changed.has("leverError") && this.leverError) this.#reveal("[data-lever-error]");
+    if (changed.has("tableChanged") && this.tableChanged) void this.#reveal("[data-table-changed]");
+    if (changed.has("leverError") && this.leverError) void this.#reveal("[data-lever-error]");
     if (changed.has("reprintErrorCode") && this.reprintErrorCode)
-      this.#reveal("[data-reprint-error]");
+      void this.#reveal("[data-reprint-error]");
   }
 
-  /** The status lines sit above the columns, out of view after a press on a card low in a long one. */
-  #reveal(selector: string): void {
+  /**
+   * The status lines sit above the columns, out of view after a press on a card low in a long one.
+   * Waits for the board: its header, above the lines, can change height when it redraws, and a
+   * browser without scroll anchoring (Safari before 27) leaves the line where the scroll put it.
+   */
+  async #reveal(selector: string): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector("till-pass-board")?.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** A refusal line drawn before this read answers is brought back into view after it redraws. */
+  async #reloadAfterPress(): Promise<void> {
+    const refusal = this.leverError;
+    await this.#reload();
+    if (refusal !== undefined && this.leverError === refusal)
+      await this.#reveal("[data-lever-error]");
   }
 
   #adoptBoard(read: DevicePassBoard): void {
@@ -420,7 +434,8 @@ export class TillPassScreen extends LitElement {
       sending.delete(key);
       this.sending = sending;
     }
-    if (reload && this.#isCurrent(boardId)) await (rechoose ? this.#loadChoice() : this.#reload());
+    if (reload && this.#isCurrent(boardId))
+      await (rechoose ? this.#loadChoice() : this.#reloadAfterPress());
   }
 
   async #groupReady(boardId: BoardId, key: string): Promise<void> {
@@ -449,7 +464,7 @@ export class TillPassScreen extends LitElement {
         } else this.#leverRefused(card, error);
       }
     }
-    if (this.#isCurrent(boardId)) await this.#reload();
+    if (this.#isCurrent(boardId)) await this.#reloadAfterPress();
   }
 
   async #billReady(boardId: BoardId, key: string): Promise<void> {
@@ -465,7 +480,7 @@ export class TillPassScreen extends LitElement {
       if (this.#switched(error)) return;
       if (this.#isCurrent(boardId)) this.#leverRefused(card, error);
     }
-    if (this.#isCurrent(boardId)) await this.#reload();
+    if (this.#isCurrent(boardId)) await this.#reloadAfterPress();
   }
 
   /** The pass offers no other area to choose, so this refusal skips the code's general sentence. */

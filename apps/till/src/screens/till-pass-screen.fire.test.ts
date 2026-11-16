@@ -14,7 +14,13 @@ import type {
   PassReleaseResult,
   TillApi,
 } from "../api/client.js";
-import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 
@@ -622,6 +628,50 @@ describe("A773 pass screen: a refusal line after a press low in a long column", 
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.bottom).toBeLessThanOrEqual(scroller().clientHeight);
   }
+
+  /** Safari before 27 keeps the scroll position when content above the view changes height. */
+  async function withoutScrollAnchoring(run: () => Promise<void>): Promise<void> {
+    document.documentElement.style.overflowAnchor = "none";
+    try {
+      await run();
+    } finally {
+      document.documentElement.style.overflowAnchor = "";
+    }
+  }
+
+  /** At 390 px the title, the overdue count and Columns wrap onto two rows; without the count, one. */
+  async function mountOverdueThenNot(api: FakeApi): Promise<TillPassScreen> {
+    await pageAt(390, 844);
+    const overdue = passCard({
+      key: "bill:late",
+      items: [passItem({ id: "late-item", queuedAt: minutesAgo(12), band: "fresh" })],
+    });
+    const el = await mount({
+      api,
+      deviceMode: true,
+      deviceName: "Pass by the back door",
+      initialBoard: deviceBoard(passBoard({ toFire: longBoard.toFire, inProgress: [overdue] })),
+    });
+    expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).not.toBeNull();
+    return el;
+  }
+
+  for (const [code, status, line] of [
+    ["ticket.pass_context_changed", 409, tableChanged],
+    ["device.forbidden_action", 403, leverError],
+  ] as const)
+    it(`at 390 px, keeps a Fire's ${code} line fully in view when the board read after it drops the overdue count above it`, () =>
+      withoutScrollAnchoring(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(longBoard)),
+          releaseDevicePass: vi.fn().mockRejectedValue(refused(code, status)),
+        });
+        const el = await mountOverdueThenNot(api);
+        await pressLow(el, '[data-pass-fire="group:g-12"]');
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).toBeNull();
+        expectInView(line(el));
+      }));
 
   for (const [width, height] of [
     [1024, 768],
