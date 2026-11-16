@@ -167,6 +167,15 @@ in A1308's orders and sales slice, which rebuilds the table anyway.
 
 ## Decisions and deliberate limits
 
+### A moved dish keeps its kitchen status (owner, 2026-09-01)
+
+A sent dish moved to another bill or table (Merge bills, Move dishes, Split table) keeps its status
+on its station's screen and is not sent again: its station gets only a MOVED slip, where it prints
+them. A dish whose course group has fired cannot move to another course group, and no dish can move
+into a fired one (`group.not_held`). Checked by "a moved dish keeps its kitchen state and is not sent
+again" in `apps/server/src/move-merge.test.ts`, and by "refuses to move a line OUT of a fired group"
+and "fire the mains, then move a Steak into them" in `apps/server/src/order-groups.test.ts`.
+
 ### A switched-off course uses Fire now (owner, 2026-10-17; C80)
 
 A dish whose course is switched off follows the no-course rule: Fire now, listed first, whether
