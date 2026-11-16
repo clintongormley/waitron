@@ -76,8 +76,6 @@ async function paintRestaurantAndTerrace(el: SeasonPainter) {
   await pick(el, "zone:z2");
   await drag(el, "4", 0, 3 * 60);
 }
-const empty = (weekday: number) => ({ weekday, slots: [] });
-const open = (weekday: number) => ({ weekday, ranges: [] });
 
 it("saves exactly the edited department and zone in one request, then is clean and rereads", async () => {
   const { painter, writes, reread } = await mount(thursdayOpen());
@@ -91,29 +89,13 @@ it("saves exactly the edited department and zone in one request, then is clean a
         departments: [
           {
             departmentId: "d1",
-            days: [
-              { weekday: 1, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
-              empty(2),
-              { weekday: 3, slots: [{ periodId: "p2", startsAt: "20:00", endsAt: "23:00" }] },
-              { weekday: 4, slots: [{ periodId: "p1", startsAt: "06:00", endsAt: "12:00" }] },
-              empty(5),
-              empty(6),
-              empty(0),
-            ],
+            days: [{ weekday: 3, slots: [{ periodId: "p2", startsAt: "20:00", endsAt: "23:00" }] }],
           },
         ],
         zones: [
           {
             zoneId: "z2",
-            days: [
-              open(1),
-              { weekday: 2, ranges: [{ startsAt: "15:00", endsAt: "17:00" }] },
-              open(3),
-              { weekday: 4, ranges: [{ startsAt: "06:00", endsAt: "09:00" }] },
-              open(5),
-              open(6),
-              open(0),
-            ],
+            days: [{ weekday: 4, ranges: [{ startsAt: "06:00", endsAt: "09:00" }] }],
           },
         ],
         expectedClockRevision: 4,
@@ -126,6 +108,28 @@ it("saves exactly the edited department and zone in one request, then is clean a
   expect(grid(painter).days.get("4")).toEqual([
     { periodId: null, startsAt: "06:00", endsAt: "09:00" },
   ]);
+});
+
+it("saves empty entries for erased weekdays without sending untouched days", async () => {
+  const { painter, writes } = await mount();
+  button(painter, "paint-closed").click();
+  await settle(painter);
+  await drag(painter, "1", 7 * 60, 10 * 60);
+  await pick(painter, "zone:z2");
+  grid(painter).dispatchEvent(
+    new CustomEvent("paint-change", {
+      detail: { key: "2", day: [] },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle(painter);
+  await save(painter, writes);
+  expect(writes[0]!.body).toEqual({
+    departments: [{ departmentId: "d1", days: [{ weekday: 1, slots: [] }] }],
+    zones: [{ zoneId: "z2", days: [{ weekday: 2, ranges: [] }] }],
+    expectedClockRevision: 4,
+  });
 });
 
 it("shrinking Restaurant's Tuesday keeps Terrace's Tuesday unchanged", async () => {
@@ -143,15 +147,7 @@ it("shrinking Restaurant's Tuesday keeps Terrace's Tuesday unchanged", async () 
       departments: [
         {
           departmentId: "d1",
-          days: [
-            { weekday: 1, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
-            { weekday: 2, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
-            empty(3),
-            empty(4),
-            empty(5),
-            empty(6),
-            empty(0),
-          ],
+          days: [{ weekday: 2, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] }],
         },
       ],
       zones: [],
@@ -217,7 +213,7 @@ it("a department refusal on a day shows that department, marks the day's heading
   const { painter, writes, navigations } = await mount(withBar(), [
     {
       code: "menu_timetable.invalid",
-      params: { field: "departments.1.days.2.slots" },
+      params: { field: "departments.1.days.0.slots" },
     },
   ]);
   await drag(painter, "1", 0, 60);
@@ -248,7 +244,7 @@ it("a zone refusal on a day shows that zone and marks its heading; the next save
   const { painter, writes } = await mount(thursdayOpen(), [
     {
       code: "zone_closed_time.invalid",
-      params: { field: "zones.0.days.4.ranges" },
+      params: { field: "zones.0.days.0.ranges" },
     },
   ]);
   await paintRestaurantAndTerrace(painter);
@@ -259,8 +255,8 @@ it("a zone refusal on a day shows that zone and marks its heading; the next save
   expect(grid(painter).days.get("4")).toEqual([
     { periodId: null, startsAt: "06:00", endsAt: "09:00" },
   ]);
-  expect([...grid(painter).columnErrors]).toEqual([["5", message]]);
-  expect(frame(painter).refusal).toBe(`Terrace, Friday: ${message}`);
+  expect([...grid(painter).columnErrors]).toEqual([["4", message]]);
+  expect(frame(painter).refusal).toBe(`Terrace, Thursday: ${message}`);
   await save(painter, writes);
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(frame(painter).refusal).toBe("");
@@ -387,14 +383,14 @@ it.each([
   [
     "menu_timetable.invalid",
     { field: "departments.0.days.0.slots.0.startsAt", reason: "clock_skips" },
-    "Restaurant, Monday: The clock skips this time on this date.",
-    [["1", "The clock skips this time on this date."]],
+    "Restaurant, Wednesday: The clock skips this time on this date.",
+    [["3", "The clock skips this time on this date."]],
   ],
   [
     "menu_timetable.invalid",
     { field: "departments.0.days.6" },
-    "Restaurant, Sunday: Check this day's time ranges and periods.",
-    [["0", "Check this day's time ranges and periods."]],
+    "Restaurant: Check this day's time ranges and periods.",
+    [],
   ],
   [
     "management.request_invalid",
@@ -595,7 +591,7 @@ it("a paint made while a save is in flight is kept, and is still unsaved once th
   await settle(painter);
   const sent = (writes[0]!.body as { departments: { days: { weekday: number }[] }[] })
     .departments[0]!.days;
-  expect(sent.find(({ weekday }) => weekday === 4)).toEqual({ weekday: 4, slots: [] });
+  expect(sent.find(({ weekday }) => weekday === 4)).toBeUndefined();
   expect(grid(painter).days.get("4")).toEqual([
     { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
   ]);
@@ -655,13 +651,7 @@ it("Save writes the season being painted, not the venue's current season", async
     { url: "/management-api/venue-service/seasons/spring/weeks", method: "PUT" },
   ]);
   expect((writes[0]!.body as { departments: { days: unknown[] }[] }).departments[0]!.days).toEqual([
-    { weekday: 1, slots: [{ periodId: "p2", startsAt: "20:00", endsAt: "23:00" }] },
-    empty(2),
     { weekday: 3, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "15:00" }] },
-    empty(4),
-    empty(5),
-    empty(6),
-    empty(0),
   ]);
 });
 
@@ -898,7 +888,7 @@ it("a save's weeks follow the first model read after it, keeping only paint adde
   await save(painter, writes);
   const days = (writes[1]!.body as { departments: { days: { weekday: number }[] }[] })
     .departments[0]!.days;
-  expect(days.find(({ weekday }) => weekday === 1)).toEqual({ weekday: 1, slots: mondayDinner });
+  expect(days.map(({ weekday }) => weekday)).toEqual([4]);
 });
 
 it("a model that a watch read before the save never counts as the one after it", async () => {

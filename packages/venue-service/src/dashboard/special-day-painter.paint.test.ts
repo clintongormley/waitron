@@ -5,7 +5,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { painterFloorPlans } from "../testing/season-painter-fixture.js";
 import type { LocalDate } from "../hours-types.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
   drag,
   frame,
@@ -862,24 +862,54 @@ describe("a period deleted with a replacement before the stored day is read agai
     expect(reads()).toBe(1);
   });
 
-  it("refuses a press beside Save when its re-read fails, keeping Save offered, and a later press reads again and sends the replacement", async () => {
-    let failing = true;
-    const { painter, writes, reads } = await deleteLunch(() =>
-      failing ? Promise.reject(new Error("offline")) : undefined,
-    );
-    expect(reads()).toBe(1);
-    saveButton(painter).click();
-    await expect.poll(() => frame(painter).refusal).toBe(t("menu.save_error"));
+  it.each(["en", "es"] as const)(
+    "%s: refuses a press beside Save when its re-read fails, keeping Save offered, and a later press reads again and sends the replacement",
+    async (locale) => {
+      let failing = true;
+      const { painter, writes, reads } = await deleteLunch(() =>
+        failing ? Promise.reject(new Error("offline")) : undefined,
+      );
+      setLocale(locale);
+      painter.requestUpdate();
+      await settle(painter);
+      expect(frame(painter).refusal).toBe(
+        locale === "en"
+          ? "The replacement hours are not loaded yet. Save will try again."
+          : VENUE_SERVICE_STRINGS.es["special.replacement_pending"],
+      );
+      expect(reads()).toBe(1);
+      saveButton(painter).click();
+      await expect.poll(() => frame(painter).refusal).toBe(t("menu.save_error"));
+      await settle(painter);
+      expect(reads()).toBe(2);
+      expect(writes).toEqual([]);
+      expect(frame(painter).busy).toBe(false);
+      expectSaveOffered(painter);
+      failing = false;
+      saveButton(painter).click();
+      await expect.poll(() => writes.length).toBe(1);
+      expect(sentPaint(writes[0]!)).toEqual([
+        { departmentId: "d1", date: DEC_15, ranges: refilled },
+      ]);
+      expect(reads()).toBe(3);
+      expect(frame(painter).refusal).toBe("");
+    },
+  );
+
+  it("keeps the dropped-edit notice beside unloaded replacement hours", async () => {
+    const { painter } = await deleteLunch(() => Promise.reject(new Error("offline")));
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_14, at("21:00"), at("22:00"));
+    const next = withoutLunch();
+    next.departments[0]!.zones = next.departments[0]!.zones.filter(({ id }) => id !== "z2");
+    painter.model = next;
     await settle(painter);
-    expect(reads()).toBe(2);
-    expect(writes).toEqual([]);
-    expect(frame(painter).busy).toBe(false);
-    expectSaveOffered(painter);
-    failing = false;
-    saveButton(painter).click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(sentPaint(writes[0]!)).toEqual([{ departmentId: "d1", date: DEC_15, ranges: refilled }]);
-    expect(reads()).toBe(3);
+    await expect
+      .poll(() => frame(painter).refusal)
+      .toContain("Terrace was removed; its changes were dropped.");
+    expect(frame(painter).refusal).toContain(
+      "The replacement hours are not loaded yet. Save will try again.",
+    );
   });
 
   for (const leaving of ["closed first", "switched while open"] as const)

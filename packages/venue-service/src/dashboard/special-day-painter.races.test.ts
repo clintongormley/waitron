@@ -408,3 +408,39 @@ it("a model read that started before a save and answers before the save's own re
   modelReads.waiting[1]!();
   await expect.poll(() => painter.model.clockRevision).toBe(5);
 });
+
+it("an update during a refused save is merged before retry, keeping personal paint", async () => {
+  const writes: Write[] = [];
+  const days = {
+    sd1: storedDay({
+      paint: [{ departmentId: "d1", date: DEC_14, ranges: [dinner("20:00", "21:00")] }],
+    }),
+  };
+  const saves = gate();
+  painter = document.createElement("special-day-painter");
+  painter.api = specialDayApi(writes, { days, answer: saves.after });
+  painter.model = painterModel();
+  painter.specialDayId = "sd1";
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await expect.poll(() => part(painter!, "loading")).toBeNull();
+  await paint(painter, "p2", DEC_15, ["19:00", "22:00"]);
+  saves.held = true;
+  frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await expect.poll(() => saves.waiting.length).toBe(1);
+  days.sd1.paint = [{ departmentId: "d1", date: DEC_14, ranges: [lunch("10:00", "12:00")] }];
+  painter.model = structuredClone(painter.model);
+  await settle(painter);
+  saves.held = false;
+  saves.waiting.shift()!.refuse({ code: "server.internal" });
+  await expect.poll(() => frame(painter!).busy).toBe(false);
+  await expect.poll(() => grid(painter!).days.get(DEC_14)).toEqual([lunch("10:00", "12:00")]);
+  expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
+  expect(frame(painter).dirty).toBe(true);
+  frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect((writes[1]!.body as Body).paint).toEqual([
+    { departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] },
+  ]);
+});

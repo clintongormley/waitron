@@ -905,6 +905,146 @@ describe("saveSeasonWeeks", () => {
     );
   };
 
+  it("sparse saves preserve other department and zone weekdays, including a later clear", async () => {
+    const p = await painted();
+    const dinner = { periodId: p.dinner, startsAt: "20:00", endsAt: "23:00" };
+    const closed = { startsAt: "15:00", endsAt: "16:00" };
+    await scoped((tx) =>
+      saveSeasonWeeks(
+        tx,
+        p.winter,
+        {
+          departments: [{ departmentId: p.departmentId, days: [{ weekday: 3, slots: [dinner] }] }],
+          zones: [{ zoneId: p.zoneId, days: [{ weekday: 2, ranges: [closed] }] }],
+        },
+        AT,
+        1,
+      ),
+    );
+    await scoped((tx) =>
+      saveSeasonWeeks(
+        tx,
+        p.winter,
+        {
+          departments: [
+            { departmentId: p.departmentId, days: [{ weekday: 4, slots: [p.lunchRange] }] },
+          ],
+          zones: [{ zoneId: p.zoneId, days: [{ weekday: 3, ranges: [closed] }] }],
+        },
+        AT,
+        1,
+      ),
+    );
+    const first = await stored();
+    expect(first.departments.get(p.departmentId)!.get(p.winter)![2]).toEqual([p.lunchRange]);
+    expect(first.departments.get(p.departmentId)!.get(p.winter)![3]).toEqual([dinner]);
+    expect(first.departments.get(p.departmentId)!.get(p.winter)![4]).toEqual([p.lunchRange]);
+    expect(first.zones.get(p.zoneId)!.get(p.winter)![2]).toEqual([closed]);
+    expect(first.zones.get(p.zoneId)!.get(p.winter)![3]).toEqual([closed]);
+    await scoped((tx) =>
+      saveSeasonWeeks(
+        tx,
+        p.winter,
+        {
+          departments: [{ departmentId: p.departmentId, days: [{ weekday: 3, slots: [] }] }],
+          zones: [{ zoneId: p.zoneId, days: [{ weekday: 2, ranges: [] }] }],
+        },
+        AT,
+        1,
+      ),
+    );
+    const cleared = await stored();
+    expect(cleared.departments.get(p.departmentId)!.get(p.winter)![3]).toEqual([]);
+    expect(cleared.departments.get(p.departmentId)!.get(p.winter)![4]).toEqual([p.lunchRange]);
+    expect(cleared.zones.get(p.zoneId)!.get(p.winter)![2]).toEqual([]);
+    expect(cleared.zones.get(p.zoneId)!.get(p.winter)![3]).toEqual([closed]);
+    await scoped((tx) =>
+      saveSeasonWeeks(
+        tx,
+        p.winter,
+        {
+          departments: [{ departmentId: p.departmentId, days: [] }],
+          zones: [{ zoneId: p.zoneId, days: [] }],
+        },
+        AT,
+        1,
+      ),
+    );
+    expect(await stored()).toEqual(cleared);
+  });
+
+  it.each(["department", "zone"] as const)(
+    "sparse %s errors keep sent positions and back out all owners",
+    async (owner) => {
+      const p = await painted();
+      const before = await stored();
+      const valid = { departmentId: p.departmentId, days: [{ weekday: 3, slots: [p.lunchRange] }] };
+      const badDepartment = {
+        departmentId: p.terrace.id,
+        days: [{ weekday: 6, slots: [{ periodId: p.lunch, startsAt: "13:00", endsAt: "16:00" }] }],
+      };
+      const badZone = {
+        zoneId: p.zoneId,
+        days: [{ weekday: 6, ranges: [{ startsAt: "16:00", endsAt: "16:00" }] }],
+      };
+      await expect(
+        scoped((tx) =>
+          saveSeasonWeeks(
+            tx,
+            p.winter,
+            {
+              departments: owner === "department" ? [valid, badDepartment] : [valid],
+              ...(owner === "zone" ? { zones: [badZone] } : {}),
+            },
+            AT,
+            1,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: owner === "department" ? "menu_timetable.invalid" : "zone_closed_time.invalid",
+        params: {
+          field:
+            owner === "department"
+              ? "departments.1.days.0.slots.0.periodId"
+              : "zones.0.days.0.ranges",
+        },
+      });
+      expect(await stored()).toEqual(before);
+    },
+  );
+
+  it.each(["department", "zone"] as const)(
+    "sparse %s rejects duplicate and invalid weekday keys",
+    async (owner) => {
+      const p = await painted();
+      const before = await stored();
+      for (const weekdays of [
+        [3, 3],
+        [3, 7],
+        [3, 1.5],
+      ]) {
+        const days = weekdays.map((weekday) => ({ weekday, slots: [], ranges: [] }));
+        await expect(
+          scoped((tx) =>
+            saveSeasonWeeks(
+              tx,
+              p.winter,
+              owner === "department"
+                ? { departments: [{ departmentId: p.departmentId, days }] }
+                : { zones: [{ zoneId: p.zoneId, days }] },
+              AT,
+              1,
+            ),
+          ),
+        ).rejects.toMatchObject({
+          code: owner === "department" ? "menu_timetable.invalid" : "zone_closed_time.invalid",
+          params: { field: `${owner === "department" ? "departments" : "zones"}.0.days.1.weekday` },
+        });
+        expect(await stored()).toEqual(before);
+      }
+    },
+  );
+
   it("saves two departments' weeks and a zone's week in the season named, leaving other seasons and an unlisted department as they were", async () => {
     const p = await painted();
     const dinner = { periodId: p.dinner, startsAt: "20:00", endsAt: "23:00" };

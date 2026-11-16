@@ -474,8 +474,20 @@ export class SeasonPainter extends LitElement {
         copyWeek(this.draft.get(key)!),
       ]),
     );
+    const sentDays = new Map(
+      [...sent.keys()].map((key) => [
+        key,
+        WEEK_DISPLAY_ORDER.filter(
+          (weekday) =>
+            !samePaint(
+              sent.get(key)!.get(String(weekday)) ?? [],
+              this.baseline.get(key)?.get(String(weekday)) ?? [],
+            ),
+        ),
+      ]),
+    );
     const days = (key: string) =>
-      WEEK_DISPLAY_ORDER.map((weekday) => ({
+      sentDays.get(key)!.map((weekday) => ({
         weekday,
         paint: sent.get(key)!.get(String(weekday))!,
       }));
@@ -509,7 +521,7 @@ export class SeasonPainter extends LitElement {
         this.revision,
       );
     } catch (error) {
-      if (generation === this.generation) this.refuse(error, departments, zones);
+      if (generation === this.generation) this.refuse(error, departments, zones, sentDays);
       return;
     } finally {
       if (generation === this.generation) this.saving = false;
@@ -533,7 +545,12 @@ export class SeasonPainter extends LitElement {
     );
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
-  private refuse(error: unknown, departments: string[], zones: string[]) {
+  private refuse(
+    error: unknown,
+    departments: string[],
+    zones: string[],
+    sentDays: ReadonlyMap<string, readonly number[]>,
+  ) {
     const code = codeOf(error);
     const params = (error as { params?: { field?: unknown; reason?: unknown } } | null)?.params;
     if (code === "hours.clock_changed") {
@@ -555,7 +572,7 @@ export class SeasonPainter extends LitElement {
       return;
     }
     const owner = zoned ? zoneKey(id) : departmentKey(id);
-    const weekday = match[3] === undefined ? undefined : WEEK_DISPLAY_ORDER[Number(match[3])];
+    const weekday = match[3] === undefined ? undefined : sentDays.get(owner)?.[Number(match[3])];
     const name = ownerName(this.model, owner);
     const reason = refusalReason(code, params?.reason);
     this.refused = {

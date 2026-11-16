@@ -105,6 +105,7 @@ const en = {
   "special.delete": "Delete {name}?",
   "special.delete_repeat": "Delete {name}? This removes it every year.",
   "special.load_error": "This special day could not be loaded.",
+  "special.replacement_pending": "The replacement hours are not loaded yet. Save will try again.",
   "special.no": "No",
   "special.yes": "Yes",
   "special.open": "Open",
@@ -1030,6 +1031,8 @@ const es: Record<keyof typeof en, string> = {
   "special.delete": "¿Eliminar {name}?",
   "special.delete_repeat": "¿Eliminar {name}? Se elimina de todos los años.",
   "special.load_error": "No se ha podido cargar este día especial.",
+  "special.replacement_pending":
+    "Aún no se han cargado los horarios de sustitución. Guardar lo intentará de nuevo.",
   "special.no": "No",
   "special.yes": "Sí",
   "special.open": "Abierto",

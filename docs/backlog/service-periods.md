@@ -50,13 +50,6 @@ read by separately written queries in `special-days.ts` and `business-day-schedu
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
 the browser-safe repeat rules. Each could collapse to one place.
 
-## A date another manager removed stays in the special-day draft
-
-A date another manager removed stays in the draft when this draft changed its paint or its Closed
-tick (`merge`, `special-day-painter.ts`). If only the Closed tick changed, Save puts the date back
-with no paint, though it had paint before the removal. The painter shows the date before Save, so
-nothing is lost unseen. Found by reading, not run; decide whether that date should be dropped too.
-
 ## Painting stops short of an off-quarter-hour changeover
 
 On a venue whose business day changes over off the quarter hour, painting starts at the first
@@ -64,15 +57,6 @@ quarter hour after the changeover and ends at the last one before it (a 05:50 ch
 from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
 server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
 was read in the code, not run.
-
-## A season painter save writes each edited week whole
-
-A save writes each edited week whole, all seven days. If another manager's save of the same week
-is stored after the read this painter's copy of the week came from and before this save is stored,
-this save puts back the days they changed, and nothing shows it. A fix needs the server to refuse
-a week changed since the draft was read, or to write only the changed days. Read in the code
-(`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
-against the server.
 
 ## Two date helpers read years 0 to 99 as 1900 to 1999
 
@@ -194,14 +178,6 @@ code, not run again here.
   `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
   every day; a lookup exported from `shared` that validates once would remove the copy.
 
-## A1073. Saving one field in the department dialog can undo another manager's change to a different field
-
-Edit only the name while another dashboard turns the reminder Off, then save, and the reminder is
-back at 10; Needs clearing behaves the same.
-Once anything is edited the dialog keeps its whole draft (since #1891, `ef59aa44c`), so the fix is
-the dialog keeping each untouched field in step with incoming updates. Left open by A756 PR 4's
-review.
-
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 
 A routing cell's line for Lunch does not apply to a Lunch dish confirmed
@@ -232,28 +208,6 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
   (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first.
   Delete it or give it a case that needs it — left open by A789 slice 1, #1948.
-
-## Bundle: One rule for two managers editing at once
-
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1073. Saving one field in the department dialog can undo another manager's change to a
-  different field.** [Detail](service-periods.md#a1073-saving-one-field-in-the-department-dialog-can-undo-another-managers-change-to-a-different-field)
-- **The special-day painter does not say a deleted period's replacement is still missing after a
-  failed re-read.** When a period is deleted and the
-  painter's re-read of the day fails, nothing tells the manager until Save shows "could not save"
-  (finish-branch's account of its own fix on #1838; not re-run since). Left open by A719.
-- **A date another manager removed stays in the special-day draft**
-  [Detail](service-periods.md#a-date-another-manager-removed-stays-in-the-special-day-draft)
-- **A special-day draft whose only edits were dropped keeps its old clock revision**
-  (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a new public-holiday day
-  could be refused with `hours.clock_changed`. Found by reading, not run — left open by A506-9,
-  #1651.
-- **A live update that arrives during a special day's save that is then refused may never be
-  taken in** (`save`, `special-day-painter.ts`), so a retry could send an old copy of a date; A637
-  closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
-- **A season painter save writes each edited week whole**
-  [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
 
 ## Decisions and deliberate limits
 

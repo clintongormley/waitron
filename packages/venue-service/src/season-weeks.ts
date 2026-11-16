@@ -287,6 +287,29 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+function completeWeek<T extends { weekday: number }>(
+  days: readonly T[],
+  stored: readonly T[],
+  code: "menu_timetable.invalid" | "zone_closed_time.invalid",
+): T[] {
+  if (!Array.isArray(days) || days.length > 7) throw new AppError(code, { field: "days" });
+  const sent = new Set<number>();
+  for (const [index, day] of days.entries()) {
+    if (typeof day !== "object" || day === null)
+      throw new AppError(code, { field: `days.${index}` });
+    if (
+      !Number.isInteger(day.weekday) ||
+      day.weekday < 0 ||
+      day.weekday > 6 ||
+      sent.has(day.weekday)
+    )
+      throw new AppError(code, { field: `days.${index}.weekday` });
+    sent.add(day.weekday);
+  }
+  // Submitted days lead so the stagers' error positions still name the request's rows.
+  return [...days, ...stored.filter((day) => !sent.has(day.weekday))];
+}
+
 /** Every listed department week and zone week of one season, under one revision check. */
 export async function saveSeasonWeeks(
   tx: Transaction,
@@ -314,7 +337,27 @@ export async function saveSeasonWeeks(
   for (const [index, entry] of departmentEntries.entries()) {
     departmentWeeks.push(
       await within(`departments.${index}.`, () =>
-        stageMenuWeek(tx, entry.departmentId, entry.days, inForce, season, departmentReads),
+        stageMenuWeek(
+          tx,
+          entry.departmentId,
+          completeWeek(
+            entry.days,
+            WEEKDAYS.map((weekday) => ({
+              weekday,
+              slots: (
+                departmentReads.seasonWeeks.get(entry.departmentId)?.get(seasonId)?.[weekday] ?? []
+              ).map(({ periodId, startsAt, endsAt }) => ({
+                periodId: periodId!,
+                startsAt,
+                endsAt,
+              })),
+            })),
+            "menu_timetable.invalid",
+          ),
+          inForce,
+          season,
+          departmentReads,
+        ),
       ),
     );
   }
@@ -335,7 +378,21 @@ export async function saveSeasonWeeks(
       throw new AppError("service_zone.not_found", { zoneId: entry.zoneId });
     zoneWeeks.push(
       await within(`zones.${index}.`, () =>
-        stageZoneClosedWeek(tx, entry.zoneId, entry.days, inForce, season, zoneSeasonWeeks),
+        stageZoneClosedWeek(
+          tx,
+          entry.zoneId,
+          completeWeek(
+            entry.days,
+            WEEKDAYS.map((weekday) => ({
+              weekday,
+              ranges: zoneSeasonWeeks.get(entry.zoneId)?.get(seasonId)?.[weekday] ?? [],
+            })),
+            "zone_closed_time.invalid",
+          ),
+          inForce,
+          season,
+          zoneSeasonWeeks,
+        ),
       ),
     );
   }

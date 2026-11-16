@@ -4,6 +4,7 @@ import { cutoverForBusinessDay } from "@waitron/shared";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
   FormFeedback,
   saveActionState,
@@ -497,9 +498,9 @@ export class SpecialDayPainter extends LitElement {
     if (this.open && this.seeded !== key) this.reseed(key);
     else if (changes.has("model")) {
       this.dropDeletedPeriods((changes.get("model") as Model | undefined) ?? this.model);
-      if (sameDraft(this.draft, this.baseline)) this.revision = this.model.clockRevision;
       if (!this.saving)
         this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
+      if (sameDraft(this.draft, this.baseline)) this.revision = this.model.clockRevision;
       if (this.open) void this.follow();
     }
     if (this.isConnected && !this.scope) {
@@ -944,7 +945,7 @@ export class SpecialDayPainter extends LitElement {
         this.saving = false;
         this.refuse(error, input);
         this.dropUnpaintable(model);
-        if (this.vacated) void this.follow();
+        void this.follow();
       }
       return;
     } finally {
@@ -1589,7 +1590,9 @@ export class SpecialDayPainter extends LitElement {
   private message(): string {
     if (this.refused) return this.refused.message;
     if (this.blocked()) return t("prep.fix_fields");
-    return this.loadFailed ? t("special.load_error") : this.notice;
+    return this.loadFailed
+      ? t("special.load_error")
+      : bottomMessage(this.notice, this.vacated ? t("special.replacement_pending") : "");
   }
 
   private panel(locked: boolean) {

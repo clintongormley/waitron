@@ -65,7 +65,11 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
             const season = server.stored.departments
               .find(({ id }) => id === departmentId)!
               .seasonWeeks.find(({ seasonId }) => seasonId === "winter")!;
-            season.week = structuredClone(days);
+            for (const day of days) {
+              season.week = season.week.map((stored) =>
+                stored.weekday === day.weekday ? structuredClone(day) : stored,
+              );
+            }
           }
         },
         answer: () => resolve(),
@@ -104,7 +108,7 @@ async function racingPainter(live: boolean, { timer = false } = {}) {
 }
 
 const slotsOn = (body: WeeksBody, weekday: number) =>
-  body.departments[0]!.days.find((day) => day.weekday === weekday)!.slots;
+  body.departments[0]!.days.find((day) => day.weekday === weekday)?.slots;
 const wednesday = [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }];
 const mondayDinner = [{ periodId: "p2", startsAt: "18:00", endsAt: "21:00" }];
 const mondayLunch = [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }];
@@ -113,7 +117,7 @@ it.each([
   ["live data", true],
   ["no live data", false],
 ])(
-  "a read that started before a save cannot undo it: the week stays as saved, and the next save sends it (%s)",
+  "a read that started before a save cannot undo it: the week stays as saved, and the next save leaves it untouched (%s)",
   async (_, live) => {
     const { painter, reads, save } = await racingPainter(live);
     painter.api.rereadWatches();
@@ -134,7 +138,7 @@ it.each([
     await new Promise((resolve) => setTimeout(resolve, 50));
     await settle(painter);
     const second = await save();
-    expect(slotsOn(second.body, 3)).toEqual(wednesday);
+    expect(slotsOn(second.body, 3)).toBeUndefined();
   },
 );
 
@@ -168,8 +172,8 @@ it.each([
     expect(grid(painter).days.get("1")).toEqual(mondayDinner);
 
     const second = await save();
-    expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
-    expect(slotsOn(second.body, 3)).toEqual(wednesday);
+    expect(slotsOn(second.body, 1)).toBeUndefined();
+    expect(slotsOn(second.body, 3)).toBeUndefined();
   },
 );
 
@@ -201,7 +205,7 @@ it.each([
     second.answer();
     await expect.poll(() => frame(painter).busy).toBe(false);
     await settle(painter);
-    expect(mondayOf().slots).toEqual(mondayLunch);
+    expect(mondayOf().slots).toEqual(mondayDinner);
     expect(grid(painter).days.get("1")).toEqual(mondayLunch);
     expect(frame(painter).dirty).toBe(false);
   },
@@ -240,7 +244,7 @@ it.each([
     expect(grid(painter).days.get("1")).toEqual(mondayDinner);
     expect(grid(painter).days.get("4")).toEqual(wednesday);
     const second = await save();
-    expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
+    expect(slotsOn(second.body, 1)).toBeUndefined();
   },
 );
 
@@ -251,7 +255,7 @@ it.each([
   ["live data", true],
   ["no live data", false],
 ])(
-  "another manager's Thursday arrives on a draft that painted only Monday, and Save sends both (%s)",
+  "another manager's Thursday arrives on a draft that painted only Monday, and Save sends only Monday (%s)",
   async (_, live) => {
     const { painter, server, save, liveData } = await racingPainter(live, { timer: !live });
     await drag(painter, "1", 60, 180);
@@ -270,7 +274,7 @@ it.each([
     expect(frame(painter).dirty).toBe(true);
 
     const sent = await save();
-    expect(slotsOn(sent.body, 4)).toEqual(thursdayDinner);
+    expect(slotsOn(sent.body, 4)).toBeUndefined();
     expect(slotsOn(sent.body, 1)).toEqual(mondayPainted);
   },
 );
@@ -279,7 +283,7 @@ it.each([
   ["live data", true],
   ["no live data", false],
 ])(
-  "another manager's Thursday that arrives during a refused save shows after the refusal, and the retry sends it (%s)",
+  "another manager's Thursday that arrives during a refused save shows after the refusal, and the retry leaves it untouched (%s)",
   async (_, live) => {
     const { painter, server, save, liveData } = await racingPainter(live, { timer: !live });
     await drag(painter, "3", 60, 180);
@@ -299,7 +303,7 @@ it.each([
     expect(grid(painter).days.get("3")).toEqual(wednesday);
 
     const retry = await save();
-    expect(slotsOn(retry.body, 4)).toEqual(thursdayDinner);
+    expect(slotsOn(retry.body, 4)).toBeUndefined();
     expect(slotsOn(retry.body, 3)).toEqual(wednesday);
   },
 );

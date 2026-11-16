@@ -71,10 +71,13 @@ interface ReceiptEditor {
 }
 /** `operationDescription` is the receipt record's, present while the receipt editor offers it; it
  * is saved through that editor, never with the department's settings. */
-type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
-  serviceSteps: ServiceStepDraft[];
-  operationDescription?: string;
-};
+type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> &
+  Required<
+    Pick<DepartmentSettingsInput, "needsClearing" | "lateSendNeedsManager" | "courseSettings">
+  > & {
+    serviceSteps: ServiceStepDraft[];
+    operationDescription?: string;
+  };
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
 const POLICY_FIELDS = ["orderStart", "paidWhen", "collectionNumber"] as const;
 const DINING_FIELDS = ["dining", "diningStartsAs"] as const;
@@ -519,22 +522,53 @@ export class DepartmentSettings extends LitElement {
       scope.commit(this.baseline!);
     }
     if (this.scope && !this.busy) {
-      if (this.scope.isDirty()) this.followSteps(source.serviceSteps);
-      else if (!equal(this.source!, source)) {
-        const steps = stepsEqual(source.serviceSteps, this.source!.serviceSteps)
-          ? this.draft!.serviceSteps
-          : source.serviceSteps;
-        this.source = copy(source);
-        this.draft = {
-          ...source,
-          serviceSteps: steps,
-          ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
-          ...(this.draft!.operationDescription === undefined
-            ? {}
-            : { operationDescription: this.draft!.operationDescription }),
+      this.followSteps(source.serviceSteps);
+      const draft = copy(this.draft!),
+        baseline = copy(this.baseline!);
+      for (const field of [
+        "name",
+        "tradingName",
+        "orderStart",
+        "paidWhen",
+        "collectionNumber",
+        "dining",
+        "diningStartsAs",
+        "needsClearing",
+        "lateSendNeedsManager",
+      ] as const) {
+        const untouched =
+          field === "name" || field === "tradingName"
+            ? draft[field].trim() === baseline[field].trim()
+            : draft[field] === baseline[field];
+        if (untouched) {
+          Object.assign(draft, { [field]: source[field] });
+          Object.assign(baseline, { [field]: source[field] });
+        }
+      }
+      const courses = source.courseSettings.map((row) => {
+        const saved = baseline.courseSettings.find((other) => other.courseId === row.courseId);
+        const edited = draft.courseSettings.find((other) => other.courseId === row.courseId);
+        const heldTouched = saved && edited && edited.heldUntilFired !== saved.heldUntilFired;
+        const reminderTouched = saved && edited && edited.reminderMinutes !== saved.reminderMinutes;
+        return {
+          draft: {
+            ...row,
+            ...(heldTouched ? { heldUntilFired: edited.heldUntilFired } : {}),
+            ...(reminderTouched ? { reminderMinutes: edited.reminderMinutes } : {}),
+          },
+          baseline: {
+            ...row,
+            ...(heldTouched ? { heldUntilFired: saved.heldUntilFired } : {}),
+            ...(reminderTouched ? { reminderMinutes: saved.reminderMinutes } : {}),
+          },
         };
-        this.baseline = copy(this.draft);
-        this.scope.commit(this.baseline);
+      });
+      draft.courseSettings = courses.map(({ draft }) => draft);
+      baseline.courseSettings = courses.map(({ baseline }) => baseline);
+      if (!equal(this.draft!, draft) || !equal(this.baseline!, baseline)) {
+        this.draft = draft;
+        this.baseline = baseline;
+        this.scope.commit(baseline);
       }
     }
     this.followDescription();
@@ -698,7 +732,7 @@ export class DepartmentSettings extends LitElement {
   }
   private courseChanged(
     courseId: string,
-    patch: Partial<DepartmentSettingsInput["courseSettings"][number]>,
+    patch: Partial<DepartmentDraft["courseSettings"][number]>,
   ) {
     this.changed(
       "courseSettings",
@@ -883,6 +917,12 @@ export class DepartmentSettings extends LitElement {
     const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
       ? unchanged
       : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
+    for (const field of ["needsClearing", "lateSendNeedsManager"] as const)
+      if (kept[field] === this.baseline![field]) delete submitted[field];
+    if (settingsEqual({ ...kept, courseSettings: this.baseline!.courseSettings }, kept))
+      delete submitted.courseSettings;
+    if (settingsEqual({ ...kept, transfers: this.baseline!.transfers }, kept))
+      delete submitted.transfers;
     const publish = this.publishSaved;
     this.busy = true;
     let written = false;
