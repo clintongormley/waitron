@@ -30,11 +30,16 @@ interface Entry {
   fingerprint: number;
 }
 
-interface Buckets {
+interface Counters {
   fails: Uint8Array;
   unlockAt: Float64Array;
   lastAt: Float64Array;
+}
+
+interface Buckets extends Counters {
   fingerprint: Uint32Array;
+  occupied: Uint8Array;
+  overflow: Counters;
 }
 
 function placeOf(
@@ -64,38 +69,55 @@ export function createPasswordThrottle(
   const entries = new Map<string, Entry>();
   // Never forgotten or folded, so trimming `entries` never has to walk past one.
   const inFlight = new Map<string, Entry>();
-  // An address forgotten to make room leaves its count in a counter picked by a secret, so a
-  // made-up address cannot be aimed at a real one's counter. A counter holds one address's count at
-  // a time, named by its fingerprint, and only an address carrying that fingerprint picks it up
-  // again. Another address takes the counter over once it is idle, or with strictly more wrong
-  // tries; the address it displaces then comes back with a fresh count.
+  // Shared overflow never clears on success: it may still hold another address's failures.
   let buckets: Buckets | undefined;
 
-  function bucketLive(table: Buckets, bucket: number, t: number): boolean {
+  function bucketLive(table: Counters, bucket: number, t: number): boolean {
     return !pinThrottleIdle(table.lastAt[bucket]!, t);
   }
 
   function fold(entry: Entry, t: number): void {
+    if (pinThrottleIdle(entry.lastAt, t)) return;
     buckets ??= {
       fails: new Uint8Array(BUCKETS),
       unlockAt: new Float64Array(BUCKETS),
       lastAt: new Float64Array(BUCKETS),
       fingerprint: new Uint32Array(BUCKETS),
+      occupied: new Uint8Array(BUCKETS),
+      overflow: {
+        fails: new Uint8Array(BUCKETS),
+        unlockAt: new Float64Array(BUCKETS),
+        lastAt: new Float64Array(BUCKETS),
+      },
     };
     const b = entry.bucket;
     const takes =
+      buckets.occupied[b] === 0 ||
       !bucketLive(buckets, b, t) ||
-      buckets.fingerprint[b] === entry.fingerprint ||
-      entry.fails > buckets.fails[b]!;
-    if (!takes) return;
-    buckets.fails[b] = Math.min(MAX_BUCKET_FAILS, entry.fails);
-    buckets.unlockAt[b] = entry.unlockAt;
-    buckets.lastAt[b] = entry.lastAt;
-    buckets.fingerprint[b] = entry.fingerprint;
+      buckets.fingerprint[b] === entry.fingerprint;
+    if (takes) {
+      buckets.fails[b] = Math.min(MAX_BUCKET_FAILS, entry.fails);
+      buckets.unlockAt[b] = entry.unlockAt;
+      buckets.lastAt[b] = entry.lastAt;
+      buckets.fingerprint[b] = entry.fingerprint;
+      buckets.occupied[b] = 1;
+      return;
+    }
+    const overflow = buckets.overflow;
+    const live = bucketLive(overflow, b, t);
+    overflow.fails[b] = Math.min(
+      MAX_BUCKET_FAILS,
+      Math.max(live ? overflow.fails[b]! : 0, entry.fails),
+    );
+    overflow.unlockAt[b] = Math.max(live ? overflow.unlockAt[b]! : 0, entry.unlockAt);
+    overflow.lastAt[b] = Math.max(live ? overflow.lastAt[b]! : entry.lastAt, entry.lastAt);
   }
 
   function ownedBucket(entry: Pick<Entry, "bucket" | "fingerprint">): Buckets | undefined {
-    return buckets?.fingerprint[entry.bucket] === entry.fingerprint ? buckets : undefined;
+    return buckets?.occupied[entry.bucket] === 1 &&
+      buckets.fingerprint[entry.bucket] === entry.fingerprint
+      ? buckets
+      : undefined;
   }
 
   function sweepIdle(t: number): void {
@@ -120,10 +142,11 @@ export function createPasswordThrottle(
 
   function fresh(bucket: number, fingerprint: number, t: number): Entry {
     const owned = ownedBucket({ bucket, fingerprint });
-    const inherits = owned !== undefined && bucketLive(owned, bucket, t);
+    const source = owned !== undefined && bucketLive(owned, bucket, t) ? owned : buckets?.overflow;
+    const inherits = source !== undefined && bucketLive(source, bucket, t);
     return {
-      fails: inherits ? owned.fails[bucket]! : 0,
-      unlockAt: inherits ? owned.unlockAt[bucket]! : 0,
+      fails: inherits ? source.fails[bucket]! : 0,
+      unlockAt: inherits ? source.unlockAt[bucket]! : 0,
       lastAt: t,
       bucket,
       fingerprint,
@@ -164,7 +187,13 @@ export function createPasswordThrottle(
             owned.unlockAt[held.bucket] = 0;
             owned.lastAt[held.bucket] = 0;
             owned.fingerprint[held.bucket] = 0;
+            owned.occupied[held.bucket] = 0;
           }
+          held.fails = 0;
+          held.unlockAt = 0;
+          held.lastAt = now();
+          entries.set(key, held);
+          trim(held.lastAt);
           return;
         }
         const finishedAt = now();
