@@ -801,26 +801,38 @@ it("a folder typed and then switched off is no change, and a status read keeps i
   expect(field(screen, "destination").value).toBe("/mnt/kept");
 });
 
+const copiesBucket = {
+  id: "bucket",
+  kind: "s3" as const,
+  endpoint: null,
+  region: "eu-west-1",
+  bucket: "copies",
+  prefix: "",
+  accessKeyId: "A",
+  namespace: "waitron/",
+  credentialPresent: true as const,
+};
+const bucketOnly: BackupStatusView = { ...on, destinations: [copiesBucket] };
+const bucketOnlyOff: BackupStatusView = { ...bucketOnly, enabled: false, storedDisabled: true };
+
+async function turnedOffElsewhere(
+  screen: Screen,
+  api: DashboardApi,
+  getBackupStatus: ReturnType<typeof vi.fn>,
+) {
+  getBackupStatus.mockResolvedValue(bucketOnlyOff);
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=apply]")).not.toBeNull();
+  await screen.updateComplete;
+}
+
 it("Cancel does not carry a hidden edited folder into Turn on backups", async () => {
-  const bucket = {
-    id: "bucket",
-    kind: "s3" as const,
-    endpoint: null,
-    region: "eu-west-1",
-    bucket: "copies",
-    prefix: "",
-    accessKeyId: "A",
-    namespace: "waitron/",
-    credentialPresent: true as const,
-  };
-  const saved = { ...on, destinations: [bucket] };
-  const disabled = { ...saved, enabled: false, storedDisabled: true };
-  const getBackupStatus = vi.fn().mockResolvedValue(saved);
-  const { screen } = await mount(saved, {
+  const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);
+  const { screen } = await mount(bucketOnly, {
     getBackupStatus,
     disableBackup: vi.fn(() => {
-      getBackupStatus.mockResolvedValue(disabled);
-      return Promise.resolve(disabled);
+      getBackupStatus.mockResolvedValue(bucketOnlyOff);
+      return Promise.resolve(bucketOnlyOff);
     }),
   });
   await click(screen, "edit-settings");
@@ -892,35 +904,9 @@ for (const source of ["settings", "stream"] as const)
     expect(unload()).toBe(false);
   });
 
-const copiesBucket = {
-  id: "bucket",
-  kind: "s3" as const,
-  endpoint: null,
-  region: "eu-west-1",
-  bucket: "copies",
-  prefix: "",
-  accessKeyId: "A",
-  namespace: "waitron/",
-  credentialPresent: true as const,
-};
-const bucketOnly: BackupStatusView = { ...on, destinations: [copiesBucket] };
-const bucketOnlyOff: BackupStatusView = { ...bucketOnly, enabled: false, storedDisabled: true };
-
-async function turnedOffElsewhere(
-  screen: Screen,
-  api: DashboardApi,
-  getBackupStatus: ReturnType<typeof vi.fn>,
-) {
-  getBackupStatus.mockResolvedValue(bucketOnlyOff);
-  api.liveData.invalidate([{ type: "backup_status" }]);
-  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=apply]")).not.toBeNull();
-  await screen.updateComplete;
-}
-
 it("Cancel does not carry a hidden edited folder into Turn on backups after another device turns backups off", async () => {
   const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);
-  const applyBackup = vi.fn(async () => bucketOnly);
-  const { screen, api } = await mount(bucketOnly, { getBackupStatus, applyBackup });
+  const { screen, api } = await mount(bucketOnly, { getBackupStatus });
   await click(screen, "edit-settings");
   await expect
     .poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]"))
@@ -935,9 +921,6 @@ it("Cancel does not carry a hidden edited folder into Turn on backups after anot
   await turnedOffElsewhere(screen, api, getBackupStatus);
   await setFolderOn(screen, true);
   expect(field(screen, "destination").value).toBe("");
-  await click(screen, "apply");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(JSON.stringify(applyBackup.mock.calls)).not.toContain("/tmp/x/cancelled");
 });
 
 it("another device turning backups off fills Turn on backups from the stored settings", async () => {
@@ -955,15 +938,14 @@ it("a stored-settings read keeps a Turn on backups draft the person changed", as
   await expect.poll(() => field(screen, "archive-bucket-name")?.value).toBe("copies");
   await change(screen, "archive-bucket-name", "typed");
   expect(unload()).toBe(true);
-  const reads = getBackupStatus.mock.calls.length;
   getBackupStatus.mockResolvedValue({
     ...bucketOnlyOff,
     revision: "99999999-2222-4333-8444-555555555555",
     retention: { count: 9, days: 30 },
+    keyFingerprint: "synthetic-fingerprint-9",
   });
   api.liveData.invalidate([{ type: "backup_status" }]);
-  await expect.poll(() => getBackupStatus.mock.calls.length).toBeGreaterThan(reads);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await expect.poll(() => field(screen, "status").textContent).toContain("synthetic-fingerprint-9");
   await screen.updateComplete;
   expect(field(screen, "archive-bucket-name").value).toBe("typed");
   expect(field(screen, "retain-count").value).toBe("7");

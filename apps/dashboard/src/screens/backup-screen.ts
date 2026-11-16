@@ -896,8 +896,8 @@ export class BackupScreen extends LitElement {
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary) return;
-    // Until `updated()` replaces it, a scope from before backups went off holds the old form's
-    // baseline, so it reads as changed, and the person has no Turn on draft to keep.
+    // A scope tracked for another form, or none yet, says nothing about a Turn on draft: another
+    // form's baseline can read as changed though nothing was typed.
     const freshForm = afterTurnOff || this.#archiveMode !== this.#archiveValue().mode;
     if (!freshForm) {
       if (this.#archiveScope?.isDirty()) return;
@@ -910,14 +910,14 @@ export class BackupScreen extends LitElement {
     this.#prefillAndCommit(s, !freshForm);
   }
 
-  /** An automatic refill keeps a switched-off folder's text when the refilled folder is off too:
-   * that text never makes the draft differ, so the unchanged-draft check before a refill cannot
-   * protect it. */
-  #prefillAndCommit(s: BackupStatusView, automatic: boolean): void {
+  /** A refill of the Turn on form already showing keeps a switched-off folder's text when the
+   * refilled folder is off too: that text never makes the draft differ, so the unchanged-draft
+   * check before a refill cannot protect it. */
+  #prefillAndCommit(s: BackupStatusView, keepHiddenFolder: boolean): void {
     const hidden = this.folderOn ? null : this.folder;
     this.#prefillFromStatus(s);
     this.#archiveScope?.commit(this.#archiveValue());
-    if (automatic && hidden !== null && !this.folderOn) this.folder = hidden;
+    if (keepHiddenFolder && hidden !== null && !this.folderOn) this.folder = hidden;
   }
 
   /** A write's answer is the box's state after it; a status read begun before it is taken may be
