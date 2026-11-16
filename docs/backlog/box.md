@@ -11,12 +11,10 @@ that measures elapsed time on a steady clock. Start by listing every site
 (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
 applies today; behaviour is kept site by site. Raised by #2331's review.
 
-**First slice, SIGNIN-STEADY-CLOCK:** only `createPinThrottle`, `createPasswordThrottle`,
-`createPasswordResetCooldown`, `createAccountActionRateLimiter` and `createEnrolRateLimiter`.
-[Build plan](../superpowers/plans/2026-11-16-signin-steady-clock.md), cleared by the watcher
-on 2026-11-16 at 16:37 after Claude's source review and driver corrections. This records no owner
-plan approval and no implementation completion. When
-the slice is built, remove its rows from the open inventory and narrow this entry to what remains.
+**Still open:** apply the shared elapsed-time source to the remaining sites below, after deciding
+which rules measure an elapsed wait and which compare persisted dates, ordering or calendar time.
+The sign-in/account limiter families are outside this open inventory; the persisted PIN helper
+exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ### Inventory scope
 
@@ -26,7 +24,9 @@ verification. Reproduced the driver's search with
 93 matching lines in 58 files, byte-for-byte equal to the supplied `site-search.txt` receipt.
 There are **41 files with clock-related code**, four related prose/type-description files, ten
 textual false-positive files and three support files. Multiple guards in one file share a row;
-the rules below name each. This is an inventory of this search, not a claim that it discovers
+the original first slice accounted for `pin-throttle.ts`, `password-throttle.ts`,
+`account-rate-limit.ts` and `enrol-rate-limit.ts`; their open rows have been removed.
+The rules below name the remaining sites. This is an inventory of this search, not a claim that it discovers
 every timer: split-line wording and guards with other words can be missed.
 
 The unrestricted root search, with the same test exclusions, has 475 matching lines in 248 files
@@ -35,56 +35,9 @@ at that commit. Its additional 382 lines are 378 documentation matches and four 
 history, policy, version ordering or backward compatibility, not additional elapsed-time guards.
 The tables below account for the matched files and their exclusions.
 
-### First slice: current rules and clock inputs
-
-| Source | Current rule to preserve except for wall-clock steps |
-| --- | --- |
-| `packages/identity/src/pin-throttle.ts:62–179` | `Date.now` by default, injectable `opts.now`; three free failures, then 2/4/8/16/32/60-second waits, 15-minute idle reset, 2,000 pairs per slot and 60-second full-slot refusal. `pinThrottleIdle` also forgets a last touch more than 60 seconds ahead. Entry access, capacity sweep and read-only probe use it; sweeps continue past a still-live future entry. `check` refreshes an admitted held entry, not a refused one. |
-| `packages/provisioning/src/password-throttle.ts:62–213` | Injectable positional `now`, default `Date.now`; reuses PIN idle/unlock/retry rules for tracked entries, owned buckets and shared overflow. Three free failures, same capped waits/15-minute reset; at most 1,000 tracked addresses except those still in flight, which cannot be forgotten and refuse overlap with one second. Hashes normalized addresses under a process secret. Success clears its own history, never shared overflow; non-credential errors do not add failures. Fold/access/sweep/probe all apply the future-stamp rule. |
-| `apps/server/src/account-rate-limit.ts:15–59` | Two families, each injectable positional `now`, default `Date.now`. Reset/invitation spacing deletes a deadline at/before now or more than 60 seconds ahead; permits one call per normalized, hashed key per minute. The fixed-window flood guard resets at 60,000 ms or whenever now precedes its start; permits 30 per hashed subject and 300 globally, then `account_action.rate_limited`. |
-| `apps/server/src/enrol-rate-limit.ts:30–59` | Injectable `opts.now`, default `Date.now`; one counter per mounted surface. Allows 30 attempts per 60,000-ms window, refuses further attempts with `device.join_rate_limited`, and resets at the window boundary or on any reading before its start. |
-
-Constructor/export search followed through `packages/identity/src/index.ts:164–168`,
-`packages/provisioning/src/index.ts:102` and `apps/server/src/password-throttle.ts:1`:
-
-- PIN instances: `apps/server/src/till-api.ts:1292` and `payments-api.ts:418` take an optional
-  complete throttle from dependencies, otherwise construct the default. They do not pass their
-  fiscal/date clock into it. Test support in `testing/zone-payment-venue.ts:53` also uses the default.
-- Password defaults: `apps/server/src/management-api.ts:723–724`, `me-api.ts:129,148`,
-  `promote-api.ts:89`, `mirror-bundle-api.ts:127`, `setup-api.ts:1137`, `carry-on.ts:186`,
-  `handover-preparation.ts:167`, `handover-activation.ts:196`, `handover-emergency-api.ts:235`
-  and `boot.ts:4269`. Some accept a complete injected throttle; none supplies a wall-clock
-  function. `testing/two-box-takeover.ts:125` uses the default too. No call-site edit is proposed.
-- `packages/provisioning/src/first-setup-owner.ts:137–155,238–272` already defaults its `now`
-  to `performance.now()`. It passes that exact function to `createPasswordThrottle(now)`;
-  only `node-key-reissue` reconfirmation begins/finishes that throttle. The same function stamps
-  `expires: now() + 300000` on in-memory grants for all purposes and checks `now() < expires`.
-  Keep this injection and file unchanged. `first-setup-owner.test.ts:166–183` already checks
-  five elapsed minutes with wall time moved backwards; `first-setup-node-key.test.ts:473–485`
-  checks reissue throttling without changing the retained key. These were read, not run.
-- Account families: `apps/server/src/management-api.ts:725–730,906–909,945,972,1215,1306,1326`.
-  Password-reset spacing receives email; invitation spacing uses the existing person-id key.
-  Flood guards receive subjects/tokens and may be injected whole through dependencies. All default
-  constructions omit the clock. Keep their key selection, acknowledgements and route refusals.
-- Enrol defaults: `apps/server/src/device-api.ts:254`, `print-api.ts:485`,
-  `node-enrol-api.ts:41`; each accepts a whole test limiter or makes its own default.
-- **Persisted exception:** `apps/server/src/handover-emergency-api.ts:435–452` reads
-  `lastFailedAt` from `node.db`, compares it with `Date.now()`, and calls exported
-  `pinThrottleIdle`, `pinThrottleUnlockAt` and `pinThrottleRetryAfterSeconds`. Keep all three
-  exports' existing wall-clock arithmetic, values and boundary comparisons. Only in-memory
-  entry/bucket idle checks stop using the exported wall-clock idle predicate. This lane does not
-  edit that route or its persisted failure counter.
-
-`packages/shared/src/timing.ts` classifies kitchen age, `duration-format.ts` formats durations,
-and its time-zone/business-day helpers handle calendar time. None supplies an elapsed-time source
-in the shared-source search. `packages/fiscal/src/clock.ts` has an injected monotonic source but
-also trusted dates, persisted anchors and confidence. Existing direct `performance.now()` defaults
-in first-setup owner and `apps/server/src/clock-correction.ts:121` support a small source function,
-not importing the fiscal clock into these limiters. No additional injection machinery is proposed.
-
 ### Other code sites: retain for later scope decisions
 
-These 37 files remain outside the first slice. A persisted date, ordering invariant or calendar
+These 37 files from the source snapshot remain open. A persisted date, ordering invariant or calendar
 rule is not made process-relative by replacing its clock read. Later slices must choose their
 scope and preserve the rules shown here before proposing any conversion.
 
@@ -1414,6 +1367,16 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+### Steady clocks and persisted sign-in failure times (2026-11-16)
+
+The first sign-in/account slice uses a shared `steadyNow` for process-local elapsed waits.
+`pinThrottleIdle`, `pinThrottleUnlockAt` and `pinThrottleRetryAfterSeconds` retain their wall-clock
+meaning: `handover-emergency-api.ts` uses them with failure timestamps stored in `node.db` across
+restarts. Do not convert those persisted values to process-relative time.
+`first-setup-owner.ts` keeps its existing single steady-clock injection for node-key reissue
+throttling and its five-minute grants. [Plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
+
 
 - **Only the bucket copy's Test and Save on the Backups screen delete their test file the way the
   daily clean-up does, several files in one request** (campaign watcher, 2026-11-16 12:51, lane B
