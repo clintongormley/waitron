@@ -131,6 +131,11 @@ declare module "@waitron/shared" {
     /** A production start of a bundle whose release stamp names no release version. */
     "server.unreleased_build": Record<string, never>;
     /**
+     * A restore's start is waiting to confirm the box's time before it names new invoice series.
+     * `confirmed`: the waiting app holds a confirmation the start has not yet refused.
+     */
+    "server.waiting_for_clock": { confirmed: boolean };
+    /**
      * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE,
      * never the value: an operator who pasted a secret into the wrong variable must not have it land
      * in an error's params.

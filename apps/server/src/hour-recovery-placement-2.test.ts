@@ -22,12 +22,15 @@ import { invoiceSeries, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { AppError } from "@waitron/shared";
 import { runRestoreHooks, restoreFromArtifact } from "./restore.js";
 import {
+  createInteractiveRecoveryPreparation,
   createSelectedRecoveryPreparation,
   createSetupRecoveryPreparation,
 } from "./recovery-preparation.js";
+import { measureDeviceReading, type ModuleOperationHost } from "@waitron/module";
 import { buildManifest } from "./backup-manifest.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
@@ -368,6 +371,98 @@ describe("selected-hour admission before archive placement", () => {
       ).toEqual([]);
     },
   );
+
+  it.each([true, false])(
+    "a staged restore's start with no internet clock takes its waiting page's reading: %s",
+    async (supplied) => {
+      const f = await archiveHost();
+      await stageRestoreRequest(f.roots.stateDir, {
+        environment: "preproduction",
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: {
+          selectedSourceId: f.options.selected.sourceId,
+          oldBoxGone: true,
+          soleRecovery: true,
+        },
+        artifact: f.restore.artifact,
+        recoveryKey: "archive password",
+      });
+      const received = { wall: Date.now(), monotonic: performance.now() };
+      const issued = { wall: received.wall - 200, monotonic: received.monotonic - 200 };
+      const reading = measureDeviceReading(issued, received.wall, received, false);
+      boot.id = "after-switch-off";
+      const placed = runStagedRestore({
+        ...f.restore,
+        ...(supplied
+          ? {
+              startClockConfirmation: () => ({
+                reading,
+                boot: { bootId: boot.id, uptimeMs: received.monotonic, wallMs: received.wall },
+              }),
+            }
+          : {}),
+      });
+      if (supplied) await expect(placed).resolves.toBe(true);
+      else
+        await expect(placed).rejects.toMatchObject({
+          code: "sif.allocation_invalid",
+          params: { reason: "second_clock_missing" },
+        });
+    },
+  );
+
+  it("a staged restore's start tells its waiting page when the chosen minute was issued", async () => {
+    const f = await archiveHost();
+    await stageRestoreRequest(f.roots.stateDir, {
+      environment: "preproduction",
+      recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+      nodeRecoverySecret: key.secret,
+      recoveryContext: {
+        selectedSourceId: f.options.selected.sourceId,
+        oldBoxGone: true,
+        soleRecovery: true,
+      },
+      artifact: f.restore.artifact,
+      recoveryKey: "archive password",
+    });
+    const noted: number[] = [];
+    // Switched off since the page's select, so the start waits for its time.
+    boot.id = "after-switch-off";
+    await expect(
+      runStagedRestore({
+        ...f.restore,
+        startClockChosenMinute: (issuedAtMs) => void noted.push(issuedAtMs),
+      }),
+    ).rejects.toMatchObject({ params: { reason: "second_clock_missing" } });
+    const { identity } = f.outcome as unknown as { identity: string };
+    expect(noted).toHaveLength(1);
+    expect(encodeMinuteIdentity(noted[0]!)).toBe(identity);
+  });
+
+  it("the restore page's preparation gives the module no start confirmation", async () => {
+    const f = await interactiveHost();
+    const hosts: ModuleOperationHost[] = [];
+    const modules = ALL_MODULES.map((module) => {
+      const operations = module.operations;
+      const configure = operations?.configure;
+      if (operations === undefined || configure === undefined) return module;
+      return {
+        ...module,
+        operations: {
+          ...operations,
+          configure: (host: ModuleOperationHost) => {
+            hosts.push(host);
+            return configure(host);
+          },
+        },
+      };
+    });
+    const session = createInteractiveRecoveryPreparation({ ...f.options, modules });
+    await f.invoke({ action: "clock-challenge" }, {}, session);
+    expect(hosts.length).toBeGreaterThan(0);
+    expect(hosts.every((host) => host.startClockConfirmation === undefined)).toBe(true);
+  });
 
   it.each(["bad source", "coerced old-box flag", "coerced sole flag", "missing key"])(
     "refuses staged recovery context with %s before writing a request",

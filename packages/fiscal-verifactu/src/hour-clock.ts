@@ -1,3 +1,6 @@
+// Not the package index: setup/clock-wait.ts puts this file in the setup and dashboard bundles.
+import { AGREEMENT_MS } from "@waitron/module/src/device-clock.js";
+export { AGREEMENT_MS };
 export interface SetupBrowserClockSample {
   readonly challengeId: string;
   readonly instantMs: number;
@@ -36,7 +39,6 @@ export interface HourClockDecision {
 }
 
 const decisions = new WeakSet<HourClockDecision>();
-export const AGREEMENT_MS = 30_000;
 const MINUTE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
 const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;

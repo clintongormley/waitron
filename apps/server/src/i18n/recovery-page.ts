@@ -320,17 +320,18 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
   },
   "sif.allocation_invalid": {
-    // Chosen by code alone, so it covers every reason the code carries at start, a clock
-    // disagreement included.
+    // Chosen by code alone. Three of a restore's clock refusals wait in `runEntry` instead. The
+    // discard choice is drawn only when the restore holds administrator verifiers, over HTTPS
+    // (`renderRestoreDiscard`).
     "en-GB": {
       title: "The box could not make its new invoice series.",
       action:
-        "It checks its time against the internet first. Let the box keep its time over the internet, then press “Retry a normal boot”.",
+        "Press “Retry a normal boot” to try again. Where this page offers “Throw this restore away”, that throws this restore away instead, so you can restore again or set up this box.",
     },
     "es-ES": {
       title: "El equipo no pudo crear sus nuevas series de facturas.",
       action:
-        "El equipo comprueba primero su hora con internet. Deja que el equipo se ponga en hora por internet y pulsa «Reintentar un arranque normal».",
+        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este equipo.",
     },
   },
   "server.config_missing": {

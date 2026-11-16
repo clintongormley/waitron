@@ -184,6 +184,7 @@ it.each(["direct", "supervised"])(
           readRecoveryState,
           writeRecoveryState,
           startServer: async (env, base) => (server = await startServer(env, base)),
+          serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
           serveRecovery: async () => {
             throw new Error("launch entered recovery");
           },

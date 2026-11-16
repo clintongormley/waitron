@@ -24,9 +24,10 @@ import {
 import { generateKeyPairSync } from "node:crypto";
 import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import { attachmentPath } from "./restore-flow.js";
 import { sql, type SQL } from "drizzle-orm";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { openVenueDatabase, type VenueHolder } from "@waitron/db";
@@ -43,7 +44,15 @@ import { escapeHtml } from "./html-page.js";
 import { OPERATOR_WORDS } from "./i18n/recovery-page.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
-import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
+import {
+  assertNotAhead,
+  recoveryTlsFiles,
+  runEntry,
+  serveRecovery,
+  serveStartClockWaiting,
+  type EntryDeps,
+} from "./node-entry.js";
+import type { StagedRestoreDeps } from "./restore-request.js";
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 
@@ -65,6 +74,7 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
     withRecoveryLock: <T>(_stateDir: string, body: () => Promise<T>) => body(),
     startServer: vi.fn<StartServer>(() => Promise.resolve({ close: () => Promise.resolve() })),
     serveRecovery: vi.fn(() => Promise.resolve()),
+    serveStartClockWaiting: vi.fn(() => Promise.resolve({ close: () => Promise.resolve() })),
     installShutdownHandlers: vi.fn(),
     scheduleStayedUp: vi.fn(),
     log: vi.fn(),
@@ -2137,6 +2147,29 @@ describe("serveRecovery's bind failure", () => {
   });
 });
 
+describe("serveStartClockWaiting", () => {
+  it("listens through serveRecovery and stops listening when closed", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-waiting-"));
+    const log = vi.fn();
+    const served = await serveStartClockWaiting(new Hono(), { stateDir, port: 0, log });
+    const listening = log.mock.calls.find((call) => call[1] === "recovery.listening");
+    const port = (listening![2] as { port: number }).port;
+    const connect = () =>
+      new Promise<void>((resolve, reject) => {
+        const socket = new Socket();
+        socket.once("connect", () => {
+          socket.destroy();
+          resolve();
+        });
+        socket.once("error", reject);
+        socket.connect(port, "127.0.0.1");
+      });
+    await connect();
+    await served.close();
+    await expect(connect()).rejects.toMatchObject({ code: "ECONNREFUSED" });
+  });
+});
+
 describe("serveRecovery's landing listener", () => {
   it("starts the landing listener beside the recovery server and closes it on teardown", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-landing-"));
@@ -2889,3 +2922,442 @@ it.each(["recovery", "disk-full", "refused"] as const)(
     }
   },
 );
+
+describe("a restore's start that waits to confirm its time", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const BEFORE: RecoveryState = {
+    failures: 1,
+    level: "normal",
+    lastErrorCode: "unknown",
+    lastFailureAt: "2026-11-12T10:00:00.000Z",
+    clears: 0,
+  };
+  const AT = new Date("2026-11-13T10:00:00.000Z");
+  const refusal = (reason: string) => new AppError("sif.allocation_invalid", { reason });
+
+  /**
+   * A start whose staged restore refuses with each of `refusals` in turn, then places the copy.
+   * `called` resolves once the first try has been made, so the fake clock is driven only after it.
+   */
+  async function waitingStart(
+    refusals: readonly string[],
+    over: Partial<EntryDeps> = {},
+    duringTry: (n: number, request: StagedRestoreDeps) => Promise<void> = async () => {},
+  ) {
+    const volume = recoveryVolume(BEFORE);
+    const timeService = { synchronised: false };
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-wait-"));
+    const order: string[] = [];
+    const tries: { at: number; reading: unknown; late?: unknown }[] = [];
+    let served: Hono | undefined;
+    let firstTry: () => void = () => {};
+    const called = new Promise<void>((resolve) => (firstTry = resolve));
+    const runStagedRestore = vi.fn(async (request: StagedRestoreDeps) => {
+      tries.push({ at: performance.now(), reading: request.startClockConfirmation?.() ?? null });
+      firstTry();
+      const n = tries.length;
+      await duringTry(n, request);
+      // As the series check does: it reads the confirmation partway through the try.
+      tries[n - 1]!.late = request.startClockConfirmation?.() ?? null;
+      const reason = refusals[n - 1];
+      if (reason !== undefined) throw refusal(reason);
+      order.push("placed");
+      return true;
+    });
+    const close = vi.fn(async () => {
+      order.push("waiting closed");
+    });
+    const d = deps({
+      ...volume.deps,
+      logDir,
+      // Real, so the waiting page can read a staged key from it.
+      stateDir: await mkdtemp(join(tmpdir(), "wt-entry-wait-state-")),
+      now: () => AT,
+      runStagedRestore,
+      timeServiceSynchronised: vi.fn(async () => timeService.synchronised),
+      serveStartClockWaiting: vi.fn(async (app: Hono) => {
+        served = app;
+        order.push("waiting served");
+        return { close };
+      }),
+      startServer: vi.fn<StartServer>(async () => {
+        order.push("startServer");
+        return { close: () => Promise.resolve() };
+      }),
+      ...over,
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const started = performance.now();
+    const settled = runEntry(d);
+    settled.catch(() => {});
+    await called;
+    return {
+      d,
+      volume,
+      logDir,
+      order,
+      runStagedRestore,
+      close,
+      settled,
+      /** Moves the fake clock to `ms` after the start. */
+      advanceTo: (ms: number) => vi.advanceTimersByTimeAsync(started + ms - performance.now()),
+      /** Tries made so far, by time after the start. */
+      triedAt: () => tries.map((one) => one.at - started),
+      tries,
+      app: () => served!,
+      timeService,
+    };
+  }
+
+  /** A time confirmed through the waiting page with the staged key, `aheadMs` from the box's
+   * own wall clock. */
+  async function sendReading(
+    start: { d: EntryDeps; app: () => Hono },
+    aheadMs: number,
+    path: "confirm" | "set" = "confirm",
+  ) {
+    const keyPath = attachmentPath(start.d.stateDir, "node-key");
+    await mkdir(dirname(keyPath), { recursive: true });
+    await writeFile(keyPath, "staged-node-key");
+    const post = (path: string, body: object) =>
+      start.app().request(
+        `/restore-clock/${path}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key: "staged-node-key", ...body }),
+        },
+        // A phone on the venue's network, not the box's own screen.
+        { incoming: { socket: { remoteAddress: "192.0.2.10", remoteFamily: "IPv4" } } },
+      );
+    const challenge = (await (await post("challenge", {})).json()) as { id: string };
+    const answer = await post(path, {
+      challengeId: challenge.id,
+      instantMs: Date.now() + aheadMs,
+    });
+    const body = (await answer.json()) as { result?: string; status?: string; reason?: string };
+    return path === "confirm" ? body.result : body;
+  }
+
+  /** What a start that placed its copy at once leaves behind, for comparison. */
+  async function unwaitedStart() {
+    const volume = recoveryVolume(BEFORE);
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-wait-"));
+    await runEntry(
+      deps({ ...volume.deps, logDir, now: () => AT, runStagedRestore: vi.fn(async () => true) }),
+    );
+    return { state: volume.current(), events: await logEvents(logDir) };
+  }
+
+  it("waits through three refusals for a second clock, uncounted, then places the copy and starts", async () => {
+    const start = await waitingStart([
+      "second_clock_missing",
+      "second_clock_missing",
+      "second_clock_missing",
+    ]);
+    start.timeService.synchronised = true;
+    await start.advanceTo(180_000);
+    await start.settled;
+    const unwaited = await unwaitedStart();
+
+    expect(start.runStagedRestore).toHaveBeenCalledTimes(4);
+    expect(start.volume.current()).toEqual(unwaited.state);
+    expect(await logEvents(start.logDir)).toEqual(unwaited.events);
+    const waits = vi
+      .mocked(start.d.log)
+      .mock.calls.filter((call) => call[1] === "server.start_waiting_for_clock");
+    expect(waits).toEqual([
+      ["warn", "server.start_waiting_for_clock", { reason: "second_clock_missing" }],
+      ["warn", "server.start_waiting_for_clock", { reason: "second_clock_missing" }],
+      ["warn", "server.start_waiting_for_clock", { reason: "second_clock_missing" }],
+    ]);
+    expect(start.order).toEqual(["waiting served", "placed", "waiting closed", "startServer"]);
+    expect(start.d.serveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("counts a refusal that is not about the clock, and writes it to the start-failure log", async () => {
+    const start = await waitingStart(["history_invalid"]);
+    // Past a look the time service answers, so a start that waited wrongly settles placed and
+    // fails here quickly.
+    start.timeService.synchronised = true;
+    await start.advanceTo(60_000);
+    await expect(start.settled).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "history_invalid" },
+    });
+    expect(start.volume.current()).toMatchObject({
+      failures: BEFORE.failures + 1,
+      lastErrorCode: "sif.allocation_invalid",
+    });
+    expect((await logEvents(start.logDir)).map((line) => line.event)).toEqual([
+      "server.boot_started",
+      "server.boot_failed",
+    ]);
+    expect(start.d.serveStartClockWaiting).not.toHaveBeenCalled();
+    expect(start.runStagedRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a wait whose page cannot be served, so the box can still reach the start-failure page", async () => {
+    const start = await waitingStart(["second_clock_missing"], {
+      serveStartClockWaiting: vi.fn(() =>
+        Promise.reject(new AppError("server.listen_failed", { port: 443, code: "EADDRINUSE" })),
+      ),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(60_000);
+    await expect(start.settled).rejects.toMatchObject({ code: "server.listen_failed" });
+    expect(start.volume.current()).toMatchObject({
+      failures: BEFORE.failures + 1,
+      lastErrorCode: "server.listen_failed",
+    });
+    expect((await logEvents(start.logDir)).map((line) => line.event)).toEqual([
+      "server.boot_started",
+      "server.boot_failed",
+    ]);
+    expect(start.runStagedRestore).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a refusal that is not about the clock after a wait, closing the waiting page", async () => {
+    const start = await waitingStart(["second_clock_missing", "history_invalid"]);
+    start.timeService.synchronised = true;
+    await start.advanceTo(120_000);
+    await expect(start.settled).rejects.toMatchObject({ params: { reason: "history_invalid" } });
+    expect(start.runStagedRestore).toHaveBeenCalledTimes(2);
+    expect(start.volume.current()).toMatchObject({
+      failures: BEFORE.failures + 1,
+      lastErrorCode: "sif.allocation_invalid",
+    });
+    expect(start.close).toHaveBeenCalledTimes(1);
+    expect((await logEvents(start.logDir)).map((line) => line.event)).toEqual([
+      "server.boot_started",
+      "server.boot_failed",
+    ]);
+  });
+
+  it("keeps the refusal, not a failed close of the waiting page, as the start's failure", async () => {
+    const start = await waitingStart(["second_clock_missing", "history_invalid"], {
+      serveStartClockWaiting: vi.fn(async () => ({
+        close: () => Promise.reject(new Error("EBADF")),
+      })),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(120_000);
+    await expect(start.settled).rejects.toMatchObject({ params: { reason: "history_invalid" } });
+    expect(start.volume.current().lastErrorCode).toBe("sif.allocation_invalid");
+    expect(start.d.log).toHaveBeenCalledWith("warn", "server.start_waiting_close_failed", {
+      errorCode: "unknown",
+    });
+  });
+
+  it.each([
+    ["second_clock_missing", true],
+    ["clock_disagreement", true],
+    ["clock_corrected", true],
+    ["clock_stale", false],
+    ["clock_unconfirmed", false],
+    ["minute_not_later", false],
+  ] as const)("a %s refusal waits: %s", async (reason, waits) => {
+    const start = await waitingStart([reason]);
+    start.timeService.synchronised = true;
+    if (waits) {
+      await start.advanceTo(60_000);
+      await start.settled;
+      expect(start.runStagedRestore).toHaveBeenCalledTimes(2);
+      expect(start.volume.current().failures).toBe(BEFORE.failures + 1);
+      expect(start.volume.current().lastErrorCode).toBe("server.boot_incomplete");
+    } else {
+      await start.advanceTo(60_000);
+      await expect(start.settled).rejects.toMatchObject({ params: { reason } });
+      expect(start.runStagedRestore).toHaveBeenCalledTimes(1);
+      expect(start.volume.current()).toMatchObject({
+        failures: BEFORE.failures + 1,
+        lastErrorCode: "sif.allocation_invalid",
+      });
+    }
+  });
+
+  it("with no confirmation and the time service never synchronised, never tries again", async () => {
+    const start = await waitingStart(["second_clock_missing"]);
+    await start.advanceTo(600_000);
+    expect(start.triedAt()).toEqual([0]);
+    expect(start.d.timeServiceSynchronised).toHaveBeenCalledTimes(40);
+    start.timeService.synchronised = true;
+    await start.advanceTo(615_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 615_000]);
+  });
+
+  it("tries again at the look that finds the time service synchronised", async () => {
+    const start = await waitingStart(["clock_corrected"]);
+    await start.advanceTo(40_000);
+    start.timeService.synchronised = true;
+    await start.advanceTo(44_999);
+    expect(start.triedAt()).toEqual([0]);
+    await start.advanceTo(45_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 45_000]);
+  });
+
+  it("tries again at the next look once a device's time agrees, handing that confirmation to the try", async () => {
+    const start = await waitingStart(["second_clock_missing"]);
+    await start.advanceTo(20_000);
+    expect(await sendReading(start, 0)).toBe("confirmed");
+    await start.advanceTo(29_999);
+    expect(start.triedAt()).toEqual([0]);
+    await start.advanceTo(30_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 30_000]);
+    expect(start.tries[0]!.reading).toBeNull();
+    expect(start.tries[1]!.reading).toMatchObject({ reading: { result: "usable" } });
+  });
+
+  it("drops the confirmation a refused try was handed, so the start asks again", async () => {
+    const start = await waitingStart(["second_clock_missing", "second_clock_missing"]);
+    await start.advanceTo(20_000);
+    await sendReading(start, 0);
+    await start.advanceTo(600_000);
+    expect(start.triedAt()).toEqual([0, 30_000]);
+    expect(await sendReading(start, 0)).toBe("confirmed");
+    await start.advanceTo(615_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 30_000, 615_000]);
+  });
+
+  it("keeps a confirmation made while a try runs, and tries with it at the next look", async () => {
+    let kept: () => void = () => {};
+    const made = new Promise<void>((resolve) => (kept = resolve));
+    const start = await waitingStart(
+      ["second_clock_missing", "second_clock_missing"],
+      {},
+      async (n) => {
+        if (n !== 2) return;
+        expect(await sendReading(start, 0)).toBe("confirmed");
+        kept();
+      },
+    );
+    await start.advanceTo(20_000);
+    await sendReading(start, 0);
+    await start.advanceTo(30_000);
+    await made;
+    await start.advanceTo(44_999);
+    expect(start.triedAt()).toEqual([0, 30_000]);
+    await start.advanceTo(45_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 30_000, 45_000]);
+    expect(start.tries[2]!.reading).not.toBe(start.tries[1]!.reading);
+    expect(start.tries[2]!.reading).toMatchObject({ reading: { result: "usable" } });
+  });
+
+  it("hands a try only the confirmation noted when it began, so a refusal drops exactly what it used", async () => {
+    let kept: () => void = () => {};
+    const made = new Promise<void>((resolve) => (kept = resolve));
+    const start = await waitingStart(
+      ["second_clock_missing", "second_clock_missing"],
+      {},
+      async (n) => {
+        if (n !== 2) return;
+        expect(await sendReading(start, 0)).toBe("confirmed");
+        kept();
+      },
+    );
+    await start.advanceTo(20_000);
+    await sendReading(start, 0);
+    await start.advanceTo(30_000);
+    await made;
+    await start.advanceTo(45_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 30_000, 45_000]);
+    expect(start.tries[1]!.late).toBe(start.tries[1]!.reading);
+    expect(start.tries[2]!.late).toBe(start.tries[2]!.reading);
+    expect(start.tries[2]!.late).not.toBe(start.tries[1]!.late);
+  });
+
+  it("keeps a confirmation made just after a refused try, and tries with it at the next look", async () => {
+    const start = await waitingStart(["second_clock_missing", "second_clock_missing"]);
+    await start.advanceTo(20_000);
+    await sendReading(start, 0);
+    await start.advanceTo(40_000);
+    expect(await sendReading(start, 0)).toBe("confirmed");
+    await start.advanceTo(45_000);
+    await start.settled;
+    expect(start.triedAt()).toEqual([0, 30_000, 45_000]);
+  });
+
+  it("does not try for a device whose time differs", async () => {
+    const start = await waitingStart(["clock_disagreement"]);
+    await start.advanceTo(20_000);
+    expect(await sendReading(start, 120_000)).toBe("differs");
+    await start.advanceTo(600_000);
+    expect(start.triedAt()).toEqual([0]);
+    start.timeService.synchronised = true;
+    await start.advanceTo(615_000);
+    await start.settled;
+  });
+
+  it("the waiting page sets no time earlier than the minute the try was told was chosen", async () => {
+    const chosenMs = Date.now() + 600_000;
+    const setter = Object.assign(
+      vi.fn(async () => ({ status: "set" as const })),
+      { writePending: async () => {} },
+    );
+    const start = await waitingStart(
+      ["second_clock_missing"],
+      { startClockSetter: () => setter },
+      async (_n, request) => {
+        request.startClockChosenMinute?.(chosenMs);
+      },
+    );
+    await start.advanceTo(1_000);
+    expect(await sendReading(start, 0, "set")).toEqual({ status: "refused", reason: "later" });
+    expect(setter).not.toHaveBeenCalled();
+    expect(await sendReading(start, 660_000, "set")).toEqual({ status: "set" });
+    expect(setter).toHaveBeenCalledTimes(1);
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await start.settled;
+  });
+
+  /** A clock setter standing in for the restore page's, whose `writePending` is `notePending`. */
+  const setterWith =
+    (notePending: () => Promise<void>): EntryDeps["startClockSetter"] =>
+    () =>
+      Object.assign(
+        vi.fn(async () => ({ status: "refused" as const, reason: "unverified" as const })),
+        { writePending: notePending },
+      );
+
+  it("notes a clock step still unnoted after the waiting page closes, before the server starts", async () => {
+    const start = await waitingStart(["second_clock_missing"], {
+      startClockSetter: setterWith(async () => void start.order.push("clock steps noted")),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await start.settled;
+    expect(start.order).toEqual([
+      "waiting served",
+      "placed",
+      "waiting closed",
+      "clock steps noted",
+      "startServer",
+    ]);
+  });
+
+  it("counts a start whose clock step cannot be noted, and starts no server", async () => {
+    const start = await waitingStart(["second_clock_missing"], {
+      startClockSetter: setterWith(() =>
+        Promise.reject(new AppError("setup.clock_step_unsaved", {}, { reason: "EIO" })),
+      ),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await expect(start.settled).rejects.toMatchObject({ code: "setup.clock_step_unsaved" });
+    expect(start.d.startServer).not.toHaveBeenCalled();
+    expect(start.volume.current()).toMatchObject({
+      failures: BEFORE.failures + 1,
+      lastErrorCode: "setup.clock_step_unsaved",
+    });
+  });
+});

@@ -129,6 +129,7 @@ describe("on a full disk, a restart", () => {
       readRecoveryState,
       writeRecoveryState,
       startServer: () => Promise.reject(new Error("a held setup must not start the server")),
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (app) => {
         served.push(app);
       },

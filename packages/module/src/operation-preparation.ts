@@ -4,6 +4,7 @@ import type { InitialSetupContext } from "./initial-setup.js";
 import type { WaitronModule } from "./module.js";
 import type { Database, Transaction } from "@waitron/db";
 import type { ProvisionedNode } from "./provisioning.js";
+import type { KeptClockConfirmation } from "./device-clock.js";
 import { AppError } from "@waitron/shared";
 import {
   moduleOperationFor,
@@ -80,6 +81,10 @@ export interface ModuleOperationHost {
    * absent, a restore's start carries no earlier choice.
    */
   readBoot?(): { ms: number; id: string | null };
+  /** A confirmation the restore page's key holder made while the restore's start waits. */
+  startClockConfirmation?(): KeptClockConfirmation | null;
+  /** Told when the minute the restore's start resumes was chosen; a device earlier sets nothing. */
+  startClockChosenMinute?(issuedAtMs: number): void;
   readPublicEvidence(
     binding: OperationBinding,
   ): Promise<{ trust: unknown; current: unknown } | undefined>;

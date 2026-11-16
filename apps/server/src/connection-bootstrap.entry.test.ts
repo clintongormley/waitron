@@ -271,6 +271,7 @@ it.each(
       clearReplacedDatabases: forbidden,
       assertNotAhead: forbidden,
       startServer: forbidden,
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (app, options) => {
         handle = await serveRecovery(app, options);
         closes.push(() => closeListener(handle!));
@@ -460,6 +461,7 @@ it("recovery respects operator TLS selected in the retained settings without exp
     writeRecoveryState: forbidden,
     loadBoxEnv: forbidden,
     startServer: forbidden,
+    serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
     serveRecovery: async (app, options) => {
       const server = await serveRecovery(app, options);
       closes.push(() => closeListener(server));
@@ -732,6 +734,7 @@ it.each([0, 1, 2])(
       clearReplacedDatabases: past,
       assertNotAhead: past,
       startServer: past,
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (_app, options) => {
         served.push(options);
       },

@@ -1003,7 +1003,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   confirms that start or during start-up; a Box administration holder's while the start waits or
   the clock reads before 28-10-2024), a Box administration holder's own device, the device showing
   the clock step of the setup page (under its owner's pass), the restore page (under its recovery
-  key or kit) or the handover page (signed in as a `node.manage` holder), when that person chooses
+  key or kit), the done screen or waiting page while that restore's start waits (under the node
+  recovery key) or the handover page (signed in as a `node.manage` holder), when that person chooses
   **This device** (owner, 2026-11-10; 2026-11-12) — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a
   second, is alerted and emailed (a step made before the venue exists, at its first full start that
@@ -1036,12 +1037,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   instead, we should always ask for confirmation, and that confirmation should be protected"; the
   conflict switch's proof is not owner-approved: the proposal the owner agreed named an
   administrator sign-in). A restore's start uses the restore page's choice while the box's boot id
-  is unchanged and its clock has not been stepped since. A minute whose name is already in a history the box reads is not taken. Its waits,
-  its other refusals and when a name can repeat:
+  is unchanged and its clock has not been stepped since. Otherwise it waits until the time service
+  synchronises or the node recovery key confirms again, held by the browser that pressed Restore
+  backup or typed on the waiting page. A minute whose name is already in a history the box reads is
+  not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
   Restore takes one source; working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/minute-selection-unknown-name
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name
   suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`,
   weaker than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a

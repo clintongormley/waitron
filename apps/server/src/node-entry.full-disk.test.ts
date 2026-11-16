@@ -48,6 +48,7 @@ function deps(
     ),
     withRecoveryLock: (<T>(_stateDir: string, body: () => Promise<T>) => body()) as Lock,
     startServer: vi.fn<StartServer>(() => Promise.resolve({ close: () => Promise.resolve() })),
+    serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
     serveRecovery: vi.fn<(app: Hono, opts: unknown) => Promise<void>>(() => Promise.resolve()),
     installShutdownHandlers: vi.fn(),
     scheduleStayedUp: vi.fn(),

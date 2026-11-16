@@ -205,6 +205,7 @@ it("sets up again after a box with its own identity throws away a placed restore
         server = await startServer(env, base);
         return server;
       },
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async () => {
         throw new Error("discarded restore still blocks setup");
       },

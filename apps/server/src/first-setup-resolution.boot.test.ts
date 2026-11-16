@@ -128,6 +128,7 @@ it.each([FRESH, { ...FRESH, level: "recovery" as const, failures: 3 }])(
       clearReplacedDatabases: forbidden,
       assertNotAhead: forbidden,
       startServer: forbidden,
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (surface) => {
         app = surface;
       },
@@ -457,6 +458,7 @@ async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }
       clearReplacedDatabases: async () => {},
       assertNotAhead: async () => {},
       startServer,
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (app, options) => {
         expect(options.port).toBe(3000);
         const server = await serveRecovery(app, options);
@@ -656,6 +658,7 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     writeRecoveryState: async () => {},
     loadBoxEnv: async (base) => base,
     startServer: stopped,
+    serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
     serveRecovery: async (app, options) => {
       expect(options.port).toBe(3000);
       const server = await serveRecovery(app, options);

@@ -460,6 +460,7 @@ export function placeCopyBoxes(deps: {
           return result.started;
         },
         assertNotAhead: overrides.assertNotAhead,
+        serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
         serveRecovery: async (app) => {
           result.page = await (await app.request("/")).text();
         },

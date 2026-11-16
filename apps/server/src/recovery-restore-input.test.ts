@@ -376,6 +376,7 @@ it.each(["marker", "file"])(
       },
       installShutdownHandlers: () => {},
       scheduleStayedUp: () => {},
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async () => {
         throw new Error("unexpected recovery page");
       },

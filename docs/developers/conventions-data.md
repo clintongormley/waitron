@@ -4472,6 +4472,48 @@ public production preparation API does not fall back to signed paper, Cloud rece
 emergency identities from environment files. Follow
 [recovering a box](../operations/hour-recovery.md).
 
+A restore's start whose placement is refused for its time (`sif.allocation_invalid` with
+`second_clock_missing`, `clock_disagreement` or `clock_corrected`) waits instead of failing: the
+start is not counted towards the start-failure page, and the box's usual address answers every
+page with a waiting page and every other request, apart from that page's own `/restore-clock/`
+routes, with 503 `server.waiting_for_clock`, whose `confirmed` says whether the waiting app holds a
+confirmation (`apps/server/src/start-clock-waiting.ts`; `start-clock-waiting.test.ts`, "says
+whether it holds a kept confirmation: none, kept, then dropped"); the listener serving it answers
+`/legal/*`, `/ca.crt` and `/setup/trust` ahead of it (`apps/server/src/recovery-listener.ts`). Every
+other refusal counts as
+before, and so does a wait whose page cannot be served (`apps/server/src/node-entry.test.ts`, "a %s
+refusal waits: %s" and "counts a wait whose page cannot be served, so the box can still reach the
+start-failure page").
+
+**The node recovery key confirms the time while the start waits (D-key).** After a successful
+restore the setup page keeps the node recovery key it sent, in memory only, and its done
+screen drops it once the server answers ready or the screen leaves the page
+(`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
+screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+"drops the node recovery key once its poll answers ready" and "drops the node recovery key once it
+leaves the page"). The waiting app's clock routes take that key in the body and compare it with the
+staged key file, refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
+(`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
+setting nothing"). The done screen shows both times with **Confirm the time** and **This device**;
+a browser that lost the key types it on the waiting page, which shows the same step
+(`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
+with both times and their dates"). A confirmation is kept only when the times agree within 30
+seconds, with the box's boot reading, and has no time limit (`start-clock-waiting.test.ts`,
+"confirm within 5 seconds that agrees is kept with the box's boot reading" and "keeps the
+confirmation however long the start takes to ask for it"); **This device** sets the box's clock
+through the restore page's setter, so the step is noted and alerted as there.
+
+**The start tries again only for a reason (D-wait).** The retry is a loop in `runEntry` in the same
+process. Every 15 seconds it looks for a confirmation kept since its last try or the time service
+answering synchronised, and either starts a try; with neither it never tries again
+(`node-entry.test.ts`, "tries again at the next look once a device's time agrees, handing that
+confirmation to the try", "tries again at the look that finds the time service synchronised" and
+"with no confirmation and the time service never synchronised, never tries again"). A try refused
+again with a confirmation drops it (the same file's "drops the confirmation a refused try was
+handed, so the start asks again"), the waiting answer's `confirmed` turns false, and the done screen
+asks again (`done-screen.test.ts`, "asks again when a poll after its confirmation says the server
+holds none").
+
 The one allocation outside the clock rule is the preproduction throwaway
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
 it, as does a Live setup through the setup page on a development box (`throwawayMarker`,

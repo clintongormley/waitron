@@ -188,3 +188,5 @@ export type {
   ModuleOperationHost,
 } from "./operation-preparation.js";
 export { configureModuleOperations } from "./operation-preparation.js";
+export type { ClockMoment, DeviceClockReading, KeptClockConfirmation } from "./device-clock.js";
+export { AGREEMENT_MS, measureDeviceReading } from "./device-clock.js";

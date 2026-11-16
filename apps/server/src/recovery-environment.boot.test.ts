@@ -111,6 +111,7 @@ async function recoveryFixture(
       assertNotAhead: async () => {},
       startServer,
       exit,
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async (app) => {
         surface = app;
       },
@@ -423,6 +424,7 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
         server = await bootServer(env, base);
         return server;
       },
+      serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
       serveRecovery: async () => {
         throw new Error("first setup was replaced by recovery");
       },

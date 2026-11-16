@@ -116,6 +116,7 @@ it.each(["archive", "bucket"] as const)(
         readRecoveryState,
         writeRecoveryState,
         startServer: async (loaded, base) => (server = await fixture.startServer(loaded, base)),
+        serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
         serveRecovery: async () => {
           throw new Error("unexpected diagnostic recovery");
         },

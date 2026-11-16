@@ -203,8 +203,15 @@ refuses, resolve its cause and choose **Compare the clocks again**. If the serve
 clocks differ, after **Proceed** the page shows the server's time and this device's and asks which is correct: **The
 server**, **This device** or **Both times are wrong**. **This device** sets the server's time from
 the device you are using, and the page carries on by itself. After either of the other two, correct
-this device's time, reconnect to the box, then choose **Compare the clocks again**. If the box then shows a page saying it could not make
-its new invoice series, let it keep its time over the internet and press **Retry a normal boot**.
+this device's time, reconnect to the box, then choose **Compare the clocks again**.
+
+If, after you choose the restore button, the server needs its time confirmed again, the page where
+you chose it shows the server's time and this device's: check that both are right, then choose
+**Confirm the time**, or **This device** if the server's time is wrong. If that page was closed, open
+any of the server's pages on a phone, computer or till on the venue's network and enter the selected
+backup's node recovery key from its paper to see the same step. The restore then carries on by
+itself. If the server instead shows a page saying it could not make its new invoice series, choose
+**Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 
 If the backup has no active administrator with a password, choose another backup.
 

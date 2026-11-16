@@ -557,9 +557,10 @@ describe("curated operator text", () => {
   // stopped itself reaches the page at once, and the generic line says only that Waitron could not
   // start; `sif.producer_unset`, `software_producer.invalid`, `sif.producer_invalid` and
   // `sif.producer_changed` because a retry of the same version and settings refuses again, and the
-  // generic line does not say what to change; `sif.allocation_invalid` because a restore placed
-  // after the restart is refused there when the box cannot read the internet clock, and Retry
-  // places it once it can; `node.state_missing` because Retry refuses again while the record is missing.
+  // generic line does not say what to change; `sif.allocation_invalid` because, though three of a
+  // restore's clock refusals wait in `runEntry` (`CLOCK_WAIT_REASONS`), its other refusals reach the
+  // page, and the generic line does not say what to do;
+  // `node.state_missing` because Retry refuses again while the record is missing.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -641,14 +642,14 @@ describe("curated operator text", () => {
     expect(english).toContain(escapeHtml("The box could not make its new invoice series."));
     expect(english).toContain(
       escapeHtml(
-        "It checks its time against the internet first. Let the box keep its time over the internet, then press “Retry a normal boot”.",
+        "Press “Retry a normal boot” to try again. Where this page offers “Throw this restore away”, that throws this restore away instead, so you can restore again or set up this box.",
       ),
     );
     const spanish = await pageFor("sif.allocation_invalid", undefined, SPANISH);
     expect(spanish).toContain(escapeHtml("El equipo no pudo crear sus nuevas series de facturas."));
     expect(spanish).toContain(
       escapeHtml(
-        "El equipo comprueba primero su hora con internet. Deja que el equipo se ponga en hora por internet y pulsa «Reintentar un arranque normal».",
+        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este equipo.",
       ),
     );
   });

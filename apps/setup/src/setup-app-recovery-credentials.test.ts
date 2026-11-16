@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import type { LitElement } from "lit";
 import { SetupApi } from "./api/client.js";
 import { SetupApp } from "./setup-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -378,5 +379,94 @@ it.each(["archive", "bucket", "cloud"])(
           ?.invalidField,
       ).toBe("nodeRecoverySecret"),
     );
+  },
+);
+it.each(["archive", "bucket", "cloud"])(
+  "after a successful %s restore the done screen holds the node recovery key it sent, and nothing else",
+  async (kind) => {
+    const api = new SetupApi("https://box.example.test", async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === "POST")
+        return Response.json({ restoreStaged: true, restarting: true });
+      // The done screen's poll waits: a resolved status means the box has not restarted yet.
+      return Response.json(
+        new URL(request.url).pathname.endsWith("/status")
+          ? { environment: "production", needs: ["venue"] }
+          : {},
+      );
+    });
+    const { el } = await mountWidget<SetupApp>("setup-app", { api });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("setup-mode-screen")).not.toBeNull(),
+    );
+    Object.assign(el, {
+      screen:
+        kind === "archive" ? "restore" : kind === "bucket" ? "restore-bucket" : "cloud-restore",
+      cloudRecoveryView: {
+        requestId: "request",
+        state: "approved",
+        code: "12345678",
+        expiresAt: "2026-10-18T23:00:00Z",
+        openCloudUrl: "https://cloud.example.test",
+        point: { id: "point", venueId: "venue", capturedAt: "2026-10-17T12:30:00Z", modules: {} },
+      },
+    });
+    await el.updateComplete;
+    const selector =
+      kind === "archive"
+        ? "setup-restore-screen"
+        : kind === "bucket"
+          ? "setup-restore-bucket-screen"
+          : "setup-cloud-restore-screen";
+    const common = { ...credentials, recoveryContext: hourContext, oldBoxGone: true };
+    el.shadowRoot!.querySelector(selector)!.dispatchEvent(
+      new CustomEvent(
+        kind === "archive"
+          ? "restore-requested"
+          : kind === "bucket"
+            ? "bucket-restore-requested"
+            : "cloud-restore-action",
+        {
+          bubbles: true,
+          composed: true,
+          detail:
+            kind === "cloud"
+              ? { action: "restore", pointId: "point", ...common }
+              : {
+                  request:
+                    kind === "archive"
+                      ? {
+                          artifact: new File(["encrypted"], "copy.backup"),
+                          recoveryKey: "archive password",
+                          environment: "production",
+                          ...common,
+                        }
+                      : {
+                          kit: "private kit",
+                          environment: "production",
+                          venueConfirmed: null,
+                          ...common,
+                        },
+                },
+        },
+      ),
+    );
+    const done = () => el.shadowRoot!.querySelector("setup-done-screen");
+    await vi.waitFor(() => expect(done()?.nodeRecoveryKey).toBe("node-key-secret"));
+    const held = (target: LitElement) =>
+      [...(target.constructor as typeof LitElement).elementProperties.keys()].map(
+        (name) => JSON.stringify((target as unknown as Record<PropertyKey, unknown>)[name]) ?? "",
+      );
+    for (const value of held(done()!)) {
+      expect(value).not.toContain("archive password");
+      expect(value).not.toContain("private kit");
+    }
+    for (const value of held(el)) expect(value).not.toContain("node-key-secret");
+    const stored = [
+      ...Object.values({ ...sessionStorage }),
+      ...Object.values({ ...localStorage }),
+      document.cookie,
+    ].join("\n");
+    expect(stored).not.toContain("node-key-secret");
   },
 );
