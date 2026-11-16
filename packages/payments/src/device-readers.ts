@@ -212,6 +212,7 @@ async function readReaderStates(
       const defaultId = defaultOf.get(d.profileId) ?? null;
       const chosenHolderDeviceId = holder(chosenId);
       const defaultHolderDeviceId = holder(defaultId);
+      // A portable reader pays only for the device holding it, chosen or the profile default.
       const resolvedId =
         chosenId !== null
           ? chosenHolderDeviceId === d.id
@@ -273,6 +274,7 @@ export async function selectDeviceReader(
           )
       : [];
     if (reader === undefined) return { ok: false, refusal: "not_permitted" };
+    // Refuse busy before asking staff to confirm a takeover that would then be refused.
     if (await readerPaymentInProgress(tx, reader.id, deviceId))
       return { ok: false, refusal: "busy" };
     const holder = await readerHeldBy(tx, reader.id);
@@ -281,7 +283,6 @@ export async function selectDeviceReader(
         return { ok: false, refusal: "held", holderDeviceId: holder };
       previousHolderDeviceId = holder;
     }
-    // Take the reader before releasing other holders; a takeover replaces the previous holder.
     await tx
       .update(cardReaders)
       .set({ heldByDeviceId: deviceId })
