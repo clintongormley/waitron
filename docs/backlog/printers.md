@@ -329,10 +329,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
   `setPartyGuests` (server `parties.ts`, `till-api.ts`; till `api/client.ts`, `till-app.ts`), and
   `#savedGuests` (`apps/till/src/screens/till-table-order-screen.ts`). Renaming
   them to `…GuestCount` is free before go-live; no behaviour changes.
-- On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
-  (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
-  `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guestCount` shows only at
-  the bottom: `refusalField` has no `guestCount` case.
 - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
   shapes only so older tests that pin the exact argument count keep passing; one call per path
   sends the same request.

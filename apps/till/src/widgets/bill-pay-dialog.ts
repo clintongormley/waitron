@@ -170,7 +170,12 @@ function amountKey(value: string): string | { invalid: string } {
 
 /** The field a refusal is about, or null when it names none the dialog shows. A tip the venue does
  * not take can only come from a card contribution larger than is left, so it is the amount's. */
-function refusalField(refusal: PayRefusal, method: Method, way: PayWay): Field | null {
+function refusalField(
+  refusal: PayRefusal,
+  method: Method,
+  way: PayWay,
+  guestsShown: boolean,
+): Field | null {
   if (refusal.code === "bill.tip_not_allowed")
     return refusal.chargeable !== undefined && method !== "cash" && way === "contribution"
       ? "amount"
@@ -181,6 +186,8 @@ function refusalField(refusal: PayRefusal, method: Method, way: PayWay): Field |
       return way === "contribution" ? "amount" : null;
     case "shareOf":
       return "people";
+    case "guestCount":
+      return guestsShown ? "guests" : null;
     case "tendered":
       return method === "cash" ? "tendered" : null;
     // A refused cash tip comes back to the form, which does not show the tip it was left from.
@@ -758,6 +765,7 @@ export class TillBillPayDialog extends LitElement {
       this.#tip = undefined;
       this.#tipBaseline = undefined;
       this.#noTip();
+      this.guestsAttempted = false;
       this.#feedback.dismiss("refusal");
       this.#emit("bill-pay-edit");
     };
@@ -1083,7 +1091,12 @@ export class TillBillPayDialog extends LitElement {
   #refusalField(): Field | null {
     return this.#shownRefusal === null
       ? null
-      : refusalField(this.#shownRefusal, this.method, this.chosenWay);
+      : refusalField(
+          this.#shownRefusal,
+          this.method,
+          this.chosenWay,
+          this.preview?.kind === "allocated" && this.#guestsShown(this.preview),
+        );
   }
 
   #refusalMessage(field: Field): string {
@@ -2107,6 +2120,7 @@ export class TillBillPayDialog extends LitElement {
     )
       return;
     this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
+    this.#changed("guests");
   }
 
   /** No draft scope tracks this field (A663 Part 3b plan). */
