@@ -112,6 +112,7 @@ export class Gestures {
       this.#extras.add(e.pointerId);
       return;
     }
+    this.#holdIfOverdue(e.timeStamp);
     if (this.#state === "held" || this.#state === "dragging") this.#handlers.cancel?.();
     this.#clearHold();
     this.#closeTapWindow();
@@ -135,17 +136,12 @@ export class Gestures {
     }
     const spot = this.#pointers.get(event.pointerId);
     if (!spot) return;
+    if (e.type !== "pointercancel") this.#holdIfOverdue(event.timeStamp);
     spot.x = event.clientX;
     spot.y = event.clientY;
     if (e.type === "pointermove") this.#onMove(spot);
-    else if (e.type === "pointerup") {
-      // Queued input can arrive before an overdue hold timer.
-      if (this.#state === "pressed" && event.timeStamp - this.#pressStartedAt >= LONG_PRESS_MS) {
-        this.#clearHold();
-        this.#onHold();
-      }
-      this.#onUp(event.pointerId, spot);
-    } else this.#onCancel(event.pointerId);
+    else if (e.type === "pointerup") this.#onUp(event.pointerId, spot);
+    else this.#onCancel(event.pointerId);
   };
 
   #onMove(spot: Spot): void {
@@ -228,6 +224,14 @@ export class Gestures {
     this.#state = "held";
     this.#handlers.holdStart?.(this.#point(this.#pointers.get(this.#pressId) as Spot));
   };
+
+  /** Queued input can arrive before an overdue hold timer. */
+  #holdIfOverdue(timeStamp: number): void {
+    if (this.#state === "pressed" && timeStamp - this.#pressStartedAt >= LONG_PRESS_MS) {
+      this.#clearHold();
+      this.#onHold();
+    }
+  }
 
   #tap(point: GesturePoint): void {
     const double =

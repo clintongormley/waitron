@@ -923,15 +923,6 @@ module mocks in browser tests; #1934 did not add one, because one failure with n
 cause is thin ground for a house rule. The owner decides.
 
 
-## A late move or second finger can overtake the gesture hold timer
-
-A delayed move is
-treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
-reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
-to those paths with their own tests; native-device reproduction remains unverified.
-[Detail](../developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
-
-
 ## Finish reusing fixed-secret hashes in remaining server test setup
 
 Use `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)

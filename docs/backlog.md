@@ -1691,9 +1691,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **Vitest settings: remaining measurements** (bundle of 2, size M). Worker pins need a loaded runner, and the setup optimizer control was inconclusive. [Detail](backlog/ci.md#bundle-vitest-settings-remaining-measurements)
 
-- **A late move or second finger can overtake the gesture hold timer.**
-  [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
-
 - **A1398. Test-file inventory only on a same-count mismatch** (1 conditional entry). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
 - **Root guard deadlines under extreme external load (left open by A751).**

@@ -2405,6 +2405,10 @@ a second pointer at +700 ms enters pinch without reporting hold cancellation. Co
 ran the timer first reported the hold/drag/drop and hold/cancel respectively. Both trees
 returned all four expected observations. Native-device reproduction remains unverified;
 this is recorded separately rather than widening A891's stationary-release fix.
+Fixed 2026-11-16: an overdue hold now also runs first on a late move and a late second
+pointer, pinned by "a $duration ms press that moves before a queued hold timer runs" and "a
+second pointer $duration ms into a press, before a queued hold timer runs" in
+`packages/ui/src/gestures.test.ts`.
 
 ## A browser test waits for a dialog's close event, not a timer
 
