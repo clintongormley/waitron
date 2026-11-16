@@ -695,7 +695,9 @@ async function runAdmittedEntry(
     return;
   }
 
-  // Written before the first step that can fail, so a boot that hangs is counted.
+  // Written before the first step that can fail, so a boot that hangs is counted. Accepted
+  // consequence: an attempt cut short counts too — three power-cycles during a long cold restore
+  // land a box on the page, where the retry button clears it.
   let attempt = await changeState(deps, (current) => afterFailure(current, BOOT_INCOMPLETE, now()));
   const page = pageLog(logDir, now, deps.log);
   // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
