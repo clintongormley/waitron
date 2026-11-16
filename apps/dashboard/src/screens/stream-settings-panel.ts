@@ -50,6 +50,7 @@ const PROBE_REASON_KEYS: Readonly<Record<string, StringKey>> = {
   fresh_version_refused: "stream.probe.fresh_version_refused",
   if_match_ignored: "stream.probe.if_match_ignored",
   delete_failed: "stream.probe.delete_failed",
+  batch_delete_refused: "stream.probe.batch_delete_refused",
 };
 
 /** What `checkLitestreamSettings` (`packages/stream/src/litestream.ts`) refuses in each field. */

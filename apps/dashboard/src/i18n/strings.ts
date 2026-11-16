@@ -2463,6 +2463,8 @@ export const en = {
   "stream.probe.if_match_ignored":
     "The bucket accepted a write over a changed file, so it cannot guard against two servers writing at once.",
   "stream.probe.delete_failed": "The test file could not be deleted from the bucket.",
+  "stream.probe.batch_delete_refused":
+    "The test file could not be deleted the way the daily clean-up deletes old backup files: several in one request. Check that the key may delete files, or choose another provider.",
   "person.new": "Add user",
   "person.name": "Name",
   "person.first_names": "First name(s)",
@@ -6849,6 +6851,8 @@ export const es: Record<StringKey, string> = {
   "stream.probe.if_match_ignored":
     "El bucket aceptó escribir sobre un archivo que había cambiado, así que no puede impedir que dos servidores escriban a la vez.",
   "stream.probe.delete_failed": "No se ha podido borrar el archivo de prueba del bucket.",
+  "stream.probe.batch_delete_refused":
+    "No se ha podido borrar el archivo de prueba de la misma forma que la limpieza diaria borra las copias antiguas: varios archivos en una sola petición. Comprueba que la clave pueda borrar archivos o elige otro proveedor.",
   "person.new": "Añadir usuario",
   "person.name": "Nombre",
   "person.first_names": "Nombre(s)",

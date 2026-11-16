@@ -30,7 +30,8 @@ type Request = {
 
 /**
  * One honest object behind the real S3 client, answering its requests: conditions are honoured, and
- * the write numbered `lostAnswer` lands and is then answered 500, so the client sends it again.
+ * the write numbered `lostAnswer` lands and is then answered 500, so the client sends it again. A
+ * batch delete is answered 501, as by a provider without one.
  */
 function bucketLosingAnswer(lostAnswer: number) {
   let held: Uint8Array | undefined;
@@ -59,6 +60,7 @@ function bucketLosingAnswer(lostAnswer: number) {
         etag = `"v${writes}"`;
         return writes === lostAnswer ? refuse(500, "InternalError") : answer(200, { etag });
       }
+      if (request.method === "POST") return refuse(501, "NotImplemented");
       if (request.method === "DELETE") {
         held = undefined;
         return answer(204, {});
@@ -428,6 +430,103 @@ describe("probeBucket", () => {
   });
 });
 
+describe("the settings screen's Test, deleting through the batch delete", () => {
+  /** A store whose batch delete runs `batch` instead; its single delete stays honest. */
+  function batchOverridden(batch: ObjectStore["deleteMany"]) {
+    const inner = createMemoryObjectStore();
+    return { inner, store: { ...inner, deleteMany: batch } satisfies ObjectStore };
+  }
+
+  it.each([
+    [400, "MalformedXML", "batch_delete_refused"],
+    [405, "MethodNotAllowed", "batch_delete_refused"],
+    [403, "AccessDenied", "access_denied"],
+  ])(
+    "refuses a bucket whose batch delete is answered %i, and still cleans up its object",
+    async (status, name, reason) => {
+      const { inner, store } = batchOverridden(async () => {
+        throw failure(status, name);
+      });
+      await expect(probeBucket(store, NONCE, { batchDelete: true })).resolves.toEqual({
+        ok: false,
+        reason,
+        detail: `${name} (${status})`,
+      });
+      expect([...inner.snapshot().keys()]).toEqual([]);
+    },
+  );
+
+  it("refuses a bucket whose batch delete answers but leaves the object", async () => {
+    const { inner, store } = batchOverridden(async () => undefined);
+    await expect(probeBucket(store, NONCE, { batchDelete: true })).resolves.toEqual({
+      ok: false,
+      reason: "batch_delete_refused",
+      detail: "the object was still there after it was deleted",
+    });
+    expect([...inner.snapshot().keys()]).toEqual([]);
+  });
+
+  it("names a failed read-back after a batch delete that worked as the delete's failure, not the batch's", async () => {
+    const inner = createMemoryObjectStore();
+    let deleted = false;
+    const store: ObjectStore = {
+      ...inner,
+      deleteMany: async (keys, call) => {
+        deleted = true;
+        return inner.deleteMany(keys, call);
+      },
+      get: async (key, call) => {
+        if (deleted) throw failure(500, "InternalError");
+        return inner.get(key, call);
+      },
+    };
+    await expect(probeBucket(store, NONCE, { batchDelete: true })).resolves.toEqual({
+      ok: false,
+      reason: "delete_failed",
+      detail: "InternalError (500)",
+    });
+  });
+
+  it("throws a batch delete that gets no answer at all, rather than report a refusal", async () => {
+    const noAnswer = failure(null, "TimeoutError");
+    const { inner, store } = batchOverridden(async () => {
+      throw noAnswer;
+    });
+    await expect(probeBucket(store, NONCE, { batchDelete: true })).rejects.toBe(noAnswer);
+    expect([...inner.snapshot().keys()]).toEqual([]);
+  });
+
+  it("passes an honest bucket through the batch delete", async () => {
+    const batches: string[][] = [];
+    const { inner, store } = batchOverridden(async (keys, call) => {
+      batches.push(keys);
+      for (const key of keys) await inner.delete(key, call);
+    });
+    await expect(probeBucket(store, NONCE, { batchDelete: true })).resolves.toEqual({
+      ok: true,
+    });
+    expect(batches).toEqual([[KEY]]);
+    expect([...inner.snapshot().keys()]).toEqual([]);
+  });
+
+  it("passes through the real S3 client when the batch is answered 501 and each key is deleted alone", async () => {
+    const bucket = bucketLosingAnswer(0);
+    await expect(probeBucket(bucket.store, NONCE, { batchDelete: true })).resolves.toEqual({
+      ok: true,
+    });
+    expect(bucket.held()).toBeUndefined();
+    expect(bucket.methods.slice(-3)).toEqual(["POST", "DELETE", "GET"]);
+  });
+
+  it("never sends a batch delete without the option", async () => {
+    const { inner, store } = batchOverridden(async () => {
+      throw new Error("batch delete sent");
+    });
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({ ok: true });
+    expect([...inner.snapshot().keys()]).toEqual([]);
+  });
+});
+
 describe("a bucket that takes the connection and never answers", () => {
   it("is thrown as unreachable once the client gives up, not reported as a refusal", async () => {
     const bucket = await silentBucket();
@@ -473,9 +572,12 @@ describe("a cancelled check", () => {
 
   it("sends nothing on a signal already cancelled, and throws the cancellation rather than report a refusal", async () => {
     const inner = createMemoryObjectStore();
-    const failure = await probeBucket(cancellable(inner), NONCE, {
-      signal: AbortSignal.abort(),
-    }).catch((error: unknown) => error);
+    const failure = await probeBucket(
+      cancellable(inner),
+      NONCE,
+      {},
+      { signal: AbortSignal.abort() },
+    ).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AppError);
     expect(failure).toMatchObject({
       code: "backup.stream_request_failed",
@@ -488,7 +590,7 @@ describe("a cancelled check", () => {
     const inner = createMemoryObjectStore();
     const controller = new AbortController();
     const store = cancellable(inner, () => controller.abort());
-    const failure = await probeBucket(store, NONCE, { signal: controller.signal }).catch(
+    const failure = await probeBucket(store, NONCE, {}, { signal: controller.signal }).catch(
       (error: unknown) => error,
     );
     expect(failure).toMatchObject({

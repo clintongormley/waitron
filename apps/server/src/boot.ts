@@ -56,7 +56,6 @@ import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Context, Hono } from "hono";
@@ -515,14 +514,13 @@ import {
   streamService,
   type StreamHostDeps,
 } from "./stream-host.js";
-import { mountStreamApi } from "./stream-api.js";
+import { mountStreamApi, settingsBucketProbe } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { replaceBackupSettings, writeRecoveryKey } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
   prepareBucketEncryption,
-  probeBucket,
   type BucketConfig,
 } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
@@ -4144,7 +4142,7 @@ async function bootServer(
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
-      probe: (bucket, signal) => probeBucket(createS3ObjectStore(bucket), randomUUID(), { signal }),
+      probe: settingsBucketProbe,
       prepareEncryption: (bucket, signal) => prepareBucketEncryption(bucket, undefined, { signal }),
       turns: backupTurns,
     },

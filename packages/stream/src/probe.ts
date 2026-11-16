@@ -17,7 +17,8 @@ export type ProbeFailure =
   | "create_only_ignored"
   | "fresh_version_refused"
   | "if_match_ignored"
-  | "delete_failed";
+  | "delete_failed"
+  | "batch_delete_refused";
 
 export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; detail: string };
 
@@ -33,10 +34,14 @@ export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; deta
  *
  * A bucket that gives no answer at all (the store's `backup.stream_request_failed` with no status)
  * is not a refusal, so it is THROWN rather than reported: callers tell "unreachable" from "refused".
+ *
+ * `batchDelete` deletes the object through `deleteMany`, as the daily prune does, and names that
+ * step's refusal `batch_delete_refused`; its clean-up still deletes one object at a time.
  */
 export async function probeBucket(
   store: ObjectStore,
   nonce: string = randomUUID(),
+  options: { batchDelete?: boolean } = {},
   call?: StoreCall,
 ): Promise<ProbeResult> {
   const key = `${PROBE_PREFIX}${nonce}.json`;
@@ -109,15 +114,21 @@ export async function probeBucket(
     const ifMatchChanged = await changedSince(store, key, replacement, "if_match_ignored", call);
     if (ifMatchChanged) return ifMatchChanged;
 
+    const deleteStep = options.batchDelete ? "batch delete" : "delete";
+    try {
+      if (options.batchDelete) await store.deleteMany([key], call);
+      else await store.delete(key, call);
+    } catch (error) {
+      return failed(error, deleteStep);
+    }
     let after: StoredObject | null;
     try {
-      await store.delete(key, call);
       after = await store.get(key, call);
     } catch (error) {
       return failed(error, "delete");
     }
     if (after !== null)
-      return refuse("delete_failed", "the object was still there after it was deleted");
+      return refuse(STEP_FAILURE[deleteStep], "the object was still there after it was deleted");
     written = false;
     return { ok: true };
   } finally {
@@ -167,13 +178,14 @@ async function attempt(
   }
 }
 
-type Step = "write" | "read" | "list" | "delete";
+type Step = "write" | "read" | "list" | "delete" | "batch delete";
 
 const STEP_FAILURE: Record<Step, ProbeFailure> = {
   write: "write_failed",
   read: "read_mismatch",
   list: "list_failed",
   delete: "delete_failed",
+  "batch delete": "batch_delete_refused",
 };
 
 function failed(error: unknown, step: Step): ProbeResult {

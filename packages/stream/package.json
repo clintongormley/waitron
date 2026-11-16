@@ -10,7 +10,8 @@
     "./testing/manual-clock.js": "./src/testing/manual-clock.ts",
     "./testing/memory-store.js": "./src/testing/memory-store.ts",
     "./testing/switchable-store.js": "./src/testing/switchable-store.ts",
-    "./testing/fake-litestream.js": "./src/testing/fake-litestream.ts"
+    "./testing/fake-litestream.js": "./src/testing/fake-litestream.ts",
+    "./testing/loopback-bucket.js": "./src/testing/loopback-bucket.ts"
   },
   "scripts": {
     "test": "vitest run",
