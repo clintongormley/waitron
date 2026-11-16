@@ -823,11 +823,13 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   });
 
   it("the as-served diet board (vegan/vegetarian/halal badges, contains-meat chip, not-reviewed note) has no violations", async () => {
-    const { host } = await mountWidget<TillStationQueue>(
+    const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups: dietGroups, stationId: "st-1" },
       theme,
     );
+    expect(el.shadowRoot!.querySelector('[data-diet="vegan"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-diet-pending]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
