@@ -592,7 +592,6 @@ describe("a run picked on the Year", () => {
   it.each(["2025-12-31", "bad-date", "2027-01-02"])(
     "removes an ignored range end %s from the address without pushing history",
     async (to) => {
-      const replaced = vi.spyOn(history, "replaceState");
       const pushed = vi.spyOn(history, "pushState");
       const { el } = await mount(
         `/manage/opening-hours/view/special-day/date/2026-01-01/to/${to}?keep=yes#dates`,
@@ -601,7 +600,6 @@ describe("a run picked on the Year", () => {
       expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
       expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
       expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
-      expect(replaced).toHaveBeenCalledTimes(2);
       expect(pushed).not.toHaveBeenCalled();
     },
   );
@@ -900,6 +898,23 @@ describe("Save closes the special-day editor", () => {
       )!;
     return { app, el, guard, question };
   }
+
+  it("with the app's guard, an ignored range end is replaced without adding history", async () => {
+    const { app, el, guard } = await mountGuarded(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2025-12-31?keep=yes#dates",
+    );
+    try {
+      const painter = await shownPainter(el);
+      expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
+      history.back();
+      await expect.poll(() => location.pathname).toBe("/manage/before");
+    } finally {
+      guard.dispose();
+      app.remove();
+    }
+  });
 
   it("with the app's guard, Save closes a new day picked on the Month without asking", async () => {
     const { app, el, guard, question } = await mountGuarded(

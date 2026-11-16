@@ -492,8 +492,6 @@ export class VenueDetailsPanel extends LitElement {
     }
     this.errors = errors;
     this.#refreshPreview();
-    if (this.actionError === t("form.fix_fields") && Object.keys(errors).length === 0)
-      this.actionError = "";
   }
   async #save(): Promise<void> {
     if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
@@ -505,7 +503,7 @@ export class VenueDetailsPanel extends LitElement {
       this.errors = Object.fromEntries(
         Object.entries(problems).map(([field, problem]) => [field, t(PROBLEMS[problem]!)]),
       );
-      this.actionError = t("form.fix_fields");
+      this.actionError = "";
       await this.#feedback.focus(this.renderRoot);
       return;
     }
@@ -544,7 +542,6 @@ export class VenueDetailsPanel extends LitElement {
         this.shadowRoot!.querySelector(`[name="${nameOf(field as VenueDetailField)}"]`)
       ) {
         this.errors = { [field]: message };
-        this.actionError = t("form.fix_fields");
         this.submitting = false;
         await this.#feedback.focus(this.renderRoot);
       } else this.actionError = message;
@@ -667,8 +664,13 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
+    const formError = this.#feedback.message(
+      { request: this.actionError, ...this.errors },
+      new Set(Object.keys(this.errors)),
+      t("form.fix_fields"),
+    );
     return html`${
-      this.readError && !this.actionError
+      this.readError && !formError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
             <wt-button
               class="retry"
@@ -781,19 +783,7 @@ export class VenueDetailsPanel extends LitElement {
                       <div class="reason" data-test="form-foot">
                         <p data-test="address-notice">${t("venue_details.address_notice")}</p>
                       </div>
-                      <wt-form-actions
-                        .error=${this.#feedback.message(
-                          {
-                            request:
-                              this.actionError === t("form.fix_fields")
-                                ? undefined
-                                : this.actionError,
-                            ...this.errors,
-                          },
-                          new Set(Object.keys(this.errors)),
-                          t("form.fix_fields"),
-                        )}
-                      >
+                      <wt-form-actions .error=${formError}>
                         <wt-button
                           slot="cancel"
                           data-test="cancel"

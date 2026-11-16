@@ -1150,3 +1150,20 @@ it.each(["en-GB", "es"])("explains a business-day-history save refusal in %s", a
   expect(actions(el).error).toBe(t("form.fix_fields"));
   expect(save(el).disabled).toBe(false);
 });
+
+it("keeps one bottom correction message when the language changes, then clears it after correction", async () => {
+  setLocale("en-GB");
+  const el = await editing(rig().api);
+  change(el, "addressLine1", "");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  expect(actions(el).error).toBe(t("form.fix_fields"));
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(actions(el).error).toBe(t("form.fix_fields"));
+  change(el, "addressLine1", "Corrected street");
+  await flush(el);
+  expect(actions(el).error).toBe("");
+  expect(save(el).disabled).toBe(false);
+});
