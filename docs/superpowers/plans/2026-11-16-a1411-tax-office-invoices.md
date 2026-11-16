@@ -372,6 +372,8 @@ Amended 2026-11-16 (Task 8a): the route is `POST /management-api/tax-office/mont
 
 Amended 2026-11-16 (Task 8 review): the path has no `.zip`; each copy comes from `copyOfSale` (split out of `readSaleCopy`), which, unlike `readSaleCopy`, writes no `invoice_pdf_downloads` row (the month writes one `tax_office.month_downloaded` activity entry instead); a sale whose copy cannot be made is left out, logged as `tax_office.copy_failed` and listed in `failed.txt`, instead of ending the month.
 
+Amended 2026-11-16 (A1411-3, [its plan](2026-11-16-a1411-3-zip-request.md)): the month route no longer streams the ZIP. It asks the box to build the file as a background job and answers at once; the person saves the finished file later from `GET /management-api/tax-office/month-download/:id/file`. The permission check before the last chunk and the stop at a handover's gate below are retired: the build stops at the job's stop signal, and the file route checks `invoice.inspect` when the file is fetched. The activity entry is renamed `tax_office.month_requested`.
+
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,
   `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included, each
   through `readSaleCopy` (Task 3b), so a ticket is ticket-width there too; the CSV
