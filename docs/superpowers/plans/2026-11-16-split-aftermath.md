@@ -1,6 +1,6 @@
 # Lane F SPLIT-AFTERMATH implementation plan
 
-Authority: `/Users/clintongormley/waitron-campaign-f/queue.md`, SPLIT-AFTERMATH; `docs/backlog/till.md:1936–1965`. Separate Sol-high draft, driver source check, Claude first read; watcher clearance pending. Implement inline, one PR. Reports remain hypotheses until run.
+Authority: `/Users/clintongormley/waitron-campaign-f/queue.md`, SPLIT-AFTERMATH; `docs/backlog/till.md:1936–1965`. Separate Sol-high draft, driver source check, two Claude reads; watcher cleared `26cd392dca` at 10:53 on 16 November in lane questions.md. Implement inline, one PR. Reports remain hypotheses until run.
 
 **Finish:** keep the newest accepted room/party state and the staying party's correct bill after the named actions; bound Split's reads. Reuse `carryRevisions`, floor `#carry`, `#rememberOrderParty`/`#notePartyRevision`, `limited`/`pause`, read generations, `billToShow`, `#billAfterSplit` and existing test support. Paths below start at `apps/till/src/`.
 
