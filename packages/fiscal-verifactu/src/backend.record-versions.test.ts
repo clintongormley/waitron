@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, deviceOrigin, jobOrigin, seriesId, type SaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -24,7 +24,6 @@ beforeEach(async () => {
   backend = new VerifactuBackend({
     deploymentEnvironment: "preproduction",
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
     clock: {
       ...steadyClock,
       now: () => ({ ...steadyClock.now(), instant: AT, offsetMinutes: 120 }),

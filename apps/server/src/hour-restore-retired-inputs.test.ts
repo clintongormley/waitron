@@ -288,7 +288,7 @@ it("requires the selected copy's node key even when a valid consumed Cloud recei
   expect(f.journal()).toBe(retained);
   await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("completes a real sale after current-hour recovery without calling fetch or resolving a filing client", async () => {
+it("completes a real sale after current-hour recovery without calling fetch", async () => {
   const f = await stage("archive");
   await f.run();
   const network = vi.fn(() => {
@@ -305,9 +305,6 @@ it("completes a real sale after current-hour recovery without calling fetch or r
       db: copy.venue,
       deploymentEnvironment: "preproduction",
       clock: steadyClock,
-      resolveClient: async () => {
-        throw new Error("sale attempted external filing");
-      },
     });
     const sale = await withTransaction(copy.venue, (tx) =>
       recordSale(

@@ -85,9 +85,6 @@ beforeEach(async () => {
     clock: steadyClock,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => {
-      throw new Error("A local correction must not contact AEAT");
-    },
   });
   await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, {
@@ -557,9 +554,6 @@ async function anotherOriginal(environment: "production" | "preproduction") {
     clock: steadyClock,
     environment,
     deploymentEnvironment: environment,
-    resolveClient: () => {
-      throw new Error("This test must not contact AEAT");
-    },
   });
   await withTransaction(suite.db, async (tx) => {
     const original = await recordSale(

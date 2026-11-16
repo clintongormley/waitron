@@ -34,7 +34,7 @@ import { computeHuella, validate } from "@waitron/verifactu";
 import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
@@ -75,7 +75,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

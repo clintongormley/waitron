@@ -284,8 +284,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("till-sale.test: resolveClient must never be called by recordSale")),
   });
 });
 

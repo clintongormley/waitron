@@ -97,8 +97,6 @@ function makeBackend(db: Database): FiscalBackend {
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("served-at-huella.test: resolveClient must never be called")),
   });
 }
 

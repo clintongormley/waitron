@@ -8,7 +8,7 @@ import { AppError } from "@waitron/shared";
 import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
@@ -142,7 +142,6 @@ async function sellAt(at: { instant: Date; offsetMinutes: number }): Promise<voi
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
   const clock = {
     ...steadyClock,

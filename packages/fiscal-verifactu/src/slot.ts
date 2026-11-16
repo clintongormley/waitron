@@ -25,15 +25,6 @@ import {
   validateVenueFiscalFields,
 } from "./venue-fields.js";
 
-/**
- * The sale path never contacts AEAT — only `drain`/`reconcile` do, and the backend built here is
- * handed to neither (the host's fiscal pass builds its own transport). Reaching this is a bug in the
- * host or the backend, so it rejects loudly rather than ever returning a usable client.
- */
-export function rejectResolveClient(): Promise<never> {
-  return Promise.reject(new Error("fiscal slot: resolveClient must never be called by recordSale"));
-}
-
 export function makeVerifactuBackend({
   db,
   clock,
@@ -45,7 +36,6 @@ export function makeVerifactuBackend({
     db,
     environment,
     deploymentEnvironment: environment,
-    resolveClient: rejectResolveClient,
   });
 }
 

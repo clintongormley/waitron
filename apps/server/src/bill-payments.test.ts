@@ -157,7 +157,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
   });
   const provisioned = await applyVenue(
     planVenue(

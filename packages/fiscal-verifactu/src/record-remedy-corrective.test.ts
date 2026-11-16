@@ -21,7 +21,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { VerifactuBackend } from "./backend.js";
@@ -69,7 +69,6 @@ beforeEach(async () => {
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "preproduction",
-    resolveClient: staticResolver(fakeClient),
   });
   await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, {
@@ -577,7 +576,6 @@ it("rolls back accounting and numbering when the backend stamps the wrong enviro
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "production",
-    resolveClient: staticResolver(fakeClient),
   });
   await refuses("fiscal.remedy_invalid");
 });

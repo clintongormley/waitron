@@ -110,7 +110,6 @@ async function sell() {
     db: suite.db,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("A local sale must not contact AEAT")),
   });
   const saleCfg = await deviceRequestCfg(suite.db, venue.cfg);
   return recordTillSale(

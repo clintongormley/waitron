@@ -19,7 +19,7 @@ import {
   TEST_SISTEMA,
   type SeededNode,
 } from "./testing/seed.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const WRITERS = 20;
 
@@ -188,7 +188,6 @@ describe("the series↔node guard (record-sale)", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
   }
 

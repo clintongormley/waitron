@@ -12,7 +12,7 @@ import {
 import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { createHourPreparation } from "./hour-preparation.js";
 import { createHourRecoveryPreparation } from "./hour-recovery-preparation.js";
 import { compareHourClocks } from "./hour-clock.js";
@@ -163,7 +163,6 @@ beforeEach(async () => {
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "preproduction",
-    resolveClient: staticResolver(fakeClient),
   });
   const original = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, saleInput({ nodeId: TENANT_A.nodeId, seriesId: seriesId(series!.id) })),

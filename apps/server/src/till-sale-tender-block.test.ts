@@ -103,10 +103,6 @@ beforeAll(async () => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(
-        new Error("till-sale-tender-block.test: resolveClient must never be called by recordSale"),
-      ),
   });
 
   const venue = await applyVenue(

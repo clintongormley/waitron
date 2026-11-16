@@ -151,7 +151,6 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient,
   });
 
   const sale = await withTransaction(suite.db, async (tx) => {
@@ -877,7 +876,6 @@ describe("reconcile — an invoice the old box issued and the box that took over
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(aeat.client()),
     });
     return { aeat, issued, cancellation, selling, deps, backend };
   }
@@ -1108,7 +1106,6 @@ describe("reconcile — a conflict on a record of the box this one took over fro
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(client),
     });
     await expect(
       withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),

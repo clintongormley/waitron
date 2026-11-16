@@ -594,7 +594,6 @@ function mount(db: Database, cfg: TradingContext, log: Logger): Hono {
     db,
     environment,
     deploymentEnvironment: environment,
-    resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
   });
   const admission = testTradingAdmission();
   const tableRemovals = enabledTableRemovals(MODULES);

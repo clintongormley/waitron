@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, type SaleId } from "@waitron/shared";
 import { buildAltaRecord } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -23,7 +23,6 @@ beforeEach(async () => {
     deploymentEnvironment: "preproduction",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 

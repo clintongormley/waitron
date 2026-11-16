@@ -4,7 +4,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { clockUnusableSource } from "./clock-behind-alerts.js";
 
@@ -19,7 +19,6 @@ describe("clockUnusableSource", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     const clock = {
       ...steadyClock,

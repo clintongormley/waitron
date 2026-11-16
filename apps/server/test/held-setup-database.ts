@@ -11,7 +11,6 @@ import { ALL_MODULES } from "@waitron/composition";
 import { parseModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { recordSale } from "@waitron/core";
-import { createFakeAeat } from "@waitron/verifactu/testing";
 import { nodeId, seriesId } from "@waitron/shared";
 import { SCRATCH_DIR } from "@waitron/store";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
@@ -196,13 +195,11 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         ...steadyClock,
         now: () => ({ ...steadyClock.now(), instant: new Date(), offsetMinutes: 120 }),
       };
-      const aeat = createFakeAeat({ serverNow: new Date() });
       const backend = new VerifactuBackend({
         db: held.venue,
         clock: saleClock,
         deploymentEnvironment: attempt.frozen.environment,
         environment: attempt.frozen.environment,
-        resolveClient: async () => aeat.client(),
       });
       const [standard] = await held.venue
         .select()

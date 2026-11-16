@@ -214,10 +214,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(
-        new Error("split-bill.fiscal.test: resolveClient must never be called by recordSale"),
-      ),
   });
 });
 

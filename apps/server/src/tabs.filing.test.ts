@@ -165,7 +165,6 @@ async function seedTable(
   });
 }
 
-// `resolveClient` rejects: filing a sale never contacts AEAT.
 let backend: FiscalBackend;
 let backendB: FiscalBackend;
 let clock: TrustedClock;
@@ -197,10 +196,6 @@ beforeAll(() => {
       db,
       environment: deploymentEnvironment(process.env),
       deploymentEnvironment: deploymentEnvironment(process.env),
-      resolveClient: () =>
-        Promise.reject(
-          new Error("tabs.filing.test: resolveClient must never be called by recordSale"),
-        ),
     });
   backend = makeBackend(suite.db);
   backendB = makeBackend(suiteB.db);

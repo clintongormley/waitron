@@ -42,9 +42,7 @@ import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import {
-  fakeClient,
   saleInput,
-  staticResolver,
   steadyClock,
   storedRecord,
 } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
@@ -796,7 +794,6 @@ async function sellAt(instant: string) {
     deploymentEnvironment: "preproduction",
     clock: saleClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
   const [standard] = await suite.db
     .select()
@@ -862,7 +859,6 @@ describe("a restore whose clock is before or past the backup's newest record", (
       deploymentEnvironment: "preproduction",
       clock: boxClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     const { fiscal } = await withTransaction(suite.db, (tx) =>
       recordSale(

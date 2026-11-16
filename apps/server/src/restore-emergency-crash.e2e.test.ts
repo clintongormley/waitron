@@ -75,9 +75,6 @@ it.each([
             ...steadyClock,
             now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-16T12:39:00Z") }),
           },
-          resolveClient: async () => {
-            throw new Error("this restore has no network");
-          },
         });
         const seriesId = await readStandardSeriesId(old.venue, f.node.nodeId);
         await withTransaction(old.venue, (tx) =>

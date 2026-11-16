@@ -4,24 +4,15 @@ import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
-import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { registrosFacturacion } from "../src/schema/registros.js";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
 /**
- * `VerifactuBackendOptions.resolveClient` is required by the constructor. A single module-scope
- * fake AEAT transport, shared via `staticResolver` below, is enough: nothing in these suites
- * submits anything distinguishable, so which fake instance answers is irrelevant.
- */
-export const fakeClient: VerifactuClient = createFakeAeat().client();
-
-/**
- * A `resolveClient` that always returns `client` — the shape every `VerifactuBackend` in this
- * package's suites must supply SOME `resolveClient` to satisfy, for the reason `fakeClient` above
- * documents. Do NOT reach for this in a test that cares WHEN the transport is resolved, or that
- * needs a throwing one — write a bespoke resolver instead.
+ * A `resolveClient` for `drain` or `reconcile` that always returns `client`. Do NOT reach for this
+ * in a test that cares WHEN the transport is resolved, or that needs a throwing one — write a
+ * bespoke resolver instead.
  */
 export function staticResolver(client: VerifactuClient): () => Promise<VerifactuClient> {
   return () => Promise.resolve(client);

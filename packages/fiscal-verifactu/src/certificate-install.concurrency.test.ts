@@ -15,7 +15,7 @@ import {
 } from "../test/certificate-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { aeatClientResolver, mtlsFetch } from "./aeat-transport.js";
 import { VerifactuBackend } from "./backend.js";
 import { installCertificate } from "./certificate-install.js";
@@ -96,7 +96,6 @@ describe("installCertificate beside the sale path", () => {
         deploymentEnvironment: "production",
         clock: steadyClock,
         db: suite.db,
-        resolveClient: staticResolver(fakeClient),
       });
       const { saleId } = await withTransaction(suite.db, (tx) =>
         recordSale(tx, backend, saleInput({ nodeId, seriesId })),

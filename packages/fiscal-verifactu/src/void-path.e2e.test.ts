@@ -16,7 +16,7 @@ import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let backend: VerifactuBackend;
@@ -60,7 +60,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 
@@ -149,7 +148,6 @@ describe("a cancellation names the taxpayer, not the software's producer", () =>
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
       identity: { ...SOFTWARE_IDENTITY, producer: { name: "Producer Person", nif: "12345678Z" } },
     });
     const a = await sell();

@@ -147,9 +147,6 @@ export async function stagedHourCrash(
       db,
       deploymentEnvironment: "preproduction",
       clock: steadyClock,
-      resolveClient: async () => {
-        throw new Error("the source backup has no network");
-      },
     });
     await withTransaction(db, (tx) =>
       recordSale(

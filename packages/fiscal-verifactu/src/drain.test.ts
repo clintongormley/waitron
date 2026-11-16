@@ -105,11 +105,12 @@ describe("drain — happy path", () => {
   });
 });
 
-async function sellAndVoid(options: {
-  resolveClient: DrainDeps["resolveClient"];
-  nif?: string;
-  identity?: SoftwareIdentity;
-}): Promise<{ nodeId: string }> {
+async function sellAndVoid(
+  options: {
+    nif?: string;
+    identity?: SoftwareIdentity;
+  } = {},
+): Promise<{ nodeId: string }> {
   const { nodeId, seriesId } = await seedTenantWithSif(
     suite.db,
     options.nif === undefined ? {} : { nif: options.nif },
@@ -129,7 +130,6 @@ async function sellAndVoid(options: {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: options.resolveClient,
     ...(options.identity === undefined ? {} : { identity: options.identity }),
   });
   const sale = await withTransaction(suite.db, async (tx) => {
@@ -155,7 +155,7 @@ async function sellAndVoid(options: {
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const { nodeId } = await sellAndVoid({ resolveClient: staticResolver(aeat.client()) });
+    const { nodeId } = await sellAndVoid();
 
     // Both envíos default to the wall-clock insert time, so a minute past it has them due.
     const first = await drain(
@@ -194,11 +194,10 @@ describe("drain — a cancellation's submission header", () => {
     const nif = nifWithControlLetter(30_000_001);
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     // Every `aeat.client()` call builds a new client, so the spy must sit on the one client
-    // shared by the backend and both passes.
+    // both passes share.
     const client = aeat.client();
     const submit = vi.spyOn(client, "submit");
     await sellAndVoid({
-      resolveClient: staticResolver(client),
       nif,
       identity: { ...SOFTWARE_IDENTITY, producer: { name: "Producer Person", nif: "12345678Z" } },
     });
@@ -1040,7 +1039,6 @@ describe("drain — Route B's lookup and the write transaction", () => {
       deploymentEnvironment: "production",
       clock: afterSeeded,
       db: suite.db,
-      resolveClient: staticResolver(aeat.client()),
     });
 
     let lookupAsked!: () => void;
@@ -1215,7 +1213,6 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(aeat.client()),
     });
     firstPass = new Date(Date.now() + 60_000);
     secondPass = new Date(firstPass.getTime() + backoffMs(1) + 1_000);

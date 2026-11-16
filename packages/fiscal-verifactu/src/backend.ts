@@ -41,7 +41,6 @@ import type {
   IDFacturaARInput,
   RegistroAlta,
   SistemaInformatico,
-  VerifactuClient,
 } from "@waitron/verifactu";
 import { appendToChain, refuseUnlessServingPrimary } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
@@ -83,11 +82,6 @@ export interface VerifactuBackendOptions {
   /** The connection `pendingCount` queries against — the one `FiscalBackend` method with no `tx`
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
-  /**
-   * Accepted but NOT consumed by this class: nothing on the sale path contacts AEAT. Submission is
-   * the standalone `drain` (`./drain.ts`).
-   */
-  resolveClient: () => Promise<VerifactuClient>;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
@@ -100,9 +94,6 @@ export interface VerifactuBackendOptions {
   deploymentEnvironment: Entorno;
   /** ./slot.ts passes the producer read from the settings; with none given, the taxpayer is named. */
   identity?: SoftwareIdentity;
-  /** Accepted but NOT consumed by this class: the skip-retry cadence belongs to the standalone
-   * `drain` (`DrainDeps.skipRetryMs`). */
-  skipRetryMs?: number;
 }
 
 /** The columns `recordVoid` reads off the alta it voids. */

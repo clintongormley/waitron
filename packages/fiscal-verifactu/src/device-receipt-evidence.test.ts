@@ -9,7 +9,7 @@ import { invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -22,7 +22,6 @@ describe("device receipt evidence", () => {
       const backend = new VerifactuBackend({
         db: suite.db,
         clock: steadyClock,
-        resolveClient: staticResolver(fakeClient),
         deploymentEnvironment: environment,
       });
       const result = await withTransaction(suite.db, (tx) =>
@@ -40,7 +39,6 @@ describe("device receipt evidence", () => {
       const other = new VerifactuBackend({
         db: suite.db,
         clock: steadyClock,
-        resolveClient: staticResolver(fakeClient),
         deploymentEnvironment: environment === "production" ? "preproduction" : "production",
       });
       const filed = await withTransaction(suite.db, (tx) =>
@@ -73,7 +71,6 @@ it("has no device evidence for a sale without an original fiscal record", async 
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
-    resolveClient: staticResolver(fakeClient),
     deploymentEnvironment: "production",
   });
   expect(
@@ -88,7 +85,6 @@ it("keeps the original invoice fingerprint after a cancellation, in either query
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
-    resolveClient: staticResolver(fakeClient),
     deploymentEnvironment: "production",
   });
   const result = await withTransaction(suite.db, (tx) =>
@@ -161,7 +157,6 @@ it("reads the original fingerprint after a correction even when later rows are r
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
-    resolveClient: staticResolver(fakeClient),
     deploymentEnvironment: "production",
   });
   await suite.db.execute(sql`pragma reverse_unordered_selects = on`);

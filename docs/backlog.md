@@ -152,10 +152,9 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
 ### Fiscal records, invoices and the asesor
 
-- **The Verifactu backend accepts a `resolveClient` and a `skipRetryMs` it never reads** (fiscal;
-  the owner lands it). Remove both from `VerifactuBackend`'s deps (`fiscal-verifactu/src/backend.ts`),
-  with `rejectResolveClient` (`slot.ts`), telling apart callers that pass `resolveClient` to the
-  drain and reconcile, which read it. Also open: regime-agnostic provisioning tests.
+- **Make `packages/provisioning`'s tests regime-agnostic** (fiscal; the owner lands it): point the
+  ones that do not test a fiscal regime at `fiscal-none` rather than `fiscal-verifactu`. Left open
+  by the removal of the Verifactu backend's unused `resolveClient` and `skipRetryMs`.
 
 - **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
   reads signed paper, Cloud receipts and emergency names, and three Cloud settings whose only

@@ -199,7 +199,6 @@ async function venue(db: Database): Promise<Venue> {
     db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
   });
   const app = new Hono();
   mountTillApi(

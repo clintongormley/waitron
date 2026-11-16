@@ -14,7 +14,7 @@ import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { VerifactuBackend } from "./backend.js";
-import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -284,7 +284,6 @@ it("gives a restore's history no time floor", async () => {
     deploymentEnvironment: "preproduction",
     clock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
   const [standard] = await suite.db
     .select()

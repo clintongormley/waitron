@@ -683,7 +683,6 @@ export async function recoveryInvoices() {
     clock,
     deploymentEnvironment: "preproduction",
     environment: "preproduction",
-    resolveClient: async () => aeat.client(),
   });
   const [standard] = await suite.db
     .select()

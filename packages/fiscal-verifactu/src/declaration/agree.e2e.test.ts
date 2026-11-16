@@ -12,12 +12,7 @@ import type { SistemaInformatico } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
 import { seedTenantWithSif } from "../../test/fixtures.js";
 import { declarationSourceFor, testProducer as producer } from "../../test/declaration.js";
-import {
-  fakeClient,
-  saleInput,
-  staticResolver,
-  steadyClock,
-} from "../../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../../test/write-path-fixtures.js";
 import { VerifactuBackend } from "../backend.js";
 import { registrosFacturacion } from "../schema/registros.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
@@ -50,7 +45,6 @@ async function recordedSoftware(
     deploymentEnvironment: "preproduction",
     clock: steadyClock,
     db: pg.db,
-    resolveClient: staticResolver(fakeClient),
     identity: writer.runningIdentity("preproduction"),
   });
   const { saleId } = await withTransaction(pg.db, (tx) =>

@@ -33,13 +33,7 @@ import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import {
-  fakeClient,
-  refusedByAeat,
-  saleInput,
-  staticResolver,
-  steadyClock,
-} from "../test/write-path-fixtures.js";
+import { refusedByAeat, saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
 let deviceId: DeviceId;
@@ -54,7 +48,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient: staticResolver(fakeClient),
   });
 });
 
@@ -222,7 +215,6 @@ describe("the software block", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
       identity: {
         ...SOFTWARE_IDENTITY,
         onlyVerifactu: "N",
@@ -251,7 +243,6 @@ describe("the software block", () => {
       deploymentEnvironment: "production",
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
       identity: {
         ...SOFTWARE_IDENTITY,
         multipleTaxpayersPossible: "S",
@@ -409,7 +400,6 @@ describe("recordVoid — date reconstruction", () => {
       deploymentEnvironment: "production",
       clock: clockAt(780),
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     await withTransaction(suite.db, (tx) =>
       voidBackend.recordVoid(tx, saleId, "staff error", nodeId),
@@ -430,7 +420,6 @@ describe("recordVoid — date reconstruction", () => {
       deploymentEnvironment: "production",
       clock: clockAt(-780),
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
     });
     await withTransaction(suite.db, (tx) =>
       voidBackend.recordVoid(tx, saleId, "staff error", nodeId),

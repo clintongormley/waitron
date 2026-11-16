@@ -202,9 +202,6 @@ export function useBackupVerificationFixture() {
       clock,
       environment: "production",
       deploymentEnvironment: "production",
-      resolveClient: async () => {
-        throw new Error("fixture must not contact AEAT");
-      },
     });
     for (const hour of [0, 1]) {
       const activation = await activate(hour);

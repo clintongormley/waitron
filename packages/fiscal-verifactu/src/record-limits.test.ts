@@ -25,7 +25,6 @@ const backend = new VerifactuBackend({
   db: null as never,
   clock: null as never,
   deploymentEnvironment: "preproduction",
-  resolveClient: () => Promise.reject(new Error("never called")),
 });
 
 /** A record carrying one 21% line whose base plus tax is `total`, so the F2 ceiling is the only

@@ -1721,7 +1721,6 @@ async function inheritedWork(
           db: files.venue,
           environment: env,
           deploymentEnvironment: env,
-          resolveClient: () => Promise.reject(new Error("a void never submits inline")),
         });
         const fiscal = await withTransaction(files.venue, async (tx) => {
           const session = await loginWithPin(tx, {

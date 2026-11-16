@@ -32,15 +32,10 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );
-  let resolvedOnSale = 0;
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
     deploymentEnvironment: "production",
-    resolveClient: async () => {
-      resolvedOnSale++;
-      throw new Error("sale contacted AEAT");
-    },
   });
   const sell = () =>
     withTransaction(suite.db, (tx) => recordSale(tx, backend, saleInput({ nodeId, seriesId })));
@@ -106,7 +101,6 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
     ).toEqual([{ invoice_number: 2 }]);
     afterSale = await snapshot();
     expect(afterSale.records.slice(0, 2)).toEqual(original.records);
-    expect(resolvedOnSale).toBe(0);
   } finally {
     release();
     await pending;

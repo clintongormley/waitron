@@ -52,15 +52,11 @@ let backend: VerifactuBackend;
 let fullSeries: ReturnType<typeof brandSeriesId>;
 let correctionSeries: ReturnType<typeof brandSeriesId>;
 let sessionId: string;
-const resolveClient = vi.fn(() => {
-  throw new Error("issuance must not resolve transport");
-});
 const recipient = { taxId: "B12345674", legalName: "Business Customer Ltd", countryCode: "ES" };
 
 beforeEach(async () => {
   fault.mode = "none";
   fault.issues = [];
-  resolveClient.mockClear();
   node = await seedTenantWithSif(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "1 Market Street" });
   const [full, correction] = await suite.db
@@ -85,7 +81,6 @@ beforeEach(async () => {
     deploymentEnvironment: "production",
     clock: steadyClock,
     db: suite.db,
-    resolveClient,
   });
 });
 
@@ -219,7 +214,6 @@ describe("new-record fingerprint refusal", () => {
                 : [2, 1, 1],
       );
       expect(await suite.db.select().from(incidents)).toEqual(alerts);
-      expect(resolveClient).not.toHaveBeenCalled();
     },
   );
 
@@ -257,7 +251,6 @@ describe("new-record fingerprint refusal", () => {
     expect((await suite.db.select().from(incidents)).map((row) => row.code)).toEqual([
       "chain.verification_failed",
     ]);
-    expect(resolveClient).not.toHaveBeenCalled();
   });
 
   it.each(["format", "invalid"] as const)(

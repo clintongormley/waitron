@@ -157,9 +157,6 @@ it.each([
         db: store.venue,
         clock,
         deploymentEnvironment: "preproduction",
-        resolveClient: async () => {
-          throw new TypeError("offline");
-        },
       });
       const standard = recovered.series.find(
         (row) => row.retiredAt === null && row.purpose === "standard",

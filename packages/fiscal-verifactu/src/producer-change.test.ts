@@ -5,7 +5,7 @@ import { captureError } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { refuseProducerChange } from "./producer-change.js";
@@ -175,7 +175,6 @@ describe("VerifactuBackend.checkFilingIdentity", () => {
       deploymentEnvironment: environment,
       clock: steadyClock,
       db: suite.db,
-      resolveClient: staticResolver(fakeClient),
       identity: running({ name: "PRODUCER PERSON", nif: "11111111H" }),
     });
   }

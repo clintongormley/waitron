@@ -557,12 +557,6 @@ beforeAll(() => {
     db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(
-        new Error(
-          "working-order.pay-and-dispatch.test: resolveClient must never be called by recordSale",
-        ),
-      ),
   });
 });
 

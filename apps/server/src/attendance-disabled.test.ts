@@ -32,7 +32,6 @@ it("signs in normally in a venue where workforce has never been migrated", async
     clock,
     environment: "preproduction",
     deploymentEnvironment: "preproduction",
-    resolveClient: () => Promise.reject(new Error("No filing in a sign-in test")),
   });
   const app = new Hono();
   mountTillApi(

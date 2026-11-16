@@ -42,7 +42,6 @@ export function recordFixtureSale(db: Database, args: FixtureSale) {
       db,
       environment: "preproduction",
       deploymentEnvironment: "preproduction",
-      resolveClient: () => Promise.reject(new Error("fixture sales must not contact AEAT")),
     });
     return recordSale(tx, backend, {
       operationDescription: "Retail sale",
