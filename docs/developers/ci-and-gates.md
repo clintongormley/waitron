@@ -245,7 +245,7 @@ from both queue pressure and the advertised total, including old runs with jobs
 created before the cutoff; in-progress retries remain visible. A missing recent
 run makes the list unreadable unless the queued CI-workflow exception below applies.
 Running-run lists and standalone commands keep their full history windows. Planner
-discovery has the short-list exception below; other standalone reads retain count completeness.
+discovery and the queued list in standalone `check` have the exceptions below; other standalone reads retain count completeness.
 The query omits old records without enumerating or logging their individual ids.
 Each strict list read restarts once from page 1 after an empty page before completion or a
 changed valid total. During routing, its queued CI-workflow list is accepted when both reads
@@ -253,7 +253,7 @@ end on empty pages with identical row values, ignoring row order. The first read
 page may change its count; a changing count within the second read still refuses. It uses the second read and logs
 `Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
 (watcher, 2026-11-15 15:10). Natural workflow qualification remains open.
-Different short rows still select hosted. Outside planner discovery below, other
+Different short rows still select hosted. Outside the discovery exceptions below, other
 lists discard earlier rows and retain strict count completeness. Duplicate/excess rows
 take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
@@ -309,12 +309,12 @@ minutes without assignment. It skips runs already marked for hosted recovery and
 whose capacity snapshot under five minutes old shows every positive slot occupied.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
-Only this planner candidate scan accepts collected workflow rows when an empty page arrives
+The planner candidate scan accepts collected workflow rows when an empty page arrives
 before the advertised count after the existing single immediate reread. It logs
 `Planner discovery count shortfall` with path, page, read, totals and numeric IDs
 (watcher, 16 November 2026 13:31). Omitted candidates may wait. Malformed, duplicate,
-excess-row and count-drift checks remain; all job lists, standalone `check`, `recover` and
-`probe`, and routing retain their existing rules. The full-server skip still applies.
+excess-row and count-drift checks remain; all job lists, `recover`, `probe` and routing
+retain their existing rules. Standalone `check` has the queued-list exception below. The full-server skip still applies.
 The current run, open owned PR head and complete current-attempt jobs are checked before
 cancellation and again before retry. A short discovery list does not establish a complete queue.
 
@@ -355,7 +355,11 @@ minutes without assigned or recent server progress raises `SERVER STUCK` unless 
 capacity snapshot under five minutes old shows positive slots all occupied, or recent
 completed server traffic explains the gap. Missing, invalid, stale or zero capacity cannot
 suppress that alarm. The machine-local stall watcher reports failed health workflows for
-intervention. Incomplete inventories are reported without changing work; API failures remain
+intervention. `check` accepts a short queued workflow list after its existing reread and
+logs `Queued workflow discovery count shortfall` with counts and IDs. Running lists and job
+lists stay strict. A partial no-stall answer stays green, says that unread runs may hold
+waiting work and makes no whole-queue health claim; omitted queued runs may contain assigned
+work. Incomplete other inventories are reported without changing work; API failures remain
 visible. The explicit general `recover` helper remains manual. Non-planner health checks
 report a stop for a person to resolve.
 
