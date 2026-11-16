@@ -1647,6 +1647,8 @@ margin; this does not bound every setup delay. One excluded provisioning job spe
 
 The deadline starts only at the test invocation. Root guards remain unwrapped;
 setup stalls and runner loss can still reach the job limit without this report.
+Exit 124 means the command exceeded its limit; a slow run still making progress
+also fails, so read the file progress before treating it as a hang.
 This branch's scoped PR does not select the light groups: their workflow wiring
 and real pnpm-line parser cases are checked, but their first runtime check of these
 limits belongs to a scheduled or manual full-main run.
@@ -1702,8 +1704,6 @@ The additional deadline table in `scripts/ci-workflow.test.mjs` also reads text;
 it checks the eight invocations and limits, not hosted timeout behaviour or log retention.
 Light groups use computed filters, so the literal-consumer guard does not attribute
 their packages to the wrapper. A wrapper-only change does not select those groups.
-The shared diagnostic message still says that a browser may be loading a file,
-even for a Node-only command.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 

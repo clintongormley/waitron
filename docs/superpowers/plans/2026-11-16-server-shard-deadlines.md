@@ -40,7 +40,7 @@ merge-job change, test-timeout change or repair of the unknown incidents. Setup/
   Keep the existing permanent CLI browser proof unchanged. No new permanent CLI variant or forced CI drill.
 
 - [x] Generalise docs/developers/ci-and-gates.md's deadline section, preserving its existing linked anchor. State limits:
-  root-guards remains unwrapped, setup is not bounded, and the shared diagnostic text still mentions a browser.
+  root-guards remains unwrapped and setup is not bounded. The shared diagnostic text covers workers and browsers.
   In docs/backlog/ci.md update only the shard-19 paragraph and incident-table diagnostic gap: a hang inside the test step
   leaves a report; both causes remain open. The generic docs/backlog.md incidents index needs no edit; request that exception.
 - [ ] Run `pnpm exec vitest run scripts/run-with-deadline.test.mjs scripts/ci-workflow.test.mjs scripts/root-scope-consumers.test.mjs`.

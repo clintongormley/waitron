@@ -3937,7 +3937,7 @@ describe("the sharded jobs", () => {
     expect(step, id).toBeDefined();
     const command = step.script.replace(/\\\n\s*/g, " ");
     const deadline =
-      /^node scripts\/run-with-deadline\.mjs (\d+) --diagnostics -- pnpm .*\btest:(?:shard|coverage)\b/m.exec(
+      /^node scripts\/run-with-deadline\.mjs (\d+) --diagnostics -- pnpm [^|\n]*\btest:(?:shard|coverage) --coverage\.enabled=/m.exec(
         command,
       );
     expect(deadline?.[1], id).toBe(String(seconds));

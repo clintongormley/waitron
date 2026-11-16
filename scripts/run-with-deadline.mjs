@@ -45,7 +45,7 @@ export function createDeadlineDiagnostics({
       if (running.size === 0)
         write("  No unfinished file reported; startup or teardown may be stalled.");
       for (const name of running) write(`  ${name}`);
-      write("Files are assigned to workers; a browser may still be loading them.");
+      write("Files are assigned to workers; a worker or browser may still be loading them.");
       write("Process snapshot (pid, ppid, state, elapsed, cpu, rss, command):");
       const result = snapshot();
       if (result.stdout) write(result.stdout);
