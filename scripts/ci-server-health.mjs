@@ -642,7 +642,7 @@ export async function healthCommand(command, options, { report, output }) {
           retried.length
             ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned${command === "recover" ? " or recently progressing server" : ""} work.`
             : command === "recover-planners"
-              ? "No stalled server run found in the rows read."
+              ? "No planner was retried."
               : "No stalled server run needed recovery.",
         );
     } else {

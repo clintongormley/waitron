@@ -1507,7 +1507,7 @@ describe("scheduled PR planner recovery", () => {
       report: (line) => reports.push(line),
     });
     expect(reports.join("\n")).toContain("Planner discovery count shortfall");
-    expect(reports.at(-1)).toBe("No stalled server run found in the rows read.");
+    expect(reports.at(-1)).toBe("No planner was retried.");
     expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
   });
   it("refuses incomplete final planner jobs without writes", async () => {
@@ -1812,7 +1812,7 @@ describe("scheduled PR planner recovery", () => {
       expect(reports).toEqual([
         "Planner rescue skipped: server is full in a fresh capacity snapshot.",
         `Planner rescue skipped: run=12 attempt=${kind === "retry" ? 2 : 1} job=123; server full.`,
-        "No stalled server run found in the rows read.",
+        "No planner was retried.",
       ]);
       expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
     },
@@ -1832,7 +1832,7 @@ describe("scheduled PR planner recovery", () => {
     expect(reports).toEqual([
       "Planner rescue skipped: server is full in a fresh capacity snapshot.",
       "Planner diagnostics unavailable: run=12 attempt=1; diagnostic refused",
-      "No stalled server run found in the rows read.",
+      "No planner was retried.",
     ]);
     expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
   });
@@ -1884,7 +1884,7 @@ describe("scheduled PR planner recovery", () => {
     expect(reports).toEqual([
       "Planner rescue skipped: server is full in a fresh capacity snapshot.",
       "Planner diagnostics unavailable: list refused",
-      "No stalled server run found in the rows read.",
+      "No planner was retried.",
     ]);
   });
   it.each(["marked", "retry"])("rescues before reading %s diagnostics", async (kind) => {
