@@ -107,9 +107,9 @@ describe("a payment's fixed columns", () => {
   });
 });
 
-it("a payment is never deleted", async () => {
+it.each(["attempting", "captured"])("never deletes a payment in state %s", async (state) => {
   await suite.db.execute(
-    sql`update payments set state = 'captured', settled_at = ${AT} where id = ${paymentId}`,
+    sql`update payments set state = ${state}, settled_at = ${state === "captured" ? AT : null} where id = ${paymentId}`,
   );
   const error = await captureError(() =>
     suite.db.execute(sql`delete from payments where id = ${paymentId}`),

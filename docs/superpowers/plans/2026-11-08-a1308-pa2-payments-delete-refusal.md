@@ -7,10 +7,14 @@
 > owner still lands pa2. No new owner approval of restore/watch is claimed.
 >
 > **Root control:** Claude found `scripts/append-only-triggers.test.ts:207–209` accepts a DELETE
-> of payments as its writable-ledger control. The delete refusal requires using an allowed
+> of payments as its writable-ledger control. The watcher selected an allowed
 > timestamp UPDATE instead, retaining both assertions. Watcher 16 November 07:40 explicitly
 > cleared this exact SQL-only port; name it in the PR's Changed test checks section.
 > Add it to Task 1's failing/green runs. The declared-delete/refusal inventory stays unchanged.
+> Measured during the build: this root fixture drops manual triggers before seeding, so its
+> original DELETE still passed. Its timestamp UPDATE is a cleared control choice, not a prerequisite.
+> The manifest-path twin in `packages/migrations/src/apply-append-only.test.ts` keeps manual
+> triggers; its payment DELETE failed and was ported to the same allowed UPDATE, keeping its settings DELETE.
 >
 > **Consumer inventory:** Keep only redundant cleanup removals still present after pa1. Include
 > raw REPLACE in the product-delete search and check configuration-transfer's existing

@@ -24,8 +24,6 @@ beforeEach(async () => {
   });
 });
 
-// Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
-// refused with `FOREIGN KEY constraint failed`.
 /** A raw `select` skips the json column's read mapping, so `incidents.params` arrives as TEXT. */
 function parseParams<T, R extends { params: string } = { params: string }>(result: {
   rows: R[];
