@@ -284,6 +284,64 @@ describe("createLinuxDevices — scan()", () => {
     expect(await devices.scan(["network_tcp", "bluetooth"])).toStrictEqual([netHit]);
     expect(warn).toHaveBeenCalledWith("bluetooth scan failed", { error: "adapter gone" });
   });
+
+  function scanWith(outcomes: Array<string | DiscoveredDevice[]>) {
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({
+        scan: async () => {
+          const next = outcomes.shift();
+          if (typeof next === "string") throw new Error(next);
+          return next ?? [];
+        },
+      }),
+      log: { info: vi.fn(), warn, error: vi.fn() },
+    });
+    const scanFailures = () =>
+      warn.mock.calls.filter(([message]) => message === "bluetooth scan failed");
+    return { devices, scanFailures };
+  }
+
+  it("logs a Bluetooth scan failure once while the same failure repeats", async () => {
+    const { devices, scanFailures } = scanWith([
+      "No default controller available",
+      "No default controller available",
+    ]);
+    await devices.scan(["bluetooth"]);
+    await devices.scan(["bluetooth"]);
+    expect(scanFailures()).toStrictEqual([
+      ["bluetooth scan failed", { error: "No default controller available" }],
+    ]);
+  });
+
+  it("logs a Bluetooth scan failure again when the failure changes", async () => {
+    const { devices, scanFailures } = scanWith([
+      "No default controller available",
+      "org.bluez.Error.NotReady",
+    ]);
+    await devices.scan(["bluetooth"]);
+    await devices.scan(["bluetooth"]);
+    expect(scanFailures()).toStrictEqual([
+      ["bluetooth scan failed", { error: "No default controller available" }],
+      ["bluetooth scan failed", { error: "org.bluez.Error.NotReady" }],
+    ]);
+  });
+
+  it("logs a repeated Bluetooth scan failure again after a scan succeeds", async () => {
+    const { devices, scanFailures } = scanWith([
+      "No default controller available",
+      [],
+      "No default controller available",
+    ]);
+    await devices.scan(["bluetooth"]);
+    await devices.scan(["bluetooth"]);
+    await devices.scan(["bluetooth"]);
+    expect(scanFailures()).toStrictEqual([
+      ["bluetooth scan failed", { error: "No default controller available" }],
+      ["bluetooth scan failed", { error: "No default controller available" }],
+    ]);
+  });
 });
 
 describe("createLinuxDevices — pair()", () => {

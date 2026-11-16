@@ -132,9 +132,6 @@ chosen destination.
   2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
   daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
   "No default controller available" and exited 0.
-- **`bluetooth scan failed` is logged on every pass** (left by A131, #915), where the agent's other
-  Bluetooth failure lines are logged once while the same failure repeats, so a box with no adapter
-  logs one line per pass while a discovery window is open.
 - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
   the agent has joined and is not out of touch, `/status.json` answers only loopback callers
   (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
