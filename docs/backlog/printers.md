@@ -290,24 +290,6 @@ paper's header rows (A754): on every sale it shows captioned invoice-number and 
 date in words, with the table and order on a line beneath them; it does pad the hour to two
 digits as paper does.
 
-## On an A4 full invoice, a caption and its amount can split across pages
-
-- **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
-  Part 2).** The A4 page draws an amount row's caption first, then its amount right-aligned
-  (`layoutInvoicePages`, `apps/server/src/invoice-page.ts:277-281`). When the amount does not fit
-  beside the caption's last line, it takes a line of its own, and if the page is full there it
-  moves to the next page, leaving its caption at the foot of the one before. Keep the two
-  together: make room for the caption's lines and the amount's line before drawing either.
-
-## The A4 item table's header can sit alone at a page foot
-
-- **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
-  open by A663 Part 2).** The A4 page draws the table's header row and each item row as separate
-  rows, each checking only its own room (`apps/server/src/invoice-page.ts:259`, `tableRow`). The
-  header can therefore end a page with the items starting on the next, and a table that runs onto
-  a further page shows no header there. Keep the header with the first row, and repeat it at the
-  top of each continuation page.
-
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
 A268 discards a waiting device's request when the last Add dialog closes. An agent told
@@ -377,8 +359,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 ## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
 
 - [The till's on-screen receipt is a second copy of the layout](#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
-- [On an A4 full invoice, a caption and its amount can split across pages](#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages).
-- [The A4 item table's header can sit alone at a page foot](#the-a4-item-tables-header-can-sit-alone-at-a-page-foot).
 
 ## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
 

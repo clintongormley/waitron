@@ -9,9 +9,10 @@ import {
   INVOICE_PAGE_HEIGHT,
   INVOICE_PAGE_WIDTH,
   layoutInvoicePages,
+  type InvoicePage,
   type InvoicePageElement,
 } from "./invoice-page.js";
-import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { sampleDocument } from "./sample-receipt.js";
 
 async function rendered(input: ReceiptDocumentInput = fixture) {
@@ -581,6 +582,16 @@ describe("A4 columns and right-aligned amounts", () => {
   const header = { units: "Uds.", item: "Artículo", price: "Precio", amount: "Importe" };
   const row = { units: "12", item: "Croquetas", price: "1,50", amount: "18,00" };
 
+  const PAGE_FOOT = INVOICE_PAGE_HEIGHT - 36;
+  const fillerLines = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      kind: "text",
+      text: `Line ${index}`,
+      indent: 0,
+    }));
+  const pageOf = (pages: InvoicePage[], value: string) =>
+    pages.findIndex((page) => texts(page.elements).some((element) => element.text === value));
+
   it("right-aligns every amount to the content's right edge", () => {
     const elements = layoutInvoicePages(fixture)[0]!.elements;
     const total = named(elements, "19,69 €");
@@ -700,11 +711,7 @@ describe("A4 columns and right-aligned amounts", () => {
     let moved = 0;
     for (let count = 40; count <= 60; count++) {
       const pages = await layoutOf([
-        ...Array.from({ length: count }, (_, index) => ({
-          kind: "text",
-          text: `Line ${index}`,
-          indent: 0,
-        })),
+        ...fillerLines(count),
         { kind: "table", table: { rows: [{ ...row, item: name }], withRate: false } },
       ]);
       const holding = pages.filter((page) =>
@@ -827,6 +834,268 @@ describe("A4 columns and right-aligned amounts", () => {
     expect(below.y).toBeCloseTo(totals.at(-1)!.y + 28, 5);
     for (const element of elements)
       expect(right(element)).toBeLessThanOrEqual(CONTENT_RIGHT + 1e-6);
+  });
+
+  it("keeps an amount on the page of its caption's last line when it needs a line of its own", async () => {
+    const total = {
+      kind: "amount",
+      caption: "TOTAL ".repeat(8).trim(),
+      amount: "12.345,67 €",
+      indent: 0,
+      style: { double: true },
+    };
+    const alone = (await layoutOf([total]))[0]!.elements;
+    const captions = texts(alone).filter((element) => element.text.startsWith("TOTAL"));
+    expect(named(alone, "12.345,67 €").y).toBeCloseTo(captions.at(-1)!.y + 28, 5);
+    const captionLines = captions.length;
+    const count = Math.floor((PAGE_FOOT - 36 - captionLines * 28) / 14);
+    const captionEnd = 36 + count * 14 + captionLines * 28;
+    expect(captionEnd).toBeLessThanOrEqual(PAGE_FOOT);
+    expect(captionEnd + 28).toBeGreaterThan(PAGE_FOOT);
+
+    const pages = await layoutOf([...fillerLines(count), total]);
+    const captionPages = pages.flatMap((page, index) =>
+      texts(page.elements)
+        .filter((element) => element.text.startsWith("TOTAL"))
+        .map(() => index),
+    );
+    expect(captionPages).toHaveLength(captionLines);
+    expect(pageOf(pages, "12.345,67 €")).toBe(captionPages.at(-1));
+    const amount = named(pages[pageOf(pages, "12.345,67 €")]!.elements, "12.345,67 €");
+    expect(amount.y + 28).toBeLessThanOrEqual(PAGE_FOOT);
+  });
+
+  it("keeps the item table's header on the page of its first row", async () => {
+    const count = Math.floor((PAGE_FOOT - 36 - 14) / 14);
+    expect(36 + count * 14 + 14).toBeLessThanOrEqual(PAGE_FOOT);
+    expect(36 + count * 14 + 28).toBeGreaterThan(PAGE_FOOT);
+
+    const pages = await layoutOf([
+      ...fillerLines(count),
+      { kind: "table", table: { header, rows: [row], withRate: false } },
+    ]);
+    expect(pageOf(pages, "Line 0")).toBe(0);
+    expect(pageOf(pages, "Uds.")).toBe(pageOf(pages, "Croquetas"));
+  });
+
+  it("draws the item table's header again at the top of each page the table continues on", async () => {
+    const rows = Array.from({ length: 80 }, (_, index) => ({ ...row, item: `Plato ${index}` }));
+    const pages = await layoutOf([{ kind: "table", table: { header, rows, withRate: false } }]);
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages.slice(1)) {
+      const drawn = texts(page.elements);
+      expect(drawn.slice(0, 5).map((element) => [element.text, element.bold])).toEqual([
+        ["Uds.", true],
+        ["Artículo", true],
+        ["Precio", true],
+        ["Importe", true],
+        ["12", false],
+      ]);
+      expect(drawn[0]!.y).toBe(36);
+      expect(drawn[5]!.text).toMatch(/^Plato /u);
+      expect(drawn[5]!.y).toBe(36 + 14);
+    }
+  });
+
+  const headerCells = [
+    ["Uds.", true],
+    ["Artículo", true],
+    ["Precio", true],
+    ["Importe", true],
+  ];
+  const startsWithHeader = (page: InvoicePage, cells = headerCells) => {
+    const drawn = texts(page.elements);
+    expect(drawn.slice(0, 4).map((element) => [element.text, element.bold])).toEqual(cells);
+    expect(drawn[0]!.y).toBe(36);
+    expect(drawn.length).toBeGreaterThan(4);
+  };
+
+  /** Filed items, one item printed outside the table, then more filed items. */
+  const splitInput = (before: number, after: number) => {
+    const input = structuredClone(fixture);
+    const filed = input.result.lines[1]!;
+    const unfiled = structuredClone(filed);
+    delete unfiled.net;
+    const items = (prefix: string, count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        ...filed,
+        descriptions: { "es-ES": `${prefix} ${index}` },
+      }));
+    input.result.lines = [
+      ...items("Antes", before - 1),
+      filed,
+      { ...unfiled, descriptions: { "es-ES": "Fuera de la tabla" } },
+      ...items("Plato", after),
+    ];
+    return input;
+  };
+  const headingCells = (heading: {
+    units: string;
+    item: string;
+    price: string;
+    amount: string;
+  }) => [
+    [heading.units, true],
+    [heading.item, true],
+    [heading.price, true],
+    [heading.amount, true],
+  ];
+
+  it("draws the header at the top of a page that items after one printed outside the table continue onto", () => {
+    const input = splitInput(1, 100);
+    const tables = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "table" ? [element.table] : [],
+    );
+    expect(tables.map((table) => [table.header !== undefined, table.rows.length])).toEqual([
+      [true, 1],
+      [false, 100],
+    ]);
+    const heading = tables[0]!.header!;
+    const pages = layoutInvoicePages(input);
+    expect(
+      texts(pages[0]!.elements).some((element) => element.text.includes("Fuera de la tabla")),
+    ).toBe(true);
+    expect(pageOf(pages, "Plato 0")).toBe(0);
+    expect(
+      texts(pages[0]!.elements).filter((element) => element.text === heading.units),
+    ).toHaveLength(1);
+    const continued = pages
+      .slice(1)
+      .filter((page) => texts(page.elements).some((element) => element.text.startsWith("Plato ")));
+    expect(continued.length).toBeGreaterThan(0);
+    for (const page of continued) startsWithHeader(page, headingCells(heading));
+  });
+
+  it("draws the header before a later section on a page that has none yet", () => {
+    const outsideAtTop = (input: ReceiptDocumentInput) => {
+      const pages = layoutInvoicePages(input);
+      const outside = texts(pages[1]?.elements ?? [])[0];
+      return outside?.text.includes("Fuera de la tabla") === true && outside.y === 36;
+    };
+    const before = Array.from({ length: 60 }, (_, index) => index + 1).find((count) =>
+      outsideAtTop(splitInput(count, 3)),
+    );
+    expect(before).toBeDefined();
+    const input = splitInput(before!, 3);
+    const tables = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "table" ? [element.table] : [],
+    );
+    expect(tables.map((table) => table.header !== undefined)).toEqual([true, false]);
+    const pages = layoutInvoicePages(input);
+    expect(
+      pages[0]!.elements.some((element) => element.kind === "text" && element.text === "Plato 0"),
+    ).toBe(false);
+    const drawn = texts(pages[1]!.elements);
+    const outside = drawn.filter((element) => element.y === 36);
+    expect(outside.map((element) => element.text)).toEqual([
+      "2 Fuera de la tabla (IVA incluido)",
+      "8,80 €",
+    ]);
+    const rest = drawn.filter((element) => element.y > 36);
+    expect(rest.slice(0, 4).map((element) => [element.text, element.bold])).toEqual(
+      headingCells(tables[0]!.header!),
+    );
+    expect(rest[0]!.y).toBe(36 + 14);
+    expect(named(pages[1]!.elements, "Plato 0").y).toBe(36 + 28);
+  });
+
+  it("moves a row whose units cell needs a line of its own onto the next page whole", async () => {
+    const units = `1 ${"raciones de menú degustación ".repeat(5).trim()}`;
+    const count = Math.floor((PAGE_FOOT - 36 - 14) / 14);
+    expect(36 + count * 14 + 14).toBeLessThanOrEqual(PAGE_FOOT);
+    expect(36 + count * 14 + 28).toBeGreaterThan(PAGE_FOOT);
+
+    const pages = await layoutOf([
+      ...fillerLines(count),
+      {
+        kind: "table",
+        table: {
+          rows: [{ units, item: "Menú", price: "72,73", amount: "72,73" }],
+          withRate: false,
+        },
+      },
+    ]);
+    expect(pages).toHaveLength(2);
+    expect(texts(pages[0]!.elements).every((element) => element.text.startsWith("Line "))).toBe(
+      true,
+    );
+    const item = named(pages[1]!.elements, "Menú");
+    const unitsLines = texts(pages[1]!.elements).filter((element) => element.y < item.y);
+    expect(unitsLines.map((element) => element.text).join(" ")).toBe(units);
+    expect(unitsLines[0]!.y).toBe(36);
+  });
+
+  it("draws the header at the top of every page a row taller than a page breaks onto", async () => {
+    const name = "ABCDEFGHIJ".repeat(600);
+    const pages = await layoutOf([
+      { kind: "table", table: { header, rows: [{ ...row, item: name }], withRate: false } },
+    ]);
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) startsWithHeader(page);
+  });
+
+  it("draws no second header for a later section on a page a tall row's header already opens", async () => {
+    const pages = await layoutOf([
+      {
+        kind: "table",
+        table: { header, rows: [{ ...row, item: "ABCDEFGHIJ".repeat(600) }], withRate: false },
+      },
+      { kind: "text", text: "Fuera de la tabla", indent: 0 },
+      { kind: "table", table: { rows: [{ ...row, item: "Postre" }], withRate: false } },
+    ]);
+    const last = pages.at(-1)!;
+    expect(pageOf(pages, "Postre")).toBe(pages.length - 1);
+    startsWithHeader(last);
+    expect(texts(last.elements).filter((element) => element.text === "Uds.")).toHaveLength(1);
+  });
+
+  const linesPerPage = Math.floor((PAGE_FOOT - 36) / 14);
+  it.each([
+    ["a row taller than a page", "ABCDEFGHIJ".repeat(600), undefined],
+    [
+      "a row that fills a page alone",
+      Array.from({ length: linesPerPage }, (_, index) => `${"W".repeat(28)}${index}`).join(" "),
+      linesPerPage,
+    ],
+  ])("never leaves the header last on a page, for %s", async (_case, name, expectedLines) => {
+    const count = Math.floor((PAGE_FOOT - 36 - 14) / 14);
+    expect(36 + count * 14 + 14).toBeLessThanOrEqual(PAGE_FOOT);
+    expect(36 + count * 14 + 28).toBeGreaterThan(PAGE_FOOT);
+
+    const pages = await layoutOf([
+      ...fillerLines(count),
+      { kind: "table", table: { header, rows: [{ ...row, item: name }], withRate: false } },
+    ]);
+    const itemLines = pages.flatMap((page, index) =>
+      texts(page.elements)
+        .filter((element) => /^[AW]/u.test(element.text) && element.text !== "Artículo")
+        .map(() => index),
+    );
+    if (expectedLines !== undefined) expect(itemLines).toHaveLength(expectedLines);
+    expect(pageOf(pages, "Uds.")).toBe(itemLines[0]);
+    for (const page of pages.slice(1)) startsWithHeader(page);
+  });
+
+  it("moves a caption that wraps onto the next page whole when its amount sits beside its last line", async () => {
+    const caption = Array.from({ length: 30 }, (_, index) => `concepto${index}`).join(" ");
+    const amount = { kind: "amount", caption, amount: "1,00 €", indent: 0 };
+    const alone = (await layoutOf([amount]))[0]!.elements;
+    const aloneCaption = texts(alone).filter((element) => element.text.startsWith("concepto"));
+    expect(aloneCaption.length).toBeGreaterThan(1);
+    expect(named(alone, "1,00 €").y).toBe(aloneCaption.at(-1)!.y);
+    const captionLines = aloneCaption.length;
+    const count = linesPerPage - captionLines + 1;
+    expect(36 + count * 14 + (captionLines - 1) * 14).toBeLessThanOrEqual(PAGE_FOOT);
+    expect(36 + count * 14 + captionLines * 14).toBeGreaterThan(PAGE_FOOT);
+
+    const pages = await layoutOf([...fillerLines(count), amount]);
+    const captionPages = pages.flatMap((page, index) =>
+      texts(page.elements)
+        .filter((element) => element.text.startsWith("concepto"))
+        .map(() => index),
+    );
+    expect(captionPages).toEqual(Array.from({ length: captionLines }, () => 1));
+    expect(pageOf(pages, "1,00 €")).toBe(1);
   });
 });
 
