@@ -208,7 +208,7 @@ it.each(["directory removal", "query close"])(
     } else {
       vi.spyOn(store, "openBackupQuery").mockImplementation(async (path) => {
         const opened = await originalOpen(path);
-        if (!path.includes("verification-venue-")) return opened;
+        if (typeof path !== "string" || !path.includes("verification-venue-")) return opened;
         return {
           ...opened,
           close: async () => {
@@ -250,7 +250,8 @@ it.each(["success", "owner refusal"])(
     let checked = false;
     vi.spyOn(store, "openBackupQuery").mockImplementation(async (path) => {
       const opened = await originalOpen(path);
-      if (path.includes("verification-venue-")) placedQuery = opened.query;
+      if (typeof path === "string" && path.includes("verification-venue-"))
+        placedQuery = opened.query;
       return opened;
     });
     vi.spyOn(fs, "rm").mockImplementation(async (path, options) => {

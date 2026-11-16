@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -31,12 +31,6 @@ function fixture() {
   return { path, directory };
 }
 
-async function open(path: string) {
-  const handle = await openBackupQuery(path);
-  handles.push(handle);
-  return handle;
-}
-
 async function rows(query: BackupQuery, sql: string, values?: readonly BackupValue[]) {
   const result: BackupRow[] = [];
   for await (const row of query.rows(sql, values)) result.push(row);
@@ -52,7 +46,13 @@ function originalRows(path: string) {
   }
 }
 
-describe("query-only backup reads", () => {
+describe.each(["file", "bytes"])("query-only backup reads (%s)", (source) => {
+  async function open(path: string) {
+    const handle = await openBackupQuery(source === "bytes" ? readFileSync(path) : path);
+    handles.push(handle);
+    return handle;
+  }
+
   it("serves bound SELECT and recursive reads", async () => {
     const { path } = fixture();
     const { query } = await open(path);
@@ -200,7 +200,7 @@ describe("query-only backup reads", () => {
     });
   });
 
-  it("does not create a missing source database", async () => {
+  it.runIf(source === "file")("does not create a missing source database", async () => {
     const { directory } = fixture();
     const absent = join(directory, "absent.db");
     await expect(open(absent)).rejects.toMatchObject({ code: "ERR_SQLITE_ERROR" });
@@ -211,5 +211,11 @@ describe("query-only backup reads", () => {
     const { path } = fixture();
     writeFileSync(path, "this is not SQLite");
     await expect(open(path)).rejects.toMatchObject({ code: "ERR_SQLITE_ERROR" });
+  });
+});
+
+it("refuses an empty byte copy before exposing a callback", async () => {
+  await expect(openBackupQuery(new Uint8Array())).rejects.toMatchObject({
+    code: "ERR_INVALID_ARG_VALUE",
   });
 });

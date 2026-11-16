@@ -18,6 +18,8 @@ describe("the public surface", () => {
         "validatePayload",
         "KEY_RING_VARIABLES",
         "loadKeyRing",
+        "encodeKeyRing",
+        "keyRingEnv",
         "singleLineKeyRingVariables",
         "credentialProvisioned",
         "credentialRevision",

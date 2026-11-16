@@ -1,3 +1,4 @@
+import { writeFileDurable } from "./fs-atomic.js";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -1399,14 +1400,8 @@ it("a backup room note that cannot be deleted stops a Move, and a resumed Move, 
 });
 
 const RING = "ring bytes\nWAITRON_CREDENTIALS_KEY=c2VjcmV0\n";
-const RING_TEMP = /^\.secrets\.env\.set-aside-\d+-[0-9a-f-]{36}$/;
 async function realWriteRing(path: string, bytes: Buffer, mode: number) {
-  const handle = await fs.open(path, "wx", mode);
-  try {
-    await handle.writeFile(bytes);
-  } finally {
-    await handle.close();
-  }
+  await writeFileDurable(path, bytes, mode, { exactMode: true, overwrite: false });
 }
 const stemFolderOnState = (roots: Roots, record: StartAgainChoiceRecord) =>
   join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record));
@@ -1582,7 +1577,7 @@ it("a cut while writing the ring's copy leaves no copy and moves nothing; the re
   const cut: SetAsideIo = {
     ...realIo,
     writeRing: async (path, bytes) => {
-      await writeFile(path, bytes.subarray(0, 5));
+      await writeFile(`${path}.tmp`, bytes.subarray(0, 5));
       throw errno("EIO");
     },
   };
@@ -1593,8 +1588,7 @@ it("a cut while writing the ring's copy leaves no copy and moves nothing; the re
   });
   await expect(lstat(join(stemFolder, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   const left = (await readdir(stemFolder)).filter((name) => name !== "state" && name !== "venue");
-  expect(left).toHaveLength(1);
-  expect(left[0]).toMatch(RING_TEMP);
+  expect(left).toEqual(["secrets.env.tmp"]);
   expect(await snapshot(roots.venueDir)).toEqual(venueBefore);
 
   const order: string[] = [];
@@ -1611,7 +1605,8 @@ it("a cut while writing the ring's copy leaves no copy and moves nothing; the re
   };
   expect(await resumeStartAgainSetAside(roots, {}, recording)).toBe("resumed");
 
-  expect(order.slice(0, 2)).toEqual(["write .secrets.env.set-aside", "rename secrets.env"]);
+  expect(order[0]).toBe("write secrets.env");
+  expect(order.slice(1).every((event) => event.startsWith("rename "))).toBe(true);
   expect(order.length).toBeGreaterThan(2);
   expect((await readdir(stemFolder)).sort()).toEqual(["secrets.env", "state", "venue"]);
   expect(await readFile(join(stemFolder, "secrets.env"), "utf8")).toBe(RING);
@@ -1627,6 +1622,8 @@ it("a leftover temporary ring file is removed by the next prepare; a folder, a l
   await mkdir(old, { recursive: true });
   const temp = join(old, `.secrets.env.set-aside-12-${randomUUID()}`);
   await writeFile(temp, "half");
+  const currentTemp = join(old, "secrets.env.tmp");
+  await writeFile(currentTemp, "half of current copy");
   const folderNamedLikeOne = join(old, `.secrets.env.set-aside-13-${randomUUID()}`);
   await mkdir(folderNamedLikeOne);
   const outside = join(await scratch(), "outside");
@@ -1640,6 +1637,7 @@ it("a leftover temporary ring file is removed by the next prepare; a folder, a l
   await prepared(roots, attempt.administratorId);
 
   await expect(lstat(temp)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(currentTemp)).rejects.toMatchObject({ code: "ENOENT" });
   expect((await lstat(folderNamedLikeOne)).isDirectory()).toBe(true);
   expect((await lstat(linkNamedLikeOne)).isSymbolicLink()).toBe(true);
   expect(await readFile(outside, "utf8")).toBe("outside");
@@ -1759,3 +1757,21 @@ it.each(["records", "records/set-aside"])(
     expect(await readFile(join(target, "keep"), "utf8")).toBe("untouched");
   },
 );
+
+it("an exclusive ring publication preserves stale staging until resume sweeps it", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
+  const record = await prepared(roots, attempt.administratorId);
+  const staging = join(stemFolderOnState(roots, record), "secrets.env.tmp");
+  await writeFile(staging, "earlier attempt");
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: `set-aside failed: EEXIST state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/secrets.env (or staging file secrets.env.tmp)`,
+  });
+  expect(await readFile(staging, "utf8")).toBe("earlier attempt");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
+  expect(await readFile(join(stemFolderOnState(roots, record), "secrets.env"), "utf8")).toBe(RING);
+  await expectAllAside(roots, record, before);
+});

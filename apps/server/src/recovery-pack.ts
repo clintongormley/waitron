@@ -1,6 +1,5 @@
 import {
-  withNodeTransaction,
-  withTransaction,
+  withVenueAndNodeTransaction,
   type Database,
   type NodeDatabase,
   type Transaction,
@@ -65,34 +64,32 @@ export async function createRecoveryPack(
       return refuse("module_unsupported");
   }
   // node.db's lock is held across the venue commit, and every key write takes it, so the key
-  // cannot change while the pack is made; it is taken outside venue.db's, never inside.
-  return withNodeTransaction(deps.nodeDb, (nodeTx) =>
-    withTransaction(deps.db, async (tx) => {
-      await deps.authorize?.(tx);
-      const key = await readRecoveryKey(nodeTx, node.nodeId);
-      if (key?.verifier !== verifier) return invalidKey();
-      const name = key.keyName;
-      if (name === null) return refuse("key_name_missing");
-      const snapshots: Record<string, unknown> = {};
-      for (const module of modules) {
-        const contribution = module.backup?.recoveryPack;
-        if (contribution === undefined) continue;
-        if (!Object.hasOwn(inputs, module.name)) return refuse("module_input_missing");
-        snapshots[module.name] = await contribution(tx, node, inputs[module.name]);
-      }
-      if ((await readRecoveryKeyVerifier(nodeTx, node.nodeId)) !== verifier) return invalidKey();
-      return {
-        version: 1,
-        kind: "node-recovery-pack",
-        createdAt,
-        nodeRecovery: { nodeId: node.nodeId, name, secret },
-        modules: snapshots,
-        warnings: [
-          "contains-node-recovery-key",
-          "register-snapshot-may-be-stale",
-          "retain-older-node-keys-for-older-backups",
-        ],
-      };
-    }),
-  );
+  // cannot change while the pack is made.
+  return withVenueAndNodeTransaction(deps.db, deps.nodeDb, async (tx, nodeTx) => {
+    await deps.authorize?.(tx);
+    const key = await readRecoveryKey(nodeTx, node.nodeId);
+    if (key?.verifier !== verifier) return invalidKey();
+    const name = key.keyName;
+    if (name === null) return refuse("key_name_missing");
+    const snapshots: Record<string, unknown> = {};
+    for (const module of modules) {
+      const contribution = module.backup?.recoveryPack;
+      if (contribution === undefined) continue;
+      if (!Object.hasOwn(inputs, module.name)) return refuse("module_input_missing");
+      snapshots[module.name] = await contribution(tx, node, inputs[module.name]);
+    }
+    if ((await readRecoveryKeyVerifier(nodeTx, node.nodeId)) !== verifier) return invalidKey();
+    return {
+      version: 1,
+      kind: "node-recovery-pack",
+      createdAt,
+      nodeRecovery: { nodeId: node.nodeId, name, secret },
+      modules: snapshots,
+      warnings: [
+        "contains-node-recovery-key",
+        "register-snapshot-may-be-stale",
+        "retain-older-node-keys-for-older-backups",
+      ],
+    };
+  });
 }

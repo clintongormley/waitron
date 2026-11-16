@@ -4,8 +4,14 @@ export { venueCredentials } from "@waitron/db";
 export { PURPOSES, isPurpose, validatePayload } from "./purposes.js";
 export type { Purpose } from "./purposes.js";
 
-export { KEY_RING_VARIABLES, loadKeyRing, singleLineKeyRingVariables } from "./keyring.js";
-export type { KeyEntry, KeyRing } from "./keyring.js";
+export {
+  KEY_RING_VARIABLES,
+  encodeKeyRing,
+  keyRingEnv,
+  loadKeyRing,
+  singleLineKeyRingVariables,
+} from "./keyring.js";
+export type { EncodedKeyRing, KeyEntry, KeyRing } from "./keyring.js";
 
 // cipher.ts is not exported: using its primitives directly would bypass the store.
 export {

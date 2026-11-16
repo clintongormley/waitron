@@ -7,15 +7,20 @@ export interface BackupQuery {
   rows(sql: string, values?: readonly BackupValue[]): AsyncIterable<BackupRow>;
 }
 const PURE_FUNCTIONS = new Set(["count", "max", "min", "length", "hex", "coalesce", "json_valid"]);
-export async function openBackupQuery(databasePath: string): Promise<{
+export async function openBackupQuery(databasePath: string | Uint8Array): Promise<{
   query: BackupQuery;
   close(): Promise<void>;
 }> {
-  const database = new DatabaseSync(databasePath, { readOnly: true, allowExtension: false });
+  const fromBytes = databasePath instanceof Uint8Array;
+  const database = new DatabaseSync(fromBytes ? ":memory:" : databasePath, {
+    readOnly: !fromBytes,
+    allowExtension: false,
+  });
   const close = async () => {
     if (database.isOpen) database.close();
   };
   try {
+    if (fromBytes) database.deserialize(databasePath);
     database.exec("pragma query_only = on");
     database.prepare("select name from sqlite_schema limit 0").get();
     database.setAuthorizer((action, _first, second) => {

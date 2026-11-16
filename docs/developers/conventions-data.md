@@ -1691,7 +1691,10 @@ the target is not in `node.db`.
 queues (`packages/store/src/index.ts`):
 
 - **`node.db`'s write lock is taken outside `venue.db`'s, never inside**, so two writers cannot each
-  hold one file and wait for the other.
+  hold one file and wait for the other. For one nested body, use
+  `withVenueAndNodeTransaction` (`packages/db/src/tenancy.ts`); each file commits separately,
+  venue first. `packages/db/src/venue-and-node-transaction.test.ts` checks lock order,
+  rollback and change delivery for this helper; it does not check other callers' lock order.
 - **Where one change spans both files, `venue.db` is saved first and `node.db` follows**, and a
   re-run repairs a `node.db` left behind; each such site says so in a one-line comment. The sites:
   promotion's role (`apps/server/src/promote.ts`; `finishPromotedRole` in `promoted-role.ts`

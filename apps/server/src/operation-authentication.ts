@@ -1,7 +1,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
-  withNodeTransaction,
+  withVenueAndNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -72,16 +72,14 @@ export async function withRecoveryKeyAuthority<T>(
       const commit = async <R>(body: (tx: Transaction) => Promise<R>): Promise<R> => {
         authorise();
         // node.db's lock is held across the venue commit, and every key write takes it, so the key
-        // cannot change before this commits; it is taken outside venue.db's, never inside.
-        return withNodeTransaction(deps.node, (node) =>
-          withTransaction(deps.db, async (tx) => {
-            authorise();
-            if ((await readRecoveryKeyVerifier(node, targetNodeId)) !== verifier) return refuse();
-            const result = await body(tx);
-            authorise();
-            return result;
-          }),
-        );
+        // cannot change before this commits.
+        return withVenueAndNodeTransaction(deps.db, deps.node, async (tx, node) => {
+          authorise();
+          if ((await readRecoveryKeyVerifier(node, targetNodeId)) !== verifier) return refuse();
+          const result = await body(tx);
+          authorise();
+          return result;
+        });
       };
       return run(authority, commit);
     },

@@ -38,6 +38,39 @@ export interface KeyRing {
   previous?: KeyEntry;
 }
 
+/** A key ring with its keys in base64, as `secrets.env` holds them. */
+export interface EncodedKeyRing {
+  key: string;
+  version: number;
+  previous?: { key: string; version: number };
+}
+
+export function encodeKeyRing(ring: KeyRing): EncodedKeyRing {
+  const encoded: EncodedKeyRing = {
+    key: ring.current.key.toString("base64"),
+    version: ring.current.version,
+  };
+  if (ring.previous !== undefined)
+    encoded.previous = {
+      key: ring.previous.key.toString("base64"),
+      version: ring.previous.version,
+    };
+  return encoded;
+}
+
+/** The ring's variables, as `loadKeyRing` reads them; the previous pair only when it has one. */
+export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
+  const env: Record<string, string> = {
+    WAITRON_CREDENTIALS_KEY: ring.key,
+    WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
+  };
+  if (ring.previous !== undefined) {
+    env.WAITRON_CREDENTIALS_KEY_PREVIOUS = ring.previous.key;
+    env.WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION = String(ring.previous.version);
+  }
+  return env;
+}
+
 /**
  * Validates the ring's SHAPE — present, 32 bytes once base64-decoded, a version for every key, no
  * version collision — and not that a key's bytes are the ones that sealed any stored row. Replacing

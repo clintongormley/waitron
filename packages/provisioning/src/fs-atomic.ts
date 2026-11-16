@@ -1,5 +1,5 @@
 import "./errors.js";
-import { mkdir, open, realpath, rename, rm } from "node:fs/promises";
+import { link, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { syncFolder } from "./folder-sync.js";
 
@@ -46,19 +46,27 @@ export function failedAtFolderSync(error: unknown): boolean {
   return typeof error === "object" && error !== null && folderSyncFailures.has(error);
 }
 
-/** Writes and syncs the working copy before returning its path. A failure
- * at any step removes the working copy and is thrown. */
+export interface DurableFileOptions {
+  exactMode?: boolean;
+  overwrite?: boolean;
+}
+
+/** Writes and syncs a working copy. Exclusive creation leaves a staging file owned by another call intact. */
 export async function stageFileDurable(
   path: string,
   data: string | Uint8Array,
   mode: number,
+  options: DurableFileOptions = {},
 ): Promise<string> {
   const tmp = stagedPath(path);
+  let created = false;
   try {
-    await rm(tmp, { force: true });
-    const handle = await open(tmp, "w", mode);
+    if (options.overwrite !== false) await rm(tmp, { force: true });
+    const handle = await open(tmp, options.overwrite === false ? "wx" : "w", mode);
+    created = true;
     let failed = false;
     try {
+      if (options.exactMode) await handle.chmod(mode);
       await handle.writeFile(data);
       await handle.sync();
     } catch (error) {
@@ -70,30 +78,41 @@ export async function stageFileDurable(
       });
     }
   } catch (error) {
-    await rm(tmp, { force: true }).catch(() => undefined);
+    if (created || options.overwrite !== false)
+      await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
   return tmp;
 }
 
-/** {@link stageFileDurable}, then rename the working copy onto `path` and sync the folder. A failed
- * sync is thrown; a failure before the rename removes the working copy. */
+/** Publishes flushed bytes by replacement, or exclusively by hard link, then syncs the folder. */
 export async function writeFileDurable(
   path: string,
   data: string | Uint8Array,
   mode: number,
+  options: DurableFileOptions = {},
 ): Promise<void> {
-  const tmp = await stageFileDurable(path, data, mode);
+  const tmp = await stageFileDurable(path, data, mode, options);
   try {
-    await rename(tmp, path);
+    if (options.overwrite === false) await link(tmp, path);
+    else await rename(tmp, path);
   } catch (error) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
+  let cleanupFailure: { error: unknown } | undefined;
+  try {
+    if (options.overwrite === false) await rm(tmp);
+  } catch (error) {
+    cleanupFailure = { error };
+  }
   try {
     await syncFolderHolding(path);
   } catch (error) {
-    if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
-    throw error;
+    if (cleanupFailure === undefined) {
+      if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
+      throw error;
+    }
   }
+  if (cleanupFailure !== undefined) throw cleanupFailure.error;
 }
