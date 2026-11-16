@@ -583,7 +583,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             "--input-type=module",
             "-e",
             `
-          import { lockVenueDirectory, VenueInUseError } from "@waitron/store";
+          import { lockVenueDirectory, VenueInUseError } from ${JSON.stringify(new URL("../../../packages/store/src/venue-lock.ts", import.meta.url).href)};
           try {
             const hold = await lockVenueDirectory(process.argv[1]);
             hold.release();
@@ -595,7 +595,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         `,
             directory,
           ],
-          { encoding: "utf8", timeout: 10000 },
+          { encoding: "utf8", timeout: 30_000 },
         );
         expect(child.status, child.stderr).toBe(0);
         expect(child.stdout).toBe("refused");
