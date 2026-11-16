@@ -29,7 +29,7 @@ export interface BackupRoomNote {
 }
 
 /** `retainDays` is the running backups' age cap, which bounds how long the step holds archives. */
-export interface BackupRoomNoteClockStep extends ClockStep {
+export interface BackupRoomNoteClockStep extends Pick<ClockStep, "confirmedAt"> {
   retainDays: number;
 }
 
@@ -113,7 +113,6 @@ export async function writeBackupRoomNote(options: {
         : {
             clockStep: {
               confirmedAt: options.clockStep.confirmedAt,
-              stepMs: options.clockStep.stepMs,
               retainDays: options.clockStep.retainDays,
             },
           }),
@@ -206,7 +205,6 @@ function parseNote(text: string): BackupRoomNote | null {
     !(
       isRecord(clockStep) &&
       isTime(clockStep.confirmedAt) &&
-      Number.isSafeInteger(clockStep.stepMs) &&
       Number.isSafeInteger(clockStep.retainDays) &&
       (clockStep.retainDays as number) > 0
     )
@@ -232,7 +230,6 @@ function parseNote(text: string): BackupRoomNote | null {
       : {
           clockStep: {
             confirmedAt: clockStep.confirmedAt as string,
-            stepMs: clockStep.stepMs as number,
             retainDays: clockStep.retainDays as number,
           },
         }),

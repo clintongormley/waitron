@@ -2820,7 +2820,9 @@ run) and takes the age cap from the running duty's `retention.days`, deleting no
 unknown. **The start on a full disk is not changed**: the note is written when backup settings load,
 not when the clock steps, so carrying the step needs a new note field and a rewrite on every step —
 backlog entry "The start on a full disk deletes backups by stamp alone after a clock step"
-(`docs/backlog/box.md`). **Departure from the control above:** in the −400 folder every correctly
+(`docs/backlog/box.md`). _2026-11-16:_ fixed by `fix/full-disk-start-clock-step`; the note now
+carries the step's time (`confirmedAt`) and the start applies the hold ([The backup room
+note](../../developers/conventions-data.md#the-backup-room-note)). **Departure from the control above:** in the −400 folder every correctly
 dated archive is stamped before every held one, so dropping the ranking alone changes nothing there;
 it is the choice of the newest not-held archive that the −400 case pins. Dropping the ranking fails
 the +400 cases (the cross-folder listing, `makeRoom`'s, the run's and the watch's). Controls:
@@ -3484,7 +3486,8 @@ its idle time by the step; tills stay signed in); and the backup hold's limit (T
 steps the box made). The paragraph on deleting old backups (`box-status.md:106-112`, "deletes its
 oldest backups", and the Spanish twin's "copias más antiguas", `:111-116`) gains that, for a while
 after the box steps its clock, backups dated by the wrong clock are deleted last, and that the start
-on a full disk does not do this yet (Task 14a). The same sentence goes in `data-protection.md`'s
+on a full disk does not do this yet (Task 14a; _2026-11-16:_ it now does, see the pointer under
+Task 14a's "Built" note). The same sentence goes in `data-protection.md`'s
 English (`:376`, "delete its oldest backups") and Spanish (`:407-408`) paragraphs on a full disk. `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
 gains what "Check the time" at the end of a red clock line means (the box started with its clock in
 doubt and could not reach the tax agency's time), what the dialog shows,
@@ -3626,7 +3629,8 @@ Focused commands: `pnpm --filter @waitron/till exec vitest run src/widgets/box-t
 - `docs/developers/conventions-data.md`'s "What may be deleted" and "Deleting. Oldest first"
   (`:4580-4593`) gain Task 14a's rule: archives a recent clock step holds are offered last, the
   newest of the current installation's not-held archives is never offered, an unreadable step
-  offers nothing, and the start on a full disk does not apply it (backlog).
+  offers nothing, and the start on a full disk does not apply it (backlog; _2026-11-16:_ it now
+  does, see the pointer under Task 14a's "Built" note).
 
 - `docs/developers/conventions-data.md`: a section "The box sets its own clock" after "A
   confirmation of the clock lifts the stop for one step back" (`:3969`): the host service and its

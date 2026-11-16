@@ -14,6 +14,7 @@ import { gunzipSync } from "node:zlib";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
+import type { ClockStep } from "@waitron/fiscal";
 import {
   type BackupSweepDeps,
   type ManifestBuilder,
@@ -1305,8 +1306,10 @@ describe("pruneBackend across a step the box made to its clock", () => {
     return { backend, keys };
   }
   const kept = (backend: FakeBackend) => [...backend.objects.keys()].sort();
+  /** A whole step, as `readClockStepHold` passes; the hold reads only its `confirmedAt`. */
+  const stepOf = (confirmedAt: string, stepMs: number): ClockStep => ({ confirmedAt, stepMs });
   const hold = (stepMs: number, at = nowMs, retainDays = 7) =>
-    clockStepHold({ confirmedAt: new Date(stepAt).toISOString(), stepMs }, at, retainDays);
+    clockStepHold(stepOf(new Date(stepAt).toISOString(), stepMs), at, retainDays);
 
   it("keeps the newest archives stamped before a +400-day step, up to the count, and applies both caps to the others", async () => {
     const behind = [0, 1, 2, 3, 4].map((d) => stepAt - 400 * day - d * day);
@@ -1368,7 +1371,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
 
   it("holds nothing for a step dated more than a minute ahead of now", () => {
     const ahead = (ms: number) =>
-      clockStepHold({ confirmedAt: new Date(ms).toISOString(), stepMs: 400 * day }, nowMs, 7);
+      clockStepHold(stepOf(new Date(ms).toISOString(), 400 * day), nowMs, 7);
     expect(ahead(nowMs + 60_000 + 1)).toBeUndefined();
     expect(ahead(nowMs + 400 * day)).toBeUndefined();
     expect(ahead(nowMs + 60_000)).toEqual({ fromMs: nowMs + 60_000, toMs: nowMs + 60_000 });
@@ -1382,7 +1385,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
       const at = stepAt + i * day;
       const stored = key(at);
       backend.objects.set(stored, Buffer.from(stored));
-      const held = clockStepHold({ confirmedAt, stepMs: 400 * day }, at, 7);
+      const held = clockStepHold(stepOf(confirmedAt, 400 * day), at, 7);
       await pruneBackend(backend, retain, 7, at, call(), BACKUP_NODE_ID, stored, held);
       expect(backend.objects.size).toBeLessThanOrEqual(retain);
     }
@@ -1397,7 +1400,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
       const stored = key(at);
       backend.objects.set(stored, Buffer.from(stored));
       const confirmedAt = new Date(start + Math.floor(i / 6) * 6 * day).toISOString();
-      const held = clockStepHold({ confirmedAt, stepMs: 5_000 }, at, 7);
+      const held = clockStepHold(stepOf(confirmedAt, 5_000), at, 7);
       await pruneBackend(backend, retain, 7, at, call(), BACKUP_NODE_ID, stored, held);
       expect(backend.objects.size).toBeLessThanOrEqual(2 * retain);
       expect(backend.objects.has(stored)).toBe(true);

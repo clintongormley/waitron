@@ -399,8 +399,7 @@ own, can also make scheduled backups, and can export your setup to start another
   unless you change those settings. Before a backup, whenever the box's disk falls under about 2 GB free, or as the box starts with
   its disk full, the box can also delete its oldest backups in folders on that disk, never the newest in each. For a
   while after the box sets its own clock, it keeps some of the backups dated by the wrong clock or
-  deletes them last; the start on a full disk does not do this yet
-  ([Box status](box-status.md#free-space) explains). Turning off
+  deletes them last ([Box status](box-status.md#free-space) explains). Turning off
   the bucket copy or the scheduled backups leaves what is already stored, so delete it at your
   provider, or from the folder, when you no longer need it. Anything else: _set with your adviser_.
 - Security: Waitron asks your storage provider to encrypt the bucket copy with a key derived from

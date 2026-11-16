@@ -65,7 +65,7 @@ async function archive(dir: string, at: Date, mib: number): Promise<string> {
 async function note(
   over: {
     folders?: { destination: string; dir: string; configuredDir: string }[];
-    clockStep?: { confirmedAt: string; stepMs: number; retainDays: number };
+    clockStep?: { confirmedAt: string; retainDays: number };
   } = {},
 ) {
   await writeBackupRoomNote({
@@ -215,7 +215,7 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("deletes the wrongly dated backups and keeps the real newest while the step is younger than the age cap", async () => {
       await note({
-        clockStep: { confirmedAt: stepAt.toISOString(), stepMs: -STEP, retainDays: 2 },
+        clockStep: { confirmedAt: stepAt.toISOString(), retainDays: 2 },
       });
       const { real } = await stamped();
       const { deps } = setup();
@@ -228,8 +228,18 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("deletes by stamp alone once the step is as old as the note's age cap", async () => {
       await note({
-        clockStep: { confirmedAt: stepAt.toISOString(), stepMs: -STEP, retainDays: 1 },
+        clockStep: { confirmedAt: stepAt.toISOString(), retainDays: 1 },
       });
+      const { wrong } = await stamped();
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readdir(usb)).toEqual([wrong[1]]);
+    });
+
+    it("deletes by stamp alone, as before the note carried a step, when the note has none", async () => {
+      await note();
       const { wrong } = await stamped();
       const { deps } = setup();
 

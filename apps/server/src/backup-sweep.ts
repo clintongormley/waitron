@@ -373,7 +373,7 @@ const AHEAD_TOLERANCE_MS = 60_000;
  * nothing, or a clock put back after it would hold every archive until it caught up. Only steps the
  * box made are recorded, so a step by the time service, or by hand on the host, holds nothing. */
 export function clockStepHold(
-  step: ClockStep | null,
+  step: Pick<ClockStep, "confirmedAt"> | null,
   nowMs: number,
   retainDays: number,
 ): ClockStepHold | undefined {

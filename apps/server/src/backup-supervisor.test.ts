@@ -27,6 +27,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
+import { readBackupRoomNote } from "./backup-room-note.js";
 import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js";
 import { gunzipSync } from "node:zlib";
 import { decryptArtifact } from "./artifact-cipher.js";
@@ -1711,14 +1712,12 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       await sup.reload();
       expect((await readNote(stateDir)).clockStep).toEqual({
         confirmedAt: "2026-10-28T08:00:00.000Z",
-        stepMs: -400 * DAY,
         retainDays: 30,
       });
       step = stepAt("2026-10-29T09:00:00.000Z");
       await sup.noteClockStep();
       expect((await readNote(stateDir)).clockStep).toEqual({
         confirmedAt: "2026-10-29T09:00:00.000Z",
-        stepMs: -400 * DAY,
         retainDays: 30,
       });
       step = null;
@@ -1727,6 +1726,31 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     } finally {
       await sup.stop();
     }
+  }, 60_000);
+
+  it("writes a note the start can read when the step's size is a fraction of a millisecond", async () => {
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const stateDir = await makeStateDir();
+    const sup = supervisorFor(refs, stateDir, {
+      latestClockStep: async () => ({
+        confirmedAt: "2026-10-28T08:00:00.000Z",
+        stepMs: -34_560_000_000.5,
+      }),
+    });
+    try {
+      await sup.reload();
+    } finally {
+      await sup.stop();
+    }
+    const read = await readBackupRoomNote({ stateDir, venueDir: refs.venueDir, nodeId: NODE });
+    expect(read).toMatchObject({
+      note: { clockStep: { confirmedAt: "2026-10-28T08:00:00.000Z", retainDays: 30 } },
+    });
   }, 60_000);
 
   it.each<[string, () => Promise<LatestClockStep>]>([
@@ -1758,6 +1782,48 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     },
     60_000,
   );
+
+  it("a rewrite whose step cannot be read deletes the note and logs it as a run does", async () => {
+    let reads = 0;
+    let unreadable = false;
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const stateDir = await makeStateDir();
+    const logged: unknown[][] = [];
+    const sup = supervisorFor(refs, stateDir, {
+      latestClockStep: async () => {
+        reads += 1;
+        if (unreadable) throw new Error("unreadable");
+        return stepAt("2026-10-28T08:00:00.000Z");
+      },
+      log: (...call) => logged.push(call),
+    });
+    try {
+      await sup.reload();
+      // The note's write and the run's immediate copy have each read the step.
+      await poll(async () => (reads >= 2 ? true : undefined));
+      expect(existsSync(notePath(stateDir))).toBe(true);
+      unreadable = true;
+      logged.length = 0;
+      await sup.noteClockStep();
+      expect(existsSync(notePath(stateDir))).toBe(false);
+      // The run may log its own progress meanwhile.
+      expect(
+        logged.filter(
+          ([, event]) =>
+            event === "backup.clock_step_unreadable" || event === "backup.room_note_write_failed",
+        ),
+      ).toEqual([
+        ["warn", "backup.clock_step_unreadable", { errorCode: "unknown", errno: undefined }],
+      ]);
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
 
   it("writes no note at a step while backups are off or once stopped", async () => {
     const refs: Refs = {

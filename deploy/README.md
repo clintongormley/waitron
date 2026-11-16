@@ -429,7 +429,8 @@ Before it deletes the spare file (below), a start deletes old backups when the d
 under 16 MiB free and the state folder holds a `backup-room-note.json` that passes the start's
 checks, among them that it was written for the `venue.db` still in place. It deletes the oldest
 backups in local backup folders on the database's disk: never the newest in a folder, one taken at
-or before the moment the current installation began, or one in a bucket. It deletes toward 256 MiB
+or before the moment the current installation began, or one in a bucket. For a while after the box steps its own clock, it deletes
+the backups made before the step last. It deletes toward 256 MiB
 free or, when that is out of reach, toward the spare plus 16 MiB (24 MiB), and deletes none when
 even that is out of reach. Once
 the server is running it raises the same alert a backup run raises.

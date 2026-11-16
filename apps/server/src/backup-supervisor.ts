@@ -24,7 +24,7 @@ import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
 import type { LoadFailure } from "./backup-settings-evidence.js";
-import { foldersOnDisk, type DeletableArchive } from "./backup-room.js";
+import { foldersOnDisk, installationStartOrNull, type DeletableArchive } from "./backup-room.js";
 import {
   deleteBackupRoomNote,
   writeBackupRoomNote,
@@ -383,18 +383,25 @@ export class BackupSupervisor {
     let clockStep: BackupRoomNoteClockStep | undefined;
     let folders;
     try {
-      installationStartedAt = await readInstallationStart();
+      installationStartedAt = await installationStartOrNull(readInstallationStart, this.#deps.log);
       if (installationStartedAt === null) return await this.#deleteNote();
-      const step = (await this.#deps.latestClockStep?.()) ?? null;
-      if (step === "setting") return await this.#deleteNote();
-      clockStep =
-        step === null
-          ? undefined
-          : {
-              confirmedAt: new Date(step.confirmedAt).toISOString(),
-              stepMs: step.stepMs,
-              retainDays: this.#config!.retainDays,
-            };
+      try {
+        const step = (await this.#deps.latestClockStep?.()) ?? null;
+        if (step === "setting") return await this.#deleteNote();
+        clockStep =
+          step === null
+            ? undefined
+            : {
+                confirmedAt: new Date(step.confirmedAt).toISOString(),
+                retainDays: this.#config!.retainDays,
+              };
+      } catch (err) {
+        this.#deps.log("warn", "backup.clock_step_unreadable", {
+          errorCode: codeOf(err),
+          errno: errnoOf(err),
+        });
+        return await this.#deleteNote();
+      }
       ({ folders } = await foldersOnDisk(backends, this.#deps.venueDir, this.#deps.deviceOf));
     } catch (err) {
       this.#deps.log("warn", "backup.room_note_write_failed", { errno: errnoOf(err) ?? null });

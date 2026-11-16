@@ -5687,11 +5687,14 @@ no bucket.
 **Who writes it.** Only `BackupSupervisor` (`apps/server/src/backup-supervisor.ts`): `reload`, and
 `noteClockStep`, which boot registers as a clock-correction anchor so every step the box makes
 rewrites the note while backups run. Nothing guards who writes it. Every reload deletes the note
-first; a failure of that deletion is logged `backup.room_note_delete_failed`, not thrown. The note is
-written again only at the end of a reload that started the backup run (`#writeNote`), when the
-installation start reads as a date, through a temporary file and a rename. A null or failed
+first; a failure of that deletion is logged `backup.room_note_delete_failed`, not thrown. A reload
+that started the backup run writes it again at its end, and `noteClockStep` rewrites it in place,
+without deleting it first, while backups run (`#writeNote` for both), when the installation start
+reads as a date, through a temporary file and a rename. A null or failed
 installation-start read, a step read answering "setting" or failing, a failed write or a `stop()`
-landing meanwhile leaves no note. The supervisor's note deletions and writes run one at a time, so
+landing meanwhile leaves no note. A failed step read is logged `backup.clock_step_unreadable` and a failed
+installation-start read `backup.installation_start_unreadable`, as a backup run logs them; a failed
+folder listing or write is logged `backup.room_note_write_failed`. The supervisor's note deletions and writes run one at a time, so
 a step's rewrite cannot land after a reload deleted the note.
 
 **Who deletes it.** Every path that replaces or removes the live `venue.db`, before it does apart
@@ -5734,8 +5737,8 @@ logged `backup.start_room_failed`. Each deletion logs `backup.archive_deleted` w
 each deleted archive and the time, for the note's `venue.db`. A record an earlier start left for the
 same `venue.db` keeps its entries and the earlier time. A failed write is logged
 `backup.start_room_record_failed` and the deletions stand. Boot reads it
-(`recordStartDeletions`, `apps/server/src/start-backup-room-record.ts`, at `boot.ts:2238`, before the
-backup supervisor's first reload at `:2275`) and records the same `backup.archives_deleted` alert a
+(`recordStartDeletions`, `apps/server/src/start-backup-room-record.ts`, before the backup
+supervisor's first reload) and records the same `backup.archives_deleted` alert a
 backup run raises, then deletes the record. A malformed record, or one for another `venue.db`
 (`other_venue_db`), is logged `backup.start_room_record_dropped` and deleted with no alert; an
 unreadable record, an unreadable `venue.db` or a failed alert keeps it for the next start.

@@ -177,6 +177,7 @@ describe("the running server's clock correction", () => {
         body: { error: { code: "clock.set_refused", params: { reason: "same_machine" } } },
       });
     } finally {
+      noteClockStep.mockRestore();
       if (server !== undefined) await server.close();
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }

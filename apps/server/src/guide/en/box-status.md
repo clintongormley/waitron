@@ -178,8 +178,7 @@ A backup's date comes from the box's clock when it was made. So for a while afte
 its own clock](box-status.md#clock-own-device), when the box deletes old backups it keeps the newest of
 the backups made before the change, as many as it keeps of the others, besides those it keeps as
 usual; and when it makes room, it deletes the backups made before the change last. This lasts as many days as backups are kept, and covers only changes the box made itself,
-not one its time service made. The start on a full disk does not do this yet: it still deletes by
-the dates in the backups' names.
+not one its time service made.
 
 This page cannot remove other files or move your data to a larger disk.
 

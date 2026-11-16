@@ -137,11 +137,7 @@ describe("writeBackupRoomNote", () => {
   });
 
   it("writes the box's latest clock step with the age cap that bounds its hold, and reads it back", async () => {
-    const clockStep = {
-      confirmedAt: "2026-10-28T08:00:00.000Z",
-      stepMs: -400 * 86_400_000,
-      retainDays: 30,
-    };
+    const clockStep = { confirmedAt: "2026-10-28T08:00:00.000Z", retainDays: 30 };
     await write({ clockStep });
     const stored = JSON.parse(await readFile(notePath(), "utf8")) as BackupRoomNote;
     expect(stored.clockStep).toEqual(clockStep);
@@ -422,7 +418,7 @@ describe("readBackupRoomNote", () => {
     writtenAt: "2026-10-29T12:00:00.000Z",
   });
 
-  const step = { confirmedAt: "2026-10-28T08:00:00.000Z", stepMs: -1, retainDays: 30 };
+  const step = { confirmedAt: "2026-10-28T08:00:00.000Z", retainDays: 30 };
 
   it.each<[string, (note: Record<string, unknown>) => unknown]>([
     ["not JSON", () => "{"],
@@ -538,10 +534,6 @@ describe("readBackupRoomNote", () => {
       (note) => ({ ...note, clockStep: { ...step, confirmedAt: "2026-10-28T08:00:00Z" } }),
     ],
     [
-      "a clock step whose size is not a number",
-      (note) => ({ ...note, clockStep: { ...step, stepMs: "-1" } }),
-    ],
-    [
       "a clock step with no age cap",
       (note) => ({ ...note, clockStep: { ...step, retainDays: undefined } }),
     ],
@@ -559,8 +551,18 @@ describe("readBackupRoomNote", () => {
     expect(await read()).toEqual({ skipped: "malformed" });
   });
 
-  it("parses a hand-written valid note before checking venue.db (control for the malformed cases)", async () => {
-    await writeFile(notePath(), JSON.stringify(valid()));
-    expect(await read()).toEqual({ skipped: "identity_mismatch" });
-  });
+  it.each<[string, (note: Record<string, unknown>) => unknown]>([
+    ["", (note) => note],
+    [" carrying a clock step", (note) => ({ ...note, clockStep: step })],
+    [
+      " whose clock step also names its size, as a fraction",
+      (note) => ({ ...note, clockStep: { ...step, stepMs: -34_560_000_000.5 } }),
+    ],
+  ])(
+    "parses a hand-written valid note%s before checking venue.db (control for the malformed cases)",
+    async (_label, change) => {
+      await writeFile(notePath(), JSON.stringify(change(valid())));
+      expect(await read()).toEqual({ skipped: "identity_mismatch" });
+    },
+  );
 });
