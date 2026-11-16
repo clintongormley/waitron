@@ -583,7 +583,7 @@ it("drops an edit still waiting to be sent when Back restores an earlier search"
   expect(location.pathname).toBe(`${base}Restored`);
 });
 
-it("reads nothing and leaves the address alone while an issue date is empty, whichever filter changes", async () => {
+it("reads nothing and leaves the address alone while an issue date is empty, when Search or Kind changes", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-10-01/to/2026-10-31");
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice()]));
   const el = await mount({ listTaxOfficeInvoices });
