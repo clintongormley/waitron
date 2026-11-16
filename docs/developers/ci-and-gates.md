@@ -1658,7 +1658,7 @@ start/end lines, including pnpm's package and script prefix in the light groups.
 That prefix keeps two packages' identical relative filenames separate.
 At expiry it lists files assigned to workers without an end line,
 then runs `ps` with a two-second limit to show process ids, parents, states, elapsed
-time, CPU, memory and command lines. Assignment does not mean a browser has loaded
+time, CPU, memory and command lines. Assignment does not mean a worker or browser has loaded
 the file. An empty file list may indicate a startup or teardown wait. A failed
 snapshot is reported, and the command still fails with exit 124. The existing
 stop signals only the launched POSIX process group. After the command exits, cleanup
