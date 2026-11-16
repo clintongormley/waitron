@@ -319,7 +319,7 @@ describe("lineBlock", () => {
   });
 
   it("names the dish when its offer is sold only as an extra, and not when it is staff only", () => {
-    const line = lineOf(burger, "v1");
+    const line = lineOf(burger, "v1", { options: [{ listId: "list-cooked", labelId: "rare" }] });
     expect(lineBlock(line, { ...burger, ordering: "not_sold_separately" })).toEqual({
       reason: "not_sold_separately",
       name: "burger",
@@ -465,6 +465,7 @@ describe("lineBlock", () => {
     const line: OrderLine = {
       product: { ...widened, unit: { ...unit, precision: 3 } },
       quantity: "0.500",
+      options: [{ listId: "list-cooked", labelId: "rare" }],
     };
     expect(lineBlock(line, burger)).toEqual({ reason: "unit_changed", name: "burger" });
     expect(lineBlock({ ...line, quantity: "2.000" }, burger)).toBeUndefined();
@@ -496,6 +497,87 @@ describe("lineBlock", () => {
       options: [{ listId: "list-cooked", labelId: "blue" }],
     };
     expect(lineBlock(line, burger)).toEqual({ reason: "extra_removed", name: "blue" });
+  });
+
+  it("names an offered options list the line has no answer for", () => {
+    const line = lineOf(burger, "v1", { extras: [pick("cheese", "1.00")] });
+    const named = {
+      ...burger,
+      offeredModifiers: burger.offeredModifiers.map((list) =>
+        list.id === "list-cooked" ? { ...list, name: "Cooked" } : list,
+      ),
+    };
+    expect(lineBlock(line, named)).toEqual({ reason: "choice_required", name: "Cooked" });
+  });
+
+  describe("an extras list whose limits the line's picks break", () => {
+    const cooked = { listId: "list-cooked", labelId: "rare" };
+    const limited = (limits: Partial<{ minPicks: number; maxPicks: number | null }>, max = 2) => ({
+      ...burger,
+      offeredModifiers: [
+        {
+          ...extrasList("list-extras", [
+            { ...extraItem("cheese", "1.00"), maxQuantity: max },
+            extraItem("bacon", "1.50"),
+          ]),
+          name: "Extras",
+          ...limits,
+        },
+        optionsList("list-cooked", [label("rare")], "rare"),
+      ],
+    });
+    const broken = { reason: "extras_limit", name: "Extras" };
+
+    it("counts a pick of two as two against the list's most", () => {
+      const line = lineOf(burger, "v1", {
+        extras: [{ ...pick("cheese", "1.00"), quantity: 2 }],
+        options: [cooked],
+      });
+      expect(lineBlock(line, limited({ maxPicks: 1 }))).toEqual(broken);
+      expect(lineBlock(line, limited({ maxPicks: 2 }))).toBeUndefined();
+    });
+
+    it("names the list when one pick is above its item's most", () => {
+      const line = lineOf(burger, "v1", {
+        extras: [{ ...pick("cheese", "1.00"), quantity: 2 }],
+        options: [cooked],
+      });
+      expect(lineBlock(line, limited({}, 1))).toEqual(broken);
+    });
+
+    it("names a list the line now picks too few from, even with no picks at all", () => {
+      const line = lineOf(burger, "v1", { options: [cooked] });
+      expect(lineBlock(line, limited({ minPicks: 1 }))).toEqual(broken);
+      expect(
+        lineBlock({ ...line, extras: [pick("bacon", "1.50")] }, limited({ minPicks: 1 })),
+      ).toBeUndefined();
+    });
+
+    it("asks no least of a set lunch's list, but still its most", () => {
+      const setLunch = (limits: Parameters<typeof limited>[0], max = 2) => ({
+        ...limited(limits, max),
+        setLunch: true as const,
+      });
+      const none = lineOf(burger, "v1", { options: [cooked] });
+      expect(lineBlock(none, setLunch({ minPicks: 2 }))).toBeUndefined();
+      expect(
+        lineBlock({ ...none, extras: [pick("bacon", "1.50")] }, setLunch({ minPicks: 2 })),
+      ).toBeUndefined();
+      const two = { ...none, extras: [{ ...pick("cheese", "1.00"), quantity: 2 }] };
+      expect(lineBlock(two, setLunch({ maxPicks: 1 }))).toEqual(broken);
+      expect(lineBlock(two, setLunch({}, 1))).toEqual(broken);
+    });
+
+    it("names a removed pick before the list's limits", () => {
+      const line = lineOf(burger, "v1", {
+        extras: [pick("cheese", "1.00"), { ...pick("ham", "1.00"), quantity: 2 }],
+        options: [cooked],
+      });
+      expect(lineBlock(line, limited({ maxPicks: 1 }))).toEqual({
+        reason: "extra_removed",
+        name: "ham",
+      });
+    });
   });
 });
 
@@ -792,6 +874,37 @@ describe("refreshBasket", () => {
     const outcome = refreshBasket([line], [withoutBacon], live);
     expect(outcome.blocked).toEqual([{ lineNo: 1, name: "bacon", reason: "extra_removed" }]);
     expect(outcome.adopted.get(0)!.extras).toEqual([bacon]);
+  });
+
+  it("blocks a line the live version asks a new question of, naming the list", () => {
+    const line = lineOf(lemonade, "v1");
+    const withIce = {
+      ...lemonade,
+      offeredModifiers: [
+        { ...optionsList("list-ice", [label("ice"), label("no-ice")], "ice"), name: "Ice" },
+      ],
+    };
+    const outcome = refreshBasket([line], [withIce], live);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "Ice", reason: "choice_required" }]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
+  });
+
+  it("blocks a line whose picks the live version's lower limit no longer allows, naming the list", () => {
+    const line = lineOf(burger, "v1", {
+      extras: [
+        { listId: "list-extras", productId: "cheese", name: "cheese", price: "1.00", quantity: 1 },
+        { listId: "list-extras", productId: "bacon", name: "bacon", price: "1.50", quantity: 1 },
+      ],
+      options: [{ listId: "list-cooked", labelId: "rare" }],
+    });
+    const [extras, cooked] = burger.offeredModifiers;
+    const limited = {
+      ...burger,
+      offeredModifiers: [{ ...extras!, maxPicks: 1, name: "Extras" }, cooked!],
+    };
+    const outcome = refreshBasket([line], [limited], live);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "Extras", reason: "extras_limit" }]);
+    expect(outcome.adopted.get(0)!.product.menuVersionId).toBe("v2");
   });
 
   describe("a line whose dish the live version sells by a unit that takes no extras", () => {

@@ -23,6 +23,8 @@ const REASON_WORDS: Record<BlockReason, StringKey> = {
   extra_unavailable: "basket_refresh.unavailable",
   extra_removed: "basket_refresh.extra_removed",
   unit_changed: "basket_refresh.unit_changed",
+  choice_required: "basket_refresh.choice_required",
+  extras_limit: "basket_refresh.extras_limit",
 };
 
 /**

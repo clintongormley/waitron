@@ -171,6 +171,20 @@ describe("till-basket-refresh-dialog", () => {
     expect(text(spanish)).toContain("Bacon ahora solo se vende como extra de otro plato");
   });
 
+  it("says a list must now be chosen, or its extras no longer fit, in English and in Spanish", async () => {
+    const asks = [
+      { lineNo: 1, name: "Cooking", reason: "choice_required" as const },
+      { lineNo: 2, name: "Sauces", reason: "extras_limit" as const },
+    ];
+    const { el } = await mount({ changed: [], blocked: asks });
+    expect(text(el)).toContain("Cooking must now be chosen");
+    expect(text(el)).toContain("Sauces: the number of extras no longer fits");
+    cleanupWidgets();
+    const { el: spanish } = await mount({ changed: [], blocked: asks }, "es-ES");
+    expect(text(spanish)).toContain("Ahora hay que elegir Cooking");
+    expect(text(spanish)).toContain("Sauces: el número de extras ya no encaja");
+  });
+
   it("confirms with a composed, bubbling event carrying what it showed", async () => {
     const { el, host } = await mount({ changed, blocked });
     const confirmed = vi.fn();

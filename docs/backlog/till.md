@@ -703,10 +703,7 @@ inside `withTransaction`; reading outside a transaction would skip the queue but
 (`packages/db/src/tenancy.ts`). A
 till learns of a change only by polling, because the dashboard's live-update route accepts the
 management cookie only; a till-session branch there would let the server tell tills (plan D11), a
-later refinement. The basket comparison does not notice a publish that adds a required options
-list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
-silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
-see a refusal where the dialog should have asked.
+later refinement.
 
 ## The till's home page (Task 9, #729)
 

@@ -971,11 +971,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   seconds on every till; choose the interval and cost first.
   [Detail](backlog/till.md#refresh-the-floor-without-a-staff-action-in-a-zones-list-view--open-3d-w16)
 
-- **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
-  does not notice a publish that adds a required options list to a dish in the basket, or lowers a
-  list's picks limit, so the till takes the new version silently and the server then refuses
-  `options.label_required` (or `extras.limit_exceeded`): staff see a refusal where the dialog should
-  have asked. [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
+- **The till's menu reads (Task 7, #719).** — left open by the menus plan. Every menu poll waits
+  its turn in the write queue, and a till learns of a menu change only by polling, because the
+  dashboard's live-update route accepts the management cookie only.
+  [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
   name only, not a customer name. The till also searches displayed section names (A461).
@@ -1599,6 +1598,14 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Finish qualifying CI's server routing and action setup** (bundle of 2, size M). Checked real-run records now cover tools/history/API, PR planner pickup, scheduled rescue, one no-op overflow, natural blind fallback and fresh-capacity route choices, including an idle-server choice followed by successful server jobs. A1424/A1440 still need natural stale-count acceptance, scheduled idle pickup, complete server/browser and coverage runs, an image guest, per-job/remaining-workflow evidence and the full-day queue measurement; the historical planner cause remains unproved. Planner recovery from short workflow lists still needs natural-run evidence; standalone `check` tolerates short queued lists with an explicit partial observation, while running/job lists and other health commands retain their rules. A935 waits for a natural setup-download stall before its [experiment proposal](superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is revisited; build no new guest capability now, and the job limit remains unqualified. The bundle remains open. [Detail](backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
 
 - **Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)** (bundle of 2, 1 important, size M, waits for another entry). Holds A1306. [Detail](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
+
+- **`request-receive-limits.test.ts` "continued progress cannot evade the native upload ceiling"
+  fails with `read ECONNRESET` instead of a 408, about two runs in five.** Added by #3559 on
+  2026-11-16. Seen in CI on PR #3569 ([run 43949252245, `test-server (14)`](https://github.com/clintongormley/waitron/actions/runs/43949252245/job/133587840376))
+  and locally: five runs of `pnpm exec vitest run src/request-receive-limits.test.ts` in
+  `apps/server` failed twice. Likely cause, not checked: the client is still sending the body when
+  the server closes the connection, so the client sees a reset before it reads the 408. Fix the
+  cause; do not loosen the assertion.
 
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
