@@ -3218,9 +3218,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     // GET list carries this order's summary. `total` is the GROSS (VAT-inclusive) draft total the
     // operator saw: 2 × 1.75 = 3.50 gross. Assert
     // containment — the suite shares one node, so other tests' open orders also list.
-    const list = await app.request("/api/working-orders", {
-      headers: { cookie },
-    });
+    const list = await app.request("/api/working-orders", { headers: { cookie } });
     expect(list.status).toBe(200);
     const summaries = (await list.json()) as {
       id: string;
@@ -4464,9 +4462,7 @@ describe("canonical modifier HTTP serialization", () => {
     expect(body.lines[0]!.optionSnapshots).toEqual(f.optionSnapshots);
     expect(body.lines[0]!.extras).toEqual(f.parkedExtras);
     // 1.75 × 2 dishes = 3.50, plus the published 0.35 × (2 dishes × 2 picks) = 1.40.
-    const listed = await f.app.request("/api/working-orders", {
-      headers: f.headers,
-    });
+    const listed = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await listed.json()).toContainEqual(expect.objectContaining({ id, total: "4.90" }));
 
     // A quantity-only edit keeps the frozen answers and re-prices from the stored lock alone.
@@ -4491,9 +4487,7 @@ describe("canonical modifier HTTP serialization", () => {
     const afterEditBody = (await afterEdit.json()) as { lines: HeldLine[] };
     expect(afterEditBody.lines[0]!.optionSnapshots).toEqual(f.optionSnapshots);
     expect(afterEditBody.lines[0]!.extras).toEqual(f.parkedExtras);
-    const editedList = await f.app.request("/api/working-orders", {
-      headers: f.headers,
-    });
+    const editedList = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await editedList.json()).toContainEqual(expect.objectContaining({ id, total: "9.80" }));
 
     // The parked line holds the six names BY VALUE, so renaming the list and its labels afterwards

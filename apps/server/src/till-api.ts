@@ -1831,6 +1831,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       assertProfileAction(session.device, "take-orders");
       await assertRequestDevice(deps, c, session);
+      // After the device checks, so a profile or device refusal outranks a malformed body.
       if (!Array.isArray(body.lines)) throw invalid("lines");
       if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
         throw invalid("tender");

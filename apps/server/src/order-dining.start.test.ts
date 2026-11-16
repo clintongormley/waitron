@@ -150,22 +150,34 @@ describe("a new order's way of selling", () => {
     expect(await diningOf(id)).toBeUndefined();
   });
 
-  it.each([["takeaway", "takeaway"]] as const)(
-    "sells a walk-up in a till-choice department asked %s as %s",
-    async (dining, expected) => {
-      await departmentsSell("till_choice", "takeaway");
-      const workingOrderId = randomUUID();
-      const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-        workingOrderId,
-        lines: croquettes(),
-        zoneId: counterZoneId,
-        tender: { method: "cash", amount: "10.00" },
-        ...(dining === undefined ? {} : { dining }),
-      });
-      expect(sold.status).toBe(200);
-      expect(await diningOf(workingOrderId)).toBe(expected);
-    },
-  );
+  it("sells a walk-up asked takeaway, in a till-choice department starting takeaway", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: croquettes(),
+      zoneId: counterZoneId,
+      tender: { method: "cash", amount: "10.00" },
+      dining: "takeaway",
+    });
+    expect(sold.status).toBe(200);
+    expect(await diningOf(workingOrderId)).toBe("takeaway");
+  });
+
+  it("refuses a walk-up that does not say its way, in a till-choice department, and records nothing", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    const workingOrderId = randomUUID();
+    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId,
+      lines: croquettes(),
+      zoneId: counterZoneId,
+      tender: { method: "cash", amount: "10.00" },
+    });
+    expect(sold.status).toBe(400);
+    expect(sold.json).toEqual({ code: "management.request_invalid", params: { field: "dining" } });
+    expect(await diningOf(workingOrderId)).toBeUndefined();
+    expect(await effectsOf(workingOrderId)).toEqual({ sales: 0, ticketItems: 0 });
+  });
 
   it("sells a walk-up asked to eat in, in a till-choice department starting takeaway", async () => {
     await departmentsSell("till_choice", "takeaway");

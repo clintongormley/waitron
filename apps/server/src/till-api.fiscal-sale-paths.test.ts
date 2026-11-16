@@ -838,9 +838,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(await parkRes.json()).toEqual({ id: workingOrderId, orderNumber: 1 });
 
     // 3. Retrieve it — the held list carries it, and GET /:id rebuilds its basket inputs.
-    const list = await app.request("/api/working-orders", {
-      headers: { cookie },
-    });
+    const list = await app.request("/api/working-orders", { headers: { cookie } });
     expect(((await list.json()) as { id: string }[]).map((o) => o.id)).toContain(workingOrderId);
     const got = await app.request(`/api/working-orders/${workingOrderId}`, { headers: { cookie } });
     expect(got.status).toBe(200);

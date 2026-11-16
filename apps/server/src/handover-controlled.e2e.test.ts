@@ -1261,9 +1261,7 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
       interval: 100,
     })
     .catch(() => {});
-  const orders = await ask(m2, "/api/working-orders", {
-    cookie: boxes.venue.cookie,
-  });
+  const orders = await ask(m2, "/api/working-orders", { cookie: boxes.venue.cookie });
   const ordersText = await orders.text();
   expect(orders.status, ordersText).toBe(200);
   await router.probeNow();
