@@ -1686,6 +1686,37 @@ describe("generation housekeeping", () => {
     },
   );
 
+  it("does not raise a retention warning when stop cancels a clock-marker read", async () => {
+    const h = await harness();
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let markerReads = 0;
+    let held = false;
+    h.store.list = async (prefix, call) => {
+      if (!prefix.endsWith("opened.json")) return list(prefix, call);
+      if (++markerReads === 1) return [];
+      held = true;
+      await gate;
+      throw new Error("cancelled listing");
+    };
+    try {
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+      await h.clock.until(() => h.supervisor.status().state === "streaming");
+      await h.clock.next();
+      await vi.waitFor(() => expect(held).toBe(true));
+      await h.supervisor.stop();
+      release();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(h.supervisor.status()).not.toHaveProperty("pruneBlockedSince");
+      expect(h.logs.map((entry) => entry.event)).not.toContain("stream.prune_failed");
+    } finally {
+      release();
+    }
+  });
+
   it.each(["absent", "fails"])("warns while the clock marker %s", async (failure) => {
     const h = await harness();
     const list = h.store.list.bind(h.store);
@@ -1712,6 +1743,8 @@ describe("generation housekeeping", () => {
     expect(h.supervisor.status().state).toBe("streaming");
     const since = h.clock.now().toISOString();
     expect(h.supervisor.status().pruneBlockedSince).toBe(since);
+    if (failure === "fails")
+      expect(h.logs.map((entry) => entry.event)).toContain("stream.prune_failed");
     h.clock.advance(PRUNE_EVERY_MS);
     await h.clock.next();
     await vi.waitFor(() => expect(markerReads).toBe(3));

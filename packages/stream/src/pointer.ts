@@ -116,7 +116,7 @@ export async function readPointer(
 
 export const SENT_POINTERS_KEPT = 16;
 
-/** Exact bytes distinguish delayed writes from another writer, even when it holds the same node id. */
+/** Recognise recorded pointer bytes rather than trusting a node id alone. */
 export class SentPointers {
   /** In the order first added, oldest first. */
   readonly #sent = new Set<string>();
