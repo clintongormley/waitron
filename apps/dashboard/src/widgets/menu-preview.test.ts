@@ -1406,3 +1406,18 @@ it.each([
     setContentLanguages(before);
   }
 });
+
+it("distinguishes a regional content version in the preview picker", async () => {
+  const before = currentContentLanguages();
+  try {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "en-US"] });
+    const el = await mount({});
+    const chooser = q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=menu-preview-view]")!;
+    expect(chooser.options.find((option) => option.value === "en")?.label).toBe("English");
+    expect(chooser.options.find((option) => option.value === "en-US")?.label).toBe(
+      "English (United States)",
+    );
+  } finally {
+    setContentLanguages(before);
+  }
+});

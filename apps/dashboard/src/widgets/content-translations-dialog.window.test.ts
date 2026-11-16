@@ -189,33 +189,19 @@ describe("bounded multilingual translation editor", () => {
     "windows 200 languages and 101 items at %s pixels without losing a last-language draft",
     async (width) => {
       await page.viewport(width, 900);
-      const codes = ["en", "es", "fr", "de", "it", "pt", "ca", "eu", "gl", "nl"];
-      const regions = [
-        "AD",
-        "AE",
-        "AR",
-        "AT",
-        "AU",
-        "BE",
-        "BR",
-        "CA",
-        "CH",
-        "CL",
-        "CO",
-        "DE",
-        "ES",
-        "FR",
-        "GB",
-        "IE",
-        "IT",
-        "MX",
-        "US",
-        "ZA",
-      ];
-      const languages = codes.flatMap((code) => regions.map((region) => `${code}-${region}`));
+      const languages = (
+        "en ace ach ada ady aeb afh agq ain akk akz ale aln alt ang ann anp apw arc arn aro arp arq ars arw " +
+        "ary arz asa ase ast atj avk awa bal ban bar bas bax bbc bbj bej bem bew bez bfd bfq bgc bgn bho bik " +
+        "bin bjn bkm bla blo blt bpy bqi bra brh brx bss bua bug bum byn byv cad car cay cch ccp ceb cgg chb " +
+        "chg chk chm chn cho chp chr chy cic ckb clc cop cps crg crh crj crk crl crm crr crs csb csw dak dar " +
+        "dav del den dgr din dje doi dsb dtp dua dum dyo dyu dzg ebu efi egl egy eka elx enm esu ewo ext fan " +
+        "ak fil fit fon frc frm fro frp frr frs fur gaa gag gan gay gba gbz gez gil glk gmh goh gon gor got " +
+        "grb grc gsw guc gur guz gwi hai hak haw hax hif hil hit hmn hnj hsb hsn hup hur iba ibb ikt ilo inh " +
+        "izh jam jbo jgo jmc jpr jrb jut kaa kab kac kaj kam kaw kbd kbl kcg kde kea kek ken kfo kgp kha nl"
+      ).split(" ");
       expect(Intl.getCanonicalLocales(languages)).toEqual(languages);
       expect(languages).toHaveLength(200);
-      const settings = { defaultLanguage: "en-AD", languages };
+      const settings = { defaultLanguage: "en", languages };
       const items = vi.fn(async (query: TranslationQuery) => ({
         ...result(
           Array.from({ length: 50 }, (_, n) => row(String(n).padStart(3, "0"), query.languages)),
@@ -229,20 +215,20 @@ describe("bounded multilingual translation editor", () => {
           getContentSuggestions: vi.fn(async () => ({ ...suggestions(), config: settings })),
         },
         settings,
-        "en-AD",
+        "en",
       );
-      await vi.waitFor(() => expect(input(el, "000", "en-AD")).toBeTruthy());
+      await vi.waitFor(() => expect(input(el, "000", "en")).toBeTruthy());
       expect(windowFor(el).shadowRoot!.querySelectorAll("[data-translation-row]")).toHaveLength(50);
       expect(windowFor(el).shadowRoot!.querySelectorAll("wt-input").length).toBeLessThanOrEqual(
         350,
       );
-      await select(el, "jump", "nl-ZA");
-      await vi.waitFor(() => expect(input(el, "000", "nl-ZA")).toBeTruthy());
-      await edit(el, "Last language", "000", "nl-ZA");
-      await select(el, "jump", "en-AD");
-      await vi.waitFor(() => expect(input(el, "000", "en-AD")).toBeTruthy());
-      await select(el, "jump", "nl-ZA");
-      await vi.waitFor(() => expect(input(el, "000", "nl-ZA")?.value).toBe("Last language"));
+      await select(el, "jump", "nl");
+      await vi.waitFor(() => expect(input(el, "000", "nl")).toBeTruthy());
+      await edit(el, "Last language", "000", "nl");
+      await select(el, "jump", "en");
+      await vi.waitFor(() => expect(input(el, "000", "en")).toBeTruthy());
+      await select(el, "jump", "nl");
+      await vi.waitFor(() => expect(input(el, "000", "nl")?.value).toBe("Last language"));
       expect(items).toHaveBeenCalledTimes(4);
       expect(windowFor(el).width).toBe(width === 390 ? "phone" : "desktop");
     },

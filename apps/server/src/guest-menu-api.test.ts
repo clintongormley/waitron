@@ -280,7 +280,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
 it("serves a French venue's Spanish menu to a guest asking in Mexican Spanish", async () => {
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
-    await writeContentLanguages(tx, { defaultLanguage: "fr-FR", languages: ["fr-FR", "es-ES"] });
+    await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "es"] });
     await updateProduct(tx, f.soup, {
       customerName: { fr: "Soup in French", es: "Soup in Spanish" },
     });
