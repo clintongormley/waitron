@@ -64,7 +64,6 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { recordSupersededAtStart } from "./start-peer-check.js";
-import { RESTRICTED_PAGE_WORDS } from "./i18n/restricted-page.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -1034,6 +1033,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       "return_pending",
       "return_complete",
     ] as const) {
+      beforeServerStarts();
       await advanceHandover(store, OP, state, {});
       main = await startServer(boxes.mainEnv, boxes.mainEnv, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
@@ -1043,7 +1043,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       const page = await fetch(`http://127.0.0.1:${port}/`, {
         headers: { "accept-language": "en-GB" },
       });
-      expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+      expect(await page.text()).toContain("This box no longer runs the venue");
       expect({
         state: (await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state,
         restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
@@ -1069,7 +1069,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     const page = await fetch(`http://127.0.0.1:${port}/`, {
       headers: { "accept-language": "en-GB" },
     });
-    expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+    expect(await page.text()).toContain("This box no longer runs the venue");
     expect({
       state: (await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state,
       restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
@@ -1080,7 +1080,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     const boxes = await prepared();
     const store = { node: mainBox.node, nodeId: boxes.mainId };
     const controlled = (await readHandoverOperation(mainBox.node, boxes.mainId, OP))!;
-    // An emergency source has no controlled operation and its restriction names none.
+    // This case starts from no planned operation; `recordSupersededAtStart` names none.
     mainBox.node.run(sql`delete from node_handover_operations`);
     mainBox.node.run(sql`delete from node_handover_restriction`);
     await beginHandover(
@@ -1098,6 +1098,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     expect(restrictionBefore).toMatchObject({ kind: "superseded", operationId: null });
 
     for (const state of ["source_superseded", "return_pending", "return_complete"] as const) {
+      beforeServerStarts();
       await advanceHandover(store, OTHER_OP, state, {});
       main = await startServer(boxes.mainEnv, boxes.mainEnv, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
@@ -1107,7 +1108,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       const page = await fetch(`http://127.0.0.1:${port}/`, {
         headers: { "accept-language": "en-GB" },
       });
-      expect(await page.text()).toContain(RESTRICTED_PAGE_WORDS["en-GB"].title);
+      expect(await page.text()).toContain("This box no longer runs the venue");
       expect({
         state: (await readHandoverOperation(mainBox.node, boxes.mainId, OTHER_OP))?.state,
         restriction: await readHandoverRestriction(mainBox.node, boxes.mainId),
