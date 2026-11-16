@@ -1,50 +1,40 @@
 # Setup port handoff implementation plan
 
-**Draft; execute inline with `superpowers:executing-plans` only after Claude plan review and watcher clearance.** Neither has happened in this drafting invocation. No owner design approval is claimed.
+**Goal:** stop the named setup suites releasing their intended listening ports before binding, preserving configured addresses and listener-release checks. The bench gets the smallest verified refused endpoint, or retains its current gap if the port-zero probe fails. Codex drafted this plan; Claude read it, and the watcher cleared the conditional bench cut at 07:27 on 16 November in Lane I questions.md. Full corrected-plan clearance is pending; no owner design approval is claimed.
 
-**Ask**, verbatim from `/Users/clintongormley/waitron-campaign-i/queue.md`, PORT-HANDOFF-SETUP:
+**Ask**, verbatim from Lane I queue.md, PORT-HANDOFF-SETUP:
 > "The remaining work includes in-process setup/recovery suites outside the migrated `boot*` siblings, such as `setup-tool-download.boot.test.ts`. Audit each case's origin and listener-release assertions before choosing the bind-time fixture." and "`bench/sqlite-failover/src/unreachable-store.ts` still releases a port intended to stay unreachable. Another worker can bind it later."
 
-**Finish line:** setup tests select ports while binding or retain their initial sockets; the bench’s offline endpoint refuses TCP connections without releasing a chosen port. Preserve existing behavioural assertions. Leave `first-fiscal-*`, `handover-*`, `hour-*` and Cloud's external pairing runner untouched. No production parser/server changes, containers, firewall manipulation or deliberately broken CI.
+## Setup callers and their contracts
 
-## 1. Convert setup callers, preserving their contracts
+- Refresh branch/uncommitted reservations before every edit; skip the queue's held/excluded `first-fiscal-*`, `handover-*`, `hour-*` and Cloud files. Reuse `testing/{ephemeral-listener,ephemeral-server-fixture,retained-http-listener}.ts` and `retained-http-adoption.mjs`, without a new fixture framework or production parser/server change.
+- Keep positive configured ports entering boot. Intercept only actual binding to use port zero, reset/wait for the listener and refresh destinations at each restart. A supervised wrapper asserts its received configured port before substituting zero. Use one interception mechanism per file. Disable unused landing listeners with `WAITRON_HTTP_LANDING_PORT="0"` so the single-listener fixture observes the main listener.
+- When advertised origins, configured-port refusal or same-port rebinding matter, retain the configured sockets. In-process, close the adopted listener before closing its reservation; a child-process handoff alone releases the parent's duplicate after adoption. Existing helper tests own adoption/release behaviour. Do not add another permanent competing-port test: retain one disposable pre-change failure/post-change success receipt.
 
-- [ ] Refresh the supplied `open-branches.json` and `uncommitted-reservations.json` reservations before editing; reconcile overlapping changes without touching another checkout. Read the TDD skill before code. Record per-case fixture choices in the PR.
-- [ ] Reuse `apps/server/src/testing/{ephemeral-listener,ephemeral-server-fixture,retained-http-listener}.ts` and `retained-http-adoption.mjs`. Boot keeps positive environment configuration; only actual Hono binding receives zero. Wait for binding and read `listener.port`; refresh destinations after every restart. Direct `serveRecovery` calls can receive zero and expose `server.address()`, without a global mock. Retain configured sockets when advertised addresses or same-port rebinding matter; close the reservation's copy after adoption so final listener-release assertions remain meaningful. Restore interception and close reservations on failures. Do not use the default last-listener fixture for paired listeners.
+All paths below are under `apps/server/src/`. Preserve every existing assertion; the PR records the fixture choice per file:
 
-All filenames below are under `apps/server/src/`; each retains these properties because they are the case's observable contract:
-
-| File | Choice and preserved properties |
+| File | Choice and preserved behaviour |
 | --- | --- |
-| `setup-tool-download.boot.test.ts` | Ephemeral boot; real wizard build, trusted HTTPS, retired-tool 404, unclaimed status, assets. |
-| `first-setup-entry.test.ts` | Fixed positive configuration with bind interception; exact `setup.attempt_invalid` and `setup.attempt_uncertain` refusals before binding. |
-| `first-setup-workspace.test.ts` | Same refusal-only approach; `setup.start_again_incomplete` and unchanged files. |
-| `first-setup-growth.test.ts` | Ephemeral on every start; successful activation, health, setup 404, growth beyond 128 MiB, no whole-database reads, unchanged completed record. |
-| `first-setup-key-reissue.boot.test.ts` | Ephemeral each restart; refresh URL; password refusal, unchanged attempt, replacement verifier and old-key rejection. |
-| `first-setup-resolution.boot.test.ts` | Supervised injected recovery uses zero directly; direct entry uses bind interception; keep both modes, refusal pages, restart counts and filesystem outcomes. |
-| `first-setup-resolution.route.test.ts` | Ephemeral ordinary routes with actual same-origin headers; retain configured loopback-guidance listener so advertised host/port stays exact; preserve HTTPS/forwarded-HTTP refusals and unchanged records. |
-| `first-setup-start-again-hour.test.ts` | Direct recovery zero/address; keep HTTPS restart without a register declaration and fiscal assertions. |
-| `first-setup-stop.route.test.ts` | Direct Hono zero/address for extra HTTP listener; keep forwarded-HTTPS refusal and no writes. |
-| `connection-bootstrap.entry.test.ts` | Direct standalone recovery zero/address; supervised injection likewise. Retain initial paired/configured repair listeners; preserve same-port continuation/retry, advertised destinations, exact valid/forged origins, CA trust and handle-close release of main/landing. Stub-only admission cases need fixed positive configuration, no reservation. |
+| `setup-tool-download.boot.test.ts` | Ephemeral boot; real wizard build, trusted HTTPS, retired-tool 404, unclaimed status and assets. |
+| `first-setup-entry.test.ts`, `first-setup-workspace.test.ts` | Fixed positive literals for refusal-only cases that never bind; exact attempt/start-again refusals and unchanged files. |
+| `first-setup-growth.test.ts` | Ephemeral each start; activation, health, setup 404, growth beyond 128 MiB, no whole-database reads, unchanged completed record. |
+| `first-setup-key-reissue.boot.test.ts` | Ephemeral each restart; refresh URL, password refusal, unchanged attempt, replacement verifier and old-key rejection. |
+| `first-setup-resolution.boot.test.ts` | One file-wide binding interception, including supervised recovery; keep both boot modes, refusal pages, restart counts and files. |
+| `first-setup-resolution.route.test.ts` | Disable unused landing listeners in all five ordinary-start cases; ephemeral ordinary routes with real same-origin headers. Retain configured guidance listener for exact advertised host/port; preserve HTTPS/forwarded-HTTP refusals and unchanged records. |
+| `first-setup-start-again-hour.test.ts` | Direct recovery zero/address; keep HTTPS restart without a register declaration and all fiscal assertions. |
+| `first-setup-stop.route.test.ts` | Direct Hono zero/address for extra HTTP listener; forwarded-HTTPS refusal and no writes. |
+| `connection-bootstrap.entry.test.ts` | Ephemeral only for non-bootstrap recovery; retain paired/configured bootstrap and repair listeners so trust-page links and exact origins never contain `:0`. Preserve continuation/retry on the same ports, valid/forged origins, CA trust and main/landing release checks. Stub-only admission cases use fixed positive configuration. |
 
-- [ ] TDD ownership: one converted ordinary boot case holds a competing configured-port listener before boot; observe its current failure, then actual-port success. Existing retained-helper tests own socket adoption. Connection-bootstrap owns repair/rebind/release; do not replace those assertions with fixture assertions. Run each changed suite.
+## Bench: probe before changing it
 
-## 2. Hold the bench's refused endpoint
+- On real macOS and Linux, probe `127.0.0.1:0` with TCP, the pinned real S3 SDK and pinned Litestream 0.5.18. Record actual attempted ports and errors; require the store URL/config and clients to preserve zero rather than default to 80. Keep `probeRefusal(0)` and a live-listener control that refusal must reject. No full benchmark workload, new container, firewall rule, keeper process or dependency.
+- If any required probe fails, change no bench code and retain its backlog gap with the evidence, as the watcher cleared. If all pass, replace only allocation in `bench/sqlite-failover/src/unreachable-store.ts`, preserving `probeRefusal`, return shape, real SDK client, stop cleanup and silent-store behaviour. A small `bench/sqlite-failover/test/` suite run by `node --test` owns repeated real refusal and its live-listener control; no root source-shape test. Do not try to prove refusal by binding port zero: `listen(0)` requests a different ephemeral port and does not compete for that destination.
+- Audit both callers (`src/scenarios/s4_offline_load.ts`, `src/probes/restart-after-foldback.ts`), source allocation comments and `bench/sqlite-failover/README.md`'s unreachable-store explanation near lines 737/1049. Keep measured scope explicit.
 
-- [ ] First test the smallest candidate in a disposable probe: use literal loopback TCP port zero as the unreachable destination, without allocating or releasing a port. This is a hypothesis, not a verified guarantee. Keep `probeRefusal(0)` and verify that the real pinned Litestream, the store URL/config path and a real SDK request preserve port zero and fail at that endpoint rather than defaulting to another port. Include a live-listener negative control that the refusal probe must reject. If that route fails, return the evidence and a concrete alternative to the watcher before adding infrastructure.
-- [ ] If that probe succeeds, add `scripts/unreachable-store.test.ts` first, asserting repeated real ECONNREFUSED answers and that the helper never listens/closes a chosen ephemeral port; observe the old allocation fail this contract, then remove `reservePort` in `bench/sqlite-failover/src/unreachable-store.ts`. Keep `probeRefusal`, return shape, SDK client and stop cleanup. Preserve silent-store behaviour and existing throwing operations. Audit the two callers `src/scenarios/s4_offline_load.ts` and `src/probes/restart-after-foldback.ts`; narrow stale allocation prose and retain the measured scope.
-- A bound-but-not-listening Python child was considered; it would add a prerequisite and lifecycle code. It is outside this plan unless the watcher separately clears it after the simpler endpoint is falsified. No private Node internals, new container or firewall rule.
+## Validation, backlog and finish
 
-## 3. Verify and narrow the backlog
+Run every changed setup suite above with `pnpm --filter @waitron/server exec vitest run src/<file>` and the existing `src/testing/retained-http-listener.test.ts`, reading counts. The adoption probe must demonstrate the real listener stays reachable until its own close and releases afterward; ordinary fixtures must expose the main listener's actual address. Run the bench behaviour suite/typecheck only if its implementation changes. Keep all configured-port, origin, fiscal and release assertions unchanged.
 
-Run from the checkout, then inspect actual test counts:
+Narrow only delivered A80 points in `docs/backlog/ci.md` and its `docs/backlog.md` index. Retain excluded suites/Cloud, `fiscal-readiness-first-setup`, `start-full-disk`, `start-from-spare`, configured-port boot cases and unused-peer ports; this PR does not audit them. Preserve the bench gap if its probe fails. Use signed commits, normal hook, finish-branch and current-head CI; authorisation to land comes from this campaign's owner request.
 
-```sh
-pnpm --filter @waitron/server exec vitest run src/setup-tool-download.boot.test.ts src/first-setup-entry.test.ts src/first-setup-workspace.test.ts src/first-setup-growth.test.ts src/first-setup-key-reissue.boot.test.ts src/first-setup-resolution.boot.test.ts src/first-setup-resolution.route.test.ts src/first-setup-start-again-hour.test.ts src/first-setup-stop.route.test.ts src/connection-bootstrap.entry.test.ts src/testing/retained-http-listener.test.ts
-pnpm exec vitest run scripts/unreachable-store.test.ts
-pnpm --filter @waitron/bench-sqlite-failover typecheck
-```
-
-No full bench/Litestream workload. Narrow `docs/backlog/ci.md`'s A80 entry and `docs/backlog.md`'s index to excluded suites and Cloud. Audit touched prose. Finish one PR through normal hooks, Claude run-it review and current-head CI.
-
-**Forecast:** production 0; bench code +5/−35; tests +180/−160; support +20/−5; docs +80/−15: about 500 changed lines, within 300–700. At most three active hours; report deviation above 750 lines or a material scope change before continuing.
+**Forecast:** production 0; bench code +5/−35 only if the probe passes; tests about +210/−190; support +20/−5; docs about +10/−25, plus this plan: about 550 physical changed lines. One PR within 3 active hours, excluding outside waits; outside opinion before 825 or any material change.
