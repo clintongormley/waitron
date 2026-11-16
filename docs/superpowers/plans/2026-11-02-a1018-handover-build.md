@@ -3112,6 +3112,10 @@ Not fiscal, unless Task 6.4 must give the fiscal module's clock element a promot
 PR says FISCAL and the owner lands it). Lands after Slice 5. The codes whose words this slice must
 change are listed in the backlog: [Slice 6's list](../../backlog/replication-cloud.md#slice-6s-list-the-handover-words-no-screen-shows-yet).
 
+**2026-11-16:** that backlog list is retired. The remaining wording and the restarted old box’s
+sale refusal are covered by the [handover refusal plan](2026-11-16-handover-refusal-words.md); its
+full-disk and bill-payment limits are stated there.
+
 #### Task 6.1: "Hand over to this box" on the Servers screen
 
 **Files:** Modify `apps/dashboard/src/screens/servers-screen.ts` (a row action on a
