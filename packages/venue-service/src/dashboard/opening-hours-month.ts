@@ -8,7 +8,7 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { joinPlacedRanges, placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
-import { FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
+import { addMonths, FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
 import {
   chosenDepartment,
   dayNameLines,
@@ -57,11 +57,6 @@ export interface CalendarDaysOpen {
 
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
-
-function stepMonth(month: string, by: number): string {
-  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
-  return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
-}
 
 interface Row {
   station?: boolean;
@@ -555,7 +550,7 @@ export class OpeningHoursMonthView extends LitElement {
     const chosen = model ? chosenDepartment(model.days[0]!, this.departmentId) : "";
     const names = monthNames(this.departments);
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
-      const target = stepMonth(current, by);
+      const target = addMonths(current, by);
       const blocked = target < FIRST_MONTH || target > LAST_MONTH;
       return html`<wt-button
         variant="secondary"

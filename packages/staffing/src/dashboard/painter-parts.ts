@@ -8,7 +8,7 @@ import { areaKey, type AreaRef } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { showHeadcount } from "./headcount-control.js";
-import { formatLocale } from "./format.js";
+import { formatLocale } from "@waitron/venue-service/dashboard/hours-view";
 import type { StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
 import "./staff-role-dialog.js";

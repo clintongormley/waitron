@@ -1,32 +1,24 @@
-import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
-import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
-import {
-  baseStyles,
-  draftScopeFor,
-  saveActionState,
-  type DraftScope,
-  type LeaveCoordinator,
-} from "@waitron/ui";
+import { dateFormat, formatMonthDay } from "@waitron/venue-service/dashboard/hours-view";
+import { css, html, nothing } from "lit";
+import { customElement, property } from "lit/decorators.js";
+import { currentLocale } from "@waitron/dashboard-kit";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { paintRowStyles, periodColourStyles, seasonLastDay } from "@waitron/venue-service/painter";
 import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
-import type { SeasonStaffing, SeasonStaffingEdit, StaffRole } from "../staffing-types.js";
-import type { StaffingApi } from "./client.js";
-import { dateFormat, monthDay, weekdayDate } from "./format.js";
+import type { SeasonStaffing, SeasonStaffingEdit } from "../staffing-types.js";
+import { StaffingPainterBase } from "./staffing-painter-base.js";
+import { weekdayDate } from "./format.js";
 import {
   NOTHING_BY_KEY,
   areaPicker,
   droppedNotice,
-  columnErrorsKeeper,
-  guidesKeeper,
   guideText,
   paintRow,
   painterStyles,
   refusedEdit,
-  staffRoleDialog,
 } from "./painter-parts.js";
 import type { StaffingChange, StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
@@ -36,12 +28,6 @@ import "./staffing-grid.js";
 type Week = Map<string, StaffingBlock[]>;
 /** One week per area key. */
 type Draft = Map<string, Week>;
-interface Refused {
-  message: string;
-  area?: string;
-  column?: string;
-  reason?: string;
-}
 
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0] as const;
 
@@ -70,7 +56,11 @@ function seed(read: SeasonStaffing): Draft {
  * changes.
  */
 @customElement("staffing-season-painter")
-export class StaffingSeasonPainter extends LitElement {
+export class StaffingSeasonPainter extends StaffingPainterBase<
+  SeasonStaffing,
+  Draft,
+  SeasonStaffingEdit
+> {
   static override styles = [
     baseStyles,
     seasonTintStyles,
@@ -102,138 +92,25 @@ export class StaffingSeasonPainter extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) api!: StaffingApi;
   @property() seasonId = "";
-  /** The address's area key; the picker starts there and never writes it back. */
-  @property() area = "";
-  /** The Calendar's month, YYYY-MM, kept when stepping and closing. */
-  @property() month = "";
-  @property({ type: Boolean }) readOnly = false;
-  /** Moves the Calendar's address. */
-  @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
-
-  @state() private read?: SeasonStaffing;
-  @state() private loadError?: string;
-  @state() private draft: Draft = new Map();
-  @state() private shown = "";
-  @state() private chosen?: string;
-  @state() private headcount = 1;
-  @state() private staffRoles: StaffRole[] = [];
-  @state() private rolesError?: string;
-  @state() private saving = false;
-  @state() private refused?: Refused;
-  /** Edits a re-read dropped because their area is gone. */
-  @state() private notice = "";
-  /** Why the read after a successful save failed; cleared only by a read that succeeds. */
-  @state() private refreshError = "";
-  @state() private dialogOpen = false;
-  private baseline: Draft = new Map();
-  private readFor?: string;
-  /** Replaced whenever a save's answer would land on a season it no longer belongs to. */
-  private generation = {};
-  /** Replaced by every read, so only the latest one's answer is taken. */
-  private latestRead = {};
-  private scope?: DraftScope<Draft>;
-  private coordinator?: LeaveCoordinator;
-  private watchingRoles = false;
+  protected get identity(): string {
+    return this.seasonId;
+  }
+  protected readData(id: string) {
+    return this.api.readSeason(id);
+  }
+  protected saveData(id: string, edits: SeasonStaffingEdit[]) {
+    return this.api.saveSeason(id, edits);
+  }
+  protected seed = seed;
+  protected copyDraft = copyDraft;
+  protected sameDraft = sameDraft;
   private weekColumns?: { locale: string; columns: readonly StaffingColumn[] };
-  private readonly guides = guidesKeeper();
-  private readonly columnErrors = columnErrorsKeeper();
-
-  readonly #roles = new QueryController(
-    this,
-    () => this.api.liveData,
-    (error) => {
-      this.rolesError = tf("staffing.role.load_error", { reason: codeMessage(codeOf(error)) });
-    },
-  );
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.watchingRoles = false;
-    this.requestUpdate();
-  }
-
-  override disconnectedCallback(): void {
-    this.scope?.dispose();
-    this.scope = undefined;
-    this.coordinator = undefined;
-    super.disconnectedCallback();
-  }
-
-  protected override willUpdate(): void {
-    if (this.seasonId && this.seasonId !== this.readFor) this.load();
-    if (this.api && !this.watchingRoles) {
-      this.watchingRoles = true;
-      this.api
-        .watchStaffRoles(
-          this.#roles,
-          (staffRoles) => {
-            this.staffRoles = staffRoles;
-            this.rolesError = undefined;
-          },
-          "painter-staff-roles",
-        )
-        .catch(() => {
-          // The controller's error callback has already said why.
-        });
-    }
-    if (this.isConnected && !this.scope) {
-      const { scope, coordinator } = draftScopeFor(this, {
-        id: {},
-        current: () => this.draft,
-        snapshot: copyDraft,
-        equal: sameDraft,
-        restore: (value) => {
-          this.draft = copyDraft(value);
-          this.notice = "";
-          this.refused = undefined;
-        },
-      });
-      this.scope = scope;
-      this.coordinator = coordinator;
-      scope.commit(copyDraft(this.baseline));
-      if (!sameDraft(this.draft, this.baseline)) scope.changed();
-    }
-  }
-
-  /** `afterSave` keeps the draft and takes the answer in with `take`. */
-  private load(afterSave = false): void {
-    const seasonId = this.seasonId;
-    const token = (this.latestRead = {});
-    if (!afterSave) {
-      this.generation = {};
-      this.readFor = seasonId;
-      this.read = undefined;
-      this.loadError = undefined;
-      this.refused = undefined;
-      this.notice = "";
-      this.refreshError = "";
-      this.saving = false;
-      this.draft = new Map();
-      this.commitBaseline(new Map());
-    }
-    this.api.readSeason(seasonId).then(
-      (read) => {
-        if (token !== this.latestRead) return;
-        const previous = this.read;
-        this.read = read;
-        this.refreshError = "";
-        this.take(seed(read), previous);
-      },
-      (error: unknown) => {
-        if (token !== this.latestRead) return;
-        const reason = codeMessage(codeOf(error));
-        if (afterSave) this.refreshError = tf("staffing.painter.refresh_error", { reason });
-        else this.loadError = tf("staffing.painter.load_error", { reason });
-      },
-    );
-  }
 
   /** Each day not edited takes the fresh read; an edited day stays, now against the fresh one.
    *  An area the fresh read no longer has loses its edits, named in the notice. Every area in the
    *  draft came from `previous`. */
-  private take(fresh: Draft, previous: SeasonStaffing | undefined): void {
+  protected take(fresh: Draft, previous: SeasonStaffing | undefined): void {
     const gone = [...this.draft]
       .filter(([key, week]) => !fresh.has(key) && !sameWeek(week, this.baseline.get(key)))
       .map(([key]) => previous!.areas.find(({ area }) => areaKey(area) === key)!.name);
@@ -256,32 +133,11 @@ export class StaffingSeasonPainter extends LitElement {
     this.commitBaseline(fresh);
   }
 
-  private commitBaseline(baseline: Draft): void {
-    this.baseline = baseline;
-    this.scope?.commit(copyDraft(baseline));
-    if (!sameDraft(this.draft, baseline)) this.scope?.changed();
-  }
-
-  private areaShown(read: SeasonStaffing): string {
-    const keys = read.areas.map(({ area }) => areaKey(area));
-    return [this.shown, this.area].find((key) => keys.includes(key)) ?? keys[0] ?? "";
-  }
-
-  private addressParams(): Record<string, string> {
-    return this.area ? { month: this.month, area: this.area } : { month: this.month };
-  }
-
   private step(by: number): void {
     const seasons = this.read!.seasons;
     const at = seasons.findIndex(({ id }) => id === this.seasonId);
     const next = seasons[(at + by + seasons.length) % seasons.length]!;
     this.open("staffing", { ...this.addressParams(), painter: "season", season: next.id });
-  }
-
-  private pick(value: string): void {
-    if (!this.read!.areas.some(({ area }) => areaKey(area) === value)) return;
-    this.notice = "";
-    this.shown = value;
   }
 
   private paint(key: string, event: CustomEvent<StaffingChange>): void {
@@ -295,7 +151,7 @@ export class StaffingSeasonPainter extends LitElement {
     this.scope?.changed();
   }
 
-  private edits(read: SeasonStaffing): SeasonStaffingEdit[] {
+  protected edits(read: SeasonStaffing): SeasonStaffingEdit[] {
     return read.areas.flatMap(({ area }) => {
       const key = areaKey(area);
       const week = this.draft.get(key)!;
@@ -310,34 +166,15 @@ export class StaffingSeasonPainter extends LitElement {
     });
   }
 
-  private async save(): Promise<void> {
-    if (this.saving || saveActionState(this.scope).unchanged) return;
-    const read = this.read!;
-    const edits = this.edits(read);
-    const generation = this.generation;
-    this.saving = true;
-    this.notice = "";
-    this.refused = undefined;
-    try {
-      await this.api.saveSeason(this.seasonId, edits);
-    } catch (error) {
-      if (generation === this.generation) {
-        this.saving = false;
-        this.refuse(error, edits, read);
-      }
-      return;
-    }
-    if (generation !== this.generation) return;
-    this.saving = false;
+  protected savedBaseline(edits: SeasonStaffingEdit[]): Draft {
     const baseline = copyDraft(this.baseline);
     for (const { area, weekday, blocks } of edits)
       baseline.get(areaKey(area))!.set(String(weekday), copyBlocks(blocks));
-    this.commitBaseline(baseline);
-    this.load(true);
+    return baseline;
   }
 
   /** `staffing.invalid` naming `edits.<i>` shows the i-th sent edit's area and marks its day. */
-  private refuse(error: unknown, edits: SeasonStaffingEdit[], read: SeasonStaffing): void {
+  protected refuse(error: unknown, edits: SeasonStaffingEdit[], read: SeasonStaffing): void {
     const { message, edit } = refusedEdit(error, edits);
     if (!edit) {
       this.refused = { message };
@@ -372,12 +209,6 @@ export class StaffingSeasonPainter extends LitElement {
     return this.weekColumns.columns;
   }
 
-  private chosenRole(): string | undefined {
-    return this.staffRoles.some(({ id }) => id === this.chosen)
-      ? this.chosen
-      : this.staffRoles[0]?.id;
-  }
-
   private seasonChip(read: SeasonStaffing) {
     // The read refuses a season that is gone, so it always lists this one.
     const season = read.seasons.find(({ id }) => id === this.seasonId)!;
@@ -396,8 +227,8 @@ export class StaffingSeasonPainter extends LitElement {
       <span class="chip" data-test="season" data-tint=${seasonTints(read.seasons).get(season.id)!}
         >${tf("staffing.month.season", {
           name: season.name,
-          from: monthDay(season.startsOn),
-          to: monthDay(seasonLastDay(read.seasons, season.startsOn)),
+          from: formatMonthDay(season.startsOn),
+          to: formatMonthDay(seasonLastDay(read.seasons, season.startsOn)),
         })}</span
       >
       <wt-button
@@ -466,8 +297,8 @@ export class StaffingSeasonPainter extends LitElement {
           read
             ? html`<p slot="row" class="covers" data-test="covers">
                 ${tf("staffing.painter.week_covers", {
-                  from: monthDay(season!.startsOn),
-                  to: monthDay(seasonLastDay(read.seasons, season!.startsOn)),
+                  from: formatMonthDay(season!.startsOn),
+                  to: formatMonthDay(seasonLastDay(read.seasons, season!.startsOn)),
                 })}
               </p>`
             : nothing
@@ -496,23 +327,7 @@ export class StaffingSeasonPainter extends LitElement {
         ${this.readOnly && shownArea ? html`<div slot="row" class="guide-read-only" data-test="guide-hint">${guideText(shownArea)}</div>` : nothing}
         ${this.content(read, shown, chosen)}
       </painter-frame>
-      ${
-        this.readOnly
-          ? nothing
-          : staffRoleDialog(
-              this.api,
-              this.dialogOpen,
-              this.staffRoles,
-              (saved) => {
-                if (!this.staffRoles.some(({ id }) => id === saved.id))
-                  this.staffRoles = [...this.staffRoles, saved];
-                this.chosen = saved.id;
-              },
-              () => {
-                this.dialogOpen = false;
-              },
-            )
-      }`;
+      ${this.roleDialog()}`;
   }
 }
 

@@ -8,8 +8,11 @@ export function format(key: Parameters<typeof t>[0], values: Record<string, stri
   );
 }
 
-function dateFormat(options: Intl.DateTimeFormatOptions, language = currentLocale()) {
-  return dateTimeFormat(language.startsWith("es") ? "es-ES" : "en-GB", {
+export const formatLocale = (language = currentLocale()) =>
+  language.startsWith("es") ? "es-ES" : "en-GB";
+
+export function dateFormat(options: Intl.DateTimeFormatOptions, language?: string) {
+  return dateTimeFormat(formatLocale(language), {
     ...options,
     timeZone: "UTC",
   });

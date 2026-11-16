@@ -1,3 +1,4 @@
+import { dateFormat } from "@waitron/venue-service/dashboard/hours-view";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import "./publish-dialog.js";
 import "./shift-edit-dialog.js";
@@ -10,7 +11,7 @@ import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/f
 import { areaKey, type AreaRef, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateFormat, utc, weekTitleParts } from "./format.js";
+import { utc, weekTitleParts } from "./format.js";
 import {
   EVERYONE,
   attentionTargets,

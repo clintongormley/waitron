@@ -1358,7 +1358,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Loose ends left by A585-7 (#1766).**
   [Detail](backlog/workforce.md#loose-ends-left-by-a585-7-1766).
 
-- **Staffing painter shared parts** (bundle of 2, size M). Holds A699, A711. [Detail](backlog/workforce.md#bundle-staffing-painter-shared-parts)
+- **Staffing painter shared parts** (A699/A711). Remaining popup/navigation, painter chrome and date-source sharing. [Detail](backlog/workforce.md#bundle-staffing-painter-shared-parts)
 
 - **A700. A failed Opening hours read also hides the Calendar's other views.**
   [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
