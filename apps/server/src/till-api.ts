@@ -1438,7 +1438,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const carriesPersonHeader = c.req.header(PERSON_HEADER) !== undefined;
       const token = readSessionToken(c);
-      if (token !== null && isUuid(token))
+      if (token !== null)
         await withTransaction(deps.db, async (tx) => {
           const holder = await openSessionPerson(tx, token);
           if (holder === null) return;

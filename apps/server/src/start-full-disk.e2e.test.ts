@@ -1726,7 +1726,9 @@ describe("a start on a real full disk", () => {
       expect(sessionCount()).toBe(before);
 
       const openSessions = () =>
-        db.all<{ n: number }>(sql`select count(*) as n from till_sessions where ended_at is null`)[0]!.n;
+        db.all<{ n: number }>(
+          sql`select count(*) as n from till_sessions where ended_at is null`,
+        )[0]!.n;
       const signOut = (cookie: string) =>
         venue.app.request("/api/session", {
           method: "DELETE",

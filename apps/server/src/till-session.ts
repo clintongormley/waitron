@@ -199,7 +199,7 @@ export async function requireSession(
   options: { permission?: Permission; action?: ProfileAction; passive?: boolean } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
   const token = readSessionToken(c);
-  if (token === null || !isUuid(token)) throw new AppError("session.required", {});
+  if (token === null) throw new AppError("session.required", {});
   const check = async (tx: Database | Transaction, stamp: boolean) => {
     const found = await readSessionRow(tx, token, c);
     const seenAt = nowIso();

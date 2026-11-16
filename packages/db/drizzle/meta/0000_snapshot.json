@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f66ebf58-1bf2-412c-8f89-4769206effd9",
+  "id": "1485ba67-00ff-4e45-952f-7d96f8a264cd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11552,7 +11552,21 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "dashboard_sessions_person_fk": {
+          "name": "dashboard_sessions_person_fk",
+          "tableFrom": "dashboard_sessions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -12296,6 +12310,13 @@
         }
       },
       "indexes": {
+        "till_sessions_opened_at_idx": {
+          "name": "till_sessions_opened_at_idx",
+          "columns": [
+            "opened_at"
+          ],
+          "isUnique": false
+        },
         "till_sessions_open_idx": {
           "name": "till_sessions_open_idx",
           "columns": [
@@ -12318,6 +12339,19 @@
           "tableTo": "devices",
           "columnsFrom": [
             "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "till_sessions_person_fk": {
+          "name": "till_sessions_person_fk",
+          "tableFrom": "till_sessions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
           ],
           "columnsTo": [
             "id"

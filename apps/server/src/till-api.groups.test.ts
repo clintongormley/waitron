@@ -2667,7 +2667,10 @@ describe("one held dish rechecks admission after reading its request", () => {
       release();
       await pending;
       await inTx(venue, async (tx) => {
-        await tx.update(tillSessions).set({ endedAt: null }).where(eq(tillSessions.id, session!.id));
+        await tx
+          .update(tillSessions)
+          .set({ endedAt: null })
+          .where(eq(tillSessions.id, session!.id));
         await tx.update(devices).set({ active: true }).where(eq(devices.id, venue.deviceId));
         await tx
           .update(deviceProfiles)

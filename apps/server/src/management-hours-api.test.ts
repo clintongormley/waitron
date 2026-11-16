@@ -211,20 +211,14 @@ it("automatic own and manager reads are passive while an explicit read extends t
     expect((await ask(route, undefined, staffCookie, true)).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(dashboardSessions)
-        .where(eq(dashboardSessions.id, staffSession))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, staffSession))
     )[0]!.lastSeenAt,
   ).toBe(old);
   expect(snapshot()).toEqual(before);
   expect((await ask(own + path())).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(dashboardSessions)
-        .where(eq(dashboardSessions.id, staffSession))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, staffSession))
     )[0]!.lastSeenAt,
   ).not.toBe(old);
 });

@@ -373,7 +373,10 @@ describe("settled-tender refund command local transaction", () => {
       const t = await target();
       if (part === "permission") await setBuiltInRoleForTest(store.db, personId, "staff");
       if (part === "session")
-        await store.db.update(tillSessions).set({ endedAt: AT }).where(eq(tillSessions.id, sessionId));
+        await store.db
+          .update(tillSessions)
+          .set({ endedAt: AT })
+          .where(eq(tillSessions.id, sessionId));
       if (part === "device")
         await store.db
           .update(devices)

@@ -24,6 +24,7 @@ const literals = new Set([
   "packages/identity/src/backup-verification.ts",
   "packages/identity/src/backup-verification.test.ts",
   "packages/identity/src/schema-ownership.test.ts",
+  "packages/identity/src/personal-data.coverage.test.ts",
   "packages/composition/src/composition.test.ts",
   "scripts/schema-constraints.test.ts",
   "packages/db/src/schema/identity/sessions.ts",
@@ -98,6 +99,14 @@ function rewrite(path, text) {
   const edits = [];
   function visit(node) {
     const parent = node.parent;
+    if (
+      literals.has(path) &&
+      ts.isIdentifier(node) &&
+      node.text === "sessions" &&
+      ts.isPropertyAssignment(parent) &&
+      parent.name === node
+    )
+      edits.push([node.getStart(source), node.end, "till_sessions"]);
     if (ts.isIdentifier(node) && node.text === "sessions") {
       let rename = false;
       if (ts.isPropertyAccessExpression(parent) && parent.name === node)
@@ -138,10 +147,9 @@ function rewrite(path, text) {
       if (ts.isNoSubstitutionTemplateLiteral(node) && node.text === "sessions")
         next = "`till_sessions`";
       if (
-        node.text.startsWith(".") &&
-        /\/identity\/sessions\.js$/.test(posix.normalize(posix.join(dirname(path), node.text)))
+        /\/identity\/sessions\.[jt]s$/.test(posix.normalize(posix.join(dirname(path), node.text)))
       )
-        next = next.replace(/sessions\.js/, "till-sessions.js");
+        next = next.replace(/sessions(\.[jt]s)/, "till-sessions$1");
       if (next !== raw) edits.push([node.getStart(source), node.end, next]);
     }
     ts.forEachChild(node, visit);
@@ -155,8 +163,8 @@ function rewrite(path, text) {
     .replace(/\bmanagementAccountActions\b/g, "accountActions")
     .replace(/\bmanagement_sessions(?=_|\b)/g, "dashboard_sessions")
     .replace(/\bmanagementSessions\b/g, "dashboardSessions")
-    .replace(/\bmanagement-sessions\.js\b/g, "dashboard-sessions.js")
-    .replace(/\bmanagement-account-actions\.js\b/g, "account-actions.js")
+    .replace(/\bmanagement-sessions(\.[jt]s)\b/g, "dashboard-sessions$1")
+    .replace(/\bmanagement-account-actions(\.[jt]s)\b/g, "account-actions$1")
     .replace(/\bsessions_(open_idx|token_hash_uq|token_hash_ck)\b/g, "till_sessions_$1");
   if (/madrid-before-move\.(?:en|es|manifest)\.json$/.test(path))
     next = next.replace(/"sessions"/g, '"till_sessions"');

@@ -3915,7 +3915,10 @@ describe("a device's approved profiles and switching its active one", () => {
         withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),
       );
       expect(ended).toBe("session.required");
-      await suite.db.update(tillSessions).set({ endedAt: null }).where(eq(tillSessions.id, session!.id));
+      await suite.db
+        .update(tillSessions)
+        .set({ endedAt: null })
+        .where(eq(tillSessions.id, session!.id));
       await suite.db.update(devices).set({ active: false }).where(eq(devices.id, s.deviceId));
       const revoked = await captureCode(() =>
         withTransaction(suite.db, (tx) => switchActiveProfile(tx, input)),

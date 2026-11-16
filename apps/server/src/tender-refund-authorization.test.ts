@@ -608,7 +608,10 @@ describe("settled-tender refund authorization before reservation", () => {
       watchDerivationsAndLock(store.db, PIN, () =>
         withTransaction(store.db, async (tx) => {
           if (change === "session")
-            await tx.update(tillSessions).set({ endedAt: AT }).where(eq(tillSessions.id, sessionId));
+            await tx
+              .update(tillSessions)
+              .set({ endedAt: AT })
+              .where(eq(tillSessions.id, sessionId));
           if (change === "operator")
             await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
           if (change === "approver")

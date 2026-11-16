@@ -207,19 +207,13 @@ it("keeps passive reads from extending a management session, but explicit reads 
   expect((await request("lookups", undefined, managerCookie, true)).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(dashboardSessions)
-        .where(eq(dashboardSessions.id, managementId))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, managementId))
     )[0]!.lastSeenAt,
   ).toBe(old);
   expect((await request("lookups")).status).toBe(200);
   expect(
     (
-      await suite.db
-        .select()
-        .from(dashboardSessions)
-        .where(eq(dashboardSessions.id, managementId))
+      await suite.db.select().from(dashboardSessions).where(eq(dashboardSessions.id, managementId))
     )[0]!.lastSeenAt,
   ).not.toBe(old);
 });

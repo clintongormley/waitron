@@ -1768,6 +1768,10 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 `restrict` key to `devices`, and `sessions` still has none to `persons`
 (`packages/db/src/schema/identity/sessions.ts`).
 
+_2026-11-16 (A1308 pp1):_ `sessions` and `management_sessions` are now `till_sessions`
+and `dashboard_sessions`; both declare a person key that restricts deletion.
+See `packages/db/src/schema/identity/till-sessions.ts` and `dashboard-sessions.ts`.
+
 _2026-11-03 (A1301 S12b):_ `join_requests.location_id` was stamped with the venue's id.
 _2026-11-12 (A1308 5e):_ that column and the venue foreign keys on `devices` and `print_agents` are removed.
 _2026-11-14 (A1308 5h):_ `locations` and its interim id accessor are removed; venue and business-day reads use the shared settings documents.

@@ -88,7 +88,11 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .orderBy(asc(dashboardSessions.createdAt), asc(dashboardSessions.id));
 
     const deviceSessions = await tx
-      .select({ device: devices.label, openedAt: tillSessions.openedAt, endedAt: tillSessions.endedAt })
+      .select({
+        device: devices.label,
+        openedAt: tillSessions.openedAt,
+        endedAt: tillSessions.endedAt,
+      })
       .from(tillSessions)
       .innerJoin(devices, eq(devices.id, tillSessions.deviceId))
       .where(eq(tillSessions.personId, personId))

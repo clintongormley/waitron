@@ -566,9 +566,6 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A stale or garbage cookie is never an error: naming nobody, the route clears it and answers
-    // 200. Weaker than its name: it does not pin the `isUuid` screen, since `endSession` hashes the
-    // value and matches no row either way.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -866,7 +863,9 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     );
     expect(sess.rows).toEqual([{ device_id: deviceIdOf(deviceCookie) }]);
 
-    await suite.db.execute(sql`delete from till_sessions where token_hash = ${hashSessionToken(token)}`);
+    await suite.db.execute(
+      sql`delete from till_sessions where token_hash = ${hashSessionToken(token)}`,
+    );
   });
 
   it("throttles a (device, person) after the free failures: a further attempt is 429 pin.throttled and loginWithPin never runs", async () => {
@@ -1220,9 +1219,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
-  // Only the row id is presented here. The stored hash is 64 hex characters, which the guard's
-  // UUID shape check refuses before any lookup, so a case presenting it would pass whatever the
-  // lookup did, and it is left out.
   it("REJECTS (401 session.required) the row's own id — what a copy of the database holds", async () => {
     const token = await openSession(suite.db);
     const { rows } = await suite.db.execute<{ id: string }>(

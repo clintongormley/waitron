@@ -1,5 +1,13 @@
 # A1308 pp1 — sign-in tables renamed, and keyed to the person: implementation plan
 
+> **2026-11-16 current-main port, watcher cleared at 17:06 (Lane E questions.md):**
+> A1002's replacement roles design satisfies the dependency; it deliberately has no sender column.
+> Carry the account-action shape unchanged through the rename. The production import deletes only
+> non-administrators during fresh provision; its seeded administrator and dashboard session stay.
+> Watcher 18:28 cleared the reset wording: prior backups are refused; configuration format 45 stays
+> unchanged because none of the renamed sign-in tables is exported.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
 > (`- [ ]`) syntax. Every step also follows
@@ -129,7 +137,7 @@ the attendance files after pp12.
 | Dashboard sessions deleted on sign-out, `activity_log` history | pp3 |
 | `target_email` | pp3 |
 | A key on `webauthn_challenges`, `google_oidc_states`, `totp_enrollments` | pp2 (their merged table gets it) |
-| `account_actions.issued_by` | A1002 cut 2 (already landed; carried inside the renamed table) |
+| A sender column on `account_actions` | deliberately absent under the replacement A1002 design |
 | Pruning ended till sessions | A980 (README U10) |
 | `location_id` anywhere | slice 5 (assumed landed) |
 
@@ -237,8 +245,7 @@ prints as one line, so its contents are not compared by the tool). Any other lin
 ## Needs
 
 - Batch 1, all of it: 1a's rebuild command; slice 5 (no `location_id` anywhere).
-- A1002 cut 2 (design §10: "A1002 lands before the people slice"): it adds `issued_by` to
-  `management_account_actions` and replaces `persons.role`; this plan renames the table after it.
+- A1002 cut 2 (design §10: "A1002 lands before the people slice"): the replacement [roles design](2026-11-11-a1002-roles-redesign.md) has landed; this plan carries its account-action shape unchanged.
 - Inside this area: nothing (first plan).
 
 ## Assumptions about batch 1 and A1002

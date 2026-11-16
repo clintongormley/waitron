@@ -61,9 +61,9 @@ it("signs in normally in a venue where workforce has never been migrated", async
   });
   expect(opened.status).toBe(200);
   expect(await opened.json()).toMatchObject({ personId: person!.id });
-  expect((await suite.db.select().from(tillSessions)).map((s) => [s.personId, s.deviceId])).toEqual([
-    [person!.id, device.deviceId],
-  ]);
+  expect((await suite.db.select().from(tillSessions)).map((s) => [s.personId, s.deviceId])).toEqual(
+    [[person!.id, device.deviceId]],
+  );
   expect(
     (await app.request("/api/clock/state", { headers: { [DEV_DEVICE_HEADER]: device.deviceId } }))
       .status,

@@ -411,14 +411,19 @@ describe("identity offline backup owner", () => {
     "totp_enrollments",
     "webauthn_challenges",
     "google_oidc_states",
-  ])("checks logical person references absent from SQL foreign keys: %s", async (table) => {
+  ])("checks stored person references on damaged copies: %s", async (table) => {
     // A kind that names a person, so only the missing-person check can refuse the row.
     const kind =
       {
         webauthn_challenges: "purpose='registration',",
         google_oidc_states: "mode='link',",
       }[table] ?? "";
-    damage(`update ${table} set ${kind}person_id='10000000-0000-4000-8000-999999999999'`);
+    damage("pragma foreign_keys=off");
+    try {
+      damage(`update ${table} set ${kind}person_id='10000000-0000-4000-8000-999999999999'`);
+    } finally {
+      damage("pragma foreign_keys=on");
+    }
     expect(await run()).toEqual(verdict("invalid", "passed"));
   });
   it("accepts explicitly absent optional authenticators and empty ceremony tables", async () => {
@@ -442,9 +447,9 @@ describe("identity offline backup owner", () => {
     syncBuiltinESMExports();
     try {
       await expect(run()).resolves.toEqual(passed);
-      expect(
-        original.db.all(sql`select code_attempts, used_at from account_actions`),
-      ).toEqual([{ code_attempts: 2, used_at: null }]);
+      expect(original.db.all(sql`select code_attempts, used_at from account_actions`)).toEqual([
+        { code_attempts: 2, used_at: null },
+      ]);
       expect(original.db.all(sql`select used_at from recovery_codes`)).toEqual([{ used_at: now }]);
       expect(original.db.all(sql`select count(*) as n from till_sessions`)).toEqual([{ n: 1 }]);
       expect(original.db.all(sql`select count(*) as n from dashboard_sessions`)).toEqual([

@@ -248,9 +248,7 @@ async function invalidateLinks(tx: Transaction, personId: string): Promise<void>
   await tx
     .update(accountActions)
     .set({ usedAt: nowIso() })
-    .where(
-      and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)),
-    );
+    .where(and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)));
 }
 
 export async function readPasskeys(tx: Transaction, personId: string) {

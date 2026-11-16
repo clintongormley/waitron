@@ -11,10 +11,7 @@ export async function endMirrorViewer(db: Database): Promise<void> {
       .update(dashboardSessions)
       .set({ endedAt: nowIso() })
       .where(
-        and(
-          eq(dashboardSessions.id, MIRROR_VIEWER_SESSION_ID),
-          isNull(dashboardSessions.endedAt),
-        ),
+        and(eq(dashboardSessions.id, MIRROR_VIEWER_SESSION_ID), isNull(dashboardSessions.endedAt)),
       ),
   );
 }

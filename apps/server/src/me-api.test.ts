@@ -1286,9 +1286,9 @@ describe("mountMeApi — own credentials and second factor", () => {
           ? []
           : [{ params: JSON.stringify({ purpose: "email_change" }), status: "pending" }],
       );
-      expect(
-        suite.db.all(sql`select id from account_actions where person_id=${personId}`),
-      ).toEqual([]);
+      expect(suite.db.all(sql`select id from account_actions where person_id=${personId}`)).toEqual(
+        [],
+      );
       await suite.db.run(sql`delete from outgoing_mail where person_id=${personId}`);
     },
   );

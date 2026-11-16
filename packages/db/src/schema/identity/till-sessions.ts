@@ -1,5 +1,6 @@
+import { persons } from "./persons.js";
 import { sql } from "drizzle-orm";
-import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, label, newId, nowIso, table, tsString } from "../columns.js";
 import { devices } from "../devices.js";
 
@@ -14,8 +15,6 @@ export const tillSessions = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
-    // No key to `persons`: none was restored when the table became `state` (docs/backlog.md, slice-2
-    // Task 1b), and `loginWithPin` inserts only a person `verifyPersonCredential` found.
     personId: id("person_id").notNull(),
     deviceId: id("device_id")
       .notNull()
@@ -24,6 +23,12 @@ export const tillSessions = table(
     endedAt: tsString("ended_at"),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "till_sessions_person_fk",
+    }).onDelete("restrict"),
+    index("till_sessions_opened_at_idx").on(t.openedAt),
     index("till_sessions_open_idx").on(t.deviceId),
     uniqueIndex("till_sessions_token_hash_uq").on(t.tokenHash),
     check("till_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),

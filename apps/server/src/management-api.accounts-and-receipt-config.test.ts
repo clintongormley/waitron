@@ -3080,11 +3080,8 @@ it("rechecks person.admin authority lost after the invitation preflight", async 
     await app.flushMail();
     expect(sent).toEqual([]);
     expect(
-      (
-        await suite.db.execute(
-          sql`select id from account_actions where person_id = ${staffId}`,
-        )
-      ).rows,
+      (await suite.db.execute(sql`select id from account_actions where person_id = ${staffId}`))
+        .rows,
     ).toEqual([]);
   } finally {
     spy.mockRestore();
@@ -3416,9 +3413,7 @@ describe("queued invitation answers", () => {
         expect((await suite.db.select().from(persons).where(eq(persons.id, id)))[0]?.status).toBe(
           "pending",
         );
-        expect(
-          suite.db.all(sql`select id from account_actions where person_id=${id}`),
-        ).toEqual([]);
+        expect(suite.db.all(sql`select id from account_actions where person_id=${id}`)).toEqual([]);
         const managerId = suite.db.get<{ id: string }>(
           sql`select id from persons where email='owner@example.test'`,
         )!.id;

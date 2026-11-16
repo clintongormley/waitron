@@ -1,5 +1,6 @@
+import { persons } from "./persons.js";
 import { sql } from "drizzle-orm";
-import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumText, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
 /**
@@ -13,9 +14,6 @@ export const dashboardSessions = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
-    // No key to `persons`: none was restored when the table became `state` (docs/backlog.md,
-    // slice-2 Task 1b). `resolveManagementSession`'s inner join refuses a session whose person is
-    // gone.
     personId: id("person_id").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
@@ -24,6 +22,11 @@ export const dashboardSessions = table(
     proofMethod: enumText("proof_method", ["password", "passkey", "recovery-code"]),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "dashboard_sessions_person_fk",
+    }).onDelete("restrict"),
     // For the writes that end a person's open sessions.
     index("dashboard_sessions_open_idx").on(t.personId),
     uniqueIndex("dashboard_sessions_token_hash_uq").on(t.tokenHash),

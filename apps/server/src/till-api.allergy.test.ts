@@ -331,7 +331,10 @@ describe("A669 allergy routes", () => {
       "submission.id_reused",
     );
     const [other] = await seedPersons(suite.db, { displayName: "Other staff", role: "staff" });
-    await suite.db.update(tillSessions).set({ personId: other!.id }).where(eq(tillSessions.id, sessionId));
+    await suite.db
+      .update(tillSessions)
+      .set({ personId: other!.id })
+      .where(eq(tillSessions.id, sessionId));
     noteSessionPerson(token, other!.id);
     await expectError(await request("PUT", path(), original), 409, "submission.id_reused");
     expect(await snapshot()).toEqual(before);

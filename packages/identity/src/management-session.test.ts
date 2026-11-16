@@ -1,3 +1,4 @@
+import { captureError, restrictRefused } from "@waitron/db";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -126,16 +127,16 @@ describe("management session lifecycle", () => {
     expect(code).toBe("management_session.required");
   });
 
-  it("throws management_session.required when the session's person row has been deleted", async () => {
+  it("refuses deleting the person behind a dashboard session", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Reachable because the table declares no key to `persons`. Two nets produce the refusal, so
-    // breaking it takes both: measured by mutation, the inner join alone can be widened to a left
-    // join and this case still passes.
-    await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
-
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
-    expect(code).toBe("management_session.required");
+    const error = await captureError(() =>
+      run((tx) => tx.execute(sql`delete from persons where id = ${personId}`)),
+    );
+    expect(restrictRefused(error)).toBe(true);
+    expect((await run((tx) => resolveManagementSession(tx, session.token))).personId).toBe(
+      personId,
+    );
   });
 
   it("throws management_session.expired past the idle timeout", async () => {

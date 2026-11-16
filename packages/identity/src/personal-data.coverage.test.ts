@@ -49,7 +49,7 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     in: ["used_at"],
     out: ["id", "person_id", "code_hash", "created_at"],
   },
-  sessions: {
+  till_sessions: {
     in: ["device_id", "opened_at", "ended_at"],
     out: ["id", "person_id", "token_hash"],
   },

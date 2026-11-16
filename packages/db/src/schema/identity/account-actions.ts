@@ -41,10 +41,7 @@ export const accountActions = table(
       sql`(${t.purpose} = 'email_change') = (${t.targetEmail} is not null)`,
     ),
     check("account_actions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
-    check(
-      "account_actions_code_hash_ck",
-      sql`${t.codeHash} is null or length(${t.codeHash}) = 64`,
-    ),
+    check("account_actions_code_hash_ck", sql`${t.codeHash} is null or length(${t.codeHash}) = 64`),
     check("account_actions_code_attempts_ck", sql`${t.codeAttempts} >= 0`),
     check("account_actions_expiry_ck", sql`${t.expiresAt} > ${t.createdAt}`),
   ],

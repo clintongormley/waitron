@@ -50,7 +50,10 @@ describe("assertStillSignedIn", () => {
   });
 
   it("refuses session.required when the session has ended", async () => {
-    await suite.db.update(tillSessions).set({ endedAt: nowIso() }).where(eq(tillSessions.id, sessionId));
+    await suite.db
+      .update(tillSessions)
+      .set({ endedAt: nowIso() })
+      .where(eq(tillSessions.id, sessionId));
     await expect(check()).rejects.toMatchObject({ code: "session.required" });
   });
 

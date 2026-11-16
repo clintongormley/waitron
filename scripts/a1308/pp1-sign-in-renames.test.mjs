@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import { afterEach, expect, it, vi } from "vitest";
 import { run } from "./pp1-sign-in-renames.mjs";
 
 const roots = [];
@@ -124,6 +125,8 @@ it("renames account-only SQL, text fixtures and imports beside attendance export
       'case "management_sessions": break;',
     "apps/server/src/attendance-export-api.test.ts":
       'import { managementSessions } from "@waitron/db"; section("sessions"); select(managementSessions);',
+    "packages/identity/src/personal-data.coverage.test.ts":
+      'const CLASSIFIED = { sessions: { in: ["id"] } }; ["sessions"];',
   });
   run({ root, write: true });
   expect(read(root, "apps/server/src/account-mail.test.ts")).toBe(
@@ -135,6 +138,9 @@ it("renames account-only SQL, text fixtures and imports beside attendance export
   expect(read(root, "apps/server/src/attendance-export-api.test.ts")).toBe(
     'import { dashboardSessions } from "@waitron/db"; section("sessions"); select(dashboardSessions);',
   );
+  expect(read(root, "packages/identity/src/personal-data.coverage.test.ts")).toBe(
+    'const CLASSIFIED = { till_sessions: { in: ["id"] } }; ["till_sessions"];',
+  );
 });
 
 it("previews without writing and changes no bytes on a second write", () => {
@@ -144,6 +150,54 @@ it("previews without writing and changes no bytes on a second write", () => {
   run({ root, write: true });
   expect(run({ root, write: true })).toEqual([]);
   expect(read(root, "packages/db/src/classification.ts")).toBe('["till_sessions"]');
+});
+
+it("ports table-name templates, demo keys and the mutation scheduler's schema paths", () => {
+  const root = fixture({
+    "apps/server/src/day.ts": "const source = sql`sessions`; sql`from sessions where id = ${id}`;",
+    "packages/db/mutation-costs.json":
+      '{"src/schema/identity/sessions.ts":1,"src/schema/identity/management-sessions.ts":2,"src/schema/identity/management-account-actions.ts":3}',
+    "packages/country-es/test-fixtures/demo/madrid-before-move.en.json": '{"sessions":[]}',
+    "apps/server/src/unused.ts": "const unchanged = 1;",
+  });
+  run({ root, write: true });
+  expect(read(root, "apps/server/src/day.ts")).toBe(
+    "const source = sql`till_sessions`; sql`from till_sessions where id = ${id}`;",
+  );
+  expect(JSON.parse(read(root, "packages/db/mutation-costs.json"))).toEqual({
+    "src/schema/identity/till-sessions.ts": 1,
+    "src/schema/identity/dashboard-sessions.ts": 2,
+    "src/schema/identity/account-actions.ts": 3,
+  });
+  expect(read(root, "packages/country-es/test-fixtures/demo/madrid-before-move.en.json")).toBe(
+    '{"till_sessions":[]}',
+  );
+  expect(read(root, "apps/server/src/unused.ts")).toBe("const unchanged = 1;");
+});
+
+it("the CLI previews by default and writes only with --write", async () => {
+  const root = fixture({ "packages/db/src/classification.ts": '["sessions"]' });
+  const argv = process.argv;
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue(root);
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    process.argv = ["node", fileURLToPath(new URL("./pp1-sign-in-renames.mjs", import.meta.url))];
+    vi.resetModules();
+    await import("./pp1-sign-in-renames.mjs");
+    expect(output.mock.calls.map(([line]) => line).join("")).toBe(
+      "packages/db/src/classification.ts\n",
+    );
+    expect(read(root, "packages/db/src/classification.ts")).toBe('["sessions"]');
+    process.argv.push("--write");
+    vi.resetModules();
+    await import("./pp1-sign-in-renames.mjs");
+    expect(read(root, "packages/db/src/classification.ts")).toBe('["till_sessions"]');
+  } finally {
+    process.argv = argv;
+    cwd.mockRestore();
+    output.mockRestore();
+    vi.resetModules();
+  }
 });
 
 it.each([

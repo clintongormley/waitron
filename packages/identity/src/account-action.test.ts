@@ -260,8 +260,7 @@ describe("management account actions", () => {
     const outstanding = await run((tx) =>
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
     );
-    await suite.db
-      .execute(sql`update dashboard_sessions set proved_at = ${new Date().toISOString()}
+    await suite.db.execute(sql`update dashboard_sessions set proved_at = ${new Date().toISOString()}
       where token_hash = ${hashSessionToken(session.token)}`);
     await run((tx) =>
       updatePersonDetails(tx, {
@@ -339,9 +338,9 @@ describe("management account actions", () => {
         not_after: "2026-11-09T12:30:00.000Z",
       },
     ]);
-    expect(
-      suite.db.all(sql`select id from account_actions where person_id=${personId}`),
-    ).toEqual([]);
+    expect(suite.db.all(sql`select id from account_actions where person_id=${personId}`)).toEqual(
+      [],
+    );
     const before = suite.db.all(sql`select id from outgoing_mail`);
     await run((tx) =>
       queueAccountRecovery(tx, { email: "queue-unknown@x.com", origin: "https://entry.test", now }),
@@ -375,9 +374,9 @@ describe("management account actions", () => {
         params: JSON.stringify({ purpose: "invitation", origin: "https://staff.test" }),
       },
     ]);
-    expect(
-      suite.db.all(sql`select id from account_actions where person_id=${personId}`),
-    ).toEqual([]);
+    expect(suite.db.all(sql`select id from account_actions where person_id=${personId}`)).toEqual(
+      [],
+    );
   });
 
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {

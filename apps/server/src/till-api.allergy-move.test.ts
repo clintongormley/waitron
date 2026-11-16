@@ -230,7 +230,10 @@ it("transports answer and ticks through the move route and replays the original 
     "submission.id_reused",
   );
   const [other] = await seedPersons(v.db, { displayName: "Other operator", role: "staff" });
-  await v.db.update(tillSessions).set({ personId: other!.id }).where(eq(tillSessions.id, f.sessionId));
+  await v.db
+    .update(tillSessions)
+    .set({ personId: other!.id })
+    .where(eq(tillSessions.id, f.sessionId));
   noteSessionPerson(f.token, other!.id);
   const changedActor = frozen();
   await refused(await f.request("", packet), 409, "submission.id_reused");

@@ -1338,7 +1338,10 @@ describe("the public cancellation read and command", () => {
       expect(await frozen()).toEqual(before);
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(tillSessions).set({ endedAt: null }).where(eq(tillSessions.id, sessionRows[0]!.id)),
+        tx
+          .update(tillSessions)
+          .set({ endedAt: null })
+          .where(eq(tillSessions.id, sessionRows[0]!.id)),
       );
     }
   });

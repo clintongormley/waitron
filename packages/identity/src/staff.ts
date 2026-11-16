@@ -178,9 +178,7 @@ async function invalidatePersonAccountActions(tx: Transaction, personId: string)
   await tx
     .update(accountActions)
     .set({ usedAt: nowIso() })
-    .where(
-      and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)),
-    );
+    .where(and(eq(accountActions.personId, personId), isNull(accountActions.usedAt)));
 }
 
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {

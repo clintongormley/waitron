@@ -6,12 +6,7 @@
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  withTransaction,
-  accountActions,
-  outgoingMail,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, accountActions, outgoingMail } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedManager } from "../test/fixtures.js";

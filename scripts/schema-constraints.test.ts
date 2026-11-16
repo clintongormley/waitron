@@ -200,6 +200,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["payment_refunds", ["payment_id"], "payments"],
   ["payment_refunds", ["authorized_by"], "persons"],
   ["payments", ["requested_by"], "persons"],
+  ["till_sessions", ["person_id"], "persons"],
+  ["dashboard_sessions", ["person_id"], "persons"],
   ["payments", ["bill_payment_id"], "bill_payments"],
   ["payments", ["resolved_by"], "persons"],
   ["payments", ["hold_decided_by"], "persons"],

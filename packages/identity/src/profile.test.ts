@@ -1,3 +1,4 @@
+import { captureError, restrictRefused } from "@waitron/db";
 import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -631,13 +632,16 @@ describe("your profile", () => {
     ]);
   });
 
-  it("refuses a live session whose person row no longer exists, as it refuses a signed-out caller", async () => {
-    // `dashboard_sessions` carries no foreign key to `persons`, so the session can outlive the row.
+  it("refuses deleting the person behind a live dashboard session", async () => {
     const f = await fixture();
-    await suite.db.execute(sql`delete from persons where id = ${f.personId}`);
-    expect(await codeOf(() => withTransaction(suite.db, (tx) => readOwnProfile(tx, f)))).toBe(
-      "management_session.required",
+    const before = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx.execute(sql`delete from persons where id = ${f.personId}`),
+      ),
     );
+    expect(restrictRefused(error)).toBe(true);
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toEqual(before);
   });
 
   it("labels the authenticator entry with the display name when the person has no email", async () => {

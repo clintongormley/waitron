@@ -1734,6 +1734,7 @@ CREATE TABLE `dashboard_sessions` (
 	`ended_at` text,
 	`proved_at` text,
 	`proof_method` text,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "dashboard_sessions_token_hash_ck" CHECK(length("dashboard_sessions"."token_hash") = 64),
 	CONSTRAINT "dashboard_sessions_proof_method_ck" CHECK("dashboard_sessions"."proof_method" in ('password', 'passkey', 'recovery-code'))
 );
@@ -1856,9 +1857,11 @@ CREATE TABLE `till_sessions` (
 	`opened_at` text NOT NULL,
 	`ended_at` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "till_sessions_token_hash_ck" CHECK(length("till_sessions"."token_hash") = 64)
 );
 --> statement-breakpoint
+CREATE INDEX `till_sessions_opened_at_idx` ON `till_sessions` (`opened_at`);--> statement-breakpoint
 CREATE INDEX `till_sessions_open_idx` ON `till_sessions` (`device_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `till_sessions_token_hash_uq` ON `till_sessions` (`token_hash`);--> statement-breakpoint
 CREATE TABLE `totp_enrollments` (
