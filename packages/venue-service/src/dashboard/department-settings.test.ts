@@ -819,6 +819,9 @@ it("a same-department snapshot updates pristine fields but leaves a dirty draft 
   await el.updateComplete;
   expect(field(el, "name").value).toBe("Draft");
   expect(save(el).disabled).toBe(false);
+  await change(el, "name", "Live name");
+  expect(field(el, "name").value).toBe("Newer live name");
+  expect(save(el).disabled).toBe(true);
 });
 it("a pristine form remains quiet when transfers become hidden and ignores a late read after hiding", async () => {
   const { el } = await mount();

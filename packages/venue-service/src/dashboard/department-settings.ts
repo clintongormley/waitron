@@ -523,54 +523,52 @@ export class DepartmentSettings extends LitElement {
     }
     if (this.scope && !this.busy) {
       this.followSteps(source.serviceSteps);
-      if (!settingsEqual({ ...this.source!, serviceSteps: source.serviceSteps }, source)) {
-        const draft = copy(this.draft!),
-          baseline = copy(this.baseline!);
-        for (const field of [
-          "name",
-          "tradingName",
-          "orderStart",
-          "paidWhen",
-          "collectionNumber",
-          "dining",
-          "diningStartsAs",
-          "needsClearing",
-          "lateSendNeedsManager",
-        ] as const) {
-          const untouched =
-            field === "name" || field === "tradingName"
-              ? draft[field].trim() === baseline[field].trim()
-              : draft[field] === baseline[field];
-          if (untouched) {
-            Object.assign(draft, { [field]: source[field] });
-            Object.assign(baseline, { [field]: source[field] });
-          }
+      const draft = copy(this.draft!),
+        baseline = copy(this.baseline!);
+      for (const field of [
+        "name",
+        "tradingName",
+        "orderStart",
+        "paidWhen",
+        "collectionNumber",
+        "dining",
+        "diningStartsAs",
+        "needsClearing",
+        "lateSendNeedsManager",
+      ] as const) {
+        const untouched =
+          field === "name" || field === "tradingName"
+            ? draft[field].trim() === baseline[field].trim()
+            : draft[field] === baseline[field];
+        if (untouched) {
+          Object.assign(draft, { [field]: source[field] });
+          Object.assign(baseline, { [field]: source[field] });
         }
-        const courses = source.courseSettings.map((row) => {
-          const saved = baseline.courseSettings.find((other) => other.courseId === row.courseId);
-          const edited = draft.courseSettings.find((other) => other.courseId === row.courseId);
-          const heldTouched = saved && edited && edited.heldUntilFired !== saved.heldUntilFired;
-          const reminderTouched =
-            saved && edited && edited.reminderMinutes !== saved.reminderMinutes;
-          return {
-            draft: {
-              ...row,
-              ...(heldTouched ? { heldUntilFired: edited.heldUntilFired } : {}),
-              ...(reminderTouched ? { reminderMinutes: edited.reminderMinutes } : {}),
-            },
-            baseline: {
-              ...row,
-              ...(heldTouched ? { heldUntilFired: saved.heldUntilFired } : {}),
-              ...(reminderTouched ? { reminderMinutes: saved.reminderMinutes } : {}),
-            },
-          };
-        });
-        draft.courseSettings = courses.map(({ draft }) => draft);
-        baseline.courseSettings = courses.map(({ baseline }) => baseline);
+      }
+      const courses = source.courseSettings.map((row) => {
+        const saved = baseline.courseSettings.find((other) => other.courseId === row.courseId);
+        const edited = draft.courseSettings.find((other) => other.courseId === row.courseId);
+        const heldTouched = saved && edited && edited.heldUntilFired !== saved.heldUntilFired;
+        const reminderTouched = saved && edited && edited.reminderMinutes !== saved.reminderMinutes;
+        return {
+          draft: {
+            ...row,
+            ...(heldTouched ? { heldUntilFired: edited.heldUntilFired } : {}),
+            ...(reminderTouched ? { reminderMinutes: edited.reminderMinutes } : {}),
+          },
+          baseline: {
+            ...row,
+            ...(heldTouched ? { heldUntilFired: saved.heldUntilFired } : {}),
+            ...(reminderTouched ? { reminderMinutes: saved.reminderMinutes } : {}),
+          },
+        };
+      });
+      draft.courseSettings = courses.map(({ draft }) => draft);
+      baseline.courseSettings = courses.map(({ baseline }) => baseline);
+      if (!equal(this.draft!, draft) || !equal(this.baseline!, baseline)) {
         this.draft = draft;
         this.baseline = baseline;
         this.scope.commit(baseline);
-        this.source = { ...copy(source), serviceSteps: this.source!.serviceSteps };
       }
     }
     this.followDescription();
