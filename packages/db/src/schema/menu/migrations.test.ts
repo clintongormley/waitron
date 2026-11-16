@@ -493,7 +493,7 @@ describe("the menu tables carry no taxpayer column", () => {
    * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
    * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration.
    */
-  it("rebuilds every lookup index without the taxpayer", async () => {
+  it("declares exactly these indexes", async () => {
     const indexes: Record<string, { unique: boolean; columns: string }> = {};
     for (const table of TABLES) {
       const rows = (

@@ -171,7 +171,6 @@ export const workingOrderLines = table(
     productId: id("product_id"),
     variantName: label("variant_name"),
     // Keyed and filled like `descriptions`, and checked by trigger the same way.
-    // Null = the variant has no customer name.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),

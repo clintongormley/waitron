@@ -248,9 +248,7 @@ so the provisioned admin can sign in immediately.
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session; the
 exceptions are `--admin-first-names` and `--admin-last-names`, which are read from a flag but never
 prompted for, so an existing non-interactive script gains no new question. `--yes` skips the
-confirmation for a non-interactive run. `--territory` currently accepts only
-`ES-common` (common-territory Spain, filing under Veri\*Factu with IVA); any other territory is
-refused with `fiscal.regime_not_implemented`. The SIF's `id_sistema_informatico` is **not** an
+confirmation for a non-interactive run. The SIF's `id_sistema_informatico` is **not** an
 option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's
 software, not the venue. The venue directory carries no password, so it is an ordinary
 `--venue-dir` flag; the two login secrets stay out of `argv`, and the parser rejects the retired
@@ -801,13 +799,12 @@ The ones worth grepping for:
 - **`duty.degraded`** (`error` when the duty is stale, `warn` otherwise) —
   `{ duty, consecutiveFailures, skipped, parked, stale, lastOkAt }`. One line per DEGRADED duty,
   per pass —
-  `ok: false`, or `ok: true` with `skipped > 0` or `parked > 0`: the same condition, computed once in
-  `health.ts`'s `recordPass`, that decides whether `/health` reads unhealthy for that duty, so this
-  line and a `503` can never disagree about what "degraded" means. The level comes from `stale`, not
-  from `consecutiveFailures` — `stale` is already the exact criterion `/health`'s `200`/`503` verdict
-  uses, so
-  an `error` line and a `503` are the same condition by construction, and a duty that fails on the
-  first pass after boot logs `error` immediately (`lastOkAt === null` reads as stale). This is the
+  `ok: false`, or `ok: true` with `skipped > 0` or `parked > 0`, as `health.ts`'s `recordPass`
+  computes it; a degraded pass leaves the duty's `lastOkAt` where it was. The level comes from
+  `stale`, not from `consecutiveFailures`: the same `isStale` test `/health`'s `200`/`503` verdict
+  uses, but taken at the pass, while `/health` takes it at each request, so a duty can go stale
+  between passes and answer `503` before any `error` line. A duty that fails on the first pass after
+  boot logs `error` immediately (`lastOkAt === null` reads as stale). This is the
   single fastest line to grep for a degraded duty — see ["What to do about a `503`"](#what-health-means)
   above.
 - **`drain.complete`** (`info`) — per-pass summary counters for `fiscal.drain`, including `skipped`

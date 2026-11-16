@@ -1781,15 +1781,6 @@ below records the gap that prompted the design, not a new runtime measurement.
   processor time (A751); see
   [the timing receipt](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-## `packages/provisioning/README.md` also says only `ES-common` is implemented
-
-- A `GB-vat` run
-  exits 0 in `cli.test.ts`; the README repeats two reasons #561 deleted from the code's comments: that
-  `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
-  reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
-  interleave was not measured) and that the entry point can only be checked through the built
-  bundle (its prompt function runs straight from source).
-
 ## `packages/provisioning` code found by #561 and not changed
 
 - The `quoteLiteral` re-export in
