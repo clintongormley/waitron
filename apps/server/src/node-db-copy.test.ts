@@ -36,7 +36,7 @@ import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
+import { keyRingEnv, type EncodedKeyRing } from "@waitron/credentials";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";

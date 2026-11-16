@@ -6,6 +6,7 @@ import {
   loadKeyRing,
   singleLineKeyRingVariables,
 } from "./keyring.js";
+import * as keyRingFormat from "./keyring.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
@@ -267,5 +268,39 @@ describe("keyForVersion", () => {
 
   it("returns null for a version the ring does not carry", () => {
     expect(keyForVersion(ring, 99)).toBeNull();
+  });
+});
+
+describe("key ring format", () => {
+  it("encodes current and previous keys without changing their bytes", () => {
+    expect(keyRingFormat).toHaveProperty("encodeKeyRing");
+    const current = { key: Buffer.alloc(32, 2), version: 7 };
+    expect(
+      keyRingFormat.encodeKeyRing({ current, previous: { key: Buffer.alloc(32, 1), version: 6 } }),
+    ).toEqual({
+      key: K2,
+      version: 7,
+      previous: { key: K1, version: 6 },
+    });
+    expect(keyRingFormat.encodeKeyRing({ current })).toEqual({ key: K2, version: 7 });
+  });
+
+  it("maps variables without normalising spelling", () => {
+    expect(keyRingFormat).toHaveProperty("keyRingEnv");
+    const key = K2.slice(0, -1) + "\n";
+    const previous = { key: K1.slice(0, -1), version: 6 };
+    expect(keyRingFormat.keyRingEnv({ key, version: 7, previous })).toEqual({
+      WAITRON_CREDENTIALS_KEY: key,
+      WAITRON_CREDENTIALS_KEY_VERSION: "7",
+      WAITRON_CREDENTIALS_KEY_PREVIOUS: previous.key,
+      WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "6",
+    });
+    expect(keyRingFormat.keyRingEnv({ key, version: 7 })).toEqual({
+      WAITRON_CREDENTIALS_KEY: key,
+      WAITRON_CREDENTIALS_KEY_VERSION: "7",
+    });
+    expect(loadKeyRing(keyRingFormat.keyRingEnv({ key, version: 7 })).current.key).toEqual(
+      Buffer.alloc(32, 2),
+    );
   });
 });

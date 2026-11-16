@@ -38,7 +38,7 @@ import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
-import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
+import { keyRingEnv, type EncodedKeyRing } from "@waitron/credentials";
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";

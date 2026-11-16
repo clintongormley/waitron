@@ -12,6 +12,7 @@ import { constants, existsSync } from "node:fs";
 import { X509Certificate, createPrivateKey, type KeyObject } from "node:crypto";
 import { join } from "node:path";
 import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
+import { keyRingEnv, type EncodedKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { withRecoveryLock } from "./recovery-lock.js";
 import "./errors.js";
@@ -58,32 +59,12 @@ function boxTlsPaths(stateDir: string) {
   };
 }
 
-/** A key ring with its keys in base64, as `secrets.env` holds them. */
-export interface EncodedKeyRing {
-  key: string;
-  version: number;
-  previous?: { key: string; version: number };
-}
-
 /**
  * Replaces `secrets.env` whole with `ring`, so the next boot opens what the main box sealed.
  */
 export async function writeCredentialsRing(stateDir: string, ring: EncodedKeyRing): Promise<void> {
   // Durable: node.db's commit is, and a key it holds sealed under this ring opens only with it.
   await writeFileDurable(join(stateDir, SECRETS_ENV_FILE), formatEnvFile(keyRingEnv(ring)), 0o600);
-}
-
-/** The ring's variables, as `loadKeyRing` reads them; the previous pair only when it has one. */
-export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
-  const env: Record<string, string> = {
-    WAITRON_CREDENTIALS_KEY: ring.key,
-    WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
-  };
-  if (ring.previous !== undefined) {
-    env.WAITRON_CREDENTIALS_KEY_PREVIOUS = ring.previous.key;
-    env.WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION = String(ring.previous.version);
-  }
-  return env;
 }
 
 export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
@@ -181,10 +162,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
   const secretsFile = join(deps.stateDir, SECRETS_ENV_FILE);
   if (!(await fileExists(secretsFile))) {
     const ring = makeKeyRing();
-    const body = formatEnvFile({
-      WAITRON_CREDENTIALS_KEY: ring.key,
-      WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
-    });
+    const body = formatEnvFile(keyRingEnv(ring));
     await writeFileDurable(secretsFile, body, 0o600);
   }
 

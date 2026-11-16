@@ -18,7 +18,12 @@ import {
   type Endorsement,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
+import {
+  encodeKeyRing,
+  nodeSigningPublicKey,
+  type EncodedKeyRing,
+  type KeyRing,
+} from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import {
   enabledModules,
@@ -29,7 +34,7 @@ import {
   type ModuleConfig,
   type ModuleOperations,
 } from "@waitron/module";
-import { caCertPath, caKeyPath, type EncodedKeyRing } from "./box-secrets.js";
+import { caCertPath, caKeyPath } from "./box-secrets.js";
 import { readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -85,19 +90,6 @@ export interface MirrorBundle {
   /** The main box's `backup.env`, its values only; `null` when it holds none. */
   backupSettings: Record<string, string> | null;
   boxCaKeyPem: string;
-}
-
-function encodeKeyRing(ring: KeyRing): EncodedKeyRing {
-  const encoded: EncodedKeyRing = {
-    key: ring.current.key.toString("base64"),
-    version: ring.current.version,
-  };
-  if (ring.previous !== undefined)
-    encoded.previous = {
-      key: ring.previous.key.toString("base64"),
-      version: ring.previous.version,
-    };
-  return encoded;
 }
 
 // `ring` travels whole as `credentialsRing`, and unseals the primary's identity private key, which
