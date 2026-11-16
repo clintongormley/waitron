@@ -182,6 +182,9 @@ describe("A773 pass board widget: dishes", () => {
       ["allergen-milk", "img", allergenName("milk", currentLocale())],
     ]);
     expect(row.querySelector(".allergen-chip")).toBeNull();
+    // Larger than the till's default icon (14px), for a cook reading from a distance.
+    for (const icon of row.querySelectorAll("wt-icon"))
+      expect(icon.getBoundingClientRect().width).toBeGreaterThan(14);
     expect(row.textContent).toContain(t("allergens.contains"));
     expect(itemOf(el, "pending").querySelector(".item-allergens")).toBeNull();
     expect(itemOf(el, "pending").textContent).not.toMatch(/review|revisi/i);

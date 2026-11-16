@@ -261,6 +261,7 @@ export function dishAllergens(item: DishLines, prefix: string): TemplateResult |
         (code) =>
           html`<wt-icon
             name=${`allergen-${code}`}
+            size="lg"
             role="img"
             aria-label=${allergenLabel(code, allergens[code]!, locale)}
           ></wt-icon>`,
