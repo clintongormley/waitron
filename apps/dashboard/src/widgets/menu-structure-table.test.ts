@@ -2485,13 +2485,17 @@ describe("colour swatches", () => {
     await userEvent.click(swatch);
     await settle(el);
     expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
-    expect(sent).toEqual([["wt-member-edit", edits[0]]]);
+    expect(sent).toEqual([
+      ["wt-member-edit", { sectionId: "s-drinks", path: ["m-drinks"], swatch: true }],
+    ]);
     await toggle(el, "m-drinks");
     sent.length = 0;
     await userEvent.click(swatchOf(el, "m-drinks"));
     await settle(el);
     expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
-    expect(sent).toEqual([["wt-member-edit", edits[0]]]);
+    expect(sent).toEqual([
+      ["wt-member-edit", { sectionId: "s-drinks", path: ["m-drinks"], swatch: true }],
+    ]);
   });
 
   it("draws the swatches inside an included menu as colour alone, not as buttons", async () => {

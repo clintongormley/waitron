@@ -842,10 +842,8 @@ export class MenusScreen extends LitElement {
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
   #disabledIncludeProducts = new Set<string>();
-  /** The tree row's ⋮, or the Home page tab's shortcut Remove button or add tile, that gets focus
-   * back once nothing is out and the window it opened, if any, has closed. */
   #focusReturn:
-    | { menuId: string; key: string }
+    | { menuId: string; key: string; swatch: boolean }
     | { menuId: string; shortcuts: string[]; add: "product" | "section" }
     | null = null;
   #windowShut = false;
@@ -1778,8 +1776,8 @@ export class MenusScreen extends LitElement {
     }
   }
 
-  #returnFocusTo(path: string[], shut = false): void {
-    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") };
+  #returnFocusTo(path: string[], shut = false, swatch = false): void {
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/"), swatch };
     this.#windowShut = shut;
   }
 
@@ -1797,7 +1795,9 @@ export class MenusScreen extends LitElement {
     this.#focusReturn = null;
     if (target.menuId !== this.menuId) return;
     if ("key" in target) {
-      this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(target.key);
+      const table = this.renderRoot.querySelector("dashboard-menu-structure-table");
+      if (target.swatch) void table?.focusRowSwatch(target.key);
+      else table?.focusRowMenu(target.key);
       return;
     }
     const preview = this.renderRoot.querySelector("dashboard-device-home-preview");
@@ -2741,9 +2741,11 @@ export class MenusScreen extends LitElement {
           const { from, memberId, to, position } = event.detail;
           this.#moveInto(from, memberId, to, position);
         }}
-        @wt-member-edit=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
+        @wt-member-edit=${(
+          event: CustomEvent<{ sectionId: string; path: string[]; swatch?: boolean }>,
+        ) => {
           event.stopPropagation();
-          this.#returnFocusTo(event.detail.path);
+          this.#returnFocusTo(event.detail.path, false, event.detail.swatch === true);
           this.editingSection =
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.newSectionErrors = {};
