@@ -701,10 +701,8 @@ is not forced later, and nothing in the code rules out the two sharing a millise
 
 ## What W106 left open (the battery on the Devices list, #1240)
 
-Left OPEN by W106 (battery, #1240): (a) the relative-time words (W106a, #1272, `wt-relative-time`)
-show the exact time in the BROWSER's time zone: the relative-time widget receives no venue time
-zone. Other dashboard places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not
-changed: the Devices "Last
+Left OPEN by W106 (battery, #1240): dashboard places still showing a bare `YYYY-MM-DD HH:MM`
+(`formatIsoMinute`), not changed: the Devices "Last
 seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
 printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
 queue's Created and Delivered columns; the menu status and preview's "published {time}"
@@ -722,8 +720,7 @@ Pair repeat some request-body building; seven unread `devices.*` strings.
 
 ## What W104 left open (#1225)
 
-Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
-save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
+Left OPEN by W104, not acted on: (2) leaving
 the Devices page with Back while a Pair save is in flight still sends a deny for that request
 (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
 device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
@@ -2273,26 +2270,14 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 
 ## Bundle: Reads and saves with no time limit
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030), B32
-  (#1055) and B34 (#1077).**
-  [Detail](fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-  - **No till test covers a payment refusal that arrives after the approver's PIN** (since A845,
-    #1895, the PIN prompt comes first).
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
     disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
-  - W106 (the battery on the Devices list, #1240): (a) the relative-time words (W106a, #1272,
-    `wt-relative-time`) show the exact time in the BROWSER's time zone: the relative-time widget
-    receives no venue time zone.
-    [Detail](till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
   - W105 (#1235): review suggestions #1235 did not take.
     [Detail](till.md#what-w105-left-open-1235)
-  - W104 (#1225), not acted on: (1) a Pair save that never answers locks both dialogs, because a
-    save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only).
-    [Detail](till.md#what-w104-left-open-1225)
 
 ## Bundle: Nothing covers the order screen's bar
 

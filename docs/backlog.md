@@ -988,7 +988,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `POST /api/working-orders/:id/collect`.
   [Detail](backlog/till.md#task-17-991-a-bill-left-unpaid)
 
-- **Reads and saves with no time limit** (bundle of 2, size S). [Detail](backlog/till.md#bundle-reads-and-saves-with-no-time-limit)
+- **Reads and saves with no time limit** (bundle of 1, size S). [Detail](backlog/till.md#bundle-reads-and-saves-with-no-time-limit)
 
 - **Loose ends left by the table actions plan (Tasks 8, 10 and 11, #869, #875, #881; C77/C86;
   C84).**
