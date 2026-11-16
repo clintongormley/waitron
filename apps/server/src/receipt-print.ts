@@ -42,6 +42,9 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
+/** The printers table's own default setting. */
+export const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+
 /** One of a device's current printers, when active, and the settings it lays documents out for. */
 export interface DevicePrinter extends EscSetting {
   id: string;

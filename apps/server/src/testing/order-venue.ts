@@ -10,7 +10,7 @@ import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-id
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleOrigin } from "@waitron/shared";
 import type { Logger } from "../logger.js";
 import { mountOrdersApi } from "../orders-api.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -264,32 +264,44 @@ export async function contribute(venue: OrderVenue, billId: string, amount: stri
   if (answer.status !== 200) throw new Error(`contribute: answered ${answer.status}`);
 }
 
-/** An invoice with no bill, written as the demo seed writes one (`recordSale`, no `workingOrderId`). */
-export async function billlessSale(venue: OrderVenue): Promise<string> {
+/**
+ * An invoice with no bill, written as the demo seed writes one (`recordSale`, no `workingOrderId`):
+ * `lineCount` lines of `unitPrice` at 21%, paid in cash, from the venue's own origin unless `origin`
+ * names another. `unitPrice` is a price whose 21% is whole cents.
+ */
+export async function billlessSale(
+  venue: OrderVenue,
+  {
+    origin = venue.cfg.origin,
+    lineCount = 1,
+    unitPrice = "10.00",
+  }: { origin?: SaleOrigin; lineCount?: number; unitPrice?: string } = {},
+): Promise<string> {
+  // Identical lines merge on the ticket, so each of several lines is numbered.
+  const name = (index: number) => (lineCount === 1 ? "Venta suelta" : `Venta suelta ${index + 1}`);
+  const total = ((lineCount * Math.round(Number(unitPrice) * 121)) / 100).toFixed(2);
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
       operationDescription: "Restaurante",
-      origin: venue.cfg.origin,
+      origin,
       nodeId: venue.cfg.nodeId,
       seriesId: venue.seriesId,
       locale: venue.cfg.locale,
       invoiceLocales: [venue.cfg.locale],
-      total: "12.10",
-      lines: [
-        {
-          lineNo: 1,
-          name: "Venta suelta",
-          descriptions: { [venue.cfg.locale]: "Venta suelta" },
-          quantity: "1",
-          unitPrice: "10.00",
-          vatRate: "21.00",
-          lineTotal: "10.00",
-        },
-      ],
+      total,
+      lines: Array.from({ length: lineCount }, (_, index) => ({
+        lineNo: index + 1,
+        name: name(index),
+        descriptions: { [venue.cfg.locale]: name(index) },
+        quantity: "1",
+        unitPrice,
+        vatRate: "21.00",
+        lineTotal: unitPrice,
+      })),
       clock: venue.clock,
       settlement: {
         kind: "immediate",
-        tenders: [{ method: "cash", amount: "12.10", tipAmount: "0.00", settledAt: new Date() }],
+        tenders: [{ method: "cash", amount: total, tipAmount: "0.00", settledAt: new Date() }],
       },
       operatorId: venue.operatorId,
     }),

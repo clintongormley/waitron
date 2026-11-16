@@ -2,14 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: **PR 1 (Tasks 1–5) built; PR 1b (Task 3b) and PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
+Status: **PR 1 (Tasks 1–5) and PR 1b (Task 3b) built; PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
 2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
 2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
 **Amended 2026-11-16 (owner's Q2 answer, 09:10):** a simplified ticket opens as a ticket-width PDF
 drawn by the till's own ticket layout (D2, Task 3b, PR 1b); full invoices keep the A4 PDF.
 Fresh Claude read of the amendment 2026-11-16: Ready after fixes (no Critical, two Important: an
-over-long ticket falls back to A4; the cutter's feed is not drawn); folded in. Awaiting the watcher.
+over-long ticket falls back to A4; the cutter's feed is not drawn); folded in. Cleared by the watcher (not the owner) 2026-11-16 12:51.
 **READ** = source read at that commit; **RUN** = a command was run and its output read.
 
 **Goal:** when the tax office asks to see a venue's invoices, one page on the box finds any invoice
@@ -268,6 +268,18 @@ screen or guide change (the guide says "choose an invoice's number to see it as 
 stays true).
 
 #### Task 3b: a ticket as the till printed it
+
+**As built (2026-11-16, after the branch's review):** these changes from the steps below.
+`ticketDrawing` decodes the laid-out ticket once, inside the transaction, and answers the A4
+fallback in two cases: the decoder stopped at its limits (`truncated`), or the page would be taller
+than 14,400 pt, Acrobat's largest page side (a 1,500-line ticket the decoder reads whole made a page
+over 17,000 pt tall). Every other layout it cannot draw still fails the request. `renderTicketPdf`
+draws that result after the transaction, the whole print area as one 1-bit PNG, and dates the PDF at
+the sale's issue time as the A4 copy does. The hidden text is drawn in the shipped Noto Sans Mono,
+so each character sits over its printed cell. In `node:26-slim`, decoding and drawing take 13.6 ms
+and 24,788 bytes for 60 lines, and 48.1 ms and 124,062 bytes for 1,000 lines (receipts in the PR).
+`DEFAULT_PRINTER` moved to `receipt-print.ts`. Size as built: about 250 production lines and 560
+test lines, the test helper included.
 
 **Files:** create `apps/server/src/ticket-pdf.ts` and `ticket-pdf.test.ts`;
 `apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.

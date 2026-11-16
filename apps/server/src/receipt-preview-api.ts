@@ -38,6 +38,7 @@ import type { TradingContext } from "./trading-context.js";
 import { readReceiptAddress } from "./venue-address.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 import { readVenueLogo, venueLogoMayPrint } from "./receipt-venue-logo.js";
+import { DEFAULT_PRINTER } from "./receipt-print.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const run = createErrorBoundary(
@@ -53,9 +54,6 @@ const run = createErrorBoundary(
   },
   "management.failed",
 );
-
-/** The printers table's own default setting (80 mm at 180 dpi, 512 dots across). */
-const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 
 /** Blocks `[start, end)` of the preview. */
 export interface BlockRange {

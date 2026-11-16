@@ -2,8 +2,11 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { invoicePdfDownloads, invoiceSeries, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
 import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
+import { renderInvoicePdf } from "./invoice-pdf.js";
+import { DEFAULT_PRINTER, layOutSaleReceipt, resolveReceiptPrinter } from "./receipt-print.js";
+import { renderTicketPdf, ticketDrawing, type TicketDrawing } from "./ticket-pdf.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { TradingContext } from "./trading-context.js";
 
@@ -27,35 +30,70 @@ export async function readInvoiceForDownload(
     .where(eq(sales.workingOrderId, billId));
   if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId: billId });
   const document = await readInvoiceDocument(deps.backend, tx, deps.tradingContext, sale.id);
-  return recordDownload(tx, sale, document, personId);
+  const fileName = await recordDownload(tx, sale, personId);
+  return { document: { ...document, duplicate: true }, fileName };
 }
 
-/** Any issued sale, simplified tickets and correctives included, as a duplicate, with the
- * download recorded; an unknown id is `invoice_delivery.not_found`. */
-export async function readSaleForDownload(
+export type SaleCopy = { fileName: string } & (
+  { kind: "invoice"; document: ReceiptDocumentInput } | { kind: "ticket"; drawing: TicketDrawing }
+);
+
+/**
+ * Any issued sale as a duplicate in its original format, with the download recorded: a sale naming
+ * no customer (an F2 or R5) as its selling device's receipt printer lays it out now (else
+ * `DEFAULT_PRINTER`), or on A4 when that ticket cannot be drawn whole on one page (past the
+ * decoder's limits, or taller than a PDF page may be); any other on A4. An unknown id is
+ * `invoice_delivery.not_found`.
+ */
+export async function readSaleCopy(
   tx: Transaction,
   deps: { backend: FiscalBackend; tradingContext: TradingContext },
   saleId: string,
   personId: string,
-): Promise<{ document: ReceiptDocumentInput; fileName: string }> {
-  const document = await readReceiptEmailDocument(deps.backend, tx, deps.tradingContext, saleId);
+): Promise<SaleCopy> {
   const [sale] = await tx
-    .select({ id: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber })
+    .select({
+      id: sales.id,
+      code: invoiceSeries.code,
+      number: sales.invoiceNumber,
+      taxId: sales.counterpartyTaxId,
+      deviceId: sales.deviceId,
+      issuedAt: sales.issuedAt,
+    })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(sales.id, saleId));
-  return recordDownload(tx, sale!, document, personId);
+  if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
+  const fileName = await recordDownload(tx, sale, personId);
+  if (sale.taxId === null) {
+    const printer =
+      (sale.deviceId === null
+        ? undefined
+        : await resolveReceiptPrinter(tx, deviceOrigin(sale.deviceId))) ?? DEFAULT_PRINTER;
+    const bytes = await layOutSaleReceipt(
+      deps.backend,
+      tx,
+      deps.tradingContext,
+      saleId,
+      true,
+      printer,
+    );
+    const drawing = ticketDrawing(bytes, printer, new Date(sale.issuedAt));
+    if (drawing !== undefined) return { kind: "ticket", drawing, fileName };
+  }
+  const document = await readReceiptEmailDocument(deps.backend, tx, deps.tradingContext, saleId);
+  return { kind: "invoice", document: { ...document, duplicate: true }, fileName };
+}
+
+export function renderSaleCopy(copy: SaleCopy): Promise<Buffer> {
+  return copy.kind === "ticket" ? renderTicketPdf(copy.drawing) : renderInvoicePdf(copy.document);
 }
 
 async function recordDownload(
   tx: Transaction,
   sale: { id: string; code: string; number: number },
-  document: ReceiptDocumentInput,
   personId: string,
-): Promise<{ document: ReceiptDocumentInput; fileName: string }> {
+): Promise<string> {
   await tx.insert(invoicePdfDownloads).values({ saleId: sale.id, personId });
-  return {
-    document: { ...document, duplicate: true },
-    fileName: invoicePdfFileName(sale.code, sale.number),
-  };
+  return invoicePdfFileName(sale.code, sale.number);
 }
