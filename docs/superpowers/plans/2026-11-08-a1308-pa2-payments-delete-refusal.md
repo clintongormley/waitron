@@ -1,83 +1,182 @@
-# A1308 pa2: refuse payment deletion and restore/watch its triggers
+# A1308 pa2: the database refuses to delete a card payment — implementation plan
 
-**Result:** Every payment delete is refused. Boot repairs missing payment guards, refuses altered
-ones, and the trading watch stops on missing or altered guards, including with Payments Off.
-Ordinary capture remains allowed. Pa1 (#3465) landed as `4f5b758700`; **the owner lands pa2**.
+> **Watcher 16 November 07:36:** Build this original delete-only pa2 now; restore/watch is
+> separate [pa2b](2026-11-16-a1308-pa2b-payment-trigger-integrity.md), pending the owner. The PR's
+> first lines must disclose that the manual guards are not boot-restored or watched. The expanded
+> proposal had one Claude read (335 seconds); its applicable delete-only findings are below. The
+> owner still lands pa2. No new owner approval of restore/watch is claimed.
+>
+> **Root control:** Claude found `scripts/append-only-triggers.test.ts:207–209` accepts a DELETE
+> of payments as its writable-ledger control. The delete refusal requires using an allowed
+> timestamp UPDATE instead, retaining both assertions. This named scripts-guard port awaits the
+> watcher's explicit answer to the lane's 07:40 question; do not edit that test until cleared.
+> Add it to Task 1's failing/green runs. The declared-delete/refusal inventory stays unchanged.
+>
+> **Consumer inventory:** Keep only redundant cleanup removals still present after pa1. Include
+> raw REPLACE in the product-delete search and check configuration-transfer's existing
+> `configurationTransfer: { kind: "none" }` for payments. No product deletion is authorised.
+>
+> **Base:** pa1 landed as `4f5b758700` (#3465). Forecast remains about90 counted lines plus
+> the two-line root-control port; generated output is four files, about15–25 changed lines
+> (forecast only, measure the actual diff). No restore/watch metadata or shared-mechanism change.
 
-**Authority:** The [design additions table](../specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)
-and [build order](2026-11-08-a1308-build-order.md) assign the delete refusal to pa2; the original plan at `5b5d51f3b7`
-records the owner's 9 November confirmation. Watcher 16 November 06:53 cleared pa1 with its deletion
-and boot/watch gaps disclosed; 07:02 requires this expanded forecast, one Claude read and
-`PLAN FOR APPROVAL` before building (lane E `questions.md`). This is watcher clearance, not new owner
-approval. Follow the [slice rules](2026-11-08-a1308-slice-rules.md); implement inline with TDD.
 
-## Smallest approach
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
-Reuse the existing store installer and catalogue comparison. Keep SQL solely in
-`packages/payments/triggers/payments.sql`, carried by the generated migration. Do not classify
-`payments` as append-only: its legitimate captures update it.
+**Goal:** Settle the last open delete question on `payments` (an A805 follow-up): a
+`BEFORE DELETE` trigger refuses every delete of a `payments` row, as `bill_payments_no_delete`
+already does for bill payments.
 
-| Files | Change |
+**Architecture:** One statement added to the payments set's trigger source file that pa1 created,
+`packages/payments/triggers/payments.sql`, the starting migration rebuilt, and one refusal text
+beside pa1's. No product path deletes a payment today, so nothing else changes.
+
+**Tech Stack:** SQLite triggers on `node:sqlite`, Vitest 4.
+
+**Spec:** [design README](../specs/2026-11-02-rationalisation/README.md), "Additions of 6 November
+2026", row `payments`: "Settle the remaining delete refusal | Payments and adjustments; the owner
+lands this part (watcher, 6 November)". The owner's rule of 2026-11-06
+(`docs/backlog/architecture.md:1696`): "For non-tax tables, no new database refusal is added unless
+someone shows how a wrong delete or update could really happen … The tax and card tables' refusals
+go into A1308." The A805 audit's record: `docs/developers/grants-retirement-audit.md:124` (`payments`,
+`DELETE`). Slice rules: [`2026-11-08-a1308-slice-rules.md`](2026-11-08-a1308-slice-rules.md).
+
+**Base:** `main` with pa1 landed. Line numbers read at `a086eedfb7`.
+
+**Who lands:** **the owner**. That rule was the watcher's word of 6 November, recorded in the
+design's additions table (README, "Additions of 6 November 2026", row `payments`); **owner,
+2026-11-09:** confirmed — the owner lands pa2, and every delete of a payment is refused. The
+lane opens the pull request after pa1 lands and goes on to pa3 without waiting; nothing later in
+this area needs this one.
+
+**Pull request's first line:** "Every venue is reset: payments; backups and exports from before
+this cannot be restored or imported." (rules §2).
+
+## Global Constraints
+
+- Rules §1–§9 apply. The trigger is added to `packages/payments/triggers/payments.sql` and the set
+  rebuilt with `pnpm --filter @waitron/server migration-baseline rebuild --set payments`; never edit
+  generated files by hand. On rebase, take `main`'s generated files and rerun the command
+  (rules §2.4); the `.sql` source merges as text.
+- The refusal is unconditional, as `bill_payments_no_delete` is (`packages/db/drizzle/0000_baseline.sql:3141-3146`):
+  `scripts/behavioural-triggers.test.ts`'s header says such a trigger has no accepting control.
+
+## Review Focus
+
+1. **A test suite that cleans payments between cases.** Twelve suites delete payments in a
+   `beforeEach` (listed in **Files**; pa1 already removed the one in `fake-provider.test.ts`, and pa3
+   removes the blocks that also delete refunds). Each
+   uses `useVenueDb`'s per-test reset, which empties the tables first, so the statement deletes no
+   row and a row trigger never fires. Task 1 deletes the lines anyway, because once the database
+   refuses a delete they read as if they work.
+2. **`useVenueDb`'s own reset.** It drops every trigger before deleting
+   (`packages/db/src/testing/venue-db.ts:59-70, :161-170`), as it already must for
+   `bill_payments_no_delete`. Task 1 runs a whole payments suite to show it.
+3. **A configuration import, a restore, Start again.** None deletes `payments` rows: the import
+   empties only declared tables and `payments` is not one
+   (`packages/composition/src/composition.test.ts:259-283` forbids it); a restore replaces the file.
+   Read, not run beyond Task 1's suites.
+
+## What it builds
+
+- `payments_no_delete` in `packages/payments/triggers/payments.sql`.
+- `PAYMENT_DELETE_REFUSAL = "a payment is never deleted"` in `packages/payments/src/trigger-refusals.ts`.
+- A refusing case in `packages/payments/src/schema/payments-guard.test.ts` and in
+  `scripts/behavioural-triggers.test.ts`.
+- The bundle entry deleted from `docs/backlog/architecture.md` ("`payments`: decide the remaining
+  DELETE restriction (A805 follow-up)", `:1223`).
+
+## What it leaves out
+
+| Left out | Who takes it |
 | --- | --- |
-| `packages/store/src/{append-only,index}.ts` | Extract `ExpectedTrigger { name, table, definition }`, `installTriggers(target, triggers)` and `triggerFaults(target, triggers)` from the existing implementation; retain append-only wrappers and assertions. Definition is catalogue text after `CREATE TRIGGER`. Never replace an altered trigger. |
-| `packages/migrations/src/{manifest,apply}.ts` | Optional `MigrationSetSource.migrationTriggers: readonly string[]`; optional `VenueMigrationOptions.expectedTriggers: readonly ExpectedTrigger[]`. Copy metadata in `manifestSets`; resolve declared definitions in `migrationOptionsFor` from `readMigrationFiles`' statements, preserving body/spacing and stripping the final delimiter. Match a first `CREATE TRIGGER` token after whitespace/line comments, case-insensitively with quoted or plain names; require one match per declared name. Derive its table from that header. Keep text from the name through END, without the trailing semicolon/whitespace. Missing/duplicate/unsupported definitions raise registered `migrations.trigger_definition_invalid`. Read no extra SQL for undeclared sets. Install after each venue set; extend the existing node-set refusal to expected definitions. |
-| `packages/composition/src/modules.ts`, `packages/migrations/migrations.manifest.json` | Declare only `payments_guard_update` and `payments_no_delete`, on `payments`, in both producers; keep composition's descriptor/manifest equality. `packages/module/src/module.ts` already spreads the descriptor in `orderedMigrationSets`. |
-| `apps/server/src/{append-only-watch,boot,upgrade-checks}.ts` | Pass optional expected definitions alongside table names through missing-before-migration, final integrity assertion and watch. Filter by existing tables before migration. Use boot pass 2's existing installed-module selection and upgrade's same selection, including Off sets; no selection change or first-pass work. Reuse current errors, warning and recovery; no broad rename. |
+| `payment_refunds`' delete question | pa3: append-only refuses its updates and deletes, and pa3 deletes that entry |
+| `payment_policy`'s delete question | 4b deletes the table and the entry |
+| `card_readers`, `scheduled_runs` | closed by the owner's rule of 2026-11-06 (no refusal) |
+| `envio_flujo`, `envios`, `invoice_series`, `registro_sif` | the fiscal slices, owner-landed |
 
-All migration callers use `migrationOptionsFor`: boot/upgrade, restore/placement/preview,
-provisioning, rejoin, dev setup/onboarding, bench and fixtures. Preserve that shared path.
-`useVenueDb` already saves/restores all triggers during reset; leave its interface alone. Register the definition error in `packages/migrations/src/errors.ts`; account for `firstSetupDatabaseIsEmpty` treating it as not empty and backup-target resolution also reading the definitions.
-**Out:** new stored records, a general SQL parser, payment-specific server imports, unrelated manual
-triggers, changes to pa1's predicate, refunds, payment-policy retirement and fiscal work.
+## Files
 
-## TDD tasks
+- Modify: `packages/payments/triggers/payments.sql`, `packages/payments/src/trigger-refusals.ts`,
+  `packages/payments/src/index.ts` (export), `packages/payments/src/schema/payments-guard.test.ts`,
+  `scripts/behavioural-triggers.test.ts`, `docs/backlog/architecture.md:1223`.
+- Delete lines (pure deletion), whichever pa1 and pa3 have not already removed: the
+  `delete from payments` (and `delete from payment_refunds`) `beforeEach` blocks, with the comment
+  above each, at `packages/payments-stripe/src/hosted-provider.test.ts:18`,
+  `reconciler.test.ts:18`, `stripe-report-client.test.ts:17`;
+  `packages/payments/src/collection-owner.sweep.test.ts:17`, `collection-owner.test.ts:31`,
+  `manual.test.ts:15`, `reconcile.test.ts:30`, `reconcile.wiring.test.ts:25`, `simulator.test.ts:16`,
+  `store.test.ts:62`, `testing/fake-async-provider.test.ts:16`, `testing/fake-provider.test.ts:41`
+  (twelve, from `git grep -n -i "delete from payments" -- apps packages` at `a086eedfb7`).
+- Regenerated: `packages/payments/drizzle/**`, the epoch line.
 
-Read the TDD skill before code. For each task, add the named assertions, observe their expected
-failure, implement minimally, then rerun. Preserve existing behavioural assertions.
+## Size
 
-1. **Delete refusal.** Add unconditional `payments_no_delete` to the SQL source and export
-   `PAYMENT_DELETE_REFUSAL = "a payment is never deleted"` through payments' `trigger-refusals.ts`
-   and `index.ts`. `packages/payments/src/schema/payments-guard.test.ts` owns exact refusal and row
-   preservation for DELETE and primary-key INSERT OR REPLACE. Keep normal capture/replay controls. Change only `scripts/append-only-triggers.test.ts`'s payments DELETE accepting control to the allowed `update payments set updated_at = updated_at`; an incorrectly installed unconditional append-only update trigger must still fail it.
-   `scripts/behavioural-triggers.test.ts` owns its inventory entry and one product-migration refusal;
-   unconditional deletion has no accepting delete control. Rebuild payments.
-2. **Shared definitions.** `store/src/append-only.test.ts` owns conditional install/reinstall,
-   unchanged altered SQL and catalogue faults. `migrations/src/manifest.test.ts` owns source and
-   copied-bundle resolution plus invalid declared SQL. `apply-append-only.test.ts` owns repair on an
-   already-migrated synthetic set, retaining journal/rows. In the real payments guard suite, migrate
-   the actual set, check zero catalogue faults, remove/reinstall its guard and check zero again;
-   this measures comment/delimiter handling against SQLite and catches startup false alarms. Composition's existing equality pins both
-   names. No payment dependency in migrations and no repeated fault grid at callers.
-3. **Wiring.** Server `boot.failed-start.test.ts`: Off repair of both names with retained
-   payment/journal and warning; altered guard refuses and releases folder. `boot.restore.test.ts`:
-   one Off payment fault causes recorded refusal and stop after an intact control period.
-   `append-only-watch.test.ts` owns existing-table filtering. `boot.upgrade.test.ts` retains generic
-   checks and adds one altered refusal. Capture and missing/altered combinations stay at their owner.
-4. **Cleanup.** Remove remaining redundant payment cleanup and obsolete comments/imports from
-   `packages/payments/src/{collection-owner.sweep,collection-owner,manual,reconcile,reconcile.wiring,simulator,store,testing/fake-async-provider,testing/fake-provider}.test.ts`
-   and `packages/payments-stripe/src/{hosted-provider,reconciler,stripe-report-client}.test.ts`;
-   pa1 already removed some. Retain other setup. Remove the completed DELETE backlog entry.
-   Inventory raw DELETE and REPLACE plus builder deletes; verify configuration-transfer's generic
-   deleter still excludes payments through its existing `configurationTransfer: { kind: "none" }`.
-   A real product delete or an unplanned behavioural assertion change goes to the watcher.
+~90 counted lines (trigger 7, constant 3, export 1, tests ~45, behavioural guard ~25, backlog 1).
+Uncounted: up to ~50 deleted `beforeEach` lines and the generated files. Under an hour.
 
-## Checks and forecast
+## Finish line
 
-Run `pnpm --filter <package> exec vitest run <named-files-above>` at each task, then affected cleanup
-suites. Read Tests counts. Root checks:
-`pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/append-only-triggers.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts scripts/apply-migrations-callers.test.ts`.
-Rebuild with `pnpm --filter @waitron/server migration-baseline rebuild --set payments`; its final
-repetition must say unchanged. Generated forecast: four files—payments' baseline SQL, snapshot, journal and the epoch entry—roughly 15–25 changed lines, including the snapshot id churn (rebuild.ts:291–300). Record the actual diff; the forecast is not a receipt.
-Run protection-list before/after from `apps/server`; expect only `extra trigger payments_no_delete`
-under six venue headers, with pa1's guard unchanged. Explain the actual comparison in the PR.
-Check product deletes with `git grep -n -i -E 'delete\(payments\)|delete from payments|(^|[^a-z])replace[[:space:]]+into[[:space:]]+payments' -- apps packages ':!*.test.ts'` (no hit, exit 1).
-Focused checks, normal hook, current-head CI; no whole-package local run solely to finish.
+```bash
+Run affected test files with `pnpm --filter <package> exec vitest run <file>`; CI owns package-wide tests.
+pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts
+pnpm --filter @waitron/server migration-baseline rebuild --set payments   # "unchanged payments"
+git grep -n "delete from payments" -- apps packages   # prints nothing
+```
 
-**Forecast:** 250–330 code/SQL/metadata lines; 350–450 test lines, including consumer ports:
-**600–780 counted lines**, replacing ~90. Generated output and pure cleanup deletions follow the
-slice rules' exclusions. This is an estimate; material growth goes to the watcher.
+## Expected protection-list difference
 
-**PR first line:** “Every venue is reset: payments; backups and exports from before this cannot be
-restored or imported.” Say the added restore/watch work follows pa1's removal of the old triggers;
-include `Sale-path read changed:` with the actual answer, and say the owner lands it. Disclose that the existing `append_only.triggers_restored/changed` messages now also name these conditional/manual guards. No tests or
-experiments were run to write this plan. Claude reviewed the approach on 16 November (335 seconds); the driver applied its concrete corrections and cut duplicate wiring cases. Watcher clearance of the expanded scope remains required.
+Under all six venue headers (two compositions × three phases), one line each, six in all:
+
+```text
+extra trigger payments_no_delete
+```
+
+Reason: the design's 6 November addition for `payments` and the owner's rule of 2026-11-06 that
+card tables' refusals go into A1308.
+
+## Stop points (beyond rules §5)
+
+1. `git grep -n -i -E "delete\(payments\)|delete from payments" -- apps packages ':!*.test.ts'`
+   prints a product line. A product delete is a decision for the owner, not something to remove.
+2. A suite fails with `a payment is never deleted` (a test that really deletes a row). Report it;
+   do not change its assertion.
+
+## Needs
+
+- pa1 (the trigger file and `trigger-refusals.ts`). Nothing else in this area; nothing waits for it.
+  Not the refunds slice (decision D2, coordinator review 2026-11-08).
+
+---
+
+### Task 1: the refusal
+
+**Interfaces:** Produces `PAYMENT_DELETE_REFUSAL` (exported from `@waitron/payments`).
+
+- [ ] **Step 0:** From `apps/server`, `pnpm protection-list list --out <empty absolute dir A>` on the base.
+- [ ] **Step 1: Write the failing tests.** In `payments-guard.test.ts`: "a payment is never deleted"
+  — seed a captured payment, `delete from payments where id = ?` raises,
+  `expect(triggerRaised(error, PAYMENT_DELETE_REFUSAL)).toBe(true)`, and the row is still there.
+  In `scripts/behavioural-triggers.test.ts`: the same refusal against the product-migrated
+  database, and `payments_no_delete` added to its equality list; extend the header sentence that
+  names `bill_payments_no_delete` to name it too.
+- [ ] **Step 2:** Run both: FAIL.
+- [ ] **Step 3:** Append to `payments.sql`, after a `--> statement-breakpoint`:
+
+```sql
+CREATE TRIGGER payments_no_delete
+BEFORE DELETE ON payments
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a payment is never deleted');
+END;
+```
+
+  Rebuild the payments set. Delete the redundant `beforeEach` blocks listed in **Files**.
+- [ ] **Step 4:** Run the Finish line: PASS, with `Tests` counts.
+- [ ] **Step 5:** Delete the bundle entry at `docs/backlog/architecture.md:1223`. Protection list
+  after (`--out <B>`), `compare`, paste into the PR and mark the six lines.
+- [ ] **Step 6:** Commit `git commit -s -m "payments: the database refuses to delete a card payment"`;
+  `/finish-branch`; the PR description says the owner lands it and why (design additions table).
