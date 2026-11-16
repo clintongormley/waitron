@@ -198,16 +198,14 @@ among the standard, full and rectificative series (`provisioning.duplicate_serie
 offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
 or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name carrying a character XML forbids and any series code outside AEAT's character set or longer than
-the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
-races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
+the 21-character base (`setup.request_invalid`, naming the offending field). A run against a database whose
 taxpayer row names a different country or tax id is refused with `provisioning.foreign_taxpayer`, and
 refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
 `assertNoForeignTaxpayer` first (`cli.test.ts` pins that the apply is never reached). `planVenue`
 trims and upper-cases both values before that comparison, so a difference of letter case or
 surrounding space is the SAME taxpayer and the re-run is the no-op a re-provision should be.
 `provisioning.taxpayer_identity_mismatch` is a second, narrower refusal INSIDE `applyVenue`'s own
-transaction, for the case that pre-read cannot see: another run committing a different taxpayer
-between this run's read and its write.
+transaction.
 
 ## Module-owned series
 
@@ -270,7 +268,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.                         |
 | `provisioning.foreign_taxpayer`      | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One taxpayer per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                         |
 | `provisioning.venue_conflict`        | `applyVenue` hit a unique-key violation                                                                         | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
-| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give a territory `FISCAL_TERRITORIES` lists.                                                                                                                                                                                         |
+| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Give one of the territories named above, such as `ES-common`.                                                                                                                                                                        |
 | `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
 | `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--rectificative-code` are the same                            | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
@@ -308,7 +306,7 @@ that DO carry one were measured against the real opener and are in the table abo
   second copy of the rule written here.
 - **One taxpayer per database.** `venue` reads the stored `(country, tax_id)` before it applies and
   refuses a second, different one (`provisioning.foreign_taxpayer`), with a narrower refusal inside
-  the transaction for a taxpayer committed between that read and the write.
+  the transaction.
 
 ## Testing
 
@@ -320,8 +318,6 @@ call, or a `useVenueDb` suite.
 ```bash
 pnpm --filter @waitron/provisioning test:coverage
 ```
-
-`vitest.config.ts` leaves `src/bin.ts` and `src/index.ts` out of coverage.
 
 ## Historical supplied allocation input on the Task 4 branch
 

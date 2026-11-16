@@ -26,12 +26,14 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
   checker and were left.
 
-## `apps/server/README.md`'s list of 503 causes, and two test comments that say "empties every table"
+## `apps/server/README.md`'s list of 503 causes, and test comments that say "empties every table"
 
 - #637's review read the README's list of `503` causes (near line 688) as naming one that answers
   200 — read, not run. "Empties every table" in `packages/bookings/src/schema/bookings.test.ts`
-  (near line 65) and `packages/db/src/schema/menu/migrations.test.ts` (near line 596) is wider than
-  the reset, which leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
+  (near line 65), `packages/db/src/schema/menu/migrations.test.ts` (near line 596),
+  `packages/layouts/src/device-equipment.db.test.ts` (near line 152) and
+  `packages/layouts/src/device-printers.db.test.ts` (near line 95) is wider than the reset, which
+  leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
 
 ## Other stale sentences and test titles from the comment-pruning sweeps
 
@@ -1138,9 +1140,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **`apps/server/README.md`'s list of 503 causes, and two test comments that say "empties every
+- **`apps/server/README.md`'s list of 503 causes, and test comments that say "empties every
   table"**
-  [Detail](architecture.md#appsserverreadmemds-list-of-503-causes-and-two-test-comments-that-say-empties-every-table)
+  [Detail](architecture.md#appsserverreadmemds-list-of-503-causes-and-test-comments-that-say-empties-every-table)
 - **Other stale sentences and test titles from the comment-pruning sweeps**
   [Detail](architecture.md#other-stale-sentences-and-test-titles-from-the-comment-pruning-sweeps)
 - **Pointers outside `docs/` that #597 made stale**

@@ -248,9 +248,7 @@ so the provisioned admin can sign in immediately.
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session; the
 exceptions are `--admin-first-names` and `--admin-last-names`, which are read from a flag but never
 prompted for, so an existing non-interactive script gains no new question. `--yes` skips the
-confirmation for a non-interactive run. `--territory` currently accepts only
-`ES-common` (common-territory Spain, filing under Veri\*Factu with IVA); any other territory is
-refused with `fiscal.regime_not_implemented`. The SIF's `id_sistema_informatico` is **not** an
+confirmation for a non-interactive run. The SIF's `id_sistema_informatico` is **not** an
 option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's
 software, not the venue. The venue directory carries no password, so it is an ordinary
 `--venue-dir` flag; the two login secrets stay out of `argv`, and the parser rejects the retired
