@@ -558,7 +558,7 @@ it("counts only offered names, including surviving earlier-run text", async () =
     await tx.update(contentSuggestions).set({ jobId: null });
     await tx.insert(contentSuggestions).values(
       cells.map((cell, index) => ({
-        kind: "product",
+        kind: "product" as const,
         itemId: cell.id,
         language: "en",
         text: index === 6 ? "   " : "CLIENT Name",

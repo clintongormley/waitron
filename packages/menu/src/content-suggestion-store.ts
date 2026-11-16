@@ -39,6 +39,7 @@ import {
 } from "./content-translation-types.js";
 import {
   parseTranslationBaseline,
+  translationBaselineReader,
   sameTranslationBaseline,
   type TranslationBaseline,
 } from "./content-translation-baseline.js";
@@ -274,10 +275,13 @@ export async function storeSuggestionPage(
 }
 
 const SUGGESTION_PAGE = 100;
-function readToken(token: string): TranslationBaseline | null {
+function readToken(
+  token: string,
+  parse: typeof parseTranslationBaseline,
+): TranslationBaseline | null {
   try {
     const value = JSON.parse(token) as TranslationBaseline;
-    return parseTranslationBaseline({
+    return parse({
       ...value.ref,
       language: value.language,
       field: value.field,
@@ -289,9 +293,13 @@ function readToken(token: string): TranslationBaseline | null {
   }
 }
 
-export function suggestionStale(stored: string, current: string): boolean {
-  const before = readToken(stored);
-  const after = readToken(current);
+export function suggestionStale(
+  stored: string,
+  current: string,
+  parse = parseTranslationBaseline,
+): boolean {
+  const before = readToken(stored, parse);
+  const after = readToken(current, parse);
   if (
     !before ||
     !after ||
@@ -319,6 +327,7 @@ async function projectSuggestions(
   settings: TranslationSettings,
 ): Promise<{ view: ContentSuggestionView; offered: boolean }[]> {
   const { config } = settings;
+  const parse = translationBaselineReader();
   const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
   const refs = new Map<string, TranslationRef>();
   for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
@@ -335,6 +344,7 @@ async function projectSuggestions(
     ).target;
     const target = row.language === null ? null : resolved;
     const languageFix = row.fixField !== null && row.fixField !== "internal";
+    const evidence = target === null ? null : nameEvidence(target);
     const view: ContentSuggestionView = {
       id: row.id,
       kind: row.kind,
@@ -350,8 +360,7 @@ async function projectSuggestions(
         row.language === null
           ? null
           : { kind: row.kind, id: row.itemId, language: row.language, field: "name" },
-      expected:
-        target?.eligible && config.languages.includes(row.language!) ? nameEvidence(target) : null,
+      expected: target?.eligible && config.languages.includes(row.language!) ? evidence : null,
       // The three fix columns are set together or not at all (content_suggestions_fix_ck).
       fix:
         row.fixField === null
@@ -364,7 +373,7 @@ async function projectSuggestions(
         (row.expected === null ||
           target === null ||
           (languageFix && target.effectiveSelectedText !== row.fixWrong) ||
-          suggestionStale(row.expected, nameEvidence(target))),
+          suggestionStale(row.expected, evidence!, parse)),
     };
     suggestions.push({
       view,

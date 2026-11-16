@@ -293,8 +293,7 @@ it("asks for the fourth service and keeps it when a renewal or report answers th
 it("accepts the four services in any order", async () => {
   const f = await installationFixture();
   try {
-    await f.client.refresh(); // renew
-    await f.client.refresh(); // configuration, four services
+    await f.client.refresh();
     const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
     f.patch({ services: [four[3], four[2], four[0], four[1]] });
     const status = await f.client.refresh();
@@ -343,8 +342,7 @@ it.each<[string, (s: unknown[]) => unknown[]]>([
 ])("refuses a reply with %s", async (_name, change) => {
   const f = await installationFixture();
   try {
-    await f.client.refresh(); // renew
-    await f.client.refresh(); // configuration, four services
+    await f.client.refresh();
     const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
     expect(four).toHaveLength(4);
     f.patch({ services: change(four) });
@@ -357,8 +355,7 @@ it.each<[string, (s: unknown[]) => unknown[]]>([
 it("drops the fourth service when a configuration reply answers three", async () => {
   const f = await installationFixture();
   try {
-    await f.client.refresh(); // renew
-    await f.client.refresh(); // configuration, four services
+    await f.client.refresh();
     const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
     f.patch({ services: four.slice(0, 3) });
     const status = await f.client.refresh();
@@ -374,8 +371,7 @@ it("drops the fourth service when a configuration reply answers three", async ()
 it("does not repeat the fourth service when a report reply carries it", async () => {
   const f = await installationFixture();
   try {
-    await f.client.refresh(); // renew
-    await f.client.refresh(); // configuration, four services
+    await f.client.refresh();
     const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
     f.patch({ services: four });
     await f.client.report([{ service: "remote_access", health: "healthy", failure: null }]);

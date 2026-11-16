@@ -19,6 +19,7 @@ import { addMember } from "./sections.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import {
   parseTranslationBaseline,
+  translationBaselineReader,
   sameTranslationBaseline,
   projectTranslationBaselines,
 } from "./content-translation-baseline.js";
@@ -465,4 +466,17 @@ describe("translation peer baseline projection", () => {
       });
     },
   );
+});
+
+it("keeps malformed languages refused when reusing baseline validation", () => {
+  const read = translationBaselineReader();
+  expect(read(edit())).toMatchObject({ language: "en", field: "name" });
+  const bad = edit({
+    ...baseline(),
+    config: { defaultLanguage: "en", languages: ["en", "en-US"] },
+  });
+  for (let i = 0; i < 2; i++) {
+    expect(() => read(bad)).toThrowError("content.translation_batch_invalid");
+    expect(read(edit())).toMatchObject({ language: "en", field: "name" });
+  }
 });

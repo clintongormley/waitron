@@ -1714,7 +1714,6 @@ async function seedWaiting(jobId: string, count: number): Promise<void> {
         id: `p${i}`,
         name: `STAFF ${i}`,
         kitchenName: `KITCHEN ${i}`,
-        pricingUnit: "each",
         unitPrice: 300,
         vatClass: "reduced",
       });
@@ -1965,8 +1964,23 @@ describe("contentSuggestionsAlertSource", () => {
   });
 });
 
-it("does not raise a ready notice for text whose product is no longer live", async () => {
-  await seedWaiting(await seedSuggestionJob(), 1);
+it("counts the offered name in a mixed notice and drops it when none remain", async () => {
+  await seedWaiting(await seedSuggestionJob(), 3);
   await suite.db.update(products).set({ active: false }).where(eq(products.id, "p0"));
+  await suite.db
+    .update(contentSuggestions)
+    .set({ expected: "{}" })
+    .where(eq(contentSuggestions.itemId, "p1"));
+  expect(await readNotice()).toEqual([
+    {
+      key: "content.suggestions_ready",
+      code: "content.suggestions_ready",
+      params: { count: 1, failed: 0 },
+      severity: "notice",
+      since: FINISHED,
+      screen: "content-languages",
+    },
+  ]);
+  await suite.db.update(products).set({ active: false }).where(eq(products.id, "p2"));
   expect(await readNotice()).toEqual([]);
 });

@@ -38,11 +38,14 @@ function keys(value: unknown, names: readonly string[]): value is Record<string,
     names.every((key) => Object.hasOwn(value, key))
   );
 }
-function languageSet(value: unknown): value is string[] {
+function languageSet(
+  value: unknown,
+  valid: typeof canonicalTranslationLanguage,
+): value is string[] {
   return (
     Array.isArray(value) &&
     value.length <= 200 &&
-    value.every(canonicalTranslationLanguage) &&
+    value.every(valid) &&
     new Set(value).size === value.length
   );
 }
@@ -67,11 +70,32 @@ const ownerKeys: Record<TranslationRef["kind"], string[]> = {
   included_menu: ["kind", "menuId", "sectionId", "includedMenuId", "includedRootId"],
 };
 export function parseTranslationBaseline(edit: TranslationCellEdit): TranslationBaseline {
+  return readBaseline(edit, canonicalTranslationLanguage);
+}
+
+/** Reuse canonical-language checks within one read; stored baselines still get every shape check. */
+export function translationBaselineReader(): typeof parseTranslationBaseline {
+  const languages = new Map<unknown, boolean>();
+  const valid = (value: unknown): value is string => {
+    let known = languages.get(value);
+    if (known === undefined) {
+      known = canonicalTranslationLanguage(value);
+      languages.set(value, known);
+    }
+    return known;
+  };
+  return (edit) => readBaseline(edit, valid);
+}
+
+function readBaseline(
+  edit: TranslationCellEdit,
+  valid: typeof canonicalTranslationLanguage,
+): TranslationBaseline {
   if (
     !TRANSLATION_GAP_KINDS.includes(edit.kind) ||
     typeof edit.id !== "string" ||
     !edit.id.trim() ||
-    !canonicalTranslationLanguage(edit.language) ||
+    !valid(edit.language) ||
     (edit.field !== "name" && !(edit.kind === "unit" && edit.field === "abbreviation")) ||
     typeof edit.expected !== "string"
   )
@@ -100,10 +124,10 @@ export function parseTranslationBaseline(edit: TranslationCellEdit): Translation
     value.field !== edit.field ||
     textKeys.some((key) => value[key] !== null && typeof value[key] !== "string") ||
     !keys(value.config, ["defaultLanguage", "languages"]) ||
-    !canonicalTranslationLanguage(value.config.defaultLanguage) ||
-    !languageSet(value.config.languages) ||
+    !valid(value.config.defaultLanguage) ||
+    !languageSet(value.config.languages, valid) ||
     !value.config.languages.includes(value.config.defaultLanguage) ||
-    !languageSet(value.required) ||
+    !languageSet(value.required, valid) ||
     !keys(value.structure, structureKeys)
   )
     invalid();

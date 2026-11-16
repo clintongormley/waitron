@@ -911,10 +911,7 @@ export function batteryAlertSource(deps: {
   };
 }
 
-/** The Translate all notice: open once a run has stopped, however it stopped, while any suggestion
- * is waiting, until someone opens the translations dialog. Quiet while `readActiveSuggestionJob`
- * finds a job, even a failed one `readSuggestionRun` already reports as stopped:
- * `markSuggestionRunOpened` would not clear it. */
+// Opening cannot clear a stopped job that still holds an unreleased Cloud job.
 export function contentSuggestionsAlertSource(context: TranslationContext): AlertSource {
   return {
     area: "content",

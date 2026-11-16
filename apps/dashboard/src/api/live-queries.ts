@@ -495,7 +495,7 @@ export const QUERY_DEPENDENCIES = {
   // refreshes it; its sales, printer and reader rows wait for the timer too.
   getBoxHealth: [],
   getBoxNetwork: [],
-  listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
+  listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions", ...TRANSLATION_READS],
   listHandledAlerts: ["incidents", "persons"],
   // The stop is process state no table reports, so the timer reads it; `incidents` holds the
   // deletion it names.

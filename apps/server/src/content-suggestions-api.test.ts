@@ -19,7 +19,7 @@ import {
   type TranslationItemPage,
 } from "@waitron/menu";
 import { eq } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, contentLanguageChoices } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
 import { mountMenuApi } from "./menu-api.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
@@ -511,28 +511,11 @@ it("refuses 21 content languages locally without waking the runner", async () =>
     writeContentLanguages(tx, {
       defaultLanguage: "en",
       languages: [
-        "ca",
-        "es",
         "en",
-        "fr",
-        "de",
-        "it",
-        "pt",
-        "nl",
-        "sv",
-        "da",
-        "no",
-        "fi",
-        "pl",
-        "cs",
-        "sk",
-        "hu",
-        "ro",
-        "bg",
-        "el",
-        "tr",
-        "ja",
-      ],
+        ...contentLanguageChoices("en")
+          .map(({ code }) => code)
+          .filter((code) => code !== "en"),
+      ].slice(0, 21),
     }),
   );
   const response = await send(mount(), "POST", JOBS, { body: "{}" });

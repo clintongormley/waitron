@@ -87,8 +87,7 @@ pide sugerencias para los nombres que faltan. Aparecen como borradores **Sugerid
 mismo límite de 100 campos, sin sustituir el texto que escribiste. Para las unidades se sugieren
 nombres; las abreviaturas las introduces tú. Nada se guarda hasta elegir **Guardar cambios**.
 **Descartar sugerencia** elimina una que no quieras. Cerrar la ventana deja las sugerencias sin
-aceptar disponibles para más tarde. Si Descartar agota el tiempo de espera, puedes volver a
-intentarlo o guardar tus otros cambios.
+aceptar disponibles para más tarde.
 
 Una corrección ortográfica espera a **Usar corrección**. Al elegirla se comprueba el nombre guardado
 antes de incorporar la corrección al editor. Una corrección desactualizada no puede sustituir un

@@ -1,3 +1,4 @@
+import { contentLanguageChoices } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
@@ -82,29 +83,12 @@ it("starts a run as one submitting job holding the body and what it sent", async
 it.each([20, 21])("starts only within the 20-language limit: %i", async (count) => {
   await seedSuggestionVenue(suite.db);
   const languages = [
-    "ca",
-    "es",
     "en",
-    "fr",
-    "de",
-    "it",
-    "pt",
-    "nl",
-    "sv",
-    "da",
-    "no",
-    "fi",
-    "pl",
-    "cs",
-    "sk",
-    "hu",
-    "ro",
-    "bg",
-    "el",
-    "tr",
-    "ja",
+    ...contentLanguageChoices("en")
+      .map(({ code }) => code)
+      .filter((code) => code !== "en"),
   ].slice(0, count);
-  await app((tx) => writeContentLanguages(tx, { defaultLanguage: "ca", languages }));
+  await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages }));
   if (count === 21) {
     await expect(app((tx) => startSuggestionRun(tx, context))).rejects.toMatchObject({
       code: "content.suggestion_languages_limit",

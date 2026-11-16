@@ -86,7 +86,6 @@ names. Suggestions fill empty fields as drafts marked **Suggested**, within the 
 batch limit, and do not replace text you typed. Units receive name suggestions; you enter their
 abbreviations yourself. Nothing is saved until you choose **Save changes**. **Discard suggestion**
 removes one you do not want; closing the dialog leaves unaccepted suggestions available for later.
-If Discard times out, you can try it again or save your other changes.
 
 A spelling correction waits for **Use fix**. Selecting it checks the latest saved name before
 staging the correction in this editor. An out-of-date fix cannot replace your own edit, and a
