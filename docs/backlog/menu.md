@@ -160,8 +160,6 @@ DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
 The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by its
 name, so a reference named otherwise is still unseen.
-Since W72c an imported print agent arrives with no node; the importing box's
-own agent still enrols as a new row beside it, as it did before (read, not run).
 
 On 2026-10-05 A261-3 also observed "ResizeObserver loop completed with undelivered
 notifications" while running `src/widgets/folder-made-at.test.ts` and

@@ -981,8 +981,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
-- **Since W72c an imported print agent arrives with no node; the importing box's own agent still
-  enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
+- **After a configuration import, Add an agent offers the old box's agent back, and it can never
+  connect.** Imported agents arrive switched off with their sign-in disabled; adding one back lists
+  a second agent with the box's name that reads Never. Printing is not affected: an imported printer
+  prints through the new box's own agent once it is added again (run on a dev stack, 2026-11-17).
 
 - **The virtual PDF printer.** Print-payload retention is handled by daily housekeeping; virtual PDF output remains.
   [Detail](backlog/printers.md#the-virtual-pdf-printer)
