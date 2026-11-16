@@ -3853,6 +3853,26 @@ describe("add a device", () => {
     }
   });
 
+  it("gives the window's closing time in the venue's time zone, not the browser's", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const el = await openAdd(
+        stubApi({
+          pairingMode: vi.fn().mockResolvedValue({ ...SHUT, timeZone: "Pacific/Auckland" }),
+        }),
+      );
+      const time = q(el, "[data-test=pairing-until]")!.querySelector("wt-relative-time")!;
+      await time.updateComplete;
+      const button = time.shadowRoot!.querySelector("button")!;
+      const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+      // In UTC the same instant reads "8 September 2026 at 10:05".
+      expect(tip.textContent!.trim()).toBe("8 September 2026 at 22:05");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("closing the dialog releases the hold", async () => {
     const api = stubApi();
     const el = await openAdd(api);

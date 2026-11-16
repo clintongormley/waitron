@@ -54,6 +54,7 @@ export function mountPrinterApp(
           open: false,
           openUntil: null,
           deviceAddress: "https://waitron.local",
+          timeZone: "UTC",
         },
         "/management-api/print-agents": [],
         "/management-api/printer-profiles": [],

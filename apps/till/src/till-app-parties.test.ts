@@ -11259,7 +11259,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     ["bill.payments_received", "cancel_credit.refused_payments"],
     ["order.payment_in_flight", "cancel_credit.refused_payment_in_flight"],
   ] as const)(
-    "a cancel refused with %s after the approver's PIN closes the PIN prompt and shows the payment sentence in the dialog",
+    "closes the PIN prompt and keeps the dialog open with %s's sentence when it follows the approver's PIN, and reads the bills again",
     async (code, key) => {
       let sends = 0;
       const server = billServer(async () => {
@@ -11269,6 +11269,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
           : { code, status: 409 };
       });
       const { el } = await openCancel(server);
+      const billReads = server.getPartyBills.mock.calls.length;
       await typeReason(el, "Wrong table");
       await confirmCancel(el);
 
@@ -11280,6 +11281,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
       expect(dialog(el)).not.toBeNull();
       expect(bottom(el)).toBe(t(key));
       expect(doneText(el)).toBeNull();
+      expect(server.getPartyBills).toHaveBeenCalledTimes(billReads + 1);
     },
   );
 

@@ -79,6 +79,7 @@ export function deviceResponses(
       open: false,
       openUntil: null,
       deviceAddress: "https://waitron.local",
+      timeZone: "UTC",
     },
     "/management-api/payments/devices/d1/reader": { readerId: null },
     "/management-api/payments/device-profiles/dp1/readers": {
