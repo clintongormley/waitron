@@ -203,25 +203,30 @@ export function paymentNotRecorded(error: unknown): boolean {
   );
 }
 
+/** `earlierUnanswered`: an earlier attempt of the same send got no answer, so it may have been
+ * recorded under the same submission id. */
 export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   sent: S,
   error?: unknown,
+  earlierUnanswered = false,
 ): S | null {
   if (error === undefined) return null;
   const code = (error as { code?: unknown }).code;
   if (typeof code === "string" && FRESH_ID_AFTER.has(code)) return null;
   if ("billId" in sent && paymentNotRecorded(error)) return null;
-  return isNetworkFailure(error) || ("billId" in sent && billPaymentUnconfirmed(error))
+  return isNetworkFailure(error) ||
+    ("billId" in sent && billPaymentUnconfirmed(error, earlierUnanswered))
     ? { ...sent, unconfirmed: true }
     : sent;
 }
 
-function billPaymentUnconfirmed(error: unknown): boolean {
+function billPaymentUnconfirmed(error: unknown, earlierUnanswered: boolean): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   if ((typeof code === "string" && FRESH_ID_AFTER.has(code)) || paymentNotRecorded(error))
     return false;
-  // The gate and the restarted box both answer this before any payment route runs.
-  if (code === "handover.stepping_down") return false;
+  // The gate and the restarted box both answer this before any payment route runs, so it says
+  // nothing of what an earlier attempt that got no answer did.
+  if (code === "handover.stepping_down") return earlierUnanswered;
   const status = (error as { status?: unknown } | null)?.status;
   return (
     isNetworkFailure(error) ||

@@ -256,6 +256,15 @@ describe("the submission id of a confirmation", () => {
     ).toBe(true);
   });
 
+  it("stays unconfirmed after a handover refusal when an earlier attempt of the same send got no answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+
+    expect(unansweredAfter(first, { code: "handover.stepping_down", status: 503 }, true)).toEqual({
+      ...first,
+      unconfirmed: true,
+    });
+  });
+
   it("is fresh after the device changed profile, whose refusal fails the payment recorded under the id", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, { code: "device.profile_changed", status: 409 });

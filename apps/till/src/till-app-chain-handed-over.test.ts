@@ -197,6 +197,39 @@ it.each(["en-GB", "es-ES"])(
 );
 
 it.each(["en-GB", "es-ES"])(
+  "keeps a bill payment unconfirmed when its resend after no answer is refused by a box handing over, in %s",
+  async (locale) => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValue({ code: "handover.stepping_down", status: 503 });
+    const { el } = await mount(locale, { takeBillPayment: write });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
+    await expect.poll(() => write.mock.calls.length, { timeout: 10_000 }).toBe(2);
+    await flush(el);
+    const error = inDialog(el, "wt-form-actions")!.error;
+    expect(error).not.toBe(codeMessage("handover.stepping_down"));
+    expect(error).toBe(t("bill_pay.unconfirmed"));
+    expect(error).toMatch(
+      locale === "es-ES" ? /No se ha podido confirmar/ : /could not be confirmed/,
+    );
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
+    await expect.poll(() => write.mock.calls.length, { timeout: 10_000 }).toBe(3);
+    await flush(el);
+    const ids = write.mock.calls.map(([, request]) => request.submissionId);
+    expect(new Set(ids).size).toBe(1);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
   "keeps terminal refund advice on a stopped hand-keyed table bill in %s",
   async (locale) => {
     const write = vi.fn().mockRejectedValue({ ...refusal, code: "handover.stepping_down" });

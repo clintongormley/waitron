@@ -21160,13 +21160,14 @@ export class TillApp extends LitElement {
       if (!isLatestSend(this.#paymentSends, key, turn) || !this.#paymentsOut.delete(key)) return;
       void this.#afterPaymentOut(open.id, key);
     };
+    let noAnswer = false;
     const settle = (error?: unknown, pending = false) => {
       if (!isLatestSend(this.#paymentSends, key, turn)) return;
       this.#sendEndedAt.set(key, ++this.#payTicks);
       let unanswered =
         pending && submission.pendingRefusal !== undefined
           ? submission
-          : unansweredAfter(submission, error);
+          : unansweredAfter(submission, error, noAnswer);
       if (error !== undefined && submission.pendingRefusal?.code === "sale.charged_not_recorded")
         unanswered = { ...submission, unconfirmed: true };
       const code = (error as { code?: unknown } | undefined)?.code;
@@ -21193,7 +21194,6 @@ export class TillApp extends LitElement {
       else this.#unansweredPayments.set(key, unanswered);
       release();
     };
-    let noAnswer = false;
     const card = asked.pay.method === "card";
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
