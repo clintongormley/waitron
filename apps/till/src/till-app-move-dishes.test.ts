@@ -282,6 +282,42 @@ describe("A803 move dishes app:", () => {
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
+  it("reads once more when a newer bills read overtakes the Move dishes opening", async () => {
+    const { el, order } = await open({
+      getPartyBills: vi.fn().mockResolvedValue(partPaid()),
+      getBillBalance: vi.fn().mockResolvedValue(balance()),
+    });
+    const menu = order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+    await userEvent.click(menu);
+    await flush(el);
+    const read = heldRead<PartyBill[]>();
+    api.getPartyBills.mockImplementationOnce(read.call);
+    const bills = api.getPartyBills.mock.calls.length;
+    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+    await flush(el);
+    expect(order.shadowRoot!.querySelector("[data-move-dishes]")).toBeNull();
+    api.getBillBalance.mockResolvedValue(
+      balance({
+        received: "3.00",
+        outstanding: "0.00",
+        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
+      }),
+    );
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => api.getPartyBills.mock.calls.length).toBe(bills + 2);
+    await flush(el);
+    read.settle(partPaid());
+    await flush(el, 6);
+    expect(api.getPartyBills.mock.calls.length).toBe(bills + 3);
+    const picker = order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker")!;
+    expect(picker).not.toBeNull();
+    await picker.updateComplete;
+    expect(
+      picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
+    ).toBe(true);
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
   it.each(["bills", "balance"])(
     "a failed opening %s read leaves Move dishes closed and lets the waiter retry",
     async (read) => {

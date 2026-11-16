@@ -13374,16 +13374,6 @@ export class TillApp extends LitElement {
     return read;
   }
 
-  /** After a change to the order `orderId` that landed, or may have: the floor's party, then the
-   * order's lines (unless `readLines` is false: the caller is reading them) and bills. When the
-   * order is no longer the open one once the floor answers, or a later re-read has started, nothing
-   * more is read or said. Otherwise, unless the waiter has left the order since `visit`
-   * ({@link #hasLeftOrder}) or a later re-read has started: this re-read's own failed floor or bills
-   * read is said, unless another message already is,
-   * whether or not another read has refreshed the order since; and with its floor read failed and
-   * its bills read still the latest, what the party still owes is taken from those bills when they
-   * are the party's, which is the sum the floor would have answered (`readBillsOfParties` in
-   * `apps/server/src/parties.ts` feeds both). */
   async #rereadAmounts(
     orderId: string,
     visit: number,
@@ -19080,8 +19070,13 @@ export class TillApp extends LitElement {
       billId === this.activeTabId &&
       visit === this.#orderVisit;
     if (billId === undefined || !current()) return;
-    const read = await this.#loadPartyBills(undefined, true, true);
-    const balanced = await read.balance;
+    let read = await this.#loadPartyBills(undefined, true, true);
+    let balanced = await read.balance;
+    if (!current()) return;
+    if (read.read !== this.#partyBillsRead) {
+      read = await this.#loadPartyBills(undefined, true, true);
+      balanced = await read.balance;
+    }
     if (!current() || read.read !== this.#partyBillsRead) return;
     if (read.bills === null || balanced !== true) {
       this.errorKey = "table.reread_failed";
