@@ -19,7 +19,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct } from "@waitron/menu";
-import { hashPin } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
@@ -99,7 +99,7 @@ beforeEach(async () => {
   const operatorId = await inTx(v, async (tx) => {
     const [person] = await seedPersons(tx, {
       displayName: "Cashier",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     return person!.id;

@@ -9,7 +9,8 @@ import { eq } from "drizzle-orm";
 import { devices, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, sessions } from "@waitron/identity";
+import { sessions } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
@@ -40,7 +41,7 @@ beforeEach(async () => {
   await seedPersons(suite.db, {
     id: OPERATOR,
     displayName: "Worker",
-    pinHash: hashPin("1234"),
+    pinHash: fixturePinHash("1234"),
     role: "admin",
   });
   const [device] = await suite.db
@@ -339,7 +340,7 @@ describe("till refund attendance", () => {
     const body = (await paid.json()) as { payment: { id: string } };
     const [worker] = await seedPersons(suite.db, {
       displayName: "Refund initiator",
-      pinHash: hashPin("2468"),
+      pinHash: fixturePinHash("2468"),
       role: "staff",
     });
     const signed = await login(api, "2468", worker!.id);

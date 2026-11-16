@@ -60,7 +60,8 @@ import {
 } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -176,8 +177,8 @@ async function setupLunch(): Promise<Lunch> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -259,7 +260,7 @@ async function setupLunch(): Promise<Lunch> {
       values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where is_default))`);
     const [person] = await seedPersons(tx, {
       displayName: "Cashier",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     return {

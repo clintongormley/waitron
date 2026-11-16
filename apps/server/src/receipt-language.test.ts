@@ -33,7 +33,8 @@ import {
 } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, startManagementSession } from "@waitron/identity";
+import { loginWithPin, startManagementSession } from "@waitron/identity";
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -141,8 +142,8 @@ async function venueWith(
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Admin",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -182,7 +183,7 @@ async function venueWith(
     const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
     const [staff] = await seedPersons(tx, {
       displayName: "Cashier",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     const { id: printerId } = await createPrinter(tx, {

@@ -22,13 +22,13 @@ import {
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import {
-  hashPin,
   hashSessionToken,
   type BuiltInRoleKey,
   resolveManagementSession,
   startManagementSession,
   withPassiveManagementRead,
 } from "@waitron/identity";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { AlertSource } from "@waitron/module";
 import {
@@ -86,7 +86,11 @@ async function seedVenueWithStaff(): Promise<Venue> {
   const { deviceId } = await seedDevice(db, { label: "Till 1" });
   const cookie = (role: BuiltInRoleKey, name: string) =>
     withTransaction(db, async (tx) => {
-      const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
+      const [p] = await seedPersons(tx, {
+        displayName: name,
+        pinHash: fixturePinHash("1234"),
+        role,
+      });
       const session = await startManagementSession(tx, { personId: p!.id });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });

@@ -24,7 +24,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
@@ -110,8 +110,8 @@ async function venue(db: Database): Promise<Venue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Admin",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -162,7 +162,7 @@ async function venue(db: Database): Promise<Venue> {
     });
     const [staff] = await seedPersons(tx, {
       displayName: "Cashier",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     const { id: printerId } = await createPrinter(tx, {

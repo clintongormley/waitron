@@ -47,8 +47,7 @@ Execute inline after review and clearance:
       and `apps/server/src/device-api.delete.test.ts` (`openTillSession`, 114; callers at 207, 257, 269, 294, 319).
 - [ ] Convert `apps/server/src/live-api.test.ts` (`fixture`, 48; called across cases)
       and `apps/server/src/device-levers.test.ts` (`fixture`, 107; called across cases).
-      Also convert repeated setup in `apps/server/src/{workforce-api.gate-sweep,personal-data-export-api.workforce,till-api.availability,device-zones-api}.test.ts`.
-      These sixteen files are a useful subset, not a promise to convert every search hit.
+      These twelve files are a useful subset, not a promise to convert every search hit.
       Import `./testing/known-secret-hashes.js`; retain every other identity import, including the namespace in live-api.
 - [ ] After each group, run each converted file with `pnpm --filter @waitron/server exec vitest run <src/file.test.ts>`.
       Run unchanged `apps/server/src/testing/known-secret-hashes.test.ts` by the same command with `src/testing/known-secret-hashes.test.ts`.
@@ -71,4 +70,4 @@ Execute inline after review and clearance:
       make signed-off commits, run the normal push hook, open one PR and wait for selected current-head CI.
       Landing is authorised by the lane request; driver uses `land-branch` after the required checks and resolved reviews.
 
-Claude reviewed the initial plan once (141 seconds); driver corrections address selection/holds, backlog completeness, named timing samples and imports. Watcher clearance is pending.
+Claude reviewed the initial plan once (141 seconds); driver corrections address selection/holds, backlog completeness, named timing samples and imports. The watcher cleared the original twelve files at 15:20 on 16 November, behind the CI priority; the four added suggestions stay unconverted.
