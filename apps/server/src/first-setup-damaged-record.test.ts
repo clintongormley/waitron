@@ -1,12 +1,11 @@
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { openVenueDatabase, invoiceSeries, sales, withTransaction } from "@waitron/db";
-import { count, eq } from "drizzle-orm";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { count, eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { nodeId, seriesId } from "@waitron/shared";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { heldSetup } from "../test/held-setup-database.js";
-import { withoutSignIn } from "../test/start-again-held-fixture.js";
+import { invoiceTable, withoutSignIn } from "../test/start-again-held-fixture.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -209,9 +208,9 @@ it("a sale without any fiscal record still refuses damaged-record deletion", asy
       ),
     );
     expect(await db.venue.select({ count: count() }).from(sales)).toEqual([{ count: 1 }]);
-    expect(await db.venue.select({ count: count() }).from(registrosFacturacion)).toEqual([
-      { count: 0 },
-    ]);
+    expect(
+      await db.venue.all(sql`select count(*) as count from ${sql.identifier(invoiceTable)}`),
+    ).toEqual([{ count: 0 }]);
   } finally {
     await db.close();
   }
