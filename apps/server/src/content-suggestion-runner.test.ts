@@ -15,7 +15,6 @@ import {
   writeContentLanguages,
   type TranslationContext,
 } from "@waitron/menu";
-import { addOversizedFamily } from "@waitron/menu/test/suggestion-fixture.js";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture, type FakeJobBody } from "../test/translation-cloud-fixture.js";
@@ -412,7 +411,8 @@ async function stopBetweenPages(f: Fake, beforeResume?: () => void) {
   return runner;
 }
 
-const notices = () => inTx((tx) => contentSuggestionsAlertSource().read({ tx, now: new Date() }));
+const notices = () =>
+  inTx((tx) => contentSuggestionsAlertSource(context).read({ tx, now: new Date() }));
 
 const endedByCloud: [string, (f: Fake, jobId: string) => void, string][] = [
   [
@@ -924,28 +924,6 @@ it("a job whose call meets a revoked connection ends on the next step as not con
     expect(await runner.step()).toBe("again");
     expect(actions(f)).toEqual([SUBMIT, STATUS]);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.not_configured" });
-  } finally {
-    await f.close();
-  }
-});
-
-it("an empty job, past Cloud's 20 languages, ends failed as a request Cloud refused", async () => {
-  const f = await connected();
-  try {
-    await seedTaxpayer(suite.db);
-    await seedVenueSettings(suite.db);
-    await inTx(async (tx) => {
-      await addOversizedFamily(tx);
-    });
-    await inTx((tx) => startSuggestionRun(tx, context));
-
-    expect(await runToIdle(createContentSuggestionRunner(deps(f)))).toEqual(["again", "idle"]);
-    expect(actions(f)).toEqual([SUBMIT]);
-    const [sent] = f.submissions.map((s) => JSON.parse(s.body) as FakeJobBody);
-    expect(sent!.items).toEqual([]);
-    expect(sent!.languages.enabled.length).toBeGreaterThan(20);
-    expect(f.jobs.size).toBe(0);
-    expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
     await f.close();
   }

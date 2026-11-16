@@ -45,6 +45,7 @@ const run = createErrorBoundary(
     "cloud.state_invalid": 409,
     "cloud.not_primary": 409,
     "content.suggestion_job_running": 409,
+    "content.suggestion_languages_limit": 409,
     "content.suggestion_not_found": 404,
     "content.translation_stale": 409,
   },

@@ -380,8 +380,13 @@ language in which an item has no customer-facing text, the default language incl
 results are suggestions: they fill empty fields as drafts and reach no diner until someone saves
 them. Units receive suggestions for their names; abbreviations remain manual. Use fix rechecks
 the saved cell before staging a language-name correction; staff-name corrections link to the
-ordinary editor. All names makes corrections visible on otherwise complete rows. This editor
-does not change the 20-language Cloud contract documented in the open Translate all backlog item.
+ordinary editor. All names makes corrections visible on otherwise complete rows. Before starting
+a run, the box refuses more than 20 enabled content languages. After a run stops, the first
+suggestion page and the ready notice count names the editor can offer, including applicable text
+from earlier runs. The raw run reader counts stored text rows; continuation pages omit the run
+summary and the browser retains the first page's summary. A Discard waits up to 30 seconds before
+showing a timeout and releasing Save and retry; that timeout does not confirm whether deletion
+happened on the server.
 
 ## Content languages per region
 

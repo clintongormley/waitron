@@ -526,3 +526,67 @@ it("carries the current staff name and parent editor for notes outside the trans
     parent: { id: ids.list, name: "STAFF Doneness" },
   });
 });
+
+it("counts only offered names, including surviving earlier-run text", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    storeSuggestionPage(
+      tx,
+      job.id,
+      {
+        state: "done",
+        cursor: 0,
+        nextCursor: null,
+        failed: [],
+        results: [result(ref(venue.bread), { es: "CLIENT Bread" })],
+      },
+      context,
+    ),
+  );
+  const ids = await app((tx) => addPlainProducts(tx, venue.menuId, 7));
+  const cells = (
+    await app((tx) =>
+      resolveTranslationCells(
+        tx,
+        ids.map((id) => ({ kind: "product", id, language: "en", field: "name" })),
+        context,
+      ),
+    )
+  ).cells;
+  await app(async (tx) => {
+    await tx.update(contentSuggestions).set({ jobId: null });
+    await tx.insert(contentSuggestions).values(
+      cells.map((cell, index) => ({
+        kind: "product",
+        itemId: cell.id,
+        language: "en",
+        text: index === 6 ? "   " : "CLIENT Name",
+        expected: index === 0 ? "{}" : cell.expected,
+        placeholder: index === 4,
+        ...(index === 5 ? { fixField: "en", fixWrong: "Old", fixRight: "New" } : {}),
+      })),
+    );
+    await tx.update(products).set({ active: false }).where(eq(products.id, ids[1]!));
+    await tx.delete(products).where(eq(products.id, ids[2]!));
+    await tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT Default", en: "CLIENT Filled" } })
+      .where(eq(products.id, ids[3]!));
+    await tx.insert(contentSuggestions).values({
+      kind: "product",
+      itemId: venue.cheese,
+      language: "fr",
+      text: "CLIENT Disabled",
+      expected: "{}",
+    });
+  });
+  expect((await page()).run).toMatchObject({ waiting: 1 });
+  await app((tx) =>
+    tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT Default", es: "CLIENT Filled" } })
+      .where(eq(products.id, venue.bread)),
+  );
+  expect((await page()).run).toMatchObject({ waiting: 0 });
+});

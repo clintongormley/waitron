@@ -28,7 +28,6 @@ it("signs {} as the body of renew and revoke, and the version-2 body of configur
   const f = await installationFixture();
   try {
     await f.client.refresh();
-    await f.client.refresh();
     await f.client.revoke(async () => {});
     expect(f.requests.map((v) => [v[2], v[7]])).toEqual([
       ["renew", "{}"],
@@ -265,8 +264,8 @@ it("cached observations distinguish fresh healthy from stale health and clear st
 it("asks for the fourth service and keeps it when a renewal or report answers three", async () => {
   const f = await installationFixture();
   try {
-    await f.client.refresh(); // renew: no lease yet
-    await f.client.refresh(); // configuration
+    const first = await f.client.refresh();
+    expect(first.installation!.services.map((s) => s.service)).toContain("content_translation");
     expect(f.requests.at(-1)![2]).toBe("configuration");
     expect(f.requests.at(-1)![7]).toBe('{"servicesVersion":2}');
     const services = (await f.client.status()).installation!.services.map((s) => s.service);
@@ -404,6 +403,26 @@ it.each([
     else await expect(result).rejects.toMatchObject({ code: "cloud.unavailable" });
   } finally {
     fetching.mockRestore();
+    await f.close();
+  }
+});
+
+it("replays configuration after first-refresh renewal succeeds but configuration is unavailable", async () => {
+  const f = await installationFixture();
+  try {
+    f.delay(async () => {
+      if (f.requests.at(-1)![2] === "configuration") f.offline();
+    });
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
+    expect(saved.lifecycle.lease).toBeTruthy();
+    expect(saved.lifecycle.pending.action).toBe("configuration");
+    f.delay(async () => {});
+    f.online();
+    const status = await createCloudConnection(f.options).refresh();
+    expect(status.installation!.services.map((s) => s.service)).toContain("content_translation");
+    expect(f.requests[1]![4]).toBe(f.requests[2]![4]);
+  } finally {
     await f.close();
   }
 });

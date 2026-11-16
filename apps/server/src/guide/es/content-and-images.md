@@ -87,15 +87,16 @@ pide sugerencias para los nombres que faltan. Aparecen como borradores **Sugerid
 mismo límite de 100 campos, sin sustituir el texto que escribiste. Para las unidades se sugieren
 nombres; las abreviaturas las introduces tú. Nada se guarda hasta elegir **Guardar cambios**.
 **Descartar sugerencia** elimina una que no quieras. Cerrar la ventana deja las sugerencias sin
-aceptar disponibles para más tarde.
+aceptar disponibles para más tarde. Si Descartar agota el tiempo de espera, puedes volver a
+intentarlo o guardar tus otros cambios.
 
 Una corrección ortográfica espera a **Usar corrección**. Al elegirla se comprueba el nombre guardado
 antes de incorporar la corrección al editor. Una corrección desactualizada no puede sustituir un
 cambio tuyo. Una corrección del nombre del personal te lleva a su editor. Usa **Todos los nombres**
 para encontrar correcciones de elementos sin traducciones pendientes. Cuando Traducir todo termina,
 aunque sea a medias, la campana de avisos indica cuántas sugerencias esperan revisión.
-La petición a Cloud sigue limitada a 20 idiomas; el editor no divide un conjunto mayor en varias
-peticiones más pequeñas.
+Si tienes más de 20 idiomas de contenido activados, la caja te pide reducirlos antes de iniciar
+Traducir todo. Elige **Eliminar** en el menú de un idioma para retirarlo de la lista de activados.
 
 **Eliminar**, en el menú ⋮ de un idioma adicional, oculta sus campos pero conserva su texto.
 Añade el idioma de nuevo para volver a usarlo. El predeterminado no tiene **Eliminar**: elige otro

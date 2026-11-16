@@ -86,14 +86,15 @@ names. Suggestions fill empty fields as drafts marked **Suggested**, within the 
 batch limit, and do not replace text you typed. Units receive name suggestions; you enter their
 abbreviations yourself. Nothing is saved until you choose **Save changes**. **Discard suggestion**
 removes one you do not want; closing the dialog leaves unaccepted suggestions available for later.
+If Discard times out, you can try it again or save your other changes.
 
 A spelling correction waits for **Use fix**. Selecting it checks the latest saved name before
 staging the correction in this editor. An out-of-date fix cannot replace your own edit, and a
 correction to a staff name takes you to its existing editor. Use **All names** to find corrections
 on items that have no missing translations. When Translate all stops, even part-way through,
 the alerts bell tells you how many suggestions are waiting for review. The
-Cloud request limit remains 20 languages; this editor does not split a
-larger language set into smaller requests.
+box asks you to reduce your enabled content languages before starting Translate all if you
+have more than 20. Choose **Delete** in a language's menu to remove it from the enabled list.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.

@@ -505,3 +505,40 @@ it("uses the staff origin for a remote suggestion run and refuses another origin
   expect((await sendRemote("https://staff.example.test")).status).toBe(200);
   expect(await inTx((tx) => readActiveSuggestionJob(tx))).toMatchObject({ state: "submitting" });
 });
+
+it("refuses 21 content languages locally without waking the runner", async () => {
+  await inTx((tx) =>
+    writeContentLanguages(tx, {
+      defaultLanguage: "en",
+      languages: [
+        "ca",
+        "es",
+        "en",
+        "fr",
+        "de",
+        "it",
+        "pt",
+        "nl",
+        "sv",
+        "da",
+        "no",
+        "fi",
+        "pl",
+        "cs",
+        "sk",
+        "hu",
+        "ro",
+        "bg",
+        "el",
+        "tr",
+        "ja",
+      ],
+    }),
+  );
+  const response = await send(mount(), "POST", JOBS, { body: "{}" });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "content.suggestion_languages_limit", params: { limit: 20 } },
+  });
+  expect(wake).not.toHaveBeenCalled();
+});

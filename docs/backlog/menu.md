@@ -403,18 +403,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`, "2b and what can be
   automated").
 
-## Translate all: a job that ends before any item is accounted for does not count its items as lost
-
-- **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
-  When a job ends after at least one of its items has been accounted for (`collected_refs` is not
-  empty), `recordSuggestionJobEnded` (`packages/menu/src/content-suggestion-jobs.ts`) counts
-  every item not yet accounted for as one that could not be done, so when the notice appears, it
-  says so. A job that ends before any item is accounted for (Cloud expired
-  it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its last
-  progress reading, usually no failures. Such a job has stored no suggestions, so the notice
-  appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
-  Left out of A689-21 as wider than its plan's Decision 8.
-
 ## Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud can still hold it
 
 - The box ends a job without asking Cloud when the job's own 24-hour
@@ -449,13 +437,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
   enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
   `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
-
-## Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15)
-
-- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
-  A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
-  dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
-  do, `packages/dashboard-kit/src/request.ts`).
 
 ## A dish in a measure unit is still rung up one unit per tap
 
@@ -638,37 +619,14 @@ The invoice owner's remaining lookup work and the unrelated #379 followups.
 
 ## Bundle: Translate all followups
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
 - **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
   notice.**
   [Detail](menu.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)
-- **Cloud services shows Translate all only from the second status check after connecting.** The
-  first Refresh status is a lease renewal, and only a configuration request asks for services
-  version 2 (`apps/server/src/cloud-installation.ts`). Seen in the Santet run (A689-21).
-- **Translate all: a job that ends before any item is accounted for does not count its items as
-  lost.**
-  [Detail](menu.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
-- **Loose ends left by A689's fifth PR.**
-  - Alert wording writes numbers without a thousands separator (`formatParam`,
-    `packages/dashboard-kit/src/alert-messages.ts`); the Translate all notice reads "1050
-    suggestions".
-- **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
-  The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
-  job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
-  second PR). A box-side refusal before any job is built would say what is wrong.
 - **Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud
   can still hold it.**
   [Detail](menu.md#translate-all-a-job-the-box-ends-itself-is-marked-released-without-a-call-to-cloud-and-cloud-can-still-hold-it)
 - **Translate all: open points from the review of A689's second PR.**
   [Detail](menu.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
-- **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
-  (`readSuggestionRun`, `packages/menu/src/content-suggestion-jobs.ts`) counts every stored
-  suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,
-  and ones left from an earlier run. Opening the dialog clears the notice, which limits the effect.
-- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR,
-  2026-10-15).**
-  [Detail](menu.md#translate-all-three-limits-the-translations-dialog-accepts-for-now-a689s-fourth-pr-2026-10-15)
 
 ## Bundle: Extras list forms
 

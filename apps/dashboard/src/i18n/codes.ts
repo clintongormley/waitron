@@ -388,6 +388,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Your Waitron Cloud account must first agree to menu names going to its translation providers.",
     es: "Tu cuenta de Waitron Cloud debe aceptar primero que los nombres de la carta se envíen a sus proveedores de traducción.",
   },
+  "content.suggestion_languages_limit": {
+    en: "Translate all supports up to 20 content languages. Reduce the enabled languages in Content languages and try again.",
+    es: "Traducir todo admite hasta 20 idiomas de contenido. Reduce los idiomas activados en Idiomas de contenido e inténtalo de nuevo.",
+  },
   "content.suggestion_limit_reached": {
     en: "This month's translation limit is reached.",
     es: "Se ha alcanzado el límite de traducción de este mes.",

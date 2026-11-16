@@ -1150,3 +1150,26 @@ it("takes returned page order while keeping an unchanged personal draft through 
   });
   reader.close();
 });
+
+it("keeps the first suggestion page summary across a continuation without a run", async () => {
+  const { reader, api } = setup();
+  const run = {
+    state: "done" as const,
+    total: 1,
+    progress: 1,
+    done: 1,
+    failed: 0,
+    code: null,
+    fits: null,
+    waiting: 1,
+    finishedAt: "2026-11-16T10:00:00Z",
+    opened: false,
+  };
+  const { run: _run, ...continuation } = suggestions();
+  api.suggestions
+    .mockResolvedValueOnce({ ...suggestions("s-100"), run })
+    .mockResolvedValueOnce(continuation as ContentSuggestionRead);
+  await reader.open();
+  await reader.nextSuggestions();
+  expect(reader.suggestions?.run).toEqual(run);
+});

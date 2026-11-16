@@ -1,5 +1,5 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
-import { and, asc, eq, gt, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -29,6 +29,7 @@ import {
   readTranslationSettings,
   resolveTranslationRow,
   type TranslationContext,
+  type TranslationSettings,
 } from "./content-translation-targets.js";
 import {
   TRANSLATION_NAME_BYTES,
@@ -312,6 +313,86 @@ export function suggestionStale(stored: string, current: string): boolean {
   );
 }
 
+async function projectSuggestions(
+  tx: Transaction,
+  rows: (typeof contentSuggestions.$inferSelect)[],
+  settings: TranslationSettings,
+): Promise<{ view: ContentSuggestionView; offered: boolean }[]> {
+  const { config } = settings;
+  const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
+  const refs = new Map<string, TranslationRef>();
+  for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
+  const live = await readLiveItems(tx, [...refs.values()], settings);
+  const suggestions: { view: ContentSuggestionView; offered: boolean }[] = [];
+  for (const row of rows) {
+    if (row.text !== null && !config.languages.includes(row.language!)) continue;
+    const item = live.get(keyOf(row));
+    if (!item) continue;
+    const resolved = resolveTranslationRow(
+      item.row,
+      row.language ?? config.defaultLanguage,
+      settings,
+    ).target;
+    const target = row.language === null ? null : resolved;
+    const languageFix = row.fixField !== null && row.fixField !== "internal";
+    const view: ContentSuggestionView = {
+      id: row.id,
+      kind: row.kind,
+      itemId: row.itemId,
+      item: {
+        name: resolved.name,
+        ...(resolved.parent ? { parent: resolved.parent } : {}),
+      },
+      language: row.language,
+      text: row.text,
+      placeholder: row.placeholder,
+      cell:
+        row.language === null
+          ? null
+          : { kind: row.kind, id: row.itemId, language: row.language, field: "name" },
+      expected:
+        target?.eligible && config.languages.includes(row.language!) ? nameEvidence(target) : null,
+      // The three fix columns are set together or not at all (content_suggestions_fix_ck).
+      fix:
+        row.fixField === null
+          ? null
+          : { field: row.fixField, wrong: row.fixWrong!, right: row.fixRight! },
+      // A row with text has a language and `expected` (content_suggestions_text_language_ck,
+      // content_suggestions_name_ck).
+      stale:
+        (row.text !== null || languageFix) &&
+        (row.expected === null ||
+          target === null ||
+          (languageFix && target.effectiveSelectedText !== row.fixWrong) ||
+          suggestionStale(row.expected, nameEvidence(target))),
+    };
+    suggestions.push({
+      view,
+      offered:
+        !!target?.eligible &&
+        !blankName(view.text) &&
+        !view.placeholder &&
+        !view.fix &&
+        !view.stale &&
+        blankName(target.effectiveSelectedText),
+    });
+  }
+  return suggestions;
+}
+
+export async function countOfferedSuggestions(
+  tx: Transaction,
+  settings: TranslationSettings,
+): Promise<number> {
+  const rows = await tx.select().from(contentSuggestions).where(isNotNull(contentSuggestions.text));
+  let count = 0;
+  for (const batch of batches(rows))
+    count += (await projectSuggestions(tx, batch, settings)).filter(
+      ({ offered }) => offered,
+    ).length;
+  return count;
+}
+
 export async function listContentSuggestions(
   tx: Transaction,
   query: ContentSuggestionQuery,
@@ -348,61 +429,19 @@ export async function listContentSuggestions(
       on live.kind = s.kind and live.id = s.item_id
     where s.fix_field is not null or s.placeholder = 1
   `);
-  const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
-  const refs = new Map<string, TranslationRef>();
-  for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
-  const live = await readLiveItems(tx, [...refs.values()], settings);
-  const suggestions: ContentSuggestionView[] = [];
-  for (const row of rows) {
-    if (query.fixesOnly && row.fixField === null && !row.placeholder) continue;
-    if (row.text !== null && !config.languages.includes(row.language!)) continue;
-    const item = live.get(keyOf(row));
-    if (!item) continue;
-    const resolved = resolveTranslationRow(
-      item.row,
-      row.language ?? config.defaultLanguage,
-      settings,
-    ).target;
-    const target = row.language === null ? null : resolved;
-    const languageFix = row.fixField !== null && row.fixField !== "internal";
-    suggestions.push({
-      id: row.id,
-      kind: row.kind,
-      itemId: row.itemId,
-      item: {
-        name: resolved.name,
-        ...(resolved.parent ? { parent: resolved.parent } : {}),
-      },
-      language: row.language,
-      text: row.text,
-      placeholder: row.placeholder,
-      cell:
-        row.language === null
-          ? null
-          : { kind: row.kind, id: row.itemId, language: row.language, field: "name" },
-      expected:
-        target?.eligible && config.languages.includes(row.language!) ? nameEvidence(target) : null,
-      // The three fix columns are set together or not at all (content_suggestions_fix_ck).
-      fix:
-        row.fixField === null
-          ? null
-          : { field: row.fixField, wrong: row.fixWrong!, right: row.fixRight! },
-      // A row with text has a language and `expected` (content_suggestions_text_language_ck,
-      // content_suggestions_name_ck).
-      stale:
-        (row.text !== null || languageFix) &&
-        (row.expected === null ||
-          target === null ||
-          (languageFix && target.effectiveSelectedText !== row.fixWrong) ||
-          suggestionStale(row.expected, nameEvidence(target))),
-    });
-  }
+  const projected = await projectSuggestions(tx, rows, settings);
+  const suggestions = projected
+    .filter(({ view }) => !query.fixesOnly || view.fix !== null || view.placeholder)
+    .map(({ view }) => view);
+  const run = query.after === undefined ? await readSuggestionRun(tx) : undefined;
+  if (run && run.state !== "sending" && run.state !== "running" && run.waiting > 0)
+    run.waiting = await countOfferedSuggestions(tx, settings);
   return {
     config,
     required,
     configuration,
     waitingFixes: counts.rows[0]!.count,
-    run: await readSuggestionRun(tx),
+    ...(run === undefined ? {} : { run }),
     suggestions,
     next: rows.length === SUGGESTION_PAGE ? rows.at(-1)!.id : null,
   };

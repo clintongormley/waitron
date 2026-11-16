@@ -79,6 +79,43 @@ it("starts a run as one submitting job holding the body and what it sent", async
   expect((await app(readActiveSuggestionJob))?.id).toBe(jobs[0]!.id);
 });
 
+it.each([20, 21])("starts only within the 20-language limit: %i", async (count) => {
+  await seedSuggestionVenue(suite.db);
+  const languages = [
+    "ca",
+    "es",
+    "en",
+    "fr",
+    "de",
+    "it",
+    "pt",
+    "nl",
+    "sv",
+    "da",
+    "no",
+    "fi",
+    "pl",
+    "cs",
+    "sk",
+    "hu",
+    "ro",
+    "bg",
+    "el",
+    "tr",
+    "ja",
+  ].slice(0, count);
+  await app((tx) => writeContentLanguages(tx, { defaultLanguage: "ca", languages }));
+  if (count === 21) {
+    await expect(app((tx) => startSuggestionRun(tx, context))).rejects.toMatchObject({
+      code: "content.suggestion_languages_limit",
+      params: { limit: 20 },
+    });
+    expect(await app(allJobs)).toEqual([]);
+  } else {
+    expect(await app((tx) => startSuggestionRun(tx, context))).toMatchObject({ state: "sending" });
+  }
+});
+
 it("a new job has no collect position and nothing accounted for", async () => {
   await seedSuggestionVenue(suite.db);
   await app((tx) => startSuggestionRun(tx, context, at));

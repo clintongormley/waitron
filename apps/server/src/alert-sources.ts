@@ -5,7 +5,13 @@
 import { and, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { deliversAsFullInvoiceSql } from "./invoice-selection.js";
-import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/menu";
+import {
+  readActiveSuggestionJob,
+  readSuggestionRun,
+  countOfferedSuggestions,
+  readTranslationSettings,
+  type TranslationContext,
+} from "@waitron/menu";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   type A4HoldCode,
@@ -909,7 +915,7 @@ export function batteryAlertSource(deps: {
  * is waiting, until someone opens the translations dialog. Quiet while `readActiveSuggestionJob`
  * finds a job, even a failed one `readSuggestionRun` already reports as stopped:
  * `markSuggestionRunOpened` would not clear it. */
-export function contentSuggestionsAlertSource(): AlertSource {
+export function contentSuggestionsAlertSource(context: TranslationContext): AlertSource {
   return {
     area: "content",
     permission: "menu.manage",
@@ -917,7 +923,9 @@ export function contentSuggestionsAlertSource(): AlertSource {
       const run = await readSuggestionRun(tx);
       if (run === null || run.opened || run.waiting === 0 || (await readActiveSuggestionJob(tx)))
         return [];
-      const params = { count: run.waiting, failed: run.failed };
+      const count = await countOfferedSuggestions(tx, await readTranslationSettings(tx, context));
+      if (count === 0) return [];
+      const params = { count, failed: run.failed };
       const shared = {
         key: "content.suggestions_ready",
         params,

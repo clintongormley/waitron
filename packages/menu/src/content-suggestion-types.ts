@@ -49,7 +49,7 @@ export interface SuggestionRunView {
   failed: number;
   code: string | null;
   fits: number | null;
-  /** Suggestions with text waiting in the table. */
+  /** Stored text rows in the raw run read; offered names on the first page of a stopped run. */
   waiting: number;
   finishedAt: string | null;
   opened: boolean;
@@ -80,7 +80,7 @@ export interface ContentSuggestionPage {
   required: string[];
   configuration: string;
   waitingFixes: number;
-  run: SuggestionRunView | null;
+  run?: SuggestionRunView | null;
   suggestions: ContentSuggestionView[];
   next: string | null;
 }

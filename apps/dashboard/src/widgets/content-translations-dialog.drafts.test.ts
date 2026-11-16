@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { languageDisplayName } from "@waitron/shared";
-import type { ContentSuggestionQuery, ContentSuggestionView, DashboardApi } from "../api/client.js";
+import {
+  DashboardApi,
+  type ContentSuggestionQuery,
+  type ContentSuggestionView,
+} from "../api/client.js";
 import type {
   TranslationCell,
   TranslationCellEdit,
@@ -401,6 +405,46 @@ describe("Translate all suggestions as drafts", () => {
     expect(note(el, "s2")).toBeNull();
     expect(save(el).disabled).toBe(true);
   });
+  it.each(["en-GB", "es-ES"] as const)(
+    "releases a hung real-client Discard and allows retry: %s",
+    async (locale) => {
+      setLocale(locale);
+      const transport = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<Response>(() => {}))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ error: { code: "content.suggestion_not_found", params: {} } }),
+            { status: 404 },
+          ),
+        );
+      const client = new DashboardApi("", transport);
+      const { el } = await open(
+        venue({ listed: [target("one"), target("two")], suggestions: [suggestion("s1", "one")] }),
+        { discardContentSuggestion: client.discardContentSuggestion.bind(client) },
+      );
+      await edit(el, "two", "CLIENT Personal");
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        await discard(el, "s1");
+        expect(save(el).disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(30_000);
+        await settle(el);
+        expect(bar(el).error).toBe(codeMessage("connection.timed_out"));
+        expect(save(el).disabled).toBe(false);
+        expect(discardButton(el, "s1")!.disabled).toBe(false);
+        expect(field(el, "one")!.value).toBe("CLIENT-es one");
+        await discard(el, "s1");
+      } finally {
+        vi.useRealTimers();
+      }
+      await vi.waitFor(() => expect(note(el, "s1")).toBeNull());
+      expect(field(el, "one")!.value).toBe("");
+      expect(save(el).disabled).toBe(false);
+      await click(el, "save");
+      await vi.waitFor(() => expect(el.open).toBe(false));
+    },
+  );
   it("a suggestion the server no longer holds counts as discarded; any other refusal is shown", async () => {
     const state = venue({
       listed: [target("one"), target("two")],
