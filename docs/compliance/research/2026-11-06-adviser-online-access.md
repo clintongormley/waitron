@@ -85,6 +85,9 @@ Found by reading the code, not by running it.
 - No export of invoice copies for a period exists. A664's archive and reader are proposed, not built.
 - There is no read-only sign-in for an inspector, so text 17 has no answer yet.
 
+2026-11-16: the invoice page and a sign-in holding only `invoice.inspect` are built (A1411 PR 1);
+the ticket-width copy (PR 1b) and the period export remain.
+
 The search must cover «cualquiera de los datos que deban reflejarse en los libros registro» (text 8).
 RIVA art. 63.3 lists these as the number and series, issue date, operation date if different, customer's
 name and tax number, taxable base, VAT rate and amount.

@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { IdentityChangeView, InvoiceIdView } from "../src/filing-overview-types.js";
+import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import type { registroSif } from "../src/schema/sif.js";
 
@@ -33,4 +34,27 @@ export function aeatInvoiceNumber(invoice: Pick<InvoiceIdView, "NumSerieFactura"
 
 export function registrationInstallationName(row: typeof registroSif.$inferSelect): string {
   return row.numeroInstalacion;
+}
+
+/** The invoice kind (F1, F2, F3, R4, R5) each listed sale was filed as; a cancellation record
+ * carries no kind and is left out. */
+export async function filedKindsBySale(
+  db: Database,
+  saleIds: readonly string[],
+): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ saleId: registrosFacturacion.saleId, kind: registrosFacturacion.tipoFactura })
+    .from(registrosFacturacion)
+    .where(inArray(registrosFacturacion.saleId, [...saleIds]));
+  return new Map(
+    rows.flatMap(({ saleId, kind }) => (saleId === null || kind === null ? [] : [[saleId, kind]])),
+  );
+}
+
+/** Stores AEAT's refusal, with `code`, as the filing reply to one record. */
+export async function refuseRecord(db: Database, recordId: string, code: string): Promise<void> {
+  await db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: code })
+    .where(eq(envios.registroId, recordId));
 }

@@ -126,6 +126,13 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("supervisor", "fiscal.view")).toBe(false);
     expect(roleHasPermission("staff", "fiscal.view")).toBe(false);
   });
+  it("grants invoice.inspect to manager and admin only (the tax office's invoice page)", () => {
+    expect(PERMISSIONS).toContain("invoice.inspect");
+    expect(roleHasPermission("manager", "invoice.inspect")).toBe(true);
+    expect(roleHasPermission("admin", "invoice.inspect")).toBe(true);
+    expect(roleHasPermission("supervisor", "invoice.inspect")).toBe(false);
+    expect(roleHasPermission("staff", "invoice.inspect")).toBe(false);
+  });
   it("grants schedule.manage to manager and admin only (shift-planning slice 1)", () => {
     expect(roleHasPermission("manager", "schedule.manage")).toBe(true);
     expect(roleHasPermission("admin", "schedule.manage")).toBe(true);
@@ -283,6 +290,7 @@ describe("explicit permission declarations", () => {
       "report.export": ["manager"],
       "hardware.manage": ["manager"],
       "fiscal.view": ["manager"],
+      "invoice.inspect": ["manager"],
       "person.admin": ["manager"],
       "person.email": [],
       "personal_data.export": [],

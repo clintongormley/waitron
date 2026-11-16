@@ -28,6 +28,7 @@ import {
   loginManagerById,
   personIdForLoginEmail,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import { credentialRevision, writePairLinkTx, type KeyRing } from "@waitron/credentials";
 import { readPairLink } from "@waitron/node-db";
@@ -276,10 +277,9 @@ export function mountMirrorBundleApi(
             totpKeyRing: deps.credentialKeyRing,
             checked,
           });
-          await authorizeManager(tx, {
-            managementSessionId: session.token,
-            permission: "node.manage",
-          });
+          await withInspectorAdmitted(() =>
+            authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
+          );
           // The session only authorised this request.
           await endManagementSession(tx, session.token);
         });

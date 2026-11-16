@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: **draft for the watcher**. Written at main `e98aaa981d`.
+Status: **PR 1 (Tasks 1–5) built; PR 1b (Task 3b) and PR 2 (Tasks 6–8) to come**. Written at main `e98aaa981d`.
+2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
+2026-11-16: D3's default month and D4's per-rate layout amended after Task 4's review (the table did not fit beside the dashboard's sidebar).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
 **Amended 2026-11-16 (owner's Q2 answer, 09:10):** a simplified ticket opens as a ticket-width PDF
 drawn by the till's own ticket layout (D2, Task 3b, PR 1b); full invoices keep the A4 PDF.
@@ -85,17 +87,18 @@ write.
   ticket" means what `readInvoiceTyping` types F2 or R5 (§1 row 2): a sale naming no customer tax
   id. F1, F3 and R4 stay A4.
 - **D3. Search fields** (RIVA art. 63.3, quoted in the research): one text box matching series and
-  number (`SERIES/N` exactly, or a bare number), customer name (folded, contains) or customer tax
-  id (prefix); issue date from–to (required, default the current month, venue calendar days);
+  number (`SERIES/N` exactly, or a bare number), customer name (the house text search,
+  `packages/shared/src/text-search.ts`: accents and case ignored, every word but the last must match
+  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, venue calendar days); the default is the browser's current month, which differs from the venue's around a month's change, for as many hours as the browser's and the venue's time zones are apart;
   operation date from–to (optional): the sale's `supply_day` where set, otherwise its issue day,
-  since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (the
-  rates present in the range); amount (exact euros compared as numbers, not text, matching the
+  since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (typed
+  as a number); amount (exact euros compared as numbers, not text, matching the
   total, any breakdown base or any breakdown VAT; `vat_breakdown` holds decimal text); kind
   (F1/F2/F3/R4/R5). Fifty rows a page, newest first. The issue range is capped at 366 days so a
   name search cannot scan years of rows; Task 2 times that worst case and shortens the cap if it
   holds the lock too long.
 - **D4. Columns:** number, kind, issue date and time, operation date (when it differs), customer
-  name and tax id, base, VAT rate and amount per rate (one sub-row per rate, as the book has it),
+  name and tax id, base, VAT rate and amount per rate (one line per rate inside those cells, lined up rate by rate),
   total, corrected invoice, cancelled.
 - **D5. The month's export:** one calendar month per download, a ZIP of `README.txt`,
   `invoices.csv` (D4's columns, one row per VAT rate, the person's language) and
@@ -117,7 +120,16 @@ write.
   and no other permission is refused every `/management-api/orders*` route with
   `authorization.not_permitted`, and its nav hides Orders and the own-schedule landing; it lands on
   Invoices. Tested route by route (Task 1).
-- **Q1 (owner). How does an inspector sign in?** Default: at the venue a manager opens Invoices on
+  Widened 2026-11-16 after review: every management route now refuses such a session unless it
+  opts in (`resolveManagementSession` in `packages/identity/src/management-session.ts`); its own
+  account's routes and the tax office's are the ones that do, pinned by the sweep in
+  `apps/server/src/boot.management-origin.test.ts`.
+  Changed 2026-11-16 (review): the refusal is `authorization.inspection_only`, with no params,
+  answered 403 by the shared error boundary when a route's table leaves it out; the live-update
+  stream ends such a session with a session-invalid event.
+- **Q1 (owner). How does an inspector sign in?** Answered 2026-11-16 08:57 (owner, relayed in lane L's
+  questions.md, "## WATCHER 2026-11-16 08:57"): "We just create a user with the relevant permissions, send
+  the email, just like any other user" — the default below stands. Default: at the venue a manager opens Invoices on
   their own sign-in (works without the internet); for an inspector's own sign-in, the manager
   creates an ordinary person with an email and a role holding only "See invoices for the tax
   office", and disables that person afterwards. Cost: a new person's first password arrives only by
@@ -202,12 +214,13 @@ for every other sale and for Task 3b's fallback.)
 
 **Files:** `apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.
 
-- [ ] Failing tests: `GET /management-api/tax-office/invoices/:saleId/pdf` answers
+- [ ] Failing tests: `POST /management-api/tax-office/invoices/:saleId/pdf` answers
   `application/pdf` named by `invoicePdfFileName` for an F2, an F1, an F3 and an R5 (the PDF starts
   `%PDF` and its text holds the invoice number); an unknown id answers `invoice_delivery.not_found`
   (what `readDocument` already throws, `invoice-document.ts:74`); no permission answers
   `authorization.not_permitted`; one `invoice_pdf_downloads` row names the person and the sale;
-  `Cache-Control: no-store`.
+  `Cache-Control: no-store`. (POST, as the Orders download, so the download record sits behind
+  the own-page check — Task 3 review 2026-11-16)
 - [ ] Implement `readSaleForDownload(tx, deps, saleId, personId)` beside `readInvoiceForDownload`,
   with `readReceiptEmailDocument` and the same insert, inside `withTransaction` (it writes); render
   with `renderInvoicePdf` after the transaction.
@@ -218,9 +231,10 @@ for every other sale and for Task 3b's fallback.)
 `.a11y.test.ts`; `dashboard-app.ts` (`CORE_SCREENS`, `NAV_GROUPS` under Reports,
 `requiresPermission: "invoice.inspect"`), `navigation.ts`, `api/client.ts`, i18n strings.
 
-- [ ] Failing tests: the screen lists the route's rows, one sub-row per VAT rate; each filter
+- [ ] Failing tests: the screen lists the route's rows, one line per VAT rate; each filter
   sends its query parameter; the issue range defaults to the current month; next page uses the
-  keyset; "Open" opens the PDF in a new tab (the browser's viewer prints and saves it); a
+  keyset; "Open" POSTs to the PDF route, as the Orders download does, and opens the returned PDF
+  in a new tab (the browser's viewer prints and saves it); a
   cancelled invoice shows "Cancelled"; a person holding only `invoice.inspect` lands on this
   screen and sees no other venue screen, Orders included (D8); a read failure shows the load message, not an empty list.
   Fields come from field primitives (`scripts/native-form-fields.test.ts`), dates through the

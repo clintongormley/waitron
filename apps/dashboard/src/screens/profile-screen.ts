@@ -236,6 +236,8 @@ export class ProfileScreen extends LitElement {
   #readErrorShown = false;
   #fieldErrors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) canAdminister = false;
+  /** False for a session holding `invoice.inspect` alone, whose PIN change the server refuses. */
+  @property({ attribute: false }) tillPin = true;
   @state() private emailStatus: "sent" | "captured" | "unconfigured" | null = null;
   @state() private saved = false;
   @state() private busy = false;
@@ -926,17 +928,21 @@ export class ProfileScreen extends LitElement {
                 : nothing
             }
           </div>
-          <div class="action-row">
-            <span class="field-value">${t("person.pin")}</span>
-            <wt-button
-              data-test="change-pin"
-              class="card-action accent-primary"
-              aria-label=${t("profile.change_pin")}
-              ?disabled=${this.busy}
-              @click=${() => this.#edit("pin")}
-              >${t("action.change")}</wt-button
-            >
-          </div>
+          ${
+            this.tillPin
+              ? html`<div class="action-row">
+                  <span class="field-value">${t("person.pin")}</span>
+                  <wt-button
+                    data-test="change-pin"
+                    class="card-action accent-primary"
+                    aria-label=${t("profile.change_pin")}
+                    ?disabled=${this.busy}
+                    @click=${() => this.#edit("pin")}
+                    >${t("action.change")}</wt-button
+                  >
+                </div>`
+              : nothing
+          }
 
           <div class="action-row passkeys-row">
             <span class="field-value">${t("profile.passkeys")}</span>

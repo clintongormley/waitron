@@ -1658,6 +1658,50 @@ export interface PrintCategorySalesInput {
   printerId: string;
 }
 
+export const TAX_OFFICE_KINDS = ["F1", "F2", "F3", "R4", "R5"] as const;
+export type TaxOfficeKind = (typeof TAX_OFFICE_KINDS)[number];
+
+/** One issued document, as `GET /management-api/tax-office/invoices` answers it. */
+export interface TaxOfficeInvoiceDto {
+  id: string;
+  number: string;
+  kind: TaxOfficeKind;
+  issuedAt: string;
+  issueDate: string;
+  /** Null when the operation happened on the issue day. */
+  operationDate: string | null;
+  customerName: string | null;
+  customerTaxId: string | null;
+  vat: { rate: string; base: string; tax: string }[];
+  total: string;
+  corrects: string[];
+  cancelledAt: string | null;
+}
+
+export interface TaxOfficeCursor {
+  at: string;
+  id: string;
+}
+
+export interface TaxOfficePageDto {
+  rows: TaxOfficeInvoiceDto[];
+  next: TaxOfficeCursor | null;
+  timeZone: string;
+}
+
+/** Issue dates are venue calendar days; the other filters are left out when not given. */
+export interface TaxOfficeQuery {
+  from: string;
+  to: string;
+  q?: string;
+  rate?: string;
+  amount?: string;
+  operationFrom?: string;
+  operationTo?: string;
+  kind?: TaxOfficeKind;
+  after?: TaxOfficeCursor;
+}
+
 /** `period` is the server's own token: `01`..`12` for a month, `1T`..`4T` for a quarter. */
 export interface VatReturnFileInput {
   year: number;
@@ -4742,6 +4786,28 @@ export class DashboardApi {
   downloadOrderInvoicePdf(id: string): Promise<Blob> {
     return this.#request<Blob>(
       `/management-api/orders/${encodeURIComponent(id)}/invoice-pdf`,
+      "POST",
+      undefined,
+      { as: "blob" },
+    );
+  }
+
+  listTaxOfficeInvoices(query: TaxOfficeQuery): Promise<TaxOfficePageDto> {
+    const { after, ...filters } = query;
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters))
+      if (value !== undefined && value !== "") params.set(key, value);
+    if (after !== undefined) {
+      params.set("afterAt", after.at);
+      params.set("afterId", after.id);
+    }
+    return this.#request<TaxOfficePageDto>(`/management-api/tax-office/invoices?${params}`, "GET");
+  }
+
+  /** Any issued document as a PDF copy; the server records who downloaded it. */
+  downloadTaxOfficeInvoicePdf(saleId: string): Promise<Blob> {
+    return this.#request<Blob>(
+      `/management-api/tax-office/invoices/${encodeURIComponent(saleId)}/pdf`,
       "POST",
       undefined,
       { as: "blob" },

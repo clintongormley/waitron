@@ -12,12 +12,18 @@ import {
   sales,
   taxpayer,
 } from "@waitron/db";
-import { recordSale } from "@waitron/core";
+import { recordSale, recordSubstitution } from "@waitron/core";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { Hono } from "hono";
+import {
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { inTx } from "./testing/bill-venue.js";
 import {
+  credit,
   parked,
   placedIssuedBill,
   provisionOrderVenue,
@@ -25,10 +31,13 @@ import {
 } from "./testing/order-venue.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
+import { mountTaxOfficeApi } from "./tax-office-api.js";
+import { sessionHolding } from "./testing/session-holding.js";
 
 let venue: OrderVenue;
 let managerDashboard = "";
 let fullSeriesId = "";
+let taxOffice: Hono;
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -50,6 +59,17 @@ useVenueDb({
         .where(and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "full")));
       fullSeriesId = series!.id;
     });
+    taxOffice = new Hono();
+    mountTaxOfficeApi(
+      taxOffice,
+      {
+        db,
+        cfg: { nodeId: venue.cfg.nodeId },
+        backend: venue.backend,
+        tradingContext: venue.cfg,
+      },
+      () => {},
+    );
   },
 });
 
@@ -277,5 +297,173 @@ describe("dashboard invoice PDF download", () => {
       readInvoiceDeliveries(tx, saleId, { emailAvailable: false }),
     );
     expect(status).toMatchObject({ originalCompleted: false, current: { status: "queued" } });
+  });
+});
+
+const saleOfBill = async (billId: string) => {
+  const [row] = await inTx(venue, (tx) =>
+    tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+  );
+  return row!.id;
+};
+
+const numberOf = async (saleId: string) => {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+      .from(sales)
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+      .where(eq(sales.id, saleId)),
+  );
+  return row!;
+};
+
+async function saleDownload(cookie: string, saleId: string) {
+  const response = await taxOffice.request(`/management-api/tax-office/invoices/${saleId}/pdf`, {
+    method: "POST",
+    headers: { cookie },
+  });
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const json = response.headers.get("content-type")?.includes("json")
+    ? (JSON.parse(new TextDecoder().decode(bytes)) as { error: { code: string } })
+    : undefined;
+  return { status: response.status, headers: response.headers, bytes, code: json?.error.code };
+}
+
+describe("tax office invoice PDF", () => {
+  const kinds: Record<string, () => Promise<string>> = {
+    F2: async () => saleOfBill(await placedIssuedBill(venue, "Caña")),
+    F1: async () => (await fullInvoice()).saleId,
+    F3: async () => {
+      const ticket = await saleOfBill(await placedIssuedBill(venue, "Caña"));
+      const { saleId } = await inTx(venue, (tx) =>
+        recordSubstitution(tx, venue.backend, {
+          operationDescription: "Restaurante",
+          origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
+          seriesId: brandSeriesId(fullSeriesId),
+          substitutedSaleIds: [brandSaleId(ticket)],
+          counterparty: {
+            taxId: "12345678Z",
+            legalName: "Cliente Mayorista SL",
+            countryCode: "ES",
+          },
+          recipientAddress: "Calle Cliente 9, Madrid",
+          total: "3.00",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Caña",
+              descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+              quantity: "1",
+              unitPrice: "3.00",
+              vatRate: "10",
+              lineTotal: "3.00",
+            },
+          ],
+          locale: venue.cfg.locale,
+          invoiceLocales: [venue.cfg.locale],
+          clock: venue.clock,
+        }),
+      );
+      return saleId;
+    },
+    R5: async () => {
+      const billId = await placedIssuedBill(venue, "Caña");
+      const ticket = await saleOfBill(billId);
+      await credit(venue, billId, "1.00", "-1.21");
+      const [corrective] = await inTx(venue, (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, ticket)),
+      );
+      return corrective!.id;
+    },
+  };
+
+  for (const [kind, issue] of Object.entries(kinds)) {
+    it(`gives an ${kind} as a duplicate PDF named by its number, recording one download`, async () => {
+      const saleId = await issue();
+      const { code, number } = await numberOf(saleId);
+      const answer = await saleDownload(managerDashboard, saleId);
+      expect(answer.status).toBe(200);
+      expect(answer.headers.get("content-type")).toBe("application/pdf");
+      expect(answer.headers.get("cache-control")).toBe("no-store");
+      expect(answer.headers.get("content-disposition")).toBe(
+        `attachment; filename="${code}-${number}.pdf"`,
+      );
+      expect(new TextDecoder().decode(answer.bytes.subarray(0, 4))).toBe("%PDF");
+      const text = await pdfText(answer.bytes);
+      expect(text).toContain(`${code}/${number}`);
+      expect(text).toContain("DUPLICADO");
+      const [manager] = await inTx(venue, (tx) =>
+        tx.select({ id: persons.id }).from(persons).where(eq(persons.displayName, "Martha")),
+      );
+      expect(await downloadsOf(saleId)).toEqual([
+        expect.objectContaining({ saleId, personId: manager!.id }),
+      ]);
+    });
+  }
+
+  it("writes only the download row", async () => {
+    const saleId = await kinds.F2!();
+    const before = await rowCounts();
+    expect((await saleDownload(managerDashboard, saleId)).status).toBe(200);
+    expect(await rowCounts()).toEqual({
+      ...before,
+      invoice_pdf_downloads: before.invoice_pdf_downloads! + 1,
+    });
+  });
+
+  it("answers an unknown sale with invoice_delivery.not_found, writing nothing", async () => {
+    const before = await rowCounts();
+    expect(await saleDownload(managerDashboard, randomUUID())).toMatchObject({
+      status: 404,
+      code: "invoice_delivery.not_found",
+    });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it("refuses an id that is not a sale's shape before reading the session, writing nothing", async () => {
+    const before = await rowCounts();
+    // A cookie naming no session: refused 401 only if the id check came after the session read.
+    const ended = `waitron_management_session=${randomUUID()}`;
+    for (const cookie of [managerDashboard, ended])
+      expect(await saleDownload(cookie, "not-a-uuid")).toMatchObject({
+        status: 404,
+        code: "invoice_delivery.not_found",
+      });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it("gives a session holding only invoice.inspect the PDF, recording that person", async () => {
+    const saleId = await kinds.F2!();
+    const inspector = await sessionHolding(venue.db, ["invoice.inspect"]);
+    expect((await saleDownload(inspector.cookie, saleId)).status).toBe(200);
+    expect(await downloadsOf(saleId)).toEqual([
+      expect.objectContaining({ saleId, personId: inspector.personId }),
+    ]);
+  });
+
+  it("refuses a session holding the report permissions but not invoice.inspect", async () => {
+    const saleId = await kinds.F2!();
+    const reporter = await sessionHolding(venue.db, ["report.view", "report.export"]);
+    const before = await rowCounts();
+    expect(await saleDownload(reporter.cookie, saleId)).toMatchObject({
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it("refuses a session without invoice.inspect, writing nothing", async () => {
+    const saleId = await kinds.F2!();
+    const before = await rowCounts();
+    for (const cookie of [venue.supervisorDashboard, venue.staffDashboard]) {
+      expect(await saleDownload(cookie, saleId)).toMatchObject({
+        status: 403,
+        code: "authorization.not_permitted",
+      });
+    }
+    expect(await rowCounts()).toEqual(before);
+    expect(await downloadsOf(saleId)).toEqual([]);
   });
 });

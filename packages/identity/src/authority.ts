@@ -45,6 +45,15 @@ export function holds(authority: PersonAuthority, permission: Permission | (stri
   );
 }
 
+/** A tax inspector's sign-in: `invoice.inspect` and nothing else. */
+export function inspectsInvoicesOnly(authority: PersonAuthority): boolean {
+  return (
+    !authority.admin &&
+    authority.permissions.size === 1 &&
+    authority.permissions.has("invoice.inspect")
+  );
+}
+
 export async function holdsInCopy(
   query: BackupQuery,
   personId: string,

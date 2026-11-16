@@ -1,3 +1,4 @@
+import { admitsInspector } from "./inspector-admission.js";
 import type { WaitronModule } from "@waitron/module";
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
@@ -117,7 +118,7 @@ const runPasskeyOptions = createErrorBoundary(
 
 /**
  * Staff self-service routes. Every route acts as the person its management session names, never
- * one the request body names. Deliberately role-blind — never `authorizeManager`: a `staff` person
+ * one the request body names. Never `authorizeManager`: a `staff` person
  * holds none of the permissions the management routes ask for, so that gate would refuse every
  * staff member. The personal-data mount this calls also carries the admin's download of another
  * person's data, which does call `authorizeManager`.
@@ -147,7 +148,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const proofThrottle = createPasswordThrottle();
   const proofSite = { rpId: deps.rpId ?? "localhost", origin: deps.origin ?? "http://localhost" };
   const passkeyOrigins = venuePasskeyOrigins(deps.db, proofSite.origin);
-  app.post("/management-api/session/me/fresh-sign-in", (c) =>
+  app.post("/management-api/session/me/fresh-sign-in", admitsInspector, (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);
       await confirmFreshSignIn(
@@ -163,7 +164,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.body(null, 204);
     }),
   );
-  app.post("/management-api/session/me/fresh-sign-in/passkey-options", (c) =>
+  app.post("/management-api/session/me/fresh-sign-in/passkey-options", admitsInspector, (c) =>
     runPasskeyOptions(c, log, async () => {
       const token = requireManagementSession(c);
       const result = await asStaff((tx) =>
@@ -189,13 +190,13 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     keyRing: credentialKeyRing,
   });
 
-  app.get("/management-api/session/me/profile", (c) =>
+  app.get("/management-api/session/me/profile", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       return c.json(await asStaff((tx) => readOwnProfile(tx, { managementSessionId })));
     }),
   );
-  app.put("/management-api/session/me/profile", (c) =>
+  app.put("/management-api/session/me/profile", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -237,7 +238,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       });
     }),
   );
-  app.post("/management-api/session/me/profile/email/confirm", (c) =>
+  app.post("/management-api/session/me/profile/email/confirm", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -252,7 +253,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json({ email });
     }),
   );
-  app.put("/management-api/session/me/password", (c) =>
+  app.put("/management-api/session/me/password", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -278,7 +279,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.body(null, 204);
     }),
   );
-  app.delete("/management-api/session/me/passkeys/:id", (c) =>
+  app.delete("/management-api/session/me/passkeys/:id", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -291,7 +292,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.body(null, 204);
     }),
   );
-  app.post("/management-api/session/me/totp/begin", (c) =>
+  app.post("/management-api/session/me/totp/begin", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -300,7 +301,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       );
     }),
   );
-  app.post("/management-api/session/me/totp/finish", (c) =>
+  app.post("/management-api/session/me/totp/finish", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -316,7 +317,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json(result);
     }),
   );
-  app.post("/management-api/session/me/recovery-codes", (c) =>
+  app.post("/management-api/session/me/recovery-codes", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -329,7 +330,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       );
     }),
   );
-  app.delete("/management-api/session/me/totp", (c) =>
+  app.delete("/management-api/session/me/totp", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -337,7 +338,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.body(null, 204);
     }),
   );
-  app.delete("/management-api/session/me/google", (c) =>
+  app.delete("/management-api/session/me/google", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -367,7 +368,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  app.get("/management-api/session/me", (c) =>
+  app.get("/management-api/session/me", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { personId, authority, email, locale, venueName, expiresAt } =
@@ -411,7 +412,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
 
   // A missing or non-string `locale` becomes `""`, which `setPersonLocale` refuses as
   // `locale.unsupported`: the one rejection path.
-  app.put("/management-api/session/me/locale", (c) =>
+  app.put("/management-api/session/me/locale", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ locale?: unknown }>(c);
@@ -426,7 +427,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
 
   // The passkey offer was settled (added or skipped), so it is never made again. The body is not
   // read.
-  app.post("/management-api/session/me/passkey-offer", (c) =>
+  app.post("/management-api/session/me/passkey-offer", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       await asStaff(async (tx) => {

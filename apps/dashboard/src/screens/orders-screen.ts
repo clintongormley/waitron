@@ -52,6 +52,12 @@ const FIELD_OF: Record<string, { control: string; message: StringKey }> = {
   table: { control: "table", message: "orders.refused.table" },
   q: { control: "q", message: "orders.refused.search" },
 };
+/** The filter as read and written to the address; `filter.table` keeps the field's text as typed. */
+const sent = (filter: OrdersFilter): OrdersFilter => ({
+  ...filter,
+  table: filter.table?.trim() || undefined,
+});
+const addressOf = (filter: OrdersFilter) => JSON.stringify(writeOrdersFilter(filter));
 
 @customElement("dashboard-orders-screen")
 export class OrdersScreen extends LitElement {
@@ -158,7 +164,11 @@ export class OrdersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
-      this.filter = readOrdersFilter((key) => this.#url.read(key));
+      clearTimeout(this.#textTimer);
+      const address = readOrdersFilter((key) => this.#url.read(key));
+      // The address this screen just wrote leaves the Table field's own spelling, such as a space
+      // still being typed, alone.
+      if (addressOf(sent(this.filter)) !== addressOf(address)) this.filter = address;
       this.#watch();
     },
     dashboardPath,
@@ -196,15 +206,16 @@ export class OrdersScreen extends LitElement {
     const previous = this.#pages.query;
     const released = this.#rangeReleased;
     this.#rangeReleased = false;
-    const { q, ...filter } = this.filter;
+    const { q, ...filter } = sent(this.filter);
     this.#pages.setQuery({ ...filter, search: q ?? "", ...this.#sort });
     if (released && previous === this.#pages.query) void this.#pages.reload();
   }
 
   #apply(next: OrdersFilter, replace = false): void {
+    clearTimeout(this.#textTimer);
     const filter = next.from && next.to ? next : { ...next, from: undefined, to: undefined };
     this.filter = filter;
-    this.#url.write(writeOrdersFilter(filter), replace);
+    this.#url.write(writeOrdersFilter(sent(filter)), replace);
     this.#watch();
   }
 
@@ -215,20 +226,15 @@ export class OrdersScreen extends LitElement {
   }
 
   #text(field: "table" | "q", value: string, immediate = false): void {
-    const kept = field === "q" ? value : value.trim();
-    const apply = () =>
-      this.#apply(
-        { ...this.filter, [field]: value.trim() === "" ? undefined : kept },
-        field === "q",
-      );
     if (field === "q") {
-      apply();
+      this.#apply({ ...this.filter, q: value.trim() === "" ? undefined : value }, true);
       if (immediate) void this.#pages.reload();
-    } else {
-      clearTimeout(this.#textTimer);
-      if (immediate) apply();
-      else this.#textTimer = setTimeout(apply, 400);
+      return;
     }
+    clearTimeout(this.#textTimer);
+    this.filter = { ...this.filter, table: value };
+    if (immediate) this.#apply(this.filter);
+    else this.#textTimer = setTimeout(() => this.#apply(this.filter), 400);
   }
 
   #tableQuery(event: CustomEvent<Pick<OrdersPageQuery, "sortKey" | "sortDirection">>): void {

@@ -112,6 +112,12 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
       "the partial-refund history of the correction target: its earlier corrections' figures and lines",
   },
   {
+    file: "apps/server/src/tax-office-list.ts",
+    fragment: "left join sales c on c.id = s.corrects_sale_id",
+    lines: 1,
+    reason: "names the one invoice a listed corrective corrects; it sums nothing",
+  },
+  {
     file: "packages/reporting/src/top-sellers.ts",
     fragment: "cs.corrects_sale_id = il.sale_id and cl.corrects_line_id = il.id",
     lines: 1,

@@ -13,12 +13,18 @@ declare module "hono" {
   }
 }
 
+// A session resolve can throw this on any route, whether or not the route's own map lists it.
+const UNMAPPED_STATUS: Record<string, ContentfulStatusCode> = {
+  "authorization.inspection_only": 403,
+};
+
 /**
  *  - A full disk in the cause chain (`diskFullIn`), or ENOSPC with a full venue disk → `{ error: { code: "storage.disk_full",
  *    params } }` at the status `status` assigns it, or 507, logged at `error`; `params` is the
  *    thrown `AppError("storage.disk_full")`'s own, and `{}` for any other full disk.
  *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
- *    or 400 when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
+ *    or, when the map omits it, 403 for `authorization.inspection_only` and 400 for the rest, logged
+ *    at `warn` — a mapped 5xx included. Its log-only `reason`, if
  *    any, goes to the log as `logReason` and never into the answer.
  *  - Anything else → logged at `error` under `tag` with only `codeOf`'s classification (never its
  *    `.message`), and answered with an opaque `server.internal` 500.
@@ -45,7 +51,7 @@ export function createErrorBoundary(
         );
       }
       if (isAppError(cause)) {
-        const httpStatus = status[cause.code] ?? 400;
+        const httpStatus = status[cause.code] ?? UNMAPPED_STATUS[cause.code] ?? 400;
         // `logReason`, not `reason`: several codes carry a param named `reason`, which it would hide.
         const logReason = cause.reason === undefined ? {} : { logReason: cause.reason };
         log("warn", cause.code, { ...cause.params, requestId, ...logReason });

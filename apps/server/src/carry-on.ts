@@ -19,6 +19,7 @@ import {
   endManagementSession,
   loginManager,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import { appendHandoverEventTx } from "@waitron/node-db";
 import { WAITING_PAGE_WORDS, type CarryOnWords } from "./i18n/waiting-page.js";
@@ -279,10 +280,9 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
             totpKeyRing: deps.credentialKeyRing,
             checked,
           });
-          const { authorizedBy } = await authorizeManager(tx, {
-            managementSessionId: session.token,
-            permission: "node.manage",
-          });
+          const { authorizedBy } = await withInspectorAdmitted(() =>
+            authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
+          );
           await endManagementSession(tx, session.token);
           return authorizedBy;
         });

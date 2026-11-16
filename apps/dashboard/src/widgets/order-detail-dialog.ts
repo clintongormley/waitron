@@ -136,8 +136,8 @@ function emailLabel(status: OrderDeliveries): StringKey {
   return status.actions.email?.designation === "duplicate" ? "orders.email_copy" : "orders.email";
 }
 
-/** The name `readInvoiceForDownload` gives the file (`apps/server/src/orders-invoice-pdf.ts`). */
-function pdfFileName(invoiceNumber: string): string {
+/** The name the server's `invoicePdfFileName` gives the file (`apps/server/src/orders-invoice-pdf.ts`). */
+export function pdfFileName(invoiceNumber: string): string {
   const cut = invoiceNumber.lastIndexOf("/");
   const series = invoiceNumber.slice(0, cut).replace(/[^A-Za-z0-9_.-]/g, "_");
   return `${series}-${invoiceNumber.slice(cut + 1)}.pdf`;

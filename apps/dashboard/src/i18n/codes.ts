@@ -540,6 +540,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You don't have permission to do that",
     es: "No tienes permiso para hacer eso",
   },
+  "authorization.inspection_only": {
+    en: "This sign-in can only see Invoices for the tax office.",
+    es: "Esta sesión solo puede ver Facturas para Hacienda.",
+  },
   "pin.too_short": {
     en: "The PIN is too short",
     es: "El PIN es demasiado corto",

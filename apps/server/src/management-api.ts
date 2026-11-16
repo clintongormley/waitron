@@ -1,3 +1,4 @@
+import { admitsInspector } from "./inspector-admission.js";
 import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 import { passkeyVerifySite, venuePasskeyOrigins } from "./passkey-origins.js";
 import { floorDeletionFor } from "./floor-delete.js";
@@ -83,6 +84,7 @@ import {
   setProfileAdmission,
   type ProfileAdmission,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import {
   FORM_FACTORS,
@@ -766,7 +768,7 @@ export function mountManagementApi(
     }),
   );
 
-  app.post("/management-api/session/me/google", (c) =>
+  app.post("/management-api/session/me/google", admitsInspector, (c) =>
     run(c, log, async () => {
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
       const sessionId = requireManagementSession(c);
@@ -1045,10 +1047,9 @@ export function mountManagementApi(
           totpKeyRing: credentialKeyRing,
           checked,
         });
-        await authorizeManager(tx, {
-          managementSessionId: session.token,
-          permission: "node.manage",
-        });
+        await withInspectorAdmitted(() =>
+          authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
+        );
         await endManagementSession(tx, session.token);
       });
       const document = await readNodeMembership(deps.db);
@@ -1906,7 +1907,7 @@ export function mountManagementApi(
   // ── Passkeys ──
   // Registration enrols a passkey for the signed-in person, resolved from the session, never a
   // client-supplied id. Authentication is ungated because it IS the login.
-  app.post("/management-api/passkey/register/options", (c) =>
+  app.post("/management-api/passkey/register/options", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -1929,7 +1930,7 @@ export function mountManagementApi(
     }),
   );
 
-  app.post("/management-api/passkey/register/verify", (c) =>
+  app.post("/management-api/passkey/register/verify", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
@@ -1947,7 +1948,7 @@ export function mountManagementApi(
     }),
   );
 
-  app.get("/management-api/passkey/signals", (c) =>
+  app.get("/management-api/passkey/signals", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const out = await withTransaction(deps.db, (tx) =>

@@ -365,6 +365,7 @@ import { mountMenuApi, translationContextFor } from "./menu-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
+import { mountTaxOfficeApi } from "./tax-office-api.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountOrdersApi } from "./orders-api.js";
 import { mountWorkforceApi, WORK_TIME_RULES_NOT_FOUND } from "./workforce-api.js";
@@ -3421,6 +3422,11 @@ async function bootServer(
       hasReturnedInvoices: nodeBackend.hasReturnedInvoices?.bind(nodeBackend),
       returnedInvoices: nodeBackend.returnedInvoices?.bind(nodeBackend),
     },
+    log,
+  );
+  mountTaxOfficeApi(
+    app,
+    { db, cfg: { nodeId: dataNodeId }, backend: nodeBackend, tradingContext },
     log,
   );
   mountOrdersApi(

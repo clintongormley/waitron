@@ -3,14 +3,18 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { personRoles, roles } from "@waitron/db";
 import {
   IDLE_TIMEOUT_MS,
   checkManagementSession,
   endManagementSession,
   resolveManagementSession,
   startManagementSession,
+  withInspectorAdmitted,
   withPassiveManagementRead,
 } from "./management-session.js";
+import { authorizeManager } from "./manager-login.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 import { hashSessionToken } from "./session-token.js";
 
@@ -273,3 +277,110 @@ it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as con
     expect(row!.last_seen_at).toBe(at);
   },
 );
+
+/** A session for a new person whose one role grants exactly `permissions`. */
+async function sessionHolding(permissions: string[]): Promise<{ token: string; personId: string }> {
+  const personId = await seedPerson(suite.db, "staff");
+  return run(async (tx) => {
+    await tx.delete(personRoles).where(eq(personRoles.personId, personId));
+    const name = `Only ${crypto.randomUUID()}`;
+    const [role] = await tx
+      .insert(roles)
+      .values({ name, nameFolded: name.toLowerCase(), permissions })
+      .returning({ id: roles.id });
+    await tx.insert(personRoles).values({ personId, roleId: role!.id });
+    const { token } = await startManagementSession(tx, { personId });
+    return { token, personId };
+  });
+}
+
+const lastSeen = async (token: string) =>
+  (
+    await suite.db.execute<{ last_seen_at: string }>(
+      sql`select last_seen_at from management_sessions where token_hash = ${hashSessionToken(token)}`,
+    )
+  ).rows[0]!.last_seen_at;
+
+describe("a session holding invoice.inspect alone", () => {
+  const refusal = { code: "authorization.inspection_only", params: {} };
+
+  it("is refused by an ordinary resolve, without stamping its activity", async () => {
+    const { token } = await sessionHolding(["invoice.inspect"]);
+    const at = minutesAgo(10);
+    await run((tx) => tx.execute(agedTo(at, token)));
+    await expect(run((tx) => resolveManagementSession(tx, token))).rejects.toMatchObject(refusal);
+    await expect(
+      run((tx) => resolveManagementSession(tx, token, { touch: false })),
+    ).rejects.toMatchObject(refusal);
+    expect(await lastSeen(token)).toBe(at);
+  });
+
+  it("is refused by the live stream's re-check, without stamping its activity", async () => {
+    const { token } = await sessionHolding(["invoice.inspect"]);
+    const at = minutesAgo(10);
+    await run((tx) => tx.execute(agedTo(at, token)));
+    await expect(checkManagementSession(suite.db, token)).rejects.toMatchObject(refusal);
+    expect(await lastSeen(token)).toBe(at);
+    const other = await sessionHolding(["invoice.inspect", "report.view"]);
+    await expect(checkManagementSession(suite.db, other.token)).resolves.toBeUndefined();
+  });
+
+  it("is re-checked by the live stream in one read that counts every role the person holds", async () => {
+    const { token, personId } = await sessionHolding(["invoice.inspect"]);
+    const select = vi.spyOn(suite.db, "select");
+    try {
+      await expect(checkManagementSession(suite.db, token)).rejects.toMatchObject(refusal);
+      expect(select).toHaveBeenCalledTimes(1);
+    } finally {
+      select.mockRestore();
+    }
+    await run(async (tx) => {
+      const name = `Also ${crypto.randomUUID()}`;
+      const [role] = await tx
+        .insert(roles)
+        .values({ name, nameFolded: name.toLowerCase(), permissions: ["report.view"] })
+        .returning({ id: roles.id });
+      await tx.insert(personRoles).values({ personId, roleId: role!.id });
+    });
+    await expect(checkManagementSession(suite.db, token)).resolves.toBeUndefined();
+    const roleless = await sessionHolding([]);
+    await run((tx) => tx.delete(personRoles).where(eq(personRoles.personId, roleless.personId)));
+    await expect(checkManagementSession(suite.db, roleless.token)).resolves.toBeUndefined();
+  });
+
+  it("is served inside a route that admits it", async () => {
+    const { token, personId } = await sessionHolding(["invoice.inspect"]);
+    const session = await withInspectorAdmitted(() =>
+      run((tx) => resolveManagementSession(tx, token)),
+    );
+    expect(session.personId).toBe(personId);
+    await expect(run((tx) => resolveManagementSession(tx, token))).rejects.toMatchObject(refusal);
+  });
+
+  it("passes authorizeManager for invoice.inspect only, and is refused as inspection-only for any other", async () => {
+    const { token, personId } = await sessionHolding(["invoice.inspect"]);
+    await expect(
+      run((tx) =>
+        authorizeManager(tx, { managementSessionId: token, permission: "invoice.inspect" }),
+      ),
+    ).resolves.toMatchObject({ authorizedBy: personId });
+    await expect(
+      run((tx) => authorizeManager(tx, { managementSessionId: token, permission: "report.view" })),
+    ).rejects.toMatchObject(refusal);
+  });
+
+  it.each([
+    ["no permission at all", []],
+    ["invoice.inspect beside another permission", ["invoice.inspect", "report.view"]],
+    ["one other permission", ["report.view"]],
+  ])("leaves a session holding %s resolving as before", async (_name, permissions) => {
+    const { token, personId } = await sessionHolding(permissions);
+    expect((await run((tx) => resolveManagementSession(tx, token))).personId).toBe(personId);
+  });
+
+  it("leaves an administrator resolving as before", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const { token } = await run((tx) => startManagementSession(tx, { personId }));
+    expect((await run((tx) => resolveManagementSession(tx, token))).personId).toBe(personId);
+  });
+});

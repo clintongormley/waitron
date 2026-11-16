@@ -38,6 +38,7 @@ import { placeFirstCopy } from "./spare-copy-placement.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { confineTo } from "./testing/session-holding.js";
 import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import {
   ADMIN,
@@ -482,6 +483,19 @@ it("requires promotion permission in the copy", async () => {
     .where(eq(persons.email, ADMIN_EMAIL));
   await setBuiltInRoleForTest(placed.venue, person!.id, "staff");
   expect((await service().post()).body.error?.code).toBe("authorization.not_permitted");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it("refuses a password holding only invoice.inspect in the copy as lacking node.manage", async () => {
+  const [person] = await placed.venue
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.email, ADMIN_EMAIL));
+  await confineTo(placed.venue, person!.id, ["invoice.inspect"]);
+  expect((await service().post()).body.error).toEqual({
+    code: "authorization.not_permitted",
+    params: { permission: "node.manage" },
+  });
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });
 

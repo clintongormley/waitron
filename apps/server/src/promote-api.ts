@@ -10,6 +10,7 @@ import {
   endManagementSession,
   loginManagerById,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import { BEFORE_ACTIVATION } from "@waitron/handover";
 import type { WaitronModule } from "@waitron/module";
@@ -252,10 +253,12 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
                 totpKeyRing: deps.credentialKeyRing,
                 checked,
               });
-              await authorizeManager(tx, {
-                managementSessionId: session.token,
-                permission: "node.manage",
-              });
+              await withInspectorAdmitted(() =>
+                authorizeManager(tx, {
+                  managementSessionId: session.token,
+                  permission: "node.manage",
+                }),
+              );
               await endManagementSession(tx, session.token);
               // Inside the transaction, so a refusal here leaves no session row behind.
               await afterSignIn();

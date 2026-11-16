@@ -20,6 +20,7 @@ import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { personHolding } from "./testing/session-holding.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import {
   watchingDerivations,
@@ -227,6 +228,21 @@ describe("GET /management-api/membership", () => {
     const res = await getMembership(app, { personId: staffPersonId, password: STAFF_PASSWORD });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("authorization.not_permitted");
+  });
+
+  it("refuses a credential holding only invoice.inspect as lacking node.manage", async () => {
+    const { designated } = await setupVenue();
+    const inspectorId = await personHolding(suite.db, ["invoice.inspect"], {
+      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
+    });
+    const app = mountApp(designated);
+
+    const res = await getMembership(app, { personId: inspectorId, password: STAFF_PASSWORD });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "node.manage" },
+    });
   });
 
   it("refuses a wrong password with 401 before it can authorize", async () => {

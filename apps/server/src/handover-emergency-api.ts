@@ -34,6 +34,7 @@ import {
   pinThrottleRetryAfterSeconds,
   pinThrottleUnlockAt,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import { servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
@@ -291,10 +292,9 @@ export function mountHandoverEmergencyApi(
             totpKeyRing: deps.credentialKeyRing,
             checked: secret,
           });
-          await authorizeManager(tx, {
-            managementSessionId: session.token,
-            permission: "node.manage",
-          });
+          await withInspectorAdmitted(() =>
+            authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
+          );
           await endManagementSession(tx, session.token);
           const [person] = await tx
             .select({ totpSecret: persons.totpSecret })

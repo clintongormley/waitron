@@ -170,6 +170,7 @@ export async function seedSale(
     /** On a replacement, the day the original sale really happened, `YYYY-MM-DD`. */
     supplyDay?: string;
     counterpartyTaxId?: string;
+    counterpartyLegalName?: string;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
     /**
@@ -195,6 +196,7 @@ export async function seedSale(
       issuedOffsetMinutes: opts.issuedOffsetMinutes ?? 0,
       total: stringToCents(opts.total),
       counterpartyTaxId: opts.counterpartyTaxId ?? null,
+      counterpartyLegalName: opts.counterpartyLegalName ?? null,
       vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

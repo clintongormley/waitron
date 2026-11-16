@@ -30,7 +30,7 @@ const STATUS = {
 const DELETION_CODE = "backup.archives_deleted";
 const RECENT_MS = 24 * 60 * 60 * 1000;
 
-/** `GET /management-api/disk-stop`, for any signed-in dashboard session. */
+/** `GET /management-api/disk-stop`, for any dashboard session `resolveManagementSession` admits. */
 export function mountDiskStopApi(app: Hono, deps: DiskStopApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "disk-stop.failed");
   app.get("/management-api/disk-stop", (c) =>

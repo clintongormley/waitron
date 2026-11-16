@@ -83,6 +83,7 @@ export function mountLiveApi(
           "management_session.required",
           "management_session.expired",
           "person.suspended",
+          "authorization.inspection_only",
         ]),
         sendIds: true,
         log,

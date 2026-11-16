@@ -94,6 +94,7 @@ import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
 import "./screens/handover-intervals-screen.js";
 import "./screens/vat-return-screen.js";
+import "./screens/tax-office-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/access-roles-screen.js";
@@ -162,6 +163,7 @@ const CORE_SCREENS = [
   "sales",
   "vat-return",
   "handover-intervals",
+  "invoices",
   "orders",
   "staff",
   "access-roles",
@@ -265,6 +267,7 @@ const NAV_GROUPS: NavGroup[] = [
         labelKey: "nav.handover_intervals",
         requiresPermission: "report.view",
       },
+      { screen: "invoices", labelKey: "nav.invoices", requiresPermission: "invoice.inspect" },
     ],
     itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
@@ -1122,6 +1125,13 @@ export class DashboardApp extends LitElement {
       return;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
+    // The person's roles were cut to invoice.inspect alone: the session still stands, and reading
+    // it again draws the Invoices-only layout.
+    if (code === "authorization.inspection_only") {
+      if (this.sessionPersonId !== undefined && !this.#confinedToInvoices())
+        void this.#probeSession();
+      return;
+    }
     // An ended or absent session answers `required`: while signed out, or while signing out (which
     // returns to login itself), it must not rewrite the address. Expiry and suspension can still end
     // a session the login screen holds unannounced.
@@ -1427,6 +1437,11 @@ export class DashboardApp extends LitElement {
   }
 
   #watchDiskStop(): void {
+    if (this.#confinedToInvoices()) {
+      this.#diskStopQueries.release("getDiskStop");
+      this.diskStop = null;
+      return;
+    }
     void this.#diskStopQueries
       .watch(
         "getDiskStop",
@@ -1441,6 +1456,12 @@ export class DashboardApp extends LitElement {
 
   #startLiveUpdates(): void {
     if (this.tradingAdmission.state !== "ready") return;
+    // The server refuses this session the stream, which names the venue's changes.
+    if (this.#confinedToInvoices()) {
+      this.liveUpdates?.stop();
+      this.#liveAccountEpoch = undefined;
+      return;
+    }
     // The screen is drawn only once this read answers; a stream started sooner lacks its watches.
     if (!this.contentLanguagesReady && this.contentLanguageError === null) return;
     if (this.#liveAccountEpoch === this.sessionGeneration) return;
@@ -1468,7 +1489,7 @@ export class DashboardApp extends LitElement {
   }
 
   #watchAlerts(): void {
-    if (this.#ownPagesOnly()) {
+    if (this.#ownPagesOnly() || this.#confinedToInvoices()) {
       this.#clearAlerts();
       return;
     }
@@ -2405,7 +2426,19 @@ export class DashboardApp extends LitElement {
     return this.#sessionPermissions.includes(item.requiresPermission ?? "venue.view");
   }
 
+  /** A session holding `invoice.inspect` alone: it opens only Invoices and its own account. */
+  #confinedToInvoices(): boolean {
+    return (
+      this.#sessionPermissions.length === 1 && this.#sessionPermissions[0] === "invoice.inspect"
+    );
+  }
+
+  #searchHidden(): boolean {
+    return this.#ownPagesOnly() || this.#confinedToInvoices();
+  }
+
   #ownPagesOnly(): boolean {
+    if (this.#confinedToInvoices()) return false;
     return (
       !NAV_GROUPS.flatMap(coreItems).some(
         (item) => item.screen !== "orders" && this.#mayOpen(item),
@@ -2438,7 +2471,8 @@ export class DashboardApp extends LitElement {
   }
 
   #permittedScreen(requested: string | null): ScreenId {
-    if (requested === "orders" || requested === "my-schedule") return requested;
+    if (this.#confinedToInvoices()) return "invoices";
+    if (requested === "my-schedule" || requested === "orders") return requested;
     const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
@@ -2611,7 +2645,9 @@ export class DashboardApp extends LitElement {
             this.onboardingIntent === "prepare" ||
             this.onboardingIntent === "live",
         )
-        .filter((item) => item.screen === "orders" || this.#mayOpen(item))
+        .filter((item) =>
+          item.screen === "orders" ? !this.#confinedToInvoices() : this.#mayOpen(item),
+        )
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
       const among = [...(this.#navGroups.get(group.id) ?? [])]
@@ -2627,7 +2663,7 @@ export class DashboardApp extends LitElement {
   /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     const permitted = this.#permittedNav();
-    if (this.#ownPagesOnly()) return permitted;
+    if (this.#searchHidden()) return permitted;
     return permitted.map(({ group, pages }) => {
       const heading = group.headerKey === undefined ? "" : t(group.headerKey);
       const matched = navMatches(this.navSearch, pages, heading);
@@ -2952,7 +2988,7 @@ export class DashboardApp extends LitElement {
     const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
     return html`<nav class="strip" aria-label=${t("nav.sections")}>
       ${
-        this.#ownPagesOnly()
+        this.#searchHidden()
           ? nothing
           : this.#stripButton(
               "search",
@@ -3008,7 +3044,7 @@ export class DashboardApp extends LitElement {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
         ${
-          this.#ownPagesOnly()
+          this.#searchHidden()
             ? nothing
             : html`<wt-input
                 type="search"
@@ -3085,7 +3121,7 @@ export class DashboardApp extends LitElement {
             </button>`,
         )}
         ${
-          this.#ownPagesOnly()
+          this.#searchHidden()
             ? nothing
             : html`<p class="nav-search-empty" role="status" data-test="nav-search-empty">
                 ${noMatch ? t("nav.no_matches") : nothing}
@@ -3120,6 +3156,7 @@ export class DashboardApp extends LitElement {
             ? html`<dashboard-profile-screen
                 .api=${this.api}
                 .canAdminister=${this.#sessionPermissions.includes("person.admin")}
+                .tillPin=${!this.#confinedToInvoices()}
                 @admin-sign-in=${() => void this.#onLogout()}
                 @profile-updated=${() => void this.#probeSession()}
                 @profile-tab-change=${(
@@ -3190,6 +3227,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-handover-intervals-screen>`;
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
+      case "invoices":
+        return html`<dashboard-tax-office-screen .api=${this.api}></dashboard-tax-office-screen>`;
       case "orders":
         return html`<dashboard-orders-screen
           .api=${this.api}

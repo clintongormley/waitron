@@ -15,6 +15,8 @@ declare module "@waitron/shared" {
     "session.required": Record<string, never>;
     "recovery.state_incomplete": { missing: string };
     "test.with_reason": { reason: string };
+    "authorization.not_permitted": { permission: string };
+    "authorization.inspection_only": Record<string, never>;
   }
 }
 
@@ -54,6 +56,27 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: { code: "test.not_found", params: { id } } });
     expect(lines).toEqual([{ level: "warn", event: "test.not_found", fields: { id } }]);
+  });
+
+  it("answers authorization.inspection_only 403 where the map omits it, and the map still wins", async () => {
+    const answer = async (status: Record<string, ContentfulStatusCode>, error: AppError) => {
+      const app = new Hono();
+      app.get("/refused", (c) =>
+        createErrorBoundary(status, "widget.failed")(c, collect([]), () => Promise.reject(error)),
+      );
+      const res = await app.request("/refused");
+      return { status: res.status, body: await res.json() };
+    };
+    const inspectionOnly = new AppError("authorization.inspection_only", {});
+    const body = { error: { code: "authorization.inspection_only", params: {} } };
+    expect(await answer({}, inspectionOnly)).toEqual({ status: 403, body });
+    expect(await answer({ "authorization.inspection_only": 404 }, inspectionOnly)).toEqual({
+      status: 404,
+      body,
+    });
+    expect(
+      await answer({}, new AppError("authorization.not_permitted", { permission: "report.view" })),
+    ).toMatchObject({ status: 400 });
   });
 
   it("maps an AppError whose code is mapped to 500 to that status but still logs it at warn", async () => {

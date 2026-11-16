@@ -15,6 +15,7 @@ export const GUIDE_PAGES = [
   "staff",
   "data-protection",
   "purchases",
+  "invoices",
   "till-notices",
   "box-status",
   "fiscal-filing",

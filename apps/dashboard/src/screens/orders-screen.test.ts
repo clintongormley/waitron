@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtDataTable } from "@waitron/ui";
+import { NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -327,6 +327,95 @@ describe("dashboard Orders", () => {
     await vi.waitFor(() => expect(read.mock.calls.map((call) => call[0].page)).toEqual([1, 1, 0]));
     await vi.waitFor(() => expect(table.serverPaging).toMatchObject({ page: 0, total: 1 }));
     expect(table.errorMessage).toBe("");
+  });
+
+  it("drops a table edit still waiting to be sent when Back restores an earlier search", async () => {
+    history.replaceState(null, "", "/manage/orders/table/Restored");
+    history.pushState(null, "", "/manage/orders/table/Current");
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    const table =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=table]")!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      table.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Pending" } }));
+      const back = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.back();
+      await back;
+      vi.advanceTimersByTime(400);
+      await el.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    const reads = [...vi.mocked(api.listOrdersPage).mock.calls, ...read.mock.calls];
+    expect(reads.map((call) => call[0].table)).toEqual(["Current", "Restored"]);
+    expect(table.value).toBe("Restored");
+    expect(location.pathname).toBe("/manage/orders/table/Restored");
+  });
+
+  it("empties the Table field when Back changes only the status during the field's wait", async () => {
+    history.pushState(null, "", "/manage/orders/status/open");
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    const table =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=table]")!;
+    const input = table.shadowRoot!.querySelector("input")!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      input.value = "4";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      const back = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.back();
+      await back;
+      vi.advanceTimersByTime(400);
+      await el.updateComplete;
+      await table.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(location.pathname).toBe("/manage/orders");
+    expect(table.value).toBe("");
+    expect(input.value).toBe("");
+    const reads = [...vi.mocked(api.listOrdersPage).mock.calls, ...read.mock.calls];
+    expect(reads.map((call) => [call[0].status, call[0].table])).toEqual([
+      ["open", undefined],
+      ["all", undefined],
+    ]);
+  });
+
+  it("keeps a table edit still waiting to be sent when another filter changes the address first", async () => {
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async (proceed) => {
+        await proceed();
+        return "proceeded";
+      },
+    });
+    onTestFinished(() => guard.dispose());
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      el.shadowRoot!.querySelector("wt-input[name=table]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "Terrace 4" } }),
+      );
+      el.shadowRoot!.querySelector("[name=status]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "open" } }),
+      );
+      vi.advanceTimersByTime(400);
+      await el.updateComplete;
+    } finally {
+      vi.useRealTimers();
+    }
+    await vi.waitFor(() =>
+      expect(read.mock.lastCall?.[0]).toMatchObject({ status: "open", table: "Terrace 4" }),
+    );
+    expect(location.pathname).toBe("/manage/orders/status/open/table/Terrace%204");
   });
 
   it("restarts an identical corrected date query after releasing a backwards range", async () => {
