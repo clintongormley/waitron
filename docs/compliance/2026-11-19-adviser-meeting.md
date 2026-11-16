@@ -6,20 +6,20 @@ ticket is issued and on changes to a quarter already filed, question 14 asks whe
 answers on money paid towards a bill correctly, question 15 asks what keeping "None" risks, and the
 Spanish question 11 now matches the English. Question 2 now asks about a clock set back (it was
 question 9; the old question 2 was dropped), and question 5 points to an example of the whole
-declaration. Questions 10 to 22 became 9 to 21. Nothing here has been sent.
+declaration. Questions 10 to 22 became 9 to 21. Then the question on copies held outside Spain was dropped, since Waitron Cloud will use EU data centres, and 20 and 21 became 19 and 20. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question explains the situation, says what Waitron
 does or proposes and why, and ends with what we ask, so it can be read without the others. Questions
 1 and 2 need the adviser's judgement. Questions 3 to 13 are confirmations, ordered by what is filed
-or signed from the first day of trading. Questions 14 to 21 follow up the adviser's answers of 15 November.
+or signed from the first day of trading. Questions 14 to 20 follow up the adviser's answers of 15 November.
 
 **What the adviser already has.** S1 to S19 and R1 to R6, the
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09), went to the adviser around 15 October
 (the owner's estimate). **The adviser answered S1 to S16 and R1 to R6 on 15 November**, in a draft whose
 numbers 1.1 to 1.16 and 2.1 to 2.6 are ours. What the adviser's answers change is in
 [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md). Questions 3 and 4 were rewritten
-that day as follow-ups to the adviser's answers, and questions 15 to 22 (now 14 to 21) were added; question 21 chases S17 to
+that day as follow-ups to the adviser's answers, and questions 15 to 22 (now 14 to 20) were added; question 20 chases S17 to
 S19, which the adviser has not answered.
 
 **Where the questions come from.** The [6 November list](2026-11-06-adviser-questions.md), whose
@@ -455,28 +455,7 @@ declaring VAT on the full €62?
 
 Yes / No / Note: ____________________________________________
 
-**19. Who is the third party for copies held outside Spain (answer 1.15).**
-
-*The situation.* Waitron keeps a continuous copy of the venue's data away from the restaurant, as a
-backup. The adviser answered that a copy abroad, while the original stays on the server in Spain, is not in
-itself keeping invoices outside Spain; that whoever holds the copy for the venue is a third party
-(RD 1619/2012 art. 19.3); and that a third party established outside the EU must be notified to
-AEAT beforehand through procedure GZ05 (art. 19.4).
-
-*The two set-ups.* Waitron Cloud plans to keep the copies with Amazon Web Services, a company with
-an American parent, in data centres in Spain and France. Alternatively, a venue may send its copy to
-a storage provider of its own choosing.
-
-*We ask:*
-
-- (a) Is the third party the company the venue contracts with (Waitron), the storage provider, or
-  both?
-- (b) Does art. 19.4 look at where the third party is established or at where the data is held? For
-  example, a provider established outside the EU that stores the data in an EU data centre.
-
-Yes / No / Note: ____________________________________________
-
-**20. Invoice copies rebuilt from AEAT's records after a restore (answer 1.16).**
+**19. Invoice copies rebuilt from AEAT's records after a restore (answer 1.16).**
 
 *The situation.* If the venue's server has to be restored from an old backup, the invoices issued
 after that backup are missing from it, although their records reached AEAT. The adviser answered that the
@@ -492,7 +471,7 @@ way, such as its continuous backup copy?
 
 Yes / No / Note: ____________________________________________
 
-**21. Three questions from October still awaited.**
+**20. Three questions from October still awaited.**
 
 *The situation.* The adviser's answers of 15 November did not cover three questions of the October list:
 
@@ -536,7 +515,7 @@ venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un
 en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta explica la
 situación, lo que hace o propone Waitron y por qué, y lo que preguntamos, de modo que puede leerse
 por separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 13 son confirmaciones; de la 14
-a la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
+a la 20 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
 1.16 y 2.1 a 2.6), que le agradecemos.
 
 ### Requieren su criterio
@@ -969,29 +948,7 @@ seguir declarando el IVA sobre los 62 €?
 
 Sí / No / Nota: ____________________________________________
 
-**19. Quién es el tercero para las copias fuera de España (su respuesta 1.15).**
-
-*Situación.* Waitron guarda, como copia de seguridad, una copia continua de los datos del local
-fuera del restaurante. Indica que una copia en el extranjero, mientras el original sigue en el
-servidor en España, no es por sí misma conservación fuera de España; que quien guarda la copia por
-cuenta del local es un tercero (RD 1619/2012, art. 19.3); y que un tercero establecido fuera de la UE
-requiere comunicación previa a la AEAT por el procedimiento GZ05 (art. 19.4).
-
-*Las dos modalidades.* Waitron Cloud prevé guardar las copias en Amazon Web Services, empresa de
-matriz estadounidense, en centros de datos de España y Francia. Un local puede, en cambio, enviar su
-copia a un proveedor de almacenamiento de su elección.
-
-*Preguntamos:*
-
-- (a) ¿Es el tercero la empresa con la que contrata el local (Waitron), el proveedor de
-  almacenamiento, o ambos?
-- (b) ¿El art. 19.4 atiende al lugar de establecimiento del tercero o al lugar donde están los
-  datos? Por ejemplo, un proveedor establecido fuera de la UE que guarda los datos en un centro de
-  datos de la UE.
-
-Sí / No / Nota: ____________________________________________
-
-**20. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta
+**19. Copias reconstruidas con los registros de la AEAT tras una restauración (su respuesta
 1.16).**
 
 *Situación.* Si el servidor del local se restaura desde una copia antigua, le faltan las facturas
@@ -1008,7 +965,7 @@ completa por otra vía, como su copia de seguridad continua?
 
 Sí / No / Nota: ____________________________________________
 
-**21. Tres preguntas de octubre aún pendientes.**
+**20. Tres preguntas de octubre aún pendientes.**
 
 *Situación.* Sus respuestas del 15 de noviembre no tratan tres preguntas de la lista de octubre:
 
@@ -1102,6 +1059,7 @@ productor al firmar.
 | Item | Why it is not asked | Receipt |
 | --- | --- | --- |
 | T2, keeping a date that nothing shows to be wrong | Owner, 16 November: the explanation of how the clock is confirmed is not needed; what matters is a later invoice timed earlier than the one before, now question 2 | the owner's review of this sheet, 16 November |
+| The adviser's answer 1.15: who is the third party for copies held outside Spain | Owner, 16 November: Waitron Cloud will keep its copies in EU data centres, so the question does not arise for it | the owner's review of this sheet, 16 November |
 | T13, the long-term archive | Owner, 15 November: "Agree, no archive now" (A1531) | `~/waitron-campaign-l/questions.md:1783-1785`; [backlog.md:2235](../backlog.md) |
 | T16, a change of producer | Owner, 11 November, "Later": A993 is built only once a change is scheduled. Its venue-move half is now in question 6 | commit `e59fac8c94`; [backlog.md:246-249](../backlog.md) |
 | T9 and T10, tips | Held by the owner on 6 November until A793 is revived, and A793 is still not approved | [2026-11-06-adviser-questions.md:71-72](2026-11-06-adviser-questions.md); [backlog.md:1283-1286](../backlog.md) |

@@ -407,9 +407,10 @@ own bucket can be with any provider in any country. Nothing warns about this or 
 **What should change.** For a venue's own bucket, either allow only providers established in the
 EU, or warn that one established outside it must first be notified to AEAT.
 
-**Your decision (D8).** Wait for Thursday's question 19 (which company is the third party, and
-whether the provider's home or the data's location counts), then choose? *Recommended: wait, then
-warn rather than restrict.*
+**Your decision (D8).** *Owner, 16 November: Waitron Cloud uses EU data centres, so the question is
+not put to the adviser.* Still open: a venue's own bucket, which can be with any provider in any
+country. Allow only providers established in the EU, or warn that one outside it must first be
+notified to AEAT?
 
 ### B10. Rebuilding invoice copies after a restore
 
@@ -430,7 +431,7 @@ breakdown and totals, but not its dishes. Waitron discards those.
   but are not on the server. Today Waitron can show their numbers and nothing more.
 
 **What should change.** Keep everything AEAT's reply carries for those invoices, so that a copy can
-be rebuilt and shown. Thursday's question 20 asks whether a copy without the dishes is acceptable.
+be rebuilt and shown. Thursday's question 19 asks whether a copy without the dishes is acceptable.
 
 **Your decision (D9).** Build this after Thursday? *Recommended: yes.*
 
@@ -558,8 +559,8 @@ Each is explained in full in its section.
 | D5 | A whole table free: self-supply at cost, or outside VAT | B5 | Per discount reason, after question 16 |
 | D6 | Wrong VAT rate: who works out the difference | B6 | Decided 16 November: a corrections report the accountant files |
 | D7 | Supplier invoice duplicates: number and date | B7 | Yes |
-| D8 | Own backup bucket outside the EU | B9 | Warn, after question 19 |
-| D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 20 |
+| D8 | Own backup bucket outside the EU | B9 | Cloud: EU data centres (16 November). A venue's own bucket: open |
+| D9 | Keep what AEAT returns, to rebuild copies | B10 | Yes, after question 19 |
 | D10 | Date of the sale on lane L's branch | B11 | Decided: after Thursday |
 | D11 | Goodwill refunds without a corrective | B12 | After question 18 |
 | D12 | A filed report never changes: reductions in the current quarter, additions on a corrections report | B13 | Decided 16 November; questions 3(c) and 7 ask the adviser to confirm |
