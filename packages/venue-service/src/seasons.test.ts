@@ -278,8 +278,8 @@ const seasonOnDay = (v: AutumnVenue, day: string) =>
     return days.get(day)?.seasonId;
   });
 const restaurantWeek = (v: AutumnVenue, seasonId: string) =>
-  scoped((tx) => readDepartmentSeasonWeeks(tx, [v.restaurant])).then((weeks) =>
-    weeks.get(v.restaurant)?.get(seasonId),
+  scoped((tx) => readDepartmentSeasonWeeks(tx, [v.restaurant])).then(
+    (weeks) => weeks.get(v.restaurant)?.get(seasonId) ?? EMPTY_WEEK(),
   );
 const terraceWeek = (v: AutumnVenue, seasonId: string) =>
   scoped((tx) => readZoneSeasonWeeks(tx, [v.terrace])).then((weeks) =>
@@ -495,7 +495,8 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await terraceWeek(v, mid.id)).toEqual(v.zoneWeek);
     expect(
-      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar)?.get(mid.id),
+      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar)?.get(mid.id) ??
+        EMPTY_WEEK(),
     ).toEqual(EMPTY_WEEK());
   });
 
@@ -557,9 +558,6 @@ describe("saveSeasons", () => {
     expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
       [],
     );
-    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
-      [],
-    );
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
 
@@ -584,7 +582,7 @@ describe("saveSeasons", () => {
     const daysOf = (seasonId: string) =>
       db.select().from(openingHours).where(eq(openingHours.seasonId, seasonId));
     const summerDays = await daysOf(summer!.id);
-    expect(summerDays).toHaveLength(7);
+    expect(summerDays).toEqual([]);
     expect(await daysOf(autumn!.id)).toEqual([]);
     const saved = await change({
       save: [
@@ -656,8 +654,10 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await restaurantWeek(v, early.id)).toEqual(v.winterWeek);
     expect(await terraceWeek(v, early.id)).toEqual(v.zoneWeek);
-    const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar);
-    expect(barWeeks?.get(mid.id)).toEqual(EMPTY_WEEK());
+    const barWeeks =
+      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar) ??
+      new Map<string, ServiceRange[][]>();
+    expect(barWeeks?.get(mid.id) ?? EMPTY_WEEK()).toEqual(EMPTY_WEEK());
     expect(barWeeks?.has(early.id)).toBe(false);
     expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.winter))).toEqual(
       [],

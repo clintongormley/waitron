@@ -497,16 +497,14 @@ async function specialDay(
     .returning({ id: specialDayDates.id });
   for (const [departmentId, ranges] of Object.entries(options.paint ?? {})) {
     if (ranges.length > 0)
-      await db
-        .insert(openingHours)
-        .values(
-          ranges.map((range) => ({
-            ...range,
-            departmentId,
-            specialDayDateId: dated!.id,
-            kind: range.periodId === null ? ("closed" as const) : ("period" as const),
-          })),
-        );
+      await db.insert(openingHours).values(
+        ranges.map((range) => ({
+          ...range,
+          departmentId,
+          specialDayDateId: dated!.id,
+          kind: range.periodId === null ? ("closed" as const) : ("period" as const),
+        })),
+      );
   }
   for (const [zoneId, ranges] of Object.entries(options.zonePaint ?? {})) {
     if (ranges.length > 0)

@@ -528,7 +528,7 @@ it("reads the categories' routing again when a zone's department changes", () =>
 
 it("reads the categories' routing again when a season week changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  for (const type of ["seasons", "department_days", "department_day_ranges", "opening_hours"])
+  for (const type of ["seasons", "opening_hours"])
     expect(query.dependencies).toContainEqual({ type });
 });
 
@@ -1122,8 +1122,6 @@ it.each(["Zone", "Department"] as const)(
       "routing_cell_periods",
       "service_steps",
       "menu_periods",
-      "department_days",
-      "department_day_ranges",
       "opening_hours",
       "department_transfer_destinations",
       "department_transfer_requests",

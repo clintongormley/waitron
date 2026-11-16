@@ -138,8 +138,8 @@ async function counts(db: Database) {
       (select count(*) from menus) as menus,
       (select count(*) from menu_periods) as periods,
       (select count(*) from menu_periods, json_each(menu_periods.staff_menu_ids)) as staff_menus,
-      (select count(*) from department_days) as timetables,
-      (select count(*) from department_day_ranges) as slots,
+      (select count(*) from (select distinct department_id, season_id, weekday, special_day_date_id from opening_hours where department_id is not null)) as timetables,
+      (select count(*) from opening_hours where department_id is not null) as slots,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
       (select count(*) from routing_cells) as routes`);

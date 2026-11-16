@@ -173,13 +173,12 @@ describe("seedDemoRestaurant", () => {
       starts_at: string;
       ends_at: string;
     }>(sql`
-      select d.name as department, p.name as period, t.weekday, s.starts_at, s.ends_at
-      from department_day_ranges s join menu_periods p on p.id = s.period_id
-      join department_days t on t.id = s.day_id
-      join seasons se on se.id = t.season_id and se.starts_on = '12-01'
+      select d.name as department, p.name as period, s.weekday, s.starts_at, s.ends_at
+      from opening_hours s join menu_periods p on p.id = s.period_id
+      join seasons se on se.id = s.season_id and se.starts_on = '12-01'
       join departments d on d.id = p.department_id
 
-      order by d.name, t.weekday, s.starts_at`);
+      order by d.name, s.weekday, s.starts_at`);
     expect(rows).toEqual([
       ...[1, 2, 3, 4, 5, 6].map((weekday) => ({
         department: "Deli",
@@ -460,11 +459,10 @@ describe("seedDemoRestaurant", () => {
           starts_at: string;
           ends_at: string;
         }>(sql`
-            select t.weekday, s.starts_at, s.ends_at from department_days t
-            join department_day_ranges s on s.day_id = t.id
-            join seasons se on se.id = t.season_id and se.starts_on = '12-01'
-            where t.department_id = ${subject.id}
-            order by t.weekday, s.starts_at`);
+            select s.weekday, s.starts_at, s.ends_at from opening_hours s
+            join seasons se on se.id = s.season_id and se.starts_on = '12-01'
+            where s.department_id = ${subject.id}
+            order by s.weekday, s.starts_at`);
         weeks[subject.name] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
           const slots = ranges.filter((range) => range.weekday === weekday);
           return slots.length === 0
@@ -594,8 +592,7 @@ describe("seedDemoRestaurant", () => {
       }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
-        from department_days h
-        join department_day_ranges s on s.day_id = h.id
+        from opening_hours h
         join seasons se on se.id = h.season_id and se.starts_on = '12-01'
         join departments d on d.id = h.department_id
         group by d.name

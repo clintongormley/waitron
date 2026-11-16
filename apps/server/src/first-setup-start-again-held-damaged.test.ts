@@ -28,7 +28,7 @@ import { cutAfterFirstPage, damageIndexes, damagePages } from "../test/damaged-d
 
 it("a held database with a damaged table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup();
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   expect(await labelOf(f)).toBe("occupied");
   const shown = await unreadableSummary(f);
   expect(shown).toEqual({
@@ -40,7 +40,7 @@ it("a held database with a damaged table: the summary says it cannot be read, an
 
 it("a damaged database whose confirmation shows another summary is refused setup.attempt_conflict, and nothing changes", async () => {
   const f = await heldSetup();
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   const shown = await unreadableSummary(f);
   const { ids, actions } = await withoutSignIn(f);
   await expectStartAgainRefused(
@@ -73,7 +73,7 @@ it("confirmUnreadableDatabase beside a readable database is refused setup.attemp
 it("a damaged recovery-key record beside a damaged database: Start again needs both acknowledgements, and deletes the setup", async () => {
   const f = await heldSetup();
   await damageRecoveryRecord(f);
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   const { ids, actions } = await withoutSignIn(f);
   const shown = await actions.startAgainSummary(ids);
   expect(shown).toEqual({
@@ -104,7 +104,7 @@ it("a damaged recovery-key record beside a damaged database: Start again needs b
 
 it("the Start again route passes confirmUnreadableDatabase on: confirming a damaged database over HTTPS starts again", async () => {
   const f = await heldSetup();
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   const { ids, actions } = await withoutSignIn(f);
   const shown = await actions.startAgainSummary(ids);
   expect(shown).toMatchObject({ databaseUnreadable: true });
@@ -228,7 +228,7 @@ it("an invoice saved only into the -wal beside a main file cut after its first p
 it("a damaged database beside its own -wal, with an invoice the read can see: a confirmed Start again is refused kept-records, and no file changes", async () => {
   const f = await heldSetup({ pendingWal: true, invoices: 1 });
   const wal = await readFile(`${venueDb(f)}-wal`);
-  damagePages(venueDb(f), "department_days");
+  damagePages(venueDb(f), "opening_hours");
   await writeFile(`${venueDb(f)}-wal`, wal);
   await expectHeldRefused(f, keptRecords);
   await expectConfirmedRefused(f, keptRecords);

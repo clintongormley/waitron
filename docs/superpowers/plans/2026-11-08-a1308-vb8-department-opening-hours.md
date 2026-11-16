@@ -213,3 +213,11 @@ vb7. Outside: none beyond vb7's.
 - [ ] **Step 3: Run** Finish-line items 2–5 — PASS.
 - [ ] **Step 4:** Docs; `pnpm protection-list list --out <B>`; `compare`; paste and mark.
 - [ ] **Step 5: Commit** `git commit -s -m "opening hours: department days go; every reader reads opening_hours"`.
+
+## Watcher clearance, 2026-11-16
+
+At 06:05 the watcher cleared up to 1,900 counted handwritten lines for the existing fixture
+and guard ports, and the three raw empty-container assertions to defaulted weeks or absent
+range rows. Public-answer baselines stay unchanged. The 05:51 clearance preserves the current
+no-hours department delete preview: only its existing deletion moves to `opening_hours`.
+Storage read counts combine the old department and zone sources under their shared table name.

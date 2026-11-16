@@ -27,7 +27,7 @@ export function madridWithPeriodChanges(
   const result = structuredClone(original);
   const periods = result.tables.menu_periods!.rows;
   const staffMenus = result.tables.menu_period_staff_menus!.rows;
-  const ranges = result.tables.department_day_ranges!.rows;
+  const ranges = result.tables.opening_hours!.rows;
   const counts = [periods, staffMenus, ranges].map((rows) => Object.keys(rows).length);
 
   const replaced = key("menu_periods", change.department, change.replaced);
@@ -55,25 +55,38 @@ export function madridWithPeriodChanges(
     });
   }
 
-  const weekdays = Object.values(result.tables.department_days!.rows).filter(
-    (row) => row.department_id === change.department && row.weekday !== null,
-  );
-  const days = new Set(weekdays.map((row) => String(row.id)));
+  const days = new Map<string, Record<string, unknown>>();
   for (const [rowKey, row] of Object.entries(ranges)) {
-    if (!days.has(String(row.day_id))) continue;
+    if (row.department_id !== change.department || row.weekday === null) continue;
     if (row.period_id !== replaced)
       throw new Error(`Madrid range not served by the replaced period: ${rowKey}`);
+    const day = {
+      department_id: row.department_id,
+      zone_id: null,
+      season_id: row.season_id,
+      weekday: row.weekday,
+      special_day_date_id: row.special_day_date_id,
+    };
+    days.set(stable(day), day);
     delete ranges[rowKey];
   }
-  for (const dayId of days)
+  for (const day of days.values())
     for (const slot of change.week) {
       const periodId = ids.get(slot.period);
       if (!periodId) throw new Error(`Madrid week names an undeclared period: ${slot.period}`);
-      const id = key("department_day_ranges", dayId, slot.startsAt, slot.endsAt);
+      const id = key(
+        "opening_hours",
+        day.department_id,
+        null,
+        day.season_id,
+        day.special_day_date_id,
+        day.weekday,
+        slot.startsAt,
+      );
       ranges[id] = {
         id,
-        day_id: dayId,
-        department_id: change.department,
+        ...day,
+        kind: "period",
         period_id: periodId,
         starts_at: slot.startsAt,
         ends_at: slot.endsAt,
@@ -102,7 +115,7 @@ export function madridWithPeriodChanges(
     added: {
       menu_periods: menuPeriods!,
       menu_period_staff_menus: staff!,
-      department_day_ranges: dayRanges!,
+      opening_hours: dayRanges!,
     },
   };
 }

@@ -654,7 +654,7 @@ it("with live data, reads the impact again when a day range it counts changes, a
   await new Promise((done) => setTimeout(done, 50));
   expect(reads).toBe(1);
 
-  liveData.invalidate([{ type: "department_day_ranges" }]);
+  liveData.invalidate([{ type: "opening_hours" }]);
   await expect.poll(() => body(dialog)).toContain("Painted in 3 seasons.");
   expect(reads).toBe(3);
 });
@@ -696,7 +696,7 @@ it("with live data, an impact answer that arrives while the list is detached is 
   const el = await mount(request, document.body, liveData);
   const dialog = await removePeriod(el);
   await impactShown(dialog);
-  liveData.invalidate([{ type: "department_day_ranges" }]);
+  liveData.invalidate([{ type: "opening_hours" }]);
   await expect.poll(() => reads).toBe(3);
   el.remove();
   currentImpact = impactOf({ seasons: 2, clockRevision: 4 });

@@ -27,7 +27,7 @@ it("reports a file that is not a database as damaged with errcode 26, nothing co
 
 it("reports damage in one table with errcode 11, keeping every other table's counts", async () => {
   const held = await heldSetup();
-  damagePages(venueDb(held), "department_days");
+  damagePages(venueDb(held), "opening_hours");
   const answer = await readDatabase(held);
   expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
   const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;
@@ -215,7 +215,7 @@ it.each([
 it("a damaged database with no invoice and its own pending -wal is not ready, and changes no file", async () => {
   const held = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(held)}-wal`);
-  damagePages(venueDb(held), "department_days");
+  damagePages(venueDb(held), "opening_hours");
   await writeFile(`${venueDb(held)}-wal`, wal);
   const before = await files(held.roots.venueDir);
   await expect(readDatabase(held)).rejects.toMatchObject({

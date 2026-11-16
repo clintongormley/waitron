@@ -6,10 +6,15 @@ const bar = '@departments:["Bar"]';
 const deli = '@departments:["Deli"]';
 const open = '@menu_periods:["@departments:[\\"Bar\\"]","Open"]';
 const deliOpen = '@menu_periods:["@departments:[\\"Deli\\"]","Open"]';
-const day = (department: string, weekday: number | null, special: string | null = null) =>
-  `@department_days:${JSON.stringify([department, '@seasons:["Winter"]', weekday, special])}`;
-const range = (dayId: string, startsAt: string, endsAt: string) =>
-  `@department_day_ranges:${JSON.stringify([dayId, startsAt, endsAt])}`;
+const day = (department: string, weekday: number | null, special: string | null = null) => ({
+  department_id: department,
+  zone_id: null,
+  season_id: special === null ? '@seasons:["Winter"]' : null,
+  weekday,
+  special_day_date_id: special,
+});
+const range = (coordinates: ReturnType<typeof day>, startsAt: string, _endsAt: string) =>
+  `@opening_hours:${JSON.stringify([coordinates.department_id, null, coordinates.season_id, coordinates.special_day_date_id, coordinates.weekday, startsAt])}`;
 const table = (rows: Record<string, Record<string, unknown>>) => ({
   columns: [],
   foreignKeys: [],
@@ -17,13 +22,14 @@ const table = (rows: Record<string, Record<string, unknown>>) => ({
 });
 const rangeRow = (
   department: string,
-  dayId: string,
+  dayId: ReturnType<typeof day>,
   periodId: string | null,
   startsAt: string,
   endsAt: string,
 ) => ({
   id: range(dayId, startsAt, endsAt),
-  day_id: dayId,
+  ...dayId,
+  kind: periodId === null ? "closed" : "period",
   department_id: department,
   period_id: periodId,
   starts_at: startsAt,
@@ -59,13 +65,7 @@ const original = (): CanonicalMadridSemantics => ({
         display_order: 0,
       },
     }),
-    department_days: table({
-      [day(bar, 0)]: { id: day(bar, 0), department_id: bar, weekday: 0 },
-      [day(bar, 1)]: { id: day(bar, 1), department_id: bar, weekday: 1 },
-      [day(bar, null, "xmas")]: { id: day(bar, null, "xmas"), department_id: bar, weekday: null },
-      [day(deli, 1)]: { id: day(deli, 1), department_id: deli, weekday: 1 },
-    }),
-    department_day_ranges: table(
+    opening_hours: table(
       keyed(
         rangeRow(bar, day(bar, 0), open, "09:00:00", "00:00:00"),
         rangeRow(bar, day(bar, 1), open, "09:00:00", "00:00:00"),
@@ -135,7 +135,7 @@ it("replaces the department's period with the declared ones and every weekday's 
   expect(Object.values(semantics.tables.menu_period_staff_menus!.rows)).toEqual([
     { period_id: lunch, department_id: bar, menu_id: '@catalogues:["Lunch"]', display_order: 0 },
   ]);
-  expect(semantics.tables.department_day_ranges!.rows).toEqual(
+  expect(semantics.tables.opening_hours!.rows).toEqual(
     keyed(
       rangeRow(bar, day(bar, null, "xmas"), null, "10:00:00", "12:00:00"),
       rangeRow(deli, day(deli, 1), deliOpen, "09:00:00", "18:00:00"),
@@ -153,7 +153,7 @@ it("replaces the department's period with the declared ones and every weekday's 
     },
     counter: before.tables.floor_zones!.rows.counter,
   });
-  expect(added).toEqual({ menu_periods: 1, menu_period_staff_menus: 0, department_day_ranges: 2 });
+  expect(added).toEqual({ menu_periods: 1, menu_period_staff_menus: 0, opening_hours: 2 });
   expect(before).toEqual(original());
 });
 
@@ -173,7 +173,7 @@ it("refuses a declared period the capture already holds", () => {
 
 it("refuses a weekday range of the department that another period serves", () => {
   const other = original();
-  other.tables.department_day_ranges!.rows[range(day(bar, 1), "09:00:00", "00:00:00")]!.period_id =
+  other.tables.opening_hours!.rows[range(day(bar, 1), "09:00:00", "00:00:00")]!.period_id =
     deliOpen;
   expect(() => madridWithPeriodChanges(other, change)).toThrow(
     "Madrid range not served by the replaced period",

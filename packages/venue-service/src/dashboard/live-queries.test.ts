@@ -28,8 +28,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "section_members",
     "menus",
     "seasons",
-    "department_days",
-    "department_day_ranges",
     "opening_hours",
     "special_days",
     "special_day_dates",
@@ -52,8 +50,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "section_members",
     "menu_items",
     "seasons",
-    "department_days",
-    "department_day_ranges",
     "opening_hours",
     "special_days",
     "special_day_dates",
@@ -78,8 +74,6 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
 
     "products",
     "seasons",
-    "department_days",
-    "department_day_ranges",
     "opening_hours",
     "special_days",
     "special_day_dates",
@@ -116,8 +110,6 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "routing_cell_periods",
       "service_steps",
       "menu_periods",
-      "department_days",
-      "department_day_ranges",
       "opening_hours",
       "department_transfer_destinations",
       "department_transfer_requests",
@@ -130,12 +122,7 @@ it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
   "refreshes %s when a season or a season week changes",
   (interest) => {
     expect(QUERY_DEPENDENCIES[interest]).toEqual(
-      expect.arrayContaining([
-        "seasons",
-        "department_days",
-        "department_day_ranges",
-        "opening_hours",
-      ]),
+      expect.arrayContaining(["seasons", "opening_hours"]),
     );
   },
 );

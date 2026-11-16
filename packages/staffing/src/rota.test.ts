@@ -11,8 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  departmentDayRanges,
-  departmentDays,
+  openingHours,
   departments,
   menuPeriods,
   seasons,
@@ -146,12 +145,10 @@ async function seasonHours(
   weekday: number,
 ) {
   await tx(async (t) => {
-    const [day] = await t
-      .insert(departmentDays)
-      .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday })
-      .returning({ id: departmentDays.id });
-    await t.insert(departmentDayRanges).values({
-      dayId: day!.id,
+    await t.insert(openingHours).values({
+      kind: "period",
+      seasonId: v.seasonId,
+      weekday,
       departmentId: v.departmentId,
       periodId,
       startsAt: "19:00:00",
@@ -346,12 +343,9 @@ describe("the rota week", () => {
       const fiesta = await specialDay("Fiesta", "2026-12-02");
       if (painted)
         await tx(async (t) => {
-          const [day] = await t
-            .insert(departmentDays)
-            .values({ departmentId: v.departmentId, specialDayDateId: fiesta.dateId })
-            .returning({ id: departmentDays.id });
-          await t.insert(departmentDayRanges).values({
-            dayId: day!.id,
+          await t.insert(openingHours).values({
+            kind: "period",
+            specialDayDateId: fiesta.dateId,
             departmentId: v.departmentId,
             periodId: period,
             startsAt: "13:00:00",

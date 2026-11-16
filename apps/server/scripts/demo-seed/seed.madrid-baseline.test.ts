@@ -1827,21 +1827,31 @@ for (const locale of ["en", "es"] as const) {
         },
       });
       const tables = expected[phase].tables;
-      const rows = Object.values(tables.zone_day_ranges!.rows).map((range) => {
-        const day = tables.zone_days!.rows[String(range.day_id)]!;
+      const rows = [
+        ...Object.values(tables.zone_day_ranges!.rows).map((range) => ({
+          range,
+          day: tables.zone_days!.rows[String(range.day_id)]!,
+          department: false,
+        })),
+        ...Object.values(tables.department_day_ranges!.rows).map((range) => ({
+          range,
+          day: tables.department_days!.rows[String(range.day_id)]!,
+          department: true,
+        })),
+      ].map(({ range, day, department }) => {
         const row = {
-          department_id: null,
-          zone_id: day.zone_id,
+          department_id: department ? day.department_id : null,
+          zone_id: department ? null : day.zone_id,
           season_id: day.season_id,
           weekday: day.weekday,
           special_day_date_id: day.special_day_date_id,
-          period_id: null,
-          kind: range.kind,
+          period_id: department ? range.period_id : null,
+          kind: department ? (range.period_id === null ? "closed" : "period") : range.kind,
           starts_at: range.starts_at,
           ends_at: range.ends_at,
         };
         const id = `@opening_hours:${stable([
-          null,
+          row.department_id,
           row.zone_id,
           row.season_id,
           row.special_day_date_id,
@@ -1889,10 +1899,15 @@ for (const locale of ["en", "es"] as const) {
         })),
         rows: Object.fromEntries(rows.sort(([a], [b]) => a.localeCompare(b))),
       };
+      delete tables.department_days;
+      delete tables.department_day_ranges;
       delete tables.zone_days;
       delete tables.zone_day_ranges;
       expected[phase].tables = byName(tables);
-      phases[phase]!.opening_hours = phases[phase]!.zone_day_ranges!;
+      phases[phase]!.opening_hours =
+        phases[phase]!.zone_day_ranges! + phases[phase]!.department_day_ranges!;
+      delete phases[phase]!.department_days;
+      delete phases[phase]!.department_day_ranges;
       delete phases[phase]!.zone_days;
       delete phases[phase]!.zone_day_ranges;
       phases[phase] = byName(phases[phase]!);

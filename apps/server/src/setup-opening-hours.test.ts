@@ -5,8 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  departmentDayRanges,
-  departmentDays,
+  openingHours,
   departments,
   menuPeriods,
   readOpeningHoursModel,
@@ -177,13 +176,13 @@ describe("setup's saved first opening hours", () => {
   it("has no full-week summary when a weekday has no range", async () => {
     const { department } = await seed();
     const tuesdays = await suite.db
-      .select({ id: departmentDays.id })
-      .from(departmentDays)
-      .where(and(eq(departmentDays.departmentId, department.id), eq(departmentDays.weekday, 2)));
+      .select({ id: openingHours.id })
+      .from(openingHours)
+      .where(and(eq(openingHours.departmentId, department.id), eq(openingHours.weekday, 2)));
     expect(tuesdays.length).toBeGreaterThan(0);
-    await suite.db.delete(departmentDayRanges).where(
+    await suite.db.delete(openingHours).where(
       inArray(
-        departmentDayRanges.dayId,
+        openingHours.id,
         tuesdays.map((day) => day.id),
       ),
     );
@@ -192,7 +191,7 @@ describe("setup's saved first opening hours", () => {
 
   it("does not describe an authored shorter week as the first weekday schedule", async () => {
     await seed();
-    await suite.db.update(departmentDayRanges).set({ endsAt: "16:00:00" });
+    await suite.db.update(openingHours).set({ endsAt: "16:00:00" });
     expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 });

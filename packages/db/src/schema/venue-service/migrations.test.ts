@@ -52,8 +52,6 @@ const TABLES = [
   "seasons",
   "special_days",
   "special_day_dates",
-  "department_days",
-  "department_day_ranges",
   "opening_hours",
 ];
 
@@ -339,21 +337,6 @@ describe("the venue-service tables carry no taxpayer column", () => {
       special_day_dates: {
         primaryKey: ["id"],
         foreignKeys: ["(special_day_id) -> special_days(id) on delete cascade"],
-      },
-      department_days: {
-        primaryKey: ["id"],
-        foreignKeys: [
-          "(department_id) -> departments(id) on delete cascade",
-          "(season_id) -> seasons(id) on delete cascade",
-          "(special_day_date_id) -> special_day_dates(id) on delete cascade",
-        ],
-      },
-      department_day_ranges: {
-        primaryKey: ["id"],
-        foreignKeys: [
-          "(day_id, department_id) -> department_days(id, department_id) on delete cascade",
-          "(period_id, department_id) -> menu_periods(id, department_id)",
-        ],
       },
       opening_hours: {
         primaryKey: ["id"],
@@ -798,11 +781,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into seasons (id, name, starts_on)
       values (${seasonId}, 'Summer', '06-01')`);
     const weekDayId = randomUUID();
-    await db.execute(sql`insert into department_days (id, department_id, season_id, weekday)
-      values (${weekDayId}, ${v.departmentId}, ${seasonId}, 6)`);
-    await db.execute(sql`insert into department_day_ranges
-        (id, day_id, department_id, period_id, starts_at, ends_at)
-      values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
+    await db.execute(sql`insert into opening_hours
+        (id, season_id, weekday, department_id, kind, period_id, starts_at, ends_at)
+      values (${weekDayId}, ${seasonId}, 6, ${v.departmentId}, 'period', ${periodId}, '12:00:00', '16:00:00')`);
     const zoneDayId = randomUUID();
     await db.execute(sql`insert into opening_hours (id, zone_id, season_id, weekday, kind, starts_at, ends_at)
       values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6, 'closed', '15:00:00', '17:00:00')`);
@@ -814,11 +795,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       (await db.execute(sql`select id from opening_hours where id = ${zoneDayId}`)).rows,
     ).toEqual([]);
     expect(
-      (await db.execute(sql`select id from department_days where id = ${weekDayId}`)).rows,
-    ).toEqual([]);
-    expect(
-      (await db.execute(sql`select id from department_day_ranges where day_id = ${weekDayId}`))
-        .rows,
+      (await db.execute(sql`select id from opening_hours where id = ${weekDayId}`)).rows,
     ).toEqual([]);
 
     const specialDayId = randomUUID();
@@ -828,21 +805,15 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into special_day_dates (id, special_day_id, date)
       values (${dateId}, ${specialDayId}, '2026-08-15')`);
     const dateDayId = randomUUID();
-    await db.execute(sql`insert into department_days (id, department_id, special_day_date_id)
-      values (${dateDayId}, ${v.departmentId}, ${dateId})`);
-    await db.execute(sql`insert into department_day_ranges
-        (id, day_id, department_id, period_id, starts_at, ends_at)
-      values (${randomUUID()}, ${dateDayId}, ${v.departmentId}, null, '00:00:00', '23:45:00')`);
+    await db.execute(sql`insert into opening_hours
+        (id, special_day_date_id, department_id, kind, period_id, starts_at, ends_at)
+      values (${dateDayId}, ${dateId}, ${v.departmentId}, 'closed', null, '00:00:00', '23:45:00')`);
     await db.execute(sql`delete from special_days where id = ${specialDayId}`);
     expect(
       (await db.execute(sql`select id from special_day_dates where id = ${dateId}`)).rows,
     ).toEqual([]);
     expect(
-      (await db.execute(sql`select id from department_days where id = ${dateDayId}`)).rows,
-    ).toEqual([]);
-    expect(
-      (await db.execute(sql`select id from department_day_ranges where day_id = ${dateDayId}`))
-        .rows,
+      (await db.execute(sql`select id from opening_hours where id = ${dateDayId}`)).rows,
     ).toEqual([]);
 
     const otherDayId = randomUUID();

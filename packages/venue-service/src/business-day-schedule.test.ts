@@ -18,8 +18,6 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   menus,
-  departmentDayRanges,
-  departmentDays,
   departments,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
@@ -188,12 +186,11 @@ async function fixture(
         );
       }
     } else if (specialDayId) {
-      const dayId = randomUUID();
-      await tx.insert(departmentDays).values({ id: dayId, departmentId, specialDayDateId });
       if (ranges.length)
-        await tx.insert(departmentDayRanges).values(
+        await tx.insert(openingHours).values(
           ranges.map((r) => ({
-            dayId,
+            kind: "period" as const,
+            specialDayDateId,
             departmentId,
             periodId,
             startsAt: `${r.startsAt}:00`,
@@ -218,17 +215,12 @@ async function seasonDay(
     ranges: { startsAt: string; endsAt: string }[];
   },
 ) {
-  const dayId = randomUUID();
-  await tx.insert(departmentDays).values({
-    id: dayId,
-    departmentId: day.departmentId,
-    seasonId: day.seasonId,
-    weekday: day.weekday,
-  });
   if (day.ranges.length)
-    await tx.insert(departmentDayRanges).values(
+    await tx.insert(openingHours).values(
       day.ranges.map((r) => ({
-        dayId,
+        kind: "period" as const,
+        seasonId: day.seasonId,
+        weekday: day.weekday,
         departmentId: day.departmentId,
         periodId: day.periodId,
         startsAt: `${r.startsAt}:00`,
@@ -249,8 +241,7 @@ async function paintedDay(
   },
 ) {
   const specialDayId = randomUUID(),
-    dateId = randomUUID(),
-    dayId = randomUUID();
+    dateId = randomUUID();
   await tx.insert(specialDays).values({
     id: specialDayId,
     name: day.name,
@@ -262,13 +253,11 @@ async function paintedDay(
     date: day.date,
     closedAllDay: day.closedAllDay ?? false,
   });
-  await tx
-    .insert(departmentDays)
-    .values({ id: dayId, departmentId: v.departmentId, specialDayDateId: dateId });
   if (day.ranges.length > 0)
-    await tx.insert(departmentDayRanges).values(
+    await tx.insert(openingHours).values(
       day.ranges.map((r) => ({
-        dayId,
+        kind: r.periodId === null ? ("closed" as const) : ("period" as const),
+        specialDayDateId: dateId,
         departmentId: v.departmentId,
         periodId: r.periodId,
         startsAt: `${r.startsAt}:00`,
@@ -596,13 +585,12 @@ describe("a waiting change checks the hours written while it waits", () => {
       (
         await tx
           .select({
-            weekday: departmentDays.weekday,
-            startsAt: departmentDayRanges.startsAt,
-            endsAt: departmentDayRanges.endsAt,
+            weekday: openingHours.weekday,
+            startsAt: openingHours.startsAt,
+            endsAt: openingHours.endsAt,
           })
-          .from(departmentDayRanges)
-          .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
-          .where(eq(departmentDays.departmentId, v.departmentId))
+          .from(openingHours)
+          .where(eq(openingHours.departmentId, v.departmentId))
       )
         .map((row) => `${row.weekday} ${row.startsAt}-${row.endsAt}`)
         .sort(),
@@ -1486,20 +1474,20 @@ describe("undated hours are checked against the start in force", () => {
         menuId: period!.menuId,
         name: "Other",
       });
-      const dayId = randomUUID();
-      await tx
-        .insert(departmentDays)
-        .values({ id: dayId, departmentId: v.departmentId, seasonId: v.seasonId, weekday: 4 });
-      await tx.insert(departmentDayRanges).values([
+      await tx.insert(openingHours).values([
         {
-          dayId,
+          kind: "period",
+          seasonId: v.seasonId,
+          weekday: 4,
           departmentId: v.departmentId,
           periodId: v.periodId,
           startsAt: "04:30:00",
           endsAt: "05:00:00",
         },
         {
-          dayId,
+          kind: "period",
+          seasonId: v.seasonId,
+          weekday: 4,
           departmentId: v.departmentId,
           periodId: other,
           startsAt: "05:00:00",
@@ -1511,9 +1499,9 @@ describe("undated hours are checked against the start in force", () => {
     await withTransaction(suite.db, (tx) => deletePeriod(tx, other, v.periodId, at, 2));
     const rows = await withTransaction(suite.db, (tx) =>
       tx
-        .select({ startsAt: departmentDayRanges.startsAt, endsAt: departmentDayRanges.endsAt })
-        .from(departmentDayRanges)
-        .where(eq(departmentDayRanges.departmentId, v.departmentId)),
+        .select({ startsAt: openingHours.startsAt, endsAt: openingHours.endsAt })
+        .from(openingHours)
+        .where(eq(openingHours.departmentId, v.departmentId)),
     );
     expect(rows).toEqual([{ startsAt: "04:30:00", endsAt: "06:00:00" }]);
   });
@@ -1797,9 +1785,9 @@ it("rechecks a time writer queued before a clock change commits", async () => {
   await first;
   await refused;
   const saved = await suite.db
-    .select({ endsAt: departmentDayRanges.endsAt })
-    .from(departmentDayRanges)
-    .where(eq(departmentDayRanges.departmentId, v.departmentId));
+    .select({ endsAt: openingHours.endsAt })
+    .from(openingHours)
+    .where(eq(openingHours.departmentId, v.departmentId));
   expect(saved).toEqual([{ endsAt: "17:00:00" }]);
 });
 
@@ -2154,14 +2142,20 @@ async function busyCalendar(count: number, run = 0) {
       departmentsMade.push({ id, lunch, dinner });
       for (const season of seasonIds)
         for (let weekday = 0; weekday < 7; weekday++) {
-          const dayId = randomUUID();
-          await tx
-            .insert(departmentDays)
-            .values({ id: dayId, departmentId: id, seasonId: season.id, weekday });
-          await tx.insert(departmentDayRanges).values([
-            { dayId, departmentId: id, periodId: lunch, startsAt: "12:00:00", endsAt: "15:00:00" },
+          await tx.insert(openingHours).values([
             {
-              dayId,
+              kind: "period",
+              seasonId: season.id,
+              weekday,
+              departmentId: id,
+              periodId: lunch,
+              startsAt: "12:00:00",
+              endsAt: "15:00:00",
+            },
+            {
+              kind: "period",
+              seasonId: season.id,
+              weekday,
               departmentId: id,
               periodId: dinner,
               startsAt: weekday === 6 ? "21:00:00" : "20:00:00",
@@ -2174,8 +2168,7 @@ async function busyCalendar(count: number, run = 0) {
       `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     for (let i = 0; i < count; i++) {
       const namedId = fixed(4, i),
-        namedDateId = fixed(8, i),
-        namedDayId = fixed(9, i);
+        namedDateId = fixed(8, i);
       await tx.insert(specialDays).values({ id: namedId, name: `Named ${i}`, repeatsYearly: true });
       await tx.insert(specialDayDates).values({
         id: namedDateId,
@@ -2183,13 +2176,9 @@ async function busyCalendar(count: number, run = 0) {
         date: date((i % 12) + 1, 2 + (i % 14)),
         closedAllDay: i % 5 === 4,
       });
-      await tx.insert(departmentDays).values({
-        id: namedDayId,
-        departmentId: departmentsMade[0]!.id,
+      await tx.insert(openingHours).values({
+        kind: "period",
         specialDayDateId: namedDateId,
-      });
-      await tx.insert(departmentDayRanges).values({
-        dayId: namedDayId,
         departmentId: departmentsMade[0]!.id,
         periodId: departmentsMade[0]!.lunch,
         startsAt: "05:15:00",
@@ -2206,14 +2195,11 @@ async function busyCalendar(count: number, run = 0) {
         date: date((i % 12) + 1, 1 + (i % 14)),
         closedAllDay: i % 7 === 6,
       });
-      for (const [d, department] of departmentsMade.entries()) {
-        const dayId = fixed(7, i * 3 + d);
-        await tx
-          .insert(departmentDays)
-          .values({ id: dayId, departmentId: department.id, specialDayDateId: dateId });
-        await tx.insert(departmentDayRanges).values([
+      for (const department of departmentsMade) {
+        await tx.insert(openingHours).values([
           {
-            dayId,
+            kind: "period",
+            specialDayDateId: dateId,
             departmentId: department.id,
             periodId: department.dinner,
             startsAt: "20:00:00",
@@ -2222,7 +2208,8 @@ async function busyCalendar(count: number, run = 0) {
           ...(i % 3 === 0
             ? [
                 {
-                  dayId,
+                  kind: "closed" as const,
+                  specialDayDateId: dateId,
                   departmentId: department.id,
                   periodId: null,
                   startsAt: "12:00:00",

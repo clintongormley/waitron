@@ -582,7 +582,10 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 **2026-11-16, A1308 vb7:** your zone's season closures and special-day paint now live in
 `opening_hours`, one row per range with `zone_id` set. An empty week stores no rows.
-Departments still use `department_days` and `department_day_ranges` until vb8.
+**2026-11-16, A1308 vb8:** department season ranges and dated paint now use the same
+`opening_hours` table, with `department_id` set. Season ranges carry `kind = period` and a
+period; a dated closure carries `kind = closed` with no period. An empty day stores no row.
+Configuration format 45 carries these rows and refuses older exports as outdated.
 
 **2026-10-13, A506-5:** named days are gone, and special days hold the calendar's dated choices
 (see "Special days" below). A special-day date stores only what it changes: a department or zone
@@ -864,6 +867,10 @@ acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.te
 **2026-11-16, A1308 vb7:** the day-container descriptions in this earlier account now apply
 only to departments. Zones use the `opening_hours` range rows described above.
 
+**2026-11-16, A1308 vb8:** departments also use those range rows; the day-container account below
+is historical. Empty saved weeks and absent weeks give the same public answers in
+`packages/venue-service/src/season-weeks.test.ts`.
+
 **2026-10-12, A506-1.** `seasons` holds the venue's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
 `zone_days` and `zone_day_ranges` each zone's closed times per season
@@ -961,6 +968,10 @@ are under "Special days" below. The cases are under "season weeks in a configura
 
 **2026-11-16, A1308 vb7:** the account below predates the zone storage move. Current zone
 paint names its date directly on each `opening_hours` range; department day rows remain.
+
+**2026-11-16, A1308 vb8:** department paint also names its date on each `opening_hours` range.
+Deleting its last range leaves no day container to remove; the season shows through where no
+paint remains. The transfer validator now names `opening_hours` fields for that paint.
 
 **2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and a list of dates, possibly empty
 (`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which

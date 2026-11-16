@@ -17,8 +17,6 @@ import {
   configureZone,
   setRoutingCell,
   openingHours,
-  departmentDayRanges,
-  departmentDays,
   departments,
   menuPeriods,
   seasons,
@@ -274,13 +272,17 @@ describe("season staffing", () => {
           .values({ departmentId, menuId, name: "Service" })
           .returning({ id: menuPeriods.id });
         periodIds.set(departmentId, period!.id);
-        const [day] = await tx
-          .insert(departmentDays)
-          .values({ departmentId, seasonId: v.seasonId, weekday })
-          .returning({ id: departmentDays.id });
         await tx
-          .insert(departmentDayRanges)
-          .values({ dayId: day!.id, departmentId, periodId: period!.id, startsAt, endsAt });
+          .insert(openingHours)
+          .values({
+            kind: "period",
+            seasonId: v.seasonId,
+            weekday,
+            departmentId,
+            periodId: period!.id,
+            startsAt,
+            endsAt,
+          });
       }
     });
     await switchOff({ kind: "department", id: closed!.id }, false);
@@ -377,17 +379,22 @@ describe("special-day staffing", () => {
         .values({ departmentId: v.departmentId, menuId, name: "Service" })
         .returning({ id: menuPeriods.id });
       const paint = async (
-        values: typeof departmentDays.$inferInsert,
+        values: Pick<
+          typeof openingHours.$inferInsert,
+          "departmentId" | "seasonId" | "weekday" | "specialDayDateId"
+        >,
         ranges: [periodId: string | null, startsAt: string, endsAt: string][],
       ) => {
-        const [day] = await tx
-          .insert(departmentDays)
-          .values(values)
-          .returning({ id: departmentDays.id });
         for (const [periodId, startsAt, endsAt] of ranges)
           await tx
-            .insert(departmentDayRanges)
-            .values({ dayId: day!.id, departmentId: v.departmentId, periodId, startsAt, endsAt });
+            .insert(openingHours)
+            .values({
+              ...values,
+              kind: periodId === null ? "closed" : "period",
+              periodId,
+              startsAt,
+              endsAt,
+            });
       };
       // 2026-08-14 is a Friday (5) and 2026-08-15 a Saturday (6).
       await paint({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 }, [
@@ -436,17 +443,17 @@ describe("special-day staffing", () => {
         .insert(menuPeriods)
         .values({ departmentId: v.departmentId, menuId, name: "Service" })
         .returning({ id: menuPeriods.id });
-      const [day] = await tx
-        .insert(departmentDays)
-        .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 })
-        .returning({ id: departmentDays.id });
-      await tx.insert(departmentDayRanges).values({
-        dayId: day!.id,
-        departmentId: v.departmentId,
-        periodId: period!.id,
-        startsAt: "19:00:00",
-        endsAt: "23:30:00",
-      });
+      await tx
+        .insert(openingHours)
+        .values({
+          kind: "period",
+          seasonId: v.seasonId,
+          weekday: 5,
+          departmentId: v.departmentId,
+          periodId: period!.id,
+          startsAt: "19:00:00",
+          endsAt: "23:30:00",
+        });
       const [feria] = await tx
         .insert(specialDays)
         .values({ name: "Feria", repeatsYearly: true })
@@ -488,7 +495,6 @@ describe("special-day staffing", () => {
           "special_day_dates",
           "seasons",
           "staffing_days",
-          "department_days",
           "opening_hours",
           "menu_periods",
           "products",
@@ -500,8 +506,7 @@ describe("special-day staffing", () => {
       special_day_dates: 0,
       seasons: 1,
       staffing_days: 1,
-      department_days: 2,
-      opening_hours: 2,
+      opening_hours: 3,
       menu_periods: 1,
       products: 2,
       routing_cells: 1,
@@ -779,17 +784,17 @@ async function guideVenue() {
         colour: "blue",
       })
       .returning();
-    const [day] = await tx
-      .insert(departmentDays)
-      .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 })
-      .returning();
-    await tx.insert(departmentDayRanges).values({
-      dayId: day!.id,
-      departmentId: v.departmentId,
-      periodId: period!.id,
-      startsAt: "12:00:00",
-      endsAt: "16:00:00",
-    });
+    await tx
+      .insert(openingHours)
+      .values({
+        kind: "period",
+        seasonId: v.seasonId,
+        weekday: 5,
+        departmentId: v.departmentId,
+        periodId: period!.id,
+        startsAt: "12:00:00",
+        endsAt: "16:00:00",
+      });
     await setRoutingCell(
       tx,
       { row: { kind: "all" }, zoneId: zone!.id },
@@ -897,17 +902,17 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(menuPeriods)
       .values({ departmentId: department!.id, menuId: v.menuId, name: "Evening", colour: "green" })
       .returning();
-    const [day] = await tx
-      .insert(departmentDays)
-      .values({ departmentId: department!.id, seasonId: v.seasonId, weekday: 5 })
-      .returning();
-    await tx.insert(departmentDayRanges).values({
-      dayId: day!.id,
-      departmentId: department!.id,
-      periodId: period!.id,
-      startsAt: "13:00:00",
-      endsAt: "17:00:00",
-    });
+    await tx
+      .insert(openingHours)
+      .values({
+        kind: "period",
+        seasonId: v.seasonId,
+        weekday: 5,
+        departmentId: department!.id,
+        periodId: period!.id,
+        startsAt: "13:00:00",
+        endsAt: "17:00:00",
+      });
     await setRoutingCell(
       tx,
       { row: { kind: "all" }, zoneId: zone!.id },
@@ -946,12 +951,10 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
       .insert(menuPeriods)
       .values({ departmentId: v.departmentId, menuId: v.menuId, name: "Tea", colour: "blue" })
       .returning();
-    const [day] = await tx
-      .select({ id: departmentDays.id })
-      .from(departmentDays)
-      .where(eq(departmentDays.seasonId, v.seasonId));
-    await tx.insert(departmentDayRanges).values({
-      dayId: day!.id,
+    await tx.insert(openingHours).values({
+      kind: "period",
+      seasonId: v.seasonId,
+      weekday: 5,
       departmentId: v.departmentId,
       periodId: period!.id,
       startsAt: "16:00:00",
@@ -973,17 +976,17 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
 it("A724 a closed own date wins over a repeating open date with sending hours", async () => {
   const v = await guideVenue();
   await inTx(async (tx) => {
-    const [day] = await tx
-      .insert(departmentDays)
-      .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 6 })
-      .returning();
-    await tx.insert(departmentDayRanges).values({
-      dayId: day!.id,
-      departmentId: v.departmentId,
-      periodId: v.periodId,
-      startsAt: "12:00:00",
-      endsAt: "16:00:00",
-    });
+    await tx
+      .insert(openingHours)
+      .values({
+        kind: "period",
+        seasonId: v.seasonId,
+        weekday: 6,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "12:00:00",
+        endsAt: "16:00:00",
+      });
     await tx
       .update(specialDayDates)
       .set({ closedAllDay: true })

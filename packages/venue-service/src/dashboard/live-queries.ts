@@ -142,6 +142,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   holidays: ["taxpayer", "settings.business_day", "settings.venue"],
   "menu-periods-painted-in": [
+    "opening_hours",
     "menu_periods",
     "departments",
     "seasons",

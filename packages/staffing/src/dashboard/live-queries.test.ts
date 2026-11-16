@@ -34,8 +34,6 @@ describe("QUERY_DEPENDENCIES", () => {
       "seasons",
       "special_days",
       "special_day_dates",
-      "department_days",
-      "department_day_ranges",
       "opening_hours",
     ]);
     expect(Object.keys(QUERY_DEPENDENCIES)).toEqual([
