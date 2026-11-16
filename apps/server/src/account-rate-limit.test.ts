@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   ACCOUNT_ACTION_GLOBAL_RATE_MAX,
@@ -54,19 +54,8 @@ describe("password reset cooldown", () => {
   });
 });
 
-describe("account action limits across a backward clock step", () => {
+describe("account action window boundaries", () => {
   const FAR = 400 * 24 * 60 * 60 * 1000;
-
-  it("opens a fresh window when the limiter's window started ahead of the clock", () => {
-    let now = FAR;
-    const limiter = createAccountActionRateLimiter(() => now);
-    for (let i = 0; i < ACCOUNT_ACTION_RATE_MAX; i += 1) limiter.check("account-a");
-    for (let i = ACCOUNT_ACTION_RATE_MAX; i < ACCOUNT_ACTION_GLOBAL_RATE_MAX; i += 1)
-      limiter.check(`account-${i}`);
-    now = FAR - 1;
-    expect(() => limiter.check("account-a")).not.toThrow();
-    expect(() => limiter.check("one-more-account")).not.toThrow();
-  });
 
   it("keeps a full window when the clock reads its start", () => {
     const limiter = createAccountActionRateLimiter(() => FAR);
@@ -74,14 +63,6 @@ describe("account action limits across a backward clock step", () => {
     expect(() => limiter.check("account-a")).toThrowError(
       expect.objectContaining({ code: "account_action.rate_limited" }),
     );
-  });
-
-  it("lets a reset through whose wait ends more than the minute ahead of the clock", () => {
-    let now = FAR;
-    const accept = createPasswordResetCooldown(() => now);
-    expect(accept("person@example.com")).toBe(true);
-    now = FAR - 1;
-    expect(accept("person@example.com")).toBe(true);
   });
 
   it("keeps a reset's wait that ends a minute or less ahead of the clock", () => {
@@ -92,4 +73,45 @@ describe("account action limits across a backward clock step", () => {
     now = FAR + 1;
     expect(accept("person@example.com")).toBe(false);
   });
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+it("keeps the default account-action window through wall-clock steps", () => {
+  let steady = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => steady);
+  const wall = vi.spyOn(Date, "now").mockReturnValue(1_000_000_000_000);
+  const limiter = createAccountActionRateLimiter();
+  for (let i = 0; i < 30; i++) limiter.check("account-a");
+  for (let i = 30; i < 300; i++) limiter.check(`account-${i}`);
+  for (const date of [0, 2_000_000_000_000]) {
+    wall.mockReturnValue(date);
+    for (const key of ["account-a", "one-more-account"]) {
+      expect(() => limiter.check(key)).toThrowError(
+        expect.objectContaining({ code: "account_action.rate_limited" }),
+      );
+    }
+  }
+  steady = 59_999;
+  expect(() => limiter.check("account-a")).toThrowError(
+    expect.objectContaining({ code: "account_action.rate_limited" }),
+  );
+  steady = 60_000;
+  expect(() => limiter.check("account-a")).not.toThrow();
+});
+
+it("keeps the default reset cooldown through wall-clock steps", () => {
+  let steady = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => steady);
+  const wall = vi.spyOn(Date, "now").mockReturnValue(1_000_000_000_000);
+  const accept = createPasswordResetCooldown();
+  expect(accept("person@example.com")).toBe(true);
+  for (const date of [0, 2_000_000_000_000]) {
+    wall.mockReturnValue(date);
+    expect(accept("person@example.com")).toBe(false);
+  }
+  steady = 59_999;
+  expect(accept("person@example.com")).toBe(false);
+  steady = 60_000;
+  expect(accept("person@example.com")).toBe(true);
 });

@@ -1,6 +1,6 @@
 // Keeps `device.join_rate_limited` (errors.ts) reachable from this file, the one code it throws.
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 
 /**
  * A per-process, in-memory fixed-window counter, one per mounted enrol surface with no per-caller
@@ -24,6 +24,7 @@ export interface EnrolRateLimiterOptions {
    * Only the clock is injectable: the window and cap are baked in, so this limiter can never be
    * constructed with a different rate policy than the one it ships.
    */
+  /** Elapsed milliseconds from a clock that never steps back. */
   now?: () => number;
 }
 
@@ -31,21 +32,20 @@ export interface EnrolRateLimiter {
   /**
    * Record one enrol attempt. Throws `device.join_rate_limited` (→ HTTP 429) when this window has
    * already seen {@link ENROL_RATE_MAX} allowed attempts; otherwise returns, having counted this one.
-   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses, or after a backward clock step, opens a
+   * The first call after {@link ENROL_RATE_WINDOW_MS} elapses opens a
    * fresh window and resets the count.
    */
   check(): void;
 }
 
 export function createEnrolRateLimiter(opts: EnrolRateLimiterOptions = {}): EnrolRateLimiter {
-  const { now = Date.now } = opts;
+  const { now = steadyNow } = opts;
   let windowStart = now();
   let count = 0;
   return {
     check(): void {
       const t = now();
-      // A start ahead of the clock was set before a backward clock step.
-      if (t - windowStart >= ENROL_RATE_WINDOW_MS || t < windowStart) {
+      if (t - windowStart >= ENROL_RATE_WINDOW_MS) {
         windowStart = t;
         count = 0;
       }

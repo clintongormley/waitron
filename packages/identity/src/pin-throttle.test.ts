@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   createPinThrottle,
+  pinThrottleIdle,
   PIN_THROTTLE_IDLE_MS,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
-  PIN_THROTTLE_MAX_WAIT_SECONDS,
 } from "./pin-throttle.js";
 import "./errors.js";
 
@@ -115,12 +115,6 @@ describe("the per-(slot, person) PIN-attempt throttle", () => {
 
     now += 1; // clock moves, but the throttled key is still inside its window
     expect(retryAfter(() => throttle.check(DEVICE, PERSON))).toBe(2);
-  });
-
-  it("defaults the clock to Date.now when none is injected", () => {
-    const throttle = createPinThrottle();
-    throttle.recordFailure(DEVICE, PERSON);
-    expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
   });
 });
 
@@ -292,75 +286,30 @@ describe("asking the PIN throttle whether it would refuse", () => {
   });
 });
 
-describe("the PIN throttle across a backward clock step", () => {
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const LONGEST_WAIT_MS = PIN_THROTTLE_MAX_WAIT_SECONDS * 1000;
-  type Throttle = ReturnType<typeof createPinThrottle>;
-  const fail = (throttle: Throttle, person: string, times: number): void => {
-    for (let i = 0; i < times; i++) throttle.recordFailure(DEVICE, person);
-  };
+afterEach(() => vi.restoreAllMocks());
 
-  it("forgets a wait whose last wrong PIN lies more than the longest wait ahead of the clock", () => {
-    let now = 400 * DAY_MS;
-    const throttle = createPinThrottle({ now: () => now });
-    fail(throttle, PERSON, 10);
-    now = 0;
-    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
-    expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
-    throttle.recordFailure(DEVICE, PERSON); // the streak started over: one of the three free
-    expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
-  });
+it("keeps the default PIN wait through wall-clock steps until steady time passes", () => {
+  let steady = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => steady);
+  const wall = vi.spyOn(Date, "now").mockReturnValue(1_000_000_000_000);
+  const throttle = createPinThrottle();
+  for (let i = 0; i < 10; i++) throttle.recordFailure(DEVICE, PERSON);
+  for (const date of [0, 2_000_000_000_000]) {
+    wall.mockReturnValue(date);
+    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(true);
+    expect(retryAfter(() => throttle.check(DEVICE, PERSON))).toBe(60);
+  }
+  steady = 59_999;
+  expect(retryAfter(() => throttle.check(DEVICE, PERSON))).toBe(1);
+  steady = 60_000;
+  expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
+});
 
-  it("forgets a wait one millisecond past the longest wait ahead, and keeps one at it", () => {
-    let now = LONGEST_WAIT_MS + 1;
-    const lapsed = createPinThrottle({ now: () => now });
-    fail(lapsed, PERSON, 10);
-    now = 0;
-    expect(lapsed.wouldRefuse(DEVICE, PERSON)).toBe(false);
-    expect(caught(() => lapsed.check(DEVICE, PERSON))).toBeUndefined();
-
-    now = LONGEST_WAIT_MS;
-    const kept = createPinThrottle({ now: () => now });
-    fail(kept, PERSON, 10);
-    now = 0;
-    expect(kept.wouldRefuse(DEVICE, PERSON)).toBe(true);
-    expect(retryAfter(() => kept.check(DEVICE, PERSON))).toBe(2 * PIN_THROTTLE_MAX_WAIT_SECONDS);
-  });
-
-  it("makes room by dropping a full slot's pairs stamped far ahead of the clock", () => {
-    let now = 400 * DAY_MS;
-    const throttle = createPinThrottle({ now: () => now });
-    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++)
-      throttle.recordFailure(DEVICE, `p-${i}`);
-    now = 0;
-    expect(throttle.wouldRefuse(DEVICE, "newcomer")).toBe(false);
-    expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
-  });
-
-  it("answers as check would for a pair stamped far ahead in a full slot whose sweep stops short of it", () => {
-    let now = 0;
-    const throttle = createPinThrottle({ now: () => now });
-    throttle.recordFailure(DEVICE, "live"); // the oldest entry, and not idle: the sweeps stop here
-    now = 100_000;
-    throttle.recordFailure(DEVICE, PERSON);
-    for (let i = 2; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++)
-      throttle.recordFailure(DEVICE, `p-${i}`);
-    now = 1_000; // a step back: PERSON and every p-i are 99 seconds ahead, lapsed; the slot is full
-    expect(throttle.wouldRefuse(DEVICE, PERSON)).toBe(false);
-    expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
-  });
-
-  it("sweeps past a pair stamped a little ahead of the clock rather than stopping at it", () => {
-    let now = 30_000;
-    const throttle = createPinThrottle({ now: () => now });
-    throttle.recordFailure(DEVICE, "ahead"); // the oldest entry
-    now = 100_000;
-    for (let i = 1; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++)
-      throttle.recordFailure(DEVICE, `p-${i}`);
-    now = 0; // a step back: "ahead" is 30 seconds ahead, not lapsed; every p-i 100 seconds, lapsed
-    expect(throttle.wouldRefuse(DEVICE, "newcomer")).toBe(false);
-    expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
-    fail(throttle, "ahead", 3); // kept: its streak goes on, so the 4th wrong PIN opens a 2-second wait
-    expect(retryAfter(() => throttle.check(DEVICE, "ahead"))).toBe(2);
-  });
+it.each([
+  [60_000, 0, false],
+  [60_001, 0, true],
+  [0, 899_999, false],
+  [0, 900_000, true],
+] as const)("keeps the persisted wall-time idle boundary for last %i at %i", (last, now, idle) => {
+  expect(pinThrottleIdle(last, now)).toBe(idle);
 });

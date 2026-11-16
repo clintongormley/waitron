@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash } from "node:crypto";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 
 export const ACCOUNT_ACTION_RATE_WINDOW_MS = 60_000;
 export const ACCOUNT_ACTION_RATE_MAX = 30;
@@ -13,14 +13,13 @@ export interface AccountActionRateLimiter {
 
 /** Process-local resend spacing, independent of account existence. Call after the flood guard. */
 export function createPasswordResetCooldown(
-  now: () => number = Date.now,
+  now: () => number = steadyNow,
 ): (email: string) => boolean {
   const deadlines = new Map<string, number>();
   return (email) => {
     const current = now();
     for (const [key, deadline] of deadlines) {
-      // A deadline further ahead than the wait was set before a backward clock step.
-      if (deadline <= current || deadline - current > PASSWORD_RESET_COOLDOWN_MS) {
+      if (deadline <= current) {
         deadlines.delete(key);
       }
     }
@@ -33,7 +32,7 @@ export function createPasswordResetCooldown(
 
 /** A process-local flood guard with per-subject isolation and a bounded global ceiling. */
 export function createAccountActionRateLimiter(
-  now: () => number = Date.now,
+  now: () => number = steadyNow,
 ): AccountActionRateLimiter {
   let windowStart = now();
   let globalCount = 0;
@@ -41,8 +40,7 @@ export function createAccountActionRateLimiter(
   return {
     check(subject: string): void {
       const current = now();
-      // A start ahead of the clock was set before a backward clock step.
-      if (current - windowStart >= ACCOUNT_ACTION_RATE_WINDOW_MS || current < windowStart) {
+      if (current - windowStart >= ACCOUNT_ACTION_RATE_WINDOW_MS) {
         windowStart = current;
         globalCount = 0;
         counts.clear();

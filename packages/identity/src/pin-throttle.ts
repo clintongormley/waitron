@@ -1,5 +1,5 @@
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 
 /**
  * An in-memory back-off on wrong PINs, keyed per slot and person (spec §5). The slot is the device
@@ -30,6 +30,7 @@ export const PIN_THROTTLE_FULL_RETRY_SECONDS = 60;
 
 export interface PinThrottleOptions {
   /** The policy constants above are deliberately NOT injectable; only the clock is. */
+  /** Elapsed milliseconds from a clock that never steps back. */
   now?: () => number;
 }
 
@@ -64,7 +65,7 @@ export function pinThrottleIdle(lastAt: number, t: number): boolean {
 }
 
 function isIdle(entry: Entry, t: number): boolean {
-  return pinThrottleIdle(entry.lastAt, t);
+  return t - entry.lastAt >= PIN_THROTTLE_IDLE_MS;
 }
 
 function waitSecondsFor(fails: number): number {
@@ -81,10 +82,8 @@ export function pinThrottleRetryAfterSeconds(unlockAt: number, t: number): numbe
 }
 
 export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
-  const { now = Date.now } = opts;
-  // Kept in order of `lastAt`, oldest first: every touch moves its entry to the end. Only a
-  // backward clock step breaks that order, so the sweeps pass over an entry stamped ahead of the
-  // clock rather than stopping at it.
+  const { now = steadyNow } = opts;
+  // Kept in order of `lastAt`, oldest first: every touch moves its entry to the end.
   const entries = new Map<string, Entry>();
   const heldBySlot = new Map<string, number>();
 
@@ -116,7 +115,7 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
   function hasRoom(slot: string, t: number): boolean {
     for (const [key, entry] of entries) {
       if (isIdle(entry, t)) drop(key, entry);
-      else if (entry.lastAt <= t) break;
+      else break;
     }
     return (heldBySlot.get(slot) ?? 0) < PIN_THROTTLE_MAX_KEYS_PER_SLOT;
   }
@@ -154,7 +153,7 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       for (const kept of entries.values()) {
         if (isIdle(kept, t)) {
           if (kept.slot === slot) idleInSlot += 1;
-        } else if (kept.lastAt <= t) break;
+        } else break;
       }
       return (heldBySlot.get(slot) ?? 0) - idleInSlot >= PIN_THROTTLE_MAX_KEYS_PER_SLOT;
     },

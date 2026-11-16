@@ -6,7 +6,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   activityLog,
   departments,
@@ -413,6 +413,8 @@ describe("the till keeps a zone open today", () => {
     expect(await zoneRows()).toEqual([]);
   });
   it("throttles wrong manager PINs for zone extensions", async () => {
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    onTestFinished(() => clock.mockRestore());
     for (let i = 0; i < 4; i++) {
       const answer = await call(
         "PUT",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   ENROL_RATE_MAX,
@@ -43,26 +43,31 @@ describe("the enrol fixed-window rate limiter", () => {
     now += ENROL_RATE_WINDOW_MS; // advance to the start of the next window (>= the window since it opened)
     expect(caught(() => limiter.check())).toBeUndefined(); // new window: allowed again
   });
-
-  it("defaults the clock to Date.now when none is injected", () => {
-    const limiter = createEnrolRateLimiter();
-    expect(caught(() => limiter.check())).toBeUndefined();
-  });
 });
 
-describe("the enrol rate limiter across a backward clock step", () => {
-  it("opens a fresh window when its window started ahead of the clock", () => {
-    let now = 400 * 24 * 60 * 60 * 1000;
-    const limiter = createEnrolRateLimiter({ now: () => now });
-    for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
-    now -= 1;
-    expect(caught(() => limiter.check())).toBeUndefined();
-  });
-
+describe("the enrol rate limiter at its window boundary", () => {
   it("keeps a full window when the clock reads its start", () => {
     const now = 400 * 24 * 60 * 60 * 1000;
     const limiter = createEnrolRateLimiter({ now: () => now });
     for (let i = 0; i < ENROL_RATE_MAX; i++) limiter.check();
     expect(isAppError(caught(() => limiter.check()))).toBe(true);
   });
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+it("keeps the default enrol window through wall-clock steps", () => {
+  let steady = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => steady);
+  const wall = vi.spyOn(Date, "now").mockReturnValue(1_000_000_000_000);
+  const limiter = createEnrolRateLimiter();
+  for (let i = 0; i < 30; i++) limiter.check();
+  for (const date of [0, 2_000_000_000_000]) {
+    wall.mockReturnValue(date);
+    expect(caught(() => limiter.check())).toMatchObject({ code: "device.join_rate_limited" });
+  }
+  steady = 59_999;
+  expect(caught(() => limiter.check())).toMatchObject({ code: "device.join_rate_limited" });
+  steady = 60_000;
+  expect(caught(() => limiter.check())).toBeUndefined();
 });
