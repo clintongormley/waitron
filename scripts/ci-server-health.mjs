@@ -11,22 +11,34 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
-    const answer = await request(
-      `${path}${path.includes("?") ? "&" : "?"}per_page=${pageSize}&page=${page}`,
-    );
-    assert.ok(
+    const requestPath = `${path}${path.includes("?") ? "&" : "?"}per_page=${pageSize}&page=${page}`;
+    const answer = await request(requestPath);
+    const unavailable = (message) => {
+      const ids = (rows) =>
+        Array.isArray(rows)
+          ? rows
+              .map((row) => row?.id)
+              .filter(Number.isSafeInteger)
+              .sort((a, b) => a - b)
+              .join(",")
+          : "invalid";
+      return new InventoryUnavailable(
+        `${message}; path=${requestPath}; page=${page}; read=${reread ? 1 : 2}; ` +
+          `starting_total=${Number.isSafeInteger(total) ? total : "invalid"}; ` +
+          `reply_total=${Number.isSafeInteger(answer.total_count) ? answer.total_count : "invalid"}; ` +
+          `rows=${entries.length}; ids=${ids(entries)}; page_ids=${ids(answer[key])}`,
+      );
+    };
+    if (!(
       Number.isSafeInteger(answer.total_count) &&
-        answer.total_count >= 0 &&
-        (limit !== undefined || answer.total_count <= 1000) &&
-        Array.isArray(answer[key]),
-      new InventoryUnavailable("Incomplete server inventory"),
-    );
+      answer.total_count >= 0 &&
+      (limit !== undefined || answer.total_count <= 1000) &&
+      Array.isArray(answer[key])
+    ))
+      throw unavailable("Incomplete server inventory");
     total ??= answer.total_count;
     entries.push(...answer[key]);
-    assert.ok(
-      entries.length <= answer.total_count,
-      new InventoryUnavailable("Incomplete server inventory"),
-    );
+    if (!(entries.length <= answer.total_count)) throw unavailable("Incomplete server inventory");
     assert.ok(
       new Set(entries.map((entry) => entry.id)).size === entries.length,
       new InventoryUnavailable("Duplicate server inventory"),
@@ -41,11 +53,7 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
         false,
         !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
       );
-    assert.equal(
-      answer.total_count,
-      total,
-      new InventoryUnavailable("Incomplete server inventory"),
-    );
+    if (answer.total_count !== total) throw unavailable("Incomplete server inventory");
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
     if (!answer[key].length) {
@@ -73,12 +81,10 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
         return entries;
       }
     }
-    assert.ok(
-      answer[key].length > 0,
-      new InventoryUnavailable(
+    if (!(answer[key].length > 0))
+      throw unavailable(
         `Incomplete server inventory: empty page after ${entries.length} of ${total} entries`,
-      ),
-    );
+      );
   }
 }
 

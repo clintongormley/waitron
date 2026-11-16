@@ -342,6 +342,8 @@ busy-server choices. The bundle stays open; these records
 supply no full-day queue or speed result. Keep the corrected v41 controller and the
 [13 November measured-memory decision](#decisions-and-deliberate-limits).
 
+- **Planner rescue inventory refusal:** [Server health 43823616837](https://github.com/clintongormley/waitron/actions/runs/43823616837) refused `recover-planners` at 07:24:53Z on 16 November (1 of 2 entries); [43828425789](https://github.com/clintongormley/waitron/actions/runs/43828425789) refused `check` at 08:05:32Z (3 of 4). The failing endpoint and cause remain unknown. Use the next refusal’s request path, page, read, totals and numeric IDs to reproduce and fix that cause; the added context does not repair overflow.
+
 - **A1424 / A1440: remaining real-run qualification.** Each line names the evidence that would close that gap; do not drain other lanes or repeat the completed rescue drill.
   - Agreeing-row inventory exception: one natural ordinary CI run logs `Stale queued CI inventory count` with IDs, rows, both starting counts and cutoff, then completes on its selected runners at the recorded workflow/module commit. Every other list stays strict.
   - Idle probe: one scheduled Server health run dispatches a probe during genuine idle capacity, followed by its first-attempt server pickup and successful aggregate; a manual probe or hosted retry cannot close it.
