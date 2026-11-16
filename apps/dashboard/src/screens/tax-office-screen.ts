@@ -168,6 +168,7 @@ export class TaxOfficeScreen extends LitElement {
   /** An Open that failed; kept apart from a read's message so neither clears the other. */
   @state() private actionError = "";
   @state() private opening: ReadonlySet<string> = new Set();
+  @state() private downloadingMonth = false;
   #read = 0;
   /** The filter of the read last sent, so the address change this screen writes does not send it twice. */
   #requested?: string;
@@ -327,6 +328,59 @@ export class TaxOfficeScreen extends LitElement {
       rest.delete(invoice.id);
       this.opening = rest;
     }
+  }
+
+  /** The `YYYY-MM` of the issue range's start, or null while that date is not a whole date. */
+  #month(): string | null {
+    const from = this.filter.from;
+    return from !== undefined && DAY.test(from) ? from.slice(0, 7) : null;
+  }
+
+  async #downloadMonth(): Promise<void> {
+    const month = this.#month();
+    if (month === null || this.downloadingMonth) return;
+    this.downloadingMonth = true;
+    this.actionError = "";
+    try {
+      const file = await this.api.downloadTaxOfficeMonth(month);
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? `invoices-${month}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.actionError = codeMessage(codeOf(error));
+    } finally {
+      this.downloadingMonth = false;
+    }
+  }
+
+  #monthAction() {
+    const month = this.#month();
+    const name =
+      month === null
+        ? ""
+        : new Intl.DateTimeFormat(currentLocale(), {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${month}-01T00:00:00Z`));
+    return html`<wt-button
+      data-test="download-month"
+      variant=${month === null ? "secondary" : "primary"}
+      ?disabled=${month === null}
+      ?loading=${this.downloadingMonth}
+      @click=${() => void this.#downloadMonth()}
+      >${
+        month === null
+          ? t("tax_office.download_no_month")
+          : fill(
+              this.downloadingMonth ? "tax_office.downloading_month" : "tax_office.download_month",
+              { month: name },
+            )
+      }</wt-button
+    >`;
   }
 
   #columns(): DataTableColumn<TaxOfficeInvoiceDto>[] {
@@ -494,7 +548,7 @@ export class TaxOfficeScreen extends LitElement {
       </p>
       <div class="filters">
         ${this.#dateField("from", "tax_office.issued_from", true)}
-        ${this.#dateField("to", "tax_office.issued_to", true)}
+        ${this.#dateField("to", "tax_office.issued_to", true)} ${this.#monthAction()}
         ${this.#textField("q", "tax_office.search", "tax_office.search_hint", false)}
         ${this.#textField("amount", "tax_office.amount", "tax_office.amount_hint", true)}
         ${this.#textField("rate", "tax_office.rate", null, true)}

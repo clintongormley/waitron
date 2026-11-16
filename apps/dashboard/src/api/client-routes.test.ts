@@ -1573,6 +1573,27 @@ it("downloads one of the tax office's invoices as a POST, bytes untouched", asyn
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
 });
 
+it("downloads a month of tax-office invoices as a POST, with the server's file name", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
+      status: 200,
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition": 'attachment; filename="invoices-2026-03.zip"',
+      },
+    }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+
+  const file = await api.downloadTaxOfficeMonth("2026-03");
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/months/2026-03", "POST", undefined],
+  ]);
+  expect(file.fileName).toBe("invoices-2026-03.zip");
+  expect([...new Uint8Array(await file.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
+});
+
 it("downloads the accountant workbook for the chosen calendar dates as a POST, bytes untouched", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([0x50, 0x4b, 3, 4])));
   const api = new DashboardApi("", fetchImpl);
