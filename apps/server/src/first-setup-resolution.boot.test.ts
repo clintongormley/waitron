@@ -451,6 +451,7 @@ async function startIn(mode: Mode, roots: { stateDir: string; venueDir: string }
       assertNotAhead: async () => {},
       startServer,
       serveRecovery: async (app, options) => {
+        expect(options.port).toBe(3000);
         const server = await serveRecovery(app, options);
         closes.push(() => closeListener(server));
       },
@@ -649,6 +650,7 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
     loadBoxEnv: async (base) => base,
     startServer: stopped,
     serveRecovery: async (app, options) => {
+      expect(options.port).toBe(3000);
       const server = await serveRecovery(app, options);
       closes.push(() => closeListener(server));
     },
