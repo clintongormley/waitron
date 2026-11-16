@@ -560,14 +560,14 @@ async function parseProvisionPayload(
   hostEnvironment: DeploymentEnvironment,
   devMode: boolean,
   acceptLanguage: string | undefined,
-): {
+): Promise<{
   mode: "demo" | "prepare" | "live";
   request: ProvisionRequest;
   contribution: FiscalContribution;
   secret: FiscalContribution["provisioningSecret"];
   secretExpected: boolean;
   rawSecret: unknown;
-} {
+}> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     invalidRequest("body");
   }
