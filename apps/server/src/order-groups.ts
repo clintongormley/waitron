@@ -2282,15 +2282,15 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     const firedTimes = kitchenItems.flatMap((component) =>
       component.ticketFiredAt === null ? [] : [component.ticketFiredAt],
     );
-    const firedAt = allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null;
+    const firedAt = allFired && isReleased(line) ? (earliestTime(firedTimes) ?? line.sentAt) : null;
     const initiatedTimes = kitchenItems.map((component) =>
       initiatedAt({ requestedAt: component.ticketRequestedAt, firedAt: component.ticketFiredAt }),
     );
     const requestedAt =
       kitchenItems.length === 0
         ? firedAt
-        : initiatedTimes.every((time) => time !== null)
-          ? initiatedTimes.sort()[0]!
+        : initiatedTimes.every((time): time is string => time !== null)
+          ? earliestTime(initiatedTimes)!
           : null;
     const readyTimes = kitchenItems.flatMap((component) =>
       component.ticketState === "ready" && component.ticketReadyAt !== null
@@ -2307,7 +2307,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       requestedAt,
       readyAt:
         kitchenItems.length > 0 && allFired && readyTimes.length === kitchenItems.length
-          ? readyTimes.sort().at(-1)!
+          ? latestTime(readyTimes)!
           : null,
       lineId: line.id,
       ...(line.sentAt === null ? {} : { sentAt: line.sentAt }),
@@ -2664,6 +2664,22 @@ export async function correctJoin(
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */
+/** Stored times are compared as moments, since a writer may spell one with an offset; the winner
+ * is returned as stored. */
+function earliestTime(times: readonly string[]): string | undefined {
+  return times.reduce<string | undefined>(
+    (best, time) => (best === undefined || Date.parse(time) < Date.parse(best) ? time : best),
+    undefined,
+  );
+}
+
+function latestTime(times: readonly string[]): string | undefined {
+  return times.reduce<string | undefined>(
+    (best, time) => (best === undefined || Date.parse(time) > Date.parse(best) ? time : best),
+    undefined,
+  );
+}
+
 function isWholeLine(quantity: string, stored: number): boolean {
   try {
     return stringToThousandths(quantity) === stored;
