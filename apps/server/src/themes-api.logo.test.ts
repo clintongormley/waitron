@@ -356,7 +356,7 @@ describe("refusals", () => {
     const real = themeLogoModule.printedLogoFor;
     vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
       const dots = await real(snapshot);
-      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, dark.image.id));
+      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, dark.image.id, null));
       expect(result.deleted).toBe(true);
       return dots;
     });
@@ -379,7 +379,7 @@ describe("refusals", () => {
     const real = themeLogoModule.printedLogoFor;
     vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
       const dots = await real(snapshot);
-      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, light.image.id));
+      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, light.image.id, null));
       expect(result.deleted).toBe(true);
       return dots;
     });
@@ -424,7 +424,7 @@ describe("refusals", () => {
     vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
       const dots = await real(snapshot);
       again = await withTransaction(suite.db, async (tx) => {
-        expect((await deleteImage(tx, first.image.id)).deleted).toBe(true);
+        expect((await deleteImage(tx, first.image.id, null)).deleted).toBe(true);
         return (await uploadImage(tx, { image: prepared, names: { en: "Light" } })).image;
       });
       return dots;
