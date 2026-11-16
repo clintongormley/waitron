@@ -660,7 +660,7 @@ describe("isBusinessDayConflict", () => {
     expect(isBusinessDayConflict(conflict)).toBe(true);
   });
 
-  it("recognises one wrapped in a DrizzleQueryError-style cause chain", () => {
+  it("recognises one wrapped in a cause chain", () => {
     expect(isBusinessDayConflict({ cause: { cause: conflict } })).toBe(true);
   });
 

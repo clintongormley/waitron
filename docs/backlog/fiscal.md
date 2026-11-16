@@ -150,9 +150,8 @@ No stored fiscal row is to be rewritten.
   states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
   change: test titles still say "jsonb" (`verify-daily-close-chain.test.ts:70`), "tenant"
   (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
-  `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`), "spec §12"
-  (`top-sellers.test.ts:307`) and "DrizzleQueryError-style" (`record-daily-close.test.ts:342`, not
-  checked). `toDr303Record` (`src/dr303.ts`) does not cross-check a monthly total against a
+  `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`) and "spec §12"
+  (`top-sellers.test.ts:307`). `toDr303Record` (`src/dr303.ts`) does not cross-check a monthly total against a
   quarterly period code such as "4T"; a test pins that and the one route that builds the file
   takes both from the same code, so it looks deliberate — worth the owner's eye because it is a
   tax file. The top-sellers fixtures give most lines no kitchen name, where CLAUDE.md §3 asks all

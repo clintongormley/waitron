@@ -457,7 +457,7 @@ describe("isRefusal (@waitron/db result-code cause-walk, as printers.ts uses it)
     );
   });
 
-  it("recognises a violation wrapped in a cause chain (drizzle wraps the real error)", () => {
+  it("recognises a violation wrapped in a cause chain", () => {
     const inner = Object.assign(new Error("unique"), { errcode: 2067 });
     expect(
       isRefusal(

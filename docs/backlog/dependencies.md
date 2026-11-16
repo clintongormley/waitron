@@ -3,18 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Dependency upgrades". This file holds
 their full text.
 
-## Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed
-
-Left open by #1139. Still naming
-0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:332` and
-`packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
-`packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:332` and
-`docs/backlog.md` (the 0.45.2 unnamed-`unique()` note under _CI, tests and developer tooling_), none of them re-checked against 0.45.3.
-Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conventions-data.md:2419`,
-`:2444` and `:2481`.
-0.45.4 arrived with #1760 (A775, 2026-10-16).
-**Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
-
 ## Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7
 
 Left open by #460.

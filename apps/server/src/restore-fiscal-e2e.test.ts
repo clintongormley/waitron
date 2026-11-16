@@ -328,7 +328,7 @@ beforeAll(async () => {
     version: "6",
     // Drizzle replays an entry only when its `when` is later than the newest applied row's
     // created_at, and every shipped `when` is in the past
-    // (`drizzle-orm@0.45.2/sqlite-core/dialect.js:660`).
+    // (`drizzle-orm@0.45.4/sqlite-core/dialect.js:660`).
     when: Date.now(),
     tag: extraTag,
     breakpoints: true,

@@ -501,9 +501,9 @@ emitted SQL with `.toSQL()`.
 
 `writeItems` in `packages/menu/src/extras.ts` inserted each of an extras list's items with a
 bare `.onConflictDoNothing()` and read "nothing came back" as "another transaction already holds
-this id". Verified with `.toSQL()` on drizzle 0.45.2: the untargeted call emits
+this id". Verified with `.toSQL()` on drizzle 0.45.4 (2026-11-16): the untargeted call emits
 `… on conflict do nothing`, and the same insert with `{ target: extraListItems.id }` emits
-`… on conflict ("id") do nothing`. The table also carries
+`… on conflict ("extra_list_items"."id") do nothing`. The table also carries
 `extra_list_items_list_product_uq` over `(list_id, product_id)`, so the bare clause swallowed a
 PRODUCT collision too: a body adding an item for the product a retained item was moving away from
 came back as `extras.invalid` naming `items.0.id`, an `id` field that body never sent, which breaks
@@ -4189,7 +4189,7 @@ against such an edit: the 2026-10-02 one passed the old guard
 
 Never from a position in the journal file, so an entry whose `when` sits AT OR BELOW one the database
 already recorded never runs, and DRIZZLE raises nothing — it applies part of a set and returns
-cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.3/sqlite-core/dialect.js`,
+cleanly. The dialect that runs is `sqlite-core`: in `drizzle-orm@0.45.4/sqlite-core/dialect.js`,
 `SQLiteSyncDialect.migrate` takes the watermark with
 `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1` at lines 653-655 and
 applies a migration only when
@@ -4203,7 +4203,7 @@ which is also where they are kept current.
 and `packages/provisioning/src/errors.ts` — point at `CLAUDE.md` §3, and so here, instead of
 repeating the citation. That is where the pointer stops: the citation is still restated under
 `packages/`, `scripts/`, `apps/` and `docs/` — `git ls-files | xargs grep -ln 'dialect.js'` finds
-every copy — and nothing enforces the pointer, so a drizzle bump starts with that grep and fixes
+every copy — and nothing enforces the pointer, so a drizzle bump also runs that grep and fixes
 each one by hand.
 
 **The core journal's contradictory shape went with the history that had it.** A database at core
@@ -4226,7 +4226,7 @@ that every journal is on disk.
 ## A migration file's last statement takes no trailing `--> statement-breakpoint`
 
 Drizzle's migrator splits each file on `--> statement-breakpoint` and keeps every piece, empty ones
-included (`drizzle-orm` 0.45.3, `migrator.js`, the `query.split(...)` in `readMigrationFiles`), and
+included (`drizzle-orm` 0.45.4, `migrator.js`, the `query.split(...)` in `readMigrationFiles`), and
 this engine refuses an empty statement: measured 2026-10-03 on `node:sqlite`, Node v26.7.0,
 `prepare("").run()` and `prepare("\n").run()` each threw `statement has been finalized`, while
 `prepare("create table t(a)\n").run()` ran. So a hand-written migration whose last statement ends in a
@@ -6006,7 +6006,7 @@ reads the built schema rather than trying an offending insert, and matches a uni
 **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
 so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
 `scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
-bump starts with `grep -rn 'dialect.js'`.
+bump starts with a grep for the outgoing version number and `grep -rn 'dialect.js'`.
 
 **2026-11-12 update:** the historical boot/bucket-only statement below now has the A950
 upgrade data checker as a third caller; see the current ahead-of-image section above.

@@ -981,7 +981,7 @@ Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
   [Detail](#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
 - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and
   `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
-  0.45.2 names an unnamed `unique()` itself, so nothing reaches it
+  0.45.4 names an unnamed `unique()` itself, so nothing reaches it
   (`packages/db/src/testing/schema-conformance.ts`) (#559).
 - In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES
   ANYTHING" repeats the first case under another name (a test change, not a comment one; #589).
