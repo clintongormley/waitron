@@ -19,8 +19,8 @@ export function withPassiveManagementRead<T>(read: () => T): T {
 
 const inspectorAdmitted = new AsyncLocalStorage<boolean>();
 
-/** Runs a route a session holding `invoice.inspect` alone may use; outside this and `authorizeManager`
- * checking `invoice.inspect`, `resolveManagementSession` refuses it. */
+/** Lets a session holding `invoice.inspect` alone past the inspection-only refusal inside `route`;
+ * the route's own permission checks still apply. */
 export function withInspectorAdmitted<T>(route: () => T): T {
   return inspectorAdmitted.run(true, route);
 }
