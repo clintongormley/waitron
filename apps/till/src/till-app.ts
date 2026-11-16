@@ -3584,9 +3584,10 @@ export class TillApp extends LitElement {
    * a reader that did not answer; on the bill path, a send left unanswered or answered `not_checked`.
    * Neither path learns that card's fate later, so a bill stays marked for the page. */
   readonly #unknownCardOutcome = new Set<string>();
-  /** Orders whose last counter sale send (pay, collect, the reader on the counter or the presented
-   * sheet) left the outcome unknown: no answer, or a handover refusal after one. Whole payments keep
-   * theirs in `#unansweredWholePayments`. */
+  /** Orders with a counter sale send (pay, collect, the reader on the counter or the presented
+   * sheet) that got no answer, and no answer to a send for the order since. A refusal does not
+   * clear one: some are answered before the server looks for the sale that send may have recorded.
+   * Whole payments keep theirs in `#unansweredWholePayments`. */
   readonly #unansweredSales = new Set<string>();
   @state() private presentedPaying: PresentedPaying | null = null;
   #presentedPays = 0;
@@ -4047,12 +4048,15 @@ export class TillApp extends LitElement {
 
   /** Notes how a sale send for order `id` ended, answering whether its outcome is unknown. */
   #saleSendEnded(id: string, error?: unknown): boolean {
-    const unknown =
-      error !== undefined &&
-      (isNetworkFailure(error) || unknownAfterHandover(error, this.#unansweredSales.has(id)));
-    if (unknown) this.#unansweredSales.add(id);
-    else this.#unansweredSales.delete(id);
-    return unknown;
+    if (error === undefined) {
+      this.#unansweredSales.delete(id);
+      return false;
+    }
+    if (isNetworkFailure(error)) {
+      this.#unansweredSales.add(id);
+      return true;
+    }
+    return unknownAfterHandover(error, this.#unansweredSales.has(id));
   }
 
   /** The presented sheet `open` shows the hold's refusal, answering whether one holds its bill. */

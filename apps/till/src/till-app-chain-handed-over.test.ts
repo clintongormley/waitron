@@ -331,6 +331,75 @@ it.each(
   },
 );
 
+const notPermitted = {
+  code: "authorization.not_permitted",
+  status: 403,
+  permission: "payment.take",
+};
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["manual", "reader", "collect"] as const).map((method) => ({ locale, method })),
+  ),
+)(
+  "keeps a $method counter sale unconfirmed through a refused tap before a box handing over refuses, in $locale",
+  async ({ locale, method }) => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockRejectedValueOnce(notPermitted)
+      .mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { [sendOf[method]]: write });
+    const screen = await openCounter(el);
+    const tap = () =>
+      emit(screen, eventOf[method], method === "reader" ? {} : { method: "card", amount: "3.00" });
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("take_payment.not_permitted"));
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(write.mock.calls[2]).toEqual(write.mock.calls[0]);
+    const shown = banner(el)?.textContent?.trim();
+    expect(shown).not.toBe(t("sale.chain_handed_over_manual_card"));
+    expect(shown).not.toMatch(locale === "es-ES" ? /datáfono/ : /terminal/);
+    expect(shown).not.toBe(codeMessage("handover.stepping_down"));
+    expect(shown).not.toMatch(locale === "es-ES" ? /traspasando el local/ : /handing over/);
+    expect(shown).toBe(t("sale.unconfirmed"));
+    expect(shown).toMatch(unconfirmedWords(locale));
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "names a box handing over on a reader counter sale once an answer follows the unanswered tap, in %s",
+  async (locale) => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockResolvedValueOnce({ outcome: "declined" })
+      .mockRejectedValue(steppingDown);
+    const { el } = await mount(locale, { pay: write });
+    const screen = await openCounter(el);
+    const tap = () => emit(screen, "collect-card", {});
+    tap();
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.unconfirmed"));
+    tap();
+    await flush(el);
+    tap();
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(write.mock.calls[2]).toEqual(write.mock.calls[0]);
+    expect(banner(el)?.textContent?.trim()).toBe(codeMessage("handover.stepping_down"));
+    expect(banner(el)?.textContent).toMatch(
+      locale === "es-ES" ? /traspasando el local/ : /handing over/,
+    );
+  },
+);
+
 it.each(
   ["en-GB", "es-ES"].flatMap((locale) =>
     (["reader", "collect"] as const).map((method) => ({ locale, method })),
