@@ -301,32 +301,41 @@ describe("a box holding a handover restriction starts restricted", () => {
     });
   }, 60_000);
 
-  it("refuses a till sign-in", async () => {
+  it("refuses a till sign-in with the handover code", async () => {
     const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ pin: "1234" }),
     });
-    expect([403, 404]).toContain(response.status);
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 503,
+      body: { error: { code: "handover.stepping_down", params: {} } },
+    });
   }, 60_000);
 
   it("mounts no dashboard, till, print or device route", async () => {
     const { port, venue } = start();
-    const probes: [string, string][] = [
-      ["GET", "/management-api/alerts"],
-      ["GET", "/management-api/menu-settings"],
-      ["DELETE", "/api/session"],
-      ["GET", "/api/device/active-profile"],
-      ["POST", "/api/device/enrol"],
-      ["GET", "/print-api/agent/jobs"],
+    // A POST under /api/ that nothing serves gets the handover refusal; every other probe a 404.
+    const probes: [string, string, number][] = [
+      ["GET", "/management-api/alerts", 404],
+      ["GET", "/management-api/menu-settings", 404],
+      ["DELETE", "/api/session", 404],
+      ["GET", "/api/device/active-profile", 404],
+      ["POST", "/api/device/enrol", 503],
+      ["GET", "/print-api/agent/jobs", 404],
     ];
-    for (const [method, path] of probes) {
+    for (const [method, path, status] of probes) {
       const response = await fetch(`http://127.0.0.1:${port}${path}`, {
         method,
         headers: { cookie: venue.managerCookie, origin: "https://dashboard.example" },
       });
-      expect({ path, status: response.status }).toEqual({ path, status: 404 });
+      const code = status === 503 ? (await response.json()).error.code : undefined;
+      expect({ path, status: response.status, code }).toEqual({
+        path,
+        status,
+        code: status === 503 ? "handover.stepping_down" : undefined,
+      });
     }
   }, 60_000);
 

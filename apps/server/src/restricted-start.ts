@@ -30,10 +30,6 @@ export interface RestrictedStartDeps {
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
-  deps.app.post("/api/sales", steppingDownResponse);
-  deps.app.post("/api/pay", steppingDownResponse);
-  deps.app.post("/api/working-orders/:id/payments", steppingDownResponse);
-  deps.app.post("/api/working-orders/:id/payments/:paymentId/refunds", steppingDownResponse);
   mountNodeApi(
     deps.app,
     {
@@ -45,6 +41,8 @@ export function startRestricted(deps: RestrictedStartDeps): StartedServer {
     deps.log,
   );
   for (const mount of deps.routes) mount(deps.app);
+  // Last, so it answers only what nothing above serves, as the stepdown gate did before the restart.
+  deps.app.post("/api/*", steppingDownResponse);
   const duties = restrictedBackgroundDuties(deps.returnRecords);
   return deps.listen(deps.app, () => stopBackgroundDuties(duties));
 }

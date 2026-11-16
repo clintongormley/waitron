@@ -44,7 +44,16 @@ describe("startRestricted", () => {
     "/api/pay",
     "/api/working-orders/wo-1/payments",
     "/api/working-orders/wo-1/payments/pay-1/refunds",
-  ])("refuses a money request at %s with the handover code after restart", async (path) => {
+    "/api/working-orders/wo-1/collect",
+    "/api/orders/o-1/collect",
+    "/api/transactions/s-1/refunds",
+    "/api/tender-refunds/r-1/retry",
+    "/api/parties/p-1/unpaid-departure",
+    "/api/working-orders/wo-1/close-deferred",
+    "/api/invoice-corrections/c-1/cash",
+    "/api/drawer/open",
+    "/api/session",
+  ])("refuses a POST to %s, which it does not serve, with the handover code", async (path) => {
     const app = new Hono();
     startRestricted({
       app,
