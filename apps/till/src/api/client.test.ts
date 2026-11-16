@@ -2530,7 +2530,7 @@ describe("TillApi", () => {
     });
   });
 
-  describe("adjustments (service plan Task 11)", () => {
+  describe("adjustments", () => {
     const ask = {
       expectedEdit: null,
       expectedRevision: 7,

@@ -11126,7 +11126,7 @@ describe("till-app", () => {
   // till (CLAUDE.md §5). These tests dispatch the event directly.
   // ---------------------------------------------------------------------------------------------
 
-  describe("collect-card (integrated card terminal, Task 8)", () => {
+  describe("collect-card (integrated card terminal)", () => {
     const withReaderTill = () =>
       vi.fn().mockResolvedValue({
         ...till,
@@ -11864,7 +11864,7 @@ describe("till-app", () => {
   // like `orderFlow`/`stage` above (per-mode pay control).
   // ---------------------------------------------------------------------------------------------
 
-  describe("integrated card wiring (Task 9): threaded from GET /api/till to the widget", () => {
+  describe("integrated card wiring: threaded from GET /api/till to the widget", () => {
     it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
       const { el } = await mountApp(); // the till fixture defaults cardProvider: "none"
       await toCounter(el);
@@ -14330,7 +14330,7 @@ describe("till-app", () => {
     });
   });
 
-  describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
+  describe("handheld table-order mount duality", () => {
     const phoneFormFactor: FormFactor = "phone-portrait";
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
@@ -14767,7 +14767,7 @@ describe("till-app", () => {
     });
   });
 
-  describe("per-user locale (Task 9)", () => {
+  describe("per-user locale", () => {
     /** Boots, then logs a person in carrying `locale` in the `logged-in` detail — leaving the app on
      * the counter with the UI switched per `resolveActiveLocale(locale, venueDefault)`. */
     async function toCounterAs(el: TillApp, locale: string | null): Promise<TillCounterScreen> {

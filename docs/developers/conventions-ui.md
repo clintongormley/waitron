@@ -1092,8 +1092,8 @@ initial value, and one with a fallback the fallback for ever, and reports nothin
 Cloud services screen's labels rendered at the body weight (C69).
 `scripts/style-token-names.test.ts` enforces it over every tracked `.ts`, `.css` and `.html` file
 under `apps/` and `packages/`, as it stands in the working tree, whose name does not end
-`.test.ts`, reading text; its header lists what that cannot see, and its `FALLBACK_READS` names the
-till reads it excuses.
+`.test.ts`, reading text; its header lists what that cannot see, and its `FALLBACK_READS` names any
+read it excuses.
 
 **What the guard does not see.** `scripts/style-token-names.test.ts` is weaker than its name: it
 matches a read against declarations anywhere in the tree, not the ones the reading page loads.

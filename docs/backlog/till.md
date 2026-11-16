@@ -34,10 +34,8 @@ their full text.
   earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
   whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
   `packages/db/src/schema` files (`menus.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
-  `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
-  "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
-  `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and
-  "(A1)"-style plan tags.
+  `orders.ts`). Stale test titles: "recordSale UNCHANGED" in `tabs.filing.test.ts`; many
+  "(KDS-…)" and "(A1)"-style plan tags.
 
 ## "resets any leftover drill/active tab on login" still passes with login's own clearing line deleted
 
@@ -49,7 +47,7 @@ their full text.
   dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
   known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
   pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
-  titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
+  titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)",
   "(SP-B2.1)").
 
 ## Test titles repeat claims the branch corrected (#618)
@@ -59,19 +57,13 @@ their full text.
   `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
   sums line totals).
 
-## Test titles repeat claims the branch corrected (#616)
+## Till widget points from #616 that were read but not run
 
-- Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
-  repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
-  orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
-  held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
-  titles carry task numbers. `apps/till/README.md`
-  says the held list is shared across the registers "on a node". Read, not run: a courseless
-  section the server held shows its lines greyed with no fire button (`#fireAction` in
-  `station-queue.ts`, from #131); `ReaderOption.online` is never set outside tests;
-  the fixed handheld mount and table screen still need their redundant exit configuration audited;
-  the tab shell and the supervisor dialog emit events not named `wt-*` (CLAUDE.md §3; not checked
-  whether the rule reaches till widgets).
+- Found by #616 (`apps/till/src/widgets`). Read, not run: a courseless section the server held
+  shows its lines greyed with no fire button (`#fireAction` in `station-queue.ts`, from #131);
+  `ReaderOption.online` is never set outside tests; the fixed handheld mount and table screen still
+  need their redundant exit configuration audited; the tab shell and the supervisor dialog emit
+  events not named `wt-*` (CLAUDE.md §3; not checked whether the rule reaches till widgets).
 
 ## The till always mounts the counter screen `embedded`
 
@@ -561,27 +553,6 @@ Open:
   `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
   no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
   in the code, not reproduced.
-
-## Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain text
-
-2026-10-16: A668-5 retires the basket, station queue and expo warning reads and removes their
-three guard exceptions. The remaining scope is `apps/till/src/widgets/diet-badges.ts`: warning
-and success text tokens at lines 131 and 117, respectively. The paragraph below records the
-original finding; its four-surface count and five-entry list no longer describe the current tree.
-
-- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
-  text.** The token is `--wt-color-warning-text`, declared in no theme; what exists in
-  `packages/ui-core/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`),
-  which `wt-count-badge` uses. Each of the four call sites writes the fallback form
-  `color: var(--wt-color-warning-text, var(--wt-color-text))` — `apps/till/src/widgets/basket.ts`,
-  `station-queue.ts`, `diet-badges.ts` and the old pass screen (since retired, A773-2 B4) — so the
-  emphasis those rows were written to carry never appears. `diet-badges.ts` also reads
-  `--wt-color-success-text`, declared nowhere, the same way. **Next action:** whoever takes the till
-  layout pass below decides whether these four want `--wt-color-warning`, a new
-  `--wt-color-warning-text` defined in both themes, or the `--wt-color-danger` the dish picker's
-  refusals now use. These five reads are the listed exceptions in
-  `scripts/style-token-names.test.ts`; fixing them means deleting their entries from its
-  `FALLBACK_READS`.
 
 ## Five measured till layout defects and one seen in a screenshot, all of them older than the extras-and-options work
 
@@ -1214,15 +1185,6 @@ display `#onLocaleSelected` (`apps/till/src/till-app.ts`) only switches the scre
 no session to save the pick to, and `#preLoginLocale` returns the venue's language whenever
 `deviceMode` is set. Decide whether a kitchen display keeps its pick on the device, as it keeps
 its collapsed columns.
-
-
-## Diet badges still read undeclared caution and success text colours.
-
-A668-5 removes the
-basket and kitchen reads from the original “Four till surfaces ask for a caution colour” finding.
-**Next action:** choose declared theme tokens or define the intended text tokens for
-`diet-badges.ts`, then remove its two `FALLBACK_READS` exceptions.
-[Original finding and remaining scope](till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
 
 
 ## A1101. Short names on the floor map where a full name does not fit, and on printed kitchen tickets.

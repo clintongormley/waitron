@@ -58,16 +58,12 @@ function isolatedGitEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Reads of undeclared names that carry a fallback, left as they are on purpose: the till's
- * caution and success text colours, which `docs/backlog.md`'s "Four till surfaces ask for a caution
- * colour" entry covers. Each entry is a file and a name, and holds only for a read WITH a fallback.
- * An entry that is no longer needed fails the guard; nothing stops one being added, so keeping the
- * list from growing is a job for review.
+ * Reads of undeclared names that carry a fallback and are left as they are on purpose. Each entry
+ * is a file and a name, and holds only for a read WITH a fallback. An entry that is no longer
+ * needed fails the guard; nothing stops one being added, so keeping the list empty is a job for
+ * review.
  */
-const FALLBACK_READS: ReadonlyArray<{ readonly file: string; readonly name: string }> = [
-  { file: "apps/till/src/widgets/diet-badges.ts", name: "--wt-color-success-text" },
-  { file: "apps/till/src/widgets/diet-badges.ts", name: "--wt-color-warning-text" },
-];
+const FALLBACK_READS: ReadonlyArray<{ readonly file: string; readonly name: string }> = [];
 
 interface TokenRead {
   readonly name: string;
@@ -135,9 +131,8 @@ function scannedTree() {
   return scanned;
 }
 
-const excused = (read: Undeclared) =>
-  read.fallback &&
-  FALLBACK_READS.some((entry) => entry.file === read.file && entry.name === read.name);
+const excused = (read: Undeclared, list = FALLBACK_READS) =>
+  read.fallback && list.some((entry) => entry.file === read.file && entry.name === read.name);
 
 describe("style token names", () => {
   it("finds a read with and without a fallback, and ignores a declaration", () => {
@@ -227,14 +222,17 @@ describe("style token names", () => {
 
   it("excuses a listed read only when it carries a fallback", () => {
     const listed = {
-      file: "apps/till/src/widgets/diet-badges.ts",
-      name: "--wt-color-warning-text",
+      file: "apps/example/src/example.ts",
+      name: "--wt-example-undeclared",
     };
-    expect(excused({ ...listed, fallback: true })).toBe(true);
-    expect(excused({ ...listed, fallback: false })).toBe(false);
-    expect(excused({ ...listed, file: "apps/till/src/widgets/other.ts", fallback: true })).toBe(
+    expect(excused({ ...listed, fallback: true }, [listed])).toBe(true);
+    expect(excused({ ...listed, fallback: false }, [listed])).toBe(false);
+    expect(excused({ ...listed, name: "--wt-example-other", fallback: true }, [listed])).toBe(
       false,
     );
+    expect(
+      excused({ ...listed, file: "apps/example/src/other.ts", fallback: true }, [listed]),
+    ).toBe(false);
   });
 
   it(
@@ -248,7 +246,7 @@ describe("style token names", () => {
   it(
     "every FALLBACK_READS entry still names a read that needs it",
     () => {
-      const needed = scannedTree().undeclared.filter(excused);
+      const needed = scannedTree().undeclared.filter((read) => excused(read));
       for (const entry of FALLBACK_READS)
         expect(
           needed.some((read) => read.file === entry.file && read.name === entry.name),

@@ -841,10 +841,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     [Detail](backlog/till.md#resets-any-leftover-drillactive-tab-on-login-still-passes-with-logins-own-clearing-line-deleted)
   - Test titles repeat claims the branch corrected (#618, `apps/till` `src/api` + `src/state` +
     `src/i18n`). [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-618)
-  - Test titles repeat claims the branch corrected (#616, `apps/till/src/widgets`). A courseless
+  - Till widget points from #616 that were read but not run (`apps/till/src/widgets`). A courseless
     section the server held shows its lines greyed with no fire button (`#fireAction` in
     `station-queue.ts`, from #131).
-    [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-616)
+    [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
   - The till always mounts the counter screen `embedded` (#614). In device mode the station
     screen's `#reload` swallows a `device.unauthorized`, so a device cookie revoked mid-session
     raises nothing until the next connect.
@@ -960,10 +960,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
   tables to staff, including handover and how assignments appear on the floor dashboard. The current
   workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
-
-- **Diet badges still read undeclared caution and success text colours.** A668-5 removes the basket
-  and kitchen reads from the original “Four till surfaces ask for a caution colour” finding.
-  [Detail](backlog/till.md#diet-badges-still-read-undeclared-caution-and-success-text-colours)
 
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box,
   as part of walking the box with the printers; with the owner present, after 2 November (owner,

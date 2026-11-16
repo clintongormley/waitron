@@ -443,7 +443,7 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-item="ti-x"]')!.textContent).toContain("1× Fish");
   });
 
-  describe("ordering modifiers (Task 14): selected options as indented sub-text under the dish", () => {
+  describe("ordering modifiers: selected options as indented sub-text under the dish", () => {
     const withModifiers: StationQueueGroup = {
       dining: "eat_in",
       kitchenNote: null,
@@ -555,7 +555,7 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
+  describe("per-line customisation: the snapshotted note as sub-text under the dish", () => {
     const withCustomisation: StationQueueGroup = {
       dining: "eat_in",
       kitchenNote: null,
@@ -1321,7 +1321,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(el.shadowRoot!.querySelector('[data-fire="none"]')).toBeNull();
   });
 
-  it("waiter fire: the display shows no fire button even for a held course (the tab screen fires — Task 7)", async () => {
+  it("waiter fire: the display shows no fire button even for a held course (the tab screen fires)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",

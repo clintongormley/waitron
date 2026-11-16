@@ -121,7 +121,7 @@ export const dietBadgeStyles = css`
     padding: 0 var(--wt-space-2);
     border: 1px solid var(--wt-color-success, var(--wt-color-border));
     border-radius: var(--wt-radius-full, 999px);
-    color: var(--wt-color-success-text, var(--wt-color-text));
+    color: var(--wt-color-success);
     font-weight: var(--wt-font-weight-bold, 600);
   }
 
@@ -135,7 +135,7 @@ export const dietBadgeStyles = css`
   /* The pending note — the neutral "not reviewed" state. Weight is the non-colour tell; it must NOT
      read as a positive claim, so it is deliberately plain text, never a badge. */
   .diet-pending {
-    color: var(--wt-color-warning-text, var(--wt-color-text));
+    color: var(--wt-color-warning);
     font-weight: var(--wt-font-weight-bold, 600);
   }
 `;

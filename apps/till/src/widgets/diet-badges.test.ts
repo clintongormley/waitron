@@ -1,8 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { nothing, render } from "lit";
+import { applyTokens } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
-import { dietBadges, extraNutrition } from "./diet-badges.js";
+import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { namedIcons } from "./test-helpers.js";
 
 const hosts: HTMLElement[] = [];
@@ -76,4 +77,41 @@ it("shows a kosher badge the dish's profile asserts", () => {
 
 it("renders no row for a reviewed dish with no claim and nothing tagged", () => {
   expect(dietBadges({ vegan: "no", vegetarian: "no", contains: [] }, "line-diet")).toBe(nothing);
+});
+
+describe.each(["light", "dark"] as const)("diet colours (%s theme)", (theme) => {
+  /** Draws inside a shadow root carrying the shared styles, as each host does, and returns the root. */
+  function drawStyled(template: ReturnType<typeof dietBadges>): ShadowRoot {
+    const host = document.createElement("div");
+    host.setAttribute("data-theme", theme);
+    document.body.append(host);
+    hosts.push(host);
+    applyTokens(host);
+    const root = host.attachShadow({ mode: "open" });
+    root.adoptedStyleSheets = [dietBadgeStyles.styleSheet!];
+    render(template, root);
+    return root;
+  }
+
+  function tokenColour(root: ShadowRoot, token: string): string {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${token})`;
+    root.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }
+
+  it("paints a diet badge in the success colour and the pending note in the warning colour", () => {
+    const root = drawStyled(
+      dietBadges({ vegan: "yes", vegetarian: "unknown", contains: [] }, "line-diet"),
+    );
+    const success = tokenColour(root, "--wt-color-success");
+    const warning = tokenColour(root, "--wt-color-warning");
+    const text = tokenColour(root, "--wt-color-text");
+    expect(success).not.toBe(text);
+    expect(warning).not.toBe(text);
+    expect(getComputedStyle(root.querySelector('[data-diet="vegan"]')!).color).toBe(success);
+    expect(getComputedStyle(root.querySelector("[data-diet-pending]")!).color).toBe(warning);
+  });
 });

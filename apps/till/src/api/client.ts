@@ -3371,7 +3371,10 @@ export class TillApi {
     );
   }
 
-  /** The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue. */
+  /**
+   * The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue,
+   * except those in zones this device's profile does not allow.
+   */
   listWorkingOrders(options: ReadOptions = {}): Promise<HeldOrderSummary[]> {
     return this.#request<HeldOrderSummary[]>(
       "/api/working-orders",

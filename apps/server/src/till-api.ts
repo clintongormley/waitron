@@ -1999,7 +1999,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Venue-wide: every open working order, whatever `node_id` it carries.
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);

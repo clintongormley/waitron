@@ -1204,7 +1204,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
   });
 
-  describe("integrated card terminal (Task 9)", () => {
+  describe("integrated card terminal", () => {
     it("shows local simulator outcomes and sends the selected decline scenario", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(coffee, "1");
@@ -1512,7 +1512,7 @@ describe("till-tender-pay", () => {
     });
   });
 
-  describe("payment-time reader picker (Task 17)", () => {
+  describe("payment-time reader picker", () => {
     const readers = [
       {
         printsOwnSlipAutomatically: false,

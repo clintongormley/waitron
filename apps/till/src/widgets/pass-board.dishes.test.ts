@@ -485,8 +485,8 @@ describe("A773 pass board widget: dishes", () => {
     ]);
     el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
     el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
-    el.style.setProperty("--wt-color-success-text", "rgb(7, 8, 9)");
-    el.style.setProperty("--wt-color-warning-text", "rgb(10, 11, 12)");
+    el.style.setProperty("--wt-color-success", "rgb(7, 8, 9)");
+    el.style.setProperty("--wt-color-warning", "rgb(10, 11, 12)");
     const colours = (id: string) =>
       [".diet-label", ".diet-badge", ".diet-contains", ".diet-pending"].map(
         (part) => getComputedStyle(itemOf(el, id).querySelector(part)!).color,

@@ -6619,7 +6619,7 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(inDialog(el, "[data-pay-collecting]")).toBeNull();
   });
 
-  describe("till-app: the charge names the reader the handheld's row shows (A796 Task 10b)", () => {
+  describe("till-app: the charge names the reader the handheld's row shows", () => {
     /** A handheld at the confirmation of a 40.00 payment by `method`, before Take payment is
      * pressed. */
     async function handheldConfirming(

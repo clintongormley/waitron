@@ -172,9 +172,8 @@ a venue and serves the real till.
 > **As of 7b (park & retrieve, 2026-08-06):** the scope below was written for slice 1 (7a). Since then
 > **7b park & retrieve** has landed on this package — the Hold/Park control, the **cross-till**
 > held-orders list, and retrieve/discard/pay of a parked order. Two "out of scope" items below are
-> lifted by 7b and no longer appear in that list: park & retrieve itself, and "one till per server"
-> (the held list is now shared across every register on a node). 7c (prepare & collect) is
-> still out. Built in #61.
+> lifted by 7b and no longer appear in that list: park & retrieve itself, and "one till per server".
+> 7c (prepare & collect) is still out. Built in #61.
 >
 > **2026-09-30 (lane B item B15):** a bill can now be paid in several payments, and the bill payment
 > dialog gives a payment back before the invoice: given back by someone who may give refunds, or
