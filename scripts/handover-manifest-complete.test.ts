@@ -58,7 +58,7 @@ describe("the handover manifest names every piece of a box's own state", () => {
     expect(missing([...venueTables], "venue.db")).toEqual([]);
     const stale = NODE_LOCAL_MANIFEST.filter((row) =>
       row.where === "node.db"
-        ? !nodeTables.has(row.item)
+        ? !(nodeTables.has(row.item) || row.item === "box.signing_key")
         : row.where === "venue.db" &&
           !(row.item.startsWith("settings:")
             ? settingsItems.has(row.item)

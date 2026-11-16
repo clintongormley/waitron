@@ -8,7 +8,7 @@ export interface PinnedPrimaryKey {
   publicKey: string;
 }
 
-/** The main box's key this node pinned, or `null` when the table holds none for it. */
+/** The main box's key this node pinned, or `null` when its pinned-key group is empty. */
 export async function readPinnedPrimaryKey(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
@@ -17,7 +17,9 @@ export async function readPinnedPrimaryKey(
     .select({ primaryNodeId: box.primaryNodeId, publicKey: box.primaryPublicKey })
     .from(box)
     .where(eq(box.nodeId, nodeId));
-  return row?.primaryNodeId == null ? null : { primaryNodeId: row.primaryNodeId, publicKey: row.publicKey! };
+  return row?.primaryNodeId == null
+    ? null
+    : { primaryNodeId: row.primaryNodeId, publicKey: row.publicKey! };
 }
 
 /** Upserts the main box's key for this node on a caller's node transaction. */

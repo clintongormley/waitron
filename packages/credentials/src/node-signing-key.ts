@@ -88,10 +88,17 @@ async function readRow(
     })
     .from(box)
     .where(eq(box.nodeId, nodeId));
-  return row?.ciphertext == null ? null : { ciphertext: row.ciphertext, iv: row.iv!, authTag: row.authTag!, keyVersion: row.keyVersion! };
+  return row?.ciphertext == null
+    ? null
+    : {
+        ciphertext: row.ciphertext,
+        iv: row.iv!,
+        authTag: row.authTag!,
+        keyVersion: row.keyVersion!,
+      };
 }
 
-/** This node's private signing key, or `null` when the table has no row for that node id; a row
+/** This node's private signing key, or `null` when that node has no signing-key group; a row
  * that will not open throws as {@link openNodeSigningKeyRow} does. */
 export async function readNodeSigningKey(
   node: NodeDatabase | NodeTransaction,
@@ -99,7 +106,18 @@ export async function readNodeSigningKey(
   nodeId: string,
 ): Promise<string | null> {
   const row = await readRow(node, nodeId);
-  return row === null ? null : openNodeSigningKeyRow({ ciphertext: row.ciphertext!, iv: row.iv!, authTag: row.authTag!, keyVersion: row.keyVersion! }, ring, nodeId);
+  return row === null
+    ? null
+    : openNodeSigningKeyRow(
+        {
+          ciphertext: row.ciphertext!,
+          iv: row.iv!,
+          authTag: row.authTag!,
+          keyVersion: row.keyVersion!,
+        },
+        ring,
+        nodeId,
+      );
 }
 
 /**
@@ -189,7 +207,21 @@ export async function rotateNodeSigningKeysTx(
       result.alreadyCurrent += 1;
       continue;
     }
-    await sealNodeSigningKeyTx(tx, ring, nodeId, openNodeSigningKeyRow({ ciphertext: row.ciphertext!, iv: row.iv!, authTag: row.authTag!, keyVersion: row.keyVersion! }, ring, nodeId));
+    await sealNodeSigningKeyTx(
+      tx,
+      ring,
+      nodeId,
+      openNodeSigningKeyRow(
+        {
+          ciphertext: row.ciphertext!,
+          iv: row.iv!,
+          authTag: row.authTag!,
+          keyVersion: row.keyVersion!,
+        },
+        ring,
+        nodeId,
+      ),
+    );
     result.rotated += 1;
   }
   return result;

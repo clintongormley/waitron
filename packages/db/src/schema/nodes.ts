@@ -6,7 +6,7 @@ import type { Endorsement } from "@waitron/membership";
  * US restaurant English "server" means a waiter, and this is a machine, not a person).
  *
  * Which role a node plays — a `primary` that writes and originates, or a read-only `mirror` — lives
- * in that node's own `node.db` (`node_mode`), because a node holding another node's copy of this
+ * in that node's own `node.db` (`box`'s role group), because a node holding another node's copy of this
  * database must read its own role or none. Do not add a `role` column here for the mirror/primary
  * split — that concept already has its table. Deliberately
  * regime-neutral: the Veri*Factu SIF identity lives in the module-owned `registro_sif` table, keyed

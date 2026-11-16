@@ -217,7 +217,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
   });
   expect(entries).toContainEqual({
     code: "restore.recovery_key_selected",
-    params: { name: archivedName.rows[0]!.key_name },
+    params: { name: archivedName.rows[0]!.recovery_key_name },
   });
   expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });

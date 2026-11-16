@@ -890,13 +890,12 @@ describe("the start check on a real start", () => {
       );
       await boot(suite, { spareUrl: OWN_URL, joined: true, seams: seams(peerCheck) });
       expect(server!.fullyStarted).toBeDefined();
-      // The first node.db read after the wait is the mirror link's.
-      suite.node.run(sql`alter table box rename to node_mirror_link_aside`);
+      suite.node.run(sql`alter table box rename to box_aside`);
       try {
         answer();
-        await expect(server!.fullyStarted).rejects.toThrow(/node_mirror_link/);
+        await expect(server!.fullyStarted).rejects.toThrow(/no such table: box/);
       } finally {
-        suite.node.run(sql`alter table node_mirror_link_aside rename to box`);
+        suite.node.run(sql`alter table box_aside rename to box`);
       }
     }, 60_000);
 

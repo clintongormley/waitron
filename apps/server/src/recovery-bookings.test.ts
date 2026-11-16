@@ -64,6 +64,7 @@ async function fixture(
         nodeId: NODE_ID,
         mode: role === "mirror" ? "mirror" : "primary",
         singletonRole: role === "primary" ? "primary" : "secondary",
+        roleChangedAt: new Date("2026-10-31T00:00:00.000Z"),
       }),
     );
   await suite.node.archiveTo(join(venueDir, "node.db"));

@@ -9,11 +9,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import {
-  readMirrorLink,
-  writeMirrorLink,
-  writeMirrorLinkTx,
-} from "./mirror-link.js";
+import { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -28,14 +24,12 @@ const SAMPLE: Parameters<typeof writeMirrorLink>[2] = {
   originNodeId: PRIMARY_NODE,
 };
 
-// A node file with NO migration set applied, so `node_mirror_link` does not exist.
+// A node file with NO migration set applied, so `box` does not exist.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
   it("is refused rather than read as unadopted", async () => {
-    await expect(readMirrorLink(bare.node, NODE)).rejects.toThrow(
-      /no such table: box/,
-    );
+    await expect(readMirrorLink(bare.node, NODE)).rejects.toThrow(/no such table: box/);
   });
 });
 
@@ -95,9 +89,7 @@ describe("box accessors", () => {
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
     });
-    const count = await suite.node.execute<{ n: number }>(
-      sql`select count(*) as n from box`,
-    );
+    const count = await suite.node.execute<{ n: number }>(sql`select count(*) as n from box`);
     expect(count.rows[0]?.n).toBe(1);
     expect(await readMirrorLink(suite.node, NODE)).toEqual({
       originUrl: "https://relay-two.test:9000/",

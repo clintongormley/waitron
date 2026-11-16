@@ -14,7 +14,7 @@ export interface MirrorConnection {
   originNodeId: string;
 }
 
-/** This node's mirror link, or `null` when this node has no row: nothing has adopted it as a mirror. */
+/** This node's mirror link, or `null` when this node has no mirror-link group: nothing has adopted it as a mirror. */
 export async function readMirrorLink(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
@@ -28,7 +28,14 @@ export async function readMirrorLink(
     })
     .from(box)
     .where(eq(box.nodeId, nodeId));
-  return row?.originUrl == null ? null : { originUrl: row.originUrl, boxHostname: row.boxHostname!, boxCaPem: row.boxCaPem!, originNodeId: row.originNodeId! };
+  return row?.originUrl == null
+    ? null
+    : {
+        originUrl: row.originUrl,
+        boxHostname: row.boxHostname!,
+        boxCaPem: row.boxCaPem!,
+        originNodeId: row.originNodeId!,
+      };
 }
 
 /** Writes this node's mirror link on its own node transaction; see {@link writeMirrorLinkTx}. */
@@ -42,7 +49,7 @@ export async function writeMirrorLink(
 
 /**
  * Upserts this node's mirror link on a caller's node transaction. A second write for the same node
- * replaces its row.
+ * replaces only that group.
  */
 export async function writeMirrorLinkTx(
   tx: NodeTransaction,

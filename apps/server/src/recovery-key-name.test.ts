@@ -32,7 +32,7 @@ async function readName(node = suite.node, nodeId = NODE): Promise<unknown> {
   const rows = await node.execute<Record<string, unknown>>(
     sql`select * from box where node_id = ${nodeId}`,
   );
-  return rows.rows[0]?.key_name;
+  return rows.rows[0]?.recovery_key_name;
 }
 
 it("stores a non-secret name beside each newly minted verifier", async () => {

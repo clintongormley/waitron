@@ -9,24 +9,19 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import {
-  pinPrimaryKeyTx,
-  readPinnedPrimaryKey,
-} from "./primary-key.js";
+import { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PRIMARY = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const NEXT_PRIMARY = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
-// A node file with NO migration set applied, so `node_primary_key` does not exist.
+// A node file with NO migration set applied, so `box` does not exist.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
   it("is refused rather than read as holding no key", async () => {
-    await expect(readPinnedPrimaryKey(bare.node, NODE)).rejects.toThrow(
-      /no such table: box/,
-    );
+    await expect(readPinnedPrimaryKey(bare.node, NODE)).rejects.toThrow(/no such table: box/);
   });
 });
 

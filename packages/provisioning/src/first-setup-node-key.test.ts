@@ -270,8 +270,8 @@ it("installs the delivered verifier once and preserves it on exact publication r
   expect(before).toMatchObject([
     {
       nodeId: state.frozen.nodeId,
-      verifier: f.staged!.stage.verifier,
-      keyName: f.staged!.stage.name,
+      recoveryKeyVerifier: f.staged!.stage.verifier,
+      recoveryKeyName: f.staged!.stage.name,
     },
   ]);
   await f.coordinator.run((hold) =>

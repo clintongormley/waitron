@@ -46,7 +46,7 @@ function facts(): FinalStateFacts {
       },
       { item: "box", where: "node.db", class: "destination-owned", treatment: "own" },
       {
-        item: "box",
+        item: "box.signing_key",
         where: "node.db",
         class: "source-only",
         treatment: "never",
@@ -170,7 +170,7 @@ describe("assembleIndicator", () => {
     ]);
     expect(indicator.nodeLocal.map((row) => `${row.where}/${row.item}`)).toEqual([
       "node.db/box",
-      "node.db/box",
+      "node.db/box.signing_key",
       "state/venue-keys.json",
     ]);
     expect(indicator.nodeLocal[2].ringKeys).toEqual(
@@ -208,7 +208,7 @@ describe("assembleIndicator", () => {
       nodeLocal: [
         { item: "box", where: "node.db", class: "destination-owned", treatment: "own" },
         {
-          item: "box",
+          item: "box.signing_key",
           where: "node.db",
           class: "source-only",
           treatment: "never",

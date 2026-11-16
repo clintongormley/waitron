@@ -294,9 +294,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     try {
       await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
       expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
-      expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual(
-        [],
-      );
+      expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
     } finally {
       await suite.node.execute(sql`drop trigger if exists refuse_signing_key`);
     }
@@ -475,14 +473,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     standbyIdentity = STANDBY;
     await adoptFromPrimary(deps(), REQ, NO_HOOKS);
 
-    for (const table of [
-      "box",
-      "box",
-      "box",
-      "box",
-      "box",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect(
         (await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows,
         table,
@@ -886,14 +877,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   async function writtenNothing(): Promise<void> {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
-    for (const table of [
-      "box",
-      "box",
-      "box",
-      "box",
-      "box",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
     expect(await readdir(stateDir)).toEqual([]);
@@ -1149,14 +1133,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toMatchObject({
       code: "EEXIST",
     });
-    for (const table of [
-      "box",
-      "box",
-      "box",
-      "box",
-      "box",
-      "node_pair_link",
-    ]) {
+    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
   });
@@ -1183,13 +1160,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     );
     try {
       await expect(adoptFromPrimary(deps(), REQ, NO_HOOKS)).rejects.toThrow("refused by test");
-      for (const table of [
-        "box",
-        "box",
-        "box",
-        "box",
-        "node_pair_link",
-      ]) {
+      for (const table of ["box", "box", "box", "box", "node_pair_link"]) {
         expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual(
           [],
         );

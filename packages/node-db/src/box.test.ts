@@ -123,8 +123,13 @@ describe("box group writers", () => {
   const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
 
   it("reads stored groups and distinguishes an empty group from an absent box", async () => {
-    const mirror = { originUrl: "https://main.example", boxHostname: "main.example", boxCaPem: "ca", originNodeId: "origin" };
-    await withNodeTransaction(suite.node, async tx => {
+    const mirror = {
+      originUrl: "https://main.example",
+      boxHostname: "main.example",
+      boxCaPem: "ca",
+      originNodeId: "origin",
+    };
+    await withNodeTransaction(suite.node, async (tx) => {
       await writeBoxRecoveryKeyTx(tx, NODE, { verifier: "verifier", keyName: "key-name" });
       expect(await readNodeMode(tx, NODE)).toEqual({ mode: "primary", singletonRole: "primary" });
       expect(await readNodeModeRow(tx, NODE)).toBeNull();
@@ -133,15 +138,35 @@ describe("box group writers", () => {
       await writeBoxRoleTx(tx, NODE, { mode: "mirror", singletonRole: "secondary" });
       await writeBoxMirrorLinkTx(tx, NODE, mirror);
       await writeBoxPinnedKeyTx(tx, NODE, { primaryNodeId: "origin", publicKey: "public-key" });
-      await writeBoxSigningKeyTx(tx, "signing-only", { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), authTag: new Uint8Array(16), keyVersion: 1 });
+      await writeBoxSigningKeyTx(tx, "signing-only", {
+        ciphertext: new Uint8Array([1]),
+        iv: new Uint8Array(12),
+        authTag: new Uint8Array(16),
+        keyVersion: 1,
+      });
     });
-    expect(await readNodeMode(suite.node, NODE)).toEqual({ mode: "mirror", singletonRole: "secondary" });
-    expect(await readNodeModeRow(suite.node, NODE)).toEqual({ mode: "mirror", singletonRole: "secondary" });
-    expect(await readRecoveryKey(suite.node, NODE)).toEqual({ verifier: "verifier", keyName: "key-name" });
+    expect(await readNodeMode(suite.node, NODE)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+    expect(await readNodeModeRow(suite.node, NODE)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+    expect(await readRecoveryKey(suite.node, NODE)).toEqual({
+      verifier: "verifier",
+      keyName: "key-name",
+    });
     expect(await readMirrorLink(suite.node, NODE)).toEqual(mirror);
-    expect(await readPinnedPrimaryKey(suite.node, NODE)).toEqual({ primaryNodeId: "origin", publicKey: "public-key" });
+    expect(await readPinnedPrimaryKey(suite.node, NODE)).toEqual({
+      primaryNodeId: "origin",
+      publicKey: "public-key",
+    });
     expect(await readRecoveryKey(suite.node, "signing-only")).toBeNull();
-    expect(await readNodeMode(suite.node, "absent")).toEqual({ mode: "primary", singletonRole: "primary" });
+    expect(await readNodeMode(suite.node, "absent")).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
     expect(await readNodeModeRow(suite.node, "absent")).toBeNull();
   });
 

@@ -66,7 +66,7 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 
 /**
- * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
+ * On a mirror the data node is the ORIGIN recorded in node.db's `box` mirror-link group, not the
  * mirror's own id. Per-node reports use it; venue-wide reports read every node.
  */
 export interface ReportApiDeps {

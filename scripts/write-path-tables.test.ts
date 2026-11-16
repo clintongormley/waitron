@@ -5,8 +5,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `taxpayer`, `nodes` and
- * `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
- * `node_recovery_key`, `node_signing_key`, `node_take_failures`,
+ * `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and node.db's `box`, `node_pair_link`, `node_take_failures`,
  * `node_handover_operations`, `node_handover_events` and `node_handover_restriction`.
  *
  * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes
@@ -58,18 +57,15 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
  *                                                adoption worker.
  *   `packages/db/src/deployment.ts`              stamps the environment.
- *   `packages/node-db/src/mirror-link.ts`        writes this node's mirror link.
- *   `packages/node-db/src/mode.ts`               writes this node's mode and singleton role.
- *   `packages/node-db/src/primary-key.ts`        pins the primary's public key on this node.
- *   `packages/node-db/src/recovery-key.ts`       writes this node's recovery-key verifier and name.
- *   `packages/credentials/src/node-signing-key.ts` seals a node's signing key, and re-seals every
- *                                                row not on the key ring's current key.
+ *   `packages/node-db/src/box.ts`                writes each box column group and sweeps abandoned
+ *                                                rows. Its exported group writers are callable
+ *                                                from any module; this file cannot check callers.
  */
 const ALLOWED: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(REPO_ROOT, "scripts", "write-path-tables.json"), "utf8"),
 );
 
-/** `node_mirror_link` -> `nodeMirrorLink`: the drizzle object a write names, from the SQL table name. */
+/** `node_pair_link` -> `nodePairLink`: the drizzle object a write names, from the SQL table name. */
 function schemaObject(table: string): string {
   return table.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
@@ -193,18 +189,14 @@ describe("no source writes a listed table outside the files the JSON names", () 
   it("keeps every table whose writes live only in named files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "activity_log",
+      "box",
       "deployment",
       "invoice_correction_refunds",
       "invoice_corrections",
       "node_handover_events",
       "node_handover_operations",
       "node_handover_restriction",
-      "node_mirror_link",
-      "node_mode",
       "node_pair_link",
-      "node_primary_key",
-      "node_recovery_key",
-      "node_signing_key",
       "node_take_failures",
       "nodes",
       "person_roles",

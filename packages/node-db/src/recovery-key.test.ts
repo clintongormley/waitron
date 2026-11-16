@@ -19,7 +19,7 @@ import {
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
-// A node file with NO migration set applied, so `node_recovery_key` does not exist.
+// A node file with NO migration set applied, so `box` does not exist.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 

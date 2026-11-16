@@ -198,9 +198,7 @@ setInterval(() => db, 1000);`;
     expect(h.err).toEqual([]);
     const after = await openVenueDatabase(venueDir, { exclusive: false });
     try {
-      const rows = await after.node
-        .select({ keyVersion: box.signingKeyVersion })
-        .from(box);
+      const rows = await after.node.select({ keyVersion: box.signingKeyVersion }).from(box);
       expect(rows).toEqual([{ keyVersion: 2 }]);
     } finally {
       await after.close();

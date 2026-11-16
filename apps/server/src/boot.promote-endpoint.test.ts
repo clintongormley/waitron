@@ -244,7 +244,7 @@ beforeAll(async () => {
   [appVenueDir, appDb, appNode] = await migratedVenue();
   [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
   await seedIdentity(appDb, appNode);
-  // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
+  // No recorded role group: `readNodeMode` reads it as ('primary', 'primary').
   await stampDeployment(appDb, "production");
 }, 180_000);
 

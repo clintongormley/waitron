@@ -485,7 +485,12 @@ function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): stri
     if (rows > 0 && (nodeId === undefined || count(name, "where node_id is not ?", nodeId) > 0))
       return `node.db holds another node's row: ${name}`;
   }
-  if (count("box", "where mode is not null or mirror_origin_url is not null or primary_node_id is not null") > 0)
+  if (
+    count(
+      "box",
+      "where mode is not null or mirror_origin_url is not null or primary_node_id is not null",
+    ) > 0
+  )
     return "node.db holds a row: box";
   return null;
 }

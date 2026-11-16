@@ -268,9 +268,7 @@ describe("runStagedReset", () => {
     try {
       expect(await readDeploymentEnvironment(store.venue)).toBeNull();
       expect(await readMirrorLink(store.node, NODE_ID)).toBeNull();
-      const roles = await store.node.execute<{ n: number }>(
-        sql`select count(*) as n from box`,
-      );
+      const roles = await store.node.execute<{ n: number }>(sql`select count(*) as n from box`);
       expect(roles.rows[0]?.n).toBe(0);
     } finally {
       await store.close();

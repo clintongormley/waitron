@@ -12,7 +12,7 @@ import { box } from "./schema/box.js";
 import { writeBoxRoleTx } from "./box.js";
 
 /**
- * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no row
+ * Both of one node's axes from ONE read of its row, so the pair is never torn. A node with no recorded role
  * reads as a sole primary: a box between its first migration and its first role write must still
  * sell.
  */
@@ -23,7 +23,7 @@ export async function readNodeMode(
   return (await readNodeModeRow(node, nodeId)) ?? { mode: "primary", singletonRole: "primary" };
 }
 
-/** Like {@link readNodeMode}, but `null` for a node with no row, for a caller that must tell the two apart. */
+/** Like {@link readNodeMode}, but `null` for a node with no recorded role, for a caller that must tell the two apart. */
 export async function readNodeModeRow(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
@@ -52,7 +52,7 @@ export async function setNodeMode(
 /**
  * Sets one node's mode on a caller's node transaction, for a caller that has already checked the
  * deployment stamp; this does not read it. `mirror` co-sets `singleton_role = 'secondary'` in the
- * same write, so the pair `node_mode_role_valid_ck` forbids is never written even transiently;
+ * same write, so the pair `box_role_valid_ck` forbids is never written even transiently;
  * `primary` leaves `singleton_role` as it is.
  */
 export async function setNodeModeTx(
@@ -61,7 +61,10 @@ export async function setNodeModeTx(
   mode: DeploymentMode,
 ): Promise<void> {
   const stored = await readNodeMode(tx, nodeId);
-  await writeBoxRoleTx(tx, nodeId, { mode, singletonRole: mode === "mirror" ? "secondary" : stored.singletonRole });
+  await writeBoxRoleTx(tx, nodeId, {
+    mode,
+    singletonRole: mode === "mirror" ? "secondary" : stored.singletonRole,
+  });
 }
 
 /** Sets one node's singleton role; refuses an unstamped `venue.db` as {@link setNodeMode} does. */
@@ -77,7 +80,7 @@ export async function setSingletonRole(
 /**
  * Sets one node's singleton role on a caller's node transaction, for a caller that has already
  * checked the deployment stamp; this does not read it. Creates the row (mode `primary`) if the node
- * has none. `'primary'` on a mirror is refused by `node_mode_role_valid_ck`: a promotion flips the
+ * has none. `'primary'` on a mirror is refused by `box_role_valid_ck`: a promotion flips the
  * mode first.
  */
 export async function setSingletonRoleTx(
@@ -90,7 +93,7 @@ export async function setSingletonRoleTx(
 }
 
 /** Makes one node the sole primary (mode and singleton role both `primary`) on a caller's node
- * transaction; like the two writes it makes, it does not read the deployment stamp. */
+ * transaction; it does not read the deployment stamp. */
 export async function setPrimaryRoleTx(tx: NodeTransaction, nodeId: string): Promise<void> {
   await writeBoxRoleTx(tx, nodeId, { mode: "primary", singletonRole: "primary" });
 }

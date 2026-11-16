@@ -1071,8 +1071,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `node_mode`, `node_mirror_link`,
-`node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_take_failures`, `node_handover_operations`,
+`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `box`, `node_pair_link`, `node_take_failures`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
@@ -1089,18 +1088,19 @@ correction; `reserveTenderRefund` calls it.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
-alone. Read its header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
+alone. The exported group writers in `packages/node-db/src/box.ts` are callable from any
+module: the guard cannot check that each group is called only through its owning module. Review
+checks that convention. Read the guard header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
 records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
 Real code does write them, legitimately: the setup-mode provision route reaches `taxpayer`,
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
-`node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`, `node_recovery_key` and
-`node_signing_key`, writing this box's rows and deleting any an abandoned earlier attempt left in
-those six `node.db` tables and in `node_take_failures` under another node id; the emergency
+`box` and `node_pair_link`, writing this box's rows and deleting abandoned rows under another node
+id from those node tables and `node_take_failures`; the emergency
 switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
-`node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`box`'s role group; first setup and replacing the recovery key reach its recovery-key group; first setup
+and `waitron-credentials rotate` reach its signing-key group; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `taxpayer` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`) and configuration imports use
@@ -1695,10 +1695,9 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 `venue.db` holds every table but `node.db`'s, and a primary streams it whole to the owner's bucket once
 one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
-singleton role (`node_mode`), its link to the main box (`node_mirror_link`), its link to the other box of its pair — the spare's
-store address and the store's access key, its secret sealed (`node_pair_link`) — the main box's key it
-pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`), its
-sealed signing key (`node_signing_key`), the failed takes of an emergency switch, which must
+singleton role, mirror link, pinned main-box key, recovery-key check and sealed signing key in
+nullable column groups of `box`; its link to the other box of its pair — the spare's store address
+and the store's access key, its secret sealed (`node_pair_link`) — the failed takes of an emergency switch, which must
 outlive the restart each one causes (`node_take_failures`), and its handover records: each handover operation it
 takes part in (`node_handover_operations`), what it decided and received during them
 (`node_handover_events`), and why it no longer acts as the main box (`node_handover_restriction`) — so a spare holding a copy of the main box's `venue.db`
@@ -1771,7 +1770,7 @@ _2026-11-14 (A1308 5h):_ `locations` and its interim id accessor are removed; ve
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
-rotation reads `node_signing_key` and `node_pair_link` whole), a seal only a box holding the key ring opens
+rotation reads every populated signing-key group in `box` and `node_pair_link` whole), a seal only a box holding the key ring opens
 (`venue_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
 `fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
@@ -1779,8 +1778,8 @@ and write names as one of `readHistoryNodes(tx, thisNode)`, this box and every b
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/db/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,
-each by deleting the node filter and watching a case fail: the `node_mode` and
-`node_mirror_link` readers in `node.db` (the "keeps each node's row apart" case in
+each by deleting the node filter and watching a case fail: the role and
+mirror-link group readers in `node.db`'s `box` (the "keeps each node's row apart" case in
 `packages/node-db/src/mode.test.ts` and the "reads a mirror link only for the node that was
 adopted" case in `packages/node-db/src/mirror-link.test.ts`), and every node filter on
 `join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a

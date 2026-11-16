@@ -151,7 +151,7 @@ it.each<[string, string, string]>([
   ["a table outside the node set", "create table t(x)", "node.db holds a table"],
   [
     "an index of its own",
-    "create index node_mode_extra on box(role_changed_at)",
+    "create index box_extra on box(role_changed_at)",
     "node.db holds a table",
   ],
   [
@@ -175,11 +175,7 @@ it.each<[string, string, string]>([
     "create trigger tr after insert on box begin select 1; end",
     "node.db holds a table",
   ],
-  [
-    "only part of the node set",
-    "drop table box",
-    "node.db lacks the node set's tables or indexes",
-  ],
+  ["only part of the node set", "drop table box", "node.db lacks the node set's tables or indexes"],
   [
     "another table in place of one of the node set's",
     "drop table box; create table t(x)",
@@ -197,7 +193,7 @@ it.each<[string, string, string]>([
   ],
   [
     "a mirror link",
-    `insert into box values ('${NODE_ID}', 'https://relay', 'box', 'pem', '${randomUUID()}', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, mirror_origin_url, mirror_box_hostname, mirror_box_ca_pem, mirror_origin_node_id, mirror_adopted_at) values ('${NODE_ID}', 'https://relay', 'box', 'pem', '${randomUUID()}', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: box",
   ],
   [
@@ -209,12 +205,12 @@ it.each<[string, string, string]>([
   ],
   [
     "a role",
-    `insert into box (node_id, role_changed_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${NODE_ID}', 'primary', 'primary', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: box",
   ],
   [
     "a main box's key",
-    `insert into box values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, primary_node_id, primary_public_key, primary_pinned_at) values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: box",
   ],
   [
@@ -240,13 +236,13 @@ it.each<[string, string, string]>([
   ],
   [
     "two recovery-key checks",
-    `insert into box values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
+    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
        ('${randomUUID()}', 'v', 'Two', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: box",
   ],
   [
     "another node's recovery-key check",
-    `insert into box values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
     "node.db holds another node's row: box",
   ],
   [
@@ -296,7 +292,7 @@ it("Start again counts a node.db table's rows from the table itself, not from a 
   const roots = await attemptWithMigratedNode();
   await withNode(
     roots,
-    `insert into box (node_id, role_changed_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${NODE_ID}', 'primary', 'primary', '2026-10-31T00:00:00.000Z')`,
   );
   damageNodeIndexes(roots);
   await expect(assertStartAgainAllowedOnDisk(roots, { nodeId: NODE_ID })).rejects.toMatchObject(

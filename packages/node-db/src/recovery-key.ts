@@ -5,7 +5,7 @@ import { writeBoxRecoveryKeyTx } from "./box.js";
 
 /**
  * This node's recovery-key verifier and the name of the key in force (`null` when blank), or
- * `null` when the table has no row for the node.
+ * `null` when the node has no recovery-key group.
  */
 export async function readRecoveryKey(
   node: NodeDatabase | NodeTransaction,
@@ -19,7 +19,7 @@ export async function readRecoveryKey(
   return { verifier: row.verifier, keyName: row.keyName!.trim() === "" ? null : row.keyName! };
 }
 
-/** This node's recovery-key verifier, or `null` when the table has no row for it. */
+/** This node's recovery-key verifier, or `null` when the node has no recovery-key group. */
 export async function readRecoveryKeyVerifier(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,

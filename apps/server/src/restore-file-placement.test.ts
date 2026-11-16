@@ -294,7 +294,7 @@ describe("restoreDatabase consumes a database file", () => {
   });
 });
 
-/** A real SQLite file holding one `node_mode` row for `nodeId`, as node.db would. */
+/** A real SQLite file holding one `box` role group for `nodeId`, as node.db would. */
 function nodeFile(path: string, nodeId: string): void {
   const database = new DatabaseSync(path);
   try {

@@ -522,8 +522,8 @@ it("publishes only an exact checked commit and installs its retained verifier", 
   expect(await venue.node.select().from(box)).toMatchObject([
     {
       nodeId: f.checked.venue.nodeId,
-      verifier: stage.verifier,
-      keyName: stage.name,
+      recoveryKeyVerifier: stage.verifier,
+      recoveryKeyName: stage.name,
     },
   ]);
 });

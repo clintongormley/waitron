@@ -423,8 +423,12 @@ async function assertSingleBox(stateDirectory) {
       await fs.access(path);
       const node = new DatabaseSync(path, { readOnly: true });
       try {
-        const role = hasTable(node, "node_mode")
-          ? node.prepare("select mode, singleton_role from node_mode where node_id = ?").get(nodeId)
+        const role = hasTable(node, "box")
+          ? node
+              .prepare(
+                "select mode, singleton_role from box where node_id = ? and mode is not null",
+              )
+              .get(nodeId)
           : undefined;
         if (role && (role.mode !== "primary" || role.singleton_role !== "primary"))
           throw new Error("paired upgrades are not available");

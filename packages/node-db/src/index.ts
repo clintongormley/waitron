@@ -31,11 +31,7 @@ export type {
 export type { HandoverOperationState } from "./schema/node-handover.js";
 export { readPairLink } from "./pair-link.js";
 export type { PairLink, PairLinkRole, PairLinkState } from "./pair-link.js";
-export {
-  readMirrorLink,
-  writeMirrorLink,
-  writeMirrorLinkTx,
-} from "./mirror-link.js";
+export { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
 export type { MirrorConnection } from "./mirror-link.js";
 export {
   readNodeMode,
@@ -52,10 +48,7 @@ export {
   readRecoveryKeyVerifier,
   setRecoveryKeyTx,
 } from "./recovery-key.js";
-export {
-  pinPrimaryKeyTx,
-  readPinnedPrimaryKey,
-} from "./primary-key.js";
+export { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
 export type { PinnedPrimaryKey } from "./primary-key.js";
 export {
   clearTakeFailuresTx,
@@ -63,5 +56,12 @@ export {
   readTakeFailures,
   recordTakeFailureTx,
 } from "./take-failures.js";
-export { deleteBoxRowsOtherThanTx, writeBoxRecoveryKeyTx, writeBoxSigningKeyTx, writeBoxRoleTx, writeBoxMirrorLinkTx, writeBoxPinnedKeyTx } from "./box.js";
+export {
+  deleteBoxRowsOtherThanTx,
+  writeBoxRecoveryKeyTx,
+  writeBoxSigningKeyTx,
+  writeBoxRoleTx,
+  writeBoxMirrorLinkTx,
+  writeBoxPinnedKeyTx,
+} from "./box.js";
 export type { BoxRoleCause } from "./box.js";

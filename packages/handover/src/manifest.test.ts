@@ -10,11 +10,8 @@ describe("the node-local manifest", () => {
   it("places and classes the original rows as the plan's table decides", () => {
     const decisions = [
       "box|node.db|destination-owned",
-      "box|node.db|destination-owned",
       "node_pair_link|node.db|destination-owned",
-      "box|node.db|destination-owned",
-      "box|node.db|destination-owned",
-      "box|node.db|source-only",
+      "box.signing_key|node.db|source-only",
       "node_handover_operations|node.db|destination-owned",
       "node_handover_events|node.db|destination-owned",
       "node_handover_restriction|node.db|destination-owned",
@@ -54,7 +51,7 @@ describe("the node-local manifest", () => {
 
   it("never sends M1's private signing key, and carries the key ring and the venue's credentials", () => {
     const classOf = (item: string) => NODE_LOCAL_MANIFEST.find((row) => row.item === item)?.class;
-    expect(classOf("box")).toBe("source-only");
+    expect(classOf("box.signing_key")).toBe("source-only");
     expect(classOf("secrets.env")).toBe("transferred");
     expect(classOf("venue_credentials")).toBe("transferred");
     expect(classOf("trading.env")).toBe("destination-owned");

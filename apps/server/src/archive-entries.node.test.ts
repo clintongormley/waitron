@@ -63,9 +63,7 @@ it("an archive carries node.db's rows as node.dump", async () => {
   const opened = await openBackupQuery(copy);
   try {
     const rows = [];
-    for await (const row of opened.query.rows(
-      "select node_id, mode, singleton_role from box",
-    ))
+    for await (const row of opened.query.rows("select node_id, mode, singleton_role from box"))
       rows.push({ ...row });
     expect(rows).toEqual([{ node_id: "node-a", mode: "mirror", singleton_role: "secondary" }]);
   } finally {

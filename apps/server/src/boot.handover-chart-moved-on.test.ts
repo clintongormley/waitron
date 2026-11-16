@@ -181,9 +181,9 @@ function readDisk() {
     const placed = node
       .prepare("select count(*) as n from node_handover_events where kind = 'copy_placed'")
       .get() as { n: number };
-    const mode = node
-      .prepare("select mode from box where node_id = ?")
-      .get(standby.nodeId) as { mode: string };
+    const mode = node.prepare("select mode from box where node_id = ?").get(standby.nodeId) as {
+      mode: string;
+    };
     return {
       chartTerm: chart.term,
       state: row.state,

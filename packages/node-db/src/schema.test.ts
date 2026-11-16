@@ -25,12 +25,22 @@ describe("node.db's tables", () => {
     expect(() =>
       suite.node
         .insert(box)
-        .values({ nodeId: "node-a", mode: "mirror", singletonRole: "primary", roleChangedAt: new Date() })
+        .values({
+          nodeId: "node-a",
+          mode: "mirror",
+          singletonRole: "primary",
+          roleChangedAt: new Date(),
+        })
         .run(),
     ).toThrow(/box_role_valid_ck/);
     suite.node
       .insert(box)
-      .values({ nodeId: "node-a", mode: "mirror", singletonRole: "secondary", roleChangedAt: new Date() })
+      .values({
+        nodeId: "node-a",
+        mode: "mirror",
+        singletonRole: "secondary",
+        roleChangedAt: new Date(),
+      })
       .run();
     expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: "node-a" }]);
   });
@@ -53,9 +63,7 @@ describe("node.db's tables", () => {
       .insert(box)
       .values({ ...row, signingKeyIv: new Uint8Array(12) })
       .run();
-    expect(suite.node.all(sql`select node_id from box`)).toEqual([
-      { node_id: "node-a" },
-    ]);
+    expect(suite.node.all(sql`select node_id from box`)).toEqual([{ node_id: "node-a" }]);
   });
 
   it("creates node_pair_link in node.db and not in venue.db", () => {

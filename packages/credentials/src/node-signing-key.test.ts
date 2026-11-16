@@ -73,7 +73,16 @@ describe("the box's signing key in node.db", () => {
   async function insertRaw(nodeId: string, aad: string, plaintext: string, keyVersion = 1) {
     const sealed = seal(Buffer.from(K1, "base64"), aadFor(aad), plaintext);
     await withNodeTransaction(suite.node, (tx) =>
-      tx.insert(box).values({ nodeId, signingKeyCiphertext: sealed.ciphertext, signingKeyIv: sealed.iv, signingKeyAuthTag: sealed.authTag, signingKeyVersion: keyVersion, signingKeyChangedAt: new Date() }),
+      tx
+        .insert(box)
+        .values({
+          nodeId,
+          signingKeyCiphertext: sealed.ciphertext,
+          signingKeyIv: sealed.iv,
+          signingKeyAuthTag: sealed.authTag,
+          signingKeyVersion: keyVersion,
+          signingKeyChangedAt: new Date(),
+        }),
     );
   }
 
@@ -82,9 +91,9 @@ describe("the box's signing key in node.db", () => {
       sealNodeSigningKeyTx(tx, RING_V1, NODE, PRIVATE_KEY),
     );
     expect(await readNodeSigningKey(suite.node, RING_V1, NODE)).toBe(PRIVATE_KEY);
-    expect(suite.node.all(sql`select node_id, signing_key_version from box`)).toEqual([
-      { node_id: NODE, key_version: 1 },
-    ]);
+    expect(
+      suite.node.all(sql`select node_id, signing_key_version as key_version from box`),
+    ).toEqual([{ node_id: NODE, key_version: 1 }]);
 
     suite.node.run(sql`update box set node_id = ${OTHER} where node_id = ${NODE}`);
     const error = await captured(() => readNodeSigningKey(suite.node, RING_V1, OTHER));
@@ -119,7 +128,7 @@ describe("the box's signing key in node.db", () => {
     );
     expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(second);
     const rows = suite.node.all<{ key_version: number; updated_at: string }>(
-      sql`select signing_key_version, signing_key_changed_at from box`,
+      sql`select signing_key_version as key_version, signing_key_changed_at as updated_at from box`,
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.key_version).toBe(2);

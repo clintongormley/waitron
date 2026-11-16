@@ -33,7 +33,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer } = ephemeralServerFixture();
 
 /**
- * A sell-only local secondary — `node_mode.mode='primary'` with `singleton_role='secondary'` — is
+ * A sell-only local secondary — `box.mode='primary'` with `singleton_role='secondary'` — is
  * not a mirror, yet must not run scheduled backups,
  * because the one singleton primary owns them. A default-`primary` directory of the same identity is
  * the control that runs the primary duties, so the secondary's absence is not a boot that wired nothing.
@@ -153,7 +153,7 @@ beforeAll(async () => {
     await stampDeployment(db, "preproduction");
     await setSingletonRole({ venue: db, node }, TILL_ENV.WAITRON_NODE_ID, "secondary");
   });
-  // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
+  // No recorded role group: `readNodeMode` reads it as ('primary', 'primary').
   primaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
