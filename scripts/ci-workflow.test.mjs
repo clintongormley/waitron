@@ -3919,6 +3919,30 @@ describe("main push package gates", () => {
 });
 
 describe("the sharded jobs", () => {
+  it.each([
+    ["test-server", "Run the server shard", 404],
+    [
+      "test-server-stream",
+      "Run the tests that need Litestream, versitygw or a small filesystem",
+      415,
+    ],
+    ["test-heavy", "Run the db shard", 414],
+    ["test-provisioning", "Run the provisioning shard", 409],
+    ["test-identity", "Run the identity shard", 418],
+    ["test-workforce", "Run the workforce shard", 421],
+    ["test-light-a", "Run the light-a shard", 414],
+    ["test-light-b", "Run the light-b shard", 424],
+  ])("bounds %s's test command with its measured diagnostic deadline", (id, name, seconds) => {
+    const step = jobSteps(id).find((step) => step.name === name);
+    expect(step, id).toBeDefined();
+    const command = step.script.replace(/\\\n\s*/g, " ");
+    const deadline =
+      /^node scripts\/run-with-deadline\.mjs (\d+) --diagnostics -- pnpm [^|\n]*\btest:(?:shard|coverage) --coverage\.enabled=/m.exec(
+        command,
+      );
+    expect(deadline?.[1], id).toBe(String(seconds));
+  });
+
   it("bound every browser package's shard command and retain deadline diagnostics", () => {
     const browser = browserPackages();
     expect(browser.length).toBeGreaterThan(0);
@@ -6626,7 +6650,8 @@ describe("scoped selection commands", () => {
       const step = workflowSteps(job(id).body.join("\n")).find((entry) =>
         /^Run the light-[ab] shard$/.test(entry.step),
       );
-      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { cat >/dev/null; };\n';
+      const record =
+        'pnpm() { printf "%s\\n" "$*"; }; node() { if [ "$1" = scripts/run-with-deadline.mjs ]; then shift 4; "$@"; else cat >/dev/null; fi; };\n';
       const command = step.command.replaceAll("${{ needs.changes.outputs.full }}", "false");
       const result = spawnSync("bash", ["-c", record + command], {
         env: {

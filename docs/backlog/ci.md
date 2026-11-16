@@ -152,8 +152,10 @@ that log too and locate what the hooks were waiting on before changing a deadlin
 limit ("The job has exceeded the maximum execution time of 10m0s"); the jobs-logs API answered
 `BlobNotFound`, so no file progress survives. The same branch passed shard 19 in about two minutes on
 its two previous heads. Locally on macOS the same 60-file shard (`--shard=19/24`, CI's excludes and
-the file-progress reporter) passed every file. Unlike the browser shards, the server shard has no
-diagnostic process deadline, so a hang here leaves nothing once the log is lost.
+the file-progress reporter) passed every file. The server test command now has a diagnostic
+process deadline: a hang inside that step reports unfinished files and a live process snapshot
+before the job limit, within the measured setup allowance. Setup stalls and runner loss remain
+outside that report. Neither this diagnostic nor the passing runs locates the original wait.
 
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 
@@ -262,7 +264,7 @@ before retrying and reproduce the pending operation before assigning a cause.
 | Dashboard heading order remains unexplained after #350: `dashboard-app.a11y.test.ts` is a different rule with no colour evidence. | Run/job/date not recorded. | Retain the exact heading-order failure log before assigning a cause. | Retained-log path not recorded. |
 | #414: shard exited 1 with every test passing. Vitest 4.1.11 / #437 closed that exit-1 path; why the reporting call went unanswered remains open. | PR #414; run/job/date not recorded. | Keep the next job log. Under 3.2.7 `onTaskUpdate` hit birpc’s 60-second default; on 4.1.11 an unanswered call instead waits for the 10-minute job cancellation. | Retained-log path not recorded; [CI guide](../developers/ci-and-gates.md), written up rather than fixed (owner, 2026-09-18). |
 | Server shard 2 / #2664: two database-open hooks and a process case timed out on a hosted runner; the re-run passed without locating the wait. | [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010); 2026-11-09, shard 2; job ID not recorded. | Keep the log and locate what the hooks were waiting on before changing a deadline. | `~/waitron-campaign-l/ci-logs/pr2664-run42690313010-test-server-2.log`; [Detail](#server-shard-2-stalled-once-on-a-hosted-runner-pr-2664-2026-11-09). |
-| Server shard 19 / #3342: silent to the 10-minute job limit; jobs-logs API returned `BlobNotFound`. Earlier heads and the local shard passed; cause unknown. | [43721700167](https://github.com/clintongormley/waitron/actions/runs/43721700167/job/132835178034); 2026-11-15. | Retain step output and file progress before cancellation; this server shard has no diagnostic process deadline. | [Detail](#server-shard-2-stalled-once-on-a-hosted-runner-pr-2664-2026-11-09); no file progress survives. |
+| Server shard 19 / #3342: silent to the 10-minute job limit; jobs-logs API returned `BlobNotFound`. Earlier heads and the local shard passed; cause unknown. | [43721700167](https://github.com/clintongormley/waitron/actions/runs/43721700167/job/132835178034); 2026-11-15. | Read the diagnostic deadline's unfinished-file and process report if the test step hangs again; setup and runner loss remain outside it. Locate the wait before changing limits. | [Detail](#server-shard-2-stalled-once-on-a-hosted-runner-pr-2664-2026-11-09); no file progress survives from the original incident. |
 
 ## Fiscal shard 2: first-hour PDF failed before the deadline
 

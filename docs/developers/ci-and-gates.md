@@ -1597,7 +1597,9 @@ reporter with the same setting paused the page 1.4 seconds in. A scratch case th
 looped forever was sampled at 46.1 seconds, its stack naming the looping function.
 
 
-### A browser shard reports before its job limit
+<a id="a-browser-shard-reports-before-its-job-limit"></a>
+
+### A test shard reports before its job limit
 
 A job killed at its outer limit can lose its log. On 23 October 2026, main run
 `39898823017`, till shard 2, left no downloadable log (`BlobNotFound`). Its blocked
@@ -1614,10 +1616,49 @@ These limits leave room under the ten-minute job limit for a two-second process
 snapshot, the five-second termination grace and artifact uploads on those measured
 runs. Setup still consumes the same job budget; the wrapper does not bound a hung install.
 
+The remaining package Vitest steps use the limits below. The source is the scheduled
+full-main run [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252)
+on 14 November 2026, head `58d3c38bddfc9dae66fbc5bf60c7b11f16121724`.
+The jobs API's `started_at` and `completed_at` values give these seconds:
+
+| Job family | Successful test step | Largest setup before tests | Diagnostic limit |
+| --- | ---: | ---: | ---: |
+| `test-server` | 116–212 | 39 | 404 |
+| `test-server-stream` | 118 | 28 | 415 |
+| `test-heavy` (db) | 24–28 | 29 | 414 |
+| `test-provisioning` | 45–90 | 34 | 409 |
+| `test-identity` | 126 | 25 | 418 |
+| `test-workforce` | 113 | 22 | 421 |
+| `test-light-a` | 215 | 29 | 414 |
+| `test-light-b` | 205 | 19 | 424 |
+
+Each limit is `600 − setup − 2 − 5 − 120 − 30`: two seconds for the snapshot,
+five for termination, both one-minute upload attempts and a thirty-second margin.
+The upload reserve also remains available in jobs without a blob upload.
+The source run passed; its slowest checkout was eleven seconds, accepted as
+"about ten" by the watcher on 16 November at 22:19. The retained
+[GitHub incident history](https://www.githubstatus.com/api/v2/incidents.json) lists
+no Actions, Git Operations, API Requests or Webhooks incident overlapping that run;
+the downloaded logs contain no download HTTP 5xx failure. The 15 and 16 November
+nightlies (`43667121845`, `43791398545`) had fifteen- and fourteen-second checkout
+maxima and were left out of the timing source. Their extra checkout time fits the
+margin; this does not bound every setup delay. One excluded provisioning job spent
+101 seconds before testing, beyond the setup allowance plus margin above.
+
+The deadline starts only at the test invocation. Root guards remain unwrapped;
+setup stalls and runner loss can still reach the job limit without this report.
+Exit 124 means the command exceeded its limit; a slow run still making progress
+also fails, so read the file progress before treating it as a hang.
+This branch's scoped PR does not select the light groups: their workflow wiring
+and real pnpm-line parser cases are checked, but their first runtime check of these
+limits belongs to a scheduled or manual full-main run.
+
 The wrapper forwards stdout and stderr and tracks the existing `[file-progress]`
-start/end lines. At expiry it lists files assigned to workers without an end line,
+start/end lines, including pnpm's package and script prefix in the light groups.
+That prefix keeps two packages' identical relative filenames separate.
+At expiry it lists files assigned to workers without an end line,
 then runs `ps` with a two-second limit to show process ids, parents, states, elapsed
-time, CPU, memory and command lines. Assignment does not mean a browser has loaded
+time, CPU, memory and command lines. Assignment does not mean a worker or browser has loaded
 the file. An empty file list may indicate a startup or teardown wait. A failed
 snapshot is reported, and the command still fails with exit 124. The existing
 stop signals only the launched POSIX process group. After the command exits, cleanup
@@ -1631,6 +1672,13 @@ the child and ignores SIGTERM. With a one-second test limit it exits 124, names 
 the unfinished file and includes the still-running child in its process snapshot.
 Healthy exit codes and both output streams are also asserted. These controls do
 not reproduce the unknown CI hang.
+
+A disposable server test also entered a synchronous block under the real server
+`test:shard` command and file-progress reporter on macOS, Node 26.13.0 and Vitest 4.1.12.
+With a ten-second diagnostic limit it printed an entered marker, named
+`src/deadline-diagnostic-probe.test.ts` as unfinished, included that worker's pid
+in the live process snapshot and exited 124. The temporary test and blob were removed.
+This proves the server diagnostic path, not the cause of either server incident.
 
 The A1027 review reproduced a pipe-lifetime regression: a command exited 0 or 7
 while a worker kept its captured output pipes open, so cleanup placed on `close`
@@ -1650,8 +1698,12 @@ witness process remained alive after that command ended.
 
 The browser-deadline case in `scripts/ci-workflow.test.mjs` is weaker than its name:
 it reads workflow text, never executes a deadline or checks GitHub log retention.
-The runner's explicit browser consumers are in `ROOT_SCOPE_CONSUMERS`; its guard
+The runner's explicit package consumers are in `ROOT_SCOPE_CONSUMERS`; its guard
 recognises the wrapped UI pair and reporters while retaining the earlier checks.
+The additional deadline table in `scripts/ci-workflow.test.mjs` also reads text;
+it checks the eight invocations and limits, not hosted timeout behaviour or log retention.
+Light groups use computed filters, so the literal-consumer guard does not attribute
+their packages to the wrapper. A wrapper-only change does not select those groups.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 

@@ -1034,7 +1034,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/db" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          pnpm --filter "@waitron/db" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 414 --diagnostics -- pnpm --filter "@waitron/db" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/3 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -1271,7 +1271,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/server" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 404 --diagnostics -- pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/24 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
@@ -1433,7 +1433,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/server" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 415 --diagnostics -- pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             src/stream-loop.e2e.test.ts \
             src/stream-pause.e2e.test.ts \
             src/s3-rehearsal-scenarios.e2e.test.ts \
@@ -3344,7 +3344,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/provisioning" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          pnpm --filter "@waitron/provisioning" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 409 --diagnostics -- pnpm --filter "@waitron/provisioning" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             --shard=${{ matrix.shard }}/6 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
@@ -3519,7 +3519,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/identity" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/identity" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 418 --diagnostics -- pnpm --filter "@waitron/identity" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   test-workforce:
@@ -3586,7 +3586,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/workforce" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/workforce" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 421 --diagnostics -- pnpm --filter "@waitron/workforce" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # The remaining packages partition into two bins, with at most two package runners per bin.
@@ -3707,7 +3707,7 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 414 --diagnostics -- pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - name: Check the contract package
@@ -3825,7 +3825,7 @@ jobs:
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+          node scripts/run-with-deadline.mjs 424 --diagnostics -- pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # Whole-file shards preserve every mutation target; the aggregate enforces the package floor.
