@@ -17,8 +17,10 @@ it("renames tracked reconciliation consumers once while preserving historical in
   const root = mkdtempSync(join(tmpdir(), "pa3-reconciliation-rename-"));
   for (const key of Object.keys(process.env))
     if (key.startsWith("GIT_")) vi.stubEnv(key, undefined);
-  const input = "scheduled_runs scheduledRuns scheduled-runs";
-  const renamed = "reconciliation_runs reconciliationRuns reconciliation-runs";
+  const input =
+    "scheduled_runs scheduledRuns scheduled-runs scheduled_runs scheduledRuns scheduled-runs scheduledAt scheduled_run SCHEDULER_TABLES ScheduledRuns";
+  const renamed =
+    "reconciliation_runs reconciliationRuns reconciliation-runs reconciliation_runs reconciliationRuns reconciliation-runs scheduledAt scheduled_run SCHEDULER_TABLES ScheduledRuns";
   const consumers = [
     "apps/server/src/consumer.ts",
     "packages/payments/src/schema/scheduled-runs.ts",
@@ -63,9 +65,14 @@ it("renames tracked reconciliation consumers once while preserving historical in
     vi.stubEnv("GIT_DIR", undefined);
     execFileSync("git", ["add", "-u"]);
     execFileSync("git", ["add", "packages/payments/src/schema/reconciliation-runs.ts"]);
+    write("apps/rebased.ts", input);
+    execFileSync("git", ["add", "apps/rebased.ts"]);
     vi.resetModules();
     await import("./pa3-reconciliation-runs.mjs");
-    expect(execFileSync("git", ["diff", "--name-only"], { encoding: "utf8" })).toBe("");
+    expect(readFileSync("apps/rebased.ts", "utf8")).toBe(renamed);
+    expect(execFileSync("git", ["diff", "--name-only"], { encoding: "utf8" })).toBe(
+      "apps/rebased.ts\n",
+    );
   } finally {
     process.chdir(originalCwd);
     vi.unstubAllEnvs();
