@@ -446,7 +446,13 @@ describe("Print API — the agent lifecycle end to end", () => {
 
       const manager = await send(app, "POST", path, { cookie: managerCookie, body });
       expect(manager.status).toBe(202);
-      expect(await manager.json()).toMatchObject({ command: { address, state: "pending" } });
+      const result = (await manager.json()) as { command: { id: string } };
+      expect(result).toMatchObject({ command: { address, state: "pending" } });
+      const settled = await send(app, "POST", "/print-api/agent/jobs", {
+        bearer: token,
+        body: { bluetoothOutcomes: [{ id: result.command.id, ok: true }] },
+      });
+      expect(settled.status).toBe(200);
     }
   });
 
