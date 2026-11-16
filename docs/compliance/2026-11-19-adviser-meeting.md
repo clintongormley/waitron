@@ -233,9 +233,9 @@ enough.
 *How a copy looks.* On the inspector's Invoices page, each invoice downloads as a PDF stamped
 "DUPLICADO": a full invoice in A4, a ticket at ticket width, laid out like the printed ticket. Like
 a till reprint, a copy shows the issued sale's issuer, lines, totals and QR code with today's header
-text and logo; a ticket copy also prints today's address. A cancelled or replaced ticket carries no
-mark saying so; the list marks it "Cancelled", or shows the full invoice that replaced it as
-"Replaces <ticket numbers>".
+text and logo; a ticket copy also prints today's address when the till's ticket does. A cancelled or
+replaced ticket carries no mark saying so; the list marks it "Cancelled", or shows the full invoice
+that replaced it as "Replaces <ticket numbers>".
 
 *We ask:* Is that right? And should the copy itself also say "Cancelled on <date>" or "Replaced by
 invoice <number>"?
@@ -684,9 +684,9 @@ pide desde su oficina, basta una copia del periodo en USB o un enlace temporal d
 la marca «DUPLICADO»: una factura completa en A4, un tique con el ancho del tique y la misma
 disposición que el impreso en caja. Como una reimpresión en caja, la copia muestra el emisor, las
 líneas, los totales y el código QR de la venta expedida, con el texto de cabecera y el logotipo
-actuales; la copia de un tique imprime también la dirección actual. Un tique anulado o sustituido no
-lleva ninguna marca que lo indique; la lista lo marca como «Anulada», o muestra la factura completa
-que lo sustituyó como «Sustituye a ‹números de tique›».
+actuales; la copia de un tique imprime también la dirección actual si el tique de caja la imprime.
+Un tique anulado o sustituido no lleva ninguna marca que lo indique; la lista lo marca como
+«Anulada», o muestra la factura completa que lo sustituyó como «Sustituye a ‹números de tique›».
 
 *Preguntamos:* ¿Es correcto? ¿Y debería la propia copia indicar también «Anulada el ‹fecha›» o
 «Sustituida por la factura ‹número›»?
