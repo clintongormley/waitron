@@ -1,6 +1,7 @@
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
-import { openVenueDatabase, invoiceSeries, withTransaction } from "@waitron/db";
-import { eq } from "drizzle-orm";
+import { openVenueDatabase, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { count, eq } from "drizzle-orm";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import { recordSale } from "@waitron/core";
 import { nodeId, seriesId } from "@waitron/shared";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
@@ -164,8 +165,8 @@ it("valid JSON with an invalid setup envelope stays refused through summary and 
         },
         { incoming: { socket } },
       );
-      expect(answer.status).toBe(400);
-      expect(await answer.json()).toMatchObject({ error: { code: "setup.request_invalid" } });
+      expect(answer.status).toBe(409);
+      expect(await answer.json()).toMatchObject({ error: { code: "setup.attempt_invalid" } });
     }
     expect(await diskSnapshot(f.roots)).toEqual(before);
   } finally {
@@ -207,6 +208,10 @@ it("a sale without any fiscal record still refuses damaged-record deletion", asy
         saleInput({ nodeId: nodeId(state.frozen.nodeId), seriesId: seriesId(series!.id) }),
       ),
     );
+    expect(await db.venue.select({ count: count() }).from(sales)).toEqual([{ count: 1 }]);
+    expect(await db.venue.select({ count: count() }).from(registrosFacturacion)).toEqual([
+      { count: 0 },
+    ]);
   } finally {
     await db.close();
   }

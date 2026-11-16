@@ -488,7 +488,7 @@ the missing-database path is deleted.)
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record (the historical A1158 case, addressed on 2026-11-16 under [setup-state](#setup-state)), the setup databases A1159 lists and the database-present case in A1161 still refuse.
+Route (audit before 2026-11-16): Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record (the historical A1158 case, addressed on 2026-11-16 under [setup-state](#setup-state)), the setup databases A1159 lists and the database-present case in A1161 still refuse.
 
 _2026-11-16, SETUP-ATTEMPT-INVALID-WORDING (queued by the watcher; the words are not owner-reviewed): the words no longer send the person to support. They now read "Waitron cannot read or save part of what it keeps about this setup, so this step cannot go on. Reload the page, or press Reconnect where it is shown, to try again. If this message comes back, paste this page's address into a new tab: a new tab does not use this tab's own copy of the setup. Where they are offered, Start again and Recover from backup ask before they delete anything." (Spanish to match). Still open: after a reload or a new tab, the repair page can still refuse Start again for the causes in A1159 and A1161 (under [setup-state](#setup-state)). The rest of this entry records the earlier tree._
 
@@ -697,6 +697,8 @@ changes take their required review and existing protected-writer approvals.
 _2026-11-16, SETUP-RECORD-WAY-OUT: a syntax-damaged setup record now has a warned, confirmed Start again and Recover from backup after an independent database read finds no sales or fiscal records. AEAT history is unknown; menu and staff rows may be deleted. The [owner’s exception and deliberate exclusions](setup.md#decisions-and-deliberate-limits) preserve readable-record refusals and the other cases below._
 
 **Setup state refusals need a usable next step.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+
+Remaining from A1158 and Recover from backup: a damaged setup record with an installed box row still refuses both choices, even without sales or fiscal records.
 
 #### A1159: some setup databases the box cannot read still refuse Start again
 

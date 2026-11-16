@@ -1,5 +1,7 @@
 # A1379: a failed setup always offers Start again
 
+_2026-11-16: the syntax-damaged setup-record case now follows [Damaged setup record: warned way out](2026-11-16-setup-record-way-out.md). Readable-record refusals and the other exclusions stay; this plan records its earlier behavior._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 **Goal:** A first setup that stopped part way can always be deleted with Start again, unless its

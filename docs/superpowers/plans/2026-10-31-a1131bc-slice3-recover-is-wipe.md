@@ -1,5 +1,7 @@
 # A1131b/c slice 3: Recover from backup becomes the wipe — Implementation Plan
 
+_2026-11-16: the syntax-damaged setup-record case now follows [Damaged setup record: warned way out](2026-11-16-setup-record-way-out.md). Readable-record refusals and the other exclusions stay; this plan records its earlier behavior._
+
 **Revision 3 (2026-10-31).** This revision folds the round-3 claim check of revision 2
 (`~/waitron-campaign/item-a1131bc-3-round3.md`: 0 critical, 1 important, 8 minor).
 - **I-1:** revision 2's fold of M1 said Continue gets a person out of a "repairable" setup record.

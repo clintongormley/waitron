@@ -148,8 +148,8 @@ export function firstFiscalOwner(c: Context): FirstSetupOwnerAttempt {
     ownerGeneration: integer("X-Waitron-Setup-Generation"),
   };
 }
-function assertAttemptCounts(body: Record<string, unknown>, damaged = false) {
-  if (damaged && body.revision === null && body.ownerGeneration === null) return;
+function assertAttemptCounts(body: Record<string, unknown>, allowNull = false) {
+  if (allowNull && body.revision === null && body.ownerGeneration === null) return;
   if (
     ![body.revision, body.ownerGeneration].every(
       (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
@@ -157,13 +157,9 @@ function assertAttemptCounts(body: Record<string, unknown>, damaged = false) {
   )
     invalid();
 }
-/** The body of a request naming only the attempt it acts on. */
-async function attemptReference(c: Context, allowDamaged?: () => Promise<boolean>) {
+async function attemptReference(c: Context, allowNull = false) {
   const body = exact(await readFirstFiscalBody(c), ["inspectionId", "revision", "ownerGeneration"]);
-  assertAttemptCounts(
-    body,
-    body.revision === null && body.ownerGeneration === null && (await allowDamaged?.()),
-  );
+  assertAttemptCounts(body, allowNull);
   return {
     inspectionId: text(body.inspectionId),
     revision: body.revision as number | null,
@@ -710,11 +706,7 @@ export function mountFirstSetupResolutionApi(
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
-        const reference = await attemptReference(
-          c,
-          async () =>
-            (await host.resolution.inspectFirstSetupResolution()).setupRecordDamaged === true,
-        );
+        const reference = await attemptReference(c, true);
         try {
           return c.json(await diskFullOr(() => options.summary!(reference)));
         } catch (error) {
@@ -766,12 +758,7 @@ export function mountFirstSetupResolutionApi(
           body.recoveryRecordDamagedShown !== true
         )
           invalid();
-        assertAttemptCounts(
-          body,
-          body.revision === null &&
-            body.ownerGeneration === null &&
-            (await host.resolution.inspectFirstSetupResolution()).setupRecordDamaged === true,
-        );
+        assertAttemptCounts(body, true);
         const confirmDamagedSetupRecord = Object.hasOwn(body, "confirmDamagedSetupRecord")
           ? { shown: shownSummary(exact(body.confirmDamagedSetupRecord, ["shown"]).shown) }
           : undefined;

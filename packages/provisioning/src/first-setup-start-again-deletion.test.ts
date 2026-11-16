@@ -400,15 +400,22 @@ it("Start again empties prepared and keeps every module's retained history", asy
     });
 });
 
-it("a damaged-record marker resumes deletion of unchanged files", async () => {
+it("a damaged-record marker resumes after deletion stops with unchanged files remaining", async () => {
   const roots = await box();
-  const ordinary = await startAgainMarkerFor(roots, attempt);
-  const { venueDir, stateDir, files, wal } = ordinary;
-  const marker = { version: 2 as const, venueDir, stateDir, files, wal };
+  const marker = await startAgainMarkerFor(roots, null);
   await writeStartAgainMarker(roots, marker);
+  await expect(
+    deleteMarkedAttempt(roots, marker, async (path, kind) => {
+      if (path === join(roots.stateDir, "flows/setup/record.json"))
+        throw Object.assign(new Error("write refused"), { code: "EIO" });
+      await removeAndSync(path, kind);
+    }),
+  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
   await finishStartAgainDeletion(roots);
   expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(false);
-  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
 });
 
 it("a damaged-record marker without the setup fingerprint is refused", async () => {
