@@ -18,7 +18,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { passSees, readScopedPassBoard, type PassScope } from "./pass-board.js";
+import { passScopeOf, passSees, readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
 import {
   boardCards,
@@ -144,6 +144,23 @@ const groupCards = (board: PassBoard) =>
     .sort((a, b) => a.group!.position - b.group!.position);
 
 describe("passSees", () => {
+  it("leaves a listed switched-off zone outside the pass scope", () => {
+    expect(
+      passScopeOf({
+        kind: "pass",
+        available: true,
+        everyStation: false,
+        everyZone: false,
+        showNonPassStations: false,
+        stations: [{ id: "grill", name: "Grill", available: true, switchedOff: false }],
+        zones: [
+          { id: "inside", name: "Inside", available: true, switchedOff: false },
+          { id: "terrace", name: "Terrace", available: false, switchedOff: true },
+        ],
+      }),
+    ).toEqual({ stationIds: ["grill"], zoneIds: ["inside"] });
+  });
+
   it("sees a dish only at a listed station and in a listed zone; a dish in no zone only under every zone", () => {
     const scope: PassScope = { stationIds: ["grill"], zoneIds: ["terrace"] };
     expect(passSees(scope, { stationId: "grill", zoneId: "terrace" })).toBe(true);
@@ -187,6 +204,23 @@ describe("pass screen", () => {
       sql`update working_orders set collected_at = '2026-10-02T18:00:00.000Z' where id = ${counterId}`,
     );
     expect(await orderIds()).toEqual([]);
+  });
+
+  it("keeps a mixed card's live dish without its dish made at the till", async () => {
+    const { v, grill, bar, outside } = await terraceVenue();
+    const items = await inTx(v, (tx) =>
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, outside.tabId)),
+    );
+    const burger = items.find((item) => item.stationId === grill)!;
+    const drink = items.find((item) => item.stationId === bar)!;
+    await inTx(v, (tx) =>
+      tx.update(ticketItems).set({ madeHere: true }).where(eq(ticketItems.id, drink.id)),
+    );
+    const card = cardOf(await read(v, EVERY), (card) =>
+      card.items.some((item) => item.id === burger.id),
+    );
+    expect(card.items.map((item) => item.id)).toEqual([burger.id]);
+    expect(card.orders.map((order) => order.orderId)).toEqual([outside.tabId]);
   });
 
   it("A773 no dispatch state: splitting a dish keeps both its kitchen items on the pass", async () => {

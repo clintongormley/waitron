@@ -488,6 +488,39 @@ describe("A773 pass board: scoped", () => {
     });
   });
 
+  it.each(["collected", "abandoned"] as const)(
+    "keeps a split group's live bill without its %s bill",
+    async (excluded) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+      const venue = await setupSplitExtrasVenue();
+      await withTransaction(db, async (tx) => {
+        await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+        const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [{ lines: [dish(venue, "burger"), dish(venue, "burger")], release: "fire" }],
+        });
+        const [first, second] = placed.groups[0]!.lineIds as [string, string];
+        const { billId } = await moveDishes(
+          tx,
+          venue.cfg,
+          venue.party.tabId,
+          null,
+          [second],
+          await billCommand(tx, venue),
+        );
+        await tx
+          .update(workingOrders)
+          .set(excluded === "collected" ? { collectedAt: AT } : { status: "abandoned" })
+          .where(eq(workingOrders.id, billId));
+        const board = await readScopedPassBoard(tx, EVERY);
+        expect(cards(board)).toHaveLength(1);
+        const [card] = board.toFire;
+        expect(card!.items.map((item) => item.id)).toEqual([await ticketItemOf(tx, first)]);
+        expect(card!.orders.map((order) => order.orderId)).toEqual([venue.party.tabId]);
+      });
+    },
+  );
+
   it("shows a held group as a held card with nothing to fire", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();

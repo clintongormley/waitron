@@ -9,12 +9,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
-import {
-  type TimingBand,
-  classifyBand,
-  conjunctionList,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { classifyBand, conjunctionList, thousandthsToDecimal } from "@waitron/shared";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { nutritionIconStyles } from "./nutrition-icons.js";
@@ -38,6 +33,8 @@ import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import {
+  BoardWidth,
+  ageAccentClasses,
   columnHeading,
   dishAllergens,
   dishModifiers,
@@ -184,6 +181,7 @@ export class TillStationQueue extends LitElement {
   constructor() {
     super();
     new ContentLanguageController(this);
+    new BoardWidth(this, () => this.#measured?.width);
   }
 
   static override styles = [
@@ -199,10 +197,6 @@ export class TillStationQueue extends LitElement {
     css`
       :host {
         display: block;
-      }
-
-      .width-probe {
-        height: 0;
       }
 
       .column-tabs {
@@ -291,15 +285,6 @@ export class TillStationQueue extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .lines {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
       .elsewhere {
         border-top: 1px solid var(--wt-color-border);
         padding-top: var(--wt-space-2);
@@ -328,21 +313,9 @@ export class TillStationQueue extends LitElement {
         gap: var(--wt-space-1) var(--wt-space-2);
       }
 
-      /* A line cell — the tappable bump target (a plain button so it themes like the floor cards). A
-         held cell renders the same box as a non-interactive span. Column layout so the dish row
-         (.line-main) can carry an indented modifiers list beneath it. */
       .line {
-        display: flex;
-        flex-direction: column;
         align-items: stretch;
-        gap: var(--wt-space-1);
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-left: var(--wt-space-1) solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
         font: inherit;
         text-align: left;
       }
@@ -364,104 +337,17 @@ export class TillStationQueue extends LitElement {
         margin-bottom: var(--wt-space-1);
       }
 
-      /* The dish row: qty× name. */
+      .line-modifiers,
+      .line-customisation {
+        gap: 0;
+      }
+
       .line-main {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-2);
         width: 100%;
-      }
-
-      /* The dish's selected options, indented beneath it — matching the
-         kitchen-print ticket's own "+ name" sub-text style (apps/server/src/kitchen-ticket.ts). Muted
-         text, never a tap target of its own (removing an option removes the whole dish). */
-      .line-modifiers {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        padding-left: var(--wt-space-3);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .line-crossrefs {
-        display: flex;
-        flex-direction: column;
-        padding-left: var(--wt-space-3);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      /* Each selected extra's OWN allergens/diet (nutrition redesign, pass 1), flowing inline after the
-         extra's "+ name" — never a fold, just the extra's own list beside the dish's own rows below. */
-      .extra-nutrition,
-      .extra-allergens,
-      .extra-diet {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-
-      .extra-nutrition {
-        margin-left: var(--wt-space-1);
-      }
-
-      /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
-         like the modifiers list: the free-text note as muted sub-text. */
-      .line-customisation {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        padding-left: var(--wt-space-3);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .line-note {
-        color: var(--wt-color-text-muted);
-      }
-
-      .line-allergens {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1) var(--wt-space-2);
-        padding-left: var(--wt-space-3);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      .allergen-label {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* The as-served DIET & contains row (dietary-classification, Task 7), indented like the allergen
-         row beneath the dish. The badge/chip look comes from the shared dietBadgeStyles; only the indent
-         is station-specific. */
-      .line-diet {
-        padding-left: var(--wt-space-3);
-      }
-
-      .line.state-queued {
-        border-left-color: var(--wt-color-text-muted);
-      }
-
-      .line.state-preparing {
-        border-left-color: var(--wt-color-primary);
-      }
-
-      .line.state-ready {
-        border-left-color: var(--wt-color-success);
-      }
-
-      /* A HELD line — greyed and non-advanceable. Greying is a
-         MUTED text colour (the token every secondary label uses, so it keeps a11y contrast on the
-         surface) plus a dashed box, NOT reduced opacity (which would composite the text against the
-         background and fail the color-contrast sweep). It renders as an inert span, so there is no bump. */
-      .line.held {
-        border-style: dashed;
-        border-left-style: solid;
-        color: var(--wt-color-text-muted);
       }
 
       /* The dish label (qty × name) — the primary text a cook reads. Truncates rather than wrapping so
@@ -759,37 +645,12 @@ export class TillStationQueue extends LitElement {
   #cardBadgeDrawn = false;
   /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
   #measured?: BoardMeasure;
-  #resizing?: ResizeObserver;
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
   #opening?: ColumnKey;
   /** The column whose tab or heading takes the focus from a heading or tab the next drawing removes. */
   #refocus?: ColumnKey;
   #drewTabs = false;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (this.hasUpdated) this.#observeWidth();
-  }
-
-  override firstUpdated(): void {
-    this.#observeWidth();
-  }
-
-  /** Watches a line of no height across the board, not the host: the switch to tabs changes the
-   * host's height, which a watch on the host would report again in the same frame. */
-  #observeWidth(): void {
-    this.#resizing = new ResizeObserver((entries) => {
-      if (entries.at(-1)!.contentRect.width !== this.#measured?.width) this.requestUpdate();
-    });
-    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#resizing?.disconnect();
-    this.#resizing = undefined;
-  }
 
   override willUpdate(): void {
     this.#measured = measureBoard(this);
@@ -928,15 +789,6 @@ export class TillStationQueue extends LitElement {
 
   #elapsedMinutes(since: number): number {
     return Math.max(0, Math.floor((this.#clockNow() - since) / 60000));
-  }
-
-  #prefersReducedMotion(): boolean {
-    return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
-  #accentClasses(band: TimingBand): string {
-    const flash = band === "forgotten" && !this.#prefersReducedMotion();
-    return `age-${band}${flash ? " flash" : ""}`;
   }
 
   /** "5 dishes to make · 1 late", over every card on this queue (D9). */
@@ -1281,7 +1133,10 @@ export class TillStationQueue extends LitElement {
     const accent =
       since === null
         ? "held"
-        : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
+        : ageAccentClasses(
+            classifyBand(since, this.#clockNow(), first.thresholds),
+            this.reducedMotion,
+          );
     const labels = cardPlaces(card);
     const row = (members: StationQueueItem[]) =>
       this.#renderLine(

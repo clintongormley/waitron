@@ -1,6 +1,14 @@
 import { registerIcons, visuallyHiddenStyles } from "@waitron/ui";
-import { type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
-import { thousandthsToDecimal } from "@waitron/shared";
+import {
+  type LitElement,
+  type ReactiveController,
+  type TemplateResult,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
+import { thousandthsToDecimal, type TimingBand } from "@waitron/shared";
 import type { ExpoItem } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import {
@@ -22,8 +30,149 @@ registerIcons({
   "column-closed": "M5.4 2 4 3.4 8.6 8 4 12.6 5.4 14 11.4 8Z",
 });
 
-/** The columns, their headings and Overview a kitchen board (the station's and the pass's) draws. */
+/** Watches a zero-height line: changing the board layout also changes the host's height. */
+export class BoardWidth implements ReactiveController {
+  #resizing?: ResizeObserver;
+
+  constructor(
+    private readonly host: LitElement,
+    private readonly measuredWidth: () => number | undefined,
+  ) {
+    host.addController(this);
+  }
+
+  hostConnected(): void {
+    this.#observe();
+  }
+
+  hostUpdated(): void {
+    this.#observe();
+  }
+
+  hostDisconnected(): void {
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
+  }
+
+  #observe(): void {
+    if (this.#resizing || !this.host.isConnected) return;
+    const probe = this.host.renderRoot?.querySelector(".width-probe");
+    if (!probe) return;
+    this.#resizing = new ResizeObserver((entries) => {
+      if (entries.at(-1)!.contentRect.width !== this.measuredWidth()) this.host.requestUpdate();
+    });
+    this.#resizing.observe(probe);
+  }
+}
+
+export function ageAccentClasses(band: TimingBand, reducedMotion?: boolean): string {
+  const reduced = reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return `age-${band}${band === "forgotten" && !reduced ? " flash" : ""}`;
+}
+
 export const kitchenBoardStyles = css`
+  .width-probe {
+    height: 0;
+  }
+
+  .items,
+  .lines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wt-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .item,
+  .line {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wt-space-1);
+    padding: var(--wt-space-2) var(--wt-space-3);
+    border: 1px solid var(--wt-color-border);
+    border-left: var(--wt-space-1) solid var(--wt-color-border);
+    border-radius: var(--wt-radius-sm);
+    background: var(--wt-color-surface);
+    color: var(--wt-color-text);
+  }
+
+  .item.state-queued,
+  .line.state-queued {
+    border-left-color: var(--wt-color-text-muted);
+  }
+
+  .item.state-preparing,
+  .line.state-preparing {
+    border-left-color: var(--wt-color-primary);
+  }
+
+  .item.state-ready,
+  .line.state-ready {
+    border-left-color: var(--wt-color-success);
+  }
+
+  .item.held,
+  .line.held {
+    border-style: dashed;
+    border-left-style: solid;
+    color: var(--wt-color-text-muted);
+  }
+
+  .item-modifiers,
+  .item-crossrefs,
+  .item-customisation,
+  .line-modifiers,
+  .line-crossrefs,
+  .line-customisation {
+    display: flex;
+    flex-direction: column;
+    padding-left: var(--wt-space-3);
+    font-size: var(--wt-font-size-sm);
+  }
+
+  .item-modifiers,
+  .item-crossrefs,
+  .item-note,
+  .line-modifiers,
+  .line-crossrefs,
+  .line-note {
+    color: var(--wt-color-text-muted);
+  }
+
+  .line-diet {
+    padding-left: var(--wt-space-3);
+  }
+
+  .extra-nutrition,
+  .extra-allergens,
+  .extra-diet {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wt-space-1);
+  }
+
+  .extra-nutrition {
+    margin-left: var(--wt-space-1);
+  }
+
+  .allergen-label {
+    font-weight: var(--wt-font-weight-bold);
+  }
+
+  .item-allergens,
+  .line-allergens {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wt-space-1) var(--wt-space-2);
+    padding-left: var(--wt-space-3);
+    font-size: var(--wt-font-size-sm);
+    color: var(--wt-color-text-muted);
+  }
+
   .visually-hidden {
     ${visuallyHiddenStyles}
   }
