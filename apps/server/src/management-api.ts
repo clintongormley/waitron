@@ -84,6 +84,7 @@ import {
   setProfileAdmission,
   type ProfileAdmission,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import {
   FORM_FACTORS,
@@ -1046,10 +1047,9 @@ export function mountManagementApi(
           totpKeyRing: credentialKeyRing,
           checked,
         });
-        await authorizeManager(tx, {
-          managementSessionId: session.token,
-          permission: "node.manage",
-        });
+        await withInspectorAdmitted(() =>
+          authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),
+        );
         await endManagementSession(tx, session.token);
       });
       const document = await readNodeMembership(deps.db);

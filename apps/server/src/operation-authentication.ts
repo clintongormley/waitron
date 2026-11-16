@@ -14,6 +14,7 @@ import {
   loginManagerById,
   verifySecretAsync,
   type TotpKeyRing,
+  withInspectorAdmitted,
 } from "@waitron/identity";
 import {
   withOperationAuthority,
@@ -135,10 +136,9 @@ export async function withAuthenticatedOperation<T>(
         totpKeyRing: deps.credentialKeyRing,
         checked,
       });
-      const authorised = await authorizeManager(tx, {
-        managementSessionId: session.token,
-        permission,
-      });
+      const authorised = await withInspectorAdmitted(() =>
+        authorizeManager(tx, { managementSessionId: session.token, permission }),
+      );
       await endManagementSession(tx, session.token);
       await afterSignIn?.();
       return authorised.authorizedBy;

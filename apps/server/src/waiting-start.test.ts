@@ -25,6 +25,7 @@ import {
 } from "@waitron/node-db";
 import { TOTP_KEY_RING, enrolAuthenticator } from "./testing/authenticator.js";
 import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
+import { personHolding } from "./testing/session-holding.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
@@ -897,6 +898,24 @@ describe("the waiting start", () => {
       const answer = await post({
         email: "manager@example.test",
         password: "managerPass1",
+        ...BOTH,
+      });
+      expect(answer.status).toBe(403);
+      expect(await answer.text()).toContain(
+        "Your role does not let you choose which box runs the venue. Sign in here as an administrator to carry on.",
+      );
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("a person holding only `invoice.inspect` is refused with the role sentence, not a failure", async () => {
+      await personHolding(suite.db, ["invoice.inspect"], {
+        email: "inspector@example.test",
+        passwordHash: fixturePasswordHash("inspectorPass1"),
+      });
+      const answer = await post({
+        email: "inspector@example.test",
+        password: "inspectorPass1",
         ...BOTH,
       });
       expect(answer.status).toBe(403);

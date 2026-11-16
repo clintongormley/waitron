@@ -9,6 +9,7 @@ import { generateSync } from "otplib";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { personHolding } from "./testing/session-holding.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 
 // The admin-login path of `POST /management-api/promote` on a real database — for an admin who has
@@ -85,6 +86,24 @@ describe("POST /management-api/promote — an admin's right password while a han
     expect([res.status, await res.json()]).toEqual([
       409,
       { error: { code: "handover.operation_in_progress", params: { operationId } } },
+    ]);
+    expect(run).not.toHaveBeenCalled();
+    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  });
+});
+
+describe("POST /management-api/promote — a right password for a person holding only invoice.inspect", () => {
+  it("is refused as lacking node.manage, writes no session and never promotes", async () => {
+    const personId = await personHolding(suite.db, ["invoice.inspect"], {
+      passwordHash: hashPassword(ADMIN_PASSWORD),
+    });
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+
+    const res = await post(appWith(run), { personId, password: ADMIN_PASSWORD });
+
+    expect([res.status, await res.json()]).toEqual([
+      403,
+      { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
     ]);
     expect(run).not.toHaveBeenCalled();
     expect(await suite.db.select().from(managementSessions)).toEqual([]);

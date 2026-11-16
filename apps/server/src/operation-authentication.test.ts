@@ -13,6 +13,7 @@ import {
   withRecoveryKeyOperation,
 } from "./operation-authentication.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
+import { personHolding } from "./testing/session-holding.js";
 import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
@@ -127,6 +128,24 @@ describe("host-issued authority after fresh operator authentication", () => {
       expect(await suite.db.select().from(managementSessions)).toEqual([]);
     },
   );
+
+  it("refuses the correct password of a person holding only invoice.inspect as lacking node.manage", async () => {
+    const inspector = await personHolding(suite.db, ["invoice.inspect"], { passwordHash: HASH });
+    let entered = false;
+    await expect(
+      perform(
+        async () => {
+          entered = true;
+        },
+        { personId: inspector, password: PASSWORD },
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "node.manage" },
+    });
+    expect(entered).toBe(false);
+    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  });
 
   it.each(["pending", "suspended"] as const)("refuses a %s administrator", async (status) => {
     await suite.db.update(persons).set({ status }).where(eq(persons.id, ADMIN));

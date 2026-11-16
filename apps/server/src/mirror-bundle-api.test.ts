@@ -64,6 +64,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { personHolding } from "./testing/session-holding.js";
 import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
@@ -752,6 +753,26 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("authorization.not_permitted");
+  });
+
+  it("refuses a credential holding only invoice.inspect as lacking node.manage", async () => {
+    const { designated } = await setupVenue();
+    await personHolding(db, ["invoice.inspect"], {
+      email: STAFF_EMAIL,
+      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
+    });
+    const app = mountApp(designated);
+
+    const res = await post(app, {
+      email: STAFF_EMAIL,
+      password: STAFF_PASSWORD,
+      ...validStandby(),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "node.manage" },
+    });
   });
 
   it("refuses a wrong password with 401 before it can authorize", async () => {
