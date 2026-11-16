@@ -144,7 +144,8 @@ export function lineBlock(
         return { reason: "extras_limit", name: list.name };
       total += pick.quantity;
     }
-    if (total < list.minPicks || (list.maxPicks !== null && total > list.maxPicks))
+    const tooFew = offer.setLunch !== true && total < list.minPicks;
+    if (tooFew || (list.maxPicks !== null && total > list.maxPicks))
       return { reason: "extras_limit", name: list.name };
   }
   return undefined;
