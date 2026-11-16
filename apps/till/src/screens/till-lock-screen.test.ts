@@ -401,6 +401,43 @@ describe("till-lock-screen", () => {
     });
   });
 
+  it("says it is loading from Log in until a refusal or Cancel, and blocks a second Log in", async () => {
+    let refuse!: (error: unknown) => void;
+    const login = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => (refuse = reject)))
+      .mockImplementation(() => new Promise(() => {}));
+    const api = stubApi({ login });
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    await flush(el);
+    const status = () => query(el, '[role="status"]')?.textContent?.trim();
+    const submit = () => query(el, "wt-button.submit") as HTMLElement & { disabled: boolean };
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "1234");
+    expect(status()).toBeUndefined();
+    click(el, ".submit");
+    await el.updateComplete;
+    expect(status()).toBe(t("login.loading"));
+    expect(submit().disabled).toBe(true);
+    click(el, ".submit");
+    await el.updateComplete;
+    expect(login).toHaveBeenCalledTimes(1);
+    refuse({ code: "pin.invalid" });
+    await flush(el);
+    expect(status()).toBeUndefined();
+    expect(query(el, '[role="alert"]')?.textContent?.trim()).toBe(t("pin.invalid"));
+    await type(el, "1");
+    click(el, ".submit");
+    await el.updateComplete;
+    expect(status()).toBe(t("login.loading"));
+    click(el, "wt-button.cancel");
+    await el.updateComplete;
+    click(el, 'wt-button.operator-button[data-person="p2"]');
+    await el.updateComplete;
+    expect(status()).toBeUndefined();
+  });
+
   it("remembers the operator on this device after a successful login", async () => {
     const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {

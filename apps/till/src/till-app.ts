@@ -6233,7 +6233,13 @@ export class TillApp extends LitElement {
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
-    this.#setActiveTab(switched ? this.#homeScreen() : this.#requestedTab(), true, true);
+    const requestedTab = this.#requestedTab();
+    // A sign-in holds no table, so an order tab left in the address (a reload) would open empty.
+    this.#setActiveTab(
+      switched || requestedTab === this.#tableOrderTabKey() ? this.#homeScreen() : requestedTab,
+      true,
+      true,
+    );
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
