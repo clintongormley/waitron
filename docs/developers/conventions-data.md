@@ -39,6 +39,18 @@ Plain writes, aliases, re-exports and indirect file-system access escape it.
 The venue-holder heartbeat deliberately stays unflushed. `writeDurableHostJson`
 keeps its exclusive temporary names and linked-parent refusal.
 
+## A restarted bucket writer reloads exact sent-pointer bytes
+
+The server saves the latest sixteen encoded pointers in `stream/sent-pointers.json`, mode 0600,
+before the first attempt to send each pointer. Fresh hosts load only this node's entries;
+reloads share the same in-memory set. Conditional retries still require an exact byte match.
+The host uses the durable writer above. Missing history starts empty; unreadable or malformed
+history and failed saves log and continue, so recognition after restart is best effort.
+A whole-volume clone retaining the same node id and history can recognise the original's bytes.
+The watcher cleared that limit and the offline setup tradeoff on 2026-11-16 at 01:40 in Lane I's
+`questions.md`; this is not owner approval of the plan. `stream-host.test.ts` exercises two fresh
+hosts with an old PUT landing after the successor read, and malformed/unwritable history.
+
 ## Read live SQLite state through SQLite
 
 If your process holds SQLite connections, inspect their live state through SQLite too.

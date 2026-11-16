@@ -232,12 +232,11 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
   `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
   title is code, so a pruning PR cannot rename it).
 
-## A pointer write from a process that has since died, landing after the restart, can still make the box refuse itself
+## A deleted bucket pointer can still look like another writer
 
-- A pointer write from a process that has since died, landing after the restart, can still make the
-  box refuse itself, because a restarted process starts with an empty record; so does a
-  `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
-  to a missing object with 412 (SeaweedFS; the in-memory test store). In both cases the owner's alert
+- A `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
+  to a missing object with 412 (SeaweedFS; the in-memory test store), can still make the box
+  refuse itself. That refusal's alert
   (`backup.stream_refused`) still says another box is writing. On a bucket that answers that write
   with 404 instead (AWS, as it documents; versitygw, as measured), the deleted pointer surfaces as
   `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
@@ -395,16 +394,12 @@ loose ends below. Coordinate naming with A917 and failover addressing with A947.
 
 ## Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
 
-- A pointer write from a process that has since died, landing after the restart, can still make
-  the box refuse itself, because a restarted process starts with an empty record. In both cases
-  the owner's alert (`backup.stream_refused`) still says another box is writing.
-  [Detail](../backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
+- A bucket pointer deleted after the supervisor read it can still look like another writer.
+  [Detail](#a-deleted-bucket-pointer-can-still-look-like-another-writer)
 - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
   large database Litestream may not finish its last upload (it is still told to stop). Litestream's
   `shutdown-timeout: 4500ms` (`litestreamConfig`) caps its own stop at 4.5 seconds, before the
   5-second forced kill, and that counts against the 8.
-- `pnpm setup:litestream` skips the download when the installed binary already reports the
-  pinned version, so the checksum protects fresh downloads only.
 
 ## Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
 
@@ -431,7 +426,7 @@ snapshots or longer compaction intervals.
   limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
   stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
   owner's Mac. A venue's real rate and the box's disk were not measured.
-- Whether the side file grows, and the pause fires, in a real network outage was not run. A549
+- Starting Litestream during a real network outage still needs a Linux measurement. A549
   stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
   errors and drops its read transaction to retry (`db.go`, `init`, the same in v0.5.17 and
   v0.5.18). On 0.5.18 a refused connection gets there after about 7 seconds, so a Litestream
@@ -463,14 +458,17 @@ rigs also passed with both pinned binaries. This leaves the real-network outage 
 open: frozen/refused loopback connections do not qualify dropped attempts, unreachable hosts,
 DNS, Linux or venue conditions, and this measured no bound on the local level-0 folder.
 
+Update, 2026-11-16: the already-streaming Linux unreachable-host case is now
+[measured](../developers/testing-guide.md#a-real-unreachable-bucket-on-linux-already-streaming).
+The 201.471-second network disconnection produced no natural pause; all 7,958 rows matched after
+restore and integrity was `ok`. This is Docker Desktop's Linux VM and a numeric-IP outage, not
+physical box storage, DNS or venue-rate qualification. No limit on local level-0 growth was measured.
+
 ## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
 
 - The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
   502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
   code also covers a bad value in the recovery kit, where 400 is right.
-- A marker listing that throws still logs `stream.prune_failed` without raising the retention
-  warning, and retries at the next daily cleanup. The warning added on 2026-11-14 covers a
-  successful listing that omits the marker; failing listings remain open in this bundle.
 - The status and `errorName` on the stream's log lines other than the pause check's 403 were
   shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
   errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
@@ -1315,16 +1313,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   when the pack's bucket or archive page failed, nor for backups made under an older key (the guide
   covers older keys further down). Narrow the sentence in English and Spanish.
 
-## Bundle: Bucket copy: silent stops and a real outage
+## Bundle: Remaining bucket-copy limits
 
 3 entries, size S.
 
 - **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
-  `pnpm setup:litestream` skips the download when the installed binary already reports the
-  pinned version, so the checksum protects fresh downloads only.
+  The shutdown budget and the deleted-pointer refusal remain open.
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-6-590-the-litestream-supervisor)
 - **Loose ends left by A549.**
-  Whether the side file grows, and the pause fires, in a real network outage was not run.
+  Bound local level-0 growth and qualify starts during an outage and venue conditions.
   [Detail](box.md#loose-ends-left-by-a549)
 - **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
   reports).**

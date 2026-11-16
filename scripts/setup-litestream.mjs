@@ -4,8 +4,16 @@
  * `WAITRON_LITESTREAM_BIN=<that path>`. The box image fetches its own copy (`deploy/Dockerfile`).
  */
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isMainScript } from "./is-main-script.mjs";
@@ -46,8 +54,7 @@ export function assetFor(platform, arch, { version = VERSION, sums = SHA256 } = 
 }
 
 /**
- * Installs the pinned Litestream at `<root>/.bin/litestream`, unless the binary already there
- * reports the pinned version.
+ * Installs the pinned Litestream at `<root>/.bin/litestream` from a checksum-verified archive.
  *
  * @param {object} options
  * @param {string} options.root the repository root
@@ -76,15 +83,15 @@ export async function install({
   const target = join(root, ".bin", "litestream");
   const { asset, url, sha256 } = assetFor(platform, arch, pin);
 
-  let present;
+  let bytes;
   try {
-    present = run(target, ["version"]).trim();
-  } catch {
-    present = undefined;
+    bytes = await downloadRelease(url, { fetch, sleep, log });
+  } catch (error) {
+    throw new Error(
+      `Each setup run downloads and verifies Litestream, even when it is installed. ${error}`,
+      { cause: error },
+    );
   }
-  if (present === version) return { target, version, downloaded: false };
-
-  const bytes = await downloadRelease(url, { fetch, sleep, log });
   const actual = createHash("sha256").update(bytes).digest("hex");
   if (actual !== sha256) {
     throw new Error(`${asset} has SHA-256 ${actual}, not the pinned ${sha256}`);
@@ -96,8 +103,14 @@ export async function install({
     writeFileSync(archive, bytes);
     run("tar", ["-xzf", archive, "-C", staging, "litestream"]);
     mkdirSync(join(root, ".bin"), { recursive: true });
-    copyFileSync(join(staging, "litestream"), target);
-    chmodSync(target, 0o755);
+    const replacement = `${target}.${randomUUID()}.tmp`;
+    try {
+      copyFileSync(join(staging, "litestream"), replacement);
+      chmodSync(replacement, 0o755);
+      renameSync(replacement, target);
+    } finally {
+      rmSync(replacement, { force: true });
+    }
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
@@ -112,14 +125,12 @@ export async function install({
 // The process wiring alone; the suite calls `install` with the download and the platform injected.
 /* v8 ignore start */
 if (isMainScript(import.meta.url)) {
-  const { target, version, downloaded } = await install({
+  const { target, version } = await install({
     root: join(import.meta.dirname, ".."),
     platform: process.platform,
     arch: process.arch,
   });
-  console.log(
-    `litestream ${version} ${downloaded ? "installed" : "already installed"} at ${target}`,
-  );
+  console.log(`litestream ${version} installed at ${target}`);
   console.log(`start the server with WAITRON_LITESTREAM_BIN=${target}`);
 }
 /* v8 ignore stop */

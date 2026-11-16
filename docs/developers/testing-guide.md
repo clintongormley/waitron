@@ -1194,6 +1194,40 @@ the sweep has no browser rule (A426). A failing case would have shown a `…/ms-
 row with ppid 1 after the kill. Never kill a browser by name to clean up: `ms-playwright` also holds
 the Playwright MCP's `mcp-chrome-*` profiles, an interactive browser.
 
+## A real unreachable bucket on Linux, already streaming
+
+On 16 November 2026, a disposable `node:26-slim` container in Docker Desktop's aarch64 Linux VM
+ran the production stream supervisor with Litestream 0.5.18 and versitygw 1.8.0. The bucket's
+container was disconnected from its private Docker network for 201.471 seconds, then reconnected
+at the same numeric IP. A separately recorded host watchdog bounded the disconnection. Healthy
+listings before and after, a failed fetch while disconnected, and Litestream's “no route to host”
+output distinguish this from a frozen server or a DNS failure.
+
+With a 16 MiB test limit and synthetic 4 KiB inserts paced by 20 ms waits:
+
+| Observation | Measured result |
+| --- | --- |
+| Inserts acknowledged during the outage | 7,758 |
+| Peak sampled side file | 4,589,712 bytes |
+| Sampled side-file salt changes | 22 |
+| Local level-0 bytes before / after the outage | 424,411 / 34,284,269 |
+| Natural child exits / restarts / pauses | 0 / 0 / 0 |
+| Restored rows, every column compared | 7,958 |
+| Restored integrity check | `ok` |
+
+No pause was forced. These are synthetic inserts, not sale times or venue rates. Starting during
+an outage, other network failure modes, physical box storage and a bound on local level-0 growth
+remain unmeasured. The first attempt's wrapper rejected SQLite's null-prototype integrity row
+against a plain object; an independent Linux read matched all 7,965 rows and the `ok` field.
+After correcting that assertion, the complete fresh run above passed.
+
+The local command was `python3 ~/waitron-campaign-i/receipts/bucket-copy-stops-20261116/linux-orchestrate.py`.
+That disposable probe bundles the production supervisor and restore helper, and imports
+`readSideFile`/`framesUnderHeader` from `apps/server/src/testing/stream-pause-diagnostics.ts`.
+Its source, watchdog pid, raw process output, samples and `linux-summary.json` are local receipts
+under that folder. The probe removes its containers and private network; its owned runtime is
+discarded after validation.
+
 ## The stream loop test skips locally without its two binaries, and a skip reads as a pass
 
 `apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream
@@ -1214,7 +1248,9 @@ The loop itself lives in `apps/server/src/testing/stream-loop-scenario.ts`, so i
 against Amazon S3 by hand, without the frozen-server stage's timing check: see [aws-backup-rehearsal.md](aws-backup-rehearsal.md).
 
 **Binaries.** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs` installs
-both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
+both under `.bin/` at the repository root. Each Litestream setup invocation downloads and verifies
+the pinned archive, even with a matching binary installed; offline setup therefore fails.
+`WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
 FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_TEST_TOOLS=1`.
 CI runs both tests in `test-server-stream`, the one job that installs both binaries, together

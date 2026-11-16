@@ -116,14 +116,34 @@ export async function readPointer(
 
 export const SENT_POINTERS_KEPT = 16;
 
-/**
- * The exact bytes of the pointers a process has sent most recently, so a refusal caused by one of
- * them landing after a later read is told from another box's write. Byte-exact, not "this node id
- * and term": a rebuild reuses the dead box's node id and can sign the same term.
- */
+/** Recognise recorded pointer bytes rather than trusting a node id alone. */
 export class SentPointers {
   /** In the order first added, oldest first. */
   readonly #sent = new Set<string>();
+
+  constructor(readonly persist?: (entries: string[]) => Promise<void>) {}
+
+  snapshot(): string[] {
+    return [...this.#sent];
+  }
+
+  load(value: unknown, nodeId: string): void {
+    if (!Array.isArray(value)) throw invalid("sent_history");
+    const entries: string[] = [];
+    for (const entry of value) {
+      if (typeof entry !== "string") throw invalid("sent_history");
+      const bytes = Buffer.from(entry, "base64");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(bytes.toString("utf8"));
+      } catch {
+        throw invalid("sent_history");
+      }
+      if (pointerProblem(parsed) !== null) throw invalid("sent_history");
+      if ((parsed as SignedPointer).body.nodeId === nodeId) entries.push(entry);
+    }
+    for (const entry of entries.slice(-SENT_POINTERS_KEPT)) this.#sent.add(entry);
+  }
 
   add(pointer: SignedPointer): void {
     this.#sent.add(Buffer.from(encode(pointer)).toString("base64"));

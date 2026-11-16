@@ -59,6 +59,7 @@ export const CONFIGURATION_IMPORT_FILE = "flows/setup/import/marker.json";
 export const CONFIGURATION_IMPORT_ARTIFACT = "flows/setup/import/artifact";
 export const CONFIGURATION_IMPORT_KEY = "flows/setup/import/key";
 export const STREAM_DIR = "stream";
+export const STREAM_SENT_POINTERS_FILE = "stream/sent-pointers.json";
 export const HANDOVER_DIR = "handover";
 export const PAIR_STORE_DIR = "pair-store";
 export const PAIR_COPY_DIR = "pair-copy";
@@ -189,7 +190,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     reset: "deleted",
     why: "Module preparation and restored history survive restarts.",
   },
-  { name: STREAM_DIR, kind: "folder", reset: "deleted", why: "Owned by Litestream." },
+  {
+    name: STREAM_DIR,
+    kind: "folder",
+    reset: "deleted",
+    why: "Litestream configuration and sent-pointer history.",
+  },
   {
     name: HANDOVER_DIR,
     kind: "folder",

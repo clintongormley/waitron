@@ -1,7 +1,8 @@
 import type { LiveEvents } from "./live-api.js";
 import { publishState } from "./live-publish.js";
 import type { ServiceDefinition } from "./job-runner.js";
-import { STREAM_DIR } from "@waitron/store";
+import { STREAM_DIR, STREAM_SENT_POINTERS_FILE } from "@waitron/store";
+import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { isDeepStrictEqual } from "node:util";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -260,10 +261,19 @@ export class StreamHost {
   #pointerStore: { bucket: BucketConfig; store: ObjectStore } | undefined;
   #retiring: Promise<void> = Promise.resolve();
   /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
-  readonly #sentPointers = new SentPointers();
+  readonly #sentPointers: SentPointers;
+  #sentPointersLoaded: Promise<void> | undefined;
 
   constructor(deps: StreamHostDeps) {
     this.#deps = deps;
+    this.#sentPointers = new SentPointers(async (entries) => {
+      await mkdirDurable(join(deps.stateDir, STREAM_DIR), 0o700);
+      await writeFileDurable(
+        join(deps.stateDir, STREAM_SENT_POINTERS_FILE),
+        JSON.stringify(entries),
+        0o600,
+      );
+    });
   }
 
   observeNewerMain(
@@ -356,6 +366,8 @@ export class StreamHost {
       // A supervisor still stopping may still have Litestream running; and a stop() or an
       // overlapping start() may land while this waits.
       await this.#retiring;
+      this.#sentPointersLoaded ??= this.#loadSentPointers();
+      await this.#sentPointersLoaded;
       if (superseded()) return;
       let bucket: BucketConfig;
       if ("bucket" in target) {
@@ -407,6 +419,18 @@ export class StreamHost {
       if (this.#supervisor === undefined) await this.#closePipe();
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
       this.#notStartedFor("start_failed");
+    }
+  }
+
+  async #loadSentPointers(): Promise<void> {
+    try {
+      const saved: unknown = JSON.parse(
+        await readFile(join(this.#deps.stateDir, STREAM_SENT_POINTERS_FILE), "utf8"),
+      );
+      this.#sentPointers.load(saved, this.#deps.nodeId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+        this.#deps.log("warn", "stream.pointer_history_load_failed", { errorCode: codeOf(error) });
     }
   }
 

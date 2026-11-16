@@ -62,7 +62,7 @@ export interface StreamStatus {
   lagMs: number;
   /** The newest file seen in the live generation, by the bucket's clock. */
   lastConfirmedUploadAt: string | null;
-  /** First daily prune whose listing omitted this generation's marker; absent once read. */
+  /** First daily prune unable to read this generation's clock marker; absent once read. */
   pruneBlockedSince?: string;
 }
 
@@ -541,7 +541,7 @@ export class StreamSupervisor {
   /**
    * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
    * refused. `writePointer` already counts a refusal of this box's own landed write as success. A
-   * refusal because the pointer now holds one this process sent earlier (a stopped supervisor's
+   * refusal because the pointer now holds one this box sent earlier (a stopped supervisor's
    * write landing late) is retried against that version, with a pause after the first retry, since
    * a bucket whose reads lag its conditional check would otherwise be asked again without pause.
    */
@@ -553,6 +553,11 @@ export class StreamSupervisor {
     let expected = previousEtag;
     let retriedAtOnce = false;
     this.#sentPointers.add(pointer);
+    try {
+      await this.#sentPointers.persist?.(this.#sentPointers.snapshot());
+    } catch (error) {
+      this.#deps.log("warn", "stream.pointer_history_save_failed", failureFields(error));
+    }
     for (;;) {
       signal.throwIfAborted();
       try {
@@ -886,9 +891,17 @@ export class StreamSupervisor {
     if (this.#bucketClockRead) return true;
     const write = this.#markerWrite;
     if (write === null) return false;
-    const offset = await bucketClockOffset(this.#store, write.key, write.started, write.ended, {
-      signal,
-    });
+    let offset: number | null;
+    try {
+      offset = await bucketClockOffset(this.#store, write.key, write.started, write.ended, {
+        signal,
+      });
+    } catch (error) {
+      signal.throwIfAborted();
+      if (this.#markerWrite === write)
+        this.#status.pruneBlockedSince ??= this.#deps.now().toISOString();
+      throw error;
+    }
     if (this.#markerWrite !== write) return false;
     if (offset === null) {
       this.#status.pruneBlockedSince ??= this.#deps.now().toISOString();
