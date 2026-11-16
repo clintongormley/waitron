@@ -100,14 +100,19 @@ export async function writeFileDurable(
     await rm(tmp, { force: true }).catch(() => undefined);
     throw error;
   }
+  let cleanupFailure: { error: unknown } | undefined;
   try {
     if (options.overwrite === false) await rm(tmp);
-  } finally {
-    try {
-      await syncFolderHolding(path);
-    } catch (error) {
+  } catch (error) {
+    cleanupFailure = { error };
+  }
+  try {
+    await syncFolderHolding(path);
+  } catch (error) {
+    if (cleanupFailure === undefined) {
       if (typeof error === "object" && error !== null) folderSyncFailures.add(error);
       throw error;
     }
   }
+  if (cleanupFailure !== undefined) throw cleanupFailure.error;
 }

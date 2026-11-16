@@ -366,6 +366,30 @@ describe("create-only durable files", () => {
     }
   });
 
+  it("keeps the staging removal error when the folder flush also fails", async () => {
+    const d = await newDir();
+    const target = join(d, "secrets.env");
+    const failure = Object.assign(new Error("cannot remove staging"), { code: "EIO" });
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rm).mockImplementation(async (path, options) => {
+      if (path === `${target}.tmp`) throw failure;
+      return real.rm(path, options);
+    });
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (String(args[0]) === d) throw Object.assign(new Error("folder flush"), { code: "EIO" });
+      return real.open(...args);
+    });
+    try {
+      await expect(writeFileDurable(target, "ring", 0o600, { overwrite: false })).rejects.toBe(
+        failure,
+      );
+      expect(await readFile(target, "utf8")).toBe("ring");
+    } finally {
+      vi.mocked(fs.rm).mockReset();
+      vi.mocked(fs.open).mockReset();
+    }
+  });
+
   it("sets the exact mode before publishing despite a restrictive umask", async () => {
     const d = await newDir();
     const target = join(d, "secrets.env");
