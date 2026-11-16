@@ -1125,11 +1125,15 @@ Held line ends in a separator with nothing after it, where the Served line above
 
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
 
-Measured
-2026-10-29 in A1125's review (the probe was not kept); left open by A1125, #2238. At 1024×768 it
-covers the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like
-the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
-where the toast goes.
+Found in A1125's review on 2026-10-29; left open by A1125, #2238. Measured again on 2026-11-17 in
+Chromium, after fix/language-button-leftovers lowered the till's bottom toasts to one gap above the
+window's foot (the probe was not kept). On a till at 1024×768 the Served toast now covers the
+bottom 34 px of the 62 px Fire and Send all buttons (before, the top 26 px); at 390×844, their
+bottom 50 px, and no longer Move to…. A tablet handheld matches the till. On a 390×844 phone
+handheld the bar sits higher and stays clear, but the toast now covers Pay. After Send all a till
+goes back to the Floor, while a tablet handheld stays on the Order screen with the empty bar, and
+the Sent toast covers the same 34 px there. A fixed lift like the Ready bar's does not fit a bar
+that is not always at the window's foot; the owner chooses where the toast goes.
 
 
 ## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).

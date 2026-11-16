@@ -1101,8 +1101,8 @@ min"), warning tables come first and their entries are amber. The floor's one re
 redraws it when a table starts to warn and each minute while it warns. Entries that do not fit
 scroll sideways between the heading and Open ›, and an end hiding an entry fades over
 `--wt-space-6` (`apps/till/src/widgets/edge-fade.ts`, shared with the till bar's table buttons).
-While the bar is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent and Served toasts
-above it.
+While the bar is drawn the Floor carries a `ready-bar` attribute, and the app raises its bottom toasts above
+it.
 
 On the Order screen the New order's button bar (Move to…, Fire, Send all; `.draft-bar`,
 `apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
