@@ -52,14 +52,16 @@ what `main` gained since the merge-base is documentation, or code only in files 
 not touch, it lands as it is with `gh pr merge --squash --admin`. `--admin` there bypasses
 the up-to-date requirement and nothing else — never a failing check or an open review. The
 post-merge `main` run checks lint, types, root guards and builds as selected, but runs no package
-tests in `ci.yml`. Two branches that break each other only when combined are checked by the next
-full package run, not at merge. The owner accepted this delay on 8 November 2026 (A1452), retaining
-the BEHIND rule; `/land-branch` step 2 still classifies the changed paths.
+tests in `ci.yml`. Two branches that break each other only when combined are otherwise checked by
+the next full package run, not at merge (the fourth check below catches some). The owner accepted
+this delay on 8 November 2026 (A1452), retaining the BEHIND rule; `/land-branch` step 2 still
+classifies the changed paths.
 
-**A code overlap lands without a rebase when three checks pass** (owner, 2026-11-12, A1520). When
-`main` changed a code file this branch also changed, a `BEHIND` PR that meets the conditions above
-(every check green on the current head, every conversation resolved, `MERGEABLE`) still lands with
-`--admin` if all three hold, and their results go in a PR comment before the merge:
+**A code overlap lands without a rebase when four checks pass** (owner, 2026-11-12, A1520; the
+fourth, 2026-11-16). When `main` changed a code file this branch also changed, a `BEHIND` PR that
+meets the conditions above (every check green on the current head, every conversation resolved,
+`MERGEABLE`) still lands with `--admin` if all four hold, and their results go in a PR comment
+before the merge:
 
 1. It merges cleanly: `git merge-tree --write-tree origin/main origin/<branch>` exits 0.
 2. It uses nothing `main` removed: for each shared file, no identifier or error code that `main`
@@ -72,6 +74,26 @@ the BEHIND rule; `/land-branch` step 2 still classifies the changed paths.
    `pnpm install --frozen-lockfile`, then `pnpm --filter "...<package>" typecheck` for every package
    both sides changed. "No projects matched" is a failure, since pnpm exits 0 when it selects
    nothing.
+4. Main's new tests still pass: for each package both sides changed, run the test files `main`
+   added or changed since the merge base
+   (`git diff --name-only --diff-filter=d <merge-base>..origin/main -- '<dir>/**/*.test.ts'`, where
+   `<dir>` is the package's folder such as `apps/server`, not its `@waitron/` name) with
+   `pnpm exec vitest run <those files, relative to <dir>>` from `<dir>` in the same throwaway
+   checkout; a red one sends the branch back. Read the run's `Tests` count: a run that shows none
+   proved nothing.
+
+The fourth check exists because a test sends its request body through `JSON.stringify`, which no
+typecheck compares with what the route requires. #3448
+(16 November 2026) passed the first three and left a failing test on `main`: #3491 had just added
+a test, in `apps/server/src/payments-api.stuck.test.ts`, whose `POST /api/pay` body lacked the
+`dining` field #3448 made required. The push run on `main` passed, since it runs no package tests,
+and #3501 carried the fix. Run afterwards on that landing's own merge base (`09532fbc02`) and `main`
+(`2dffe58975`), the step-4 command listed 13 test files in `apps/server` and `apps/till`, that one
+among them; on the merged tree it failed (1 failed, 130 passed), and on `main` alone it passed (131
+passed). The check runs only the `.test.ts` files `main` touched, only in packages both sides
+changed, and only when the two share a code file. So a test `main` left alone, a test `main` added
+in a package the branch did not change (even one that depends on a package the branch changed), and
+a test `main` added when the two share no code file are still found only by the next full run.
 
 The post-merge `main` run and the next full run then check it, with the same delay as above.
 Rebase in the worktree only for `CONFLICTING` or a failed check — `pnpm install`, then push through

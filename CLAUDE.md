@@ -1074,15 +1074,17 @@ before treating an implementation as a rule violation.
   (owner decision 2026-09-05): if what `main` gained is documentation, or code only in files this
   branch did not touch, land it with `gh pr merge --squash --admin` — which bypasses the up-to-date
   requirement and NOTHING else, never a failing check or an open review. Where `main` changed a code
-  file this branch also changed, it lands that way only when three checks pass, with their results
-  in a PR comment before merging (owner, 2026-11-12, A1520): a clean `git merge-tree --write-tree`,
-  no identifier or error code `main` removed or renamed in those files on any line the branch adds,
-  and a typecheck of the merged tree for every package both sides changed. Rebase only for
-  `CONFLICTING` or a failed check. Procedure:
+  file this branch also changed, it lands that way only when four checks pass, with their results
+  in a PR comment before merging (owner, 2026-11-12, A1520; the fourth, 2026-11-16): a clean
+  `git merge-tree --write-tree`, no identifier or error code `main` removed or renamed in those
+  files on any line the branch adds, and, on the merged tree for every package both sides changed,
+  a typecheck and a run of the test files `main` added or changed since the merge base. Cost: #3448
+  passed the other three and left a failing test on `main` (a test's request body is not
+  typechecked). Rebase only for `CONFLICTING` or a failed check. Procedure:
   [workflow-guide.md](docs/developers/workflow-guide.md#commits-pull-requests-and-merging).
-  Package-level failures caused only by combining branches are checked at the next full run, not at
-  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
-  merge commit carries no sign-off and fails DCO.
+  Other package-level failures caused only by combining branches are checked at the next full run,
+  not at merge; the owner accepted this delay on 2026-11-08 (A1452). **Never
+  `gh pr update-branch`** — its merge commit carries no sign-off and fails DCO.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.
   Procedure: [workflow-guide.md](docs/developers/workflow-guide.md).
