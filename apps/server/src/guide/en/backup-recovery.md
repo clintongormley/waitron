@@ -209,7 +209,7 @@ If, after you choose the restore button, the server needs its time confirmed aga
 you chose it shows the server's time and this device's: check that both are right, then choose
 **Confirm the time**, or **This device** if the server's time is wrong. If that page was closed, open
 any of the server's pages on a phone, computer or till on the venue's network and enter the selected
-backup's node recovery key from its paper to see the same step. The restore then carries on by
+backup's server key from its paper to see the same step. The restore then carries on by
 itself. If the server instead shows a page saying it could not make its new invoice series, choose
 **Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 

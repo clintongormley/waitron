@@ -4776,8 +4776,9 @@ Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-set
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
-confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
-restore and handover pages' clock step. It opens no stop of its own.
+confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), from the setup,
+restore and handover pages' clock step, and from the done screen or waiting page while a restore's
+start waits for its time. It opens no stop of its own.
 
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
@@ -6567,7 +6568,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   until the internet confirms that start or during start-up; a Box administration holder's while the
   start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
-  its recovery key or kit) or the handover page (signed in as a `node.manage` holder), when that
+  its recovery key or kit), the done screen or waiting page while that restore's start waits (under
+  the node recovery key) or the handover page (signed in as a `node.manage` holder), when that
   person chooses **This device** (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
   #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
@@ -6598,7 +6600,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   switch, which it gave as an administrator sign-in and whose page checks the box's current
   recovery key, a choice that is not owner-approved); a restore's start uses the restore page's
   choice while the box's boot id is unchanged and its clock has not been stepped since
-  ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)); a minute whose name is already in a
+  ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)), and otherwise waits until
+  the time service synchronises or the node recovery key confirms again, held by the browser that
+  pressed Restore backup or typed on the waiting page; a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6609,7 +6613,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/minute-selection-unknown-name suites (the
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name suites (the
   last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
   than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 

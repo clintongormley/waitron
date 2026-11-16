@@ -262,11 +262,15 @@ shows both times on the same page, with **Confirm the time** and **This device**
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "asks for the time on the screen itself when the restore's start waits for it"). If that page was
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
-node recovery key from the backup's paper: the waiting page then shows the same step
+node recovery key (the paper calls it the server key) from the backup's paper: the waiting page then shows the same step
 (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
 with both times and their dates"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
-setting nothing"), and the box's own screen does not count.
+setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
+file's "/restore-clock/%s refuses the right key from another site's page (%o)"), and the box's own
+screen does not count. The waiting page leaves for the server once the wait ends
+(`start-clock-waiting-page.test.ts`, "leaves for the server once the wait ends without a
+confirmation, as when its time service synchronises").
 
 **Confirm the time** is kept only when the two times agree within 30 seconds; **This device** sets
 the box's clock from the device's time. The box looks every 15 seconds and tries the restore again
