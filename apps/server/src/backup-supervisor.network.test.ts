@@ -572,13 +572,12 @@ describe("BackupSupervisor status, one destination at a time", () => {
 
   it("after a stop, closes each destination it built for a status read once the read has settled", async () => {
     const closed: string[] = [];
-    const realList = LocalFsBackend.prototype.list;
     vi.spyOn(LocalFsBackend.prototype, "list").mockImplementation(function (
       this: LocalFsBackend,
-      prefix,
+      _prefix,
       call,
     ) {
-      return this.id === "remote" ? stall(call) : realList.call(this, prefix, call);
+      return this.id === "remote" ? stall(call) : Promise.resolve([]);
     });
     vi.spyOn(LocalFsBackend.prototype, "close").mockImplementation(function (this: LocalFsBackend) {
       closed.push(this.id);

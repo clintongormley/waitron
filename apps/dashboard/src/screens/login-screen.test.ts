@@ -1879,6 +1879,33 @@ describe("login-screen: emailed account links", () => {
   });
 });
 
+it.each(["password", "factor", "invitation"])(
+  "keeps the %s username hidden and available even with no email",
+  async (step) => {
+    if (step === "invitation")
+      history.replaceState(null, "", "/manage/account?token=held&purpose=invitation");
+    const api = stubApi({ inspectAccountAction: () => new Promise(() => {}) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    if (step !== "invitation") {
+      Object.assign(el, { email: "", step });
+      await el.updateComplete;
+    }
+    const username = el.shadowRoot!.querySelector<HTMLInputElement>("[data-autofill-username]")!;
+    expect(username).not.toBeNull();
+    expect(username.name).toBe("email");
+    expect(username.type).toBe("email");
+    expect(username.autocomplete).toBe("username");
+    expect(username.value).toBe("");
+    expect(username.readOnly).toBe(true);
+    expect(username.tabIndex).toBe(-1);
+    expect(username.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(username).position).toBe("absolute");
+    expect(getComputedStyle(username).clipPath).toBe("inset(50%)");
+    expect(username.getBoundingClientRect().width).toBeLessThanOrEqual(10);
+    expect(username.getBoundingClientRect().height).toBeLessThanOrEqual(10);
+  },
+);
+
 describe("login-screen: password and second factor", () => {
   it("sends one sign-in when Log in is pressed twice before the first answer", async () => {
     const answer = deferred<{ personId: string }>();

@@ -59,6 +59,13 @@ describe("your profile", () => {
       hasTotp: false,
       hasGoogle: false,
       passkeys: [],
+      passkeySignals: {
+        rpId: "localhost",
+        userId: Buffer.from(personId).toString("base64url"),
+        credentialIds: [],
+        name: "profile@example.com",
+        displayName: "Profile owner",
+      },
     });
     const saved = await app.request("/management-api/session/me/profile", {
       method: "PUT",
@@ -105,6 +112,16 @@ describe("your profile", () => {
         { personId: colleagueId, credentialId: "profile-other", publicKey: "public" },
       ])
       .returning({ id: webauthnCredentials.id, personId: webauthnCredentials.personId });
+    const profile = await app.request("/management-api/session/me/profile", {
+      headers: { cookie },
+    });
+    expect((await profile.json()).passkeySignals).toEqual({
+      rpId: "localhost",
+      userId: Buffer.from(personId).toString("base64url"),
+      credentialIds: ["profile-own"],
+      name: "profile@example.com",
+      displayName: "Updated name",
+    });
     const ownKey = keys.find((key) => key.personId === personId)!.id;
     const otherKey = keys.find((key) => key.personId === colleagueId)!.id;
     const remove = (id: string) =>

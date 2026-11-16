@@ -20,6 +20,7 @@ import {
   resolveManagementSession,
   setPersonLocale,
   readOwnProfile,
+  readPasskeySignals,
   saveOwnProfile,
   confirmOwnEmailChange,
   changeOwnPassword,
@@ -193,7 +194,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me/profile", admitsInspector, (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
-      return c.json(await asStaff((tx) => readOwnProfile(tx, { managementSessionId })));
+      const profile = await asStaff(async (tx) => {
+        const profile = await readOwnProfile(tx, { managementSessionId });
+        const signals = await readPasskeySignals(tx, { managementSessionId });
+        return {
+          ...profile,
+          passkeySignals: { rpId: managementSite(c, proofSite).rpId, ...signals },
+        };
+      });
+      return c.json(profile);
     }),
   );
   app.put("/management-api/session/me/profile", admitsInspector, (c) =>

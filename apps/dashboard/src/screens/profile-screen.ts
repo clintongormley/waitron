@@ -30,7 +30,7 @@ import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
-import { signalAcceptedPasskeys } from "../passkey-signals.js";
+import { sendAcceptedPasskeys } from "../passkey-signals.js";
 
 type Mode =
   | "view"
@@ -335,39 +335,43 @@ export class ProfileScreen extends LitElement {
     this.#edit("details");
   }
 
-  async #load(): Promise<void> {
-    try {
-      await Promise.all([
-        this.#queries.watch("getProfile", [], (value) => {
-          this.profile = value;
-          this.#announceTab();
-        }),
-        this.#queries.watch("getGoogleConfig", [], (value) => {
-          this.googleConfigured = value.configured;
-          this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
-        }),
-        this.#queries.watch("getLocales", [], (locales) => {
-          this.locales = locales.locales;
-          this.venueLocale = locales.venueDefault;
-        }),
-      ]);
-      if (!this.#initialDetailsChecked && this.profile !== null && this.isConnected) {
-        this.#initialDetailsChecked = true;
-        if (
-          this.mode === "view" &&
-          [
-            this.profile.displayName,
-            this.profile.firstNames,
-            this.profile.lastNames,
-            this.profile.email,
-          ].some((value) => !value?.trim())
-        ) {
-          this.#edit("details");
-        }
+  async #load(): Promise<OwnProfile | undefined> {
+    let applied: OwnProfile | undefined;
+    const reads = await Promise.allSettled([
+      this.#queries.watch("getProfile", [], (value) => {
+        this.profile = value;
+        applied = value;
+        this.#announceTab();
+      }),
+      this.#queries.watch("getGoogleConfig", [], (value) => {
+        this.googleConfigured = value.configured;
+        this.privacyNoticeUrl = value.privacyNoticeUrl ?? "";
+      }),
+      this.#queries.watch("getLocales", [], (locales) => {
+        this.locales = locales.locales;
+        this.venueLocale = locales.venueDefault;
+      }),
+    ]);
+    if (
+      reads.every((read) => read.status === "fulfilled") &&
+      !this.#initialDetailsChecked &&
+      this.profile !== null &&
+      this.isConnected
+    ) {
+      this.#initialDetailsChecked = true;
+      if (
+        this.mode === "view" &&
+        [
+          this.profile.displayName,
+          this.profile.firstNames,
+          this.profile.lastNames,
+          this.profile.email,
+        ].some((value) => !value?.trim())
+      ) {
+        this.#edit("details");
       }
-    } catch (error) {
-      this.#showReadError(error);
     }
+    return applied;
   }
   #showError(message: string, fromRead = false): void {
     this.error = message;
@@ -685,11 +689,13 @@ export class ProfileScreen extends LitElement {
                 ? "sent"
                 : null;
       }
-      if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
+      const sendSignals = ["details", "email", "passkey", "remove"].includes(this.mode);
       scope?.commit(submitted);
       if (!scope?.isDirty()) this.#closeSaved();
       this.saved = true;
-      await this.#load();
+      const profile = await this.#load();
+      if (sendSignals && profile && this.isConnected && this.#operation === operation)
+        void sendAcceptedPasskeys(profile.passkeySignals);
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
       if (!active()) return;

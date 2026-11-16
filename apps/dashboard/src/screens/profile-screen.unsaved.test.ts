@@ -17,6 +17,13 @@ const profile: OwnProfile = {
   hasPassword: true,
   hasTotp: true,
   hasGoogle: true,
+  passkeySignals: {
+    rpId: "localhost",
+    userId: "cHJvZmlsZQ",
+    credentialIds: [],
+    name: "profile@example.test",
+    displayName: "Profile",
+  },
   passkeys: [
     {
       id: "key1",

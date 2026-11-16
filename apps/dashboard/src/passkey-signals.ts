@@ -1,4 +1,4 @@
-import type { DashboardApi } from "./api/client.js";
+import type { DashboardApi, PasskeySignals } from "./api/client.js";
 
 /**
  * The WebAuthn signal methods (WebAuthn Level 3, §5.1.10), absent from some browsers. Each resolves
@@ -25,7 +25,6 @@ async function attempt(call: () => Promise<void>): Promise<boolean> {
   }
 }
 
-/** Never throws. */
 export async function signalAcceptedPasskeys(
   api: Pick<DashboardApi, "passkeySignals">,
 ): Promise<void> {
@@ -38,6 +37,12 @@ export async function signalAcceptedPasskeys(
   } catch {
     return;
   }
+  await sendAcceptedPasskeys(signals);
+}
+
+export async function sendAcceptedPasskeys(signals: PasskeySignals): Promise<void> {
+  const browser = browserSignals();
+  const { signalAllAcceptedCredentials: all, signalCurrentUserDetails: details } = browser;
   const { rpId, userId, credentialIds, name, displayName } = signals;
   await Promise.all([
     typeof all === "function"

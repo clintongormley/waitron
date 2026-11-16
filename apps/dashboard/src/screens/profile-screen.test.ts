@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { ProfileScreen } from "./profile-screen.js";
@@ -68,6 +68,7 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       hasPassword: true,
       hasTotp: false,
       hasGoogle: false,
+      passkeySignals: PASSKEY_SIGNALS,
       passkeys: [
         {
           id: "credential",
@@ -266,6 +267,15 @@ describe("your profile", () => {
     });
     expect(el.shadowRoot!.querySelector("wt-button")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(codeMessage("server.internal"));
+  });
+  it("keeps the initial auxiliary-read refusal without opening incomplete details", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null }),
+      getLocales: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect((el as unknown as { error: string }).error).toBe(codeMessage("connection.failed"));
   });
   it("opens Edit in a modal over the details card, not in place of it", async () => {
     const { el } = await mount();
@@ -587,6 +597,7 @@ describe("your profile", () => {
         telephone: null,
         email: "alex@example.com",
         pendingEmail: "new@example.com",
+        passkeySignals: PASSKEY_SIGNALS,
         locale: "en-GB",
         hasPassword: true,
         hasTotp: false,
@@ -676,7 +687,8 @@ describe("your profile", () => {
 
     await click(el, "save");
     await flush(el);
-    expect(api.passkeySignals).toHaveBeenCalledOnce();
+    expect(api.getProfile).toHaveBeenCalledTimes(2);
+    expect(api.passkeySignals).not.toHaveBeenCalled();
     expect(signalAll).toHaveBeenCalledExactlyOnceWith({
       rpId: "localhost",
       userId: "BAUG",
@@ -688,13 +700,85 @@ describe("your profile", () => {
       name: "alex@example.com",
       displayName: "Alex",
     });
+    const profile = await apiStub().getProfile();
+    api.getProfile.mockResolvedValue({
+      ...profile,
+      passkeySignals: { ...PASSKEY_SIGNALS, credentialIds: [] },
+    });
     await click(el, "remove-passkey");
 
     await click(el, "save");
     await flush(el);
-    expect(api.passkeySignals).toHaveBeenCalledTimes(2);
+    expect(api.getProfile).toHaveBeenCalledTimes(3);
+    expect(api.passkeySignals).not.toHaveBeenCalled();
     expect(signalAll).toHaveBeenCalledTimes(2);
+    expect(signalAll).toHaveBeenLastCalledWith({
+      rpId: "localhost",
+      userId: "BAUG",
+      allAcceptedCredentialIds: [],
+    });
   });
+  it.each(["details", "email", "auxiliary failure"])(
+    "sends the reloaded profile after %s without a second signals read",
+    async (change) => {
+      const before = await apiStub().getProfile();
+      const signals = {
+        ...PASSKEY_SIGNALS,
+        rpId: "configured.example.test",
+        name: "confirmed@example.test",
+        displayName: "Saved name",
+        credentialIds: ["c2F2ZWQ"],
+      };
+      let answer!: (profile: OwnProfile) => void;
+      const reloaded = new Promise<OwnProfile>((resolve) => {
+        answer = resolve;
+      });
+      const liveData = new LiveData();
+      const { el, api } = await mount({
+        liveData,
+        getProfile: vi
+          .fn()
+          .mockResolvedValueOnce({ ...before, pendingEmail: "new@example.com" })
+          .mockReturnValue(reloaded),
+      });
+      try {
+        if (change === "email") {
+          await click(el, "confirm-email");
+          input(el, "setupCode", "123456");
+        } else {
+          await editDetails(el);
+          input(el, "displayName", "Saved name");
+        }
+        if (change === "auxiliary failure")
+          api.getLocales.mockRejectedValue({ code: "connection.failed" });
+        const updated = new Promise<void>((resolve) =>
+          el.addEventListener("profile-updated", () => resolve(), { once: true }),
+        );
+        await click(el, "save");
+        await vi.waitFor(() => expect(api.getProfile).toHaveBeenCalledTimes(2));
+        expect(signalDetails).not.toHaveBeenCalled();
+        expect(signalAll).not.toHaveBeenCalled();
+        answer({ ...before, passkeySignals: signals });
+        await updated;
+        expect(signalDetails).toHaveBeenCalledExactlyOnceWith({
+          rpId: signals.rpId,
+          userId: signals.userId,
+          name: signals.name,
+          displayName: signals.displayName,
+        });
+        expect(signalAll).toHaveBeenCalledExactlyOnceWith({
+          rpId: signals.rpId,
+          userId: signals.userId,
+          allAcceptedCredentialIds: signals.credentialIds,
+        });
+        expect(api.passkeySignals).not.toHaveBeenCalled();
+        expect(api.getProfile).toHaveBeenCalledTimes(2);
+      } finally {
+        answer({ ...before, passkeySignals: signals });
+        el.remove();
+      }
+    },
+  );
   it("tells the password manager nothing when adding a passkey fails or another setting changes", async () => {
     const { el, api } = await mount({
       passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
@@ -1927,7 +2011,13 @@ describe("profile confirmation delivery messages", () => {
     input(el, "email", "new@example.com");
     await flush(el);
 
+    const updated = new Promise<void>((resolve) =>
+      el.addEventListener("profile-updated", () => resolve(), { once: true }),
+    );
     await click(el, "save");
+    await updated;
+    expect(signalAll).not.toHaveBeenCalled();
+    expect(signalDetails).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim()).toBe(
       t("profile.email_unconfigured"),
     );

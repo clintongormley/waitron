@@ -1336,6 +1336,13 @@ describe("dashboard-app", () => {
           hasPassword: true,
           hasTotp: false,
           hasGoogle: false,
+          passkeySignals: {
+            rpId: "localhost",
+            userId: "cDE",
+            credentialIds: [],
+            name: "alex@example.com",
+            displayName: "Alex",
+          },
           passkeys: [],
         }),
         saveProfile,
