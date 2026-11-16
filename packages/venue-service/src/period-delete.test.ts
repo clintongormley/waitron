@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_STRINGS } from "./dashboard/strings.js";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -441,9 +442,15 @@ describe("what deleting a period touches", () => {
     async (language) => {
       const v = await venue();
       await scoped(async (tx) => {
+        const localizedName = VENUE_SERVICE_STRINGS.es["prep.tomorrow"];
         const folders = await tx
           .insert(categories)
-          .values([{ name: "Nuez" }, { name: "Ñoquis" }, { name: "Cycle A" }, { name: "Cycle B" }])
+          .values([
+            { name: "manner" },
+            { name: localizedName },
+            { name: "Cycle A" },
+            { name: "Cycle B" },
+          ])
           .returning();
         await tx
           .update(categories)
@@ -493,14 +500,16 @@ describe("what deleting a period touches", () => {
         const impact = await periodDeleteImpact(tx, v.lunch, AT, language);
         const names = impact.routingUses.map(({ rowLabel, zoneName }) => [rowLabel, zoneName]);
         const nuts = [
-          ["Nuez", null],
-          ["Nuez › Same", "Zone A"],
-          ["Nuez › Same", "Zone B"],
-          ["Nuez › Same", "Zone A"],
-          ["Nuez › Same", "Zone B"],
+          ["manner", null],
+          ["manner › Same", "Zone A"],
+          ["manner › Same", "Zone B"],
+          ["manner › Same", "Zone A"],
+          ["manner › Same", "Zone B"],
         ];
         expect(names).toEqual([
-          ...(language === "es-ES" ? [...nuts, ["Ñoquis", null]] : [["Ñoquis", null], ...nuts]),
+          ...(language === "es-ES"
+            ? [...nuts, [localizedName, null]]
+            : [[localizedName, null], ...nuts]),
           ["Cycle A", null],
           ["Cycle A › Cycle B", null],
         ]);

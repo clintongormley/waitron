@@ -1,3 +1,4 @@
+import { VENUE_SERVICE_STRINGS } from "./dashboard/strings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -299,7 +300,8 @@ describe("the period-delete routes", () => {
     async (language) => {
       const r = await routed();
       const [station] = await db.select({ id: kitchenStations.id }).from(kitchenStations);
-      for (const name of ["Nuez", "Ñoquis"]) {
+      const localizedName = VENUE_SERVICE_STRINGS.es["prep.tomorrow"];
+      for (const name of ["manner", localizedName]) {
         const [category] = await db.insert(categories).values({ name }).returning();
         const [cell] = await db
           .insert(routingCells)
@@ -320,7 +322,7 @@ describe("the period-delete routes", () => {
         routingUses
           .filter((use: { rowKind: string }) => use.rowKind === "category")
           .map((use: { rowLabel: string }) => use.rowLabel),
-      ).toEqual(language === "es-ES" ? ["Nuez", "Ñoquis"] : ["Ñoquis", "Nuez"]);
+      ).toEqual(language === "es-ES" ? ["manner", localizedName] : [localizedName, "manner"]);
     },
   );
 
