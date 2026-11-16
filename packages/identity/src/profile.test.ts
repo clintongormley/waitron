@@ -1,9 +1,9 @@
 import { randomUUID, scrypt } from "node:crypto";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { quoteLiteral } from "@waitron/shared";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
 import { codeOf, seedManager, seedSessionDevice, TOTP_KEY_RING } from "../test/fixtures.js";
@@ -50,7 +50,42 @@ async function fixture() {
   return { personId, email, managementSessionId: session.token, queueEmailChange: true };
 }
 
+async function securityNotices(personId: string) {
+  return suite.db
+    .select({ personId: outgoingMail.personId, params: outgoingMail.params })
+    .from(outgoingMail)
+    .where(and(eq(outgoingMail.personId, personId), eq(outgoingMail.kind, "security_change")))
+    .orderBy(outgoingMail.seq);
+}
+
 describe("your profile", () => {
+  it("rolls a password change and its notice back together", async () => {
+    const f = await fixture();
+    const before = suite.db.get(sql`select password_hash from persons where id=${f.personId}`);
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        await changeOwnPassword(tx, {
+          ...f,
+          password: "a replacement password",
+          keyRing: TOTP_KEY_RING,
+        });
+        const [mail] = await tx
+          .select()
+          .from(outgoingMail)
+          .where(eq(outgoingMail.kind, "security_change"));
+        expect(mail).toMatchObject({
+          personId: f.personId,
+          params: { change: "password_changed" },
+        });
+        throw new Error("cancel change");
+      }),
+    ).rejects.toThrow("cancel change");
+    expect(suite.db.get(sql`select password_hash from persons where id=${f.personId}`)).toEqual(
+      before,
+    );
+    expect(await securityNotices(f.personId)).toEqual([]);
+  });
+
   it("returns only profile and passkey metadata", async () => {
     const f = await fixture();
     const profile = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
@@ -145,11 +180,15 @@ describe("your profile", () => {
         }),
       ),
     ).resolves.toBeNull();
+    expect(await securityNotices(f.personId)).toEqual([]);
     await expect(
       withTransaction(suite.db, (tx) =>
         confirmOwnEmailChange(tx, { ...f, code: emailChange!.code!, codeKey }),
       ),
     ).resolves.toBe("changed@example.com");
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "email_changed" } },
+    ]);
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       email: "changed@example.com",
       pendingEmail: null,
@@ -310,6 +349,7 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "password.too_short" });
+    expect(await securityNotices(f.personId)).toEqual([]);
     vi.mocked(scrypt).mockClear();
     await withTransaction(suite.db, (tx) =>
       changeOwnPassword(tx, {
@@ -319,6 +359,9 @@ describe("your profile", () => {
       }),
     );
     expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain("new password");
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "password_changed" } },
+    ]);
     await expect(
       withTransaction(suite.db, (tx) =>
         readOwnProfile(tx, { ...f, managementSessionId: other.token }),
@@ -363,6 +406,7 @@ describe("your profile", () => {
       sql`select ended_at from sessions where id = ${till.rows[0]!.id}`,
     );
     expect(rows.rows[0]!.ended_at).not.toBeNull();
+    expect(await securityNotices(f.personId)).toEqual([]);
   });
 
   it("lists and removes only your own passkeys", async () => {
@@ -394,6 +438,7 @@ describe("your profile", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "passkey.not_registered" });
+    expect(await securityNotices(f.personId)).toEqual([]);
     await withTransaction(suite.db, (tx) =>
       removeOwnPasskey(tx, {
         ...f,
@@ -402,6 +447,9 @@ describe("your profile", () => {
       }),
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([]);
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "passkey_removed" } },
+    ]);
   });
 
   it("says which password manager holds each passkey and when it last signed in", async () => {
@@ -488,6 +536,7 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "totp.invalid" });
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).hasTotp).toBe(false);
+    expect(await securityNotices(f.personId)).toEqual([]);
     const recovery = await withTransaction(suite.db, (tx) =>
       finishOwnTotpEnrollment(tx, {
         ...f,
@@ -497,6 +546,9 @@ describe("your profile", () => {
       }),
     );
     expect(recovery.codes).toHaveLength(10);
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "authenticator_set_up" } },
+    ]);
     const stored = await suite.db.execute<{ totp_secret: string }>(
       sql`select totp_secret from persons where id=${f.personId}`,
     );
@@ -532,6 +584,10 @@ describe("your profile", () => {
       }),
     );
     expect(replacement.codes).toHaveLength(10);
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "authenticator_set_up" } },
+      { personId: f.personId, params: { change: "recovery_codes_regenerated" } },
+    ]);
   });
 
   it("disables the authenticator and removes its recovery material after reauthentication", async () => {
@@ -552,6 +608,10 @@ describe("your profile", () => {
       sql`select totp_secret from persons where id = ${f.personId}`,
     );
     expect(rows.rows[0]!.totp_secret).toBeNull();
+    await withTransaction(suite.db, (tx) => disableOwnTotp(tx, { ...f, keyRing }));
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "authenticator_removed" } },
+    ]);
   });
 
   it("unlinks Google after reauthentication", async () => {
@@ -565,6 +625,10 @@ describe("your profile", () => {
       sql`select google_subject from persons where id = ${f.personId}`,
     );
     expect(rows.rows[0]!.google_subject).toBeNull();
+    await withTransaction(suite.db, (tx) => unlinkOwnGoogle(tx, { ...f, keyRing: TOTP_KEY_RING }));
+    expect(await securityNotices(f.personId)).toEqual([
+      { personId: f.personId, params: { change: "google_disconnected" } },
+    ]);
   });
 
   it("refuses a live session whose person row no longer exists, as it refuses a signed-out caller", async () => {

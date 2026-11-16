@@ -1,3 +1,4 @@
+import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, lt, lte, or } from "drizzle-orm";
@@ -122,6 +123,10 @@ export async function completeGoogleLink(
   tx: Transaction,
   input: { personId: string; subject: string },
 ): Promise<void> {
+  const [person] = await tx
+    .select({ googleSubject: persons.googleSubject })
+    .from(persons)
+    .where(eq(persons.id, input.personId));
   try {
     const updated = await tx
       .update(persons)
@@ -129,6 +134,8 @@ export async function completeGoogleLink(
       .where(and(eq(persons.id, input.personId), eq(persons.status, "active")))
       .returning({ id: persons.id });
     if (updated.length !== 1) throw new AppError("google.invalid", {});
+    if (person?.googleSubject !== input.subject)
+      await queueSecurityChangeMail(tx, { personId: input.personId, change: "google_connected" });
   } catch (error) {
     if (isUniqueViolation(error)) throw new AppError("google.already_linked", {});
     throw error;

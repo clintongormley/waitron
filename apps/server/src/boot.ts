@@ -229,6 +229,7 @@ import {
   type HealthState,
 } from "./health.js";
 import { abandonMailClaims, startMailSender } from "./mail-sender.js";
+import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
 import { roleMembershipMail } from "./role-membership-mail.js";
 import { accountActionMail } from "./account-mail.js";
@@ -2649,10 +2650,14 @@ async function bootServer(
         readPrivacyNoticeUrl: async () =>
           (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
       });
-      await withTransaction(db, (tx) => abandonMailClaims(tx, [owner], now()));
+      const owners = [
+        owner,
+        securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
+      ];
+      await withTransaction(db, (tx) => abandonMailClaims(tx, owners, now()));
       repairMail = startMailSender({
         db,
-        owners: [owner],
+        owners,
         now,
         isPrimary: () => holders.singletonRole.current === "primary",
         signal: repairMailController.signal,
@@ -3053,6 +3058,7 @@ async function bootServer(
       // A clock step can date new mail before start, so identify prior episodes by their row ids.
       const previousEpisodeMailIds = new Set<string>();
       const owners = [
+        securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
         emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
         roleMembershipMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
         boxAlertMail({

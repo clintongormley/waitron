@@ -1,3 +1,4 @@
+import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
   nowIso,
@@ -208,7 +209,9 @@ export async function finishOwnTotpEnrollment(
     .set({ totpSecret: enrollment!.encryptedSecret })
     .where(eq(persons.id, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.id, input.enrollmentId));
-  return { codes: await replaceRecoveryCodes(tx, person.id) };
+  const codes = await replaceRecoveryCodes(tx, person.id);
+  await queueSecurityChangeMail(tx, { personId: person.id, change: "authenticator_set_up" });
+  return { codes };
 }
 
 export async function regenerateOwnRecoveryCodes(
@@ -217,7 +220,9 @@ export async function regenerateOwnRecoveryCodes(
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
-  return { codes: await replaceRecoveryCodes(tx, person.id) };
+  const codes = await replaceRecoveryCodes(tx, person.id);
+  await queueSecurityChangeMail(tx, { personId: person.id, change: "recovery_codes_regenerated" });
+  return { codes };
 }
 
 export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials): Promise<void> {
@@ -226,6 +231,8 @@ export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials
   await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
+  if (person.totpSecret !== null)
+    await queueSecurityChangeMail(tx, { personId: person.id, change: "authenticator_removed" });
 }
 
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
@@ -233,6 +240,8 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
   await verifyCurrent(tx, person, input);
   await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
   await assertUsableAdminRemains(tx);
+  if (person.googleSubject !== null)
+    await queueSecurityChangeMail(tx, { personId: person.id, change: "google_disconnected" });
 }
 
 async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
@@ -351,6 +360,8 @@ export async function confirmOwnEmailChange(
     code: input.code,
     codeKey: input.codeKey,
   });
+  if (email !== null)
+    await queueSecurityChangeMail(tx, { personId: person.id, change: "email_changed" });
   return email;
 }
 
@@ -393,6 +404,7 @@ export async function changeOwnPassword(
         isNull(managementSessions.endedAt),
       ),
     );
+  await queueSecurityChangeMail(tx, { personId: person.id, change: "password_changed" });
 }
 
 export async function removeOwnPasskey(
@@ -407,4 +419,5 @@ export async function removeOwnPasskey(
     .returning({ id: webauthnCredentials.id });
   if (removed.length === 0) throw new AppError("passkey.not_registered", {});
   await assertUsableAdminRemains(tx);
+  await queueSecurityChangeMail(tx, { personId: person.id, change: "passkey_removed" });
 }
