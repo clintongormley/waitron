@@ -7,6 +7,8 @@ import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import type { DashboardApi, MonthDownloadDto } from "./api/client.js";
 import { setLocale } from "./i18n/t.js";
+import { es } from "./i18n/strings.js";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 
 const FILE_URL = "/management-api/tax-office/month-download/file";
 // Built from local clock parts: the toast shows the browser's local time.
@@ -32,7 +34,9 @@ const failed = (id = "b1", month = "2026-03"): MonthDownloadDto => ({
 });
 
 const READY_EN = "The invoices for March 2026 are ready to save until 19:42.";
-const READY_ES = "Las facturas de marzo de 2026 se pueden guardar hasta las 19:42.";
+const READY_ES = es["tax_office.notice_ready"]
+  .replace("{month}", "marzo de 2026")
+  .replace("{time}", "19:42");
 const FAILED_EN =
   "The invoices for March 2026 could not be prepared. Choose Download March 2026 on Invoices to try again.";
 const RESTARTED_EN =
@@ -69,10 +73,7 @@ function shellApi(
     logout: vi.fn().mockResolvedValue(undefined),
     forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
+      locales: [...SUPPORTED_LOCALES],
       venueDefault: "es-ES",
       loginDefault: "es-ES",
       venueName: "Deli Test SL",
@@ -201,7 +202,7 @@ describe("the shell's notice for the tax office's month file", () => {
     changed(liveData);
     await expect.poll(() => toast(el).open).toBe(true);
     expect(toast(el).message).toBe(READY_ES);
-    expect(saveButton(el)!.textContent!.trim()).toBe("Guardar el archivo");
+    expect(saveButton(el)!.textContent!.trim()).toBe(es["tax_office.save_file"]);
   });
 
   it("shows no notice when the sign-in's first read already finds the file ready", async () => {
@@ -416,6 +417,52 @@ describe("the shell's notice for the tax office's month file", () => {
     },
   );
 
+  it.each([
+    ["the file is gone", none],
+    ["another file is being prepared", building("b2")],
+  ])("closes the ready notice when %s", async (_case, next) => {
+    const background = vi
+      .fn()
+      .mockResolvedValueOnce(building())
+      .mockResolvedValueOnce(ready())
+      .mockResolvedValue(next);
+    const { el, liveData } = await openReadyNotice(background);
+    changed(liveData);
+    await expect.poll(() => toast(el).open).toBe(false);
+  });
+
+  it("closes the ready notice once the Invoices screen saved that same file", async () => {
+    const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+    const { el } = await openReadyNotice(background);
+    const saved = (id: string) =>
+      el.shadowRoot!.querySelector(".shell")!.dispatchEvent(
+        new CustomEvent("tax-office-month-saved", {
+          detail: { id },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    saved("b0");
+    await flush(el);
+    expect(toast(el).open).toBe(true);
+    saved("b1");
+    await expect.poll(() => toast(el).open).toBe(false);
+  });
+
+  it("tells the page which file the notice's Save the file saved", async () => {
+    const told: unknown[] = [];
+    const listen = (event: Event) => told.push((event as CustomEvent).detail);
+    document.addEventListener("tax-office-month-saved", listen);
+    try {
+      const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
+      const { el } = await openReadyNotice(background);
+      saveButton(el)!.click();
+      await expect.poll(() => told).toEqual([{ id: "b1" }]);
+    } finally {
+      document.removeEventListener("tax-office-month-saved", listen);
+    }
+  });
+
   it("never reads the file's state for a session without invoice.inspect", async () => {
     const background = vi.fn().mockResolvedValue(ready());
     const { api, foreground } = shellApi(background, []);
@@ -490,6 +537,18 @@ describe("where the shell draws the notice", () => {
         expect(hit?.closest("wt-toast")).toBe(notice);
         expect(box.left).toBeGreaterThanOrEqual(0);
         expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      }
+      // The stack's empty parts, between the two and beside the narrower one, leave the page pressable.
+      const empty: [number, number][] = [
+        [second.left + second.width / 2, (first.bottom + second.top) / 2],
+      ];
+      if (second.left - first.left > 8)
+        empty.push([(first.left + second.left) / 2, second.top + second.height / 2]);
+      if (width === 1280) expect(empty).toHaveLength(2);
+      for (const [x, y] of empty) {
+        const hit = el.shadowRoot!.elementFromPoint(x, y);
+        expect(hit).not.toBeNull();
+        expect(hit!.closest(".toast-stack")).toBeNull();
       }
     },
   );

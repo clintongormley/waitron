@@ -29,8 +29,11 @@ import type { StringKey } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
 import {
+  announceMonthSaved,
   clockTime,
+  MONTH_SAVED_EVENT,
   monthName,
+  paramsOf,
   saveTaxOfficeFile,
   startBrowserDownload,
   type StartDownload,
@@ -65,9 +68,6 @@ const FIELD_OF: Record<string, { control: string; message: StringKey }> = {
 };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const keyOf = (filter: Filter) => JSON.stringify(FILTER_KEYS.map((name) => filter[name] ?? null));
-
-const paramsOf = (error: unknown) =>
-  (error as { params?: Parameters<typeof codeMessage>[2] } | null)?.params;
 
 /** The current month on the browser's own calendar. */
 function currentMonth(): { from: string; to: string } {
@@ -227,8 +227,14 @@ export class TaxOfficeScreen extends LitElement {
     dashboardPath,
   );
 
+  /** A save from this line or from the app's notice: either way the line has done its job. */
+  readonly #onMonthSaved = (event: Event): void => {
+    this.settledFile = (event as CustomEvent<{ id: string }>).detail.id;
+  };
+
   override connectedCallback(): void {
     super.connectedCallback();
+    document.addEventListener(MONTH_SAVED_EVENT, this.#onMonthSaved);
     void this.#monthQueries
       .watch(
         "getTaxOfficeMonthDownload",
@@ -242,6 +248,7 @@ export class TaxOfficeScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    document.removeEventListener(MONTH_SAVED_EVENT, this.#onMonthSaved);
     clearTimeout(this.#textTimer);
     this.#read++;
     this.#requested = undefined;
@@ -412,11 +419,13 @@ export class TaxOfficeScreen extends LitElement {
   async #saveMonth(file: { id: string; month: string }): Promise<void> {
     this.actionError = "";
     try {
-      await saveTaxOfficeFile(this.api, file.month, this.startDownload);
+      announceMonthSaved(this, await saveTaxOfficeFile(this.api, file.month, this.startDownload));
     } catch (error) {
-      this.actionError = codeMessage(codeOf(error), currentLocale(), paramsOf(error));
+      const code = codeOf(error);
+      this.actionError = codeMessage(code, currentLocale(), paramsOf(error));
+      // Only a file found gone is settled; any other refusal leaves Save to try again.
+      if (code === "tax_office.download_missing") this.settledFile = file.id;
     }
-    this.settledFile = file.id;
   }
 
   /** The month the server is preparing for this person, or the one being asked for. */

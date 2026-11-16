@@ -661,6 +661,75 @@ it("says the file is no longer on the server when Save finds it gone, and downlo
   expect(monthLine(el)).toBeNull();
 });
 
+it("tells the app which file was saved from the ready line", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const told: unknown[] = [];
+  const listen = (event: Event) => told.push((event as CustomEvent).detail);
+  document.addEventListener("tax-office-month-saved", listen);
+  onTestFinished(() => document.removeEventListener("tax-office-month-saved", listen));
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(ready()),
+      taxOfficeMonthFileUrl: () => "/file",
+    },
+    { startDownload },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() => expect(told).toEqual([{ id: "b1" }]));
+});
+
+it("keeps Save the file when the check before saving is refused for another reason", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const told: unknown[] = [];
+  const listen = (event: Event) => told.push((event as CustomEvent).detail);
+  document.addEventListener("tax-office-month-saved", listen);
+  onTestFinished(() => document.removeEventListener("tax-office-month-saved", listen));
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi
+        .fn()
+        .mockResolvedValueOnce(ready())
+        .mockRejectedValue({ code: "connection.failed" }),
+      taxOfficeMonthFileUrl: () => "/file",
+    },
+    { startDownload },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() => expect(actionError(el)).toBeTruthy());
+  await el.updateComplete;
+  expect(saveButton(el)).not.toBeNull();
+  expect(startDownload).not.toHaveBeenCalled();
+  expect(told).toEqual([]);
+});
+
+it("takes the ready line away once the app's notice saved that same file", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const el = await mount({
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+    getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(ready()),
+  });
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+  const saved = (id: string) =>
+    document.dispatchEvent(new CustomEvent("tax-office-month-saved", { detail: { id } }));
+
+  saved("b0");
+  await el.updateComplete;
+  expect(saveButton(el)).not.toBeNull();
+  saved("b1");
+  await el.updateComplete;
+  expect(monthLine(el)).toBeNull();
+});
+
 it("names the month whose invoices could not be prepared", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
   const el = await mount({

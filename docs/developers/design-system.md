@@ -4224,12 +4224,15 @@ panel lists at most five alerts and, below the drawer breakpoint (`48rem`), span
 less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears at the trailing edge just
 below the bottom of the row that holds the banner: below the banner itself, or below the full-disk bar and the update bar
 while they show, because the bars sit in the same row (`.banner-row` and `.toast-stack` in
-`apps/dashboard/src/dashboard-app.ts`). Below that same
-breakpoint it spans the banner's width less a small gutter on each side. The notice that a person's
-tax-office month file is ready, could not be prepared or was lost to a restart is a second
-`wt-toast` in the same stack, drawn under the alerts pop-up when both are open, so neither covers the
-other and neither pushes the page down (looked at in both themes at 1280 and 390 px wide,
-2026-11-16). While the floor plan editor
+`apps/dashboard/src/dashboard-app.ts`; the bars' case read from the CSS, not looked at on a screen).
+Below that same breakpoint it spans the banner's width less a small gutter on each side. The notice
+that a person's tax-office month file is ready, could not be prepared or was lost to a restart is a
+second `wt-toast` in the same stack, drawn under the alerts pop-up when both are open, so neither
+covers the other and neither pushes the page down (looked at, without the bars, in both themes at
+1280 and 390 px wide on 2026-11-16). The stack's empty parts, between the two and beside the
+narrower, let presses through to the page (hit-tested in
+`apps/dashboard/src/dashboard-app.tax-office-download.test.ts`).
+While the floor plan editor
 is open, the shell hands the stack, the full-disk bar and the update bar to the editor's `notices` slot, at the top of
 its modal, because the modal makes the page underneath inert. Elsewhere, and in the editor while another window is open over it, the toast is not drawn while a
 window is open and appears, with its full countdown, once the window closes.

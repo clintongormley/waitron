@@ -147,8 +147,11 @@ import type {
 } from "./api/client.js";
 import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
+  announceMonthSaved,
   clockTime,
+  MONTH_SAVED_EVENT,
   monthName,
+  paramsOf,
   saveTaxOfficeFile,
   startBrowserDownload,
   type StartDownload,
@@ -804,6 +807,11 @@ export class DashboardApp extends LitElement {
         flex-direction: column;
         align-items: flex-end;
         max-width: calc(100% - 2 * var(--wt-space-3));
+        pointer-events: none;
+      }
+      /* Only the pop-ups take presses: the stack's empty parts leave the page pressable. */
+      .toast-stack > * {
+        pointer-events: auto;
       }
       .toast-stack > wt-toast[open] ~ wt-toast[open] {
         margin-block-start: var(--wt-space-2);
@@ -1073,7 +1081,7 @@ export class DashboardApp extends LitElement {
     (error) => diag.record("warn", "disk_stop.load_failed", { code: codeOf(error) }),
   );
   @state() private taxOfficeToast:
-    | { kind: "ready"; month: string; expiresAt: string }
+    | { kind: "ready"; id: string; month: string; expiresAt: string }
     | { kind: "failed" | "restarted"; month: string }
     | { kind: "refused"; code: string; params?: Parameters<typeof codeMessage>[2] }
     | null = null;
@@ -1252,6 +1260,10 @@ export class DashboardApp extends LitElement {
       // A read that already saw this build is newer than the answer that started it.
       if (seen !== null && "id" in seen && "id" in view && seen.id === view.id) return;
       this.#taxOfficeSeen = view;
+    });
+    this.addEventListener(MONTH_SAVED_EVENT, (event) => {
+      if ((event as CustomEvent<{ id: string }>).detail.id === this.#readyNoticeId())
+        this.#closeReadyNotice();
     });
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
@@ -1499,11 +1511,13 @@ export class DashboardApp extends LitElement {
     this.#taxOfficeSeen = view;
     // The sign-in's first read is not news: a reload must not repeat a notice.
     if (last === null) return;
+    // Saved elsewhere, out of time or replaced: Save the file would only refuse.
+    if (!(view.status === "ready" && view.id === this.#readyNoticeId())) this.#closeReadyNotice();
     if (view.status === "ready" || view.status === "failed") {
       if (last.status === view.status && last.id === view.id) return;
       this.taxOfficeToast =
         view.status === "ready"
-          ? { kind: "ready", month: view.month, expiresAt: view.expiresAt }
+          ? { kind: "ready", id: view.id, month: view.month, expiresAt: view.expiresAt }
           : { kind: "failed", month: view.month };
     } else if (view.status === "none" && last.status === "building") {
       this.taxOfficeToast = { kind: "restarted", month: last.month };
@@ -1513,13 +1527,26 @@ export class DashboardApp extends LitElement {
   async #saveTaxOfficeFile(month: string): Promise<void> {
     const generation = this.sessionGeneration;
     try {
-      await saveTaxOfficeFile(this.api, month, this.startDownload);
-      if (generation === this.sessionGeneration) this.#replaceTaxOfficeToast(null);
+      const id = await saveTaxOfficeFile(this.api, month, this.startDownload);
+      if (generation !== this.sessionGeneration) return;
+      this.#replaceTaxOfficeToast(null);
+      announceMonthSaved(this, id);
     } catch (error) {
       if (generation !== this.sessionGeneration) return;
-      const params = (error as { params?: Parameters<typeof codeMessage>[2] }).params;
-      this.#replaceTaxOfficeToast({ kind: "refused", code: codeOf(error), params });
+      this.#replaceTaxOfficeToast({
+        kind: "refused",
+        code: codeOf(error),
+        params: paramsOf(error),
+      });
     }
+  }
+
+  #readyNoticeId(): string | null {
+    return this.taxOfficeToast?.kind === "ready" ? this.taxOfficeToast.id : null;
+  }
+
+  #closeReadyNotice(): void {
+    if (this.#readyNoticeId() !== null) this.#replaceTaxOfficeToast(null);
   }
 
   /** Save the file goes with either answer and the close button with the toast, so focus held in

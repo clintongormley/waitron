@@ -1,7 +1,22 @@
 import type { DashboardApi } from "./api/client.js";
+import type { codeMessage } from "./i18n/codes.js";
 import { currentLocale } from "./i18n/t.js";
 
 export type StartDownload = (url: string) => void;
+
+/** Fired, bubbling out of every shadow root, with `{ id }` of the file a Save the file started, so
+ * the shell's notice and the Invoices screen's line both stand down for it. */
+export const MONTH_SAVED_EVENT = "tax-office-month-saved";
+
+export function announceMonthSaved(from: EventTarget, id: string): void {
+  from.dispatchEvent(
+    new CustomEvent(MONTH_SAVED_EVENT, { detail: { id }, bubbles: true, composed: true }),
+  );
+}
+
+/** The words' values a refusal carries, for `codeMessage`. */
+export const paramsOf = (error: unknown) =>
+  (error as { params?: Parameters<typeof codeMessage>[2] } | null)?.params;
 
 /** A link carrying `download` saves its target without leaving the page. */
 export function startBrowserDownload(url: string): void {
@@ -29,14 +44,15 @@ export function clockTime(iso: string): string {
 }
 
 /** Starts the browser's download of the person's file for `month`, once the server still holds it
- * ready; otherwise throws `tax_office.download_missing`. */
+ * ready, and answers that file's id; otherwise throws `tax_office.download_missing`. */
 export async function saveTaxOfficeFile(
   api: DashboardApi,
   month: string,
   start: StartDownload = startBrowserDownload,
-): Promise<void> {
+): Promise<string> {
   const view = await api.getTaxOfficeMonthDownload();
   if (view.status !== "ready" || view.month !== month)
     throw { code: "tax_office.download_missing" };
   start(api.taxOfficeMonthFileUrl());
+  return view.id;
 }
