@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
   seedDeviceProfiles,
@@ -697,6 +698,7 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
     });
     return tabId;
   });
+  await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(suite.db, {

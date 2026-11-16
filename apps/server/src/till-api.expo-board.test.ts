@@ -63,7 +63,9 @@ async function fixture() {
     profileId: profile!.id,
   });
   const deviceCookie = `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`;
-  const [person] = await inTx(v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
+  const [person] = await inTx(v, (tx) =>
+    tx.select({ id: persons.id }).from(persons).where(eq(persons.email, "owner@example.test")),
+  );
   const session = await inTx(v, (tx) =>
     loginWithPin(tx, { deviceId: joined.deviceId, personId: person!.id, pin: "1234" }),
   );

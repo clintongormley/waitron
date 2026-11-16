@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
@@ -393,6 +394,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const tabId = await openTableTab(v, [
       { menuItemId: v.tables.offerFor(v.products.beer), quantity: "2" },
     ]);
+    await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
     const operator = {
       personId: OPERATOR,
       sessionId: await openTillSession(suite.db, {
