@@ -9,7 +9,7 @@
 > **Root control:** Claude found `scripts/append-only-triggers.test.ts:207–209` accepts a DELETE
 > of payments as its writable-ledger control. The delete refusal requires using an allowed
 > timestamp UPDATE instead, retaining both assertions. This named scripts-guard port awaits the
-> watcher's explicit answer to the lane's 07:40 question; do not edit that test until cleared.
+> watcher's explicit answer to the lane's root-control question; do not edit that test until cleared.
 > Add it to Task 1's failing/green runs. The declared-delete/refusal inventory stays unchanged.
 >
 > **Consumer inventory:** Keep only redundant cleanup removals still present after pa1. Include
@@ -119,11 +119,14 @@ Uncounted: up to ~50 deleted `beforeEach` lines and the generated files. Under a
 
 ## Finish line
 
+Run every changed cleanup test file by path before committing; CI owns package-wide checks.
+
 ```bash
-Run affected test files with `pnpm --filter <package> exec vitest run <file>`; CI owns package-wide tests.
-pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts
+pnpm --filter @waitron/payments exec vitest run src/schema/payments-guard.test.ts
+pnpm --filter @waitron/payments-stripe exec vitest run src/hosted-provider.test.ts src/reconciler.test.ts src/stripe-report-client.test.ts
+pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/append-only-triggers.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/server migration-baseline rebuild --set payments   # "unchanged payments"
-git grep -n "delete from payments" -- apps packages   # prints nothing
+git grep -n -i -E 'delete\(payments\)|delete from payments|replace[[:space:]]+into[[:space:]]+payments' -- apps packages ':!*.test.ts' # no product hit, exit 1
 ```
 
 ## Expected protection-list difference
