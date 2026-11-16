@@ -16,6 +16,11 @@ does not exist.
 
 Left open:
 
+- Pass and pass-monitor screens reuse their boot boards after a language rebuild (source-only,
+  not run: `till-app.ts`'s `initialDevicePass`/`initialDevicePassMonitor`, `till-pass-screen.ts`'s
+  `#initialConsumed`); post-load changes may disappear until the next read.
+
+
 - A switched-off printer's printing problem keeps showing until the printer is switched on
   and a Reprint prints there; there is no way to dismiss one.
 - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of

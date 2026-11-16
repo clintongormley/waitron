@@ -2408,6 +2408,92 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("es-ES");
   });
 
+  it("keeps the latest station queue across Spanish and English switches", async () => {
+    const { allergyQueue } = await import("../test/kitchen-allergy-fixtures.js");
+    const previousLocale = currentLocale();
+    const previousSize = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 900);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const template = allergyQueue();
+      const queue = [1, 2, 4, 7].map((number) => ({
+        ...template,
+        orderId: `order-${number}`,
+        orderNumber: number,
+        kitchenNote: null,
+        items: [
+          {
+            ...template.items[0]!,
+            id: `item-${number}`,
+            workingOrderLineId: `line-${number}`,
+            allergy: null,
+          },
+        ],
+      }));
+      const answer = (numbers: number[]) => ({
+        stations: [
+          {
+            id: "kitchen",
+            name: "Kitchen",
+            available: true,
+            today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "open" },
+            queue: queue.filter((group) => numbers.includes(group.orderNumber)),
+            notices: [],
+          },
+        ],
+      });
+      const read = vi.fn().mockResolvedValue(answer([2, 4]));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "en-GB",
+          formFactor: kdsFormFactor,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "display",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: read,
+      });
+      const shown = () => {
+        const boards = [
+          ...station(el)!.shadowRoot!.querySelectorAll<TillStationQueue>("till-station-queue"),
+        ];
+        return [
+          ...new Set(
+            boards.flatMap((board) =>
+              [...board.shadowRoot!.querySelectorAll<HTMLElement>("[data-order]")].map((card) =>
+                Number(card.dataset.order),
+              ),
+            ),
+          ),
+        ].sort((a, b) => a - b);
+      };
+      await flush(el, 8);
+      emit(shell(el)!, "wt-locale-selected", { code: "en-GB" });
+      await flush(el, 8);
+      expect(shown()).toEqual([2, 4]);
+      read.mockResolvedValue(answer([1, 2, 7]));
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 8);
+      expect(shown()).toEqual([1, 2, 7]);
+      for (const code of ["es-ES", "en-GB"]) {
+        const reads = read.mock.calls.length;
+        emit(shell(el)!, "wt-locale-selected", { code });
+        await flush(el, 8);
+        expect(currentLocale()).toBe(code);
+        expect(shown()).toEqual([1, 2, 7]);
+        expect(read).toHaveBeenCalledTimes(reads);
+      }
+    } finally {
+      vi.useRealTimers();
+      setLocale(previousLocale);
+      await page.viewport(previousSize.width, previousSize.height);
+    }
+  });
+
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
