@@ -8327,7 +8327,9 @@ export class TillApp extends LitElement {
         };
       }
       reachedPlace = true;
-      await api.placeOrder(id, null, lateSend);
+      await (lateSend === undefined
+        ? api.placeOrder(id, null)
+        : api.placeOrder(id, null, lateSend));
       if (!current()) return;
       this.#unconfirmedPlace = undefined;
       this.stage = "collect";
