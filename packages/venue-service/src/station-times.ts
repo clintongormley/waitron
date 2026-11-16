@@ -91,9 +91,11 @@ export async function stationDestinations(
   return stations
     .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
     .filter((station) => stationStatus(rules, station.id, moment).open)
-    .map(({ closedOnDay: _closedOnDay, ...station }) => ({
-      ...station,
-      preferred: station.id === whenClosedSendsToStationId,
+    .map(({ id, name, isDefault }) => ({
+      id,
+      name,
+      isDefault,
+      preferred: id === whenClosedSendsToStationId,
     }));
 }
 

@@ -3022,7 +3022,9 @@ describe("saving a cell's period choices", () => {
       expect(readPeriods).not.toHaveBeenCalled();
       readPeriods.mockRestore();
       expect(plain.periods).toEqual([]);
-      expect(plain.cells).toEqual(full.cells.map(({ periods: _periods, ...cell }) => cell));
+      expect(plain.cells).toEqual(
+        full.cells.map(({ row, zoneId, target }) => ({ row, zoneId, target })),
+      );
       expect(plain.categories).toEqual(full.categories);
       expect(plain.products).toEqual(full.products);
       expect(plain.stationTimes).toEqual(full.stationTimes);
