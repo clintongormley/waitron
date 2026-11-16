@@ -359,7 +359,7 @@ it("derives once for preview and staging and once after a fresh-process restart"
   const input = await artifact(f);
   const derive = vi.spyOn(kdf, "deriveKeyAsync");
   try {
-    for (const _step of ["preview", "staging"]) {
+    for (let step = 0; step < 2; step += 1) {
       const copy = await validateArtifactFile(f);
       await copy.discard();
     }
