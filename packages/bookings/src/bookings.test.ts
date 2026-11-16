@@ -345,6 +345,47 @@ describe("updateBooking", () => {
     });
   });
 
+  it.each([1000, 1.5])(
+    "refuses a party size of %s with booking.invalid, on create and on edit",
+    async (partySize) => {
+      const { createdBy } = await setupVenue();
+      const base = {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        contactName: "Taylor",
+        createdBy,
+      };
+      await expect(scoped((tx) => createBooking(tx, { ...base, partySize }))).rejects.toMatchObject(
+        {
+          code: "booking.invalid",
+        },
+      );
+      const { id } = await scoped((tx) => createBooking(tx, { ...base, partySize: 999 }));
+      await expect(scoped((tx) => updateBooking(tx, id, { partySize }))).rejects.toMatchObject({
+        code: "booking.invalid",
+      });
+      await scoped((tx) => updateBooking(tx, id, { partySize: 999 }));
+      expect((await scoped((tx) => getBooking(tx, id)))!.partySize).toBe(999);
+    },
+  );
+
+  it("refuses a contact name that is blank after trimming with booking.invalid, on create and on edit", async () => {
+    const { createdBy } = await setupVenue();
+    const base = { bookingDate: "2026-08-20", bookingTime: "20:00", partySize: 2, createdBy };
+    await expect(
+      scoped((tx) => createBooking(tx, { ...base, contactName: " " })),
+    ).rejects.toMatchObject({
+      code: "booking.invalid",
+      params: { field: "contactName" },
+    });
+    const { id } = await scoped((tx) => createBooking(tx, { ...base, contactName: "Taylor" }));
+    await expect(scoped((tx) => updateBooking(tx, id, { contactName: "" }))).rejects.toMatchObject({
+      code: "booking.invalid",
+      params: { field: "contactName" },
+    });
+    expect((await scoped((tx) => getBooking(tx, id)))!.contactName).toBe("Taylor");
+  });
+
   it("assigns an ACTIVE table on edit", async () => {
     const { createdBy } = await setupVenue();
     const tableId = await makeTable();

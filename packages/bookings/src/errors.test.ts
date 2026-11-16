@@ -18,6 +18,12 @@ describe("the booking error codes carry their declared params", () => {
     expect(error.params).toEqual({ partySize: 0 });
   });
 
+  it("constructs booking.invalid naming a blank contact name's field", () => {
+    const error = new AppError("booking.invalid", { field: "contactName" });
+    expect(error.code).toBe("booking.invalid");
+    expect(error.params).toEqual({ field: "contactName" });
+  });
+
   it("constructs booking.invalid_transition with the qualified bookingId, matching ticket.invalid_transition's shape", () => {
     const bookingId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     const error = new AppError("booking.invalid_transition", { bookingId });

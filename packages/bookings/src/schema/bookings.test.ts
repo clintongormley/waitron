@@ -62,7 +62,7 @@ const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
-  // Each test seeds its own parents: the helper empties every table after each test.
+  // Each test seeds its own parents: useVenueDb empties the data tables after each test.
   async function seedParents(): Promise<void> {
     await seedTaxpayer(suite.db);
     await seedPerson(suite.db, { id: CREATED_BY });

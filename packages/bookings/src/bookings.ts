@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { tableInService, diningTables, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, isValidGuestCount } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
@@ -49,13 +49,20 @@ async function requireActiveTable(tx: Transaction, tableId: string): Promise<voi
   }
 }
 
+function requireValidBooking(fields: { partySize?: number; contactName?: string }): void {
+  if (fields.partySize !== undefined && !isValidGuestCount(fields.partySize)) {
+    throw new AppError("booking.invalid", { partySize: fields.partySize });
+  }
+  if (fields.contactName !== undefined && fields.contactName.trim() === "") {
+    throw new AppError("booking.invalid", { field: "contactName" });
+  }
+}
+
 export async function createBooking(
   tx: Transaction,
   input: CreateBookingInput,
 ): Promise<{ id: string }> {
-  if (input.partySize <= 0) {
-    throw new AppError("booking.invalid", { partySize: input.partySize });
-  }
+  requireValidBooking(input);
   if (input.tableId !== undefined) {
     await requireActiveTable(tx, input.tableId);
   }
@@ -100,9 +107,7 @@ export async function updateBooking(
   id: string,
   patch: UpdateBookingPatch,
 ): Promise<void> {
-  if (patch.partySize !== undefined && patch.partySize <= 0) {
-    throw new AppError("booking.invalid", { partySize: patch.partySize });
-  }
+  requireValidBooking(patch);
   const tableChanges = patch.tableId !== undefined && patch.tableId !== null;
   if (tableChanges || patch.bookingDate !== undefined) {
     const [stored] = await tx

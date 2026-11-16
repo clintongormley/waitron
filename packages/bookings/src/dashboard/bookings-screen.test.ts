@@ -827,6 +827,42 @@ it.each(["dining_tables", "floor_zones"])(
   },
 );
 
+it("moves an open seat picker to the first table still offered when a refresh drops its table", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  await click(el, "seat-bk-late");
+  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=seat-table]")!, "t-2");
+  await el.updateComplete;
+  vi.mocked(api.listTables).mockResolvedValue([TABLES[0]!]);
+  liveData.invalidate([{ type: "dining_tables", id: "t-2" }]);
+  await vi.waitFor(() => expect(api.listTables).toHaveBeenCalledTimes(2));
+  await flush(el);
+  await click(el, "confirm-seat-bk-late");
+  await flush(el);
+  expect(api.seatBooking).toHaveBeenCalledWith("bk-late", { tableId: TABLES[0]!.id });
+});
+
+it("closes an open seat picker and asks for a table when a refresh leaves none", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  await click(el, "seat-bk-late");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-seat-bk-late]")).not.toBeNull();
+  vi.mocked(api.listTables).mockResolvedValue([]);
+  liveData.invalidate([{ type: "dining_tables", id: "changed" }]);
+  await vi.waitFor(() => expect(api.listTables).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-seat-bk-late]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+    codeMessage("booking.table_required", "es-ES"),
+  );
+  expect(api.seatBooking).not.toHaveBeenCalled();
+});
+
 let previousLocale: string;
 beforeEach(() => {
   previousLocale = currentLocale();

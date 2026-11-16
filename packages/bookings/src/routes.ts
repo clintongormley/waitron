@@ -46,6 +46,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "booking.table_required": 400,
   "table.not_found": 400,
   "table.inactive": 400,
+  "service_zone.mode_incompatible": 400,
   "tab.already_open": 409,
   "table.needs_clearing": 409,
   "table.needs_moving": 409,
@@ -53,7 +54,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 const run = createErrorBoundary(STATUS, "booking.failed");
 
-/** Zero and negatives pass: `party_size > 0` is the verbs' rule (`booking.invalid`). */
+/** Any whole number passes: 1 to 999 is the verbs' rule (`booking.invalid`). */
 function requireInteger(v: unknown, field: string): number {
   if (!Number.isInteger(v)) throw new AppError("management.request_invalid", { field });
   return v as number;

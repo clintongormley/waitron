@@ -171,6 +171,7 @@ export class BookingsScreen extends LitElement {
         },
         (value) => {
           this.tables = tablesInNumberOrder(value);
+          this.#keepSeatTableOffered();
         },
       );
     } catch (error) {
@@ -296,11 +297,22 @@ export class BookingsScreen extends LitElement {
     }
     this.#showError(null);
     this.seatingId = b.id;
-    this.seatTableId = this.tables[0]?.id ?? "";
+    this.seatTableId = this.tables[0]!.id;
+  }
+
+  /** An open picker never confirms a table the list no longer offers. */
+  #keepSeatTableOffered(): void {
+    if (this.seatingId === null) return;
+    if (this.tables.some((table) => table.id === this.seatTableId)) return;
+    const [first] = this.tables;
+    if (first === undefined) {
+      this.seatingId = null;
+      this.#showError("booking.table_required");
+    } else this.seatTableId = first.id;
   }
 
   #onSeatConfirm(id: string): void {
-    void this.#seat(id, this.seatTableId === "" ? undefined : this.seatTableId);
+    void this.#seat(id, this.seatTableId);
   }
 
   async #seat(id: string, tableId?: string): Promise<void> {
