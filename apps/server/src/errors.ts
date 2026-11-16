@@ -1777,6 +1777,9 @@ declare module "@waitron/shared" {
     /** A Wi-Fi join was not sent over an encrypted connection from the box's own page. */
     "box_network.join_connection_insecure": { reason: "unencrypted" | "other_origin" };
     "restore.request_waiting": Record<string, never>;
+    /** A restore's clock-waiting route was sent by a page on another site (`Origin` or
+     * `Sec-Fetch-Site`). */
+    "restore.clock_origin_refused": Record<string, never>;
     "restore.flow_unreadable": Record<string, never>;
     "restore.administrator_password_missing": Record<string, never>;
     /** A restored box's first start (a certificate for this machine, the next membership term)

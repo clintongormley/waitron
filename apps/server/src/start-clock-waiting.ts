@@ -13,6 +13,7 @@ import "./errors.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import { requestFromBox } from "./request-from-box.js";
 import { matchesStagedNodeKey } from "./restore-request.js";
 import type { SetupClockSetter } from "./setup-clock-set.js";
@@ -65,7 +66,8 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
     });
   };
 
-  /** Each clock route: refused without the key, otherwise `answer` with the body and its time. */
+  /** Each clock route: refused from another site's page or without the key, otherwise `answer`
+   * with the body and its time. */
   const keyed = (
     path: string,
     answer: (c: Context, sent: Record<string, unknown>, received: ClockMoment) => Promise<Response>,
@@ -76,6 +78,10 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       const sent =
         typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
       c.header("Cache-Control", "no-store");
+      if (!sentFromThisOrigin(c)) {
+        const err = new AppError("restore.clock_origin_refused", {});
+        return c.json({ error: { code: err.code, params: err.params } }, 403);
+      }
       if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) {
         const err = new AppError("promotion.break_glass_invalid", {});
         return c.json({ error: { code: err.code, params: err.params } }, 403);
@@ -248,16 +254,38 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     show(answer === null ? null : "clock-set-refused");
     await compare();
   }));
-  // A refused try drops the confirmation, which the server's 503 says: ask again then.
-  const recheck = quietly(async () => {
-    if ($("clock-confirmed").hidden) return;
-    const answer = await (await fetch("/", { headers: { accept: "application/json" } })).json();
-    if (answer.error?.params?.confirmed !== false) return;
-    show(null);
-    await compare();
-  });
-  const later = () => setTimeout(() => void recheck().then(later), 5000);
-  later();
+  // Any answer but the waiting one means the wait is over. A look that fails, or stalls past its
+  // deadline, is tried again at the next turn. A refused try drops the confirmation, which the
+  // waiting answer says: ask again then.
+  const look = async () => {
+    const stop = new AbortController();
+    const deadline = setTimeout(() => stop.abort(), 5000);
+    try {
+      const response = await fetch("/", {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+        signal: stop.signal,
+      });
+      const text = await response.text();
+      let answer = null;
+      try {
+        answer = JSON.parse(text);
+      } catch {}
+      if (answer?.error?.code !== "server.waiting_for_clock") {
+        field.value = "";
+        return location.replace("/");
+      }
+      if (answer.error.params?.confirmed === false && !$("clock-confirmed").hidden) {
+        show(null);
+        void quietly(compare)();
+      }
+    } catch {
+    } finally {
+      clearTimeout(deadline);
+    }
+    setTimeout(look, 5000);
+  };
+  setTimeout(look, 5000);
 })();
 </script>
 `,

@@ -133,7 +133,7 @@ it.each([FRESH, { ...FRESH, level: "recovery" as const, failures: 3 }])(
         app = surface;
       },
       scheduleStayedUp: forbidden,
-      installShutdownHandlers: forbidden,
+      installShutdownHandlers: () => void forbidden(),
       log: () => {},
     });
     expect(forbidden).not.toHaveBeenCalled();

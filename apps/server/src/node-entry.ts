@@ -120,8 +120,7 @@ export interface EntryDeps {
   now?: () => Date;
   startServer: (env: NodeJS.ProcessEnv, base?: NodeJS.ProcessEnv) => Promise<StartedEntryServer>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
-  /** Serves the page a restore's start shows while it waits to confirm its time. No shutdown
-   *  handlers: the start closes it itself, before the server's own are installed. */
+  /** Serves the page a restore's start shows while it waits to confirm its time. */
   serveStartClockWaiting: (
     app: Hono,
     opts: RecoveryServeOptions,
@@ -130,7 +129,9 @@ export interface EntryDeps {
   timeServiceSynchronised?: () => Promise<boolean>;
   /** The waiting page's clock setter; absent, the restore page's (`createSetupClockSet`). */
   startClockSetter?: () => SetupClockSet;
-  installShutdownHandlers: (server: ShutdownTarget) => void;
+  /** Also installed while a restore's start waits to confirm its time, and taken off through
+   *  the answer before the server's go on; an answer that is not a function takes nothing off. */
+  installShutdownHandlers: (server: ShutdownTarget) => (() => void) | void;
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
   scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
   log: Logger;
@@ -299,7 +300,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    `fullyStarted` (present on a box that answered while it waited for its peers) settled, and the
  *    process then survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing
  *    seconds in reset the counter on every attempt. A restart this start's own server asks for
- *    takes its attempt back off (`beforeRestart`).
+ *    takes its attempt back off (`beforeRestart`), as does a restore's start each time it waits
+ *    to confirm its time.
  * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
  *    the venue files, and before `startServer`, which migrates and then queries the schema. It
  *    judges a database nothing has migrated yet, which the one-directional comparison in
@@ -693,9 +695,7 @@ async function runAdmittedEntry(
     return;
   }
 
-  // Written before the first step that can fail, so a boot that hangs is counted. Accepted
-  // consequence: an attempt cut short counts too — three power-cycles during a long cold restore
-  // land a box on the page, where the retry button clears it.
+  // Written before the first step that can fail, so a boot that hangs is counted.
   let attempt = await changeState(deps, (current) => afterFailure(current, BOOT_INCOMPLETE, now()));
   const page = pageLog(logDir, now, deps.log);
   // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
@@ -741,11 +741,13 @@ async function runAdmittedEntry(
     let waiting:
       { page: StartClockWaiting; setter: SetupClockSet; close(): Promise<void> } | undefined;
     let chosenMinuteMs: number | undefined;
+    let failed: { error: unknown } | undefined;
+    let trying: Promise<unknown> = Promise.resolve();
     try {
       for (;;) {
         const offered = waiting?.page.confirmation() ?? null;
         try {
-          await (deps.runStagedRestore ?? runStagedRestore)({
+          const tried = (deps.runStagedRestore ?? runStagedRestore)({
             stateDir: deps.stateDir,
             venueDir: deps.venueDir,
             migrationsRoot,
@@ -765,6 +767,8 @@ async function runAdmittedEntry(
               chosenMinuteMs = issuedAtMs;
             },
           });
+          trying = tried.catch(() => {});
+          await tried;
           break;
         } catch (error) {
           const reason = clockWaitReason(error);
@@ -789,7 +793,22 @@ async function runAdmittedEntry(
               earliestMs: () => chosenMinuteMs,
             });
             const served = await deps.serveStartClockWaiting(page.app, transport);
-            waiting = { page, setter, close: () => served.close() };
+            // On the box Node is process 1, which ignores a stop signal it has no handler for. A
+            // stop lets a try under way finish, within the handlers' deadline.
+            const stopHandlers = deps.installShutdownHandlers({
+              close: async () => {
+                await served.close();
+                await trying;
+              },
+            });
+            waiting = {
+              page,
+              setter,
+              close: () => {
+                if (typeof stopHandlers === "function") stopHandlers();
+                return served.close();
+              },
+            };
           }
           const taken = attempt;
           await persistState(deps, (current) => withoutAttempt(current, taken.before, taken.after));
@@ -803,12 +822,21 @@ async function runAdmittedEntry(
           );
         }
       }
+    } catch (error) {
+      failed = { error };
     } finally {
       await waiting?.close().catch((error: unknown) => {
         deps.log("warn", "server.start_waiting_close_failed", { errorCode: codeOf(error) });
       });
     }
     // A step the page made lives only in this process until noted; the full start raises the note.
+    // A failed start notes it too, and keeps its own failure.
+    if (failed !== undefined) {
+      await waiting?.setter.writePending().catch((error: unknown) => {
+        deps.log("warn", "server.start_clock_step_unnoted", { errorCode: codeOf(error) });
+      });
+      throw failed.error;
+    }
     await waiting?.setter.writePending();
     await (deps.runStagedReset ?? runStagedReset)({
       stateDir: deps.stateDir,

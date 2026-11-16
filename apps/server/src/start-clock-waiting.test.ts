@@ -97,10 +97,10 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the node recovery key from the backup's paper below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the server key from the backup's paper below to confirm the time from this device.",
         ),
       );
-      expect(body).toContain(escapeHtml("Selected backup’s node recovery key"));
+      expect(body).toContain(escapeHtml("Selected backup’s server key"));
       expect(body).toMatch(/<input [^>]*type="password"[^>]*name="node-recovery-key"/);
     },
   );
@@ -175,6 +175,48 @@ describe("the restore's waiting app: the node recovery key", () => {
       expect(w.sets).toEqual([]);
     },
   );
+
+  const origin = "http://localhost";
+  it.each([
+    ["challenge", { origin: "https://elsewhere.example" }],
+    ["compare", { origin: "https://elsewhere.example" }],
+    ["confirm", { "sec-fetch-site": "cross-site" }],
+    ["set", { "sec-fetch-site": "same-site" }],
+    ["set", { origin: "null" }],
+    ["challenge", { origin: "" }],
+  ])(
+    "/restore-clock/%s refuses the right key from another site's page (%o)",
+    async (path, headers) => {
+      const w = await waiting();
+      const id = await w.challenge();
+      const res = await w.app.request(`/restore-clock/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ key: KEY, challengeId: id, instantMs: BOX_MS }),
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "restore.clock_origin_refused", params: {} },
+      });
+      expect(w.confirmation()).toBeNull();
+      expect(w.sets).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["this page's origin", { origin, "sec-fetch-site": "same-origin" }],
+    ["no Origin or Sec-Fetch-Site, as a request no browser page sent", {}],
+    ["a request the person typed", { "sec-fetch-site": "none" }],
+  ])("serves the right key from %s (control)", async (_name, headers) => {
+    const w = await waiting();
+    const res = await w.app.request(`${origin}/restore-clock/challenge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ key: KEY }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: expect.any(String) });
+  });
 
   it("refuses the right key when no key is staged", async () => {
     const w = await waiting({ staged: null });

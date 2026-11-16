@@ -183,3 +183,60 @@ describe("a restart the server asks for itself", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("handlers taken off again", () => {
+  async function fresh() {
+    vi.resetModules();
+    const module = await import("./run-server.js");
+    const on = new Map<string, () => void>();
+    const off: [string, () => void][] = [];
+    const exit = vi.fn();
+    const deps = {
+      on: (signal: NodeJS.Signals, handler: () => void) => void on.set(signal, handler),
+      off: (signal: NodeJS.Signals, handler: () => void) => void off.push([signal, handler]),
+      write: (_line: string, done: () => void) => done(),
+      exit,
+      now: () => new Date("2026-11-16T00:00:00Z"),
+      setTimer: () => ({ cancel: () => {} }),
+    };
+    return { module, on, off, exit, deps };
+  }
+
+  it("takes both signals' handlers off, and keeps a restart asked for afterwards for the next handlers", async () => {
+    const h = await fresh();
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const first = vi.fn(() => Promise.resolve());
+      const remove = h.module.installShutdownHandlers({ close: first }, h.deps);
+      remove();
+      expect(h.off).toEqual([
+        ["SIGTERM", h.on.get("SIGTERM")],
+        ["SIGINT", h.on.get("SIGINT")],
+      ]);
+      // Failing case, handlers still counted as installed: a SIGTERM sent to a process with none.
+      h.module.restartProcess();
+      expect(kill).not.toHaveBeenCalled();
+      const second = vi.fn(() => Promise.resolve());
+      h.module.installShutdownHandlers({ close: second }, h.deps);
+      await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("leaves a shutdown already under way to finish", async () => {
+    const h = await fresh();
+    let finish!: () => void;
+    const remove = h.module.installShutdownHandlers(
+      { close: () => new Promise<void>((resolve) => (finish = resolve)) },
+      h.deps,
+    );
+    h.on.get("SIGTERM")!();
+    remove();
+    expect(h.off).toEqual([]);
+    finish();
+    await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+  });
+});

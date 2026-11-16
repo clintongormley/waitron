@@ -4,6 +4,7 @@ import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { loadConfig } from "./config.js";
 import * as firstSetupEntry from "./first-setup-entry.js";
 import { Socket } from "node:net";
+import type { ShutdownTarget } from "./run-server.js";
 import { TLSSocket } from "node:tls";
 import { hashPassword } from "@waitron/identity";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
@@ -3343,6 +3344,102 @@ describe("a restore's start that waits to confirm its time", () => {
       "clock steps noted",
       "startServer",
     ]);
+  });
+
+  /** Shutdown handlers that record their targets, and when each set goes on and comes off, into
+   * `into` (`follow` points it at a start's own order, carrying over what came before). */
+  const recordedHandlers = () => {
+    const targets: ShutdownTarget[] = [];
+    let into: string[] = [];
+    const install = vi.fn((target: ShutdownTarget) => {
+      const n = targets.push(target);
+      into.push(`handlers ${n} on`);
+      return () => void into.push(`handlers ${n} off`);
+    });
+    const follow = (order: string[]) => {
+      order.push(...into);
+      into = order;
+    };
+    return { targets, install, follow };
+  };
+
+  it("stops on a signal while it waits: its handlers close the waiting page, and come off before the server's go on", async () => {
+    const handlers = recordedHandlers();
+    const start = await waitingStart(["second_clock_missing"], {
+      installShutdownHandlers: handlers.install,
+    });
+    handlers.follow(start.order);
+    await start.advanceTo(1_000);
+    expect(handlers.targets).toHaveLength(1);
+    // A signal during the wait: its close is the waiting page's.
+    await handlers.targets[0]!.close();
+    expect(start.close).toHaveBeenCalledTimes(1);
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await start.settled;
+    expect(start.order).toEqual([
+      "waiting served",
+      "handlers 1 on",
+      "waiting closed",
+      "placed",
+      "handlers 1 off",
+      "waiting closed",
+      "startServer",
+      "handlers 2 on",
+    ]);
+  });
+
+  it("a signal during a try after the wait began lets that try finish before exiting", async () => {
+    const handlers = recordedHandlers();
+    let finishTry!: () => void;
+    let secondTry!: () => void;
+    const tryStarted = new Promise<void>((resolve) => (secondTry = resolve));
+    const start = await waitingStart(
+      ["second_clock_missing"],
+      { installShutdownHandlers: handlers.install },
+      async (n) => {
+        if (n !== 2) return;
+        secondTry();
+        await new Promise<void>((resolve) => (finishTry = resolve));
+      },
+    );
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await tryStarted;
+    let closed = false;
+    const closing = handlers.targets[0]!.close().then(() => (closed = true));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(start.close).toHaveBeenCalledTimes(1);
+    expect(closed).toBe(false);
+    finishTry();
+    await closing;
+    await start.settled;
+  });
+
+  it("notes a clock step the page made when a later try fails for another reason, keeping that failure", async () => {
+    const start = await waitingStart(["second_clock_missing", "history_invalid"], {
+      startClockSetter: setterWith(async () => void start.order.push("clock steps noted")),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await expect(start.settled).rejects.toMatchObject({ params: { reason: "history_invalid" } });
+    expect(start.order).toEqual(["waiting served", "waiting closed", "clock steps noted"]);
+    expect(start.volume.current().lastErrorCode).toBe("sif.allocation_invalid");
+  });
+
+  it("keeps a later try's failure, not a failed note of the clock step, as the start's failure", async () => {
+    const start = await waitingStart(["second_clock_missing", "history_invalid"], {
+      startClockSetter: setterWith(() =>
+        Promise.reject(new AppError("setup.clock_step_unsaved", {}, { reason: "EIO" })),
+      ),
+    });
+    start.timeService.synchronised = true;
+    await start.advanceTo(15_000);
+    await expect(start.settled).rejects.toMatchObject({ params: { reason: "history_invalid" } });
+    expect(start.volume.current().lastErrorCode).toBe("sif.allocation_invalid");
+    expect(start.d.log).toHaveBeenCalledWith("warn", "server.start_clock_step_unnoted", {
+      errorCode: "setup.clock_step_unsaved",
+    });
   });
 
   it("counts a start whose clock step cannot be noted, and starts no server", async () => {
