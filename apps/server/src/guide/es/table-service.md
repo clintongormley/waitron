@@ -891,7 +891,7 @@ aparte, después del cobro.
 tarjeta, por lo que se resta de **Queda por pagar**. En una cuenta de 70 € con un cobro de 30 €
 en curso, otro teléfono puede cobrar los 40 € restantes. No puede volver a descontar de la cuenta
 los 30 € reservados. Si no queda saldo aparte de esa tarjeta, espera su resultado. Con propinas
-activadas, introducir más de 40 € en **Una cantidad** cobra el exceso como propina en esa tarjeta;
+activadas, introducir más de 40 € en **Una cantidad** cobra el exceso como propina en este cobro;
 confirma ese cargo con el cliente. Si la ventana pregunta si quieres **Cobrar otro**, compruébalo
 con la otra persona antes de hacerlo. Un teléfono que tenía abierto un importe anterior puede pedirte
 confirmar los importes actualizados. Comprueba tanto lo que se descuenta de la cuenta como la
