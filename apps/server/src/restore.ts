@@ -13,6 +13,7 @@ import {
 } from "@waitron/store";
 
 import { syncFolderHolding } from "./fs-atomic.js";
+import { reachDisk } from "./sync-path.js";
 
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
@@ -676,8 +677,11 @@ export async function restoreDatabase(args: {
       await (fs.copyFile ?? copyFile)(args.databasePath, incoming);
       await (fs.chmod ?? chmod)(incoming, VENUE_FILE_MODE);
     }
-    if (args.nodeDump !== undefined)
+    await reachDisk(incoming);
+    if (args.nodeDump !== undefined) {
       await writeFile(nodeIncoming, args.nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
+      await reachDisk(nodeIncoming);
+    }
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
   } catch (error) {
@@ -722,6 +726,16 @@ export async function restoreDatabase(args: {
       errno: errnoOf(error),
     });
     throw new AppError("restore.placement_failed", params);
+  }
+  // Publication has completed: refusing here would restore the old identity beside the new pair.
+  // Keep the matching identity; durability is unconfirmed when the folder flush fails.
+  try {
+    await syncFolderHolding(target);
+  } catch (error) {
+    args.log("error", "restore.db.folder_sync_failed", {
+      folder: args.venueDir,
+      errno: errnoOf(error),
+    });
   }
   try {
     await fs.rm(aside, { recursive: true, force: true });
