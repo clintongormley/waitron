@@ -56,12 +56,4 @@ export {
   readTakeFailures,
   recordTakeFailureTx,
 } from "./take-failures.js";
-export {
-  deleteBoxRowsOtherThanTx,
-  writeBoxRecoveryKeyTx,
-  writeBoxSigningKeyTx,
-  writeBoxRoleTx,
-  writeBoxMirrorLinkTx,
-  writeBoxPinnedKeyTx,
-} from "./box.js";
-export type { BoxRoleCause } from "./box.js";
+export { deleteBoxRowsOtherThanTx, writeBoxSigningKeyTx } from "./box.js";

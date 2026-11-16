@@ -4,8 +4,6 @@ import type { MirrorConnection } from "./mirror-link.js";
 import type { PinnedPrimaryKey } from "./primary-key.js";
 import { box } from "./schema/box.js";
 
-export type BoxRoleCause = "adopt" | "promote" | "fenced";
-
 export async function writeBoxRecoveryKeyTx(
   tx: NodeTransaction,
   nodeId: string,

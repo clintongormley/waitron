@@ -20,10 +20,12 @@ export const box = table(
     mirrorOriginUrl: label("mirror_origin_url"),
     mirrorBoxHostname: label("mirror_box_hostname"),
     mirrorBoxCaPem: label("mirror_box_ca_pem"),
-    // No venue foreign key crosses node.db; adopting checks the origin's membership.
+    // The origin is a venue nodes row; nothing in node.db establishes that it exists.
+    // No foreign key crosses the two database files.
     mirrorOriginNodeId: id("mirror_origin_node_id"),
     mirrorAdoptedAt: ts("mirror_adopted_at"),
-    // The joining flow verifies this venue node and its public key before pinning them.
+    // A venue nodes row; nothing in node.db establishes that it exists.
+    // No foreign key crosses the two database files.
     primaryNodeId: id("primary_node_id"),
     primaryPublicKey: label("primary_public_key"),
     primaryPinnedAt: ts("primary_pinned_at"),

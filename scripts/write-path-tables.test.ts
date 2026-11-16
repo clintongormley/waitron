@@ -58,8 +58,8 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                adoption worker.
  *   `packages/db/src/deployment.ts`              stamps the environment.
  *   `packages/node-db/src/box.ts`                writes each box column group and sweeps abandoned
- *                                                rows. Its exported group writers are callable
- *                                                from any module; this file cannot check callers.
+ *                                                rows. Its signing writer and sweep are public;
+ *                                                this file cannot check their callers.
  */
 const ALLOWED: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(REPO_ROOT, "scripts", "write-path-tables.json"), "utf8"),

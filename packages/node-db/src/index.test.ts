@@ -7,11 +7,7 @@ describe("the public surface", () => {
       [
         "box",
         "deleteBoxRowsOtherThanTx",
-        "writeBoxRecoveryKeyTx",
         "writeBoxSigningKeyTx",
-        "writeBoxRoleTx",
-        "writeBoxMirrorLinkTx",
-        "writeBoxPinnedKeyTx",
         "NODE_CLASSIFICATION",
         "NODE_MIGRATIONS",
         "HANDOVER_CLOSED_STATES",

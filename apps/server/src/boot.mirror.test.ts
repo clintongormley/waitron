@@ -978,7 +978,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("refuses a mirror boot that has no box row (a mirror REQUIRES its DB connection config)", async () => {
+  it("refuses a mirror boot with no mirror-link group", async () => {
     let caught: unknown;
     try {
       await startServer({

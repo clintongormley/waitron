@@ -1088,9 +1088,10 @@ correction; `reserveTenderRefund` calls it.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
-alone. The exported group writers in `packages/node-db/src/box.ts` are callable from any
-module: the guard cannot check that each group is called only through its owning module. Review
-checks that convention. Read the guard header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
+alone. `packages/node-db/src/box.ts` exposes its signing-key writer and row sweep through the
+package; its other group writers are called inside node-db. The guard cannot check callers of an
+allowed file. Review checks that each group goes through its owning module. Read the guard header
+for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
 records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
 Real code does write them, legitimately: the setup-mode provision route reaches `taxpayer`,

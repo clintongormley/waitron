@@ -8,7 +8,7 @@ import {
   type Database,
   venueCredentials,
 } from "@waitron/db";
-import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { NODE_MIGRATIONS, readRecoveryKey, setRecoveryKeyTx } from "@waitron/node-db";
 import { hasCode, type AppError } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -222,6 +222,22 @@ describe("rotateCredentials", () => {
     const result = await rotateCredentials(deletingDb, RING_BOTH, suite.node);
     expect(transactions).toBe(2);
     expect(result).toEqual({ rotated: 0, alreadyCurrent: 0 });
+  });
+
+  it("rotation skips recovery-only boxes and still re-seals a populated signing group", async () => {
+    await withNodeTransaction(suite.node, async (tx) => {
+      await setRecoveryKeyTx(tx, OTHER_NODE, "verifier", "Recovery only");
+      await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);
+    });
+    expect(await rotateCredentials(suite.db, RING_BOTH, suite.node)).toEqual({
+      rotated: 1,
+      alreadyCurrent: 0,
+    });
+    expect(await readRecoveryKey(suite.node, OTHER_NODE)).toEqual({
+      verifier: "verifier",
+      keyName: "Recovery only",
+    });
+    expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(SIGNING_KEY);
   });
 
   it("rotation re-seals the signing key, and it opens once the previous key is dropped", async () => {

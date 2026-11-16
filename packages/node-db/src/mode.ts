@@ -79,7 +79,7 @@ export async function setSingletonRole(
 
 /**
  * Sets one node's singleton role on a caller's node transaction, for a caller that has already
- * checked the deployment stamp; this does not read it. Creates the row (mode `primary`) if the node
+ * checked the deployment stamp; this does not read it. Creates a role group (mode `primary`) if the node
  * has none. `'primary'` on a mirror is refused by `box_role_valid_ck`: a promotion flips the
  * mode first.
  */
