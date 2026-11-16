@@ -492,6 +492,7 @@ describe("TillApi", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     await api.collectOrder("wo-tip", tender, undefined, undefined, null);
     const bodies = fetchStub.mock.calls.map(([, init]) =>
@@ -499,7 +500,7 @@ describe("TillApi", () => {
     );
     const wanted = { method: "card", amount: "1.50", externalRef: "OP-TIP", addedTip: "0.30" };
     expect(bodies).toEqual([
-      { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null },
+      { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null, dining: "eat_in" },
       { tender: wanted, expectedEdit: null },
     ]);
   });
