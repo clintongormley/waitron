@@ -395,7 +395,10 @@ export class TillPassScreen extends LitElement {
       if (typeof status !== "number") {
         reload = false;
         this.#dropAskIfChanged(key);
-        if (this.#isCurrent(boardId)) this.stale = true;
+        if (this.#isCurrent(boardId)) {
+          this.stale = true;
+          this.#failedRequest = this.#request;
+        }
       } else {
         this.#asks.delete(key);
         if (this.#switched(error)) reload = false;

@@ -281,6 +281,7 @@ export class TillStationScreen extends LitElement {
   /** Numbers every queue read; an answer is used only when its read set out after the one on screen. */
   #queueRequest = 0;
   #appliedRequest = 0;
+  #failedRequest = 0;
   // Preserve the requested ID until the station list can validate it.
   #stationsLoaded = false;
   readonly #url = new UrlStateController(
@@ -473,14 +474,16 @@ export class TillStationScreen extends LitElement {
     return true;
   }
 
-  #readSucceeded(): void {
+  #readSucceeded(request: number): void {
     this.#lastGoodAt = new Date();
-    this.stale = false;
+    if (request > this.#failedRequest) this.stale = false;
   }
 
   /** A failure of a read older than the answer on screen says nothing about that answer. */
   #readFailed(request: number): void {
-    if (request > this.#appliedRequest) this.stale = true;
+    if (request <= this.#appliedRequest) return;
+    this.stale = true;
+    this.#failedRequest = Math.max(this.#failedRequest, request);
   }
 
   #adoptNotices(notices: KitchenNotice[]): void {
@@ -549,13 +552,13 @@ export class TillStationScreen extends LitElement {
     // A one-shot, so a later re-connect fetches and never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
-      this.#adoptDeviceStation(this.initialDeviceStation);
+      this.#adoptDeviceStation(this.initialDeviceStation, this.#queueRequest);
       return;
     }
     const request = ++this.#queueRequest;
     try {
       const answer = await this.#readDeviceStation(signal);
-      if (this.#isNewest(request)) this.#adoptDeviceStation(answer);
+      if (this.#isNewest(request)) this.#adoptDeviceStation(answer, request);
     } catch (error) {
       if ((error as { code?: string }).code === "device.unauthorized") {
         this.dispatchEvent(
@@ -573,7 +576,7 @@ export class TillStationScreen extends LitElement {
       : this.api.getDeviceStationScreen({ signal });
   }
 
-  #adoptDeviceStation({ stations }: DeviceStationScreen): void {
+  #adoptDeviceStation({ stations }: DeviceStationScreen, request: number): void {
     // A refused bump's own reload lands here too, so the line clears only when the stations change.
     const ids = (list: readonly { id: string }[]) => list.map((station) => station.id).join("\n");
     if (ids(stations) !== ids(this.deviceStations)) this.bumpErrorCode = undefined;
@@ -587,7 +590,7 @@ export class TillStationScreen extends LitElement {
           }
         : station,
     );
-    this.#readSucceeded();
+    this.#readSucceeded(request);
   }
 
   async #reload(signal?: AbortSignal, refreshStations = false): Promise<void> {
@@ -595,7 +598,7 @@ export class TillStationScreen extends LitElement {
       const request = ++this.#queueRequest;
       try {
         const answer = await this.#readDeviceStation(signal);
-        if (this.#isNewest(request)) this.#adoptDeviceStation(answer);
+        if (this.#isNewest(request)) this.#adoptDeviceStation(answer, request);
       } catch {
         this.#readFailed(request);
       }
@@ -618,7 +621,7 @@ export class TillStationScreen extends LitElement {
         this.groups = items;
         this.printersDown = printersDown ?? [];
         this.#adoptNotices(notices);
-        this.#readSucceeded();
+        this.#readSucceeded(request);
       }
     } catch {
       this.#readFailed(request);
