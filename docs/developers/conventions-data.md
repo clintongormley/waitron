@@ -5619,6 +5619,10 @@ and found no hidden definition on candidate `bf13077098`. Cloud connection, reco
 in `cloud/snapshots/`; legacy setup names remain with the code that reads or refuses them until their slices.
 The separate reset case compares the shell command's retained names with the layout's kept entries.
 
+Layout names also drive `environment-recovery-move.ts` and the handover manifest completeness
+guard (`scripts/handover-manifest-complete.test.ts`). Adding a name can therefore change what a
+move sets aside; backup metadata alone does not need a new name.
+
 Each layout entry also declares its backup disposition: a required or optional file, named TLS
 recovery files, a database snapshot, module evidence, or an exclusion with its reason. The required
 and optional archive path lists come from that table; `RECOVERY_FILES` and

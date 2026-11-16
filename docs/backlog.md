@@ -1426,8 +1426,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.
   [Detail](backlog/box.md#the-amazon-s3-delete-and-archive-rehearsals-open-edges-a538-9)
 
-- **Backup and restore carry-forwards (B2):** working-file cleanup, boot qualification and
-  database placement durability remain open.
+- **Backup and restore carry-forwards (B2)** remain open.
   [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **Guide replacement address settings after a cold restore.** Replace manual configuration of

@@ -42,7 +42,6 @@ export const BACKUP_ROOM_START_DELETED_FILE = "backup-room-start-deleted.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
-export const RECOVERY_LOCK_JOURNAL_FILE = `${RECOVERY_LOCK_FILE}${JOURNAL_SUFFIX}`;
 export const FLOWS_DIR = "flows";
 export const SETUP_FLOW_DIR = "flows/setup";
 export const RESTORE_FLOW_DIR = "flows/restore";
@@ -162,17 +161,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
   },
   {
     name: RECOVERY_LOCK_FILE,
-    backup: { exclude: "Live recovery serialization belongs to this box." },
+    backup: {
+      exclude: "The live recovery lock and its transient SQLite journal belong to this box.",
+    },
     kind: "file",
     reset: "deleted",
     why: "Serialises recovery operations.",
-  },
-  {
-    name: RECOVERY_LOCK_JOURNAL_FILE,
-    backup: { exclude: "The live recovery lock's journal belongs to this box." },
-    kind: "file",
-    reset: "deleted",
-    why: "SQLite's recovery-lock journal.",
   },
   {
     name: SCRATCH_DIR,
