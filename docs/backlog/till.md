@@ -1093,11 +1093,10 @@ element with a cursor rule of its own keeps it unless that rule reads `--reorder
 [Decision](till.md#decisions-and-deliberate-limits)
 
 
-## Pass screen stale refresh and unused values
+## Pass screen unused values
 
-When a newer refresh of the pass fails and an older one then answers, the screen clears its
-stale line. The server still works out each pass dish's age colour, which no screen reads
-(D68 keeps it); the pass screen's `operatorSession` property is never read.
+The server still works out each pass dish's age colour, which no screen reads (D68 keeps it); the
+pass screen's `operatorSession` property is never read.
 
 
 ## Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept (left open by A773-2 PR C's review).
@@ -1867,12 +1866,8 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Bundle: Status words on the pass and beside it
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **The pass's "screen has been refreshed" line after a Fire appears above the columns, out of view
-  after a Fire low on the screen (seen in A773-2 B4a's look).** The old pass screen put its line in
-  the same place.
-  [Detail](till.md#the-passs-refreshed-line-after-a-fire-is-out-of-view)
 - **The pass's header does not say what the pass covers (left open by A773-2 B4a).** A797 §3.5 asks
   for a line naming the stations and zones a pass covers; it needs new words.
 - **A card holding both held dishes and dishes asked for says "Held, not released", and the
@@ -1975,13 +1970,13 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
   per dish count the part carved off comes back as a row of its own.
 
-## Bundle: Pass screen stale refresh and unused values
+## Bundle: Pass screen unused values
 
 1 entry, size S.
 
-- **Pass screen stale refresh and unused values.** The stale line can clear after an older read;
-  `operatorSession` is unread, and the server still works out the unread age colour D68 keeps.
-  [Detail](till.md#pass-screen-stale-refresh-and-unused-values)
+- **Pass screen unused values.** `operatorSession` is unread, and the server still works out the
+  unread age colour D68 keeps.
+  [Detail](till.md#pass-screen-unused-values)
 
 ## Bundle: Floor plan editor at phone width
 
@@ -3212,14 +3207,6 @@ when it was sent to be cooked (`passItemBand`, `apps/till/src/state/pass-view.ts
 for its runner turns red and says Forgotten. The old pass did the same, and the guide says so. Should
 a dish stop ageing once it is ready, or age from when it was ready? A question for the owner, beside
 A1250's colour question.
-
-## The pass's refreshed line after a Fire is out of view
-
-Seen in A773-2 B4a's look (2026-11-03). When a Fire is refused because the card changed, the screen
-reads the board again and says "The screen has been refreshed: check it and press again." in the
-board's status slot, above the columns (`apps/till/src/screens/till-pass-screen.ts`). After a Fire on
-a card low on a long column the line is off screen. The old pass screen drew its line in the same
-place.
 
 ## A678. Two readers answer "where is this order"
 
