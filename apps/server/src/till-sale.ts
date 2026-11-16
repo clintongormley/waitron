@@ -1465,8 +1465,6 @@ async function payIntegrated(
       reason: "partial_refund",
     });
   if (result.state !== "captured") {
-    if (result.state === "failed" || result.state === "network_unavailable") {
-    }
     await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
@@ -1823,7 +1821,6 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
-
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,
@@ -1978,7 +1975,6 @@ async function finalizeRecovery(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
-
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,

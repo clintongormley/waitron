@@ -83,8 +83,7 @@ const actions = [
   "station-move",
   "hand-over",
 ] as const;
-const retiredActions = ["course-fire", "course-away", "group-away"] as const;
-type Action = (typeof actions)[number] | (typeof retiredActions)[number];
+type Action = (typeof actions)[number];
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
   mountTillApi(
@@ -116,7 +115,7 @@ async function prepare(action: Action) {
         .update(orderGroups)
         .set({ state: "held", firedAt: null })
         .where(eq(orderGroups.id, line!.groupId!));
-    if (action !== "course-fire" && action !== "group-fire")
+    if (action !== "group-fire")
       await fireGroup(tx, v.cfg, party.partyId, line!.groupId!, {
         submissionId: newId(),
         expectedPartyRevision: await partyRevision(tx, party.partyId),
@@ -127,12 +126,6 @@ async function prepare(action: Action) {
         .update(workingOrderLines)
         .set({ groupId: null })
         .where(eq(workingOrderLines.id, line!.id));
-    if (action.endsWith("-away"))
-      await bumpGroupReady(tx, party.partyId, line!.groupId!, {
-        submissionId: newId(),
-        expectedPartyRevision: await partyRevision(tx, party.partyId),
-        operatorId: v.operatorId,
-      });
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
         submissionId: newId(),
@@ -179,9 +172,6 @@ function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof pre
     body = { stationId, to: action.slice(7) };
   } else if (action === "bill-ready") {
     path = `/api/orders/${order.tabId}/ready`;
-    body = {};
-  } else if (action.startsWith("course-")) {
-    path = `/api/orders/${order.tabId}/courses/${courseId}/${action.slice(7)}`;
     body = {};
   } else if (action === "station-move") {
     path = `/api/working-orders/${order.tabId}/lines/move-station`;
