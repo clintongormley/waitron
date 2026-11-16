@@ -127,6 +127,22 @@ const suite = useVenueDb({
       total: "9.90",
       lines: [{ vatRate: "10.00", lineTotal: "9.00" }],
     });
+    // December holds sales no other case's range reaches.
+    await sale("lateNight", {
+      invoiceNumber: 12,
+      issuedAt: "2026-12-04T23:30:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: "2.20",
+      lines: [{ vatRate: "10.00", lineTotal: "2.00" }],
+    });
+    await sale("dni", {
+      invoiceNumber: 13,
+      issuedAt: "2026-12-10T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+      counterpartyTaxId: "12345678Z",
+      counterpartyLegalName: "Ana Ruiz",
+    });
   },
 });
 
@@ -256,6 +272,26 @@ describe("the tax office's invoice list", () => {
     ["two filters together", "kind=F2&rate=10&amount=3.30", ["A/7"]],
   ])("narrows to %s", async (_name, filter, expected) => {
     expect(await numbers(`${NOVEMBER}&${filter}`)).toEqual(expected);
+  });
+
+  const DECEMBER = "from=2026-12-01&to=2026-12-31";
+
+  it("dates a sale by the offset filed with it, not by its UTC day", async () => {
+    const { json } = await list(DECEMBER);
+    expect((json.rows as TaxOfficeInvoice[]).find((row) => row.number === "A/12")).toMatchObject({
+      issueDate: "2026-12-05",
+      operationDate: null,
+    });
+    expect(await numbers(`${DECEMBER}&operationFrom=2026-12-05&operationTo=2026-12-05`)).toEqual([
+      "A/12",
+    ]);
+    expect(await numbers(`${DECEMBER}&operationFrom=2026-12-04&operationTo=2026-12-04`)).toEqual(
+      [],
+    );
+  });
+
+  it("matches a bare number against the start of a customer's tax id", async () => {
+    expect(await numbers(`${DECEMBER}&q=1234`)).toEqual(["A/13"]);
   });
 
   it("leaves out sales issued outside the range", async () => {

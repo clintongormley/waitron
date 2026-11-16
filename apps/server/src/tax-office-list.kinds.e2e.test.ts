@@ -40,7 +40,7 @@ const customer: Counterparty = {
 };
 let nextNumber = 1;
 
-/** A `sales` row and the input that files it, as the product's write path pairs them. */
+/** Inserts a `sales` row and returns the input that files it through the Verifactu backend. */
 async function sale(
   counterparty: Counterparty | null,
   total: string,

@@ -3,6 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Status: **draft for the watcher**. Written at main `e98aaa981d`.
+2026-11-16: D3 amended after Task 2's review (name search as built; VAT rate typed, no list of rates present).
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
 **Amended 2026-11-16 (owner's Q2 answer, 09:10):** a simplified ticket opens as a ticket-width PDF
 drawn by the till's own ticket layout (D2, Task 3b, PR 1b); full invoices keep the A4 PDF.
@@ -85,11 +86,12 @@ write.
   ticket" means what `readInvoiceTyping` types F2 or R5 (§1 row 2): a sale naming no customer tax
   id. F1, F3 and R4 stay A4.
 - **D3. Search fields** (RIVA art. 63.3, quoted in the research): one text box matching series and
-  number (`SERIES/N` exactly, or a bare number), customer name (folded, contains) or customer tax
-  id (prefix); issue date from–to (required, default the current month, venue calendar days);
+  number (`SERIES/N` exactly, or a bare number), customer name (the house text search,
+  `packages/shared/src/text-search.ts`: accents and case ignored, every word but the last must match
+  a whole word, the last may match part of a word, in any order) or customer tax id (prefix); issue date from–to (required, default the current month, venue calendar days);
   operation date from–to (optional): the sale's `supply_day` where set, otherwise its issue day,
-  since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (the
-  rates present in the range); amount (exact euros compared as numbers, not text, matching the
+  since `supply_day` is set only on some sales (`sales.ts:101-103`, check `:144`); VAT rate (typed
+  as a number); amount (exact euros compared as numbers, not text, matching the
   total, any breakdown base or any breakdown VAT; `vat_breakdown` holds decimal text); kind
   (F1/F2/F3/R4/R5). Fifty rows a page, newest first. The issue range is capped at 366 days so a
   name search cannot scan years of rows; Task 2 times that worst case and shortens the cap if it
