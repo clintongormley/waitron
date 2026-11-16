@@ -515,7 +515,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         flex-basis: 100%;
       }
 
-      /* Its primary border marks focus; an outer outline would draw a second line. */
+      /* Outside contrast themes, the border marks focus without a second line. */
       .table-search:focus-visible {
         border-color: var(--wt-color-primary);
         outline: none;
@@ -853,6 +853,30 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       :host([narrow]) .tree-cell {
         padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-2));
+      }
+
+      @media (forced-colors: active) {
+        th[data-filtered]::after {
+          border-block-end: var(--wt-field-line-width-active) solid Highlight;
+        }
+
+        .table-search:focus-visible {
+          outline: var(--wt-field-line-width-active) solid Highlight;
+          outline-offset: var(--wt-focus-offset);
+        }
+
+        tr.joined {
+          position: relative;
+        }
+
+        tr.joined .tree-cell::after {
+          content: "";
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 0;
+          border-inline-start: var(--wt-field-line-width-active) solid CanvasText;
+          pointer-events: none;
+        }
       }
     `,
     iconButtonStyles,

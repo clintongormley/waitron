@@ -346,11 +346,9 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
 
 ## Contrast-theme styles for the remaining primitives
 
-Under a Windows contrast theme, primitives that draw an edge or a state with a box-shadow, a
-background or a transparent border lose it — among them `wt-help-switch`'s pressed state,
-`wt-combobox`'s open-list line, `wt-colour-chooser`'s checked ring, `wt-data-table`, `wt-floor-map`
-and the floor plan's overdue and forgotten rings (`packages/ui/src/floor-ring.ts`), read from their
-CSS, not run. The field box, `wt-switch` and `wt-tabs` already do this; the rule and how to test it
+The remaining contrast-theme work is `wt-floor-map` and the floor plan's overdue and forgotten
+rings (`packages/ui/src/floor-ring.ts`), whose backgrounds and shadows can lose their marks,
+read from their CSS, not run. The rule and how to test it
 are in [design-system.md](../developers/design-system.md#forced-colours-windows-contrast-themes).
 Size M.
 

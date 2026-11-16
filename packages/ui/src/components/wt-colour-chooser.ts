@@ -117,7 +117,7 @@ export class WtColourChooser extends LitElement {
         cursor: pointer;
       }
 
-      /* A ring drawn with box-shadow, so the focus outline still shows on the checked tile. */
+      /* Keep the checked mark inside the tile so its focus outline remains separate. */
       .tile[aria-checked="true"] {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
         font-weight: var(--wt-font-weight-bold);
@@ -144,6 +144,26 @@ export class WtColourChooser extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
+      }
+
+      @media (forced-colors: active) {
+        .swatch {
+          forced-color-adjust: none;
+          border-color: CanvasText;
+        }
+
+        .tile {
+          position: relative;
+        }
+
+        .tile[aria-checked="true"]::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border: var(--wt-field-line-width-active) solid Highlight;
+          border-radius: inherit;
+          pointer-events: none;
+        }
       }
     `,
   ];
