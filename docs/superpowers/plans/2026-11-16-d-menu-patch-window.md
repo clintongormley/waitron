@@ -1,0 +1,25 @@
+# Menu patch window implementation plan
+
+**Finish line:** one PR for MENU-PATCH-WINDOW's eight entries: a split dialog, current menu/languages on Reload, accurate loss notices, preserved typing, useful refusal placement, restored image focus and aligned wrapped variants. Reuse `MenuPatchDraft`, review helpers, `DashboardQueries`, content-language state, field primitives and existing widget fixtures. No server/fiscal code, new controller/framework/public API, unrelated repairs or locked-name explanation change.
+
+**Authority:** Lane D `queue.md`, MENU-PATCH-WINDOW, started 2026-11-16 09:13; `docs/backlog/menu.md:830-870`. Separate Sol-high author's proposal; the driver source-checks, commits signed off, obtains Claude approach review and watcher clearance before building. No owner design approval is claimed.
+
+**Unverified diagnosis:** source reading is not reproduction. In particular, `packages/menu/src/menu-publication.ts:764` calls `applyMenuPatch`, which uses optional translations (`menu-patch.ts:296`); the old `content.translation_required` example may be obsolete. Reproduce through today's validator before choosing its fix; take an unreproduced scope discrepancy to the watcher, without inventing server changes or legacy handling.
+
+- [ ] **Reproduce, then split first.** Record browser reproductions of the read-found faults before fixes. In `apps/dashboard/src/widgets/`, extract the existing styles into `menu-patch-dialog.styles.ts` and recursive tree matching, lookup and rendering into `menu-patch-tree.ts`. Use plain functions with selected/changed/marked values and a pick callback. Keep reads, draft ownership, field rendering and lifecycle in `menu-patch-dialog.ts`. Run the existing focused suites below before/after; preserve their behavioral assertions and commit this behavior-preserving split separately.
+- [ ] **Reload and draft fixes, test first.** Extend `menu-patch-dialog.test.ts` using its existing `LiveData`, deferred replies, `lunch`, `reloadOnto` and native-input helpers. Name cases “Reload refreshes menu and languages” (both reads, language failure retains edits/retry, newest delivered version wins); “loss count describes the latest recheck” (successive losses, then zero; already-live changes excluded); and “equal live typing keeps its spelling” (`3` survives same-version Reload/language recheck, remains unstaged and leaves Review quiet; a genuinely changed live value still replaces an untouched old value). Observe each expected failure before minimal changes in `menu-patch-dialog.ts`. Apply Reload's fetched pair with one revalidation; preserve existing session/send guards and language trimming/folder rules.
+- [ ] **Refusal fixes, test first.** In that same suite, reproduce “slow languages never blame a filled Spanish name” using the current validator and a held language reply, not an injected obsolete reason. Place only demonstrably attributable errors beside a language; otherwise use bottom feedback. Extend the existing folder-name case as “newly fixed language retires its server refusal”: disabled field and tree/bottom mark clear, remaining edits stay staged, Review stays enabled. Reuse `FormFeedback` for attempt/focus/message work as Forms requires, preserving existing refusal precedence.
+- [ ] **Focus and wrapping, test first.** In `image-upload.test.ts`, “Remove/library pick restores Choose focus” uses real pointer actions and asserts native button focus; extend `image-upload.ts`'s restoration, retaining logo behavior. In `menu-patch-dialog.test.ts`, “wrapped variant values align with name text” measures final rendered boxes at 390px and desktop; fix extracted styles with spacing tokens.
+- [ ] **Docs and completion.** Update Reload wording in `apps/dashboard/src/i18n/strings.ts` (EN/ES), `apps/server/src/guide/{en,es}/products.md` and `docs/developers/design-system.md`. In `docs/backlog/menu.md` and `docs/backlog.md`, delete resolved entries; narrow bundle/index to the owner question, retaining unresolved entries. Inspect EN/ES, light/dark, desktop/phone through `wa-wt demo waitron-fix-d-menu-patch-window`; keep captures uncommitted. Normal `finish-branch`, pre-push hook and required current-head CI apply, without whole-package local runs.
+
+**Focused commands:** check browser headroom first; run from repository root and require actual passing test counts:
+
+```sh
+memory_pressure | rg free
+pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-patch-{dialog,draft,review}.test.ts src/widgets/menu-patch-dialog.{unsaved,a11y}.test.ts src/widgets/image-upload{,.unsaved,.a11y}.test.ts
+pnpm --filter @waitron/menu exec vitest run src/menu-patch.test.ts -t "merges translated text"
+pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts
+pnpm exec vitest run scripts/guide-links.test.ts
+```
+
+**Budget:** three hours to open PR. Estimated added/removed: production 330/270 (about 250 moved lines counted both ways), tests 270/10, test support 0/0, docs 70/25: 975 total. Drop the 8px point if needed beyond 900–1,000; report it. Stop for watcher reassessment before exceeding 1.5× (about 1,460), after running every changed test file.
