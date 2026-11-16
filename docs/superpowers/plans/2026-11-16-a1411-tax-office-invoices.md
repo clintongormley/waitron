@@ -124,6 +124,9 @@ write.
   opts in (`resolveManagementSession` in `packages/identity/src/management-session.ts`); its own
   account's routes and the tax office's are the ones that do, pinned by the sweep in
   `apps/server/src/boot.management-origin.test.ts`.
+  Changed 2026-11-16 (review): the refusal is `authorization.inspection_only`, with no params,
+  answered 403 by the shared error boundary when a route's table leaves it out; the live-update
+  stream ends such a session with a session-invalid event.
 - **Q1 (owner). How does an inspector sign in?** Answered 2026-11-16 08:57 (owner, relayed in lane L's
   questions.md, "## WATCHER 2026-11-16 08:57"): "We just create a user with the relevant permissions, send
   the email, just like any other user" — the default below stands. Default: at the venue a manager opens Invoices on
