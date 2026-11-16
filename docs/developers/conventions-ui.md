@@ -2078,7 +2078,9 @@ screen (`till-lock-screen`) name the logo, as its alt text, by the start read's 
 `packages/ui/src/venue-theme.ts`), so it follows `themeHash` as the colours do. The till fetches `/api/theme` from the server its
 `ServerRouter` currently follows (`apps/till/src/main.ts`), so after a move the next `themeHash` it
 is handed that differs from the applied one fetches the new server's theme; pinned by
-`apps/till/src/main.theme-server.test.ts`.
+`apps/till/src/main.theme-server.test.ts`. The logo addresses in that answer are paths
+(`/media/renditions/…`, `apps/server/src/venue-theme.ts`), so the browser still loads the logo
+image from the page's own address, as it does the menu's pictures.
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
