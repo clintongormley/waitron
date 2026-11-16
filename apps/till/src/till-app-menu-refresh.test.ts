@@ -702,6 +702,43 @@ describe("a basket that spans a publish", () => {
 });
 
 describe("a pay refused because the menu changed", () => {
+  it("retains manual tip details after the automatic menu retry refuses the tip", async () => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu.version_changed", status: 409, menus: [] })
+      .mockRejectedValueOnce({ code: "bill.tip_not_allowed", status: 400 });
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({
+          ...till,
+          tipsEnabled: true,
+          capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+        }),
+      listZoneOffers: vi.fn().mockResolvedValue(menu("v2", V1.offers)),
+      recordSale: write,
+    });
+    await toCounter(el);
+    add(el, "Lemonade");
+    await flush(el);
+    const form = tenderPay(el);
+    emit(form, "confirm-payment", {
+      method: "card",
+      amount: "3.00",
+      addedTip: "0.30",
+      externalRef: "OP-TIP",
+      externalMachine: "Spare Solo",
+    });
+    await flush(el);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".tip-input")?.value,
+    ).toBe("0.30");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".ref-input")?.value,
+    ).toBe("OP-TIP");
+  });
+
   const refusal = {
     code: "menu.version_changed",
     status: 409,

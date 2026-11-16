@@ -90,7 +90,9 @@ describe("till-profile-dialog", () => {
   it("a refusal naming no field is said at the bottom", async () => {
     const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });
     expect(picker(el).error).toBe("");
-    expect(await bottom(el)).toContain(codeMessage("device.payment_in_progress"));
+    expect(await bottom(el)).toBe(
+      `${codeMessage("device.payment_in_progress")} ${t("profile.payment_recovery")}`,
+    );
     expect(codeMessage("device.payment_in_progress")).not.toBe(codeMessage("nope.unknown"));
   });
 

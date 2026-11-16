@@ -1,3 +1,4 @@
+import { leaveCoordinatorFor } from "@waitron/ui";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -385,6 +386,7 @@ it.each(["confirm-payment", "collect-order"])(
     await screen.updateComplete;
     await form.updateComplete;
     expect(banner(el)?.textContent).toContain(t("tender.tip_not_recorded"));
+    expect(leaveCoordinatorFor(form)!.isDirty([form])).toBe(true);
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".tip-input")?.value,
     ).toBe("0.30");

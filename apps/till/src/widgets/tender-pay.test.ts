@@ -1462,7 +1462,7 @@ describe("till-tender-pay", () => {
         store,
         tipsEnabled: true,
       });
-      expect(query(manual, ".tip-input")).not.toBeNull();
+      expect(query(manual, ".tip-input")).toBeNull();
     });
 
     it("reads the entered tip onto the emitted collect-card detail", async () => {
@@ -2659,8 +2659,12 @@ it.each(["sumup_cloud", "none"] as const)(
     });
     const sent: unknown[] = [];
     el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
+    if (cardProvider === "none") {
+      click(el, ".pay-card");
+      await el.updateComplete;
+    }
     await typeTip(el, "0.30");
-    click(el, cardProvider === "none" ? ".pay-card" : ".pay-manual-card");
+    if (cardProvider !== "none") click(el, ".pay-manual-card");
     await el.updateComplete;
     expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("0.30");
     expect(query(el, ".total")?.textContent).toBe("€1.80");
@@ -2688,3 +2692,34 @@ it.each(["sumup_cloud", "none"] as const)(
     expect(query(el, ".total")?.textContent).toBe("€1.80");
   },
 );
+
+it.each(["cash", "new order"])("does not carry a card tip after %s", async (change) => {
+  const store = new WorkingOrderStore();
+  store.addProduct(coffee, "1");
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    cardProvider: "sumup_cloud",
+    takesManualCard: true,
+    tipsEnabled: true,
+  });
+  await typeTip(el, "2.00");
+  if (change === "cash") {
+    click(el, ".pay");
+    await el.updateComplete;
+    await type(el, "2");
+    click(el, ".confirm");
+    await el.updateComplete;
+  } else {
+    store.clear();
+    store.addProduct(coffee, "1");
+    await el.updateComplete;
+  }
+  click(el, ".pay-manual-card");
+  await el.updateComplete;
+  expect((query(el, ".tip-input") as HTMLElementTagNameMap["wt-input"]).value).toBe("");
+  expect(query(el, ".total")?.textContent).toMatch(/1[.,]50/);
+  const sent = vi.fn();
+  el.addEventListener("confirm-payment", (event) => sent((event as CustomEvent).detail));
+  click(el, ".confirm");
+  expect(sent).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+});

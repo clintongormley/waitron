@@ -462,7 +462,7 @@ export class TillTenderPay extends LitElement {
       this.#entryScope?.commit(this.#entryBaseline);
     }
     if (
-      (this.cardProvider !== "none" || this.tipsEnabled) &&
+      this.cardProvider !== "none" &&
       this.view !== "collecting" &&
       this.view !== "card_outcome"
     ) {
@@ -556,6 +556,7 @@ export class TillTenderPay extends LitElement {
       this.view = "idle";
     }
     if (this.#guestsOrderId !== this.store.id) {
+      this.#resetTip();
       this.printCardSlip = false;
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
@@ -655,6 +656,14 @@ export class TillTenderPay extends LitElement {
     this.refEntry = "";
     this.outside = {};
     this.view = "card";
+  }
+
+  #resetTip(): void {
+    this.#extrasScope?.dispose();
+    this.#extrasScope = undefined;
+    this.#extrasBaseline = undefined;
+    this.tipEntry = "";
+    this.#tipFeedback.reset();
   }
 
   #tipInvalid(): boolean {
@@ -813,6 +822,7 @@ export class TillTenderPay extends LitElement {
     if (!this.isConnected || this.busy || this.view !== "paying") return;
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
     this.#finishEntry();
+    this.#resetTip();
     const detail: ConfirmPaymentDetail = {
       method: "cash",
       amount: this.#enteredDecimal(),
@@ -830,6 +840,9 @@ export class TillTenderPay extends LitElement {
   }
 
   restoreManualCard(tender: Extract<Tender, { method: "card" }>): void {
+    this.#finishEntry();
+    this.#entryView = "card";
+    this.#entryBaseline = { entry: "", label: "", ref: "", outside: {}, tip: "" };
     this.tipEntry = tender.addedTip ?? "";
     this.refEntry = tender.externalRef ?? "";
     this.outside = outsideCardValues(tender);
@@ -851,11 +864,7 @@ export class TillTenderPay extends LitElement {
       ...outsideCardValues(this.outside),
       ...this.#guestsDetail(),
     };
-    this.#extrasScope?.dispose();
-    this.#extrasScope = undefined;
-    this.#extrasBaseline = undefined;
-    this.tipEntry = "";
-    this.#tipFeedback.reset();
+    this.#resetTip();
     this.view = "idle";
     this.refEntry = "";
     this.dispatchEvent(
@@ -1176,7 +1185,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderCardExtras() {
-    if (this.cardProvider === "none" && !this.tipsEnabled) return nothing;
+    if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
         ${this.#renderReaderControl()}

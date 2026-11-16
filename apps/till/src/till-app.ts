@@ -7160,7 +7160,12 @@ export class TillApp extends LitElement {
    * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
-  async #onConfirmPayment(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
+  async #onConfirmPayment(
+    event: Event,
+    retried = false,
+    lateSend?: LateSend,
+    sourceForm?: HTMLElementTagNameMap["till-tender-pay"],
+  ): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
     if (this.#store.lines.some((line) => line.blocked === "period_ended")) {
@@ -7168,12 +7173,14 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#askInvoiceRecipientForLargeBill()) return;
-    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
+    const form =
+      sourceForm ??
+      (event
+        .composedPath()
+        .find((node) => node instanceof HTMLElement && node.localName === "till-tender-pay") as
+        HTMLElementTagNameMap["till-tender-pay"] | undefined);
+    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed, form);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
-    const form = event
-      .composedPath()
-      .find((node) => node instanceof HTMLElement && node.localName === "till-tender-pay") as
-      HTMLElementTagNameMap["till-tender-pay"] | undefined;
     this.submitting = true;
     this.sendingTender = (event as CustomEvent<ConfirmPaymentDetail>).detail.method;
     this.#counterSends++;
@@ -7276,14 +7283,14 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onConfirmPayment(event, true, lateSend),
+        this.#onConfirmPayment(event, true, lateSend, form),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#onConfirmPayment(event, true, lateSend);
+      await this.#onConfirmPayment(event, true, lateSend, form);
   }
 
   /** The late-send window over the counter basket's marked lines; answers whether it opened. */
