@@ -4287,7 +4287,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 ### Adding a workspace package breaks the root guards until it is wired in
 
 Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
-runs that project on every CI run except a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
+runs that project on every CI run except a cancellation or a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are

@@ -385,7 +385,7 @@ jobs:
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
     needs: changes
-    if: ${{ always() && !inputs.server_probe }}
+    if: ${{ always() && !cancelled() && !inputs.server_probe }}
     runs-on: ${{ needs.changes.outputs.server_route == 'server' && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-lint-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
@@ -471,7 +471,7 @@ jobs:
 
   root-guards:
     needs: changes
-    if: ${{ always() && !inputs.server_probe }}
+    if: ${{ always() && !cancelled() && !inputs.server_probe }}
     runs-on: ${{ needs.changes.outputs.server_route == 'server' && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-root-guards-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
