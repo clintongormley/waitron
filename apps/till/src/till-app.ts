@@ -21646,7 +21646,7 @@ export class TillApp extends LitElement {
           this.errorKey = "payment_slip.capture_failed";
       } catch (error) {
         const notChecked =
-          (keyed === previous || noAnswer) &&
+          (keyed.request.submissionId === previous?.request.submissionId || noAnswer) &&
           READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
         if (card && (noAnswer || previous?.unconfirmed === true)) this.#unknownCardOutcome.add(key);
         settle(error);
@@ -21807,6 +21807,9 @@ export class TillApp extends LitElement {
         refusal: { code: refusal.code },
         busy: false,
       };
+    } else if (refusal.code === "management.request_invalid" && refusal.field === "guestCount") {
+      // The guests field is drawn only on the confirmation.
+      this.billPaying = { ...now, refusal, busy: false };
     } else {
       this.billPaying = {
         ...now,

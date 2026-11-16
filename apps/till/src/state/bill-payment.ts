@@ -177,9 +177,13 @@ export function submissionFor(
   delete payment.expectedEdit;
   delete payment.guestCount;
   const key = JSON.stringify([billId, payment]);
-  if (unanswered?.billId === billId && (unanswered.unconfirmed === true || unanswered.key === key))
-    return unanswered;
-  return { key, billId, request: structuredClone({ ...confirmation, submissionId: mint() }) };
+  if (unanswered?.billId === billId && unanswered.unconfirmed === true) return unanswered;
+  if (unanswered?.billId !== billId || unanswered.key !== key)
+    return { key, billId, request: structuredClone({ ...confirmation, submissionId: mint() }) };
+  if (unanswered.request.guestCount === confirmation.guestCount) return unanswered;
+  // The server matches a resent id ignoring its count (`retryShapeOf`, apps/server/src/bill-payments.ts);
+  // on a replay the server keeps the first attempt's count.
+  return { ...unanswered, request: { ...unanswered.request, guestCount: confirmation.guestCount } };
 }
 
 /** `submission.id_reused`: the id belongs to another request. The rest can be raised at the

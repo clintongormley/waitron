@@ -1765,6 +1765,48 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
     expect(confirmed).toEqual([{ guestCount: 3 }]);
   });
 
+  it("puts the server's refusal of the count under the field until it changes", async () => {
+    const el = await contribute("20");
+    el.refusal = { code: "management.request_invalid", field: "guestCount" };
+    await el.updateComplete;
+
+    expect(guests(el)!.error).toBe(codeMessage("management.request_invalid"));
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
+
+    await step(el, "1");
+    expect(guests(el)!.error).toBe("");
+    expect(actions(el).error).toBe("");
+  });
+
+  it("puts a refusal of the count above the action when the field is not shown", async () => {
+    const el = await contribute("5");
+    el.refusal = { code: "management.request_invalid", field: "guestCount" };
+    await el.updateComplete;
+
+    expect(guests(el)).toBeNull();
+    expect(actions(el).error).toBe(codeMessage("management.request_invalid"));
+  });
+
+  it("clears the count's mark on Back, so the next confirmation says nothing until Take", async () => {
+    const el = await contribute("20");
+    await typeGuests(el, "1000");
+    await click(el, "[data-pay-confirm]");
+    await el.updateComplete;
+    expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+
+    await click(el, "[data-pay-back]");
+    el.asked = null;
+    el.preview = null;
+    await el.updateComplete;
+    await type(el, "tendered", "20");
+    await previewed(el, cashPreview("20.00", "0.00"));
+
+    expect(guests(el)!.value).toBe("1000");
+    expect(guests(el)!.error).toBe("");
+    expect(actions(el).error).toBe("");
+  });
+
   it("keeps the waiter's count when the payment is refused, and starts again after one is taken", async () => {
     const el = await contribute("20");
     await step(el, "1");
