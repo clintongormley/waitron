@@ -4,6 +4,10 @@
 
 Status: **draft for the watcher**. Written at main `e98aaa981d`.
 Fresh Claude read 2026-11-16: Ready after fixes (no Critical, six Important); folded in.
+**Amended 2026-11-16 (owner's Q2 answer, 09:10):** a simplified ticket opens as a ticket-width PDF
+drawn by the till's own ticket layout (D2, Task 3b, PR 1b); full invoices keep the A4 PDF.
+Fresh Claude read of the amendment 2026-11-16: Ready after fixes (no Critical, two Important: an
+over-long ticket falls back to A4; the cutter's feed is not drawn); folded in. Awaiting the watcher.
 **READ** = source read at that commit; **RUN** = a command was run and its output read.
 
 **Goal:** when the tax office asks to see a venue's invoices, one page on the box finds any invoice
@@ -23,8 +27,8 @@ backlog says it is needed whatever the answer.
 
 **Architecture:** one new core permission, `invoice.inspect`. One read-only server module
 (`apps/server/src/tax-office-api.ts`) with three routes: a paged, filtered list of every row of
-`sales`; one invoice as an A4 PDF, recorded in the existing `invoice_pdf_downloads`; one month as a
-streamed ZIP (PDFs plus a CSV book). One dashboard screen, **Invoices**, under Reports. A session
+`sales`; one invoice as a PDF (A4 for a full invoice, one ticket wide for a simplified ticket, D2),
+recorded in the existing `invoice_pdf_downloads`; one month as a streamed ZIP (PDFs plus a CSV book). One dashboard screen, **Invoices**, under Reports. A session
 holding `invoice.inspect` and no other permission sees that screen and nothing else of the venue:
 the nav already hides what a session does not hold (`apps/dashboard/src/dashboard-app.ts:2404-2406`),
 and D8 closes the one screen every signed-in person gets, Orders. No table, no migration, no fiscal
@@ -48,9 +52,10 @@ write.
   turn and renders outside it, in turns (`apps/server/src/download-archive.ts:60-88` pattern), and
   stops when the request is aborted or a handover closes the gate.
 - English in code; words through the dashboard and server i18n files, English and Spanish.
-- Two PRs, each landing on its own (THE RULE): PR 1 = Tasks 1–5 (permission, list, one invoice,
-  screen, guide); PR 2 = Tasks 6–8 (the month's export). Branches `feat/a1411-tax-office-page`
-  and `feat/a1411-tax-office-export`. One `subagent_type: "implementer"` per task, per-task
+- Three PRs, each landing on its own (THE RULE): PR 1 = Tasks 1–5 (permission, list, one invoice,
+  screen, guide); PR 1b = Task 3b (tickets at ticket width); PR 2 = Tasks 6–8 (the month's
+  export). Branches `feat/a1411-tax-office-page`, `feat/a1411-ticket-width` and
+  `feat/a1411-tax-office-export`. One `subagent_type: "implementer"` per task, per-task
   reviews, `/finish-branch` full wave with two Codex angles. Fiscal-adjacent, so the owner lands.
 
 ## 1. What exists and what each piece reuses
@@ -60,21 +65,25 @@ write.
 | 1 | Every issued document | `sales` holds one row per issued document: series and number, `issued_at`, `total`, `vat_breakdown` JSON `{rate, base, tax}[]`, customer columns, `corrects_sale_id`, `replaces_original`, `supply_day` (`packages/db/src/schema/sales.ts:67-170`); voids in `sale_voids`; F3 links in `sale_substitutions` | List every row; no other source |
 | 2 | The kind of each | `readInvoiceTyping` (`invoice-typing.ts:55-75`) types the printed document only: F1 names a customer tax id, else F2; a corrective R4 with a customer, else R5; never F3. The filing sets F3 for a full invoice replacing tickets (`packages/fiscal-verifactu/src/backend.ts:726`), linked in `sale_substitutions` | The list computes the kind in SQL from `counterparty_tax_id`, `corrects_sale_id` and `sale_substitutions`; an end-to-end test files one sale of each kind through the Verifactu module and pins the page's kind to each record's `tipo_factura` |
 | 3 | A search | The module's Fiscal filing screen lists filing cases, not invoices, under `report.export` (`packages/fiscal-verifactu/src/dashboard/index.ts:13-31`); till lookup finds only original full invoices, 20 at most (`invoice-lookup-api.ts:28,44-53`); the till's Transactions tab leaves out voided sales (`find-bill-transactions.ts:73-75`); the dashboard Orders screen lists bills, not invoices (`orders-list.ts`) | New list; none of these is widened, since each serves its own screen |
-| 4 | One invoice in full | `readReceiptEmailDocument` admits any sale (`invoice-document.ts:53-60`) and `renderInvoicePdf` draws the A4 page (`invoice-pdf.ts:7`); the per-customer export already renders with `duplicate: true` (`invoice-customer-data.ts:198`) | Same two calls. `POST /management-api/orders/:id/invoice-pdf` (`apps/server/src/orders-api.ts:362`) already downloads a bill's F1 as a copy through `readInvoiceForDownload` (`orders-invoice-pdf.ts:17-35`), recording each download in `invoice_pdf_downloads`. Task 3 adds a by-sale entry beside it for any kind and records there too |
+| 4 | One invoice in full | `readReceiptEmailDocument` admits any sale (`invoice-document.ts:53-60`) and `renderInvoicePdf` draws the A4 page (`invoice-pdf.ts:7`); the per-customer export already renders with `duplicate: true` (`invoice-customer-data.ts:198`) | Same two calls. `POST /management-api/orders/:id/invoice-pdf` (`apps/server/src/orders-api.ts:362`) already downloads a bill's F1 as a copy through `readInvoiceForDownload` (`orders-invoice-pdf.ts:17-35`), recording each download in `invoice_pdf_downloads`. Task 3 adds a by-sale entry beside it for any kind and records there too; since 2026-11-16 a simplified ticket goes through Task 3b instead (D2) |
 | 5 | A period's files | `zipArchiveInTurns` adds one entry per turn but joins the whole archive in memory (`download-archive.ts:60-88`) | A streamed variant (Task 7): a month of a busy venue's PDFs must not sit in memory |
 | 6 | Who may look | `CORE_PERMISSIONS` (`packages/identity/src/permissions.ts:10-32`); custom roles with any subset a granter holds (`packages/identity/src/roles.ts:254-261`); routes check with `authorizeManager` (`packages/identity/src/manager-login.ts:187-199`) | `invoice.inspect`, default holder `manager` |
 | 7 | Remote | Cloud's staff listener passes every `/management-api/*` route and GET `/manage/*` (`apps/server/src/cloud-remote.ts:120-145`) | Nothing to add on the box; Task 4 checks the routes are not on its blocked list |
 | 8 | A record of who looked | `recordActivity`, kinds in `packages/db/src/activity-kinds.ts` (the accountant export's `accountant_export.downloaded`, `:95`, `:145`) | One kind, a month downloaded; an opened invoice goes in `invoice_pdf_downloads` (row 4) |
+| 9 | The printed ticket | `layOutSaleReceipt(backend, tx, cfg, saleId, duplicate, printer)` (`apps/server/src/receipt-print.ts`) lays out any filed sale's ticket as the till prints it and returns the printer's commands; the print queue's reprint already calls it (`reprintJobOn`, `apps/server/src/print-job-reprint.ts:84`, through `print-api.ts`). `previewPrintJob` (`apps/server/src/print-job-preview.ts:52`) decodes those commands into dot images (each printed line, the logo, the QR code), a line's with the text read back from it; the dashboard's receipt preview and the tests' `printedLines` (`apps/server/src/testing/decode-ticket.ts`) read tickets through it | Task 3b draws `previewPrintJob`'s images onto one PDF page the paper's width; no second ticket layout |
 
 ## 2. Decisions (D, the plan's; Q, for the owner through the watcher)
 
 - **D1. Every row of `sales` is listed**, voided ones included and marked "Cancelled" with the
   cancellation date: an annulled invoice was still issued, and its number must be findable. F3
   substitutions and every corrective are listed with their kind and the number they correct.
-- **D2. The original format is the A4 PDF Waitron already sends by email** (row 4), stamped as a
-  copy (`duplicate: true`). For a full invoice it is the document the customer received by email or
-  download; for a simplified ticket it is the electronic form of the ticket. A ticket-width PDF that
-  mirrors the thermal layout is the alternative (Q2).
+- **D2. A full invoice's original format is the A4 PDF Waitron already sends by email** (row 4),
+  stamped as a copy (`duplicate: true`): the document the customer received by email or download.
+  **A simplified ticket's is the printed ticket** (owner, 2026-11-16 09:10: "I think ticket width
+  will be needed"; most venues have no A4 printer): it opens as a PDF one ticket wide, drawn by the
+  same code that prints it at the till, stamped as a copy as a till reprint is (Task 3b). "Simplified
+  ticket" means what `readInvoiceTyping` types F2 or R5 (§1 row 2): a sale naming no customer tax
+  id. F1, F3 and R4 stay A4.
 - **D3. Search fields** (RIVA art. 63.3, quoted in the research): one text box matching series and
   number (`SERIES/N` exactly, or a bare number), customer name (folded, contains) or customer tax
   id (prefix); issue date from–to (required, default the current month, venue calendar days);
@@ -118,8 +127,20 @@ write.
   to deliver a sign-in secret); or a one-off access code with no person record (a new sign-in path
   to protect). Task 1 checks that such a person appears in no staff list, rota or working-time
   record; if one does, that is a question before Task 4.
-- **Q2 (owner). Is the A4 copy of a simplified ticket its original format (D2)?** Default yes; it
-  is also adviser material (T4's "copy in its original format").
+- **Q2 (owner), answered 2026-11-16 09:10: a ticket opens at ticket width** (D2). Still adviser
+  material (T4's "copy in its original format", 19 Nov); the answer there can only confirm this or
+  ask for the A4 form as well, which `renderInvoicePdf` already draws.
+- **D9. The ticket copy is laid out for the paper width and resolution of the selling device's
+  receipt printer as it is now** (`sales.device_id`, `packages/db/src/schema/sales.ts:73`, through
+  `resolveReceiptPrinter`, `apps/server/src/receipt-print.ts`), and for an 80 mm printer at 180 dpi
+  when there is none: a sale from a job (`demo_seed`, `readiness_test`, `operator_script`; no
+  device), a device with no receipt printer now, or one switched off. 80 mm at 180 dpi is the
+  printers table's own default, which the receipt preview also uses
+  (`apps/server/src/receipt-preview-api.ts:58`, `DEFAULT_PRINTER`, to be exported for this). A printer changed since the sale
+  changes the copy's line width only; every word, amount and the QR code come from the same filed
+  sale. Like a till reprint (`layOutSaleReceipt`'s comment, `apps/server/src/receipt-print.ts`),
+  the copy carries today's header text, logo and address and the filed sale's issuer, lines, totals
+  and QR code.
 
 ## 3. Tasks
 
@@ -176,6 +197,9 @@ site in `boot.ts`).
 
 #### Task 3: one invoice as a PDF
 
+(Amended 2026-11-16: a simplified ticket is drawn ticket-width by Task 3b; this task's A4 path stays
+for every other sale and for Task 3b's fallback.)
+
 **Files:** `apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.
 
 - [ ] Failing tests: `GET /management-api/tax-office/invoices/:saleId/pdf` answers
@@ -219,13 +243,83 @@ other pages are (`guide-content.test.ts` shows how), and the screen's help link 
   guides).
 - [ ] Run `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`.
 
+### PR 1b — tickets at ticket width
+
+Branch `feat/a1411-ticket-width`, cut from PR 1's branch (`feat/a1411-tax-office-page`) while #3490
+is open. It goes to `/finish-branch` only once #3490 has landed, after
+`git rebase --onto origin/main <PR 1's last head>`; if the owner would rather have it inside #3490,
+its commits go onto that branch instead. Size forecast: about 100 production lines (the renderer
+about 70, the choice and the route about 30) and 150 test lines; no table, migration, error code,
+screen or guide change (the guide says "choose an invoice's number to see it as a PDF", which
+stays true).
+
+#### Task 3b: a ticket as the till printed it
+
+**Files:** create `apps/server/src/ticket-pdf.ts` and `ticket-pdf.test.ts`;
+`apps/server/src/orders-invoice-pdf.ts`, `apps/server/src/tax-office-api.ts`, their tests.
+
+- [ ] Failing tests for `renderTicketPdf(bytes: Uint8Array, printer: EscSetting): Promise<Buffer>`,
+  over a ticket from `sample-receipt.ts`'s `sampleDocument`, given QR caption text (it draws a QR
+  only then, `sample-receipt.ts:46`) and a logo, laid out with `formatReceipt` (as
+  `invoice-pdf.test.ts` reads its PDFs, with `pdfjs-dist`, `@napi-rs/canvas` and `jsqr`): one page,
+  as wide as the paper (80 mm = 226.77 pt; a 58 mm printer gives 164.41 pt); the page's text (pdfjs
+  `getTextContent`) holds every non-blank line `printedLines(bytes)` reads from the same bytes,
+  trimmed, in order (this checks no line is dropped or reordered, not the drawing); the page rendered
+  at one pixel per dot (scale `dpi / 72`) has, for one chosen text line, dark pixels exactly where
+  that line's image has set dots, and a QR code that `jsqr` decodes to the ticket's QR text; bytes
+  that `previewPrintJob` reports `unsupported` or `truncated`, or with `omittedGraphics`, make it
+  throw.
+- [ ] Implement: `previewPrintJob(bytes, { widthDots })`; one dot is `72 / dpi` pt; the print area
+  (`widthDots`) is centred on the paper's width. An image block's rows are packed bits, `ceil(width
+  / 8)` bytes a row; draw each row's runs of set dots as one rectangle per run (the A4 logo draws a
+  rectangle per dot, `invoice-pdf.ts`), placed by the block's `align`. A `feed` block advances `lines`
+  is not drawn: the builder never sets a line spacing (`init()` sends only `ESC @`), and the one feed
+  a ticket sends is `FEED_BEFORE_CUT` (`packages/printing/src/escpos.ts:18`), blank paper for the
+  cutter, just before `cut` (the fresh read decoded the sample ticket at 80 mm and 58 mm: 31 images,
+  one feed of 5 lines, one cut). The page ends at `cut` with a bottom margin equal to the top one,
+  and is as tall as what was drawn; a feed anywhere but straight before the cut makes it throw. Each image block that carries `text`
+  also gets that text written over it with `fillOpacity(0)` in the invoice font, stretched to the
+  image's width (pdfkit's `horizontalScaling`, written as `Tz`, `pdfkit.js:4596`), so the viewer's
+  search, selection and copy find what the ticket says where it is drawn; pdfkit has no invisible-text option
+  (`pdfkit.js:4588` sets modes 0–2 only), so this is the way. A `text` block (bytes sent as text, which `drawReceipt`
+  never sends) throws, as an unsupported command does.
+- [ ] Failing tests for the choice, then implement it in one function both this route and PR 2's
+  export call (`readSaleCopy` in `orders-invoice-pdf.ts`, replacing `readSaleForDownload`'s
+  document): a sale naming no customer tax id (F2, R5; D2) is laid out by
+  `layOutSaleReceipt(backend, tx, cfg, saleId, true, printer)` inside the transaction, with D9's
+  printer (`resolveReceiptPrinter(tx, deviceOrigin(deviceId))`, `packages/shared/src/origin.ts:43`,
+  else 80 mm at 180 dpi), and rendered by `renderTicketPdf` after it; any other sale keeps
+  `readReceiptEmailDocument` and `renderInvoicePdf`. The sale's tax id and device are read first, so
+  an unknown id still answers `invoice_delivery.not_found` (`layOutSaleReceipt` would throw
+  `sale.not_found`, `transaction-receipt.ts:82`, which the route does not map). When
+  `renderTicketPdf` throws because the decode is incomplete (the decoder stops at 2,048 blocks or
+  4 MiB, `print-job-preview.ts:38-42`; the fresh read hit it at 2,100 dish lines), that sale's copy
+  falls back to the A4 PDF, so one very long ticket neither fails the page nor ends PR 2's month
+  download. Route tests over `POST /management-api/tax-office/invoices/:saleId/pdf`: an
+  F2, an R5 and a voided F2 answer a page 226.77 pt wide whose text holds the invoice number and the
+  copy label (`receipt-document.ts`'s `label.duplicate`); an F1, an F3 and an R4 answer an A4 page
+  (595.28 pt); an F2 sold on a device whose receipt printer is 58 mm answers 164.41 pt; an F2 from
+  `demo_seed` answers 226.77 pt; an F2 of 2,100 lines answers an A4 page; each still writes one
+  `invoice_pdf_downloads` row. PR 1's
+  existing PDF route tests keep passing unchanged except those whose sale is now a ticket: list each
+  changed check in the PR.
+- [ ] RUN, and record in the PR: render time and bytes for tickets of 6, 60 and 1,000 lines, in a
+  `node:26-slim` container (CLAUDE.md §4). If either passes 200 ms or 500 KB, draw each image block
+  as one 1-bit PNG made with `node:zlib` instead of rectangles, and say so in the PR. Open an F2's
+  copy on the dev stack beside a reprint of the same sale, as the dashboard's print-job preview
+  shows it (`print-api.ts` previews a job's commands), and LOOK: the same lines, logo, QR code and
+  copy label; text selection in the viewer covers the lines.
+- [ ] Golden huella and `inmutabilidad` unedited; nothing under `packages/fiscal-verifactu/src`
+  changes.
+
 ### PR 2 — the month's export
 
 #### Task 6: measure first
 
 - [ ] RUN, on the bench venue or a seeded venue of 9,000 sales in one month (300 a day, a busy
   restaurant; say which), the render time of 500 PDFs through `renderInvoicePdf` in a
-  `node:26-slim` container (CLAUDE.md §4: measure where the box's runtime is), and the largest
+  `node:26-slim` container (CLAUDE.md §4: measure where the box's runtime is), the same for 500
+  ticket copies through Task 3b's renderer (most of a restaurant's month is tickets), and the largest
   single event-loop block while rendering. Record per-invoice time, the month's projected time and
   bytes in the PR. If a month projects over 15 minutes or a block over 100 ms, stop and write the
   numbers in questions.md with a smaller unit (a week) as the default.
@@ -247,7 +341,8 @@ other pages are (`guide-content.test.ts` shows how), and the screen's help link 
 guide sections from Task 5.
 
 - [ ] Failing tests: `GET /management-api/tax-office/months/2026-03.zip` streams `README.txt`,
-  `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included; the CSV
+  `invoices.csv` and one PDF per sale issued in March (venue days), voided ones included, each
+  through `readSaleCopy` (Task 3b), so a ticket is ticket-width there too; the CSV
   has D4's columns in the person's language and one row per VAT rate, money with a decimal point;
   file names are unique when two series share a number (reuse `uniquePdfPath`'s rule from
   `invoice-customer-data.ts:123`, exported, not copied); aborting the request after the first
