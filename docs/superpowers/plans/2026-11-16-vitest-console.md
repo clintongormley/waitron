@@ -33,18 +33,21 @@ following `createBrowserServer`’s config-file/options merge; do not merely rea
 flags. Record package, project and resolved `server.forwardConsole`. Under agent variables,
 the missing settings should resolve enabled; dashboard is the disabled comparison.
 After editing, require every browser server to resolve
-`{ enabled: false, unhandledErrors: false, logLevels: [] }`, with agent variables both
-set and unset. Close created contexts and keep temporary caches/results outside the tree.
+`{ enabled: false, unhandledErrors: false, logLevels: [] }` under agent variables.
+The separate agent-unset run is a comparison, not evidence that the edit works. Close created contexts and keep temporary caches/results outside the tree.
 If resolution leaves uncertainty, use only the existing small
-`packages/ui-core/src/harness.test.ts` browser fixture, retaining its assertions and reading
-the Tests count. No package/workspace suite locally. Normal pre-push checks and selected
+`packages/adjustments/src/dashboard/strings.test.ts` browser fixture from an inline project
+without `extends: true`, retaining its assertions and reading the actual browser-server setting
+as well as the Tests count. No package/workspace suite locally. Normal pre-push checks and selected
 current-head PR CI remain the finishing responsibility; do not duplicate them locally.
 
 **Documentation after applying.** In `docs/developers/testing-guide.md`, retain A902’s
 14 November receipt and reviewer attribution, replacing only the pending-rollout wording
 with the verified scope and placement. Do not claim all Vitest output is silenced.
 Remove the completed A902 item from the existing bundle in `docs/backlog/ci.md` and update
-its count and `docs/backlog.md` summary, retaining the bundle anchor. Preserve loaded-runner
+its count and `docs/backlog.md` summary. Rename the remaining bundle to
+“Vitest settings: remaining measurements”, updating its anchor/link and the guide’s by-name
+mention; do not leave the completed console policy in a current heading. Preserve loaded-runner
 worker qualifications and the inconclusive/unmeasured optimizer work, including
 `docs/backlog/dependencies.md`. Leave the earlier dated plan as historical evidence.
 
