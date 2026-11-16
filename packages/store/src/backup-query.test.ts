@@ -215,5 +215,7 @@ describe.each(["file", "bytes"])("query-only backup reads (%s)", (source) => {
 });
 
 it("refuses an empty byte copy before exposing a callback", async () => {
-  await expect(openBackupQuery(new Uint8Array())).rejects.toThrow();
+  await expect(openBackupQuery(new Uint8Array())).rejects.toMatchObject({
+    code: "ERR_INVALID_ARG_VALUE",
+  });
 });
