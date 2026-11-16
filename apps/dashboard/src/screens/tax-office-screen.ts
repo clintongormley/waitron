@@ -449,7 +449,7 @@ export class TaxOfficeScreen extends LitElement {
     if (file.status === "none" || file.id === this.settledFile) return nothing;
     const month = monthName(file.month);
     if (file.status !== "ready") {
-      const spaceLow = file.status === "failed" ? file.refusal : null;
+      const stopped = file.status === "failed" ? file.refusal : null;
       return html`<div
         class="notice month-file ${file.status}"
         data-test="month-file"
@@ -457,8 +457,8 @@ export class TaxOfficeScreen extends LitElement {
       >
         <p>
           ${
-            spaceLow !== null
-              ? codeMessage(spaceLow.code, currentLocale(), spaceLow.params)
+            stopped !== null
+              ? codeMessage(stopped.code, currentLocale(), stopped.params)
               : fill(
                   file.status === "building"
                     ? "tax_office.month_building"
@@ -467,7 +467,7 @@ export class TaxOfficeScreen extends LitElement {
                 )
           }
         </p>
-        ${spaceLow === null ? nothing : this.#spaceNextStep()}
+        ${stopped === null ? nothing : this.#spaceNextStep()}
       </div>`;
     }
     return html`<div class="notice month-file" data-test="month-file" role="status">

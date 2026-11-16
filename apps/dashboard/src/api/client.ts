@@ -1700,10 +1700,7 @@ export type MonthDownloadDto =
       id: string;
       month: string;
       /** Set when the build stopped because the disk was running out. */
-      refusal: null | {
-        code: "tax_office.space_low";
-        params: { freeBytes: number; neededBytes: number };
-      };
+      refusal: null | { code: "tax_office.space_ran_out"; params: { writtenBytes: number } };
     };
 
 /** Issue dates are venue calendar days; the other filters are left out when not given. */

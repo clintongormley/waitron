@@ -37,9 +37,9 @@ const failed = (
   month,
   refusal,
 });
-const spaceLow = {
-  code: "tax_office.space_low" as const,
-  params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
+const ranOut = {
+  code: "tax_office.space_ran_out" as const,
+  params: { writtenBytes: 412_000_000 },
 };
 
 const READY_EN = "The invoices for March 2026 are ready to save until 19:42.";
@@ -51,8 +51,8 @@ const FAILED_EN =
 const RESTARTED_EN =
   "The server restarted before the invoices for March 2026 were ready. Choose Download March 2026 on Invoices to prepare them again.";
 const MISSING_EN = "This file is no longer on the server. Choose Download again to prepare it.";
-const SPACE_LOW_EN =
-  "The server's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.";
+const RAN_OUT_EN =
+  "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.";
 
 function me(permissions: string[], locale: string) {
   return {
@@ -476,17 +476,17 @@ describe("the shell's notice for the tax office's month file", () => {
     await expect.poll(() => monthLine(el)).toBeNull();
   });
 
-  it("names the low disk when the file stopped for want of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
+  it("says how far the file had got when the server ran short of space, and offers an administrator's sign-in to a session that cannot open Backups", async () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())
-      .mockResolvedValue(failed("b1", "2026-03", spaceLow));
+      .mockResolvedValue(failed("b1", "2026-03", ranOut));
     const { api, liveData } = shellApi(background);
     const { el } = await mount(api);
     await expect.poll(() => background.mock.calls.length).toBe(1);
     changed(liveData);
     await expect.poll(() => toast(el).open).toBe(true);
-    expect(toast(el).message).toBe(SPACE_LOW_EN);
+    expect(toast(el).message).toBe(RAN_OUT_EN);
     expect(toast(el).tone).toBe("error");
     expect(toast(el).querySelector("[data-test=tax-office-go-to-backups]")).toBeNull();
     const signInButton = toast(el).querySelector<HTMLElement>(
@@ -503,7 +503,7 @@ describe("the shell's notice for the tax office's month file", () => {
     const background = vi
       .fn()
       .mockResolvedValueOnce(building())
-      .mockResolvedValue(failed("b1", "2026-03", spaceLow));
+      .mockResolvedValue(failed("b1", "2026-03", ranOut));
     const { api, liveData } = shellApi(
       background,
       ["venue.view", "invoice.inspect", "system.manage"],

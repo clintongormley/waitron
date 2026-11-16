@@ -781,23 +781,27 @@ it("names the free and needed space when the disk is too full to prepare the mon
   expect(table(el).rows).toHaveLength(1);
 });
 
-const SPACE_LOW_EN =
-  "The server's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.";
 const spaceLow = {
   code: "tax_office.space_low" as const,
   params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
 };
+const RAN_OUT_EN =
+  "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.";
+const ranOut = {
+  code: "tax_office.space_ran_out" as const,
+  params: { writtenBytes: 412_000_000 },
+};
 const nextStep = (el: TaxOfficeScreen, test: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`);
 
-it("says the month stopped for want of disk space, in place of the plain failure", async () => {
+it("says how far the month had got when the server ran short of space, in place of the plain failure", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
-    { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: spaceLow } },
+    { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut } },
   );
 
-  await vi.waitFor(() => expect(lineText(el)).toContain(SPACE_LOW_EN));
+  await vi.waitFor(() => expect(lineText(el)).toContain(RAN_OUT_EN));
   expect(lineText(el)).not.toContain("could not be prepared");
   expect(saveButton(el)).toBeNull();
 });
@@ -815,7 +819,7 @@ it.each([
         requestTaxOfficeMonth: vi.fn().mockRejectedValue(spaceLow),
       },
       where === "line"
-        ? { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: spaceLow } }
+        ? { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut } }
         : {},
     );
     await vi.waitFor(() => expect(table(el).loading).toBe(false));
@@ -849,7 +853,7 @@ it.each([
       where === "line"
         ? {
             canOpenBackups: true,
-            monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: spaceLow },
+            monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut },
           }
         : { canOpenBackups: true },
     );

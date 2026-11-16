@@ -22,8 +22,8 @@ export type MonthDownloadView =
 
 /** Why a build stopped, when the person can do something about it. */
 export interface MonthDownloadRefusal {
-  code: "tax_office.space_low";
-  params: { freeBytes: number; neededBytes: number };
+  code: "tax_office.space_ran_out";
+  params: { writtenBytes: number };
 }
 
 export const TAX_OFFICE_KEEP_MS = 3_600_000;
@@ -144,10 +144,7 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
           const room = free === null ? WRITE_BETWEEN_READINGS_BYTES : free - SPACE_LOW_BYTES;
           if (free !== null && room < bytes) {
             deps.log("warn", "tax_office.build_space_low", { freeBytes: free });
-            throw new AppError("tax_office.space_low", {
-              freeBytes: free,
-              neededBytes: SPACE_LOW_BYTES + Math.max(TAX_OFFICE_ROOM_BYTES, written + bytes),
-            });
+            throw new AppError("tax_office.space_ran_out", { writtenBytes: written });
           }
           allowed = Math.min(room, Math.max(WRITE_BETWEEN_READINGS_BYTES, bytes));
         }
@@ -188,8 +185,8 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         until: deps.now().getTime() + keepMs,
       };
     } catch (error) {
-      const spaceLow = isAppError(error) && hasCode(error, "tax_office.space_low");
-      if (!signal.aborted && !spaceLow)
+      const ranOut = isAppError(error) && hasCode(error, "tax_office.space_ran_out");
+      if (!signal.aborted && !ranOut)
         deps.log("error", "tax_office.build_failed", {
           errorCode: codeOf(error),
           errorClass: error instanceof Error ? error.name : typeof error,
@@ -197,20 +194,11 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
         });
       await remove(path);
       if (!signal.aborted) {
-        let refusal: MonthDownloadRefusal | null = null;
-        if (spaceLow) {
-          // Read again once the partial file is gone, so the person sees what is free now.
-          const freeBytes = (await deps.freeBytes()) ?? error.params.freeBytes;
-          refusal = {
-            code: "tax_office.space_low",
-            params: { freeBytes, neededBytes: error.params.neededBytes },
-          };
-        }
         outcome = {
           status: "failed",
           id: record.id,
           month: record.month,
-          refusal,
+          refusal: ranOut ? { code: error.code, params: error.params } : null,
           until: deps.now().getTime() + keepMs,
         };
       }

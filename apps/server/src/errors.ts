@@ -45,6 +45,9 @@ declare module "@waitron/shared" {
     "tax_office.export_running": Record<string, never>;
     /** Building the month's file would take the disk below the low-space line, room included. */
     "tax_office.space_low": { freeBytes: number; neededBytes: number };
+    /** A month file's writing was stopped before it took the disk under the low-space line, and
+     * the partial file deleted; `writtenBytes` is how much the file had taken in by then. */
+    "tax_office.space_ran_out": { writtenBytes: number };
     /** No ready month file on the box for this person. */
     "tax_office.download_missing": Record<string, never>;
     "invoice_delivery.full_invoice_required": Record<string, never>;

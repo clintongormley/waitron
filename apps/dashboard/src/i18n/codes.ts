@@ -85,6 +85,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The server's disk is nearly full: it has {free} free, and preparing this file needs {needed}. Keeping fewer backups on the server, under Backups, frees space; then try again.",
     es: "El disco del servidor está casi lleno: tiene {free} libres y preparar este archivo necesita {needed}. Guardar menos copias de seguridad en el servidor, en Copias de seguridad, libera espacio; después vuelve a intentarlo.",
   },
+  "tax_office.space_ran_out": {
+    en: "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached {written}; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.",
+    es: "El servidor se quedó sin espacio en disco mientras preparaba este archivo, así que lo detuvo y lo borró. El archivo ya ocupaba {written}; libera más espacio que eso en el servidor, por ejemplo guardando menos copias de seguridad en Copias de seguridad, y vuelve a intentarlo.",
+  },
   "tax_office.download_missing": {
     en: "This file is no longer on the server. Choose Download again to prepare it.",
     es: "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",
@@ -1843,6 +1847,7 @@ export function codeMessage(
     kind?: unknown;
     freeBytes?: unknown;
     neededBytes?: unknown;
+    writtenBytes?: unknown;
   },
 ): string {
   if (
@@ -1882,6 +1887,11 @@ export function codeMessage(
     return registeredCodeMessage(code, locale)
       .replace("{free}", formatBytes(params?.freeBytes, locale))
       .replace("{needed}", formatBytes(params?.neededBytes, locale));
+  if (code === "tax_office.space_ran_out")
+    return registeredCodeMessage(code, locale).replace(
+      "{written}",
+      formatBytes(params?.writtenBytes, locale),
+    );
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "receipt.language_orders_open" && typeof params?.count === "number")
     return ordersOpenMessage(params.count, locale);

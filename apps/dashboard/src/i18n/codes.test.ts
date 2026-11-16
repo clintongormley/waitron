@@ -1216,6 +1216,16 @@ it("a source preflight refusal keeps trading and names Stop and the handover gui
   );
 });
 
+it("says how far a month file had got when the server ran short of space, in the language's style", () => {
+  const params = { writtenBytes: 1_200_000_000 };
+  expect(codeMessage("tax_office.space_ran_out", "en", params)).toBe(
+    "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 1.2 GB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.",
+  );
+  expect(codeMessage("tax_office.space_ran_out", "es", params)).toBe(
+    "El servidor se quedó sin espacio en disco mientras preparaba este archivo, así que lo detuvo y lo borró. El archivo ya ocupaba 1,2 GB; libera más espacio que eso en el servidor, por ejemplo guardando menos copias de seguridad en Copias de seguridad, y vuelve a intentarlo.",
+  );
+});
+
 it("words the tax office's month-file refusals, with the disk's sizes in the language's style", () => {
   const params = { freeBytes: 2_200_000_000, neededBytes: 2_415_919_104 };
   expect(codeMessage("tax_office.space_low", "en", params)).toBe(

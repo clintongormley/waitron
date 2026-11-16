@@ -96,14 +96,14 @@ describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (t
     ],
     ["a failed month file", { status: "failed", id: "b1", month: "2026-11", refusal: null }],
     [
-      "a month file stopped for want of disk space",
+      "a month file stopped when the server ran short of space",
       {
         status: "failed",
         id: "b1",
         month: "2026-11",
         refusal: {
-          code: "tax_office.space_low",
-          params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
+          code: "tax_office.space_ran_out",
+          params: { writtenBytes: 412_000_000 },
         },
       },
     ],

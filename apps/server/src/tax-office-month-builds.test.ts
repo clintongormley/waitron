@@ -18,7 +18,6 @@ import type { TaxOfficeMonth } from "./tax-office-export.js";
 import {
   createTaxOfficeMonthBuilds,
   TAX_OFFICE_KEEP_MS,
-  TAX_OFFICE_ROOM_BYTES,
   type TaxOfficeMonthBuilds,
 } from "./tax-office-month-builds.js";
 
@@ -374,45 +373,34 @@ function bigEntries(count: number, size: number): Entries {
   };
 }
 
-it("stops a build whose writing would take the disk under the low-space line, keeping no file", async () => {
+it("stops a build whose writing would take the disk under the low-space line, naming how far the file had got and keeping no file", async () => {
   const MIB = 1024 ** 2;
-  // The second reading leaves no room for even a byte more.
-  const readings = [SPACE_LOW_BYTES + 3 * MIB, SPACE_LOW_BYTES, SPACE_LOW_BYTES + 5 * MIB];
+  // The second reading leaves no room for even a byte more; a third would show more free.
+  const readings = [SPACE_LOW_BYTES + 3 * MIB, SPACE_LOW_BYTES];
   const freeBytes = vi.fn(() => Promise.resolve(readings.shift() ?? SPACE_LOW_BYTES + 5 * MIB));
   const t = setup(bigEntries(8, MIB), undefined, freeBytes);
   t.builds.claim(ANA, "2026-01");
   const id = idOf(t.builds, ANA);
   t.builds.begin(ANA, input("2026-01"));
   await t.pass();
-  expect(t.builds.view(ANA)).toEqual({
+  const view = t.builds.view(ANA);
+  expect(view).toEqual({
     status: "failed",
     id,
     month: "2026-01",
-    refusal: {
-      code: "tax_office.space_low",
-      params: {
-        freeBytes: SPACE_LOW_BYTES + 5 * MIB,
-        neededBytes: SPACE_LOW_BYTES + TAX_OFFICE_ROOM_BYTES,
-      },
-    },
+    refusal: { code: "tax_office.space_ran_out", params: { writtenBytes: expect.any(Number) } },
   });
+  // The first reading allowed 3 MiB, and each entry is a little over 1 MiB, so the file had
+  // taken in the README and two entries when the next would have gone past what was allowed.
+  const { writtenBytes } = (view as { refusal: { params: { writtenBytes: number } } }).refusal
+    .params;
+  expect(writtenBytes).toBeGreaterThan(2 * MIB);
+  expect(writtenBytes).toBeLessThanOrEqual(3 * MIB);
   expect(t.files()).toEqual([]);
-  expect(freeBytes).toHaveBeenCalledTimes(3);
+  expect(freeBytes).toHaveBeenCalledTimes(2);
   expect(t.log.mock.calls).toEqual([
     ["warn", "tax_office.build_space_low", { freeBytes: SPACE_LOW_BYTES }],
   ]);
-});
-
-it("names the free space it last read when it cannot read it again after stopping", async () => {
-  const MIB = 1024 ** 2;
-  const readings = [SPACE_LOW_BYTES + 3 * MIB, SPACE_LOW_BYTES, null];
-  const t = setup(bigEntries(8, MIB), undefined, () => Promise.resolve(readings.shift() ?? null));
-  await readyFor(t, ANA, "2026-01");
-  expect(t.builds.view(ANA)).toMatchObject({
-    status: "failed",
-    refusal: { params: { freeBytes: SPACE_LOW_BYTES } },
-  });
-  expect(readings).toEqual([]);
 });
 
 it("keeps building while free space cannot be read, reading it again as it writes", async () => {
