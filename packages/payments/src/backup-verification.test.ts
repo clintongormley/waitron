@@ -38,7 +38,6 @@ const tables = [
   "card_readers",
   "device_card_readers",
   "device_profile_card_readers",
-  "card_reader_holders",
 ];
 
 beforeEach(() => {
@@ -68,7 +67,7 @@ beforeEach(() => {
       sql`insert into working_orders (id,source,order_number,opened_at,dining) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z','eat_in')`,
     );
     db.run(
-      sql`insert into card_readers (id,provider,provider_ref,name,active,created_at) values ('reader','stripe','terminal_synthetic','Retained reader',0,'2026-10-20T08:00:00.000Z'),('other-reader','stripe','other','Other reader',0,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into card_readers (id,provider,provider_ref,name,disabled_at,created_at) values ('reader','stripe','terminal_synthetic','Retained reader','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z'),('other-reader','stripe','other','Other reader','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into persons (id, display_name, created_at) values ('manager', 'Manager', '2026-10-20T08:00:00.000Z')`,
@@ -83,9 +82,7 @@ beforeEach(() => {
     db.run(
       sql`insert into device_profile_card_readers (device_profile_id,reader_id,position,is_default) values ('profile','reader',0,1)`,
     );
-    db.run(
-      sql`insert into card_reader_holders (reader_id,device_id,held_at) values ('reader','device','2026-10-20T08:00:00.000Z')`,
-    );
+    db.run(sql`update card_readers set held_by_device_id='device' where id='reader'`);
   }
 });
 afterEach(() => {
@@ -252,7 +249,7 @@ it.each([
   ["card_readers", "name='Changed reader'"],
   ["device_card_readers", "reader_id='other-reader'"],
   ["device_profile_card_readers", "position=1"],
-  ["card_reader_holders", "held_at='2026-10-21T08:00:00.000Z'"],
+  ["card_readers", "held_by_device_id=null"],
 ])("detects a same-count value change in %s", async (table, change) => {
   expect(await run()).toEqual(passed);
   corrupt(restored.db, `update "${table}" set ${change}`);
@@ -277,8 +274,7 @@ it.each([
   ["device_card_readers", "reader_id"],
   ["device_profile_card_readers", "device_profile_id"],
   ["device_profile_card_readers", "reader_id"],
-  ["card_reader_holders", "reader_id"],
-  ["card_reader_holders", "device_id"],
+  ["card_readers", "held_by_device_id"],
 ])("checks the %s.%s reference in matching damaged copies", async (table, column) => {
   for (const db of [original.db, restored.db])
     corrupt(db, `update "${table}" set "${column}"='missing'`);
@@ -291,7 +287,7 @@ it.each(["stripe", "sumup"])(
   "requires a usable credential for an active %s reader",
   async (provider) => {
     for (const db of [original.db, restored.db])
-      db.run(sql`update card_readers set active=1,provider=${provider}`);
+      db.run(sql`update card_readers set disabled_at=null,provider=${provider}`);
     expect(await run()).toMatchObject({ status: "invalid" });
     await credential(
       provider === "stripe" ? "payments.stripe" : "payments.sumup",
@@ -302,12 +298,12 @@ it.each(["stripe", "sumup"])(
 );
 it("does not require provider credentials for an active simulator", async () => {
   for (const db of [original.db, restored.db])
-    db.run(sql`update card_readers set active=1,provider='simulator'`);
+    db.run(sql`update card_readers set disabled_at=null,provider='simulator'`);
   expect(await run()).toEqual(passed);
 });
 it("allows a deleted reader to remain as payment history after disconnect", async () => {
   for (const db of [original.db, restored.db])
-    db.run(sql`update card_readers set active=1,deleted_at='2026-10-21T08:00:00.000Z'`);
+    db.run(sql`update card_readers set disabled_at=null,deleted_at='2026-10-21T08:00:00.000Z'`);
   expect(await run()).toEqual(passed);
 });
 it.each(["attempting", "initiated"])("keeps in-flight %s work as data", async (state) => {
@@ -393,7 +389,6 @@ it.each([0, null])(
     // Recreate only the schema; the existing helper still owns the database and teardown.
     for (const db of [restored.db]) {
       for (const table of [
-        "card_reader_holders",
         "device_profile_card_readers",
         "device_card_readers",
         "payment_refunds",
@@ -413,12 +408,12 @@ it("refuses a positive source schema with missing payment tables", async () => {
 });
 it("refuses a missing restored payment table", async () => {
   const definition = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type='table' and name='card_reader_holders'`,
+    sql`select sql from sqlite_schema where type='table' and name='device_card_readers'`,
   )[0]!.sql;
   const triggers = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'card_reader_holders'`,
+    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'device_card_readers'`,
   );
-  restored.db.run(sql`drop table card_reader_holders`);
+  restored.db.run(sql`drop table device_card_readers`);
   try {
     expect(await run()).toMatchObject({ status: "invalid" });
   } finally {

@@ -164,7 +164,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
         }),
       );
       await suite.db.execute(
-        sql`update card_reader_holders set device_id = ${s.deviceId} where reader_id = ${readerId}`,
+        sql`update card_readers set held_by_device_id = ${s.deviceId} where id = ${readerId}`,
       );
       const provider = new FakePaymentProvider(suite.db);
       arm(provider, script);

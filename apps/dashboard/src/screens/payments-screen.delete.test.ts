@@ -443,7 +443,7 @@ describe("Deleting a card reader", () => {
     confirmOf(el).click();
     await flush(el);
     getReaderDeleteImpact.mockRejectedValue(coded("reader.not_found"));
-    api.liveData!.invalidate([{ type: "card_reader_holders", id: "h1" }]);
+    api.liveData!.invalidate([{ type: "card_readers", id: "h1" }]);
     await vi.waitFor(() => expect(getReaderDeleteImpact).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(dialogOf(el)!.open).toBe(true);
@@ -466,7 +466,7 @@ describe("Deleting a card reader", () => {
     confirmOf(el).click();
     await flush(el);
     getReaderDeleteImpact.mockRejectedValue(coded("connection.failed"));
-    api.liveData!.invalidate([{ type: "card_reader_holders", id: "h1" }]);
+    api.liveData!.invalidate([{ type: "card_readers", id: "h1" }]);
     await vi.waitFor(() => expect(dialogOf(el)!.readError).toBe(codeMessage("connection.failed")));
     await flush(el);
     const reads = getReaderDeleteImpact.mock.calls.length;

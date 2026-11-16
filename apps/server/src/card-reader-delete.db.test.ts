@@ -13,7 +13,6 @@ import {
 import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import {
-  cardReaderHolders,
   cardReaders,
   deviceCardReaders,
   deviceProfileCardReaders,
@@ -88,11 +87,12 @@ function withoutReaderLinks(
   return {
     ...before,
     card_readers: sorted(
-      before.card_readers!.map((row) => (row.id === readerId ? change(row) : row)),
+      before.card_readers!.map((row) =>
+        row.id === readerId ? { ...change(row), held_by_device_id: null } : row,
+      ),
     ),
     device_card_readers: unlinked(before.device_card_readers!),
     device_profile_card_readers: unlinked(before.device_profile_card_readers!),
-    card_reader_holders: unlinked(before.card_reader_holders!),
   };
 }
 
@@ -133,7 +133,6 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
       provider: options.provider ?? "stripe",
       providerRef: "tmr_R",
       name: "Bar reader",
-      active: options.active ?? true,
       disabledAt: options.disabledAt ?? null,
       unpairedAt: options.unpairedAt === undefined ? UNPAIRED : options.unpairedAt,
     })
@@ -172,10 +171,14 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
     { deviceId: firstTill.id, readerId: r },
     { deviceId: retiredTill.id, readerId: r },
   ]);
-  await suite.db.insert(cardReaderHolders).values([
-    { readerId: r, deviceId: firstTill.id, heldAt: EARLIER },
-    { readerId: q, deviceId: thirdTill.id, heldAt: EARLIER },
-  ]);
+  await suite.db
+    .update(cardReaders)
+    .set({ heldByDeviceId: firstTill.id })
+    .where(eq(cardReaders.id, r));
+  await suite.db
+    .update(cardReaders)
+    .set({ heldByDeviceId: thirdTill.id })
+    .where(eq(cardReaders.id, q));
 
   let orderNumber = 0;
   const payment = async (
@@ -342,7 +345,6 @@ describe("deleting a card reader", () => {
       expect(await snapshot()).toEqual(
         withoutReaderLinks(before, v.r, (row) => ({
           ...row,
-          active: 0,
           deleted_at: NOW.toISOString(),
           disabled_at: expectedDisabledAt,
         })),
@@ -441,7 +443,6 @@ describe("deleting a card reader", () => {
     expect(await snapshot()).toEqual(
       withoutReaderLinks(before, v.r, (row) => ({
         ...row,
-        active: 0,
         deleted_at: NOW.toISOString(),
         disabled_at: NOW.toISOString(),
       })),
@@ -478,7 +479,11 @@ describe("deleting a card reader", () => {
     const v = await seedVenueWithReaders({ unpairedAt: null });
     await remove(seats, v.r);
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
-    expect(row).toMatchObject({ deletedAt: NOW.toISOString(), unpairedAt: null, active: false });
+    expect(row).toMatchObject({
+      deletedAt: NOW.toISOString(),
+      unpairedAt: null,
+      disabledAt: NOW.toISOString(),
+    });
   });
 
   it("never looks up the provider of an unpaired reader", async () => {
@@ -555,7 +560,6 @@ describe("preparing a card reader delete (step a)", () => {
       expect(await snapshot()).toEqual(
         withReaderRow(before, v.r, (row) => ({
           ...row,
-          active: 0,
           disabled_at: expectedDisabledAt,
         })),
       );
@@ -653,7 +657,6 @@ describe("starting a card reader delete (step a, and the delete when no provider
     expect(await snapshot()).toEqual(
       withoutReaderLinks(before, v.r, (row) => ({
         ...row,
-        active: 0,
         deleted_at: NOW.toISOString(),
         disabled_at: NOW.toISOString(),
       })),
@@ -674,7 +677,7 @@ describe("starting a card reader delete (step a, and the delete when no provider
       plan: { impact, provider: "stripe", providerRef: "tmr_R", unpairAtProvider: true },
     });
     expect(await snapshot()).toEqual(
-      withReaderRow(before, v.r, (row) => ({ ...row, active: 0, disabled_at: NOW.toISOString() })),
+      withReaderRow(before, v.r, (row) => ({ ...row, disabled_at: NOW.toISOString() })),
     );
   });
 
@@ -709,7 +712,6 @@ describe("marking a card reader unpaired", () => {
     expect(await snapshot()).toEqual(
       withReaderRow(before, v.r, (row) => ({
         ...row,
-        active: 0,
         disabled_at: at,
         unpaired_at: at,
       })),

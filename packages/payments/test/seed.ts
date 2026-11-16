@@ -19,7 +19,6 @@ import {
   seedVenue,
   seedWorkingOrder as seedOrder,
 } from "@waitron/db/testing/seed.js";
-import { cardReaderHolders } from "../src/schema/card-reader-holders.js";
 import { cardReaders } from "../src/schema/card-readers.js";
 import type { CollectionOwners } from "../src/provider.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -165,9 +164,13 @@ export async function billPaymentOfRow(db: Database, paymentRef: string): Promis
 export async function seedHeldReader(db: Database, deviceId: string): Promise<string> {
   const [reader] = await db
     .insert(cardReaders)
-    .values({ provider: "sumup", providerRef: `rdr_${randomUUID()}`, name: "Reader" })
+    .values({
+      provider: "sumup",
+      providerRef: `rdr_${randomUUID()}`,
+      name: "Reader",
+      heldByDeviceId: deviceId,
+    })
     .returning({ id: cardReaders.id });
-  await db.insert(cardReaderHolders).values({ readerId: reader!.id, deviceId });
   return reader!.id;
 }
 

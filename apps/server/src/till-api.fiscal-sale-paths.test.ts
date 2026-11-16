@@ -50,7 +50,6 @@ import {
   MANUAL_PROVIDER,
   payments,
   SimulatorPaymentProvider,
-  cardReaderHolders,
   cardReaders,
 } from "@waitron/payments";
 import { routingCells, departments } from "@waitron/venue-service";
@@ -335,9 +334,11 @@ async function setChosenReader(deviceId: string, readerId: string): Promise<void
   await holdReader(deviceId, readerId);
 }
 
-/** The device holds the reader (`card_reader_holders`), so a pay may name it. */
 async function holdReader(deviceId: string, readerId: string): Promise<void> {
-  await suite.db.insert(cardReaderHolders).values({ readerId, deviceId });
+  await suite.db
+    .update(cardReaders)
+    .set({ heldByDeviceId: deviceId })
+    .where(eq(cardReaders.id, readerId));
 }
 
 /** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay

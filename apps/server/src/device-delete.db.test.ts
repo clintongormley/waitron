@@ -30,13 +30,7 @@ import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, sessions } from "@waitron/identity";
-import {
-  cardReaderHolders,
-  cardReaders,
-  deviceCardReaders,
-  payments,
-  type PaymentState,
-} from "@waitron/payments";
+import { cardReaders, deviceCardReaders, payments, type PaymentState } from "@waitron/payments";
 import { AppError, deviceOrigin, type DeleteImpact, type ResourceIdentity } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { VENUE_SERVICE } from "@waitron/venue-service";
@@ -135,7 +129,11 @@ function afterDelete(before: Snapshot, deviceId: string): Snapshot {
       ),
     ),
     printer_holders: notMine(before.printer_holders!),
-    card_reader_holders: notMine(before.card_reader_holders!),
+    card_readers: byJson(
+      before.card_readers!.map((row) =>
+        row.held_by_device_id === deviceId ? { ...row, held_by_device_id: null } : row,
+      ),
+    ),
     join_requests: before.join_requests!.filter((row) => row.id !== deviceId),
   };
 }
@@ -317,10 +315,14 @@ async function seed() {
 
   const readerR = await reader("Reader R");
   const readerS = await reader("Reader S");
-  await suite.db.insert(cardReaderHolders).values([
-    { readerId: readerR, deviceId: barTill },
-    { readerId: readerS, deviceId: pass },
-  ]);
+  await suite.db
+    .update(cardReaders)
+    .set({ heldByDeviceId: barTill })
+    .where(eq(cardReaders.id, readerR));
+  await suite.db
+    .update(cardReaders)
+    .set({ heldByDeviceId: pass })
+    .where(eq(cardReaders.id, readerS));
   await suite.db.insert(deviceCardReaders).values([
     { deviceId: barTill, readerId: readerR },
     { deviceId: pass, readerId: readerS },
@@ -666,7 +668,7 @@ describe("the device delete impact", () => {
       ["devices", "id"],
       ["sessions", "device_id"],
       ["printer_holders", "device_id"],
-      ["card_reader_holders", "device_id"],
+      ["card_readers", "held_by_device_id"],
       ["device_made_here_stations", "device_id"],
       ["device_approved_profiles", "device_id"],
       ["device_card_readers", "device_id"],

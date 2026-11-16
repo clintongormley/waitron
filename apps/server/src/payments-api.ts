@@ -620,7 +620,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           const registration = registered.get(reader.providerRef);
           if (registration === undefined) return { ...reader, status: "available" };
           const status =
-            registration.active && registration.deletedAt === null ? "added" : "disabled";
+            registration.disabledAt === null && registration.deletedAt === null
+              ? "added"
+              : "disabled";
           return {
             ...reader,
             ...(status === "disabled" ? { name: registration.name } : {}),
@@ -675,7 +677,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           if (existing !== undefined) {
             await tx
               .update(cardReaders)
-              .set({ active: true, deletedAt: null, disabledAt: null, unpairedAt: null })
+              .set({ deletedAt: null, disabledAt: null, unpairedAt: null })
               .where(readerWhere(existing.id));
             return { id: existing.id };
           }
@@ -973,7 +975,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           const readers = await tx
             .select({ name: cardReaders.name })
             .from(cardReaders)
-            .where(and(eq(cardReaders.provider, seat.providerId), eq(cardReaders.active, true)))
+            .where(and(eq(cardReaders.provider, seat.providerId), isNull(cardReaders.disabledAt)))
             .orderBy(cardReaders.name);
           if (readers.length)
             throw new AppError("payment.provider_in_use", {
@@ -1002,7 +1004,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
-          .where(and(eq(cardReaders.provider, id), eq(cardReaders.active, true)));
+          .where(and(eq(cardReaders.provider, id), isNull(cardReaders.disabledAt)));
         if (active.length > 0) {
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
@@ -1023,7 +1025,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             id: cardReaders.id,
             provider: cardReaders.provider,
             name: cardReaders.name,
-            active: cardReaders.active,
+            active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean),
             printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
             unpairedAt: cardReaders.unpairedAt,
           })

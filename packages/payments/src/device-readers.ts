@@ -1,10 +1,9 @@
-import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
-import { devices, nowIso } from "@waitron/db";
+import { and, asc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import { IN_PROGRESS_PAYMENT_STATES } from "./provider.js";
-import { cardReaderHolders } from "./schema/card-reader-holders.js";
 import { cardReaders } from "./schema/card-readers.js";
 import { deviceCardReaders } from "./schema/device-card-readers.js";
 import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
@@ -122,9 +121,9 @@ export async function appendReaderToProfiles(
 /** The device holding the reader, or `null` when nobody does. */
 export async function readerHeldBy(tx: Transaction, readerId: string): Promise<string | null> {
   const [row] = await tx
-    .select({ deviceId: cardReaderHolders.deviceId })
-    .from(cardReaderHolders)
-    .where(eq(cardReaderHolders.readerId, readerId));
+    .select({ deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders)
+    .where(eq(cardReaders.id, readerId));
   return row?.deviceId ?? null;
 }
 
@@ -244,13 +243,12 @@ async function readReaderStates(
             id: cardReaders.id,
             name: cardReaders.name,
             provider: cardReaders.provider,
-            active: cardReaders.active,
+            active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean),
             unpairedAt: cardReaders.unpairedAt,
             printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
-            holderDeviceId: cardReaderHolders.deviceId,
+            holderDeviceId: cardReaders.heldByDeviceId,
           })
           .from(cardReaders)
-          .leftJoin(cardReaderHolders, eq(cardReaderHolders.readerId, cardReaders.id))
           .where(inArray(cardReaders.id, readerIds));
   const choiceOf = new Map(choices.map((row) => [row.deviceId, row.readerId]));
   const defaultOf = new Map(
@@ -328,7 +326,7 @@ export async function selectDeviceReader(
         and(
           eq(deviceProfileCardReaders.deviceProfileId, device.profileId),
           eq(cardReaders.id, selection.id),
-          eq(cardReaders.active, true),
+          isNull(cardReaders.disabledAt),
           isNull(cardReaders.unpairedAt),
         ),
       );
@@ -344,12 +342,9 @@ export async function selectDeviceReader(
       previousHolderDeviceId = holder;
     }
     await tx
-      .insert(cardReaderHolders)
-      .values({ readerId: reader.id, deviceId })
-      .onConflictDoUpdate({
-        target: cardReaderHolders.readerId,
-        set: { deviceId, heldAt: nowIso() },
-      });
+      .update(cardReaders)
+      .set({ heldByDeviceId: deviceId })
+      .where(eq(cardReaders.id, reader.id));
     if (previousHolderDeviceId !== null) {
       await tx
         .delete(deviceCardReaders)
@@ -388,7 +383,10 @@ export async function settleDeviceReader(
       state.chosenHolderDeviceId === null &&
       !(await readerPaymentInProgress(tx, state.chosenId, deviceId));
     if (free) {
-      await tx.insert(cardReaderHolders).values({ readerId: state.chosenId, deviceId });
+      await tx
+        .update(cardReaders)
+        .set({ heldByDeviceId: deviceId })
+        .where(and(eq(cardReaders.id, state.chosenId), isNull(cardReaders.heldByDeviceId)));
     } else {
       await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
       state.chosenId = null;
@@ -403,22 +401,26 @@ export async function settleDeviceReader(
     !(await readerPaymentInProgress(tx, state.defaultId, deviceId))
   ) {
     await tx
-      .insert(cardReaderHolders)
-      .values({ readerId: state.defaultId, deviceId })
-      .onConflictDoNothing({ target: cardReaderHolders.readerId });
+      .update(cardReaders)
+      .set({ heldByDeviceId: deviceId })
+      .where(and(eq(cardReaders.id, state.defaultId), isNull(cardReaders.heldByDeviceId)));
   }
   await tx
-    .delete(cardReaderHolders)
+    .update(cardReaders)
+    .set({ heldByDeviceId: null })
     .where(
       used === null
-        ? eq(cardReaderHolders.deviceId, deviceId)
-        : and(eq(cardReaderHolders.deviceId, deviceId), ne(cardReaderHolders.readerId, used)),
+        ? eq(cardReaders.heldByDeviceId, deviceId)
+        : and(eq(cardReaders.heldByDeviceId, deviceId), ne(cardReaders.id, used)),
     );
 }
 
 /** Lets go of every reader the device holds; keeps its choice. */
 export async function releaseDeviceReader(tx: Transaction, deviceId: string): Promise<void> {
-  await tx.delete(cardReaderHolders).where(eq(cardReaderHolders.deviceId, deviceId));
+  await tx
+    .update(cardReaders)
+    .set({ heldByDeviceId: null })
+    .where(eq(cardReaders.heldByDeviceId, deviceId));
 }
 
 /** Puts the device back on Use default when its profile no longer lists its chosen reader. */
@@ -475,14 +477,17 @@ export async function settleProfileReaderDevices(
     ).map((row) => [row.deviceId, row.readerId]),
   );
   const held = await tx
-    .select({ readerId: cardReaderHolders.readerId, deviceId: cardReaderHolders.deviceId })
-    .from(cardReaderHolders)
-    .where(inArray(cardReaderHolders.deviceId, deviceIds));
+    .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders)
+    .where(inArray(cardReaders.heldByDeviceId, deviceIds));
   // As settleDeviceReader without acquiring: a device keeps only the reader it uses.
   const released = held
-    .filter((row) => row.readerId !== (choiceOf.get(row.deviceId) ?? list.defaultReaderId))
+    .filter((row) => row.readerId !== (choiceOf.get(row.deviceId!) ?? list.defaultReaderId))
     .map((row) => row.readerId);
   if (released.length > 0) {
-    await tx.delete(cardReaderHolders).where(inArray(cardReaderHolders.readerId, released));
+    await tx
+      .update(cardReaders)
+      .set({ heldByDeviceId: null })
+      .where(inArray(cardReaders.id, released));
   }
 }

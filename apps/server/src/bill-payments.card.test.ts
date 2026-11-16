@@ -200,7 +200,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     // The paying till holds the reader it names; the second till gets it back afterwards.
     const holdOther = (deviceId: string) =>
       venue.db.run(
-        sql`update card_reader_holders set device_id = ${deviceId} where reader_id = ${other!.id}`,
+        sql`update card_readers set held_by_device_id = ${deviceId} where id = ${other!.id}`,
       );
     holdOther(venue.deviceId);
     try {

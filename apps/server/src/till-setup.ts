@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
 import { readTaxpayer, roles, type Transaction } from "@waitron/db";
 import { authorityForRoles, holds, BUILT_IN_ROLE_KEYS } from "@waitron/identity";
@@ -86,7 +86,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
         printsOwnSlipAutomatically: cardReaders.printsOwnSlipAutomatically,
       })
       .from(cardReaders)
-      .where(and(eq(cardReaders.id, resolvedReaderId), eq(cardReaders.active, true)));
+      .where(and(eq(cardReaders.id, resolvedReaderId), isNull(cardReaders.disabledAt)));
     const provider = reader === undefined ? undefined : tillProviderForReader(reader.provider);
     if (reader !== undefined && provider !== undefined) {
       defaultReaderProvider = provider;

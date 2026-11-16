@@ -22,7 +22,6 @@ import {
 } from "@waitron/layouts";
 import type { ProfilePrinterLists } from "@waitron/layouts";
 import {
-  cardReaderHolders,
   cardReaders,
   deviceCardReaders,
   resolveDeviceReaderId,
@@ -167,10 +166,12 @@ async function printerHoldersOf(ids: string[]): Promise<Record<string, string>> 
 
 async function readerHoldersOf(ids: string[]): Promise<Record<string, string>> {
   const rows = await suite.db
-    .select()
-    .from(cardReaderHolders)
-    .where(inArray(cardReaderHolders.readerId, ids));
-  return Object.fromEntries(rows.map((r) => [r.readerId, r.deviceId]));
+    .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders)
+    .where(inArray(cardReaders.id, ids));
+  return Object.fromEntries(
+    rows.filter((r) => r.deviceId !== null).map((r) => [r.readerId, r.deviceId!]),
+  );
 }
 
 async function signIn(deviceId: string, displayName = "Lucy") {
@@ -372,7 +373,9 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     const venue = await setupVenue(suite.db);
     const s = await switchable(venue);
     // `b` joined on `to`, so it took that profile's free defaults; free one of them again.
-    await inTx((tx) => tx.delete(cardReaderHolders).where(eq(cardReaderHolders.readerId, s.r2)));
+    await inTx((tx) =>
+      tx.update(cardReaders).set({ heldByDeviceId: null }).where(eq(cardReaders.id, s.r2)),
+    );
     const me = await signIn(s.a);
 
     await inTx((tx) =>
@@ -393,7 +396,9 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("a manager moving a device to another profile settles the same way", async () => {
     const venue = await setupVenue(suite.db);
     const s = await switchable(venue);
-    await inTx((tx) => tx.delete(cardReaderHolders).where(eq(cardReaderHolders.readerId, s.r2)));
+    await inTx((tx) =>
+      tx.update(cardReaders).set({ heldByDeviceId: null }).where(eq(cardReaders.id, s.r2)),
+    );
     const app = mountApp(venue);
 
     const res = await managerRequest(app, venue, "PATCH", `/management-api/devices/${s.a}`, {
@@ -427,7 +432,10 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     // Choices the profile does not list, as a device chosen before its lists named them keeps.
     await suite.db.update(devices).set({ paymentSlipPrinterId: bar }).where(eq(devices.id, a));
     await suite.db.insert(deviceCardReaders).values({ deviceId: a, readerId: unlisted });
-    await suite.db.insert(cardReaderHolders).values({ readerId: unlisted, deviceId: a });
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: a })
+      .where(eq(cardReaders.id, unlisted));
     const app = mountApp(venue);
 
     const res = await managerRequest(app, venue, "PATCH", `/management-api/devices/${a}`, {
@@ -711,11 +719,7 @@ describe("readDeviceEquipment", () => {
       const at = new Date().toISOString();
       await suite.db
         .update(cardReaders)
-        .set(
-          shape === "switched off"
-            ? { active: false }
-            : { active: false, disabledAt: at, unpairedAt: at },
-        )
+        .set(shape === "switched off" ? { disabledAt: at } : { disabledAt: at, unpairedAt: at })
         .where(eq(cardReaders.id, reader));
 
       const terminal = (await inTx((tx) => readDeviceEquipment(tx, a))).roles[4]!;

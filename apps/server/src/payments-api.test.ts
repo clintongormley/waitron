@@ -5,7 +5,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import {
@@ -37,7 +37,6 @@ import {
   PAYMENTS_PERMISSIONS,
   PAYMENTS_SETTINGS,
   SimulatorPaymentProvider,
-  cardReaderHolders,
   cardReaders,
   deviceProfileCardReaders,
   deviceCardReaders,
@@ -298,10 +297,7 @@ async function addReader(
 }
 
 async function switchOffReader(id: string): Promise<void> {
-  await suite.db
-    .update(cardReaders)
-    .set({ active: false, disabledAt: nowIso() })
-    .where(eq(cardReaders.id, id));
+  await suite.db.update(cardReaders).set({ disabledAt: nowIso() }).where(eq(cardReaders.id, id));
 }
 
 async function sealedStripe(): Promise<Record<string, string> | null> {
@@ -549,9 +545,9 @@ describe("device and profile readers", () => {
 
   async function readerHolder(readerId: string): Promise<string | null> {
     const [row] = await suite.db
-      .select({ deviceId: cardReaderHolders.deviceId })
-      .from(cardReaderHolders)
-      .where(eq(cardReaderHolders.readerId, readerId));
+      .select({ deviceId: cardReaders.heldByDeviceId })
+      .from(cardReaders)
+      .where(eq(cardReaders.id, readerId));
     return row?.deviceId ?? null;
   }
 
@@ -770,7 +766,10 @@ describe("reader holders", () => {
       .select({ label: devices.label })
       .from(devices)
       .where(eq(devices.id, holder));
-    await suite.db.insert(cardReaderHolders).values({ readerId: held!, deviceId: holder });
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: holder })
+      .where(eq(cardReaders.id, held!));
     let orderNumber = 0;
     const order = async () => {
       orderNumber += 1;
@@ -1231,7 +1230,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
 
   async function activeOf(id: string): Promise<boolean> {
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
-    return row!.active;
+    return row!.disabledAt === null;
   }
 
   it("answers reader.provider_disconnected when the seat finds no credential during the call", async () => {
@@ -1488,7 +1487,7 @@ describe("reader adoption and local management", () => {
     });
     expect(rows.find((row) => row.id === id)).toMatchObject({
       printsOwnSlipAutomatically: true,
-      active: false,
+      disabledAt: expect.any(String),
     });
   });
 
@@ -1553,7 +1552,10 @@ describe("reader adoption and local management", () => {
     // `dated` is derived in JavaScript: `disabled_at is not null` in SQL would come back as 0/1.
     const disabled = (
       await suite.db
-        .select({ active: cardReaders.active, disabledAt: cardReaders.disabledAt })
+        .select({
+          active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean),
+          disabledAt: cardReaders.disabledAt,
+        })
         .from(cardReaders)
         .where(eq(cardReaders.id, id))
     ).map(({ active, disabledAt }) => ({ active, dated: disabledAt !== null }));
@@ -1567,7 +1569,7 @@ describe("reader adoption and local management", () => {
       .select({
         id: cardReaders.id,
         name: cardReaders.name,
-        active: cardReaders.active,
+        active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean),
         disabledAt: cardReaders.disabledAt,
       })
       .from(cardReaders);
@@ -1757,7 +1759,7 @@ describe("reader adoption and local management", () => {
       await suite.db
         .select({
           name: cardReaders.name,
-          active: cardReaders.active,
+          active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean),
           disabledAt: cardReaders.disabledAt,
         })
         .from(cardReaders)
@@ -1768,7 +1770,7 @@ describe("reader adoption and local management", () => {
     expect(removed).toEqual([vendor.providerRef]);
     expect(
       await suite.db
-        .select({ active: cardReaders.active })
+        .select({ active: sql<boolean>`${cardReaders.disabledAt} is null`.mapWith(Boolean) })
         .from(cardReaders)
         .where(eq(cardReaders.id, id)),
     ).toEqual([{ active: false }]);
@@ -2189,10 +2191,10 @@ describe("reader delete", () => {
 
   async function readerRow(id: string) {
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
-    return row!;
+    return { ...row!, active: row!.disabledAt === null };
   }
 
-  /** Every row in the three link tables naming the reader. */
+  /** The choices, profile entries and holder naming this reader. */
   async function linksOf(readerId: string) {
     return {
       chosen: await suite.db
@@ -2204,18 +2206,21 @@ describe("reader delete", () => {
         .from(deviceProfileCardReaders)
         .where(eq(deviceProfileCardReaders.readerId, readerId)),
       held: await suite.db
-        .select()
-        .from(cardReaderHolders)
-        .where(eq(cardReaderHolders.readerId, readerId)),
+        .select({ readerId: cardReaders.id, deviceId: cardReaders.heldByDeviceId })
+        .from(cardReaders)
+        .where(and(eq(cardReaders.id, readerId), isNotNull(cardReaders.heldByDeviceId))),
     };
   }
 
-  /** A device that lists, chooses and holds the reader: one row in each link table. */
+  /** A device that lists, chooses and holds the reader. */
   async function linkReader(readerId: string): Promise<string> {
     const device = await seedDevice();
     await listOnProfile(device, readerId);
     await suite.db.insert(deviceCardReaders).values({ deviceId: device, readerId });
-    await suite.db.insert(cardReaderHolders).values({ readerId, deviceId: device });
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: device })
+      .where(eq(cardReaders.id, readerId));
     return device;
   }
 
@@ -2423,7 +2428,12 @@ describe("reader delete", () => {
     expect(await deleted.json()).toEqual(impact);
     expect(removed).toEqual([]);
     const after = await readerRow(id);
-    expect(after).toEqual({ ...row, active: false, deletedAt: after.deletedAt });
+    expect(after).toEqual({
+      ...row,
+      active: false,
+      heldByDeviceId: null,
+      deletedAt: after.deletedAt,
+    });
     expect(after.deletedAt).not.toBeNull();
     expect(after.unpairedAt).toBeNull();
     expect(await linksOf(id)).toEqual({ chosen: [], listed: [], held: [] });
@@ -2782,7 +2792,7 @@ describe("reader delete", () => {
     it(`refuses adopting a provider id whose listing was taken before ${action} dropped it there, changing nothing`, async () => {
       const venue = await seedVenueWithStaff();
       const { seat, removed } = unpairingSeat();
-      let dropped: { status: number; row: typeof cardReaders.$inferSelect } | undefined;
+      let dropped: { status: number; row: Awaited<ReturnType<typeof readerRow>> } | undefined;
       const listing: CardProviderContribution = {
         ...seat,
         readers: {
@@ -2810,7 +2820,9 @@ describe("reader delete", () => {
         body: { error: { code: "reader.not_listed", params: { providerId: "stripe" } } },
       });
       expect(
-        await suite.db.select().from(cardReaders).where(eq(cardReaders.providerRef, ref)),
+        (await suite.db.select().from(cardReaders).where(eq(cardReaders.providerRef, ref))).map(
+          (row) => ({ ...row, active: row.disabledAt === null }),
+        ),
       ).toEqual([dropped!.row]);
       expect(dropped!.row).toMatchObject({ active: false });
       expect(dropped!.row.unpairedAt).not.toBeNull();
@@ -2994,7 +3006,7 @@ describe("reader delete", () => {
         provider: "stripe",
         providerRef,
         name: "Old",
-        active: false,
+        disabledAt: "2026-10-10T10:00:00.000Z",
         unpairedAt: null,
         deletedAt: "2026-10-10T10:00:00.000Z",
       });
@@ -3028,7 +3040,10 @@ describe("reader delete", () => {
         });
         expect(restored.status).toBe(201);
         expect(await restored.json()).toEqual({ id: current.id, status: "paired" });
-        expect(await readerRow(current.id)).toEqual(current);
+        expect(await readerRow(current.id)).toEqual({
+          ...current,
+          active: current.disabledAt === null,
+        });
       }
     });
 
@@ -3206,7 +3221,7 @@ describe("provider On/Off", () => {
     });
     await suite.db
       .update(cardReaders)
-      .set({ active: false, unpairedAt: nowIso() })
+      .set({ disabledAt: nowIso(), unpairedAt: nowIso() })
       .where(eq(cardReaders.id, reader[0]!.id));
     const off = await change(cookie, false, 0);
     expect({ status: off.status, body: await off.json() }).toEqual({

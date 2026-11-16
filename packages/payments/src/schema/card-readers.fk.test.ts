@@ -30,7 +30,6 @@ describe("card_readers", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0]!.name).toBe("Counter");
     expect(stored[0]!.provider).toBe("sumup");
-    expect(stored[0]!.active).toBe(true);
     expect(stored[0]!.disabledAt).toBeNull();
     expect(stored[0]!.unpairedAt).toBeNull();
 
@@ -57,7 +56,12 @@ describe("card_readers", () => {
     const [old] = await withTransaction(db, (tx) =>
       tx
         .insert(cardReaders)
-        .values({ provider: "sumup", providerRef: "rdr_free", name: "Old", active: false })
+        .values({
+          provider: "sumup",
+          providerRef: "rdr_free",
+          name: "Old",
+          disabledAt: "2026-11-01T00:00:00.000Z",
+        })
         .returning({ id: cardReaders.id }),
     );
     const dup = await captureError(() =>

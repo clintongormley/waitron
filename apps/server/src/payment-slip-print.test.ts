@@ -16,7 +16,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readBillEditState } from "./bill-editing.js";
 import { decimal } from "@waitron/shared";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { cardReaders, cardReaderHolders, payments } from "@waitron/payments";
+import { cardReaders, payments } from "@waitron/payments";
 import { validateCapabilities } from "@waitron/layouts";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -543,21 +543,21 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
   const readers = await venue.db.select().from(cardReaders);
   const [holder] = await venue.db
     .select()
-    .from(cardReaderHolders)
-    .where(eq(cardReaderHolders.readerId, readers[1]!.id));
+    .from(cardReaders)
+    .where(eq(cardReaders.id, readers[1]!.id));
   onTestFinished(async () => {
     await withTransaction(venue.db, (tx) =>
       tx
-        .update(cardReaderHolders)
-        .set({ deviceId: holder!.deviceId, heldAt: holder!.heldAt })
-        .where(eq(cardReaderHolders.readerId, readers[1]!.id)),
+        .update(cardReaders)
+        .set({ heldByDeviceId: holder!.heldByDeviceId })
+        .where(eq(cardReaders.id, readers[1]!.id)),
     );
   });
   await withTransaction(venue.db, async (tx) => {
     await tx
-      .update(cardReaderHolders)
-      .set({ deviceId: venue.deviceId })
-      .where(eq(cardReaderHolders.readerId, readers[1]!.id));
+      .update(cardReaders)
+      .set({ heldByDeviceId: venue.deviceId })
+      .where(eq(cardReaders.id, readers[1]!.id));
     await tx.update(cardReaders).set({ printsOwnSlipAutomatically: true });
     await tx
       .update(cardReaders)

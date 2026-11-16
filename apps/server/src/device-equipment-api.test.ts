@@ -29,7 +29,6 @@ import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import type { ProfilePrinterLists } from "@waitron/layouts";
 import type { StaffNotice, StaffNoticeReadContext, WaitronModule } from "@waitron/module";
 import {
-  cardReaderHolders,
   cardReaders,
   deviceCardReaders,
   failAttempting,
@@ -239,10 +238,10 @@ async function printerHolder(printerId: string): Promise<string | null> {
 
 async function readerHolders(readerId: string): Promise<string[]> {
   const rows = await suite.db
-    .select({ deviceId: cardReaderHolders.deviceId })
-    .from(cardReaderHolders)
-    .where(eq(cardReaderHolders.readerId, readerId));
-  return rows.map((row) => row.deviceId);
+    .select({ deviceId: cardReaders.heldByDeviceId })
+    .from(cardReaders)
+    .where(eq(cardReaders.id, readerId));
+  return rows.flatMap((row) => (row.deviceId === null ? [] : [row.deviceId]));
 }
 
 function payBody(readerId?: string) {
@@ -516,10 +515,7 @@ describe("paying only on a reader this device holds, with no other device's paym
   it("/api/pay on a reader with another device's payment in progress is reader.payment_in_progress", async () => {
     await stalledPayment(venue.cookie2);
     // A stuck payment of B's stays on R2 while A comes to hold it.
-    await suite.db
-      .update(cardReaderHolders)
-      .set({ deviceId: a })
-      .where(eq(cardReaderHolders.readerId, r2));
+    await suite.db.update(cardReaders).set({ heldByDeviceId: a }).where(eq(cardReaders.id, r2));
     const calls = venue.card.collectCalls.length;
 
     const paid = await pay(venue.cookie, r2);
@@ -559,10 +555,7 @@ describe("paying only on a reader this device holds, with no other device's paym
 
     it("refuses a reader with another device's payment in progress as reader.payment_in_progress", async () => {
       await stalledPayment(venue.cookie2);
-      await suite.db
-        .update(cardReaderHolders)
-        .set({ deviceId: a })
-        .where(eq(cardReaderHolders.readerId, r2));
+      await suite.db.update(cardReaders).set({ heldByDeviceId: a }).where(eq(cardReaders.id, r2));
       const billId = await tabWith(venue, "Tarta");
       const calls = venue.card.collectCalls.length;
 
@@ -627,13 +620,16 @@ describe("what a device may newly choose", () => {
       id = fp;
     } else if (shape === "unknown printer") id = randomUUID();
     else if (shape === "disabled reader") {
-      await suite.db.update(cardReaders).set({ active: false }).where(eq(cardReaders.id, r3));
+      await suite.db
+        .update(cardReaders)
+        .set({ disabledAt: new Date().toISOString() })
+        .where(eq(cardReaders.id, r3));
       id = r3;
     } else if (shape === "unpaired reader") {
       const at = new Date().toISOString();
       await suite.db
         .update(cardReaders)
-        .set({ active: false, disabledAt: at, unpairedAt: at })
+        .set({ disabledAt: at, unpairedAt: at })
         .where(eq(cardReaders.id, r3));
       id = r3;
     } else id = await seedReader("Unlisted reader");
@@ -683,9 +679,9 @@ describe("what a device may newly choose", () => {
         .from(printerHolders)
         .where(eq(printerHolders.deviceId, a)),
       readerHolds: await suite.db
-        .select({ readerId: cardReaderHolders.readerId })
-        .from(cardReaderHolders)
-        .where(eq(cardReaderHolders.deviceId, a)),
+        .select({ readerId: cardReaders.id })
+        .from(cardReaders)
+        .where(eq(cardReaders.heldByDeviceId, a)),
       readerChoice: await suite.db
         .select({ readerId: deviceCardReaders.readerId })
         .from(deviceCardReaders)
@@ -1329,7 +1325,9 @@ describe("a deleted reader", () => {
   async function readerState() {
     return {
       choices: await readerChoices(),
-      holders: await suite.db.select().from(cardReaderHolders),
+      holders: await suite.db
+        .select({ id: cardReaders.id, holder: cardReaders.heldByDeviceId })
+        .from(cardReaders),
     };
   }
 

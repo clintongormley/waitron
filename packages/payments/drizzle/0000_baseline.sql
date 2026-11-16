@@ -1,22 +1,15 @@
-CREATE TABLE `card_reader_holders` (
-	`reader_id` text PRIMARY KEY NOT NULL,
-	`device_id` text NOT NULL,
-	`held_at` text NOT NULL,
-	FOREIGN KEY (`reader_id`) REFERENCES `card_readers`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `card_readers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`provider` text NOT NULL,
 	`provider_ref` text NOT NULL,
 	`name` text NOT NULL,
-	`active` integer DEFAULT true NOT NULL,
+	`held_by_device_id` text,
 	`prints_own_slip_automatically` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
 	`disabled_at` text,
 	`unpaired_at` text,
-	`deleted_at` text
+	`deleted_at` text,
+	FOREIGN KEY (`held_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `card_readers_provider_ref_key` ON `card_readers` (`provider`,`provider_ref`) WHERE "card_readers"."deleted_at" is null;--> statement-breakpoint

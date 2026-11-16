@@ -58,7 +58,6 @@ import {
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
   cardReaders,
-  cardReaderHolders,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
@@ -2016,10 +2015,14 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         { provider: "stripe", providerRef: "reader_b", name: "Reader B" },
       ])
       .returning();
-    await suite.db.insert(cardReaderHolders).values([
-      { readerId: readerA!.id, deviceId: cfg.origin.deviceId },
-      { readerId: readerB!.id, deviceId: retrying.origin.deviceId },
-    ]);
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: cfg.origin.deviceId })
+      .where(eq(cardReaders.id, readerA!.id));
+    await suite.db
+      .update(cardReaders)
+      .set({ heldByDeviceId: retrying.origin.deviceId })
+      .where(eq(cardReaders.id, readerB!.id));
     const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
     suite.db.run(sql`update payments set reader_id = ${readerA!.id}
       where working_order_id = ${id}`);

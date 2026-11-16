@@ -491,9 +491,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
 }
 
 async function seedLowReader(name = "Card reader"): Promise<void> {
-  await db
-    .insert(cardReaders)
-    .values({ provider: "stub", providerRef: `ref-${name}`, name, active: true });
+  await db.insert(cardReaders).values({ provider: "stub", providerRef: `ref-${name}`, name });
 }
 
 /** A document print job old enough to count as stuck, on an active printer. */
@@ -678,7 +676,6 @@ describe("ongoing alert sources through the route", () => {
       provider: "sumup",
       providerRef: "rdr_low",
       name: "Counter",
-      active: true,
     });
     const paths: string[] = [];
     const fetch = (async (input: string | URL | Request) => {
