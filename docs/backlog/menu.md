@@ -1325,5 +1325,7 @@ The owner's A1515 decisions, recorded in the [proposal](../superpowers/specs/202
 keep one lunch per diner, permit later choices and independent course sends, and price each premium
 supplement separately. Table service is one 10% service; takeaway/delivery VAT treatment remains
 with S10/Lane L and adviser question [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
+Until T17 is answered a set lunch is sold only eaten here: a takeaway order refuses one
+(`order.set_lunch_takeaway`, `apps/server/src/order-dining.ts`).
 Existing menus and service periods govern availability. An unchosen course never changes the
 price or blocks payment.

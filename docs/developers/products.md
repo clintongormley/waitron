@@ -174,8 +174,11 @@ class again where the product has none) with its gross price, which is the same 
 order's `working_orders.dining` picks which class a bill, payment or filing rates the line at; it is
 fixed once the kitchen has any of the order, a payment has started or the order is no longer open
 (`working_orders_dining_fixed`); a walk-up sale is priced at payment,
-from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
-no class of its own was frozen at its parent's class, and an extras line takes the classes frozen for
+from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). The class is
+picked in two places only: `priceOrderLines`, for lines being priced, and `readLockedLines`'s
+stored-line columns, for stored lines a bill, payment or filing reads (both in that file). A set
+lunch and its choices sell only eaten here: a takeaway order refuses one
+(`order.set_lunch_takeaway`). A variant with no class of its own was frozen at its parent's class, and an extras line takes the classes frozen for
 its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
 an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
 a till only when a menu including it is published again, and until then that menu shows
