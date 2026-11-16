@@ -530,7 +530,9 @@ describe("a card sale in flight when the box steps down", () => {
   });
 
   // Control, run locally and not committed: with this payment sent before the stepdown instead,
-  // this case fails receiving status 200, outcome "received" and collectCalls 2.
+  // this case fails with
+  //   expected { status: 200, body: { …(4) }, …(1) } to deeply equal { status: 503, …(2) }
+  // (the received body is the settled bill, its card payment `received`, and collectCalls 2).
   it("a reader bill payment made after the stepdown began is refused handover.stepping_down and asks no reader", () => {
     expect(seen().billPayment).toEqual({
       status: 503,
