@@ -85,7 +85,7 @@ try {
     });
     const cookie = await sessionCookieForTest(store.venue, session.token);
     const management = await db.withTransaction(store.venue, (tx) =>
-      identity.startManagementSession(tx, { personId: person!.id }),
+      identity.startManagementSession(tx, { personId: person!.id, method: "setup" }),
     );
     const headers = { cookie, [PERSON_HEADER]: person!.id, "content-type": "application/json" };
     const managerHeaders = { cookie: `${MANAGEMENT_COOKIE}=${management.token}` };

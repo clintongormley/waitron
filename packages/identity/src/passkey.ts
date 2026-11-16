@@ -342,7 +342,7 @@ export async function finishPasskeyAuthentication(
       lastUsedAt: nowIso(),
     })
     .where(eq(webauthnCredentials.id, cred.id));
-  return startManagementSession(tx, { personId: cred.personId });
+  return startManagementSession(tx, { method: "passkey", personId: cred.personId });
 }
 
 /**

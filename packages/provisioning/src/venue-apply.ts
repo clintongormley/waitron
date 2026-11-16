@@ -562,7 +562,7 @@ async function seedDeviceProfiles(
   if (personId === undefined) {
     throw new Error("applyVenue: seed-device-profiles before seed-admin");
   }
-  const session = await startManagementSession(tx, { personId });
+  const session = await startManagementSession(tx, { personId, method: "setup" });
   for (const profile of toCreate) {
     await createDeviceProfile(tx, {
       managementSessionId: session.token,

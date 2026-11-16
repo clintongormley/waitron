@@ -10,6 +10,20 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  /** person_id is the person signing in. */
+  readonly "dashboard.signed_in": {
+    readonly method: "password" | "passkey" | "google" | "invitation" | "setup";
+  };
+  /** person_id is the person signing out, the access-removing administrator, or null for break-glass. */
+  readonly "dashboard.signed_out": {
+    readonly reason:
+      | "signed_out"
+      | "operation_finished"
+      | "password_changed"
+      | "account_action_completed"
+      | "access_removed"
+      | "break_glass";
+  };
   readonly "photo.deleted": {
     readonly filename: string;
     readonly names: Readonly<Record<string, string>>;
@@ -114,6 +128,8 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "dashboard.signed_in": { subject: "person" },
+  "dashboard.signed_out": { subject: "person" },
   "photo.deleted": { subject: "media_image" },
   "menu_edition.rescheduled": { subject: "menu_version" },
   "menu.archived": { subject: "menu" },

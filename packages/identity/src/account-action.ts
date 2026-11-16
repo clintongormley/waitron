@@ -344,7 +344,10 @@ async function finishClaimedAction(
     await queueSecurityChangeMail(tx, { personId, change: "password_changed" });
   return {
     personId,
-    session: input.purpose === "invitation" ? await startManagementSession(tx, { personId }) : null,
+    session:
+      input.purpose === "invitation"
+        ? await startManagementSession(tx, { method: "invitation", personId })
+        : null,
   };
 }
 

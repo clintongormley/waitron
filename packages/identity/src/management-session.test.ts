@@ -1,4 +1,4 @@
-import { captureError, restrictRefused } from "@waitron/db";
+import { captureError, restrictRefused, readActivityForPerson } from "@waitron/db";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -35,6 +35,21 @@ const agedTo = (at: string, token: string) =>
   sql`update dashboard_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(token)}`;
 
 describe("management session lifecycle", () => {
+  it("records dashboard.signed_in with the method", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    await run((tx) => startManagementSession(tx, { personId, method: "passkey" }));
+    const entries = await readActivityForPerson(suite.db, personId);
+    expect(entries).toEqual([
+      expect.objectContaining({
+        kind: "dashboard.signed_in",
+        subjectKind: "person",
+        subjectId: personId,
+        personId,
+        data: { method: "passkey" },
+      }),
+    ]);
+  });
+
   it("a new login has no fresh proof", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
