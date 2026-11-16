@@ -154,7 +154,8 @@ it("previews without writing and changes no bytes on a second write", () => {
 
 it("ports templates and schema paths while retaining captured demo keys", () => {
   const root = fixture({
-    "apps/server/src/day.ts": "const source = sql`sessions`; sql`from sessions where id = ${id}`;",
+    "apps/server/src/day.ts":
+      'const source = sql`sessions`; sql`from sessions where id = ${id}`; sql`select ${id} from sessions`; sql.raw(`select id from sessions`); "with x as (select id from sessions) select * from x";',
     "packages/db/mutation-costs.json":
       '{"src/schema/identity/sessions.ts":1,"src/schema/identity/management-sessions.ts":2,"src/schema/identity/management-account-actions.ts":3}',
     "packages/country-es/test-fixtures/demo/madrid-before-move.en.json": '{"sessions":[]}',
@@ -164,7 +165,7 @@ it("ports templates and schema paths while retaining captured demo keys", () => 
   });
   run({ root, write: true });
   expect(read(root, "apps/server/src/day.ts")).toBe(
-    "const source = sql`till_sessions`; sql`from till_sessions where id = ${id}`;",
+    'const source = sql`till_sessions`; sql`from till_sessions where id = ${id}`; sql`select ${id} from till_sessions`; sql.raw(`select id from till_sessions`); "with x as (select id from till_sessions) select * from x";',
   );
   expect(JSON.parse(read(root, "packages/db/mutation-costs.json"))).toEqual({
     "src/schema/identity/till-sessions.ts": 1,

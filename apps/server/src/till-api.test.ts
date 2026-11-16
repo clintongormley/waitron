@@ -1237,11 +1237,14 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 
   it("REJECTS the stored token hash from a database copy as a cookie", async () => {
     const token = await openSession(suite.db);
-    const { rows } = await suite.db.execute<{ token_hash: string }>(
-      sql`select token_hash from till_sessions where token_hash = ${hashSessionToken(token)}`,
+    const { rows } = await suite.db.execute<{ token_hash: string; person_id: string }>(
+      sql`select token_hash, person_id from till_sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
-      headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.token_hash}` },
+      headers: {
+        cookie: `${SESSION_COOKIE}=${rows[0]!.token_hash}`,
+        [PERSON_HEADER]: rows[0]!.person_id,
+      },
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });

@@ -141,13 +141,19 @@ function rewrite(path, text) {
       ts.isTemplateTail(node)
     ) {
       const raw = text.slice(node.getStart(source), node.end);
-      const template = ts.isTemplateExpression(parent) ? parent : node;
+      const template = ts.isTemplateSpan(parent)
+        ? parent.parent
+        : ts.isTemplateExpression(parent)
+          ? parent
+          : node;
       const sqlText =
         ts.isTaggedTemplateExpression(template.parent) &&
         template.parent.tag.getText(source) === "sql";
+      const prefix = ts.isTemplateExpression(template) ? template.head.text : node.text;
       const statement =
-        ts.isStringLiteral(node) &&
-        /^\s*(select|insert|update|delete|create|alter|drop|from|join)\b/i.test(node.text);
+        /^\s*\(*\s*(select|insert|update|delete|create|alter|drop|from|join|with|explain|pragma)\b/i.test(
+          prefix,
+        );
       let next =
         sqlText || statement
           ? raw.replace(

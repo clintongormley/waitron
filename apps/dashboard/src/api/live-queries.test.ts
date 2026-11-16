@@ -364,6 +364,7 @@ it.each([
     ],
   ],
   [
+    // `till_sessions` has no declared live resource.
     "getDeviceDeleteImpact",
     ["d1"],
     [
