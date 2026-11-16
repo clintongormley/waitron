@@ -1763,12 +1763,9 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Service steps after a bill moves
 
-2 entries, size S. A1333's text is unchanged from the index it came from (backlog review,
+1 entry, size S. A1333's text is unchanged from the index it came from (backlog review,
 2026-11-06).
 
-- **A step done before a bill moves onto a seated table, or before two parties combine, is asked
-  again at the receiving table** (decision 2026-11-16: asking twice rather than hiding the receiving
-  party's own step).
 - **A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice
   4b).** A table that sent its own order keeps those order times after every bill has left, so the
   step stays.
@@ -2158,6 +2155,12 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
+
+- **A step done before a bill moves onto a seated table, or before two parties combine, is asked
+  again at the receiving table (watcher, 2026-11-16, #3507, not the owner; the owner may
+  overrule).** "Asking twice is a small annoyance; a missed step is a lost sale." A Done is copied
+  only to the party a move to a free table or a split opens (`carryDoneWithBill`,
+  `apps/server/src/service-step-done.ts`).
 
 - **A dragged table keeps its square when the map refits mid-drag (A766 decision 4, kept by the
   watcher 2026-11-16, not the owner).** After a refit the drawn table is no longer under the
