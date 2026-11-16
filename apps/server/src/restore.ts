@@ -77,6 +77,7 @@ import { recoveryStreamSourceId } from "./recovery-source.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
+import { BackupManifestReadError, readBackupManifest } from "./backup-manifest-reader.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
@@ -319,7 +320,7 @@ async function validateEntryMetadata(
   nodeDump: Uint8Array;
   secretEntries: ArchiveEntry[];
 }> {
-  // Rejection precedence is the statement order below: missing manifest → missing dump → missing
+  // Rejection precedence is the statement order below: missing manifest → manifest admission → missing dump → missing
   // node copy → compatibility gate → unexpected entry → path guard / duplicate destination → identity
   // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
   // destination is refused by the guard loop regardless.
@@ -343,7 +344,14 @@ async function validateEntryMetadata(
   if (manifestEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: MANIFEST_NAME });
   }
-  const manifest = JSON.parse(Buffer.from(manifestEntry.bytes).toString("utf8")) as BackupManifest;
+  let manifest: BackupManifest;
+  try {
+    manifest = readBackupManifest(manifestEntry.bytes);
+  } catch (error) {
+    if (error instanceof BackupManifestReadError)
+      throw new AppError("restore.manifest_invalid", { reason: error.status });
+    throw error;
+  }
 
   if (dumpEntry === undefined) {
     throw new AppError("restore.archive_incomplete", { missing: DB_DUMP_NAME });
