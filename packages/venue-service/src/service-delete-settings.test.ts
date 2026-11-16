@@ -21,7 +21,6 @@ import {
   floorZones,
   kitchenStations,
   menuPeriods,
-  menuPeriodStaffMenus,
   routingCellPeriods,
   routingCells,
   seasons,
@@ -236,9 +235,9 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     const periods = await tx
       .insert(menuPeriods)
       .values([
-        { departmentId: f.department, name: "Lunch", menuId: menu!.id },
-        { departmentId: f.department, name: "Dinner", menuId: menu!.id },
-        { departmentId: f.alpha, name: "Other", menuId: menu!.id },
+        { departmentId: f.department, name: "Lunch", menuId: menu!.id, staffMenuIds: [menu!.id] },
+        { departmentId: f.department, name: "Dinner", menuId: menu!.id, staffMenuIds: [menu!.id] },
+        { departmentId: f.alpha, name: "Other", menuId: menu!.id, staffMenuIds: [menu!.id] },
       ])
       .returning();
     const [p1, p2, p3] = periods.map((row) => row.id) as [string, string, string];
@@ -259,13 +258,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         { cellId: cells[1]!.id, periodId: p3, noPreparation: true },
       ])
       .returning();
-    await tx.insert(menuPeriodStaffMenus).values(
-      periods.map((row) => ({
-        periodId: row.id,
-        departmentId: row.departmentId,
-        menuId: menu!.id,
-      })),
-    );
     for (const zoneId of [f.gone, f.elsewhere])
       await tx
         .update(floorZones)
@@ -285,7 +277,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       cells: routingCells,
       children: routingCellPeriods,
       periods: menuPeriods,
-      staff: menuPeriodStaffMenus,
       policies: floorZones,
       routes: departmentTransferDestinations,
       menus: menus,
@@ -394,8 +385,8 @@ it("delete takes the department's season days and their ranges before its period
     const [lunch, other] = await tx
       .insert(menuPeriods)
       .values([
-        { departmentId: f.department, name: "Lunch", menuId: menu!.id },
-        { departmentId: f.alpha, name: "Other", menuId: menu!.id },
+        { departmentId: f.department, name: "Lunch", menuId: menu!.id, staffMenuIds: [menu!.id] },
+        { departmentId: f.alpha, name: "Other", menuId: menu!.id, staffMenuIds: [menu!.id] },
       ])
       .returning();
     const [winter] = await tx
@@ -470,7 +461,12 @@ async function paintSeasons(tx: Transaction) {
   const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
   const [lunch] = await tx
     .insert(menuPeriods)
-    .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })
+    .values({
+      departmentId: f.department,
+      name: "Lunch",
+      menuId: menu!.id,
+      staffMenuIds: [menu!.id],
+    })
     .returning();
   const seasonsByName = new Map(
     (await ensureDefaultSeasons(tx)).map((season) => [season.name, season.id]),

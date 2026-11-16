@@ -102,7 +102,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "floor_zones",
     "departments",
     "menu_periods",
-    "menu_period_staff_menus",
     "kitchen_courses",
     "order_draft_events",
     "bill_edit_states",
@@ -134,7 +133,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "departments",
     "floor_zones",
     "menu_periods",
-    "menu_period_staff_menus",
     "device_zone_selections",
     "device_zone_selection_zones",
     "kitchen_courses",
@@ -184,7 +182,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "party_tables",
     "dining_tables",
     "menu_periods",
-    "menu_period_staff_menus",
     "floor_zones",
   ],
 };

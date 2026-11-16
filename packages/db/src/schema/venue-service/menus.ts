@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menus } from "../menus.js";
-import { count, enumCheck, enumType, id, label, newId, table } from "../columns.js";
+import { enumCheck, enumType, id, json, jsonShapeCheck, label, newId, table } from "../columns.js";
 import { floorPlanSets } from "../floor-plans.js";
 import { CALENDAR_COLOURS } from "@waitron/shared";
 import { departments } from "./service.js";
@@ -21,10 +21,13 @@ export const menuPeriods = table(
      * A set of this period's own department. The key names core's floor_plan_sets, so the
      * database takes any department's set; the period routes refuse another department's with
      * menu_period.invalid (floorPlanSetId) and the configuration import with
-     * menu_periods.floor_plan_set_id. A composite key to floor_plan_sets would rebuild
-     * menu_periods, whose rebuild empties menu_period_staff_menus (its key cascades).
+     * menu_periods.floor_plan_set_id.
      */
     floorPlanSetId: id("floor_plan_set_id").references(() => floorPlanSets.id),
+    // JSON has no menu key: writeMenuPeriod checks active choices and duplicates.
+    // validateMenuTimetables checks bundle IDs; jsonReferences remaps them on import.
+    // Menus are only deactivated.
+    staffMenuIds: json<string[]>("staff_menu_ids").notNull().default([]),
   },
   (t) => [
     foreignKey({
@@ -41,28 +44,6 @@ export const menuPeriods = table(
     uniqueIndex("menu_periods_department_key").on(t.id, t.departmentId),
     check("menu_periods_name_ck", sql`trim(${t.name}) <> ''`),
     check("menu_periods_colour_ck", enumCheck(t.colour)),
-  ],
-);
-
-export const menuPeriodStaffMenus = table(
-  "menu_period_staff_menus",
-  {
-    periodId: id("period_id").notNull(),
-    departmentId: id("department_id").notNull(),
-    menuId: id("menu_id").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({ columns: [t.periodId, t.menuId], name: "menu_period_staff_menus_pk" }),
-    foreignKey({
-      columns: [t.periodId, t.departmentId],
-      foreignColumns: [menuPeriods.id, menuPeriods.departmentId],
-      name: "menu_period_staff_menus_period_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.menuId],
-      foreignColumns: [menus.id],
-      name: "menu_period_staff_menus_menu_fk",
-    }),
+    check("menu_periods_staff_menu_ids_ck", jsonShapeCheck(t.staffMenuIds, "array")),
   ],
 );

@@ -23,7 +23,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "day_cutover_changes",
     "routing_cell_periods",
     "menu_periods",
-    "menu_period_staff_menus",
     "departments",
     "sections",
     "section_members",
@@ -44,7 +43,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "departments",
     "floor_zones",
     "menu_periods",
-    "menu_period_staff_menus",
     "routing_cells",
     "menus",
     "categories",
@@ -70,7 +68,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
 it("refreshes Opening hours from its periods, ranges, dates, menu names and the routing that names a period", () => {
   expect(QUERY_DEPENDENCIES["opening-hours"]).toEqual([
     "menu_periods",
-    "menu_period_staff_menus",
     "departments",
     "menus",
     "settings.business_day",
@@ -122,7 +119,6 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "routing_cell_periods",
       "service_steps",
       "menu_periods",
-      "menu_period_staff_menus",
       "department_days",
       "department_day_ranges",
       "zone_days",

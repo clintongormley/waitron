@@ -1,11 +1,5 @@
 import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  departments,
-  menuPeriods,
-  menuPeriodStaffMenus,
-  products,
-  type Transaction,
-} from "@waitron/db";
+import { departments, menuPeriods, products, type Transaction } from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/menu";
 import type { RoutingPeriod } from "./routing-types.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
@@ -13,6 +7,7 @@ import { rangeSpan } from "./service-day.js";
 
 type PeriodRow = Omit<RoutingPeriod, "productIds" | "departmentInactive"> & {
   menuId: string;
+  staffMenuIds: readonly string[];
   departmentActive: boolean;
 };
 
@@ -28,6 +23,7 @@ export async function readPeriods(tx: Transaction, ids?: readonly string[]): Pro
       name: menuPeriods.name,
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
+      staffMenuIds: menuPeriods.staffMenuIds,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -40,17 +36,13 @@ export async function readPeriods(tx: Transaction, ids?: readonly string[]): Pro
  */
 export async function periodProductIds(
   tx: Transaction,
-  periods: readonly { id: string; menuId: string }[],
+  periods: readonly { id: string; menuId: string; staffMenuIds: readonly string[] }[],
 ): Promise<Map<string, string[]>> {
   const found = new Map<string, string[]>();
   if (periods.length === 0) return found;
-  const menusOf = new Map(periods.map((period) => [period.id, [period.menuId]]));
-  for (const row of await tx
-    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
-    .from(menuPeriodStaffMenus)
-    .where(inArray(menuPeriodStaffMenus.periodId, [...menusOf.keys()]))
-    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId)))
-    menusOf.get(row.periodId)!.push(row.menuId);
+  const menusOf = new Map(
+    periods.map((period) => [period.id, [period.menuId, ...period.staffMenuIds]]),
+  );
   const graph = await loadSectionGraph(tx);
   const rootOf = new Map(graph.roots().map((root) => [root.menuId, root.sectionId]));
   const parentOf = new Map(

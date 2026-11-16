@@ -223,7 +223,14 @@ export async function readPlannedServiceGuides(
   }
   return {
     departments,
-    periods,
+    periods: periods.map(({ id, departmentId, name, colour, menuId, floorPlanSetId }) => ({
+      id,
+      departmentId,
+      name,
+      colour,
+      menuId,
+      floorPlanSetId,
+    })),
     departmentRanges,
     stationRanges,
   };

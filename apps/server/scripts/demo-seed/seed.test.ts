@@ -489,8 +489,8 @@ describe("seedDemoRestaurant", () => {
         staff_menus: string | null;
       }>(sql`
         select d.name as department, p.name, c.name as menu,
-          (select group_concat(sc.name, ',') from menu_period_staff_menus s
-            join menus sc on sc.id = s.menu_id where s.period_id = p.id) as staff_menus
+          (select group_concat(sc.name, ',') from json_each(p.staff_menu_ids) s
+            join menus sc on sc.id = s.value) as staff_menus
         from menu_periods p join departments d on d.id = p.department_id
         join menus c on c.id = p.menu_id
         order by d.name, p.name`);
@@ -582,7 +582,7 @@ describe("seedDemoRestaurant", () => {
         join (
           select department_id, menu_id, 0 as display_order from menu_periods
           union
-          select department_id, menu_id, display_order + 1 from menu_period_staff_menus
+          select p.department_id, s.value as menu_id, s.key + 1 as display_order from menu_periods p, json_each(p.staff_menu_ids) s
         ) dm on dm.department_id = z.department_id
         join menus c on c.id = dm.menu_id
         group by z.name, d.name, z.order_start, d.order_start, z.is_counter_default

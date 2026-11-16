@@ -83,7 +83,6 @@ for (const enabled of [true, false]) {
         "routing_cells",
         "routing_cell_periods",
         "menu_periods",
-        "menu_period_staff_menus",
         "department_days",
         "department_day_ranges",
         "zone_days",

@@ -2433,16 +2433,6 @@ CREATE UNIQUE INDEX `routing_cells_product_zone_key` ON `routing_cells` (`produc
 CREATE UNIQUE INDEX `routing_cells_all_zone_key` ON `routing_cells` (`zone_id`) WHERE "routing_cells"."category_id" is null and "routing_cells"."product_id" is null and "routing_cells"."no_category" = 0 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `routing_cells_no_category_every_zone_key` ON `routing_cells` (`no_category`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX `routing_cells_no_category_zone_key` ON `routing_cells` (`no_category`,`zone_id`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
-CREATE TABLE `menu_period_staff_menus` (
-	`period_id` text NOT NULL,
-	`department_id` text NOT NULL,
-	`menu_id` text NOT NULL,
-	`display_order` integer DEFAULT 0 NOT NULL,
-	PRIMARY KEY(`period_id`, `menu_id`),
-	FOREIGN KEY (`period_id`,`department_id`) REFERENCES `menu_periods`(`id`,`department_id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `menu_periods` (
 	`id` text PRIMARY KEY NOT NULL,
 	`department_id` text NOT NULL,
@@ -2450,11 +2440,13 @@ CREATE TABLE `menu_periods` (
 	`colour` text DEFAULT 'grey' NOT NULL,
 	`menu_id` text NOT NULL,
 	`floor_plan_set_id` text,
+	`staff_menu_ids` text DEFAULT '[]' NOT NULL,
 	FOREIGN KEY (`floor_plan_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_periods_name_ck" CHECK(trim("menu_periods"."name") <> ''),
-	CONSTRAINT "menu_periods_colour_ck" CHECK("menu_periods"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey'))
+	CONSTRAINT "menu_periods_colour_ck" CHECK("menu_periods"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')),
+	CONSTRAINT "menu_periods_staff_menu_ids_ck" CHECK(json_valid("menu_periods"."staff_menu_ids") and json_type("menu_periods"."staff_menu_ids") = 'array')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_periods_department_name_key` ON `menu_periods` (`department_id`,`name`);--> statement-breakpoint

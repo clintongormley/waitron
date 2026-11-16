@@ -22,7 +22,6 @@ export {
   kitchenNoticeKind,
   kitchenNotices,
   menuPeriods,
-  menuPeriodStaffMenus,
   orderKitchenNotes,
   orderServiceContexts,
   partyAllergyGuests,

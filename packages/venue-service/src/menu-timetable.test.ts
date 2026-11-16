@@ -24,7 +24,6 @@ import {
   floorZones,
   kitchenStations,
   menuPeriods,
-  menuPeriodStaffMenus,
   routingCellPeriods,
   routingCells,
   specialDayDates,
@@ -131,9 +130,13 @@ const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
 describe("Always fixture periods", () => {
   it("keeps the previous customer menu and staff menus when the fixture selects another default", async () => {
     const v = await venue({ timetable: false });
+    const [staffMenu, previousDefault] = [v.menus.Desayunos, v.menus.Bebidas].sort() as [
+      string,
+      string,
+    ];
     await scoped(async (tx) => {
-      await offerMenuThroughZone(tx, v.sala, v.menus.Desayunos);
-      await offerMenuThroughZone(tx, v.sala, v.menus.Bebidas, { displayOrder: 9 });
+      await offerMenuThroughZone(tx, v.sala, previousDefault);
+      await offerMenuThroughZone(tx, v.sala, staffMenu, { displayOrder: 9 });
       await offerMenuThroughZone(tx, v.sala, v.menus.Café, { makeDefault: true });
     });
     const offers = await scoped((tx) =>
@@ -148,23 +151,17 @@ describe("Always fixture periods", () => {
       })),
     ).toEqual([
       { id: v.menus.Café, audience: "customer", orderable: true },
-      { id: v.menus.Desayunos, audience: "staff", orderable: true },
-      { id: v.menus.Bebidas, audience: "staff", orderable: true },
+      { id: previousDefault, audience: "staff", orderable: true },
+      { id: staffMenu, audience: "staff", orderable: true },
     ]);
     expect(
-      await db
-        .select({
-          menuId: menuPeriodStaffMenus.menuId,
-          displayOrder: menuPeriodStaffMenus.displayOrder,
-        })
-        .from(menuPeriodStaffMenus)
-        .innerJoin(menuPeriods, eq(menuPeriods.id, menuPeriodStaffMenus.periodId))
-        .where(eq(menuPeriods.departmentId, v.restaurant))
-        .orderBy(menuPeriodStaffMenus.displayOrder),
-    ).toEqual([
-      { menuId: v.menus.Desayunos, displayOrder: 0 },
-      { menuId: v.menus.Bebidas, displayOrder: 9 },
-    ]);
+      (
+        await db
+          .select({ ids: menuPeriods.staffMenuIds })
+          .from(menuPeriods)
+          .where(eq(menuPeriods.departmentId, v.restaurant))
+      ).flatMap((row) => row.ids),
+    ).toEqual([previousDefault, staffMenu]);
   });
 
   it("keeps two menus orderable on both sides of midnight and both touching ranges", async () => {
@@ -433,15 +430,13 @@ describe("service-period writers", () => {
         .from(menuPeriods)
         .where(eq(menuPeriods.id, period.id)),
     ).toEqual([{ name: "Lunch", colour: "red", menuId: v.menus["Deli para llevar"] }]);
-    const staff = () =>
-      db
-        .select({
-          menuId: menuPeriodStaffMenus.menuId,
-          position: menuPeriodStaffMenus.displayOrder,
-        })
-        .from(menuPeriodStaffMenus)
-        .where(eq(menuPeriodStaffMenus.periodId, period.id))
-        .orderBy(menuPeriodStaffMenus.displayOrder);
+    const staff = async () =>
+      (
+        await db
+          .select({ ids: menuPeriods.staffMenuIds })
+          .from(menuPeriods)
+          .where(eq(menuPeriods.id, period.id))
+      ).flatMap((row) => row.ids.map((menuId, position) => ({ menuId, position })));
     expect(await staff()).toEqual([
       { menuId: v.menus.Café, position: 0 },
       { menuId: v.menus.Bebidas, position: 1 },
@@ -1194,18 +1189,17 @@ describe("the timetable's writers", () => {
       updateMenuPeriod(tx, periods.noches, { staffMenuIds: [menuRows.Cócteles] }),
     );
     expect(
-      await db
-        .select({ menuId: menuPeriodStaffMenus.menuId })
-        .from(menuPeriodStaffMenus)
-        .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
+      (
+        await db
+          .select({ ids: menuPeriods.staffMenuIds })
+          .from(menuPeriods)
+          .where(eq(menuPeriods.id, periods.noches))
+      ).flatMap((row) => row.ids.map((menuId) => ({ menuId }))),
     ).toEqual([{ menuId: menuRows.Cócteles }]);
     await scoped((tx) => deletePeriod(tx, periods.noches, null, AT, 1));
-    expect(
-      await db
-        .select()
-        .from(menuPeriodStaffMenus)
-        .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
-    ).toEqual([]);
+    expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.noches))).toEqual(
+      [],
+    );
   });
 });
 

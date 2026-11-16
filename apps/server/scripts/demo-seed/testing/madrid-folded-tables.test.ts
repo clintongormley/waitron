@@ -120,3 +120,30 @@ it("collects every matching child id into a sorted JSON list and defaults an unm
   expect(result.tables).not.toHaveProperty("mappings");
   expect(capture.tables).toHaveProperty("mappings");
 });
+
+it("collects staff menus by position before menu id", () => {
+  const capture: CanonicalMadridSemantics = {
+    tables: {
+      periods: { columns: [], foreignKeys: [], rows: { p: { id: "p" } } },
+      staff: {
+        columns: [],
+        foreignKeys: [],
+        rows: {
+          a: { period_id: "p", menu_id: "a", display_order: 2 },
+          z: { period_id: "p", menu_id: "z", display_order: 0 },
+          b: { period_id: "p", menu_id: "b", display_order: 2 },
+        },
+      },
+    },
+  };
+  const result = madridWithFoldedTables(capture, [
+    {
+      from: "staff",
+      into: "periods",
+      match: { from: "period_id", into: "id" },
+      columns: {},
+      collect: { from: "menu_id", into: "staff_menu_ids", orderBy: "display_order" },
+    },
+  ]);
+  expect(result.tables.periods!.rows.p!.staff_menu_ids).toEqual(["z", "a", "b"]);
+});

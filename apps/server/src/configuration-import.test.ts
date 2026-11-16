@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 41,
+  version: 42,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -184,6 +184,7 @@ describe("staged configuration import", () => {
     ["pre-department-columns export", { version: 36 }],
     ["pre-menu-and-category-fold export", { version: 37 }],
     ["pre-department-receipt-columns export", { version: 38 }],
+    ["pre-period-staff-list export", { version: 41 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

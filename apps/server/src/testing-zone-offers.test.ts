@@ -137,7 +137,7 @@ async function counts(db: Database) {
       (select count(*) from departments) as departments,
       (select count(*) from menus) as menus,
       (select count(*) from menu_periods) as periods,
-      (select count(*) from menu_period_staff_menus) as staff_menus,
+      (select count(*) from menu_periods, json_each(menu_periods.staff_menu_ids)) as staff_menus,
       (select count(*) from department_days) as timetables,
       (select count(*) from department_day_ranges) as slots,
       (select count(*) from menu_items) as items,

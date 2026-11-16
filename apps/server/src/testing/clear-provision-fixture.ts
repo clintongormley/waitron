@@ -13,7 +13,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "seasons",
 
       "special_days",
-      "menu_period_staff_menus",
       "menu_periods",
       "routing_cell_periods",
       "routing_cells",

@@ -359,7 +359,6 @@ describe("OpeningHoursApi", () => {
       expect(live.interests).toEqual(
         [
           "menu_periods",
-          "menu_period_staff_menus",
           "departments",
           "menus",
           "settings.business_day",
