@@ -57,6 +57,12 @@ export class StaffScreen extends LitElement {
         color: var(--wt-color-text);
         margin-top: var(--wt-space-3);
       }
+      .filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+      }
       .download-error {
         display: flex;
         flex-wrap: wrap;
@@ -496,6 +502,18 @@ export class StaffScreen extends LitElement {
     >`;
   }
 
+  #filterChip(key: "roles" | "status", value: string, clear: () => void) {
+    const filter = t(key === "roles" ? "staff.filter_role" : "staff.filter_status");
+    const text = `${filter}: ${value}`;
+    return html`<wt-button
+      variant="secondary"
+      data-chip=${key}
+      aria-label=${`${text}, ${fill("staff.remove_filter", { filter })}`}
+      @click=${clear}
+      >${text} ×</wt-button
+    >`;
+  }
+
   override render() {
     return html`
       <div class="header">
@@ -588,6 +606,39 @@ export class StaffScreen extends LitElement {
             >${t("staff.filter_current_help")}</wt-help-tooltip
           >
         </wt-combobox>
+        ${
+          this.roleFilter.length > 0 || this.statusFilter !== "all"
+            ? html`<div slot="toolbar-bottom" class="filter-chips">
+                ${
+                  this.roleFilter.length > 0
+                    ? this.#filterChip(
+                        "roles",
+                        this.accessRoles
+                          .filter((role) => this.roleFilter.includes(role.id))
+                          .map((role) => accessRoleName(role))
+                          .join(", "),
+                        () => {
+                          this.roleFilter = [];
+                        },
+                      )
+                    : nothing
+                }
+                ${
+                  this.statusFilter !== "all"
+                    ? this.#filterChip(
+                        "status",
+                        this.statusFilter === "current"
+                          ? t("staff.filter_current")
+                          : statusName(this.statusFilter),
+                        () => {
+                          this.statusFilter = "all";
+                        },
+                      )
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
         ${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
       >
       ${

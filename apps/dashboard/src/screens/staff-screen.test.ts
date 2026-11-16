@@ -1683,6 +1683,47 @@ describe("staff-screen filter fields", () => {
     },
   );
 
+  it.each([390, 1280])(
+    "shows active filters outside the panel and removes them separately at %ipx",
+    async (width) => {
+      const previous = { width: innerWidth, height: innerHeight };
+      await page.viewport(width, 900);
+      try {
+        const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+        await flush(el);
+        const chip = (key: string) =>
+          el.shadowRoot!.querySelector<HTMLElement>(`[data-chip="${key}"]`);
+        await vi.waitFor(() =>
+          expect(chip("status")?.textContent).toContain(t("staff.filter_current")),
+        );
+        expect(chip("status")!.getBoundingClientRect().width).toBeGreaterThan(0);
+        const root = list(el).shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+        await userEvent.click(root.querySelector<HTMLButtonElement>(".filters-trigger")!);
+        await chooseOptions(field(el, "[data-test=role-filter]")!, ["manager"]);
+        await userEvent.click(root.querySelector<HTMLButtonElement>(".filters-close")!);
+        await vi.waitFor(() => expect(chip("roles")?.textContent).toContain(roleName("manager")));
+        expect(chip("roles")!.getBoundingClientRect().width).toBeGreaterThan(0);
+        await userEvent.click(chip("roles")!);
+        await vi.waitFor(() =>
+          expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+            expect.objectContaining({ roleIds: [], status: "current" }),
+          ),
+        );
+        expect(chip("roles")).toBeNull();
+        expect(chip("status")).not.toBeNull();
+        await userEvent.click(chip("status")!);
+        await vi.waitFor(() =>
+          expect(el.api.listStaffPage).toHaveBeenLastCalledWith(
+            expect.objectContaining({ roleIds: [], status: "all" }),
+          ),
+        );
+        expect(chip("status")).toBeNull();
+      } finally {
+        await page.viewport(previous.width, previous.height);
+      }
+    },
+  );
+
   it("searches from a labelled search field", async () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
       canAdminister: true,

@@ -198,6 +198,7 @@ export class StaffList extends LitElement {
         .emptyMessage=${this.emptyMessage ?? t("staff.empty")}
         ><slot name="filters-start" slot="filters-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot
+        ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot
         ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>
     `;
