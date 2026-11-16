@@ -103,7 +103,9 @@ products before you confirm. Deleting cannot be undone.
 **An open order does not block a delete, and you are not told to finish or void one.** The delete
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
 answer is stored as the wording that was chosen. The next save of a parked counter order drops
-answers from deleted options lists.
+answers from deleted options lists. An extra picked from a deleted list stays on a parked counter
+order, with its charge, until staff open the dish it is on and save a change there, which takes it
+off; until then, + cannot raise that dish's count.
 
 To remove a deleted list from the guest menu too, publish that menu again.
 

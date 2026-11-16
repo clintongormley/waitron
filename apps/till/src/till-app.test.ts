@@ -7394,7 +7394,7 @@ describe("till-app", () => {
 
     expect(counter.store.lines[0]!.extras).toBeUndefined();
     expect(counter.store.lines[0]!.notOfferedExtras).toEqual([
-      { productId: "p-milk", name: "Leche extra", price: "0.75", quantity: 2 },
+      { productId: "p-milk", listId: "list-milk", name: "Leche extra", price: "0.75", quantity: 2 },
     ]);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.extra_not_offered"));
@@ -7432,8 +7432,6 @@ describe("till-app", () => {
     counterBody(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
 
   it("shows a retrieved pick no list offers any more, marked, and counts it in the total", async () => {
-    // Nothing offers `p-milk` now, so the pick cannot be re-sent, but the unedited order is paid
-    // from its stored lines, which still bill it.
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
     });
@@ -7448,7 +7446,23 @@ describe("till-app", () => {
     expect(totalText(el)).toContain(formatMoney("6.00", currentLocale()));
   });
 
-  it("takes a not-offered pick off the basket and the total once the order is edited", async () => {
+  it("keeps a not-offered pick on the basket and in the total when its line's count is lowered", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    counter.store.setLineQuantity(0, "1");
+    await flush(el);
+
+    expect(basketText(el)).toContain("Leche extra ×2");
+    // One café at 1.50, with two milks at 0.75.
+    expect(totalText(el)).toContain(formatMoney("3.00", currentLocale()));
+  });
+
+  it("refuses raising the count of a line holding a not-offered pick, saying what to do, and sends nothing", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
     });
@@ -7459,12 +7473,25 @@ describe("till-app", () => {
     counter.store.setLineQuantity(0, "3");
     await flush(el);
 
-    expect(basketText(el)).not.toContain("Leche extra");
-    // Three cafés at 1.50, and no milk: what the server re-prices the edit to.
-    expect(totalText(el)).toContain(formatMoney("4.50", currentLocale()));
+    expect(el.shadowRoot!.querySelector(".error")!.textContent!.trim()).toBe(
+      t("held.extra_blocks_raise"),
+    );
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(totalText(el)).toContain(formatMoney("6.00", currentLocale()));
+
+    setLocale("en-GB");
+    counter.store.setLineQuantity(0, "3");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(".error")!.textContent!.trim()).toBe(
+      t("held.extra_blocks_raise"),
+    );
+
+    emit(counter, "park-order", { label: undefined });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
-  it("never sends a not-offered pick, whether the order is paid unedited, held, or edited", async () => {
+  it("names a not-offered pick again under its list, whether the order is paid unedited, held, or edited", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
     });
@@ -7473,18 +7500,19 @@ describe("till-app", () => {
       emit(counter, "retrieve-order", { id: "wo-customised" });
       await flush(el);
     };
-    const plainLine = (quantity: string) => ({
+    const milkLine = (quantity: string) => ({
       workingOrderLineId: "line-customised",
       menuItemId: "menu-item-cafe-0",
       quantity,
       makeAt: null,
+      extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
     });
 
     await retrieve();
     emit(counter, "confirm-payment", { method: "cash", amount: "10" });
     await flush(el);
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [plainLine("2")],
+      [milkLine("2")],
       { method: "cash", amount: "10" },
       "wo-customised",
       undefined,
@@ -7499,17 +7527,65 @@ describe("till-app", () => {
     emit(counter, "new-sale");
     await flush(el);
     await retrieve();
-    counter.store.setLineQuantity(0, "3");
+    counter.store.setLineQuantity(0, "1");
     emit(counter, "park-order", { label: undefined });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
       dining: "eat_in",
       label: "Takeaway",
       revision: 0,
-      lines: [plainLine("3")],
+      lines: [milkLine("1")],
       expectedEdit: null,
     });
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps a not-offered pick, and names it again, when another line of the order is edited", async () => {
+    const order = milkOrder();
+    order.lines.push({
+      workingOrderLineId: "line-plain",
+      menuItemId: coffee.menuItemId,
+      productId: coffee.id,
+      quantity: "1.000",
+      product: coffee,
+      extras: [],
+    });
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(order),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    counter.store.setLineQuantity(1, "2");
+    await flush(el);
+
+    expect(basketText(el)).toContain("Leche extra ×2");
+    // Two cafés with two milks each (2 × 1.50 + 4 × 0.75), and two plain cafés.
+    expect(totalText(el)).toContain(formatMoney("9.00", currentLocale()));
+    emit(counter, "park-order", { label: undefined });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
+      dining: "eat_in",
+      label: "Takeaway",
+      revision: 0,
+      lines: [
+        {
+          workingOrderLineId: "line-customised",
+          menuItemId: "menu-item-cafe-0",
+          quantity: "2",
+          makeAt: null,
+          extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
+        },
+        {
+          workingOrderLineId: "line-plain",
+          menuItemId: "menu-item-cafe-0",
+          quantity: "2",
+          makeAt: null,
+        },
+      ],
+      expectedEdit: null,
+    });
   });
 
   it("says a retrieved extra is no longer offered, not that it was dropped", async () => {

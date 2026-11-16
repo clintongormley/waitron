@@ -26,6 +26,8 @@ import {
   createMenu,
   createCategory,
   createExtraList,
+  deleteExtraList,
+  getExtraList,
   addProductToMenu,
   createOptionList,
   createProduct,
@@ -71,7 +73,7 @@ import {
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
 } from "./testing/whole-payment-fixture.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder, getHeldOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { recordSale } from "@waitron/core";
@@ -2783,6 +2785,111 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.total).toBe("26.99");
     const filed = await filedLinesOf(id);
     expect(filed[0]!.optionSnapshots).toEqual([largeSnapshot(v.defaultLanguage)]);
+  });
+
+  // The till names a sold-out pick again when another line of a held order is edited.
+  it("keeps and charges a sold-out extra a held order's edit of another line names again", async () => {
+    const v = await setupModifierVenue();
+    const id = randomUUID();
+    const burgerOffer = v.offerFor(v.burgerId);
+    const extras = extrasPick(v, [{ productId: v.baconId, quantity: 1 }]);
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [
+          { menuItemId: burgerOffer, quantity: "1", extras },
+          { menuItemId: burgerOffer, quantity: "1" },
+        ],
+        null,
+        { zoneId: v.zoneId },
+      ),
+    );
+    await withTransaction(suite.db, (tx) => updateProduct(tx, v.baconId, { available: false }));
+    const [withBacon, plain] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)))
+      .orderBy(workingOrderLines.lineNo);
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        { workingOrderLineId: withBacon!.id, menuItemId: burgerOffer, quantity: "1", extras },
+        { workingOrderLineId: plain!.id, menuItemId: burgerOffer, quantity: "2" },
+      ],
+    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      { id, lines: [], tender: { method: "cash", amount: "50.00" } },
+    );
+    // Three burgers at 9.00 and the sold-out Bacon at 0.50; 27.00 had the edit dropped it.
+    expect(result.total).toBe("27.50");
+  });
+
+  it("keeps and charges an extra from a deleted list a held order's edit of another line names again", async () => {
+    const v = await setupModifierVenue();
+    const id = randomUUID();
+    const burgerOffer = v.offerFor(v.burgerId);
+    const extras = extrasPick(v, [{ productId: v.baconId, quantity: 1 }]);
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [
+          { menuItemId: burgerOffer, quantity: "2", extras },
+          { menuItemId: burgerOffer, quantity: "1" },
+        ],
+        null,
+        { zoneId: v.zoneId },
+      ),
+    );
+    await withTransaction(suite.db, (tx) => deleteExtraList(tx, v.extrasListId));
+    await expect(
+      withTransaction(suite.db, (tx) => getExtraList(tx, v.extrasListId)),
+    ).rejects.toMatchObject({ code: "extras.not_found" });
+    // The stored pick still names the deleted list, so the till can name it again.
+    const held = await getHeldOrder({ db: suite.db }, id);
+    expect(held.lines[0]!.extras).toEqual([
+      expect.objectContaining({ listId: v.extrasListId, productId: v.baconId }),
+    ]);
+    const [withBacon, plain] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)))
+      .orderBy(workingOrderLines.lineNo);
+
+    // No live list offers the pick now, so a raise of its line, priced afresh, is refused.
+    for (const republish of [false, true]) {
+      if (republish) await withTransaction(suite.db, (tx) => republishMenus(tx));
+      await expect(
+        updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
+          revision: await revisionOf(id),
+          lines: [
+            { workingOrderLineId: withBacon!.id, menuItemId: burgerOffer, quantity: "3", extras },
+            { workingOrderLineId: plain!.id, menuItemId: burgerOffer, quantity: "1" },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: "extras.invalid" });
+    }
+    // A lowering of the line holding it, and a raise of the other line, keep it.
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        { workingOrderLineId: withBacon!.id, menuItemId: burgerOffer, quantity: "1", extras },
+        { workingOrderLineId: plain!.id, menuItemId: burgerOffer, quantity: "2" },
+      ],
+    });
+    const result = await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      v.cfg,
+      { id, lines: [], tender: { method: "cash", amount: "50.00" } },
+    );
+    // Three burgers at 9.00 and the Bacon from the deleted list at 0.50.
+    expect(result.total).toBe("27.50");
   });
 
   it("charges an extra an edit adds to a held line at its published price", async () => {

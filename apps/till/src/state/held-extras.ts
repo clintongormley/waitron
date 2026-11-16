@@ -31,6 +31,7 @@ export function deriveExtraSelections(
     if (list === undefined || productId === null) {
       notOffered.push({
         productId: held.productId,
+        listId: held.listId,
         name: held.name,
         price: held.price,
         quantity: held.quantity,

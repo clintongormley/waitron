@@ -114,7 +114,10 @@ esos productos antes de que confirmes. No se puede deshacer.
 **Un pedido abierto no impide eliminarla, y nadie te pide que lo termines o lo anules.** Eliminarla
 no cambia por sí sola nada de un pedido abierto: una selección de extras es su propia línea del
 pedido, y una respuesta de opciones se guarda como el texto que se eligió. El siguiente guardado de
-un pedido aparcado de caja descarta las respuestas de las listas de opciones eliminadas.
+un pedido aparcado de caja descarta las respuestas de las listas de opciones eliminadas. Un extra
+elegido de una lista eliminada sigue en un pedido aparcado de caja, con su cargo, hasta que el
+personal abra el plato que lo lleva y guarde un cambio, lo que lo quita; mientras tanto, + no puede
+aumentar la cantidad de ese plato.
 
 Para quitar también una lista eliminada de la carta para clientes, vuelve a publicar esa carta.
 

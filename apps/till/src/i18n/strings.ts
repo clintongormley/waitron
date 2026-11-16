@@ -1624,7 +1624,9 @@ export const en = {
   "held.park_error": "Could not park the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
-    "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the station, paying is refused until it is removed.",
+    "An extra on this order is no longer offered. It stays on the order as saved until you save a change in that item's own window, which takes it off; until then + cannot raise that item's count. If it can no longer be sold and has not gone to the station, paying is refused until it is removed.",
+  "held.extra_blocks_raise":
+    "This item's count cannot be raised here: it has an extra that is no longer offered. To add more without that extra, open the item and change the count there. To keep this line as it is, add the dish from the menu: it goes on a line of its own.",
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
@@ -3714,7 +3716,9 @@ export const es: Record<StringKey, string> = {
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":
-    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó, y si cambias el pedido, se quita. Si ya no se puede vender y no se ha enviado a la estación, no se podrá cobrar hasta que se quite.",
+    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó hasta que guardes un cambio en la ventana de ese producto, lo que lo quita; mientras tanto, + no puede aumentar su cantidad. Si ya no se puede vender y no se ha enviado a la estación, no se podrá cobrar hasta que se quite.",
+  "held.extra_blocks_raise":
+    "Aquí no se puede aumentar la cantidad de este producto: lleva un extra que ya no se ofrece. Para añadir más sin ese extra, abre el producto y cambia ahí la cantidad. Para dejar esta línea como está, añade el plato desde la carta: va en una línea aparte.",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",

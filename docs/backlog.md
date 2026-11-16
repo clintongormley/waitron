@@ -985,7 +985,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   name only, not a customer name. The till also searches displayed section names (A461).
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
-- **Reopening a held order keeps its lines right** (bundle of 4, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
+- **Reopening a held order keeps its lines right** (bundle of 3, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
 
 ### Printers, the print agent and receipts
 

@@ -208,6 +208,33 @@ describe("order-line pricing", () => {
       expect(toWireModifiers(plain)).toEqual({});
     });
 
+    it("sends a not-offered pick under its stored list, and drops one naming no list or product", () => {
+      const notOffered = { name: "Leche", price: "0.75", quantity: 2 };
+      const line: OrderLine = {
+        product: coffee,
+        quantity: "1",
+        extras: [shot],
+        notOfferedExtras: [
+          { ...notOffered, listId: "list-extras", productId: "p-milk" },
+          { ...notOffered, listId: "list-gone", productId: "p-oat" },
+          { ...notOffered, listId: null, productId: "p-soy" },
+          { ...notOffered, listId: "list-gone", productId: null },
+        ],
+      };
+      expect(toWireModifiers(line)).toEqual({
+        extras: [
+          {
+            listId: "list-extras",
+            picks: [
+              { productId: "p-shot", quantity: 1 },
+              { productId: "p-milk", quantity: 2 },
+            ],
+          },
+          { listId: "list-gone", picks: [{ productId: "p-oat", quantity: 2 }] },
+        ],
+      });
+    });
+
     it("never sends a display value — a pick names its product and count alone", () => {
       const line: OrderLine = { product: coffee, quantity: "1", extras: [shot] };
       const wire = toWireModifiers(line);

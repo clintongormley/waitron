@@ -51,7 +51,9 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
         product: coffee,
         quantity: "2",
         notOffered: true,
-        notOfferedExtras: [{ productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 }],
+        notOfferedExtras: [
+          { productId: "p-milk", listId: "list-milk", name: "Leche", price: "0.75", quantity: 2 },
+        ],
       },
     ]);
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);

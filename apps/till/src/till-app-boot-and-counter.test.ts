@@ -5224,7 +5224,13 @@ describe("department transfers across operator lifetimes", () => {
           product: c.products[0]!,
           quantity: "2",
           notOfferedExtras: [
-            { productId: "cream", name: "Retired cream", price: "0.50", quantity: 1 },
+            {
+              productId: "cream",
+              listId: "list-cream",
+              name: "Retired cream",
+              price: "0.50",
+              quantity: 1,
+            },
           ],
         },
       ],

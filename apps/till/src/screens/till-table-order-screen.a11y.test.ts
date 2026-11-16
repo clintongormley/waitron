@@ -1139,6 +1139,7 @@ describe("saved extra layout on the table screen", () => {
                   notOfferedExtras: [
                     {
                       productId: "retired-extra",
+                      listId: "list-retired",
                       name: "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
                       price: "0.75",
                       quantity: 1,
