@@ -84,23 +84,28 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "diagnosis-process-"));
 });
 afterEach(async ({ task }) => {
-  await Promise.all(runners.splice(0).map((runner) => runner.stop()));
-  vi.unstubAllEnvs();
-  if (task.result?.state === "fail" || process.env.DIAGNOSIS_PROCESS_TRACE === "1") {
-    const markers = await Promise.all(
-      (await readdir(root)).map(async (name) => ({
-        name,
-        events: await records(join(root, name)),
-      })),
-    );
-    console.error(
-      "Certificate child process diagnostics",
-      JSON.stringify({ markers, timeline: lifetime.events }),
-    );
+  try {
+    await Promise.all(runners.splice(0).map((runner) => runner.stop()));
+    vi.unstubAllEnvs();
+    if (task.result?.state === "fail" || process.env.DIAGNOSIS_PROCESS_TRACE === "1") {
+      const markers = await Promise.all(
+        (await readdir(root)).map(async (name) => ({
+          name,
+          raw: await readFile(join(root, name), "utf8").catch((error: NodeJS.ErrnoException) => ({
+            readError: error.code ?? error.message,
+          })),
+        })),
+      );
+      console.error(
+        "Certificate child process diagnostics",
+        JSON.stringify({ markers, timeline: lifetime.events }),
+      );
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
-  await rm(root, { recursive: true, force: true });
 });
-function runner(workMs = 5_000, cleanupMs = 200, monotonicNow?: () => number) {
+function runner(workMs = 5_000, cleanupMs = 2_000, monotonicNow?: () => number) {
   const value = createCertificateDiagnosisRunner({
     fiscalId: "fixture",
     entry: fixtureEntry,
@@ -155,11 +160,11 @@ describe("owned certificate child lifetime", () => {
         import { promises } from "node:fs";
         const opendir = promises.opendir;
         promises.opendir = async (...args) => {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          await new Promise((resolve) => setTimeout(resolve, 2_500));
           return opendir(...args);
         };
       `);
-    const value = runner();
+    const value = runner(5_000, 2_000);
     const marker = join(root, "cache-control");
     try {
       await expect(
@@ -204,7 +209,7 @@ describe("owned certificate child lifetime", () => {
 
   it("includes startup in the work deadline and never releases late evidence", async () => {
     const now = vi.fn(() => performance.now());
-    const value = runner(1, 200, now);
+    const value = runner(1, 2_000, now);
     const at = performance.now();
     await expect(
       value.attempt(
@@ -325,7 +330,7 @@ describe("owned certificate child lifetime", () => {
   });
 
   it("applies the work deadline to a recorded child stuck in synchronous opening", async () => {
-    const value = runner(1_500, 200);
+    const value = runner(1_500, 2_000);
     const marker = join(root, "native-deadline");
     const at = performance.now();
     const held = value.attempt(
@@ -339,7 +344,7 @@ describe("owned certificate child lifetime", () => {
       result: { outcome: "interrupted", reason: "deadline", lastProgress: null },
     });
     gone((await records(marker))[0]!.pid);
-    expect(performance.now() - at).toBeLessThan(3_000);
+    expect(performance.now() - at).toBeLessThan(4_000);
     await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
   });
 

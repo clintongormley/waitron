@@ -1974,6 +1974,32 @@ stays within the existing total attempt budget. Run the server's
 `fiscal-certificate-diagnosis-runner.test.ts`
 and `fiscal-certificate-diagnosis-process.test.ts` together.
 
+## Real-process tests need time to observe child exit
+
+The certificate process suite uses production's 2,000 ms cleanup allowance. Its exact timer
+ordering remains covered by the controlled-timer suite.
+
+**16 November 2026:** with four busy worker threads inside a two-CPU Linux container, the original
+process file failed three cases and passed nineteen. The retained traces show two shapes: delayed
+termination let deadline cases finish after their total attempt allowance, while abort/stop cases
+could answer before the exit callback. The latter had 25 ms termination steps; one baseline
+SIGKILL-to-exit interval was 52 ms. Increasing cleanup gives both paths more time to observe exit;
+the allowance bounds how long the runner waits. The historical CI timelines are missing.
+
+The corrected process file passed five loaded runs at two CPUs and five at four (22 cases each).
+Its cache control uses a 2,500 ms loader delay; its native elapsed bound is 4,000 ms
+(1,500 work + 2,000 cleanup + 500 margin). Removing deadline scheduling makes the native case
+fail by test timeout, before that elapsed assertion is reached; the exact timer case also fails.
+The bundle cancellation case now uses the same cleanup allowance because it shared the compressed
+setting. Its original seven loaded runs passed; that case's historical failure was not reproduced.
+These settings supersede the historical bounds below and the 12 November plan's cache exception.
+
+Earlier sightings and retained logs: run 43532895318 (#3121),
+`~/waitron-campaign/ci-logs/pr3121-run43532895318-test-server-12.log`;
+43585179122 (#3003), `~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`;
+43838316063 (#3487), `~/waitron-campaign-i/receipts/setup-port-handoff-20261116/ci-failed-server-8.log`;
+and 43717151594 (#3342), `~/waitron-campaign-l/ci-logs/pr3342-run43717151594-attempt1-test-server-5.log`.
+
 ## Compile a process-lifetime fixture before starting its cleanup clock
 
 **12 November 2026:** The two naturally exiting process cases now use a 2,000 ms cleanup

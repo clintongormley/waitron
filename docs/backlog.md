@@ -1668,7 +1668,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 
 
-- **CI incidents to watch.** One table keeps A891, A999, A1230, A1305, A1027, A419 and the other unexplained CI sightings, their evidence and what to retain on recurrence. [Detail](backlog/ci.md#ci-incidents-to-watch)
+- **CI incidents to watch.** One table keeps A891, A999, A1230, A1305, A1027, A419 and the remaining unexplained CI sightings, their evidence and what to retain on recurrence. [Detail](backlog/ci.md#ci-incidents-to-watch)
 
 - **Finish qualifying CI's server routing and action setup** (bundle of 2, size M). Checked real-run records now cover tools/history/API, PR planner pickup, scheduled rescue, one no-op overflow, natural blind fallback and fresh-capacity route choices, including an idle-server choice followed by successful server jobs. A1424/A1440 still need natural stale-count acceptance, scheduled idle pickup, complete server/browser and coverage runs, an image guest, per-job/remaining-workflow evidence and the full-day queue measurement; the historical planner cause remains unproved. Server health also needs the cause of its natural incomplete-inventory refusals fixed; capture the next refusal’s endpoint, counts and IDs first. A935 still needs a selectively stalled setup-download run: the runner 2.338.2 cancellation-source trace is evidence about code, not the job limit in action. The bundle remains open. [Detail](backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
 
