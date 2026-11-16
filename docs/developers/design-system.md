@@ -163,9 +163,12 @@ venue's choices, warning about hard-to-read colours and text sizes drawn under 1
 described below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out
 values only, outranks the token layer the same way.
 
-Override tokens on the theme root, with a selector of your own (a class or ID — not an inline
-style, and not a bare `[data-wt-theme-root]`/`[data-theme]` selector, which only matches the token
-layer's own specificity). Never patch component styles.
+Override tokens on the theme root, with an ID selector of your own — not an inline style, and not
+a bare `[data-theme]` selector, which stops matching under Follow device because that choice removes
+the attribute (`packages/ui/src/theme-choice.ts`). A class or a bare `[data-wt-theme-root]` selector
+beats the token layer but gives way to a theme the venue saved on System → Appearance, whose sheet
+uses that selector (`packages/ui-core/src/theme/sheet.ts`); an ID beats both. Never patch component
+styles.
 
 ```css
 #app {

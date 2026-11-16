@@ -1224,17 +1224,6 @@ uploaded face. It plugs into A841's seam: the typeface list (`TYPEFACES` in
 `/api/theme`'s blocks (A841 design, section 5a).
 
 
-## A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file was created in b20c26709).
-
-It says such a selector "only matches the token layer's own
-specificity", but every token-layer rule is now `:where()`-wrapped, and A841's probe (Chromium
-156, the real `colors.css` adopted as `applyTokens` does) found a bare
-`[data-wt-theme-root] { --wt-color-primary: … }` winning in all six Light / Dark / Follow device ×
-OS light / dark cases. The advice against a bare `[data-theme]` selector holds for another reason:
-Follow device removes the attribute (`packages/ui/src/theme-choice.ts:28`), so such a rule stops
-matching. Next: reword the sentence with the real reasons.
-
-
 ## A1013. Online booking for customers (owner, 2026-10-22).
 
 A customer books a table from the

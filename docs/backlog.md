@@ -945,11 +945,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   may also be a font file the venue uploads, so every screen draws the bar's own face.
   [Detail](backlog/till.md#uploaded-font-files-for-themes-owner-2026-10-20-a841-q7-b--after-a841)
 
-- **A899. design-system.md's "Retheming a deployment" gives the wrong reason against a bare
-  `[data-wt-theme-root]` selector (`docs/developers/design-system.md:108-110`, written when the file
-  was created in b20c26709).** Next: reword the sentence with the real reasons.
-  [Detail](backlog/till.md#a899-design-systemmds-retheming-a-deployment-gives-the-wrong-reason-against-a-bare-data-wt-theme-root-selector-docsdevelopersdesign-systemmd108-110-written-when-the-file-was-created-in-b20c26709)
-
 - **Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16).** — left
   open by the product folders work. Since A429 slice 3 the floor screen re-reads the floor every
   15 seconds while a zone's map is on screen. Polling would read `listTablesWithState` every few
