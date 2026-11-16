@@ -41,7 +41,7 @@ Waitron te ayuda con las solicitudes de las personas de estas formas:
 - Un administrador puede buscar por NIF las facturas completas de un cliente de factura en
   **Pedidos** y descargarlas. Consulta
   [Descargar los datos de un cliente de factura](staff.md#invoice-customer-data).
-- Un gerente puede corregir los nombres y el teléfono de una persona con **Editar** en **Usuarios**,
+- Un encargado puede corregir los nombres y el teléfono de una persona con **Editar** en **Usuarios**,
   y un administrador también puede cambiar su correo, su rol y su estado. Consulta
   [Nombres y datos de contacto](staff.md#staff-details).
 - Cuando un administrador deshabilita la cuenta de una persona, Waitron borra su PIN, su contraseña,

@@ -434,7 +434,7 @@ it.each([
     archive: "Archivar",
     keep: "Conservar",
     remove: "Eliminar",
-    badge: "Se archivará al guardar",
+    badge: "Se archiva al guardar",
     none: "Todas las variantes están archivadas.",
   },
 ])(

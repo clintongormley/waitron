@@ -54,35 +54,15 @@ when the variant or its product is archived (`packages/media/src/images.ts`, the
 label predates A886, which only renamed it. Decide whether a variant gets its own label ("Archived
 variant", "Variante archivada") and, if so, update the content-and-images guides in both languages.
 
-## Future-tense lines outside the delete windows
-
-The Remove-standby explanation (`servers.remove_explanation`, "It will be marked removed…"), the
-Spanish variant badge "Se archivará al guardar", and the Spanish PIN reset confirmation
-(`person.confirm_reset_pin`, "no podrá usar") whose English is present were left alone by A477
-(#1530, delete windows in the present tense).
-
-## Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen
-
-The dashboard's role name is «Encargado» (`roleName`, `apps/dashboard/src/i18n/domain.ts:11`,
-shown in the **Users** table and filter), and the Appearance guide says **Encargado**
-(`apps/server/src/guide/es/appearance.md`). The Users guide (`apps/server/src/guide/es/staff.md`),
-the data download's README (`apps/server/src/i18n/personal-data-readme.ts`) and four of the
-dashboard's bill-payment strings (`payments.bill.*` in `apps/dashboard/src/i18n/strings.ts`,
-among them «PIN de gerente») say «gerente». Pick one word and use it everywhere.
-
 ## Bundle: Ui wording sweep
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
   still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
   sentence; a specific "nothing yet" sentence per screen, #1037).
-- **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
-  [Detail](languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 - **The image library calls an archived variant an "Archived product".**
   [Detail](languages.md#the-image-library-calls-an-archived-variant-an-archived-product)
-- **Future-tense lines outside the delete windows were left alone.**
-  [Detail](languages.md#future-tense-lines-outside-the-delete-windows)
 
 ## Bundle: Native speaker review
 
