@@ -1397,6 +1397,91 @@ describe("scheduled PR planner recovery", () => {
       path.endsWith("/pulls/7") ? f.pull : f.request(path, options);
     return f;
   }
+  it.each(
+    ["recover-planners", "check"].flatMap((command) =>
+      ["workflow_runs", "jobs"].map((key) => ({ command, key })),
+    ),
+  )("identifies the refused $key read in $command without writes", async ({ command, key }) => {
+    const f = planner(),
+      reports = [],
+      calls = [];
+    const path =
+      key === "jobs"
+        ? "/repos/fixture/waitron/actions/runs/12/attempts/1/jobs"
+        : "/repos/fixture/waitron/actions/workflows/ci.yml/runs?status=in_progress";
+    const suffix = key === "jobs" ? "?per_page=30&page=" : "&per_page=100&page=";
+    const row = key === "jobs" ? f.job : f.run;
+    const request = (endpoint, options) => {
+      calls.push([endpoint, options]);
+      return endpoint.startsWith(path)
+        ? { total_count: 2, [key]: endpoint.endsWith("page=1") ? [row] : [] }
+        : f.options.request(endpoint, options);
+    };
+    await health.healthCommand(
+      command,
+      { ...f.options, request },
+      {
+        report: (line) => reports.push(line),
+      },
+    );
+    expect(reports.join("\n")).toContain(
+      "Incomplete server inventory: empty page after 1 of 2 entries",
+    );
+    expect(reports.join("\n")).toContain(
+      `path=${path}${suffix}2; page=2; read=2; starting_total=2; reply_total=2; rows=1; ids=${row.id}; page_ids=`,
+    );
+    expect(
+      calls.filter(([endpoint]) => endpoint.startsWith(path)).map(([endpoint]) => endpoint),
+    ).toEqual([1, 2, 1, 2].map((page) => path + suffix + page));
+    expect(calls.filter(([, options]) => options?.method)).toEqual([]);
+  });
+  it.each(["excess", "changed"])("locates the %s-count refusal", async (kind) => {
+    const f = planner(),
+      reports = [];
+    f.options.request = (path, options) => {
+      if (!path.includes("/jobs?")) return f.request(path, options);
+      const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+      return {
+        total_count: kind === "excess" ? 0 : page === 1 ? 2 : 3,
+        jobs: [{ ...f.job, id: page === 1 ? 124 : 123 }],
+      };
+    };
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    const context =
+      kind === "excess"
+        ? "page=1; read=1; starting_total=0; reply_total=0; rows=1; ids=124; page_ids=124"
+        : "page=2; read=2; starting_total=2; reply_total=3; rows=2; ids=123,124; page_ids=123";
+    expect(reports.join("\n")).toContain(
+      "Incomplete server inventory; path=/repos/fixture/waitron/actions/runs/12/attempts/1/jobs?per_page=30&",
+    );
+    expect(reports.join("\n")).toContain(context);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it("reports a malformed count without printing nonnumeric count or id values", async () => {
+    const f = planner(),
+      reports = [],
+      calls = [];
+    const request = (path, options) => {
+      calls.push([path, options]);
+      return path.includes("/jobs?")
+        ? { total_count: "private-count", jobs: [{ id: "private-id" }] }
+        : f.options.request(path, options);
+    };
+    await health.healthCommand(
+      "recover-planners",
+      { ...f.options, request },
+      {
+        report: (line) => reports.push(line),
+      },
+    );
+    expect(reports.join("\n")).toContain(
+      "Incomplete server inventory; path=/repos/fixture/waitron/actions/runs/12/attempts/1/jobs?per_page=30&page=1; page=1; read=1; starting_total=none; reply_total=invalid; rows=0; ids=; page_ids=",
+    );
+    expect(reports.join("\n")).not.toContain("private-");
+    expect(calls.filter(([, options]) => options?.method)).toEqual([]);
+  });
   it("recovers an untouched PR planner despite unrelated server progress", async () => {
     const f = planner();
     const request = f.options.request;
