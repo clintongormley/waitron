@@ -22,6 +22,7 @@ export class StaffList extends LitElement {
   @property({ type: Boolean }) canExportPersonalData = false;
   @property({ attribute: false }) downloadingPersonId: string | null = null;
   @property() searchTerm = "";
+  @property({ type: Number }) externalFilterCount = 0;
   @property() emptyMessage?: string;
 
   #edit(event: Event, personId: string): void {
@@ -183,6 +184,10 @@ export class StaffList extends LitElement {
         lastShownColumnLabel=${t("table.column_last_shown")}
         columnPositionLabel=${t("table.column_position")}
         .serverPaging=${this.serverPaging}
+        .externalFilterCount=${this.externalFilterCount}
+        filtersLabel=${t("table.filters")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
         previousPageLabel=${t("table.previous_page")}
         nextPageLabel=${t("table.next_page")}
         .pageRangeLabel=${(from: number, to: number, total: number) => fill("table.page_range", { from: from.toLocaleString(currentLocale()), to: to.toLocaleString(currentLocale()), total: total.toLocaleString(currentLocale()) })}
@@ -191,6 +196,9 @@ export class StaffList extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${personKey}
         .emptyMessage=${this.emptyMessage ?? t("staff.empty")}
+        ><slot name="filters-start" slot="filters-start"></slot
+        ><slot name="toolbar-search" slot="toolbar-search"></slot
+        ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot
         ><slot name="empty-action" slot="empty-action"></slot
       ></wt-data-table>
     `;

@@ -106,6 +106,20 @@ test("a flat search offers a disclosure only on a match that holds rows, and rep
   expect(el.shownKeys()).toEqual(["coffee", "latte", "cake"]);
 });
 
+test.each([false, true])(
+  "a non-collapsible flat match reports its drawn expansion with collapseDescendants %s",
+  async (collapseDescendants) => {
+    const el = await flatSearch({ collapseDescendants, rowCollapsible: (r) => r.id !== "coffee" });
+    expect(keys(el)).toEqual(["coffee", "latte", "cake"]);
+    expect(shownRow(el, "coffee").getAttribute("aria-expanded")).toBe("true");
+    expect(el.isExpanded("coffee")).toBe(true);
+    expect(el.isExpanded("missing")).toBe(false);
+    el.searchTerm = "";
+    await el.updateComplete;
+    expect(el.isExpanded("coffee")).toBe(true);
+  },
+);
+
 test("a flat search over rows that name each other as parents draws each once below the other", async () => {
   const el = await flatSearch({
     rows: [row("one", "two", "Coffee one"), row("two", "one", "Coffee two")],

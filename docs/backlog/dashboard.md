@@ -50,10 +50,7 @@ Review #559 also recorded no test reaching `management_session.required` in
   (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list
   (`apps/dashboard/src/screens/servers-screen.ts`) offers no chooser, its one column beside the
   buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
-  with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
-  screen keeps its search and filters outside the table (staff, card readers) or the table has none
-  (alerts), the Customise icon button sits alone on a row above the table rather than
-  beside those controls — moving a screen's own controls into the table's toolbar would fix it;
+  with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
   four report tables on the sales screen
@@ -62,12 +59,6 @@ Review #559 also recorded no test reaching `management_session.required` in
   those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (7) the
   Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
   chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
-
-The Devices table still uses `viewKey="devices"`
-(`apps/dashboard/src/screens/devices-screen.ts:1936`, read during A988 review). Next: rename its
-preference key before go-live, following the prefixed table keys. This is separate from A988's
-printer keys.
-
 
 ## What C47 part 2 found and did not fix
 

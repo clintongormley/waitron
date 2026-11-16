@@ -60,8 +60,6 @@ that link on a highlighted row is fixed (A306, #1336).
 
 Left open:
 
-- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
-  row's ⋮ menu rather than back on the swatch that opened it. No test pins it.
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
@@ -795,15 +793,13 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+7 entries, size M.
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](menu.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
 - **Loose ends left by W87 (#1191).**
   [Detail](menu.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
-- **Loose ends left by W92 (#1250).** In the Structure tree, closing the section form opened from a
-  section's swatch puts focus on the row's ⋮ menu rather than back on the swatch that opened it. No
-  test pins it.
+- **Other loose ends left by W92 (#1250).**
   [Detail](menu.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
 - **Products at phone width: what W85e left for the owner**
   [Detail](menu.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
@@ -811,18 +807,11 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
   tab.
   [Detail](menu.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
-- **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
-  house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
-  slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
-  `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
 - **Products' full-screen Filters threshold remains unmeasured with the sidebar shown and tied to token sizes.**
   [Detail](menu.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
-- **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
-  answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
-  mutation tests, not fixed. Outside a search it answers true for the same row
-  (`packages/ui/src/components/wt-data-table.ts`).
+
 
 
 ## Bundle: Translate all followups

@@ -671,7 +671,7 @@ describe("the device table", () => {
     });
     await flush(el);
     const table = devicesTable(el);
-    expect(table.getAttribute("viewKey")).toBe("devices");
+    expect(table.getAttribute("viewKey")).toBe("waitron.devices.table");
     expect(table.getAttribute("aria-label")).toBe(t("devices.title"));
     expect(table.getAttribute("customiseColumnsLabel")).toBe(t("table.customise_columns"));
     expect(table.columns.map((c) => [c.key, c.label])).toEqual([
@@ -1083,9 +1083,9 @@ describe("the device table", () => {
 
   it("shows the equipment columns to someone whose remembered columns predate them, after Shows", async () => {
     // Saved by the table before these columns existed: Battery hidden, Status moved first.
-    localStorage.setItem("devices:columns", JSON.stringify({ battery: false }));
+    localStorage.setItem("waitron.devices.table:columns", JSON.stringify({ battery: false }));
     localStorage.setItem(
-      "devices:column-order",
+      "waitron.devices.table:column-order",
       JSON.stringify(["profile", "shows", "battery", "lastSeen"]),
     );
     try {
@@ -1110,8 +1110,8 @@ describe("the device table", () => {
         t("devices.actions"),
       ]);
     } finally {
-      localStorage.removeItem("devices:columns");
-      localStorage.removeItem("devices:column-order");
+      localStorage.removeItem("waitron.devices.table:columns");
+      localStorage.removeItem("waitron.devices.table:column-order");
     }
   });
 });

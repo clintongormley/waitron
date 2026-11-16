@@ -12299,6 +12299,27 @@ describe("colour swatches on the Structure tab", () => {
     expect(form.getAttribute("heading")).toBe(t("menus.edit_section"));
   });
 
+  it.each(["cancel", "save"] as const)(
+    "returns focus to the section swatch after %s",
+    async (action) => {
+      const el = await mountLunch();
+      await settleStructure(el);
+      await userEvent.click(inStructure(el, '[data-test="color-m-drinks"]')!);
+      await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
+      const closed = dialogClosed(modal(el, "new-section"));
+      if (action === "save") {
+        type(inModal(el, "new-section", 'wt-input[name="name"]'), "Updated drinks");
+        await el.updateComplete;
+      }
+      inModal(el, "new-section", `[data-test="new-section-${action}"]`).click();
+      await closed;
+      await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+      await afterDialogCloses(el);
+      await settleStructure(el);
+      expect(inStructure(el, '[data-test="color-m-drinks"]')!.matches(":focus")).toBe(true);
+    },
+  );
+
   it("paints the venue default on a product with nothing coloured above it, and follows a new default", async () => {
     const live = new LiveData();
     const client = api({

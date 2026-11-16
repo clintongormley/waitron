@@ -1776,7 +1776,7 @@ export class DevicesScreen extends LitElement {
       searchable
       searchLabel=${t("devices.search")}
       data-test="devices-table"
-      viewKey="devices"
+      viewKey="waitron.devices.table"
       customiseColumnsLabel=${t("table.customise_columns")}
       customiseLabel=${t("table.customise")}
       restoreColumnsLabel=${t("table.restore_columns")}

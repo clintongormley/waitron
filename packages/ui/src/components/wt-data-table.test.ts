@@ -8996,6 +8996,7 @@ test("scrolling the Customise dialog mid-drag keeps the lifted row under the poi
     ]);
     await scrollBy(-height);
     expect(errors).toEqual([]);
+    await Promise.allSettled(lifted.getAnimations().map((slide) => slide.finished));
     expectNoDisplacedColumnRow(el);
   } finally {
     sendColumnPointer("pointercancel", 19, start.x, y);

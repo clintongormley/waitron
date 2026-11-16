@@ -972,6 +972,17 @@ export class MenuStructureTable extends LitElement {
     table?.setExpanded(key, expanded);
   }
 
+  async focusRowSwatch(key: string): Promise<void> {
+    await this.updateComplete;
+    const table = this.#table();
+    await table?.updateComplete;
+    const swatch = table?.shadowRoot?.querySelector<HTMLButtonElement>(
+      `button[data-test="color-${CSS.escape(key)}"]`,
+    );
+    if (swatch) swatch.focus();
+    else this.focusRowMenu(key);
+  }
+
   /** Focuses the row's ⋮, or the nearest drawn ancestor's; for the top level (`""`), or when no
    * ancestor is drawn, the root row's ⋮; in an empty menu, which draws no rows, the empty box's
    * first add. */
@@ -1233,7 +1244,7 @@ export class MenuStructureTable extends LitElement {
       data-test=${`color-${key}`}
       aria-label=${fill("folders.edit_color", { name })}
       ?disabled=${this.busy}
-      @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path })}
+      @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path, swatch: true })}
     >
       ${chip}
     </button>`;

@@ -57,6 +57,12 @@ export class StaffScreen extends LitElement {
         color: var(--wt-color-text);
         margin-top: var(--wt-space-3);
       }
+      .filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+      }
       .download-error {
         display: flex;
         flex-wrap: wrap;
@@ -65,21 +71,6 @@ export class StaffScreen extends LitElement {
       }
       .download-error p {
         margin: 0;
-      }
-      .filters {
-        display: grid;
-        grid-template-columns: minmax(calc(var(--wt-space-6) * 7), 1fr) repeat(
-            2,
-            minmax(calc(var(--wt-space-6) * 5), auto)
-          );
-        gap: var(--wt-space-3);
-        align-items: start;
-        margin-bottom: var(--wt-space-4);
-      }
-      @media (max-width: 42rem) {
-        .filters {
-          grid-template-columns: 1fr;
-        }
       }
     `,
   ];
@@ -511,14 +502,70 @@ export class StaffScreen extends LitElement {
     >`;
   }
 
+  #filterChip(key: "roles" | "status", value: string, clear: () => void) {
+    const filter = t(key === "roles" ? "staff.filter_role" : "staff.filter_status");
+    const text = `${filter}: ${value}`;
+    return html`<wt-button
+      variant="secondary"
+      data-chip=${key}
+      aria-label=${`${text}, ${fill("staff.remove_filter", { filter })}`}
+      @click=${async () => {
+        clear();
+        await this.updateComplete;
+        const next = this.renderRoot.querySelector<HTMLElement>("[data-chip]");
+        if (next) next.focus();
+        else
+          this.renderRoot
+            .querySelector("dashboard-staff-list")
+            ?.shadowRoot?.querySelector("wt-data-table")
+            ?.shadowRoot?.querySelector<HTMLButtonElement>(".filters-trigger")
+            ?.focus();
+      }}
+      >${text} ×</wt-button
+    >`;
+  }
+
   override render() {
     return html`
       <div class="header">
         <h1 class="title">${t("staff.title")}</h1>
         <div class="actions">${this.#renderAdd()}</div>
       </div>
-      <div class="filters" aria-label=${t("staff.filters")}>
+      <dashboard-staff-list
+        .accessRoles=${this.accessRoles}
+        .people=${this.people}
+        .serverPaging=${this.paging}
+        .externalFilterCount=${Number(this.roleFilter.length > 0) + Number(this.statusFilter !== "all")}
+        @wt-filters-clear=${(event: Event) => {
+          event.stopPropagation();
+          this.roleFilter = [];
+          this.statusFilter = "all";
+        }}
+        @wt-query-change=${(
+          event: CustomEvent<Pick<PersonPageQuery, "sortKey" | "sortDirection">>,
+        ) => {
+          event.stopPropagation();
+          this.#sort = { sortKey: event.detail.sortKey, sortDirection: event.detail.sortDirection };
+          this.#requestPage();
+        }}
+        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
+          event.stopPropagation();
+          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
+          else this.#pages.move(event.detail.page);
+        }}
+        .searchTerm=${this.search}
+        .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}
+        .currentPersonId=${this.currentPersonId}
+        .canAdminister=${this.canAdminister}
+        .canExportPersonalData=${this.canExportPersonalData}
+        .downloadingPersonId=${this.downloadingPerson?.personId ?? null}
+        @download-person-data=${(event: CustomEvent<{ personId: string }>) =>
+          void this.#onDownloadPersonData(event)}
+        @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
+        @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
+      >
         <wt-input
+          slot="toolbar-search"
           data-test="search"
           name="search"
           type="search"
@@ -529,6 +576,7 @@ export class StaffScreen extends LitElement {
             (this.search = event.detail.value)}
         ></wt-input>
         <wt-combobox
+          slot="filters-start"
           data-test="role-filter"
           name="role-filter"
           label=${t("staff.filter_role")}
@@ -545,6 +593,7 @@ export class StaffScreen extends LitElement {
         ></wt-combobox>
         <wt-combobox
           ?preserve-order=${true /* Preserve current/active/pending/suspended/all lifecycle. */}
+          slot="filters-start"
           data-test="status-filter"
           name="status-filter"
           label=${t("staff.filter_status")}
@@ -568,34 +617,41 @@ export class StaffScreen extends LitElement {
             >${t("staff.filter_current_help")}</wt-help-tooltip
           >
         </wt-combobox>
-      </div>
-      <dashboard-staff-list
-        .accessRoles=${this.accessRoles}
-        .people=${this.people}
-        .serverPaging=${this.paging}
-        @wt-query-change=${(
-          event: CustomEvent<Pick<PersonPageQuery, "sortKey" | "sortDirection">>,
-        ) => {
-          event.stopPropagation();
-          this.#sort = { sortKey: event.detail.sortKey, sortDirection: event.detail.sortDirection };
-          this.#requestPage();
-        }}
-        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
-          event.stopPropagation();
-          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
-          else this.#pages.move(event.detail.page);
-        }}
-        .searchTerm=${this.search}
-        .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}
-        .currentPersonId=${this.currentPersonId}
-        .canAdminister=${this.canAdminister}
-        .canExportPersonalData=${this.canExportPersonalData}
-        .downloadingPersonId=${this.downloadingPerson?.personId ?? null}
-        @download-person-data=${(event: CustomEvent<{ personId: string }>) =>
-          void this.#onDownloadPersonData(event)}
-        @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
-        @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
-        >${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
+        ${
+          this.roleFilter.length > 0 || this.statusFilter !== "all"
+            ? html`<div slot="toolbar-bottom" class="filter-chips">
+                ${
+                  this.roleFilter.length > 0
+                    ? this.#filterChip(
+                        "roles",
+                        this.accessRoles
+                          .filter((role) => this.roleFilter.includes(role.id))
+                          .map((role) => accessRoleName(role))
+                          .sort((a, b) => a.localeCompare(b, currentLocale()))
+                          .join(", "),
+                        () => {
+                          this.roleFilter = [];
+                        },
+                      )
+                    : nothing
+                }
+                ${
+                  this.statusFilter !== "all"
+                    ? this.#filterChip(
+                        "status",
+                        this.statusFilter === "current"
+                          ? t("staff.filter_current")
+                          : statusName(this.statusFilter),
+                        () => {
+                          this.statusFilter = "all";
+                        },
+                      )
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
+        ${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
       >
       ${
         this.errorKey && !this.editOpen && !this.formOpen && this.rowAction === null

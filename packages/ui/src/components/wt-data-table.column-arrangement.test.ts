@@ -1,5 +1,5 @@
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { cleanup, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
@@ -379,6 +379,63 @@ test("rows a column is dragged up past slide down, and land when it drops", asyn
   await el.updateComplete;
   expect(headers(el)).toEqual(["Name", "M3", "M1", "M2", "M4", "Actions"]);
 });
+
+test.each([
+  ["slot", false],
+  ["outside", false],
+  ["slot", true],
+] as const)(
+  "a released column lands from its drawn position (%s, reduced motion %s)",
+  async (drop, reduced) => {
+    await commands.emulateReducedMotion(reduced ? "reduce" : "no-preference");
+    try {
+      const el = await table();
+      el.style.setProperty("--wt-duration-move", "7s");
+      await openChooser(el);
+      const rest = rests(el);
+      const start = grab(el, "m1", 37);
+      const y = centre(rest.m3!).y + rest.m3!.height / 4;
+      const x = drop === "slot" ? start.x : rest.m3!.right + 10;
+      send("pointermove", 37, x, y);
+      const dragged = columnRow(el, "m1");
+      const drawn = dragged.getBoundingClientRect().top;
+      expect(document.body.style.cursor).toBe("grabbing");
+      expect(drawn).toBeGreaterThan(rest.m3!.top);
+      send("pointerup", 37, x, y);
+      await el.updateComplete;
+      expect(document.body.style.cursor).not.toBe("grabbing");
+      const target = drop === "slot" ? rest.m3!.top : rest.m1!.top;
+      const slides = dragged
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation instanceof CSSTransition && animation.transitionProperty === "transform",
+        );
+      if (reduced) {
+        expect(slides).toHaveLength(0);
+      } else {
+        expect(slides).toHaveLength(1);
+        const slide = slides[0]!;
+        slide.pause();
+        slide.currentTime = 0;
+        expect(dragged.getBoundingClientRect().top).toBeCloseTo(drawn, 0);
+        slide.currentTime = 3500;
+        expect(dragged.getBoundingClientRect().top).toBeGreaterThan(target);
+        expect(dragged.getBoundingClientRect().top).toBeLessThan(drawn);
+        slide.finish();
+        await slide.finished;
+      }
+      expect(dragged.getBoundingClientRect().top).toBeCloseTo(target, 0);
+      expect(headers(el)).toEqual(
+        drop === "slot"
+          ? ["Name", "M2", "M3", "M1", "M4", "Actions"]
+          : ["Name", "M1", "M2", "M3", "M4", "Actions"],
+      );
+    } finally {
+      await commands.emulateReducedMotion(null);
+    }
+  },
+);
 
 test("a row passed and then left behind by the drag returns to where it rests", async () => {
   const el = await table();
