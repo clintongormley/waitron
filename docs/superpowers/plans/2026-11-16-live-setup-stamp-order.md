@@ -1,6 +1,6 @@
 # Lane K: Live setup stamp order
 
-**Status:** Drafted by separate Sol-high invocation. **NOT CLEARED** until Claude reviews and the watcher clears. The request authorizes the task, not this design. The driver arranges both; this draft includes no implementation or test execution.
+**Status:** Separate Sol-high draft checked by driver; one Claude source read reviewed it and its simpler cuts were accepted. The watcher cleared corrected390375e69f on 2026-11-16 at11:59 in Lane K questions.md, inside the queued ask, with no reread; not owner design approval. Build after the directed main fixture repair and #3500. No implementation or test execution yet.
 
 **Finish line:** A wizard Live attempt refused before activation starts can restart on its original preproduction host and clear through Start again. Keep one database per environment and every existing refusal.
 
@@ -22,4 +22,4 @@ pnpm --filter @waitron/provisioning exec vitest run src/first-setup-activation.t
 
 **Bounds:** Production +15/−5; tests +150/−0; support0; prose +30/−20, about220 changed lines (outside opinion above330). No new shared helper, state, record, protocol, schema, CLI change, environment exception, UI work, or repair of already stranded boxes. No edit to `registerSif`, `restoreFiscal`, hash chains or allocation. Inject the refusal; never fill the machine's disk. Use real databases, sequential transactions, close before outside reads, guarded cleanup.
 
-**Backlog and delivery:** remove the active `setup-environment` defect at `docs/backlog/self-service-refusals.md:784–786`, its table row and `docs/backlog.md:421–422`; fix its references around45/531/544/1268 so no deleted-anchor link remains. Preserve dated historical notes with a dated pointer to this plan rather than rewriting their history. One PR; two run-it angles (restart/Start again and environment/refusal preservation), one fixes read. Claude's single source read recommended the cuts above; the driver accepted them. Still NOT CLEARED until the watcher answers; no implementation or owner design approval.
+**Backlog and delivery:** remove the active `setup-environment` defect at `docs/backlog/self-service-refusals.md:784–786`, its table row and `docs/backlog.md:421–422`; fix its references around45/531/544/1268 so no deleted-anchor link remains. Preserve dated historical notes with a dated pointer to this plan rather than rewriting their history. One PR; two run-it angles (restart/Start again and environment/refusal preservation), one fixes read. Claude's single source read recommended the cuts above; the driver accepted them. Watcher11:59cleared this corrected scope; no implementation or owner design approval.
