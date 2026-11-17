@@ -2,7 +2,6 @@ import "./errors.js";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { authorizeManager } from "@waitron/identity";
 import { civilDateOf } from "@waitron/reporting";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
@@ -25,9 +24,6 @@ export interface TaxOfficeMonth {
   issued: TaxOfficeFilter["issued"];
   language: "en" | "es";
   venue: string | null;
-  /** The person the first turn authorized; the last turn must authorize the same one. */
-  authorizedBy: string;
-  sessionId: string;
   at: Date;
 }
 
@@ -36,7 +32,7 @@ export interface TaxOfficeExportDeps {
   backend: FiscalBackend;
   tradingContext: TradingContext;
   render: (copy: SaleCopy) => Promise<Uint8Array>;
-  /** Throws when the export must stop: the request was aborted or a handover closed the gate. */
+  /** Throws once the build's job is asked to stop. */
   stopIfAsked: () => void;
   log: Logger;
 }
@@ -105,7 +101,7 @@ export function renderTaxOfficeCsv(
  * copy is read in a lock turn of its own and rendered outside it, with a turn of the event loop
  * after each render, since a render resolves without one and renders back to back would hold the
  * thread. A copy that cannot be made is logged, left out and named in `failed.txt`, unless the
- * export was asked to stop. Authority, and whether to stop, are checked again after the last copy.
+ * export was asked to stop. Whether to stop is checked again after the last copy.
  */
 export async function* taxOfficeMonthEntries(
   deps: TaxOfficeExportDeps,
@@ -171,14 +167,5 @@ export async function* taxOfficeMonthEntries(
   }
   if (failed.length > 0)
     yield { name: "failed.txt", content: TAX_OFFICE_EXPORT_WORDS[month.language].failed(failed) };
-  await deps.db.withWriteLock(async () => {
-    const again = await authorizeManager(tx, {
-      managementSessionId: month.sessionId,
-      permission: "invoice.inspect",
-      touch: false,
-    });
-    if (again.authorizedBy !== month.authorizedBy)
-      throw new Error("tax office authorisation named a different person after building");
-  });
   deps.stopIfAsked();
 }

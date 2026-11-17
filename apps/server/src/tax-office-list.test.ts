@@ -12,6 +12,7 @@ import {
 } from "@waitron/reporting/test/fixtures.js";
 import type { SaleId } from "@waitron/shared";
 import { mountTaxOfficeApi } from "./tax-office-api.js";
+import type { TaxOfficeMonthBuilds } from "./tax-office-month-builds.js";
 import { sessionHolding } from "./testing/session-holding.js";
 import {
   listTaxOfficeInvoices,
@@ -146,7 +147,7 @@ let reporter: string;
 beforeAll(async () => {
   db = suite.db;
   app = new Hono();
-  // The list route reads neither the fiscal seat nor the trading context.
+  // The list route reads neither the fiscal seat, the trading context nor the month builds.
   mountTaxOfficeApi(
     app,
     {
@@ -155,6 +156,8 @@ beforeAll(async () => {
       backend: {} as FiscalBackend,
       tradingContext: {} as TradingContext,
       venueLocale: "es-ES",
+      builds: {} as TaxOfficeMonthBuilds,
+      freeBytes: () => Promise.resolve(null),
     },
     () => {},
   );

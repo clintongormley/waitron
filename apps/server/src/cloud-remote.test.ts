@@ -203,7 +203,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
       .status,
   ).toBe(404);
 });
-it("the staff entrance lets the tax office's invoice list, PDF and month through", async () => {
+it("the staff entrance lets the tax office's invoice list, PDF, month and its download through", async () => {
   const app = new Hono();
   app.all("*", (c) => c.json({ path: c.req.path, method: c.req.method }));
   const staff = createStaffApp(app, "https://staff.example.test");
@@ -211,6 +211,8 @@ it("the staff entrance lets the tax office's invoice list, PDF and month through
     ["GET", "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30"],
     ["POST", "/management-api/tax-office/invoices/0b0e6d0c-56a4-4c3e-9b0e-1b2b3c4d5e6f/pdf"],
     ["POST", "/management-api/tax-office/months/2026-11"],
+    ["GET", "/management-api/tax-office/month-download"],
+    ["GET", "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file"],
   ] as const) {
     const response = await staff.request(`https://staff.example.test${path}`, { method });
     expect(response.status, path).toBe(200);

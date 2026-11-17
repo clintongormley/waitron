@@ -17,13 +17,20 @@ it("quiets only the audited database queries while connected", () => {
     listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
     getVenueDefaults getVenuePrivacy listPurchaseInvoices
     getContentLanguages getContentTranslationGaps getContentTranslationTargets getContentTranslationCells
-    getGoogleConfig getLocales getDepartmentReceipt getReceiptPaperWidths pairingMode`.split(/\s+/);
+    getGoogleConfig getLocales getDepartmentReceipt getReceiptPaperWidths pairingMode
+    getTaxOfficeMonthDownload`.split(/\s+/);
   const api = new DashboardApi();
   const quiet = (Object.keys(QUERY_DEPENDENCIES) as DashboardQueryName[]).filter((name) => {
     const args = name === "getMenuRead" ? ["menu-1", ["status"]] : [];
     return dashboardQuery(api, name, args as never).quietWhileConnected;
   });
   expect(quiet.sort()).toEqual(expected.sort());
+});
+
+it("reads the person's tax-office month file on its own event, and every minute without the stream", () => {
+  const query = dashboardQuery(new DashboardApi(), "getTaxOfficeMonthDownload", []);
+  expect(query.dependencies).toEqual([{ type: "tax_office_download" }]);
+  expect(query.refreshMs).toBe(60_000);
 });
 
 it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {

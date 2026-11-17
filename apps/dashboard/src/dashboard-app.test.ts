@@ -6289,7 +6289,7 @@ describe("the floor plan editor inside the real page", () => {
         window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
         await expect.poll(() => bar(el)).not.toBeNull();
         expect(
-          el.shadowRoot!.querySelector(".banner-row > [data-test=alert-toast]"),
+          el.shadowRoot!.querySelector(".banner-row > .toast-stack > [data-test=alert-toast]"),
         ).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".banner-row > [data-test=update-bar]")).not.toBeNull();
       } finally {

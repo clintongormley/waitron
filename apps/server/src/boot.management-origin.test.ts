@@ -484,6 +484,8 @@ const INSPECTOR_ROUTES = [
   "GET /management-api/tax-office/invoices",
   "POST /management-api/tax-office/invoices/:saleId/pdf",
   "POST /management-api/tax-office/months/:month",
+  "GET /management-api/tax-office/month-download",
+  "GET /management-api/tax-office/month-download/:id/file",
 ];
 
 const INSPECTOR_REFUSAL = { status: 403, code: "authorization.inspection_only", params: {} };
@@ -616,6 +618,8 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           "/management-api/passkey/signals",
           "/management-api/me/personal-data/export",
           "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30",
+          "/management-api/tax-office/month-download",
+          "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file",
         ]) {
           const response = await fetch(url(path), { headers: { cookie: inspector } });
           await response.body?.cancel();
@@ -649,11 +653,49 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
           "/management-api/passkey/signals": 200,
           "/management-api/me/personal-data/export": 200,
           "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30": 200,
-          "POST month": 200,
+          "/management-api/tax-office/month-download": 200,
+          "/management-api/tax-office/month-download/00000000-0000-4000-8000-000000000000/file": 404,
+          "POST month": 202,
           "PUT locale": 204,
           "DELETE session": 204,
           "after signing out": 401,
         });
+      },
+      async () => {
+        inspector = (await sessionHolding(suite.db, ["invoice.inspect"])).cookie;
+      },
+    );
+  });
+
+  it("builds the month it asks for in the background and hands over the file once", async () => {
+    let inspector = "";
+    await withServer(
+      {},
+      async () => {
+        const status = async () => {
+          const response = await fetch(url("/management-api/tax-office/month-download"), {
+            headers: { cookie: inspector },
+          });
+          return (await response.json()) as { status: string; id?: string; month?: string };
+        };
+        const asked = await fetch(url("/management-api/tax-office/months/2026-11"), {
+          method: "POST",
+          headers: { cookie: inspector },
+        });
+        expect(asked.status).toBe(202);
+        expect(await asked.json()).toMatchObject({ status: "building", month: "2026-11" });
+        await vi.waitFor(async () => expect((await status()).status).toBe("ready"), {
+          timeout: 15_000,
+          interval: 100,
+        });
+        const { id } = await status();
+        const file = await fetch(url(`/management-api/tax-office/month-download/${id}/file`), {
+          headers: { cookie: inspector },
+        });
+        expect(file.status).toBe(200);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+        await vi.waitFor(async () => expect(await status()).toEqual({ status: "none" }));
       },
       async () => {
         inspector = (await sessionHolding(suite.db, ["invoice.inspect"])).cookie;

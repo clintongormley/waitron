@@ -51,6 +51,7 @@ export const JOB_CATALOGUE = {
   "cloud.suggestions": stop,
   "demo.printer": stop,
   "fiscal.reconciliation": stop,
+  "tax_office.month_zip": stop,
 } as const satisfies Record<
   string,
   { readonly kind: "job" | "service"; readonly stepdown: StepdownMark; readonly failsHealth?: true }

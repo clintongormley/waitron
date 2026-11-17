@@ -526,6 +526,15 @@ export const en = {
   "tax_office.download_month": "Download {month}",
   "tax_office.download_no_month": "Download the month",
   "tax_office.downloading_month": "Preparing {month}…",
+  "tax_office.save_file": "Save the file",
+  "tax_office.save_file_size": "Save the file ({size})",
+  "tax_office.month_building":
+    "Preparing the invoices for {month}. You can leave this page: a notice appears when they are ready.",
+  "tax_office.notice_ready": "The invoices for {month} are ready to save until {time}.",
+  "tax_office.notice_failed":
+    "The invoices for {month} could not be prepared. Choose Download {month} on Invoices to try again.",
+  "tax_office.notice_restarted":
+    "The server restarted before the invoices for {month} were ready. Choose Download {month} on Invoices to prepare them again.",
   "folders.select": "Select",
   "folders.selected": "{count} selected",
   "folders.selected_one": "1 selected",
@@ -4922,6 +4931,15 @@ export const es: Record<StringKey, string> = {
   "tax_office.download_month": "Descargar {month}",
   "tax_office.download_no_month": "Descargar el mes",
   "tax_office.downloading_month": "Preparando {month}…",
+  "tax_office.save_file": "Guardar el archivo",
+  "tax_office.save_file_size": "Guardar el archivo ({size})",
+  "tax_office.month_building":
+    "Preparando las facturas de {month}. Puedes salir de esta página: aparecerá un aviso cuando estén listas.",
+  "tax_office.notice_ready": "Las facturas de {month} se pueden guardar hasta las {time}.",
+  "tax_office.notice_failed":
+    "No se pudieron preparar las facturas de {month}. Elige Descargar {month} en Facturas para volver a intentarlo.",
+  "tax_office.notice_restarted":
+    "El servidor se reinició antes de que las facturas de {month} estuvieran listas. Elige Descargar {month} en Facturas para prepararlas de nuevo.",
   "folders.select": "Seleccionar",
   "folders.selected": "{count} seleccionados",
   "folders.selected_one": "1 seleccionado",

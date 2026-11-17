@@ -19,6 +19,7 @@ export function liveResourceTypes(
       "printer_discovery",
       "email_inbox",
       "backup_status",
+      "tax_office_download",
       "google_config",
       settingsChangeType("modules"),
     ]),

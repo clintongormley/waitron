@@ -1,14 +1,17 @@
 import { NavigationGuard } from "@waitron/ui";
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { LiveData } from "@waitron/dashboard-kit";
 import type {
   DashboardApi,
+  MonthDownloadDto,
   TaxOfficeInvoiceDto,
   TaxOfficePageDto,
   TaxOfficeQuery,
 } from "../api/client.js";
 import { en, es } from "../i18n/strings.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, fill, setLocale } from "../i18n/t.js";
+import { clockTime } from "../tax-office-download.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TaxOfficeScreen } from "./tax-office-screen.js";
 import "./tax-office-screen.js";
@@ -64,9 +67,22 @@ const page = (rows: TaxOfficeInvoiceDto[], next: TaxOfficePageDto["next"] = null
   timeZone: "Europe/Madrid",
 });
 
-async function mount(api: Partial<DashboardApi>) {
+/** The screen with the app shell's part played: the shell holds the month file's view, takes a
+ * request's answer into it and marks a saved or missing file settled. */
+async function mount(api: Partial<DashboardApi>, props: Partial<TaxOfficeScreen> = {}) {
   const { el } = await mountWidget<TaxOfficeScreen>("dashboard-tax-office-screen", {
-    api: api as DashboardApi,
+    api: {
+      liveData: new LiveData(),
+      getTaxOfficeMonthDownload: vi.fn().mockResolvedValue({ status: "none" }),
+      ...api,
+    } as DashboardApi,
+    ...props,
+  });
+  el.addEventListener("tax-office-month-requested", (event) => {
+    el.monthFile = (event as CustomEvent<MonthDownloadDto>).detail;
+  });
+  el.addEventListener("tax-office-month-settled", (event) => {
+    el.settledFile = (event as CustomEvent<{ id: string }>).detail.id;
   });
   return el;
 }
@@ -424,10 +440,10 @@ it("names the month of the issue range's start on the download action, in the pe
 
 it("keeps the download action quiet and switched off while the issue start date is empty", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  const downloadTaxOfficeMonth = vi.fn();
+  const requestTaxOfficeMonth = vi.fn();
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
@@ -438,17 +454,17 @@ it("keeps the download action quiet and switched off while the issue start date 
   expect(monthButton(el).textContent!.trim()).toBe("Download the month");
   expect(monthButton(el).getAttribute("variant")).toBe("secondary");
   monthButton(el).click();
-  expect(downloadTaxOfficeMonth).not.toHaveBeenCalled();
+  expect(requestTaxOfficeMonth).not.toHaveBeenCalled();
 });
 
 it("keeps the download action quiet and switched off when the address holds an impossible start date", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-13-01/to/2026-13-31");
-  const downloadTaxOfficeMonth = vi.fn();
+  const requestTaxOfficeMonth = vi.fn();
   const el = await mount({
     listTaxOfficeInvoices: vi
       .fn()
       .mockRejectedValue({ code: "management.request_invalid", params: { field: "from" } }),
-    downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
 
   await vi.waitFor(() => expect(field(el, "from").error).toBe(en["tax_office.refused.date"]));
@@ -456,57 +472,78 @@ it("keeps the download action quiet and switched off when the address holds an i
   expect(monthButton(el).textContent!.trim()).toBe("Download the month");
   expect(monthButton(el).getAttribute("variant")).toBe("secondary");
   monthButton(el).click();
-  expect(downloadTaxOfficeMonth).not.toHaveBeenCalled();
+  expect(requestTaxOfficeMonth).not.toHaveBeenCalled();
 });
 
-it("downloads the start month and saves it under the server's file name", async () => {
+const building = (month = "2026-03", id = "b1"): MonthDownloadDto => ({
+  status: "building",
+  id,
+  month,
+});
+const ready = (month = "2026-03", id = "b1"): MonthDownloadDto => ({
+  status: "ready",
+  id,
+  month,
+  bytes: 154_000_000,
+  expiresAt: "2026-03-31T15:45:00.000Z",
+});
+const monthLine = (el: TaxOfficeScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=month-file]");
+const lineText = (el: TaxOfficeScreen) => monthLine(el)?.textContent!.replace(/\s+/g, " ").trim();
+const saveButton = (el: TaxOfficeScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-month-file]");
+const actionError = (el: TaxOfficeScreen) =>
+  el.shadowRoot!.querySelector("[data-test=action-error]")?.textContent!.trim();
+const preparing = (month: string) =>
+  `Preparing the invoices for ${month}. You can leave this page: a notice appears when they are ready.`;
+
+it("Download asks the server to prepare the month, tells the app, and shows it being prepared", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  const zip = new Blob(["PK"], { type: "application/zip" });
-  const downloadTaxOfficeMonth = vi
-    .fn()
-    .mockResolvedValue({ blob: zip, fileName: "named-by-the-server.zip" });
-  const created = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:the-month");
-  const revoked = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const clicked: { href: string; download: string }[] = [];
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-    this: HTMLAnchorElement,
-  ) {
-    clicked.push({ href: this.href, download: this.download });
-  });
+  const requestTaxOfficeMonth = vi.fn().mockResolvedValue(building());
+  const told: unknown[] = [];
+  const listen = (event: Event) => told.push((event as CustomEvent).detail);
+  document.addEventListener("tax-office-month-requested", listen);
+  onTestFinished(() => document.removeEventListener("tax-office-month-requested", listen));
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  expect(monthLine(el)).toBeNull();
 
   await userEvent.click(monthButton(el));
 
-  await vi.waitFor(() =>
-    expect(clicked).toEqual([{ href: "blob:the-month", download: "named-by-the-server.zip" }]),
-  );
-  expect(downloadTaxOfficeMonth).toHaveBeenCalledWith("2026-03");
-  expect(created).toHaveBeenCalledWith(zip);
-  await vi.waitFor(() => expect(revoked).toHaveBeenCalledWith("blob:the-month"));
-  expect(monthButton(el).loading).toBe(false);
+  await vi.waitFor(() => expect(told).toEqual([building()]));
+  expect(requestTaxOfficeMonth).toHaveBeenCalledWith("2026-03");
+  await el.updateComplete;
+  expect(monthButton(el).loading).toBe(true);
+  expect(monthButton(el).textContent!.trim()).toBe("Preparing March 2026…");
+  expect(lineText(el)).toBe(preparing("March 2026"));
+  expect(saveButton(el)).toBeNull();
 });
 
-it("shows the download working and ignores a second press until it ends", async () => {
+it("says in Spanish that the month is being prepared", async () => {
+  setLocale("es-ES");
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  let finish!: (file: { blob: Blob; fileName: string | null }) => void;
-  const downloadTaxOfficeMonth = vi.fn(
-    () => new Promise<{ blob: Blob; fileName: string | null }>((resolve) => (finish = resolve)),
+  const el = await mount(
+    { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
+    { monthFile: building() },
   );
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:the-month");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const saved: string[] = [];
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-    this: HTMLAnchorElement,
-  ) {
-    saved.push(this.download);
-  });
+
+  await vi.waitFor(() =>
+    expect(lineText(el)).toBe(es["tax_office.month_building"].replace("{month}", "marzo de 2026")),
+  );
+});
+
+it("ignores a second press while the month is being asked for and prepared", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  let answer!: (view: MonthDownloadDto) => void;
+  const requestTaxOfficeMonth = vi.fn(
+    () => new Promise<MonthDownloadDto>((resolve) => (answer = resolve)),
+  );
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
@@ -514,83 +551,369 @@ it("shows the download working and ignores a second press until it ends", async 
   await vi.waitFor(() => expect(monthButton(el).loading).toBe(true));
   expect(monthButton(el).textContent!.trim()).toBe("Preparing March 2026…");
   monthButton(el).click();
+  answer(building());
+  await vi.waitFor(() => expect(lineText(el)).toBe(preparing("March 2026")));
+  monthButton(el).click();
   await el.updateComplete;
-  expect(downloadTaxOfficeMonth).toHaveBeenCalledTimes(1);
 
-  finish({ blob: new Blob(["PK"]), fileName: null });
-  await vi.waitFor(() => expect(monthButton(el).loading).toBe(false));
-  expect(monthButton(el).textContent!.trim()).toBe("Download March 2026");
-  expect(saved).toEqual(["invoices-2026-03.zip"]);
+  expect(requestTaxOfficeMonth).toHaveBeenCalledTimes(1);
+  expect(monthButton(el).loading).toBe(true);
+});
+
+it("shows the state the app holds when the person leaves the page and comes back", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const api: Partial<DashboardApi> = {
+    liveData: new LiveData(),
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+    requestTaxOfficeMonth: vi.fn().mockResolvedValue(building()),
+  };
+  const first = await mount(api);
+  await vi.waitFor(() => expect(table(first).loading).toBe(false));
+  await userEvent.click(monthButton(first));
+  await vi.waitFor(() => expect(lineText(first)).toBe(preparing("March 2026")));
+  first.remove();
+
+  const during = await mount(api, { monthFile: building() });
+  await vi.waitFor(() => expect(lineText(during)).toBe(preparing("March 2026")));
+  expect(monthButton(during).loading).toBe(true);
+  during.remove();
+
+  const after = await mount(api, { monthFile: ready() });
+  await vi.waitFor(() =>
+    expect(lineText(after)).toContain(
+      fill("tax_office.notice_ready", {
+        month: "March 2026",
+        time: clockTime("2026-03-31T15:45:00.000Z"),
+      }),
+    ),
+  );
+  expect(monthButton(after).loading).toBe(false);
+  expect(monthButton(after).textContent!.trim()).toBe("Download March 2026");
+});
+
+it("follows the app's record while the page is open, from preparing to ready", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const el = await mount(
+    { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
+    { monthFile: building() },
+  );
+  await vi.waitFor(() => expect(lineText(el)).toBe(preparing("March 2026")));
+
+  el.monthFile = ready();
+
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+  expect(monthButton(el).loading).toBe(false);
+});
+
+it("Save the file on the ready line starts the browser's download, shows the file's size, and the line goes", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(ready()),
+      taxOfficeMonthFileUrl: (id: string) => `/management-api/tax-office/month-download/${id}/file`,
+    },
+    { startDownload, monthFile: ready() },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+  expect(lineText(el)).toBe(
+    `${fill("tax_office.notice_ready", {
+      month: "March 2026",
+      time: clockTime("2026-03-31T15:45:00.000Z"),
+    })} Save the file (154 MB)`,
+  );
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() =>
+    expect(startDownload).toHaveBeenCalledWith("/management-api/tax-office/month-download/b1/file"),
+  );
+  await el.updateComplete;
+  expect(monthLine(el)).toBeNull();
+  expect(actionError(el)).toBeUndefined();
+});
+
+it("says the file is no longer on the server when Save finds it gone, and downloads nothing", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi.fn().mockResolvedValue({ status: "none" }),
+      taxOfficeMonthFileUrl: () => "/file",
+    },
+    { startDownload, monthFile: ready() },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() =>
+    expect(actionError(el)).toBe(
+      "This file is no longer on the server. Choose Download again to prepare it.",
+    ),
+  );
+  expect(startDownload).not.toHaveBeenCalled();
+  expect(monthLine(el)).toBeNull();
+});
+
+it("tells the app which file was saved from the ready line", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const told: unknown[] = [];
+  const listen = (event: Event) => told.push((event as CustomEvent).detail);
+  document.addEventListener("tax-office-month-settled", listen);
+  onTestFinished(() => document.removeEventListener("tax-office-month-settled", listen));
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi.fn().mockResolvedValue(ready()),
+      taxOfficeMonthFileUrl: () => "/file",
+    },
+    { startDownload, monthFile: ready() },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() => expect(told).toEqual([{ id: "b1" }]));
+});
+
+it("keeps Save the file when the check before saving is refused for another reason", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const told: unknown[] = [];
+  const listen = (event: Event) => told.push((event as CustomEvent).detail);
+  document.addEventListener("tax-office-month-settled", listen);
+  onTestFinished(() => document.removeEventListener("tax-office-month-settled", listen));
+  const startDownload = vi.fn();
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      getTaxOfficeMonthDownload: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      taxOfficeMonthFileUrl: () => "/file",
+    },
+    { startDownload, monthFile: ready() },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+
+  await userEvent.click(saveButton(el)!);
+
+  await vi.waitFor(() => expect(actionError(el)).toBeTruthy());
+  await el.updateComplete;
+  expect(saveButton(el)).not.toBeNull();
+  expect(startDownload).not.toHaveBeenCalled();
+  expect(told).toEqual([]);
+});
+
+it("takes the ready line away once the app marks that same file settled", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const el = await mount(
+    { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
+    { monthFile: ready() },
+  );
+  await vi.waitFor(() => expect(saveButton(el)).not.toBeNull());
+  const saved = (id: string) => (el.settledFile = id);
+
+  saved("b0");
+  await el.updateComplete;
+  expect(saveButton(el)).not.toBeNull();
+  saved("b1");
+  await el.updateComplete;
+  expect(monthLine(el)).toBeNull();
+});
+
+it("names the month whose invoices could not be prepared", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
+  const el = await mount(
+    { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
+    { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: null } },
+  );
+
+  await vi.waitFor(() =>
+    expect(lineText(el)).toBe(
+      "The invoices for March 2026 could not be prepared. Choose Download March 2026 on Invoices to try again.",
+    ),
+  );
+  expect(saveButton(el)).toBeNull();
+  expect(monthButton(el).loading).toBe(false);
+  expect(monthButton(el).textContent!.trim()).toBe("Download April 2026");
 });
 
 it("says why the month could not be downloaded, and keeps the list", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([invoice()])),
-    downloadTaxOfficeMonth: vi.fn().mockRejectedValue({ code: "tax_office.export_running" }),
+    requestTaxOfficeMonth: vi.fn().mockRejectedValue({ code: "tax_office.export_running" }),
   });
   await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
 
   await userEvent.click(monthButton(el));
 
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=action-error]")?.textContent!.trim()).toBe(
-      "Another month of invoices is already downloading. Try again once that download finishes.",
+    expect(actionError(el)).toBe(
+      "Invoices for a month are already being prepared on the server. Try again once that file is ready.",
     ),
   );
   expect(monthButton(el).loading).toBe(false);
+  expect(monthLine(el)).toBeNull();
   expect(table(el).errorMessage).toBe("");
   expect(table(el).rows).toHaveLength(1);
 });
 
-function heldDownload() {
-  let finish!: (file: { blob: Blob; fileName: string | null }) => void;
-  const downloadTaxOfficeMonth = vi.fn(
-    () => new Promise<{ blob: Blob; fileName: string | null }>((resolve) => (finish = resolve)),
-  );
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:the-month");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const saved: string[] = [];
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-    this: HTMLAnchorElement,
-  ) {
-    saved.push(this.download);
-  });
-  return {
-    downloadTaxOfficeMonth,
-    saved,
-    finish: () => finish({ blob: new Blob(["PK"]), fileName: null }),
-  };
-}
-
-it("keeps naming the month being downloaded when Issued from moves to another month", async () => {
+it("names the free and needed space when the disk is too full to prepare the month", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  const held = heldDownload();
+  const params = { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 };
+  const el = await mount({
+    listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([invoice()])),
+    requestTaxOfficeMonth: vi.fn().mockRejectedValue({ code: "tax_office.space_low", params }),
+  });
+  await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
+
+  await userEvent.click(monthButton(el));
+
+  await vi.waitFor(() =>
+    expect(actionError(el)).toBe(
+      "The server's disk is nearly full: it has 2.3 GB free, and preparing this file needs 2.4 GB. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+    ),
+  );
+  expect(table(el).errorMessage).toBe("");
+  expect(table(el).rows).toHaveLength(1);
+});
+
+const spaceLow = {
+  code: "tax_office.space_low" as const,
+  params: { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 },
+};
+const RAN_OUT_EN =
+  "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached 412 MB; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.";
+const ranOut = {
+  code: "tax_office.space_ran_out" as const,
+  params: { writtenBytes: 412_000_000 },
+};
+const nextStep = (el: TaxOfficeScreen, test: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`);
+
+it("says how far the month had got when the server ran short of space, in place of the plain failure", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
+  const el = await mount(
+    { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
+    { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut } },
+  );
+
+  await vi.waitFor(() => expect(lineText(el)).toContain(RAN_OUT_EN));
+  expect(lineText(el)).not.toContain("could not be prepared");
+  expect(saveButton(el)).toBeNull();
+});
+
+it.each([
+  ["the line of a month that stopped", "line"],
+  ["the refusal of a request", "request"],
+] as const)(
+  "offers an administrator's sign-in beside %s for want of space when the person cannot open Backups",
+  async (_case, where) => {
+    history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+    const el = await mount(
+      {
+        listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+        requestTaxOfficeMonth: vi.fn().mockRejectedValue(spaceLow),
+      },
+      where === "line"
+        ? { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut } }
+        : {},
+    );
+    await vi.waitFor(() => expect(table(el).loading).toBe(false));
+    if (where === "request") await userEvent.click(monthButton(el));
+    const asked: string[] = [];
+    el.addEventListener("admin-sign-in", () => asked.push("admin-sign-in"));
+    el.addEventListener("wt-alert-go-to", () => asked.push("go-to"));
+
+    await vi.waitFor(() => expect(nextStep(el, "space-admin-sign-in")).not.toBeNull());
+    expect(nextStep(el, "space-go-to-backups")).toBeNull();
+    expect(nextStep(el, "space-admin-sign-in")!.textContent!.trim()).toBe(
+      "Sign in as an administrator",
+    );
+    nextStep(el, "space-admin-sign-in")!.click();
+    expect(asked).toEqual(["admin-sign-in"]);
+  },
+);
+
+it.each([
+  ["the line of a month that stopped", "line"],
+  ["the refusal of a request", "request"],
+] as const)(
+  "offers Backups beside %s for want of space when the person can open it",
+  async (_case, where) => {
+    history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+    const el = await mount(
+      {
+        listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+        requestTaxOfficeMonth: vi.fn().mockRejectedValue(spaceLow),
+      },
+      where === "line"
+        ? {
+            canOpenBackups: true,
+            monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut },
+          }
+        : { canOpenBackups: true },
+    );
+    await vi.waitFor(() => expect(table(el).loading).toBe(false));
+    if (where === "request") await userEvent.click(monthButton(el));
+    const went: unknown[] = [];
+    el.addEventListener("wt-alert-go-to", (event) => went.push((event as CustomEvent).detail));
+
+    await vi.waitFor(() => expect(nextStep(el, "space-go-to-backups")).not.toBeNull());
+    expect(nextStep(el, "space-admin-sign-in")).toBeNull();
+    expect(nextStep(el, "space-go-to-backups")!.textContent!.trim()).toBe("Go to Backups");
+    nextStep(el, "space-go-to-backups")!.click();
+    expect(went).toEqual([{ screen: "backup" }]);
+  },
+);
+
+it("offers no next step beside a refusal that is not about disk space", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const el = await mount(
+    {
+      listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
+      requestTaxOfficeMonth: vi.fn().mockRejectedValue({ code: "tax_office.export_running" }),
+    },
+    { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: null } },
+  );
+  await vi.waitFor(() => expect(table(el).loading).toBe(false));
+  await userEvent.click(monthButton(el));
+  await vi.waitFor(() => expect(actionError(el)).toBeDefined());
+
+  expect(nextStep(el, "space-admin-sign-in")).toBeNull();
+  expect(nextStep(el, "space-go-to-backups")).toBeNull();
+});
+
+it("keeps naming the month being prepared when Issued from moves to another month", async () => {
+  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  const requestTaxOfficeMonth = vi.fn().mockResolvedValue(building());
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth: held.downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
   await userEvent.click(monthButton(el));
-  await vi.waitFor(() => expect(monthButton(el).loading).toBe(true));
+  await vi.waitFor(() => expect(lineText(el)).toBe(preparing("March 2026")));
   changeField(el, "from", "2026-04-02");
   await el.updateComplete;
   expect(monthButton(el).textContent!.trim()).toBe("Preparing March 2026…");
+  expect(lineText(el)).toBe(preparing("March 2026"));
 
-  held.finish();
+  el.monthFile = ready();
   await vi.waitFor(() => expect(monthButton(el).loading).toBe(false));
-  expect(held.saved).toEqual(["invoices-2026-03.zip"]);
-  expect(held.downloadTaxOfficeMonth).toHaveBeenCalledWith("2026-03");
+  expect(requestTaxOfficeMonth).toHaveBeenCalledWith("2026-03");
   expect(monthButton(el).textContent!.trim()).toBe("Download April 2026");
 });
 
-it("keeps the download action primary and busy when Issued from is cleared during the download", async () => {
+it("keeps the download action primary and busy when Issued from is cleared while the month is prepared", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  const held = heldDownload();
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth: held.downloadTaxOfficeMonth,
+    requestTaxOfficeMonth: vi.fn().mockResolvedValue(building()),
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
@@ -603,37 +926,31 @@ it("keeps the download action primary and busy when Issued from is cleared durin
   expect(monthButton(el).loading).toBe(true);
   expect(monthButton(el).textContent!.trim()).toBe("Preparing March 2026…");
 
-  held.finish();
+  el.monthFile = ready();
   await vi.waitFor(() => expect(monthButton(el).loading).toBe(false));
-  expect(held.saved).toEqual(["invoices-2026-03.zip"]);
   expect(monthButton(el).disabled).toBe(true);
   expect(monthButton(el).getAttribute("variant")).toBe("secondary");
   expect(monthButton(el).textContent!.trim()).toBe("Download the month");
 });
 
-it("clears an earlier download refusal when the month is downloaded again", async () => {
+it("clears an earlier download refusal when the month is asked for again", async () => {
   history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
-  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:the-month");
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const saved = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-  const downloadTaxOfficeMonth = vi
+  const requestTaxOfficeMonth = vi
     .fn()
     .mockRejectedValueOnce({ code: "tax_office.export_running" })
-    .mockResolvedValueOnce({ blob: new Blob(["PK"]), fileName: null });
+    .mockResolvedValueOnce(building());
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
-    downloadTaxOfficeMonth,
+    requestTaxOfficeMonth,
   });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
-  const actionError = () => el.shadowRoot!.querySelector("[data-test=action-error]");
 
   await userEvent.click(monthButton(el));
-  await vi.waitFor(() => expect(actionError()).not.toBeNull());
+  await vi.waitFor(() => expect(actionError(el)).toBeDefined());
 
   await userEvent.click(monthButton(el));
-  await vi.waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
-  await el.updateComplete;
-  expect(actionError()).toBeNull();
+  await vi.waitFor(() => expect(lineText(el)).toBe(preparing("March 2026")));
+  expect(actionError(el)).toBeUndefined();
 });
 
 it("marks a cancelled invoice Cancelled, with its date on the next line", async () => {

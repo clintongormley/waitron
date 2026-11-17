@@ -4,7 +4,7 @@ import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
-import { CLOUD_STAFF_CERT_FILE, SERVER_PEM_FILE } from "@waitron/store";
+import { CLOUD_STAFF_CERT_FILE, SERVER_PEM_FILE, TAX_OFFICE_DOWNLOADS_DIR } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -368,7 +368,9 @@ import { mountMenuApi, translationContextFor } from "./menu-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
-import { mountTaxOfficeApi } from "./tax-office-api.js";
+import { mountTaxOfficeApi, taxOfficeMonthSource } from "./tax-office-api.js";
+import { createTaxOfficeMonthBuilds } from "./tax-office-month-builds.js";
+import { lowestFreeBytes } from "./start-space.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountOrdersApi } from "./orders-api.js";
 import { mountWorkforceApi, WORK_TIME_RULES_NOT_FOUND } from "./workforce-api.js";
@@ -3452,6 +3454,17 @@ async function bootServer(
     },
     log,
   );
+  const taxOfficeFreeBytes = () => lowestFreeBytes([config.stateDir, config.venueDir]);
+  const taxOfficeMonthBuilds = createTaxOfficeMonthBuilds({
+    dir: join(config.stateDir, TAX_OFFICE_DOWNLOADS_DIR),
+    now,
+    entries: taxOfficeMonthSource({ db, backend: nodeBackend, tradingContext, log }),
+    changed: () => publishState(liveEvents, "tax_office_download", log),
+    wake: () => jobRunner.wake("tax_office.month_zip"),
+    log,
+    freeBytes: taxOfficeFreeBytes,
+  });
+  jobRunner.add(taxOfficeMonthBuilds.job());
   mountTaxOfficeApi(
     app,
     {
@@ -3460,7 +3473,8 @@ async function bootServer(
       backend: nodeBackend,
       tradingContext,
       venueLocale,
-      closed: handoverGate.closed,
+      builds: taxOfficeMonthBuilds,
+      freeBytes: taxOfficeFreeBytes,
     },
     log,
   );

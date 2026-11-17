@@ -112,9 +112,9 @@ export interface ActivityKindData {
     readonly invoices: number;
     readonly purchases: number;
   };
-  /** Who downloaded a month of invoices for the tax office, which month (`YYYY-MM`) and how many
-   * invoices it held when the download began; never a customer named in it. */
-  readonly "tax_office.month_downloaded": { readonly month: string; readonly invoices: number };
+  /** Who asked for a month of invoices for the tax office, which month (`YYYY-MM`) and how many
+   * invoices it held when they asked; never a customer named in it. */
+  readonly "tax_office.month_requested": { readonly month: string; readonly invoices: number };
   /** Who downloaded the file of deferred payments, for which business days, and its row
    * count; never a customer named in the file. */
   readonly "deferred_payment_export.downloaded": {
@@ -162,6 +162,6 @@ export const ACTIVITY_KINDS = {
   "membership.node_cleared": { subject: "node" },
   "deferred_payment_export.downloaded": { subject: "report" },
   "accountant_export.downloaded": { subject: "report" },
-  "tax_office.month_downloaded": { subject: "report" },
+  "tax_office.month_requested": { subject: "report" },
 } as const satisfies Record<ActivityKind, ActivityKindRule>;
 export type ActivitySubjectKind = (typeof ACTIVITY_KINDS)[ActivityKind]["subject"];

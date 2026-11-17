@@ -500,6 +500,9 @@ export const QUERY_DEPENDENCIES = {
   // The stop is process state no table reports, so the timer reads it; `incidents` holds the
   // deletion it names.
   getDiskStop: ["incidents"],
+  // In-memory build state, published on each change. The shell reads it faster while a file of the
+  // person's is being prepared and the stream is down.
+  getTaxOfficeMonthDownload: ["tax_office_download"],
 } as const;
 
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
@@ -570,6 +573,7 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getDepartmentReceipt",
   "getReceiptPaperWidths",
   "pairingMode",
+  "getTaxOfficeMonthDownload",
 ]);
 
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;

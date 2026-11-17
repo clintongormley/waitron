@@ -1598,25 +1598,41 @@ it("downloads one of the tax office's invoices as a POST, bytes untouched", asyn
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
 });
 
-it("downloads a month of tax-office invoices as a POST, with the server's file name", async () => {
-  const fetchImpl = vi.fn().mockResolvedValue(
-    new Response(new Uint8Array([0x50, 0x4b, 3, 4]), {
-      status: 200,
-      headers: {
-        "content-type": "application/zip",
-        "content-disposition": 'attachment; filename="invoices-2026-03.zip"',
-      },
-    }),
-  );
+it("asks for a month of tax-office invoices as a POST, answering the person's view", async () => {
+  const view = { status: "building", id: "b1", month: "2026-03" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(view, true, 202));
   const api = new DashboardApi("", fetchImpl);
-
-  const file = await api.downloadTaxOfficeMonth("2026-03");
-
+  expect(await api.requestTaxOfficeMonth("2026-03")).toEqual(view);
   expect(callsOf(fetchImpl)).toEqual([
     ["/management-api/tax-office/months/2026-03", "POST", undefined],
   ]);
-  expect(file.fileName).toBe("invoices-2026-03.zip");
-  expect([...new Uint8Array(await file.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
+});
+
+it("reads the person's tax-office month file as a GET", async () => {
+  const view = {
+    status: "ready",
+    id: "b1",
+    month: "2026-03",
+    bytes: 12,
+    expiresAt: "2026-11-16T20:00:00.000Z",
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(view));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.getTaxOfficeMonthDownload()).toEqual(view);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/month-download", "GET", undefined],
+  ]);
+});
+
+it("names the tax-office month file's address by its build id under the client's base, without fetching it", () => {
+  const fetchImpl = vi.fn();
+  expect(new DashboardApi("", fetchImpl).taxOfficeMonthFileUrl("b1")).toBe(
+    "/management-api/tax-office/month-download/b1/file",
+  );
+  expect(new DashboardApi("https://box.test", fetchImpl).taxOfficeMonthFileUrl("b/1 2")).toBe(
+    "https://box.test/management-api/tax-office/month-download/b%2F1%202/file",
+  );
+  expect(fetchImpl).not.toHaveBeenCalled();
 });
 
 it("downloads the accountant workbook for the chosen calendar dates as a POST, bytes untouched", async () => {

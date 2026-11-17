@@ -8,7 +8,7 @@ import {
   pageTitleStyles,
   type DataTableColumn,
 } from "@waitron/ui";
-import { formatMoney, isCalendarDate } from "@waitron/shared";
+import { formatBytes, formatMoney, isCalendarDate } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import {
   TAX_OFFICE_KINDS,
   type DashboardApi,
+  type MonthDownloadDto,
   type TaxOfficeCursor,
   type TaxOfficeInvoiceDto,
   type TaxOfficeKind,
@@ -26,6 +27,15 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
+import {
+  clockTime,
+  monthName,
+  paramsOf,
+  saveTaxOfficeFile,
+  startBrowserDownload,
+  type StartDownload,
+} from "../tax-office-download.js";
+import { goToLabel } from "../widgets/alert-format.js";
 import { pdfFileName } from "../widgets/order-detail-dialog.js";
 
 type Filter = Omit<TaxOfficeQuery, "after">;
@@ -98,8 +108,18 @@ export class TaxOfficeScreen extends LitElement {
       .filters wt-combobox {
         width: calc(var(--wt-cell-name-max-width) + var(--wt-space-4));
       }
-      .action-error {
+      .notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
         margin: 0 0 var(--wt-space-3);
+      }
+      .notice p {
+        margin: 0;
+      }
+      .action-error,
+      .month-file.failed p {
         color: var(--wt-color-danger);
       }
       .more {
@@ -155,6 +175,12 @@ export class TaxOfficeScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) startDownload: StartDownload = startBrowserDownload;
+  /** The person's own month file on the server, as the app shell last read it. */
+  @property({ attribute: false }) monthFile: MonthDownloadDto = { status: "none" };
+  /** A file saved or found gone, whose line no longer applies until the server says otherwise. */
+  @property({ attribute: false }) settledFile: string | null = null;
+  @property({ attribute: false }) canOpenBackups = false;
   /** The fields as the person left them, text untrimmed; a read waits until both issue dates are filled. */
   @state() private filter: Filter = currentMonth();
   @state() private invoices: TaxOfficeInvoiceDto[] = [];
@@ -165,11 +191,11 @@ export class TaxOfficeScreen extends LitElement {
   /** A read's refusal: beside the field it names, or the table's load message when it names none. */
   @state() private refusal: { field: string | null; message: string } | null = null;
   @state() private moreError = "";
-  /** An Open that failed; kept apart from a read's message so neither clears the other. */
-  @state() private actionError = "";
+  /** A press that failed; kept apart from a read's message so neither clears the other. */
+  @state() private actionRefusal: { code: string; message: string } | null = null;
   @state() private opening: ReadonlySet<string> = new Set();
-  /** The `YYYY-MM` being downloaded: the month pressed, which a later Issued from change does not move. */
-  @state() private downloadingMonth: string | null = null;
+  /** The `YYYY-MM` being asked for: the month pressed, which a later Issued from change does not move. */
+  @state() private requestingMonth: string | null = null;
   #read = 0;
   /** The filter of the read last sent, so the address change this screen writes does not send it twice. */
   #requested?: string;
@@ -311,7 +337,7 @@ export class TaxOfficeScreen extends LitElement {
   async #open(invoice: TaxOfficeInvoiceDto): Promise<void> {
     if (this.opening.has(invoice.id)) return;
     this.opening = new Set(this.opening).add(invoice.id);
-    this.actionError = "";
+    this.actionRefusal = null;
     try {
       const file = await this.api.downloadTaxOfficeInvoicePdf(invoice.id);
       const url = URL.createObjectURL(file);
@@ -323,7 +349,7 @@ export class TaxOfficeScreen extends LitElement {
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
-      this.actionError = codeMessage(codeOf(error));
+      this.#refused(error);
     } finally {
       const rest = new Set(this.opening);
       rest.delete(invoice.id);
@@ -337,43 +363,77 @@ export class TaxOfficeScreen extends LitElement {
     return from !== undefined && isCalendarDate(from) ? from.slice(0, 7) : null;
   }
 
-  async #downloadMonth(): Promise<void> {
+  #refused(error: unknown): void {
+    const code = codeOf(error);
+    this.actionRefusal = { code, message: codeMessage(code, currentLocale(), paramsOf(error)) };
+  }
+
+  #tell(type: string, detail: unknown): void {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /** The answer goes to the app shell, which keeps it unless a read already saw that build. */
+  async #requestMonth(): Promise<void> {
     const month = this.#month();
-    if (month === null || this.downloadingMonth !== null) return;
-    this.downloadingMonth = month;
-    this.actionError = "";
+    if (month === null || this.#busyMonth() !== null) return;
+    this.requestingMonth = month;
+    this.actionRefusal = null;
     try {
-      const file = await this.api.downloadTaxOfficeMonth(month);
-      const url = URL.createObjectURL(file.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = file.fileName ?? `invoices-${month}.zip`;
-      link.click();
-      URL.revokeObjectURL(url);
+      this.#tell("tax-office-month-requested", await this.api.requestTaxOfficeMonth(month));
     } catch (error) {
-      this.actionError = codeMessage(codeOf(error));
+      this.#refused(error);
     } finally {
-      this.downloadingMonth = null;
+      this.requestingMonth = null;
     }
   }
 
+  async #saveMonth(file: { id: string; month: string }): Promise<void> {
+    this.actionRefusal = null;
+    try {
+      const id = await saveTaxOfficeFile(this.api, file.month, this.startDownload);
+      this.#tell("tax-office-month-settled", { id });
+    } catch (error) {
+      this.#refused(error);
+      // Only a file found gone is settled; any other refusal leaves Save to try again.
+      if (codeOf(error) === "tax_office.download_missing")
+        this.#tell("tax-office-month-settled", { id: file.id });
+    }
+  }
+
+  /** Space is freed on Backups; a session that cannot open it is offered an administrator's sign-in. */
+  #spaceNextStep() {
+    return this.canOpenBackups
+      ? html`<wt-button
+          variant="secondary"
+          data-test="space-go-to-backups"
+          @click=${() => this.#tell("wt-alert-go-to", { screen: "backup" })}
+          >${goToLabel("backup")}</wt-button
+        >`
+      : html`<wt-button
+          variant="secondary"
+          data-test="space-admin-sign-in"
+          @click=${() => this.#tell("admin-sign-in", null)}
+          >${t("staff.sign_in_as_admin")}</wt-button
+        >`;
+  }
+
+  /** The month the server is preparing for this person, or the one being asked for. */
+  #busyMonth(): string | null {
+    return (
+      this.requestingMonth ?? (this.monthFile.status === "building" ? this.monthFile.month : null)
+    );
+  }
+
   #monthAction() {
-    const busy = this.downloadingMonth;
+    const busy = this.#busyMonth();
     const month = busy ?? this.#month();
-    const label = (key: StringKey, yearMonth: string) =>
-      fill(key, {
-        month: new Intl.DateTimeFormat(currentLocale(), {
-          month: "long",
-          year: "numeric",
-          timeZone: "UTC",
-        }).format(new Date(`${yearMonth}-01T00:00:00Z`)),
-      });
+    const label = (key: StringKey, yearMonth: string) => fill(key, { month: monthName(yearMonth) });
     return html`<wt-button
       data-test="download-month"
       variant=${month === null ? "secondary" : "primary"}
       ?disabled=${month === null}
       ?loading=${busy !== null}
-      @click=${() => void this.#downloadMonth()}
+      @click=${() => void this.#requestMonth()}
       >${
         busy !== null
           ? label("tax_office.downloading_month", busy)
@@ -382,6 +442,45 @@ export class TaxOfficeScreen extends LitElement {
             : label("tax_office.download_month", month)
       }</wt-button
     >`;
+  }
+
+  #monthFileLine() {
+    const file = this.monthFile;
+    if (file.status === "none" || file.id === this.settledFile) return nothing;
+    const month = monthName(file.month);
+    if (file.status !== "ready") {
+      const stopped = file.status === "failed" ? file.refusal : null;
+      return html`<div
+        class="notice month-file ${file.status}"
+        data-test="month-file"
+        role="status"
+      >
+        <p>
+          ${
+            stopped !== null
+              ? codeMessage(stopped.code, currentLocale(), stopped.params)
+              : fill(
+                  file.status === "building"
+                    ? "tax_office.month_building"
+                    : "tax_office.notice_failed",
+                  { month },
+                )
+          }
+        </p>
+        ${stopped === null ? nothing : this.#spaceNextStep()}
+      </div>`;
+    }
+    return html`<div class="notice month-file" data-test="month-file" role="status">
+      <p>${fill("tax_office.notice_ready", { month, time: clockTime(file.expiresAt) })}</p>
+      <wt-button
+        variant="secondary"
+        data-test="save-month-file"
+        @click=${() => void this.#saveMonth(file)}
+        >${fill("tax_office.save_file_size", {
+          size: formatBytes(file.bytes, currentLocale()),
+        })}</wt-button
+      >
+    </div>`;
   }
 
   #columns(): DataTableColumn<TaxOfficeInvoiceDto>[] {
@@ -576,12 +675,16 @@ export class TaxOfficeScreen extends LitElement {
         ${this.#dateField("operationFrom", "tax_office.operation_from", false)}
         ${this.#dateField("operationTo", "tax_office.operation_to", false)}
       </div>
+      ${this.#monthFileLine()}
       ${
-        this.actionError === ""
+        this.actionRefusal === null
           ? nothing
-          : html`<p class="action-error" role="alert" data-test="action-error">
-              ${this.actionError}
-            </p>`
+          : html`<div class="notice">
+              <p class="action-error" role="alert" data-test="action-error">
+                ${this.actionRefusal.message}
+              </p>
+              ${this.actionRefusal.code === "tax_office.space_low" ? this.#spaceNextStep() : nothing}
+            </div>`
       }
       <wt-data-table
         aria-label=${t("tax_office.title")}

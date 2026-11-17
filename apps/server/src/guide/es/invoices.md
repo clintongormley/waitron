@@ -20,9 +20,10 @@ Elige el número de una factura para verla en PDF y, desde ahí, imprimirla o gu
 anulada sigue en la lista, marcada con el día en que se anuló. Si la lista termina con
 **Mostrar más facturas**, elígelo para ver el resto.
 
-Para entregar un mes entero, elige **Descargar** junto a las fechas: guarda un archivo con una
-copia de cada factura emitida en el mes en que cae **Emitidas desde** y una hoja de cálculo
-con esas facturas.
+Para entregar un mes entero, elige **Descargar** junto a las fechas: el servidor prepara un
+archivo con una copia de cada factura emitida en el mes en que cae **Emitidas desde** y una hoja
+de cálculo con esas facturas. Puedes salir de la página mientras tanto; un aviso te indica cuándo
+elegir **Guardar el archivo**, y un archivo sin guardar se queda en el servidor una hora.
 
 ## Dar a un inspector su propio acceso {#inspector-sign-in}
 
@@ -35,6 +36,7 @@ Un inspector puede tener su propio acceso cuando el correo del servidor está co
   por correo; consulta [Acceso a la cuenta](staff.md#account-access).
 - Puede entrar en el local o, con el [acceso remoto](servers.md#remote-access) activado, a través
   de Waitron Cloud.
-- Puede elegir **Descargar** junto a las fechas para guardar las facturas de un mes, cada una
-  como copia, con una hoja de cálculo de ellas.
+- Puede elegir **Descargar** junto a las fechas para preparar las facturas de un mes, cada una
+  como copia, con una hoja de cálculo de ellas, y después **Guardar el archivo** cuando el aviso
+  diga que está listo.
 - Cuando termine la visita, deshabilita su cuenta en **Usuarios**.

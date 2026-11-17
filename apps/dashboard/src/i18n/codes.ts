@@ -3,6 +3,7 @@ import {
   codeOf,
   registerCodeMessages,
 } from "@waitron/dashboard-kit";
+import { formatBytes } from "@waitron/shared";
 import { t, currentLocale, pickLocale } from "./t.js";
 import { en, es } from "./strings.js";
 
@@ -77,8 +78,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya no es el servidor principal, así que no puede añadir registros nuevos para Hacienda. Abre esta página en el servidor principal.",
   },
   "tax_office.export_running": {
-    en: "Another month of invoices is already downloading. Try again once that download finishes.",
-    es: "Ya se está descargando otro mes de facturas. Vuelve a intentarlo cuando termine esa descarga.",
+    en: "Invoices for a month are already being prepared on the server. Try again once that file is ready.",
+    es: "Ya se están preparando las facturas de un mes en el servidor. Vuelve a intentarlo cuando ese archivo esté listo.",
+  },
+  "tax_office.space_low": {
+    en: "The server's disk is nearly full: it has {free} free, and preparing this file needs {needed}. Keeping fewer backups on the server, under Backups, frees space; then try again.",
+    es: "El disco del servidor está casi lleno: tiene {free} libres y preparar este archivo necesita {needed}. Guardar menos copias de seguridad en el servidor, en Copias de seguridad, libera espacio; después vuelve a intentarlo.",
+  },
+  "tax_office.space_ran_out": {
+    en: "The server ran short of disk space while preparing this file, so it stopped and deleted it. The file had already reached {written}; free more space than that on the server, for example by keeping fewer backups under Backups, then try again.",
+    es: "El servidor se quedó sin espacio en disco mientras preparaba este archivo, así que lo detuvo y lo borró. El archivo ya ocupaba {written}; libera más espacio que eso en el servidor, por ejemplo guardando menos copias de seguridad en Copias de seguridad, y vuelve a intentarlo.",
+  },
+  "tax_office.download_missing": {
+    en: "This file is no longer on the server. Choose Download again to prepare it.",
+    es: "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",
   },
   "invoice_customer.not_found": {
     en: "No full invoice names that tax number.",
@@ -1835,7 +1848,15 @@ export function fieldOf(error: unknown): string {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown; count?: unknown; seconds?: unknown; kind?: unknown },
+  params?: {
+    reason?: unknown;
+    count?: unknown;
+    seconds?: unknown;
+    kind?: unknown;
+    freeBytes?: unknown;
+    neededBytes?: unknown;
+    writtenBytes?: unknown;
+  },
 ): string {
   if (
     code === "printer.bluetooth_command_busy" &&
@@ -1870,6 +1891,15 @@ export function codeMessage(
     const key = `cloud.emergency_${params!.reason}` as "cloud.emergency_setting_off";
     return pickLocale({ en: en[key], es: es[key] }, locale);
   }
+  if (code === "tax_office.space_low")
+    return registeredCodeMessage(code, locale)
+      .replace("{free}", formatBytes(params?.freeBytes, locale))
+      .replace("{needed}", formatBytes(params?.neededBytes, locale));
+  if (code === "tax_office.space_ran_out")
+    return registeredCodeMessage(code, locale).replace(
+      "{written}",
+      formatBytes(params?.writtenBytes, locale),
+    );
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "receipt.language_orders_open" && typeof params?.count === "number")
     return ordersOpenMessage(params.count, locale);

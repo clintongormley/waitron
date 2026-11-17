@@ -611,6 +611,10 @@ export const ALERT_WORDS: Readonly<
         en: "checking what the tax agency holds",
         es: "la comprobación de lo que tiene la Agencia Tributaria",
       },
+      "tax_office.month_zip": {
+        en: "preparing invoice downloads",
+        es: "la preparación de descargas de facturas",
+      },
     },
     otherwise: { en: "one of its background tasks", es: "una de sus tareas de fondo" },
   },
