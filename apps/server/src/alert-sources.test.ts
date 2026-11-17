@@ -11,6 +11,7 @@ import {
 } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
+  devices,
   printAgents,
   printJobs,
   printers,
@@ -22,6 +23,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedTaxpayer,
+  seedDevice,
   seedVenue,
   seedVenueSettings,
   attachStationPrinterForTest,
@@ -41,6 +43,7 @@ import {
   backupAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  deviceBatteryAlertSource,
   certificateAlertSource,
   contentSuggestionsAlertSource,
   BATTERY_ERROR,
@@ -2000,4 +2003,103 @@ it("counts the offered name in a mixed notice and drops it when none remain", as
   ).toEqual(await readNotice());
   await suite.db.update(products).set({ active: false }).where(eq(products.id, "p2"));
   expect(await readNotice()).toEqual([]);
+});
+
+describe("deviceBatteryAlertSource", () => {
+  it.each([
+    [0, "error"],
+    [10, "error"],
+    [11, "warning"],
+    [20, "warning"],
+    [21, null],
+  ] as const)("reports %s percent as %s", async (percent, severity) => {
+    await seedFixtureVenue();
+    const { deviceId } = await seedDevice(suite.db, {
+      label: "Terrace handheld",
+      formFactor: "phone-portrait",
+    });
+    await suite.db
+      .update(devices)
+      .set({ batteryLevel: percent, batteryCharging: false, batteryReportedAt: NOW.toISOString() })
+      .where(eq(devices.id, deviceId));
+    const source = deviceBatteryAlertSource();
+    expect(source.area).toBe("devices");
+    expect(source.permission).toBe("hardware.manage");
+    expect(await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }))).toEqual(
+      severity === null
+        ? []
+        : [
+            {
+              key: `device.battery_low:${deviceId}`,
+              code: "device.battery_low",
+              params: { device: "Terrace handheld", percent },
+              severity,
+              since: null,
+              screen: "devices",
+            },
+          ],
+    );
+  });
+
+  it.each([
+    ["charging", { batteryCharging: true }],
+    ["never reported", { batteryLevel: null, batteryCharging: null, batteryReportedAt: null }],
+    ["stale", { batteryReportedAt: new Date(NOW.getTime() - 600_001).toISOString() }],
+    ["inactive", { active: false }],
+    ["deleted", { deletedAt: NOW.toISOString() }],
+  ])("ignores a %s device", async (_reason, values) => {
+    await seedFixtureVenue();
+    const { deviceId } = await seedDevice(suite.db);
+    await suite.db
+      .update(devices)
+      .set({
+        batteryLevel: 5,
+        batteryCharging: false,
+        batteryReportedAt: NOW.toISOString(),
+        ...values,
+      })
+      .where(eq(devices.id, deviceId));
+    expect(
+      await withTransaction(suite.db, (tx) => deviceBatteryAlertSource().read({ tx, now: NOW })),
+    ).toEqual([]);
+  });
+
+  it("keeps distinct stable keys at the freshness boundary and clears a charging device on reread", async () => {
+    await seedFixtureVenue();
+    const first = await seedDevice(suite.db, { label: "Counter" });
+    const second = await seedDevice(suite.db, { label: "Terrace" });
+    for (const { deviceId } of [first, second]) {
+      await suite.db
+        .update(devices)
+        .set({
+          batteryLevel: 20,
+          batteryCharging: false,
+          batteryReportedAt: new Date(NOW.getTime() - 600_000).toISOString(),
+        })
+        .where(eq(devices.id, deviceId));
+    }
+    const source = deviceBatteryAlertSource();
+    const before = await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }));
+    expect(new Set(before.map((alert) => alert.key))).toEqual(
+      new Set([`device.battery_low:${first.deviceId}`, `device.battery_low:${second.deviceId}`]),
+    );
+    await suite.db
+      .update(devices)
+      .set({ label: "Front counter" })
+      .where(eq(devices.id, first.deviceId));
+    await suite.db
+      .update(devices)
+      .set({ batteryCharging: true })
+      .where(eq(devices.id, second.deviceId));
+    expect(await withTransaction(suite.db, (tx) => source.read({ tx, now: NOW }))).toEqual([
+      {
+        key: `device.battery_low:${first.deviceId}`,
+        code: "device.battery_low",
+        params: { device: "Front counter", percent: 20 },
+        severity: "warning",
+        since: null,
+        screen: "devices",
+      },
+    ]);
+  });
 });

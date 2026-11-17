@@ -1093,9 +1093,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
 
-- **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
-  Devices list; nothing alerts when a handheld runs low.
-
 - **A982. Logging Slice 2 — one-touch bug report.** Dashboard, setup and till browser-only preview/download
   are implemented by the [download-first plan](superpowers/plans/2026-11-08-a982-client-only-report-first.md).
   Richer trail privacy and stored capture with manager read/download remain;

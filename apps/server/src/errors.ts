@@ -523,6 +523,7 @@ declare module "@waitron/shared" {
      * percentage; neither is a secret.
      */
     "reader.battery_low": { reader: string; percent: number };
+    "device.battery_low": { device: string; percent: number };
     "reader.status_unavailable": { reader: string };
     "reader.offline": { reader: string };
     /** The till was asked to ring a sale with no lines; refused before any menu read or fiscal write. */

@@ -503,6 +503,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "Full invoice {invoice} is waiting for office printer “{printer}”, which is holding an earlier job. {hold:printer_hold} The invoice will then print after it. To give the customer the invoice on the receipt printer instead, open the order on the till.",
     es: "La factura completa {invoice} está esperando a la impresora de oficina «{printer}», que tiene retenido un trabajo anterior. {hold:printer_hold} Después la factura se imprimirá tras él. Para darle al cliente la factura en la impresora de tickets, abre el pedido en el TPV.",
   },
+  "device.battery_low": {
+    en: "Device “{device}” battery is low ({percent}%). Charge it.",
+    es: "La batería del dispositivo «{device}» está baja ({percent} %). Cárgalo.",
+  },
   "reader.battery_low": {
     en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
     es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
