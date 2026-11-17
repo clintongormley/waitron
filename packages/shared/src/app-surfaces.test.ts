@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as shared from "./index.js";
-
-const classify = (shared as { isDashboardPath?: (path: string) => boolean }).isDashboardPath;
+import { isDashboardPath } from "./index.js";
 
 describe("dashboard page paths", () => {
   it.each([
@@ -26,6 +24,7 @@ describe("dashboard page paths", () => {
       "api",
       "management-api",
       "setup-api",
+      "setup-assets",
       "recovery-api",
       "print-api",
       "webhooks",
@@ -45,6 +44,6 @@ describe("dashboard page paths", () => {
       [`/${prefix}/page`, false],
     ]),
   ] as const)("classifies %s as dashboard=%s", (path, expected) => {
-    expect(classify?.(path)).toBe(expected);
+    expect(isDashboardPath(path)).toBe(expected);
   });
 });

@@ -1291,11 +1291,7 @@ describe("the Edit dialog", () => {
   it.each(["initial", "history"] as const)(
     "opens a linked device when an initial failed read recovers (%s)",
     async (entry) => {
-      history.replaceState(
-        null,
-        "",
-        entry === "initial" ? "/devices/device/t1" : "/devices",
-      );
+      history.replaceState(null, "", entry === "initial" ? "/devices/device/t1" : "/devices");
       const liveData = new LiveData();
       const api = Object.assign(
         editApi({

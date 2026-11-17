@@ -1064,6 +1064,8 @@ describe("waitron.sh install (published main)", () => {
     expect(compose).toContainEqual(expect.stringMatching(/^pull\b/));
     expect(compose).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("COMPOSE_PROFILES=practice-inbox\n");
+    expect(r.stdout).toMatch(/Till +https:\/\/waitron\.local\/till\//);
+    expect(r.stdout).toMatch(/Dashboard +https:\/\/waitron\.local\//);
     expect(r.stdout).toContain("https://waitron.local/email");
     expect(r.stdout).not.toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");

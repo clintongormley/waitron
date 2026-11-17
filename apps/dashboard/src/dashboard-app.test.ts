@@ -375,9 +375,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     await flush(el);
     expect(modal.open).toBe(false);
     await expect.poll(() => el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
-    expect(new URL(location.href).pathname).toBe(
-      role === "staff" ? "/my-schedule" : "/overview",
-    );
+    expect(new URL(location.href).pathname).toBe(role === "staff" ? "/my-schedule" : "/overview");
   },
 );
 
@@ -2102,11 +2100,7 @@ describe("dashboard-app", () => {
   it.each(["failed", "different-account", "not-callback", "no-intent"])(
     "does not save Google preference for %s",
     async (scenario) => {
-      history.replaceState(
-        null,
-        "",
-        scenario === "not-callback" ? "/" : "/?login=google",
-      );
+      history.replaceState(null, "", scenario === "not-callback" ? "/" : "/?login=google");
       if (scenario !== "no-intent")
         sessionStorage.setItem(
           "waitron-google-login-preference",
@@ -2488,21 +2482,18 @@ describe("dashboard-app", () => {
     ).toBeNull();
   });
 
-  it.each([
-    "/kitchen",
-    "/statuses",
-    "/receipts",
-    "/receipt",
-    "/location-settings",
-  ])("treats the retired address %s as an unknown screen", async (path) => {
-    history.replaceState(null, "", path);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    expect(overview(el)).not.toBeNull();
-    expect(location.pathname).toBe("/overview");
-  });
+  it.each(["/kitchen", "/statuses", "/receipts", "/receipt", "/location-settings"])(
+    "treats the retired address %s as an unknown screen",
+    async (path) => {
+      history.replaceState(null, "", path);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      expect(overview(el)).not.toBeNull();
+      expect(location.pathname).toBe("/overview");
+    },
+  );
 
   it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
     history.replaceState(null, "", "/adjustment-reasons");
@@ -2558,9 +2549,7 @@ describe("dashboard-app", () => {
           : adjustmentsRequest(path, method, body, options),
     });
     await flush(el);
-    await vi.waitFor(() =>
-      expect(location.pathname).toBe("/venue-settings/view/venue-details"),
-    );
+    await vi.waitFor(() => expect(location.pathname).toBe("/venue-settings/view/venue-details"));
     expect(
       venueSettings(el)!.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen"),
     ).toBeNull();
@@ -4152,12 +4141,7 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    [
-      "manager",
-      ["venue.configure"],
-      "dashboard-floor-plan-editor",
-      "/floor-plan/set/s1/zone/z1",
-    ],
+    ["manager", ["venue.configure"], "dashboard-floor-plan-editor", "/floor-plan/set/s1/zone/z1"],
     ["supervisor", ["venue.view"], "dashboard-overview-screen", "/overview"],
     [
       "supervisor",
@@ -4485,14 +4469,7 @@ describe("dashboard-app", () => {
     modules: [],
   };
 
-  it.each([
-    "/",
-    "/orders",
-    "/my-schedule",
-    "/alerts",
-    "/staff",
-    "/sales",
-  ])(
+  it.each(["/", "/orders", "/my-schedule", "/alerts", "/staff", "/sales"])(
     "a session holding only invoice.inspect lands on Invoices, and sees no other venue screen, from %s",
     async (path) => {
       history.replaceState(null, "", path);
@@ -5221,42 +5198,41 @@ describe("dashboard URL navigation", () => {
     },
   );
 
-  it.each([
-    "/prep-stations",
-    "/prep-stations/view/stations",
-    "/prep-stations/view/settings",
-  ])("does not offer Prep stations to a venue viewer (%s)", async (address) => {
-    history.replaceState(null, "", address);
-    const reads: string[] = [];
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        getMe: vi.fn().mockResolvedValue({
-          personId: "p1",
-          roleIds: ["supervisor"],
-          locale: "en-GB",
-          venueLocale: "en-GB",
-          sessionDefault: "en-GB",
-          permissions: ["venue.view"],
-          modules: ["venue-service"],
-          venueName: "Venue",
+  it.each(["/prep-stations", "/prep-stations/view/stations", "/prep-stations/view/settings"])(
+    "does not offer Prep stations to a venue viewer (%s)",
+    async (address) => {
+      history.replaceState(null, "", address);
+      const reads: string[] = [];
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            personId: "p1",
+            roleIds: ["supervisor"],
+            locale: "en-GB",
+            venueLocale: "en-GB",
+            sessionDefault: "en-GB",
+            permissions: ["venue.view"],
+            modules: ["venue-service"],
+            venueName: "Venue",
+          }),
         }),
-      }),
-      request: async (path) => {
-        reads.push(path);
-        return [] as never;
-      },
-    });
-    await flush(el);
-    await expect.poll(() => location.pathname).toBe("/overview");
-    expect(navItem(el, "prep-stations")).toBeNull();
-    expect(navItem(el, "opening-hours")).not.toBeNull();
-    expect(navItem(el, "hours")).toBeNull();
-    expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
-    expect(
-      reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
-    ).toEqual([]);
-    expect(reads).not.toContain("/management-api/venue-service/routing");
-  });
+        request: async (path) => {
+          reads.push(path);
+          return [] as never;
+        },
+      });
+      await flush(el);
+      await expect.poll(() => location.pathname).toBe("/overview");
+      expect(navItem(el, "prep-stations")).toBeNull();
+      expect(navItem(el, "opening-hours")).not.toBeNull();
+      expect(navItem(el, "hours")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
+      expect(
+        reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
+      ).toEqual([]);
+      expect(reads).not.toContain("/management-api/venue-service/routing");
+    },
+  );
 
   it("offers a venue service manager Prep stations with both tabs", async () => {
     history.replaceState(null, "", "/prep-stations");
@@ -6918,9 +6894,7 @@ describe("alerts in the shell", () => {
       await atViewport(host, 1280, async () => {
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(
-            intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]',
-          )!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -6998,9 +6972,7 @@ describe("alerts in the shell", () => {
         const logo = items[1]!.box;
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(
-            intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]',
-          )!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -9458,8 +9430,7 @@ describe("inline translation application leave paths", () => {
       await vi.waitFor(() => expect(warning.open).toBe(true));
       await warning.updateComplete;
       warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      if (route === "navigation")
-        await vi.waitFor(() => expect(location.pathname).toBe("/staff"));
+      if (route === "navigation") await vi.waitFor(() => expect(location.pathname).toBe("/staff"));
       else if (route === "editor")
         await vi.waitFor(() => expect(location.pathname).toBe("/products/product/dish"));
       else if (route === "locale") await vi.waitFor(() => expect(currentLocale()).toBe("en-GB"));

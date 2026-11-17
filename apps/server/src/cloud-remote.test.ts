@@ -149,8 +149,6 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     onBox: false,
   });
   for (const path of [
-    "/",
-    "/assets/index.js",
     "/api/theme",
     "/api/content-languages",
     "/api/backup/status",
@@ -192,9 +190,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
         path,
       ).toBe(404);
   }
-  expect(
-    (await staff.request("https://staff.example.test/", { method: "POST" })).status,
-  ).toBe(404);
+  expect((await staff.request("https://staff.example.test/", { method: "POST" })).status).toBe(404);
   expect(
     (await staff.request("https://staff.example.test/media/logo.webp", { method: "POST" })).status,
   ).toBe(404);
@@ -249,11 +245,16 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
   await mkdir(join(root, "cloud"), { recursive: true });
   await writeFile(join(root, "cloud/staff.crt"), material.serverCertPem);
   const app = new Hono();
-  app.get("/", (c) => c.text("dashboard"));
+  await writeFile(join(root, "index.html"), "dashboard");
+  app.get("/", (c) => c.text("main handler must not run"));
   app.get("/setup", (c) => c.text("setup must stay local"));
   const lines: Parameters<Logger>[] = [];
   const server = startStaffListener(
-    { staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 0 }, stateDir: root },
+    {
+      staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 0 },
+      stateDir: root,
+      dashboardAppDir: root,
+    },
     app,
     (...args) => lines.push(args),
   );
@@ -359,5 +360,82 @@ it("limits remote anonymous passkey challenges and allows a later minute", async
     expect((await ask()).status).toBe(201);
   } finally {
     clock.mockRestore();
+  }
+});
+
+it("serves dashboard pages and assets directly, never arbitrary main-app root handlers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "waitron-staff-pages-"));
+  try {
+    await writeFile(join(root, "index.html"), "<html>dashboard bundle</html>");
+    await mkdir(join(root, "assets"));
+    await writeFile(join(root, "assets/app-hash.js"), "dashboard asset");
+    const local = new Hono();
+    local.all("*", (c) => c.text("main handler must not run"));
+    const staff = createStaffApp(local, "https://staff.example.test", { root });
+    for (const path of ["/", "/account?token=example", "/private-server-handler"]) {
+      const response = await staff.request(`https://staff.example.test${path}`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("<html>dashboard bundle</html>");
+    }
+    expect(
+      (
+        await staff.request("https://staff.example.test/account", {
+          method: "HEAD",
+          headers: { Accept: "text/html" },
+        })
+      ).status,
+    ).toBe(200);
+    const asset = await staff.request("https://staff.example.test/assets/app-hash.js");
+    expect(await asset.text()).toBe("dashboard asset");
+    expect(asset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    for (const [method, path] of [
+      ["POST", "/account"],
+      ["GET", "/till/"],
+      ["GET", "/assets/missing.js"],
+      ["GET", "/sw-probe.js"],
+    ])
+      expect((await staff.request(`https://staff.example.test${path}`, { method })).status).toBe(
+        404,
+      );
+    expect(
+      (await staff.request("https://other.example.test/", { headers: { Accept: "text/html" } }))
+        .status,
+    ).toBe(404);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("applies the supplied main page gates in order before serving staff pages", async () => {
+  const { spareReadGate } = await import("./spare-read-gate.js");
+  const { zoneRepairGate } = await import("./zone-repair-serving.js");
+  const { TradingAdmission } = await import("./trading-admission.js");
+  const root = await mkdtemp(join(tmpdir(), "waitron-staff-gates-"));
+  try {
+    await writeFile(join(root, "index.html"), "dashboard");
+    const admission = new TradingAdmission();
+    admission.repairOnly("invalid");
+    const gates = [spareReadGate({ main: () => undefined }), zoneRepairGate(admission)];
+    const mirror = createStaffApp(new Hono(), "https://staff.example.test", { root, gates });
+    const response = await mirror.request("https://staff.example.test/account", {
+      headers: { Accept: "text/html" },
+    });
+    expect(await response.text()).toContain("This server started as the spare");
+    const repair = createStaffApp(new Hono(), "https://staff.example.test", {
+      root,
+      gates: [zoneRepairGate(admission)],
+    });
+    expect(
+      await (
+        await repair.request("https://staff.example.test/account", {
+          headers: { Accept: "text/html" },
+        })
+      ).text(),
+    ).toBe("dashboard");
+    expect((await repair.request("https://staff.example.test/till/")).status).toBe(404);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

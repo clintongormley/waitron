@@ -2,6 +2,7 @@ const RESERVED_PREFIXES = new Set([
   "api",
   "management-api",
   "setup-api",
+  "setup-assets",
   "recovery-api",
   "print-api",
   "webhooks",

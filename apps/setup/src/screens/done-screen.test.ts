@@ -170,11 +170,7 @@ describe("setup-done-screen", () => {
     [
       "en-GB",
       [
-        [
-          "Dashboard",
-          "/",
-          "Set up your menu, staff, devices and settings, and see your sales.",
-        ],
+        ["Dashboard", "/", "Set up your menu, staff, devices and settings, and see your sales."],
         ["Till", "/till/", "Take orders and payments."],
         [
           "Email inbox",

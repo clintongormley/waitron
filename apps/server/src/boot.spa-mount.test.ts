@@ -62,7 +62,7 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     "/api/typo",
     "/management-api/typo",
     "/assets/missing.js",
-    "/assets/missing.js",
+    "/sw-probe.js",
     "/favicon.ico",
     "/till/tabs-other/counter",
   ])("keeps missing APIs and files as 404s: %s", async (path) => {
@@ -79,7 +79,6 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     const app = build();
     expect(await (await app.request("/")).text()).toContain("dashboard");
     expect(await (await app.request("/till/")).text()).toBe("<html>till</html>");
-    expect(await (await app.request("/")).text()).toContain("dashboard");
     expect(await (await app.request("/assets/d-1.js")).text()).toContain("dashboard asset");
   });
 });

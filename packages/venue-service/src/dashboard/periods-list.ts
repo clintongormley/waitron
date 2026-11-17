@@ -165,7 +165,7 @@ export class PeriodsList extends LitElement {
   });
   @state() private address: string | null = null;
   private readonly url = new UrlStateController(this, () => this.restoreAddress(), {
-    basePath: "/",
+    basePath: "",
     primary: "dashboard",
     children: { periods: { view: "view", period: "period" } },
   });

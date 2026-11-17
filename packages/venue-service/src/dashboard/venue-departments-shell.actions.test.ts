@@ -425,9 +425,7 @@ it("a saved department edit returns focus to the same row menu after refresh", a
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
 it("removing a zone's department closes its editor and returns to Add", async () => {
-  const { shell, request } = await mount(
-    "/venue-operations/department/d1/view/zones/zone/z1",
-  );
+  const { shell, request } = await mount("/venue-operations/department/d1/view/zones/zone/z1");
   const { list } = await listTable(shell);
   const next = view();
   next.departments = next.departments.filter((row) => row.id !== "d1");

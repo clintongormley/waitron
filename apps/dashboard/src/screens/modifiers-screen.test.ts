@@ -504,9 +504,7 @@ describe("a path naming one list", () => {
     await selectTab(el, "extras");
     expect(location.pathname).toBe("/modifiers/view/extras");
     history.back();
-    await vi.waitFor(() =>
-      expect(location.pathname).toBe("/modifiers/view/options/list/o1"),
-    );
+    await vi.waitFor(() => expect(location.pathname).toBe("/modifiers/view/options/list/o1"));
   });
 });
 

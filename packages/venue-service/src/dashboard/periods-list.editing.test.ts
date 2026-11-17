@@ -150,9 +150,7 @@ async function edit(el: PeriodsList, existing?: string) {
   await dialog!.updateComplete;
   expect(dialog!.shadowRoot!.querySelector("wt-modal"), "list opens an individual page").toBeNull();
   expect(el.shadowRoot!.querySelector("nav[aria-label] a.parent")).not.toBeNull();
-  expect(location.pathname).toBe(
-    existing ? `/periods/period/${existing}` : "/periods/view/new",
-  );
+  expect(location.pathname).toBe(existing ? `/periods/period/${existing}` : "/periods/view/new");
   return dialog!;
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {

@@ -1,7 +1,12 @@
 import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { nodes, type Database } from "@waitron/db";
-import { FALLBACK_LOCALE, isAppError, type SupportedLocale } from "@waitron/shared";
+import {
+  FALLBACK_LOCALE,
+  isAppError,
+  isDashboardPath,
+  type SupportedLocale,
+} from "@waitron/shared";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
@@ -55,7 +60,7 @@ export function pageReturnPath(value: unknown): string {
   const url = new URL(value, "http://local");
   if (
     url.origin !== "http://local" ||
-    !(url.pathname === "/" || /^\/(?:manage|till)(?:\/|$)/.test(url.pathname))
+    !(isDashboardPath(value) || /^\/till(?:\/|$)/.test(url.pathname))
   )
     return "/";
   return url.pathname + url.search;
@@ -116,7 +121,7 @@ export function waitingPageRoute(
       const path = c.req.path;
       if (
         path !== "/" &&
-        (!/^\/(?:manage|till)(?:\/|$)/.test(path) ||
+        (!(isDashboardPath(path) || /^\/till(?:\/|$)/.test(path)) ||
           !(c.req.header("Accept") ?? "").includes("text/html"))
       )
         return next();

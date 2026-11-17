@@ -173,6 +173,6 @@ it("lets the nav search find a screened module by its label, and nothing of a pa
 it("keeps a screened module's address word, and none for a panel-only module", async () => {
   urlConfigs.length = 0;
   await mount("/");
-  const config = urlConfigs.find((each) => each.basePath === "/");
+  const config = urlConfigs.find((each) => each.basePath === "");
   expect(config?.keepUnlisted).toEqual([...(dashboardPath.keepUnlisted ?? []), "gauges"]);
 });

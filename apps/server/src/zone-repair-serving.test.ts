@@ -25,7 +25,6 @@ const allowed = [
   ["DELETE", "/management-api/session"],
   ["GET", "/management-api/venue-details/time-zone-repair"],
   ["POST", "/management-api/venue-details/time-zone-repair"],
-  ["GET", "/"],
   ["GET", "/account?token=synthetic"],
   ["GET", "/assets/app.js"],
   ["GET", "/help/en/time-zone"],

@@ -153,12 +153,7 @@ it("keeps a dirty schedule draft across the Hours tab and still protects an actu
 });
 
 it("lets a supervisor open their own Hours without workforce.correct", async () => {
-  const { el, requests } = await mount(
-    ["workforce"],
-    [],
-    "supervisor",
-    "/my-schedule/view/hours",
-  );
+  const { el, requests } = await mount(["workforce"], [], "supervisor", "/my-schedule/view/hours");
   await expect
     .poll(() => el.shadowRoot!.querySelector("dashboard-my-schedule-screen"))
     .not.toBeNull();
@@ -317,9 +312,7 @@ it.each(["own", "manager"] as const)(
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
     choice("keep");
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBeFalsy();
-    expect(location.pathname).toBe(
-      mode === "own" ? "/my-schedule/view/hours" : "/hours",
-    );
+    expect(location.pathname).toBe(mode === "own" ? "/my-schedule/view/hours" : "/hours");
     expect(field.value).toBe("2020-01-01");
     el.remove();
     await dialog.updateComplete;

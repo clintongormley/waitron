@@ -628,9 +628,7 @@ it("shows linked printers and kitchen screens in Stations", async () => {
   expect(screens.textContent).toContain("Bar display");
   expect(screens.querySelector("a")?.getAttribute("href")).toBe("/devices/device/d%2Fone");
   expect(
-    el
-      .shadowRoot!.querySelector('[slot="routing"]')!
-      .querySelector('a[href="/printing-rules"]'),
+    el.shadowRoot!.querySelector('[slot="routing"]')!.querySelector('a[href="/printing-rules"]'),
   ).toBeNull();
 });
 it("creates a station from the modal with the chosen thresholds", async () => {
@@ -2959,11 +2957,7 @@ it.each(["en", "es"])(
       [...q(el, '[data-test="screens-bar"]')!.querySelectorAll("a")].map((link) =>
         link.getAttribute("href"),
       ),
-    ).toEqual([
-      "/devices/device/current",
-      "/devices/device/pass",
-      "/devices/device/till-grill",
-    ]);
+    ).toEqual(["/devices/device/current", "/devices/device/pass", "/devices/device/till-grill"]);
   },
 );
 

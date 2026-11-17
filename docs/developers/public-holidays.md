@@ -1,6 +1,6 @@
 # Public holidays
 
-You plan holidays in the Calendar's Year (`/manage/opening-hours/view/year`). Public
+You plan holidays in the Calendar's Year (`/opening-hours/view/year`). Public
 holidays come only from the country's shipped calendar: its national and regional dates. The venue
 is not a holiday source. To change the venue's hours on a day, your town's holiday included, make
 that day a special day (see "Special days" in [conventions-data.md](conventions-data.md)). A

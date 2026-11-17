@@ -75,9 +75,9 @@ it("matches contributed paths exactly and leaves unrelated destinations to the s
     expect(mountPublicModulePage(app, pathname, [contribution], { locale: "en" })).toBe(false);
     expect(app.textContent).toBe("session shell");
   }
-  expect(
-    mountPublicModulePage(app, "/recovery/example", [contribution], { locale: "en" }),
-  ).toBe(true);
+  expect(mountPublicModulePage(app, "/recovery/example", [contribution], { locale: "en" })).toBe(
+    true,
+  );
   expect(app.querySelector("h1")?.textContent).toBe("Public procedure");
 });
 

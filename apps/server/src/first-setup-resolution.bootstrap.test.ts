@@ -116,7 +116,7 @@ it("the repair shell preserves API refusals and missing assets while serving its
   const missing = await admitted.app.request("/setup-assets/missing.txt");
   expect(missing.status).toBe(404);
   expect(missing.headers.get("Content-Disposition")).toBeNull();
-  const navigation = await admitted.app.request("/", { headers: { Accept: "text/html" } });
+  const navigation = await admitted.app.request("/account", { headers: { Accept: "text/html" } });
   expect(navigation.status).toBe(302);
   expect(navigation.headers.get("Location")).toBe("/");
   for (const path of ["/assets/missing.js", "/setup-api/missing", "/api/missing"])

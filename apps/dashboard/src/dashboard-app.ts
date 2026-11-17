@@ -33,7 +33,12 @@ import {
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
-import { FALLBACK_LOCALE, resolveActiveLocale, type LegalAbout } from "@waitron/shared";
+import {
+  isDashboardPath,
+  FALLBACK_LOCALE,
+  resolveActiveLocale,
+  type LegalAbout,
+} from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
 import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
 import { departmentReceiptSearchDestinations } from "./department-receipt-setting-search.js";
@@ -1288,7 +1293,7 @@ export class DashboardApp extends LitElement {
     this.narrow = this.#breakpoint.matches;
     this.sidebarFolded = readStoredFold() ?? window.matchMedia(FOLDED_BY_DEFAULT).matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
-    this.#releaseAppLinks = captureAppLinks(this, dashboardPath.basePath);
+    this.#releaseAppLinks = captureAppLinks(this, isDashboardPath);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     window.addEventListener("waitron-session-active", this.#onSessionActive);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
@@ -2741,7 +2746,7 @@ export class DashboardApp extends LitElement {
     leave: {
       isDirty: () => this.leave.coordinator.isDirty(),
       request: (proceed, signal, destination) => {
-        const segment = new URL(destination).pathname.split("/")[2];
+        const segment = new URL(destination).pathname.split("/")[1];
         let requested: string | undefined;
         try {
           requested = segment === undefined ? undefined : decodeURIComponent(segment);

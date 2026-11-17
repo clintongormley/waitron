@@ -94,7 +94,7 @@ it("keeps app paths local and preserves setup's handover entry", async () => {
   expect(till.status).toBe(200);
   expect(await till.text()).toContain("<title>Waitron Till</title>");
   for (const app of ["till", "setup"]) {
-    for (const url of ["/manage-x", "/management-api"]) {
+    for (const url of ["/api/theme", "/management-api"]) {
       const response = await fetch(origin(app) + url, { redirect: "manual" });
       await response.arrayBuffer();
       expect(response.status).not.toBe(302);

@@ -166,7 +166,5 @@ it("a zone outside this department keeps the list visible without opening an unr
   const shell = await mount("/venue-operations/department/d1/view/zones/zone/elsewhere");
   expect(shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeNull();
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-  expect(location.pathname).toBe(
-    "/venue-operations/department/d1/view/zones/zone/elsewhere",
-  );
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/elsewhere");
 });

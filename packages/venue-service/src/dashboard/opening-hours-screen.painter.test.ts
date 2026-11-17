@@ -225,9 +225,7 @@ describe("the season painter's address", () => {
     expect(el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
   });
   it("closes a painter opened by Painted in to the Periods page", async () => {
-    const el = await mount(
-      "/opening-hours/view/season/season/winter/department/d1?back=/periods",
-    );
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1?back=/periods");
     await cancel(await shownPainter(el));
     await expect.poll(() => location.pathname).toBe("/periods");
   });
@@ -338,9 +336,7 @@ describe("links into the painter", () => {
     history.pushState(null, "", "/before-hours");
     const pushed = pushedPaths();
     const el = await mount(address);
-    await expect
-      .poll(() => location.pathname)
-      .toBe(`/opening-hours/view/season/season/${painted}`);
+    await expect.poll(() => location.pathname).toBe(`/opening-hours/view/season/season/${painted}`);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
     expect(drawnView(el)).toBe("year");
@@ -508,9 +504,7 @@ describe("Save closes the season painter", () => {
       expect(painterOf(el)).toBe(painter);
       expect(painter.seasonId).toBe("winter");
       expect(back).not.toHaveBeenCalled();
-      expect(location.pathname).toBe(
-        "/opening-hours/view/season/season/winter/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d1");
       expect(frame(painter).dirty).toBe(false);
       expect(saved).not.toHaveBeenCalled();
     } finally {
@@ -614,9 +608,7 @@ describe("leaving a painter with edits", () => {
       history.back();
       await choose(app, "discard");
       await expect.poll(() => painter.seasonId).toBe("spring");
-      expect(location.pathname).toBe(
-        "/opening-hours/view/season/season/spring/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/spring/department/d1");
       expect(painted()).toEqual({ departments: [], zones: [] });
     } finally {
       guard.dispose();
@@ -694,9 +686,7 @@ describe("leaving a painter with edits", () => {
       expect(painter.edited().departments.length).toBe(1);
       history.back();
       await choose(app, "keep");
-      expect(location.pathname).toBe(
-        "/opening-hours/view/season/season/winter/department/d3",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d3");
       history.back();
       await choose(app, "discard");
       await expect.poll(() => location.pathname).toBe("/opening-hours/view/year");
@@ -713,10 +703,7 @@ describe("leaving a painter with edits", () => {
     "removing the %s being painted drops its painting, says so, and moves the address",
     async (kind, name, address) => {
       let model = withBar();
-      const el = await mount(
-        "/opening-hours/view/season/season/winter/department/d1",
-        () => model,
-      );
+      const el = await mount("/opening-hours/view/season/season/winter/department/d1", () => model);
       const painter = await shownPainter(el);
       await drag(painter, "3", 7 * 60, 9 * 60);
       expect(painter.edited().departments).toEqual(["d1"]);
@@ -798,9 +785,7 @@ describe("leaving a painter with edits", () => {
       await settle(painter);
       expect(painter.seasonId).toBe("winter");
       expect(painter.edited().departments).toEqual(["d1"]);
-      expect(location.pathname).toBe(
-        "/opening-hours/view/season/season/winter/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d1");
       next();
       await choose(app, "discard");
       await expect

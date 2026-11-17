@@ -4119,11 +4119,7 @@ describe("login-screen: the chosen email is a read-only field", () => {
 
 it("account-link cancellation preserves the accepted history index and publishes the login address", async () => {
   const original = location.href;
-  history.replaceState(
-    { marker: "retained" },
-    "",
-    "/account?token=token-1&purpose=invitation",
-  );
+  history.replaceState({ marker: "retained" }, "", "/account?token=token-1&purpose=invitation");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async (proceed) => {
@@ -4155,11 +4151,7 @@ it.each(["keep", "discard"] as const)(
   "account-link cancellation waits for %s before clearing its form",
   async (decision) => {
     const original = location.href;
-    history.replaceState(
-      { marker: "retained" },
-      "",
-      "/account?token=token-1&purpose=invitation",
-    );
+    history.replaceState({ marker: "retained" }, "", "/account?token=token-1&purpose=invitation");
     let answer!: (decision: "keep" | "discard") => void;
     const guard = new NavigationGuard(window, {
       isDirty: () => true,

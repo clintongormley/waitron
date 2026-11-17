@@ -185,9 +185,7 @@ describe("email-screen message and inbox edge cases", () => {
   });
 
   it("offers no account link to another origin", async () => {
-    const el = await openFirst(
-      withBody("Open https://attacker.example/account?token=secret"),
-    );
+    const el = await openFirst(withBody("Open https://attacker.example/account?token=secret"));
 
     expect(q(el, "[data-test=message-body]")?.textContent).toContain("attacker.example");
     expect(q(el, "[data-test=message-link]")).toBeNull();
@@ -201,9 +199,7 @@ describe("email-screen message and inbox edge cases", () => {
   });
 
   it("links the same-origin account URL itself", async () => {
-    const el = await openFirst(
-      withBody(`Open ${window.location.origin}/account?token=abc now`),
-    );
+    const el = await openFirst(withBody(`Open ${window.location.origin}/account?token=abc now`));
 
     expect(q(el, "[data-test=message-link]")?.getAttribute("href")).toBe(
       `${window.location.origin}/account?token=abc`,

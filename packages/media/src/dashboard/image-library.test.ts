@@ -1960,9 +1960,7 @@ it("shows that the uses are being looked up until the answer arrives", async () 
   );
   expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
   lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   expect(modal.querySelector(".uses [role=status]")).toBeNull();
 });
 
@@ -1981,9 +1979,7 @@ it("reports a failed lookup in the preview and shows the uses after Try again", 
   );
   expect(usesShown()).toEqual([]);
   modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   expect(client.getImage).toHaveBeenCalledTimes(2);
   expect(client.getImage).toHaveBeenLastCalledWith("one");
   expect(modal.querySelector(".uses [role=alert]")).toBeNull();
@@ -2034,9 +2030,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   await previewClosed();
   thumbnail("two").click();
   await openedViewer();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await el.updateComplete;
@@ -2225,9 +2219,7 @@ it("keeps a live department receipt usage linked to its editor", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(1));
   const link = el.shadowRoot!.querySelector("wt-modal li a")!;
   expect(link.textContent?.trim()).toBe("Bar receipt logo");
-  expect(link.getAttribute("href")).toBe(
-    "/venue-operations/department/bar%2Fa%26b/view/receipt",
-  );
+  expect(link.getAttribute("href")).toBe("/venue-operations/department/bar%2Fa%26b/view/receipt");
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 

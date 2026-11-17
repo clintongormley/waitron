@@ -218,7 +218,7 @@ export class SeasonsScreen extends LitElement {
   }
 
   private readonly url = new UrlStateController(this, () => this.restoreAddress(), {
-    basePath: "/",
+    basePath: "",
     primary: "dashboard",
     children: { seasons: { view: "view", season: "season" } },
   });

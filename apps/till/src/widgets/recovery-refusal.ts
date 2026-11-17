@@ -1,3 +1,4 @@
+import { isDashboardPath } from "@waitron/shared";
 import { html, nothing } from "lit";
 import { t } from "../i18n/t.js";
 
@@ -10,7 +11,7 @@ interface RecoveryRefusal {
 
 function recoveryPath(refusal: RecoveryRefusal | null): string | null {
   const path = refusal?.recoveryUrl;
-  if (path === undefined || !path.startsWith("/")) return null;
+  if (path === undefined || !isDashboardPath(path)) return null;
   const parsed = new URL(path, location.origin);
   return parsed.pathname === path ? path : null;
 }

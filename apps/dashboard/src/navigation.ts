@@ -3,7 +3,7 @@ import type { UrlPathConfig } from "@waitron/ui";
 export { leftToBrowser } from "@waitron/ui";
 
 export const dashboardPath: UrlPathConfig = {
-  basePath: "/",
+  basePath: "",
   primary: "dashboard",
   children: {
     "*": { view: "view" },

@@ -115,7 +115,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "shows %s spare status at dashboard addresses and in API refusals",
   async (locale) => {
     const app = fixture();
-    for (const path of ["/", "/", "/staff", "/assets/old.js", "/till/"]) {
+    for (const path of ["/", "/staff", "/assets/old.js", "/till/"]) {
       const response = await app.request(path, { headers: { "accept-language": locale } });
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -146,7 +146,10 @@ it("serves the handover page and its built assets while private reads remain clo
     const response = await app.request(path);
     expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
   }
-  for (const path of ["/handover-other/operation-one", "/handover/operation-one/private"]) {
+  const otherPage = await app.request("/handover-other/operation-one");
+  expect(otherPage.status).toBe(200);
+  expect(await otherPage.text()).toContain(SPARE_WORDS["en-GB"].title);
+  for (const path of ["/handover/operation-one/private"]) {
     expect((await app.request(path)).status).toBe(403);
   }
 });

@@ -111,9 +111,7 @@ it("chooses among all rows, starts quiet, re-resolves identity and opens its ref
     .poll(() => (action(app, "open") as HTMLElementTagNameMap["wt-button"]).disabled)
     .toBe(false);
   await userEvent.click(action(app, "open"));
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/venue-operations/department/bar/view/service");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar/view/service");
   expect(state.resolve).toHaveBeenCalledTimes(2);
 });
 it("no candidates explains, and Cancel retains query and address", async () => {

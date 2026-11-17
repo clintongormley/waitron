@@ -107,7 +107,7 @@ export interface ServerConfig {
    * verbatim.
    */
   tillAppDir?: string;
-  /** The built `dashboard` SPA served at "/" and "/"; `WAITRON_DASHBOARD_APP_DIR`, as
+  /** The built `dashboard` SPA served at "/"; `WAITRON_DASHBOARD_APP_DIR`, as
    * `tillAppDir`. */
   dashboardAppDir?: string;
   /**

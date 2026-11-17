@@ -136,9 +136,7 @@ it("links each zone row to its set's layout in the editor, and back to this page
   const { table } = await mountScreen();
   const link = cell(table, "zone:dinner:terrace", "name").querySelector("a")!;
   expect(text(link)).toBe("Terrace");
-  expect(link.getAttribute("href")).toBe(
-    "/floor-plan/set/dinner/zone/terrace?back=%2Ffloor-plans",
-  );
+  expect(link.getAttribute("href")).toBe("/floor-plan/set/dinner/zone/terrace?back=%2Ffloor-plans");
   expect(link.getAttribute("aria-label")).toBe("Terrace · Dinner");
   expect(cell(table, "zone:standard:inside", "name").querySelector("a")!.getAttribute("href")).toBe(
     "/floor-plan/set/standard/zone/inside?back=%2Ffloor-plans",

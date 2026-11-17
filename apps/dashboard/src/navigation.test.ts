@@ -167,18 +167,12 @@ it("preserves the explicit menu price filter when the dashboard rewrites its des
 it("preserves Opening hours zone and All departments URLs", async () => {
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
-  history.replaceState(
-    null,
-    "",
-    "/opening-hours/view/week/department/restaurant/zone/terrace",
-  );
+  history.replaceState(null, "", "/opening-hours/view/week/department/restaurant/zone/terrace");
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("zone")).toBe("terrace");
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe(
-    "/opening-hours/view/week/department/restaurant/zone/terrace",
-  );
+  expect(location.pathname).toBe("/opening-hours/view/week/department/restaurant/zone/terrace");
   await url.write({ department: "all", zone: null }, true);
   expect(location.pathname).toBe("/opening-hours/view/week/department/all");
   expect(url.read("department")).toBe("all");
@@ -197,19 +191,13 @@ it("preserves an Opening hours date view's date while the shell replaces its sec
 });
 
 it("preserves an Opening hours special day's address while the shell replaces its section", async () => {
-  history.replaceState(
-    null,
-    "",
-    "/opening-hours/view/special-day/special-day/sd1/date/2026-12-25",
-  );
+  history.replaceState(null, "", "/opening-hours/view/special-day/special-day/sd1/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe(
-    "/opening-hours/view/special-day/special-day/sd1/date/2026-12-25",
-  );
+  expect(location.pathname).toBe("/opening-hours/view/special-day/special-day/sd1/date/2026-12-25");
   expect(url.read("special-day")).toBe("sd1");
   host.remove();
 });

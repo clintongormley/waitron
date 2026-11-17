@@ -1886,7 +1886,7 @@ already paid for:
 - **Update this file as entries finish**, in the same PR (_How to keep this file honest_).
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
-<http://localhost:5190/till/>, dashboard <http://localhost:5191/manage/>, setup <http://localhost:5192/setup/>, server
+<http://localhost:5190/till/>, dashboard <http://localhost:5191/>, setup <http://localhost:5192/setup/>, server
 :8080 (the owner's stack; Claude's stacks get the ports `wa-wt ls` shows). The till enrols itself
 on first load in dev mode. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 `dev:setup` seeds three menus (~44 products with images), a floor plan (5 zones / ~16 tables),

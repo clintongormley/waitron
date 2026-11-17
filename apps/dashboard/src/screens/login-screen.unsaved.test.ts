@@ -218,9 +218,7 @@ it.each(["invitation", "password_reset"])(
   },
 );
 it("accepted account credentials leave the action URL with no question or warning", async () => {
-  const { app, screen, completions } = await mount(
-    "/account?token=synthetic&purpose=invitation",
-  );
+  const { app, screen, completions } = await mount("/account?token=synthetic&purpose=invitation");
   await change(screen, "new-password", "synthetic new password");
   await change(screen, "new-pin", "4321");
   await click(screen, "complete-account");

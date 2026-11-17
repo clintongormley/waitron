@@ -1305,9 +1305,7 @@ describe("a price override row's Edit product link under the app's link router",
     expect(leaked).toBe(false);
     // The first write is the link's; the app then rewrites the same address in place.
     expect(write).toHaveBeenCalled();
-    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      `/products/product/${id}`,
-    );
+    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(`/products/product/${id}`);
     await expect.poll(() => location.pathname).toBe(`/products/product/${id}`);
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
@@ -1356,9 +1354,7 @@ describe("a Structure tab product row's Edit product link under the app's link r
     expect(event.defaultPrevented).toBe(true);
     expect(leaked).toBe(false);
     expect(write).toHaveBeenCalled();
-    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      "/products/product/p-burger",
-    );
+    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe("/products/product/p-burger");
     await expect.poll(() => location.pathname).toBe("/products/product/p-burger");
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });

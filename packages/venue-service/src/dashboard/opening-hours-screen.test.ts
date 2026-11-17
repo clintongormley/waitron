@@ -292,11 +292,7 @@ it("keeps a zone through Back and Forward and clears it when choosing a departme
         ? yearRead(2026)
         : structuredClone(pickerModel())) as DashboardRequest);
     const painter = () => el.shadowRoot!.querySelector("season-painter");
-    history.pushState(
-      null,
-      "",
-      "/opening-hours/view/season/department/restaurant/zone/terrace",
-    );
+    history.pushState(null, "", "/opening-hours/view/season/department/restaurant/zone/terrace");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => painter()?.zoneId).toBe("terrace");
     expect(painter()!.departmentId).toBe("restaurant");
@@ -312,9 +308,7 @@ it("keeps a zone through Back and Forward and clears it when choosing a departme
         composed: true,
       }),
     );
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/season/department/bar");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/season/department/bar");
     await expect.poll(() => painter()?.zoneId).toBe("");
     expect(painter()!.departmentId).toBe("bar");
   } finally {
@@ -327,9 +321,7 @@ it("ignores a zone belonging to another department", async () => {
     path.includes("/opening-hours/year?")
       ? yearRead(2026)
       : structuredClone(pickerModel())) as DashboardRequest);
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/opening-hours/view/season/department/bar");
+  await expect.poll(() => location.pathname).toBe("/opening-hours/view/season/department/bar");
   const painter = el.shadowRoot!.querySelector("season-painter")!;
   expect([painter.departmentId, painter.zoneId]).toEqual(["bar", ""]);
 });
@@ -968,9 +960,7 @@ describe("Year view", () => {
   });
 
   it("hands the Year its model and read-only", async () => {
-    const { el, view, years, listReads } = await yearMount(
-      "/opening-hours/view/year/year/2027",
-    );
+    const { el, view, years, listReads } = await yearMount("/opening-hours/view/year/year/2027");
     await expect.poll(() => view()?.model?.year).toBe(2027);
     expect(view()!.readOnly).toBe(false);
     for (const gone of ["api", "specialDays"]) expect(gone in view()!).toBe(false);
@@ -1058,9 +1048,8 @@ describe("Year view", () => {
   });
 
   it("shows Loading… until the date's month answers", async () => {
-    const { el, view, held } = await heldMount(
-      "/opening-hours/view/year/year/2026",
-      (path) => path.endsWith("/opening-hours/month?month=2026-12"),
+    const { el, view, held } = await heldMount("/opening-hours/view/year/year/2026", (path) =>
+      path.endsWith("/opening-hours/month?month=2026-12"),
     );
     yearDate(await shownYear(view), "2026-12-10").click();
     await expect.poll(() => boxOpen(el)).toBe(true);
@@ -1078,9 +1067,8 @@ describe("Year view", () => {
   it("keeps a box near the bottom on screen when its month arrives", async () => {
     await useViewport(390, 640);
     expect([window.innerWidth, window.innerHeight]).toEqual([390, 640]);
-    const { el, view, held } = await heldMount(
-      "/opening-hours/view/year/year/2026",
-      (path) => path.endsWith("/opening-hours/month?month=2026-12"),
+    const { el, view, held } = await heldMount("/opening-hours/view/year/year/2026", (path) =>
+      path.endsWith("/opening-hours/month?month=2026-12"),
     );
     const button = yearDate(await shownYear(view), "2026-12-28");
     button.scrollIntoView({ block: "end" });
@@ -1203,9 +1191,8 @@ describe("Year view", () => {
   });
 
   it("a read that answers after the box moved to another month does not fill the new box", async () => {
-    const { el, view, held } = await heldMount(
-      "/opening-hours/view/year/year/2026",
-      (path) => path.includes("/opening-hours/month?"),
+    const { el, view, held } = await heldMount("/opening-hours/view/year/year/2026", (path) =>
+      path.includes("/opening-hours/month?"),
     );
     const year = await shownYear(view);
     yearDate(year, "2026-12-10").click();
@@ -1331,9 +1318,7 @@ describe("Year view", () => {
   });
 
   it("opens the Year from an old Calendar address that names a month", async () => {
-    const { el, view, years } = await yearMount(
-      "/opening-hours/view/calendar/month/2027-02",
-    );
+    const { el, view, years } = await yearMount("/opening-hours/view/calendar/month/2027-02");
     expect(drawnView(el)).toBe("year");
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(years).toEqual(["2026"]);
@@ -1376,9 +1361,7 @@ describe("Year view", () => {
     const { el, view } = await yearMount("/opening-hours/view/year/year/2027");
     await expect.poll(() => view()?.model?.year).toBe(2027);
     view()!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=month-name]")[2]!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2027-03");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2027-03");
     await expect
       .poll(() => el.shadowRoot!.querySelector("opening-hours-month")?.month)
       .toBe("2027-03");
@@ -1428,9 +1411,7 @@ describe("Year view", () => {
     expect(box.width).toBeGreaterThan(0);
     expect(box.height).toBeGreaterThan(0);
     names[4]!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2026-05");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-05");
     await expect
       .poll(() => el.shadowRoot!.querySelector("opening-hours-month")?.month)
       .toBe("2026-05");
@@ -1526,9 +1507,7 @@ describe("Month view", () => {
   }
 
   it("draws the month the address names from that month's read, with no view switch", async () => {
-    const { el, view, data, months } = await monthMount(
-      "/opening-hours/view/month/month/2026-12",
-    );
+    const { el, view, data, months } = await monthMount("/opening-hours/view/month/month/2026-12");
     const month = await shown(view);
     expect(months).toEqual(["2026-12"]);
     expect(month.month).toBe("2026-12");
@@ -1553,20 +1532,14 @@ describe("Month view", () => {
   });
 
   it("steps months through the address, goes back to the year, and writes the chosen department", async () => {
-    const { view, months } = await monthMount(
-      "/opening-hours/view/month/month/2026-12?keep=yes",
-    );
+    const { view, months } = await monthMount("/opening-hours/view/month/month/2026-12?keep=yes");
     await shown(view);
     view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2027-01");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2027-01");
     expect(location.search).toBe("?keep=yes");
     await shown(view, "2027-01");
     view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-month]")!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2026-12");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-12");
     await shown(view);
     view()!
       .shadowRoot!.querySelector("[name=departmentId]")!
@@ -1582,9 +1555,7 @@ describe("Month view", () => {
       .dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "all" }, bubbles: true, composed: true }),
       );
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2026-12");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-12");
     await expect.poll(() => view()?.departmentId).toBe("");
     await userEvent.click(
       view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=month-year]")!,
@@ -1628,9 +1599,7 @@ describe("Month view", () => {
   });
 
   it("keeps the month drawn beside the message when a later reread of it fails", async () => {
-    const { el, view, failNext } = await monthMount(
-      "/opening-hours/view/month/month/2026-12",
-    );
+    const { el, view, failNext } = await monthMount("/opening-hours/view/month/month/2026-12");
     await shown(view);
     failNext(1);
     el.api.rereadWithSpecialDays();
@@ -1640,9 +1609,7 @@ describe("Month view", () => {
   });
 
   it("an open Month box keeps its hours and leaves the failed reread to the screen's one alert, until a reread succeeds", async () => {
-    const { el, view, failNext } = await monthMount(
-      "/opening-hours/view/month/month/2026-12",
-    );
+    const { el, view, failNext } = await monthMount("/opening-hours/view/month/month/2026-12");
     const box = await openBox(el, await shown(view));
     expect(box.error).toBe("");
     const alert = () => el.shadowRoot!.querySelector("[data-test=month-read-error]")?.textContent;
@@ -1665,9 +1632,7 @@ describe("Month view", () => {
   ])(
     "does nothing with %s when the screen has gone before the box's button acts",
     async (_, test) => {
-      const { el, view, writes } = await monthMount(
-        "/opening-hours/view/month/month/2026-12",
-      );
+      const { el, view, writes } = await monthMount("/opening-hours/view/month/month/2026-12");
       const box = await openBox(el, await shown(view));
       const closed = new Promise((resolve) =>
         box.addEventListener("calendar-day-box-close", resolve, { once: true }),
@@ -1689,9 +1654,7 @@ describe("Month view", () => {
   ])(
     "does nothing with %s when the screen has gone before the box's button acts, under the dashboard's navigation guard",
     async (_, test) => {
-      const { el, view, writes } = await monthMount(
-        "/opening-hours/view/month/month/2026-12",
-      );
+      const { el, view, writes } = await monthMount("/opening-hours/view/month/month/2026-12");
       const guard = new NavigationGuard(window, {
         isDirty: () => false,
         request: async () => "proceeded",
@@ -1713,9 +1676,7 @@ describe("Month view", () => {
   );
 
   it("a Year date's box lists every department after one was picked in the Month", async () => {
-    const { el, view } = await monthMount(
-      "/opening-hours/view/month/department/bar/month/2026-12",
-    );
+    const { el, view } = await monthMount("/opening-hours/view/month/department/bar/month/2026-12");
     await shown(view);
     await userEvent.click(
       view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=month-year]")!,
@@ -2041,18 +2002,14 @@ describe("Month view", () => {
       monthName(el, "2026-03")!.focus();
       expect(focused()).toBe(monthName(el, "2026-03"));
       await userEvent.keyboard("{Enter}");
-      await expect
-        .poll(() => location.pathname)
-        .toBe("/opening-hours/view/month/month/2026-03");
+      await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2026-03");
       const month = await shown(view, "2026-03");
       await expect.poll(focused).toBe(yearLink(month));
       expect(document.activeElement).toBe(el);
     });
 
     it("the year link pressed with the keyboard leaves focus on the shown month's name once the Year has drawn it", async () => {
-      const { el, view, holdYears } = await monthMount(
-        "/opening-hours/view/month/month/2026-03",
-      );
+      const { el, view, holdYears } = await monthMount("/opening-hours/view/month/month/2026-03");
       const month = await shown(view, "2026-03");
       const release = holdYears();
       yearLink(month)!.focus();
@@ -2068,9 +2025,7 @@ describe("Month view", () => {
     });
 
     it("forgets the month to focus when focus moves elsewhere or the view changes before the Year draws", async () => {
-      const { el, view, holdYears } = await monthMount(
-        "/opening-hours/view/month/month/2026-03",
-      );
+      const { el, view, holdYears } = await monthMount("/opening-hours/view/month/month/2026-03");
       let release = holdYears();
       yearLink(await shown(view, "2026-03"))!.focus();
       await userEvent.keyboard("{Enter}");
@@ -2154,9 +2109,7 @@ describe("Month view", () => {
     });
 
     it("forgets the month to focus when the year link's navigation is refused", async () => {
-      const { el, view, holdYears } = await monthMount(
-        "/opening-hours/view/month/month/2026-03",
-      );
+      const { el, view, holdYears } = await monthMount("/opening-hours/view/month/month/2026-03");
       const month = await shown(view, "2026-03");
       const guard = new NavigationGuard(window, {
         isDirty: () => true,
@@ -2177,9 +2130,7 @@ describe("Month view", () => {
     });
 
     it("the year link pressed without focus leaves focus alone once the Year draws", async () => {
-      const { el, view, holdYears } = await monthMount(
-        "/opening-hours/view/month/month/2026-03",
-      );
+      const { el, view, holdYears } = await monthMount("/opening-hours/view/month/month/2026-03");
       const month = await shown(view, "2026-03");
       const release = holdYears();
       yearLink(month)!.click();
@@ -2421,14 +2372,10 @@ describe("the Calendar's module views", () => {
     const el = await mountCalendar();
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
     await choose(el, "staffing");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/staffing/month/2027-03");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/month/2027-03");
     expect(hostsSeen["staffing"]![0]!.month).toBe("2027-03");
     await choose(el, "hours");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/month/month/2027-03");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/month/month/2027-03");
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
     expect(checked(el)).toBe("hours");
   });
@@ -2441,9 +2388,7 @@ describe("the Calendar's module views", () => {
       .not.toBeNull();
     const host = hostsSeen["staffing"]![0]!;
     host.open("staffing", { week: "2026-11-30" });
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/staffing/week/2026-11-30");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/week/2026-11-30");
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]")!.textContent)
       .toContain('{"week":"2026-11-30"}');
@@ -2544,9 +2489,7 @@ describe("the Calendar's module views", () => {
       .not.toBeNull();
     const host = hostsSeen["staffing"]![0]!;
     host.open("staffing", { view: "rota", week: "2026-11-30" });
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/staffing/week/2026-11-30");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/week/2026-11-30");
     expect(host.params).toEqual({ week: "2026-11-30" });
     expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
   });
@@ -2587,14 +2530,10 @@ describe("the Calendar's module views", () => {
       .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
       .not.toBeNull();
     await choose(el, "rota");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/rota/month/2027-03");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/rota/month/2027-03");
     expect(hostsSeen["rota"]![0]!.month).toBe("2027-03");
     await choose(el, "staffing");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/opening-hours/view/staffing/month/2027-03");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/month/2027-03");
   });
 
   it("returns from a view with no month to Opening hours' year", async () => {
@@ -2609,11 +2548,7 @@ describe("the Calendar's module views", () => {
   });
 
   it("leaves out a pair whose value is not a valid escape, and keeps the rest", async () => {
-    history.replaceState(
-      null,
-      "",
-      "/opening-hours/view/staffing/area/%E0%A4%A/week/2026-11-30",
-    );
+    history.replaceState(null, "", "/opening-hours/view/staffing/area/%E0%A4%A/week/2026-11-30");
     const el = await mountCalendar();
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))

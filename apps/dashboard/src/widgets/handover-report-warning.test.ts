@@ -34,9 +34,7 @@ it.each([
     await vi.waitFor(() =>
       expect(el.shadowRoot?.textContent).toContain(words["handover_warning.unconfirmed"]),
     );
-    expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-      "/handover-intervals",
-    );
+    expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe("/handover-intervals");
     expect(el.shadowRoot!.querySelector("a")!.textContent).toContain(
       words["handover_warning.check"],
     );
@@ -104,9 +102,7 @@ it.each([
         hasEmergencyHandover,
       );
       expect(el.shadowRoot!.querySelectorAll("a")).toHaveLength(1);
-      expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-        "/handover-intervals",
-      );
+      expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe("/handover-intervals");
       expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(1);
     }
   },

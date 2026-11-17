@@ -308,9 +308,9 @@ matching `cloud/staff.key` and `cloud/staff.crt` before startup. An unset or emp
 opens no staff listener. For the current container, put these values in its `trading.env`;
 Compose does not forward host `WAITRON_STAFF_*` variables. This does not configure a tunnel or connect the box to Cloud.
 
-The separate HTTPS listener serves `/`, its management API, the dashboard's box and backup
-API groups, theme and content-language reads, and help pages. Other routes return 404, as does a
-request for another origin. Requests through it are remote even when the gateway connects over
+The separate HTTPS listener serves dashboard pages at `/` and their root paths directly from the built app.
+It forwards the management API, the dashboard's box and backup API groups, theme and content-language
+reads, and help pages to the main app. Till and setup paths return 404, as does a request for another origin. Requests through it are remote even when the gateway connects over
 loopback. Use your usual password; enrol passkeys separately for the staff hostname. The staff roster
 requires a signed-in session through this entrance. Dashboard images are served read-only;
 membership, mirror-bundle and promotion operations stay off it. Sign-in bodies are limited to

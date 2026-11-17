@@ -258,9 +258,7 @@ it("opening another zone's editor asks first, and Discard opens it fresh", async
   const { app, api } = await mount();
   const el = editor(app);
   await move(el);
-  void navigationGuardFor(window)!.write(
-    new URL("/floor-plan/set/s1/zone/z2", location.origin),
-  );
+  void navigationGuardFor(window)!.write(new URL("/floor-plan/set/s1/zone/z2", location.origin));
   await choose(app, "discard");
   await expect.poll(() => location.pathname).toBe("/floor-plan/set/s1/zone/z2");
   expect(api.getFloorPlan).toHaveBeenLastCalledWith("s1", "z2");

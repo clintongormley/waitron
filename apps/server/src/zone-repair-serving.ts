@@ -1,3 +1,4 @@
+import { isDashboardPath } from "@waitron/shared";
 import type { MiddlewareHandler } from "hono";
 import type { TradingAdmission } from "./trading-admission.js";
 
@@ -33,11 +34,10 @@ export function zoneRepairGate(admission: TradingAdmission): MiddlewareHandler {
       managementRoutes[method]?.some((route) => path === `/management-api/${route}`) === true;
     const read =
       method === "GET" &&
-      (path === "/" ||
+      (isDashboardPath(path) ||
+        path.startsWith("/assets/") ||
         path === "/health" ||
         path === "/api/node" ||
-        path === "/" ||
-        path.startsWith("/") ||
         path.startsWith("/help/"));
     // The webhook must verify its signature before its own closed-admission write check.
     if (management || read || (method === "POST" && path === "/webhooks/stripe")) return next();

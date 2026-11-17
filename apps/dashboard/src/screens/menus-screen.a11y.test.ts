@@ -420,22 +420,14 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   );
 
   it("accessible Price overrides tab", async () => {
-    const { el, host } = await mount(
-      "populated",
-      theme,
-      "/menus/menu/menu-lunch/view/prices",
-    );
+    const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/prices");
     const prices = q(el, "dashboard-menu-prices-table") as HTMLElement & { rows: unknown[] };
     await vi.waitFor(() => expect(prices.rows).toHaveLength(1));
     await expectNoA11yViolations(host);
   });
 
   it("accessible Preview tab", async () => {
-    const { el, host } = await mount(
-      "populated",
-      theme,
-      "/menus/menu/menu-lunch/view/preview",
-    );
+    const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/preview");
     const panel = q(el, "dashboard-menu-preview");
     await vi.waitFor(() => {
       if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");

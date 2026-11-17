@@ -1294,9 +1294,7 @@ describe("Translate all notes", () => {
       fill("suggestions.fix_internal", { wrong: "ZURRITO", right: "ZURITO" }),
     );
     expect(field(el, "one")!.value).toBe("CLIENT-es one");
-    expect(note(el, "s2")!.querySelector("a")!.getAttribute("href")).toBe(
-      "/products/product/one",
-    );
+    expect(note(el, "s2")!.querySelector("a")!.getAttribute("href")).toBe("/products/product/one");
     expect(note(el, "s2")!.querySelector("[data-test=use-fix]")).toBeNull();
   });
   it("names the language of a spelling fix and waits for Use fix", async () => {

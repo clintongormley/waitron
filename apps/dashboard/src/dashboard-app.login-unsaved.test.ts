@@ -208,7 +208,7 @@ it("a Google callback marker stays removed after a guarded page write", async ()
   const app = await mount("/?login=google");
   expect(location.search).toBe("");
   await new UrlStateController(app, () => {}, {
-    basePath: "/",
+    basePath: "",
     primary: "dashboard",
     children: {},
   }).write({ dashboard: "overview" });

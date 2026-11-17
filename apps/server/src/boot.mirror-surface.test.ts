@@ -288,7 +288,6 @@ const OPEN_READS: Record<string, Answer> = {
   "/api/node/main": { status: 200 },
   [`/api/node/handover/${MADE_UP}`]: { status: 404, code: "handover.operation_unknown" },
   "/": { status: 200 },
-  "/": { status: 200 },
   "/staff": { status: 200 },
   "/x": { status: 200 },
   "/setup/trust": { status: 200 },

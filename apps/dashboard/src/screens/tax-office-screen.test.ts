@@ -1102,9 +1102,7 @@ it("keeps a text filter edited moments before another one", async () => {
     amount: "34.10",
   });
   expect(field(el, "q").value).toBe("Ruiz");
-  expect(location.pathname).toBe(
-    "/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz/amount/34.10",
-  );
+  expect(location.pathname).toBe("/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz/amount/34.10");
 });
 
 it("drops an edit still waiting to be sent when Back restores an earlier search", async () => {

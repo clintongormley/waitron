@@ -570,9 +570,7 @@ it.each(["parent", "Back", "sidebar", "Cancel"])(
     await userEvent.click(
       question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!,
     );
-    await expect
-      .poll(() => location.pathname)
-      .toBe(way === "sidebar" ? "/seasons" : "/periods");
+    await expect.poll(() => location.pathname).toBe(way === "sidebar" ? "/seasons" : "/periods");
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
   },
 );

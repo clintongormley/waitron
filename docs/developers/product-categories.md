@@ -1,7 +1,7 @@
 # Product categories
 
 To find products and keep each sale counted once, organise products into categories on the Products
-screen at `/manage/products`. Each category is a reporting category with one internal name, shown
+screen at `/products`. Each category is a reporting category with one internal name, shown
 on the Products screen as a row of its tree. It has no translations or image, and it may have a
 colour, which every product under it takes unless the product has one of its own or a coloured
 category nearer to it ([products.md](products.md), _Colour_). A product belongs to at most one category; one
@@ -16,7 +16,7 @@ by its category path. A matching category starts collapsed; open it to see its c
 matching products also keep their flat result. Clearing search keeps the branches you opened
 and opens their parents too. Column filters and Show archived affect
 products; categories stay. The address names the category last opened, as
-`/manage/products/category/<id>`; closing that category, or one above it, names the closed
+`/products/category/<id>`; closing that category, or one above it, names the closed
 category's parent.
 
 A category has at most one parent, stored in `categories.parent_id`. A save that would make

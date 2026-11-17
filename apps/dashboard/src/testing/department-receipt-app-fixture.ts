@@ -71,11 +71,7 @@ export async function mountReceiptApp(
   } = {},
 ) {
   const permissions = options.permissions ?? ["venue.configure", "venue.view"];
-  history.replaceState(
-    null,
-    "",
-    options.path ?? "/venue-operations/department/bar/view/receipt",
-  );
+  history.replaceState(null, "", options.path ?? "/venue-operations/department/bar/view/receipt");
   const model = venueServiceModel(options.departments, options.zones);
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
     const answer = options.respond?.(path, init);

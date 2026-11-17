@@ -1,6 +1,8 @@
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_STAFF_KEY_FILE, CLOUD_STAFF_CERT_FILE } from "@waitron/store";
-import { Hono } from "hono";
+import { isDashboardPath } from "@waitron/shared";
+import { mountSpa } from "./spa-api.js";
+import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serve } from "@hono/node-server";
 import { Server as HttpsServer } from "node:https";
@@ -106,8 +108,18 @@ export async function installStaffCertificate(
 }
 
 /** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
-export function createStaffApp(app: Hono, origin: string): Hono {
+export function createStaffApp(
+  app: Hono,
+  origin: string,
+  pages?: { root: string; gates?: readonly MiddlewareHandler[] },
+  log: Logger = () => {},
+): Hono {
   const staff = new Hono();
+  const dashboard = new Hono();
+  if (pages !== undefined) {
+    for (const gate of pages.gates ?? []) dashboard.use("*", gate);
+    mountSpa(dashboard, { root: pages.root, basePath: "", navigationPath: isDashboardPath }, log);
+  }
   const limit = bodyLimit({ maxSize: 65536 });
   staff.use("/management-api/*", (c, next) =>
     /^\/management-api\/(?:session$|passkey\/|password-reset$|account-actions\/|google\/)/.test(
@@ -130,14 +142,25 @@ export function createStaffApp(app: Hono, origin: string): Hono {
     )
       return c.notFound();
     const read = c.req.method === "GET" || c.req.method === "HEAD";
+    if (
+      read &&
+      (isDashboardPath(path) ||
+        path.startsWith("/assets/") ||
+        [
+          "/favicon.ico",
+          "/favicon.svg",
+          "/apple-touch-icon.png",
+          "/icon-192.png",
+          "/icon-512.png",
+        ].includes(path))
+    )
+      return dashboard.fetch(c.req.raw, c.env);
     const allowed =
       path.startsWith("/management-api/") ||
       path.startsWith("/api/box/") ||
       path.startsWith("/api/backup/") ||
       (read &&
-        (path === "/" ||
-          path.startsWith("/") ||
-          path === "/api/theme" ||
+        (path === "/api/theme" ||
           path === "/api/content-languages" ||
           path.startsWith("/media/") ||
           path.startsWith("/help/") ||
@@ -165,9 +188,10 @@ export function createStaffApp(app: Hono, origin: string): Hono {
 }
 
 export function startStaffListener(
-  config: Pick<ServerConfig, "staff" | "stateDir">,
+  config: Pick<ServerConfig, "staff" | "stateDir" | "dashboardAppDir">,
   app: Hono,
   log: Logger,
+  pageGates: readonly MiddlewareHandler[] = [],
 ): { close(): Promise<void>; isListening(): boolean } | undefined {
   const staff = config.staff;
   if (staff === undefined) return undefined;
@@ -184,7 +208,18 @@ export function startStaffListener(
     };
     const server = serve(
       buildServeOptions(
-        { fetch: createStaffApp(app, staff.origin).fetch, hostname: staff.host, port: staff.port },
+        {
+          fetch: createStaffApp(
+            app,
+            staff.origin,
+            config.dashboardAppDir === undefined
+              ? undefined
+              : { root: config.dashboardAppDir, gates: pageGates },
+            log,
+          ).fetch,
+          hostname: staff.host,
+          port: staff.port,
+        },
         tls,
       ),
       (info) => log("info", "server.listening", { listener: "staff", port: info.port }),

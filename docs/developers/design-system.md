@@ -1585,7 +1585,7 @@ wrapping-name case failed.
 "Unpublished" for a menu never published, and "Published" with the live version and its time for
 one that has been, whether or not it has changes since. A menu with changes since its live version
 has an "Unpublished changes" link, named "Unpublished changes: <menu>", that opens the menu's
-Preview tab (`/manage/menus/menu/<id>/view/preview`) straight away; a click with a modifier key is
+Preview tab (`/menus/menu/<id>/view/preview`) straight away; a click with a modifier key is
 left to the browser. A menu never published, one with no changes, and every menu while the states
 are read or after their read fails have no link. Sorting by Status still puts the menus waiting for
 a publish first. Where the link sits depends on the list's own width, read through container
@@ -4214,7 +4214,7 @@ the help switch and the account menu are collapsed to no height at their own wid
 height in pixels: measured locally on a68cc3661, before the switch, the banner was 94 px for a Demo
 venue and 102 px for a Live one, and CI's Chromium drew this branch's banner 1 px shorter than that
 (run 39113231289). In Demo and Preparation, `wt-demo-bar` shows the mode,
-the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
+the current dashboard page, a link to the device page, and an "Email inbox" link to `/email`
 (the inbox screen, also linked from setup's done page). Signed out, the inbox link always shows;
 signed in, it shows only to a session that may open the inbox screen (a manager or an admin). The
 sidebar has no entry for that screen. Keep the bar on one line so it leaves room for the page
@@ -4436,9 +4436,9 @@ page itself never scrolls. Before this, only `.sidebar` was self-contained
 a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
 the page actually ended. Both panes now share the same bound, so they always end at the same line.
 
-Seasons and Periods have separate module-contributed pages at `/manage/seasons` and
-`/manage/periods`, under Venue operations. Their drafts use the ordinary dashboard navigation
-question. Painted-in links open a painter with `?back=/manage/periods`, and its Close returns
+Seasons and Periods have separate module-contributed pages at `/seasons` and
+`/periods`, under Venue operations. Their drafts use the ordinary dashboard navigation
+question. Painted-in links open a painter with `?back=/periods`, and its Close returns
 to Periods; bare painter addresses close back to Calendar.
 
 
@@ -4693,7 +4693,7 @@ nesting makes non-optional, not just good practice:
   `.open` reads) would make every session pay for those calls on every page load, whether or not
   anyone ever opens their profile.
 
-Reachability by URL still matters here even though it isn't a real destination: `/manage/profile`
+Reachability by URL still matters here even though it isn't a real destination: `/profile`
 opens the modal on load, with the underlying face resolving to this person's ordinary default
 (never a page literally named "profile" — `#permittedScreen` never sees that value, since
 `#applyRequestedScreen` intercepts it first) — closing the modal REPLACES the URL with that
@@ -5378,7 +5378,7 @@ remain mounted, so switching tabs retains their input values. Supply unique, non
 localized `label` for the tab group.
 
 Prep stations uses `stations` and `routing` (Stations and Routes) at
-`/manage/prep-stations/view/<key>`. Any other key, including `times`, opens Stations and replaces
+`/prep-stations/view/<key>`. Any other key, including `times`, opens Stations and replaces
 the address without adding a history entry. A retired `/station/<id>` child is dropped; Routes
 keeps its own tab when an old address names a station. The tab strip wraps onto a second line
 when the labels do not fit.
@@ -5511,7 +5511,7 @@ It shows the missing-default repair wording or a read-only name/note as appropri
 The page is offered only to
 someone with `venue.configure`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year, the
+Department opening hours belong to `/opening-hours`. No switch picks between the Year, the
 Month and the Week (`opening-hours-screen.ts`): a month's name in the Year opens that month, and the
 Month's year, drawn as a link, opens that year's Year, keeping the department and the rest of the
 address; the Week opens from the day box's Open this week (Week and Day box below).
@@ -6097,13 +6097,13 @@ identifiers against its loaded data and permissions; a URL never establishes aut
 replacement history for defaults and invalid destinations, and push history for a new selection.
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
-Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
-at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Tables, Receipts and Transfers tabs add
+Module management tabs use `/<section>/view/<key>`. Departments always opens its list
+at `/venue-operations`. A department opens at
+`/venue-operations/department/<id>` in its edit dialog; its Service, Tables, Receipts and Transfers tabs add
 `/view/service`, `/view/tables`, `/view/receipt` and `/view/transfers`, and a zone editor adds
 `/view/zones/zone/<id>`. The list stays beneath these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
-(`/manage/venue-settings`) starts with `venue-details`, followed by `kitchen`; a tab
+(`/venue-settings`) starts with `venue-details`, followed by `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
 opens the first visible tab. Venue details holds five cards — Business, Venue, Business day,
 Defaults and Privacy — and, with the Veri\*Factu module, a sixth: the AEAT certificate, which needs
@@ -6113,19 +6113,19 @@ receipt language and the "VAT class for new products" default — is shown with 
 editable with `venue.configure` and read-only without it. So is the Privacy card — the address of
 the venue's privacy notice web page and its privacy email. Venue settings has no Kitchen tab:
 the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address opens Venue details. Voids and comps
-(`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
-`view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
+(`/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
+`view` segments while the module validates its keys. The Menus screen (`/menus`) puts the menu's id before
 the tab:
-`/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
+`/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
 `apps/dashboard/src/navigation.ts`).
-The Modifiers screen's `/manage/modifiers/view/<extras|options>/list/<id>` opens that list's editor
+The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
 the selected tab's lists do not hold opens nothing and is dropped from the address without adding a
 Back stop; closing the editor, with Cancel or a save, drops it the same way. Changing tab drops it
 too and, like any tab change, adds a Back stop.
 
-Use `/manage/<section>` for dashboard destinations and `/till/tabs/<key>` for the till's fixed primary
-screens. Nested views and zones extend those paths, such as `/manage/floor-plan/set/<set>/zone/<zone>`.
+Use `/<section>` for dashboard destinations and `/till/tabs/<key>` for the till's fixed primary
+screens. Nested views and zones extend those paths, such as `/floor-plan/set/<set>/zone/<zone>`.
 Till Schedule, Stations and Pass use `/till/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station` and `expo`. The operator Stations picker adds `/station/<id>`;
 an embedded station keeps its selection local to its screen. Restore these destinations
@@ -6162,7 +6162,7 @@ each selected diet and allergen group once, regardless of how many kinds you cho
 changes the displayed offers, leaving the basket and browser history in place. Browser storage
 being blocked must not stop filtering.
 
-The production server serves app HTML for browser navigation at `/` and under `/manage` and `/till/tabs`. APIs and
+The production server serves app HTML for browser navigation at root dashboard paths and under `/till/tabs`. APIs and
 static assets keep their own responses; setup continues to use its existing root page.
 
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each app
@@ -7099,7 +7099,7 @@ separate `service-delete-dialog` and `service-delete-editors` suites.
 ### Floor plans page
 
 The Floor plans page (`floor-plans-screen.ts`, under `packages/venue-service/src/dashboard/`, at
-`/manage/floor-plans`) has an `h1` "Floor plans" with "+ Add set" beside it. Below, a `wrapToFit`
+`/floor-plans`) has an `h1` "Floor plans" with "+ Add set" beside it. Below, a `wrapToFit`
 `wt-data-table` lists each department, its sets under it and, under each set, the department's
 zones, as an always-open tree whose indent and arrows are taken out, so department and set rows sit
 flush left. A department row is bold on the `--wt-color-bg` band, and one with no sets says "No
@@ -7126,18 +7126,18 @@ staged input. Cases: the `floor-plans-screen*.test.ts`, `floor-plan-set-dialog*.
 ### Periods page
 
 Periods is a module-contributed page under Venue operations, beside Calendar and Seasons,
-at `/manage/periods`. It opens from the menu, page search, the Year's Periods link and the
+at `/periods`. It opens from the menu, page search, the Year's Periods link and the
 Departments warning's Set up periods link. It renders `periods-list` directly, without a
 Calendar window or Close action. Painters retain their inline period pencils and + New period.
 
 The list has an h1 and Add period, department heading rows and period rows, with the columns
 Period, Customer menu, Staff-only menus, Floor plan, Painted in and pinned Actions. A row or
-Edit in its `wt-row-actions` opens `/manage/periods/period/<id>`; Add opens
-`/manage/periods/view/new`. A viewer has no Add, Actions or editable rows. Floor plan appears
+Edit in its `wt-row-actions` opens `/periods/period/<id>`; Add opens
+`/periods/view/new`. A viewer has no Add, Actions or editable rows. Floor plan appears
 only while a department offers one: an explicit alternative is normal text, the default’s name
 is muted italic without a suffix, and a period of a department without plans shows “—”.
 Painted in keeps season and special-day chips, their tints and native modified clicks, and links
-to the painter with `?back=/manage/periods`.
+to the painter with `?back=/periods`.
 
 Guard, weaker than the layout contract: the M1 cases in `periods-list.test.ts` check that the
 table and its cells fit at 1280 px in English and Spanish, each again in Verdana. Their data offers
@@ -7176,15 +7176,15 @@ files.
 
 ### Seasons page
 
-Seasons is a module-contributed page at `/manage/seasons`, under Venue operations beside Calendar
+Seasons is a module-contributed page at `/seasons`, under Venue operations beside Calendar
 and Periods. The menu, page search and the Year's Seasons link open it. `seasons-screen.ts` follows
 passive opening-hours reads and renders a list or the selected `seasons-window.ts` form with an h1.
 
 The page lists seasons in January-first order (`draftOf`), with a tinted name swatch, Starts on,
 Runs until and pinned `wt-row-actions` offering Edit and Delete. Each swatch names its colour
 for assistive technology and on hover. The only season’s Delete is
-disabled. Viewers see no editing actions. Add opens `/manage/seasons/view/new`; a row or Edit
-opens `/manage/seasons/season/<id>`, with “Seasons ›” above its h1. The selected-season form
+disabled. Viewers see no editing actions. Add opens `/seasons/view/new`; a row or Edit
+opens `/seasons/season/<id>`, with “Seasons ›” above its h1. The selected-season form
 (`seasons-window.ts`) shows Name, Colour, Day and Month, visibly required. It retains the full
 season draft for duplicate checks, date clamping, colour choices and live merges, but sends only
 the selected entry through the existing batch API. A missing edited season stays marked and

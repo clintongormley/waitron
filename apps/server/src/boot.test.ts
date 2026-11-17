@@ -1540,7 +1540,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("a trading boot with the setup app configured does not send unknown browser paths to the root", async () => {
+  it("a trading boot serves dashboard pages in place without redirecting to setup", async () => {
     const venue = await freshVenue();
     await seedSharedVenue(venue.store.venue);
     const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-setup-spa-"));
@@ -1583,7 +1583,8 @@ describe("startServer, against a migrated venue directory", () => {
       expect((await pair.json()).deviceAddress).toBe("https://dashboard.example.com/till/");
       const html = { headers: { Accept: "text/html" }, redirect: "manual" as const };
       const unknown = await fetch(`http://127.0.0.1:${httpPort()}/anything/else`, html);
-      expect(unknown.status).toBe(404);
+      expect(unknown.status).toBe(200);
+      expect(await unknown.text()).toBe("<html>dashboard-page</html>");
       expect(unknown.headers.get("location")).toBeNull();
       const tabs = await fetch(`http://127.0.0.1:${httpPort()}/till/tabs/counter`, html);
       expect(tabs.status).toBe(200);

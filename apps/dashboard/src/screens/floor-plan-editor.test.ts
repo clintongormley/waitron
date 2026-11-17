@@ -494,7 +494,7 @@ it("Cancel links to the way back, or to / when it is not a dashboard path", asyn
   );
   expect(close(evil)).toBe("/");
   cleanupWidgets();
-  const elsewhere = await open(stubApi(), "/floor-plan/set/s1/zone/z1?back=%2Flogin");
+  const elsewhere = await open(stubApi(), "/floor-plan/set/s1/zone/z1?back=%2Ftill%2F");
   expect(close(elsewhere)).toBe("/");
   cleanupWidgets();
   const unparsable = await open(

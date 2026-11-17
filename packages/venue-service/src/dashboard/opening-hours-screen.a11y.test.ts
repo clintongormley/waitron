@@ -220,11 +220,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     onTestFinished(() => page.viewport(...before));
     expect(window.innerWidth).toBe(width);
     setLocale("en");
-    history.replaceState(
-      null,
-      "",
-      "/opening-hours/view/week/department/rest/week/2026-12-09",
-    );
+    history.replaceState(null, "", "/opening-hours/view/week/department/rest/week/2026-12-09");
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");

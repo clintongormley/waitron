@@ -454,11 +454,7 @@ for (const locale of ["en-GB", "es-ES"]) {
       it(`renders the real Venue details tab warning in ${locale}/${theme}/${width}`, async () => {
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
-        const { app, host } = await mount(
-          "/venue-settings/view/venue-details",
-          locale,
-          theme,
-        );
+        const { app, host } = await mount("/venue-settings/view/venue-details", locale, theme);
         expect(host.dataset.theme).toBe(theme);
         const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
         await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();

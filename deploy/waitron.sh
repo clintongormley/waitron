@@ -542,7 +542,7 @@ EOF
   Install this box's certificate before entering setup details.
   On a box serving its own certificate, the guide's first step removes any old one.
   Once set up:
-    Till         ${BOX_URL}
+    Till         ${BOX_URL}/till/
     Dashboard    ${BOX_URL}/
     Email inbox  ${BOX_URL}/email
 

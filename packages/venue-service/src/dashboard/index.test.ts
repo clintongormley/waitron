@@ -123,9 +123,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       liveData: new LiveData(),
     });
     const at = (path: string) => new URL(path, location.origin);
-    expect(
-      handle.navigationScopes!(at("/venue-operations/department/d1/view/service")),
-    ).toBe(undefined);
+    expect(handle.navigationScopes!(at("/venue-operations/department/d1/view/service"))).toBe(
+      undefined,
+    );
     const container = document.createElement("div");
     document.body.append(container);
     containers.push(container);
@@ -140,9 +140,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           ?.shadowRoot!.querySelector("department-edit-dialog"),
       ).toBeTruthy(),
     );
-    expect(
-      handle.navigationScopes!(at("/venue-operations/department/d1/view/service")),
-    ).toEqual([]);
+    expect(handle.navigationScopes!(at("/venue-operations/department/d1/view/service"))).toEqual(
+      [],
+    );
     expect(handle.navigationScopes!(at("/venue-operations/department/d2"))).toBe(undefined);
   });
 

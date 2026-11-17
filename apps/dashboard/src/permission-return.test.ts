@@ -5,9 +5,7 @@ afterEach(() => sessionStorage.removeItem("waitron-permission-return"));
 
 it("keeps only the current pathname across a Google return and consumes it once", () => {
   preparePermissionReturn("/test-evidence");
-  expect(sessionStorage.getItem("waitron-permission-return")).toBe(
-    '{"path":"/test-evidence"}',
-  );
+  expect(sessionStorage.getItem("waitron-permission-return")).toBe('{"path":"/test-evidence"}');
   expect(consumePermissionReturn(true)).toBe("/test-evidence");
   expect(consumePermissionReturn(true)).toBeUndefined();
 });

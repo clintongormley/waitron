@@ -152,9 +152,7 @@ it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
     );
     expect(prevented).toBe(false);
     expect(heard).not.toHaveBeenCalled();
-    expect(link.getAttribute("href")).toBe(
-      "/menus/menu/menu-lunch/view/prices/filter/clashes",
-    );
+    expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/prices/filter/clashes");
   },
 );
 

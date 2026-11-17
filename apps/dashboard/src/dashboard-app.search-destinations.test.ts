@@ -22,7 +22,7 @@ class SearchDestinationFixture extends LitElement {
       this.windowId = this.url.read("window") ?? "";
     },
     {
-      basePath: "/",
+      basePath: "",
       primary: "dashboard",
       children: { "*": { view: "view", mode: "mode", window: "window" } },
     },
@@ -183,9 +183,7 @@ it("keeps all matching pages ahead of inner results across groups and labels the
   await search(el, "stock");
   expect(results(el).map((x) => x.textContent!.trim())).toEqual(["Stock", "Stock — in Library"]);
   await userEvent.click(destination(el, "library:stock")!);
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   await vi.waitFor(() =>
     expect(fixture(el).shadowRoot!.querySelector("[data-test=chosen]")!.textContent).toBe(
       "stock/person",
@@ -199,9 +197,7 @@ it("Enter opens the same complete inner address and preserves blank ordinary nav
   await search(el, "stock library");
   box(el).focus();
   await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   expect(box(el).value).toBe("");
 });
 it("opens a window from an address and restores it through Back Forward and a fresh mount", async () => {
@@ -256,9 +252,7 @@ it("keeps same-page drafts and the phone search on Keep, then navigates only aft
   await vi.waitFor(() => expect(question.open).toBe(true));
   await question.updateComplete;
   await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   expect(value).toBe("saved");
   expect(box(el).value).toBe("");
   expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);

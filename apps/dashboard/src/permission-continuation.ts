@@ -1,9 +1,10 @@
+import { isDashboardPath } from "@waitron/shared";
 import type { DashboardPermissionContinuation } from "@waitron/dashboard-kit";
 import type { SessionEpoch } from "./session-signals.js";
 
 const RETURN_KEY = "waitron-permission-return";
 const surfacePath = (path: unknown): path is string =>
-  typeof path === "string" && path.startsWith("/") && !/[?#]/.test(path);
+  typeof path === "string" && isDashboardPath(path) && !/[?#]/.test(path);
 
 export function preparePermissionReturn(path: string): void {
   try {

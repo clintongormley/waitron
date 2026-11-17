@@ -9,7 +9,7 @@ import {
 const readBack = (path: string) =>
   new URL(path, "http://venue.test").pathname
     .split("/")
-    .slice(3)
+    .slice(2)
     .map((part) => decodePathSegment(part));
 
 describe("opening hours paths", () => {

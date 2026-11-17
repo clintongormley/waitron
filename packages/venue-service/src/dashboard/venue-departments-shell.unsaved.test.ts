@@ -44,7 +44,7 @@ class App extends LitElement {
   model = model;
   readonly leave = new LeaveController(this);
   readonly url = new UrlStateController(this, () => {}, {
-    basePath: "/",
+    basePath: "",
     primary: "dashboard",
     children: {},
     leave: {

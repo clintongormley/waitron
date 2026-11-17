@@ -1,3 +1,4 @@
+import { isDashboardPath } from "@waitron/shared";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -380,7 +381,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     );
     mountSpa(
       source,
-      { root: join(root!, "dashboard"), basePath: "/", navigationPath: "/" },
+      { root: join(root!, "dashboard"), basePath: "", navigationPath: isDashboardPath },
       log,
     );
     await context.addCookies([

@@ -208,7 +208,7 @@ export class PrepStationsScreen extends LitElement {
       }
     },
     {
-      basePath: "/",
+      basePath: "",
       primary: "dashboard",
       children: { "prep-stations": { view: "view", station: "station" }, "*": { view: "view" } },
     },

@@ -192,9 +192,7 @@ it("choosing the Service tab records /view/service and Back returns to Details",
   const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
   await selectDepartmentTab(form, "service");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/venue-operations/department/d1/view/service");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1/view/service");
   expect(location.search).toBe("?source=saved");
   history.back();
   await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
@@ -234,9 +232,7 @@ it("choosing Tables records its address and keeps the tab open", async () => {
   const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
   await selectDepartmentTab(form, "tables");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/venue-operations/department/d1/view/tables");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1/view/tables");
   expect(form.tab).toBe("tables");
 });
 
@@ -332,9 +328,7 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
   table.shadowRoot!.querySelector<HTMLElement>("[data-test=open-department-d1]")!.click();
   const form = await departmentSettings(shell);
   await selectDepartmentTab(form, "service");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/venue-operations/department/d1/view/service");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1/view/service");
   departmentCancel(form).click();
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   const menu = table
@@ -432,9 +426,7 @@ it("/view/receipt opens the department dialog on its Receipts tab", async () => 
 it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {
   const at = (path: string) => new URL(path, location.origin);
   const list = await mount();
-  expect(list.navigationScopes(at("/venue-operations/department/d1?source=saved"))).toBe(
-    undefined,
-  );
+  expect(list.navigationScopes(at("/venue-operations/department/d1?source=saved"))).toBe(undefined);
   list.remove();
   const shell = await mount("/venue-operations/department/d1/view/service");
   shell.renderPanel = undefined;
@@ -445,10 +437,7 @@ it("navigationScopes is [] for another offered tab of the open department and un
     "/department/d1/view/service",
     "/department/d1/view/transfers",
   ])
-    expect(
-      shell.navigationScopes(at(`/venue-operations${path}?source=saved`)),
-      path,
-    ).toEqual([]);
+    expect(shell.navigationScopes(at(`/venue-operations${path}?source=saved`)), path).toEqual([]);
   for (const path of [
     "/venue-operations/department/d2?source=saved",
     "/venue-operations/department/d1/view/zones/zone/z1?source=saved",
@@ -470,9 +459,7 @@ it("navigationScopes is [] for another offered tab of the open department and un
   const single = await mount("/venue-operations/department/d1", undefined, oneDepartment());
   await departmentSettings(single);
   expect(
-    single.navigationScopes(
-      at("/venue-operations/department/d1/view/transfers?source=saved"),
-    ),
+    single.navigationScopes(at("/venue-operations/department/d1/view/transfers?source=saved")),
   ).toBe(undefined);
 });
 it("navigationScopes is [] for receipt when the dialog offers it", async () => {

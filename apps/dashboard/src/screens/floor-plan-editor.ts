@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   SHORT_NAME_MAX,
+  isDashboardPath,
   refusesShortNamePlus,
   shortNameKey,
   shortNameLength,
@@ -257,7 +258,7 @@ const SET_GONE = new Set(["zone.not_found", "floor_plan_set.not_found", "floor_p
 /** `back` when it is a dashboard path on this origin, else the dashboard's home. */
 function closeHref(back: string | null): string {
   const url = back === null ? null : URL.parse(back, location.origin);
-  return url !== null && url.origin === location.origin && url.pathname.startsWith(`${HOME}/`)
+  return url !== null && url.origin === location.origin && isDashboardPath(url.pathname)
     ? `${url.pathname}${url.search}${url.hash}`
     : HOME;
 }
