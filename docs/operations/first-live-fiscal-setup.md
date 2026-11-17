@@ -182,6 +182,13 @@ You can select the saved pack, or an older sheet, during recovery or type its gr
 typing check catches mistakes; opening the selected backup still authenticates the complete secret.
 See [recovering a box](hour-recovery.md).
 
+When the box's time service is not synchronised, keep the box switched on, Waitron running and the
+box's clock unchanged from **Proceed** until setup finishes: the time confirmed at **Proceed** counts
+only until then (`packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "without a time
+service, a confirmed device time counts two minutes later while %s";
+`apps/server/src/module-operation-host.test.ts`, "a device time confirmed through the setup page
+counts at Provision two minutes later without the time service %s").
+
 ## After an interruption
 
 Reconnect to inspect the attempt before starting another setup. A reloaded tab that still holds

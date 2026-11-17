@@ -57,7 +57,7 @@ comparison is skipped: that reader replaces the held readings entirely.
    answers synchronised, so this covers the synchronised case only.
 3. Golden huella and `inmutabilidad` unedited.
 
-**Out of scope, asked separately (WATCHER-NEEDED).** A box whose time service is not synchronised
+**Out of scope, asked separately (WATCHER-NEEDED; superseded by the amendment below).** A box whose time service is not synchronised
 cannot get a second clock at Provision without the browser. Since the steps between the series and
 Provision always take more than 30 seconds, its first setup through the page always fails, before
 and after this change. And any refusal at activation still leaves the page stuck, because the

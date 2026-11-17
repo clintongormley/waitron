@@ -1,5 +1,9 @@
 # A679 changed test checks
 
+_2026-11-17, SETUP-STALE-CLOCK: the restart case's `clock_stale` assertion and its manual clock
+comparison are removed; Provision now takes its own fresh clock reading, so the first fresh
+confirmation prepares._
+
 _2026-11-09, A1379: setup-password recovery ("Continue"), publication-only Finish, the command's
 resumption and its retained configuration import are removed, with their suites
 (`first-setup-finish.route.test.ts`, `first-fiscal-hour-finish.test.ts`,
