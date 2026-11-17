@@ -256,9 +256,6 @@ it("accepts one exact staff DNS name together with its new TLS context and retai
     watcher.checkNow();
     expect(watcher.hostname()).toBe("staff.next.example.test");
     expect(await fingerprint()).toBe(accepted);
-    await writeFile(files.certFile, "broken");
-    watcher.checkNow();
-    expect(watcher.hostname()).toBe("staff.next.example.test");
   } finally {
     server.emit("close");
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));

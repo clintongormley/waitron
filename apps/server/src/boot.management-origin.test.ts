@@ -380,43 +380,46 @@ it("every money or drawer write the restricted start refuses is a POST the full 
 
 it("boots and closes a separate staff entrance over the real dashboard API", async () => {
   const [port] = await freePorts(1);
-  await withServer({ WAITRON_STAFF_PORT: String(port) }, async ({ venue }) => {
-    expect(served.listeners).toHaveLength(2);
-    const remote = served.listeners[0]!;
-    const response = await remote.fetch(
-      new Request("https://staff.example.test/management-api/session/me", {
-        headers: { cookie: venue.managerCookie },
-      }),
-    );
-    expect(response.status).toBe(200);
-    const local = await served.listeners[1]!.fetch(
-      new Request("http://localhost/management-api/session/me", {
-        headers: { cookie: venue.managerCookie },
-      }),
-    );
-    const localBody = (await local.json()) as { personId: string };
-    expect(await response.json()).toMatchObject({
-      personId: localBody.personId,
-      roleIds: [
-        (
-          await suite.db.execute<{ id: string }>(
-            sql`select id from roles where built_in_key = 'manager'`,
-          )
-        ).rows[0]!.id,
-      ],
-    });
-    for (const path of [
-      "/setup-api/status",
-      "/api/session",
-      "/print-api/agent/jobs",
-      "/device-api/start",
-    ]) {
-      expect(
-        (await remote.fetch(new Request(`https://staff.example.test${path}`))).status,
-        path,
-      ).toBe(404);
-    }
-  });
+  await withServer(
+    { WAITRON_STAFF_HOST: "127.0.0.1", WAITRON_STAFF_PORT: String(port) },
+    async ({ venue }) => {
+      expect(served.listeners).toHaveLength(2);
+      const remote = served.listeners[0]!;
+      const response = await remote.fetch(
+        new Request("https://staff.example.test/management-api/session/me", {
+          headers: { cookie: venue.managerCookie },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const local = await served.listeners[1]!.fetch(
+        new Request("http://localhost/management-api/session/me", {
+          headers: { cookie: venue.managerCookie },
+        }),
+      );
+      const localBody = (await local.json()) as { personId: string };
+      expect(await response.json()).toMatchObject({
+        personId: localBody.personId,
+        roleIds: [
+          (
+            await suite.db.execute<{ id: string }>(
+              sql`select id from roles where built_in_key = 'manager'`,
+            )
+          ).rows[0]!.id,
+        ],
+      });
+      for (const path of [
+        "/setup-api/status",
+        "/api/session",
+        "/print-api/agent/jobs",
+        "/device-api/start",
+      ]) {
+        expect(
+          (await remote.fetch(new Request(`https://staff.example.test${path}`))).status,
+          path,
+        ).toBe(404);
+      }
+    },
+  );
   expect(served.listeners.every(({ server }) => !server.listening)).toBe(true);
 });
 

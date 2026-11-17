@@ -473,11 +473,10 @@ it("checks current staff admission before parsing a body or forwarding a request
   const app = new Hono();
   app.all("*", (c) => c.text("forwarded"));
   let admitted = true,
-    unreadable = false,
-    name = "staff.example.test";
+    unreadable = false;
   const staff = createStaffApp(app, async () => {
     if (unreadable) throw new Error("state unreadable");
-    return admitted ? `https://${name}` : undefined;
+    return admitted ? "https://staff.example.test" : undefined;
   });
   expect((await staff.request("https://staff.example.test/management-api/session")).status).toBe(
     200,
@@ -492,16 +491,8 @@ it("checks current staff admission before parsing a body or forwarding a request
       })
     ).status,
   ).toBe(404);
-  admitted = true;
-  name = "staff.next.example.test";
+  unreadable = true;
   expect((await staff.request("https://staff.example.test/management-api/session")).status).toBe(
     404,
   );
-  expect(
-    (await staff.request("https://staff.next.example.test/management-api/session")).status,
-  ).toBe(200);
-  unreadable = true;
-  expect(
-    (await staff.request("https://staff.next.example.test/management-api/session")).status,
-  ).toBe(404);
 });

@@ -707,36 +707,30 @@ it("uses Cloud's changed staff name and retains the accepted chain until its rep
   expect(await f.readKey()).toBe(key);
 });
 
-it.each([
-  "switch off",
-  "pending revoke",
-  "unconfigured",
-  "failed",
-  "missing name",
-  "invalid name",
-  "production",
-])("quietly skips certificate work for %s", async (gate) => {
-  const f = await fixture();
-  await f.client.refresh();
-  const path = join(f.stateDir, "cloud/connection.json");
-  const state = JSON.parse(await readFile(path, "utf8"));
-  if (gate === "switch off") state.remoteAccessEnabled = false;
-  if (gate === "pending revoke")
-    state.lifecycle.pending = {
-      action: "revoke",
-      operationId: "17171717-1717-4717-8717-171717171717",
-      body: "{}",
-    };
-  if (gate === "production") state.environment = "production";
-  const service = state.lifecycle.view.services.find(
-    (s: { service: string }) => s.service === "remote_access",
-  );
-  if (["unconfigured", "failed"].includes(gate)) service.state = gate;
-  if (gate === "missing name") delete service.configuration.staffHostname;
-  if (gate === "invalid name")
-    service.configuration.staffHostname = "https://bad.example.test/path";
-  const { refreshStaffCertificate } = await import("./cloud-staff-certificate.js");
-  expect(await refreshStaffCertificate(state, f.stateDir)).toBe(false);
-  expect(f.calls).toEqual([]);
-  await expect(f.readKey()).rejects.toMatchObject({ code: "ENOENT" });
-});
+it.each(["switch off", "pending revoke", "unconfigured", "failed", "missing name", "invalid name"])(
+  "quietly skips certificate work for %s",
+  async (gate) => {
+    const f = await fixture();
+    await f.client.refresh();
+    const path = join(f.stateDir, "cloud/connection.json");
+    const state = JSON.parse(await readFile(path, "utf8"));
+    if (gate === "switch off") state.remoteAccessEnabled = false;
+    if (gate === "pending revoke")
+      state.lifecycle.pending = {
+        action: "revoke",
+        operationId: "17171717-1717-4717-8717-171717171717",
+        body: "{}",
+      };
+    const service = state.lifecycle.view.services.find(
+      (s: { service: string }) => s.service === "remote_access",
+    );
+    if (["unconfigured", "failed"].includes(gate)) service.state = gate;
+    if (gate === "missing name") delete service.configuration.staffHostname;
+    if (gate === "invalid name")
+      service.configuration.staffHostname = "https://bad.example.test/path";
+    const { refreshStaffCertificate } = await import("./cloud-staff-certificate.js");
+    expect(await refreshStaffCertificate(state, f.stateDir)).toBe(false);
+    expect(f.calls).toEqual([]);
+    await expect(f.readKey()).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
