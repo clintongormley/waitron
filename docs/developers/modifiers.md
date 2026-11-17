@@ -299,7 +299,7 @@ be told from a different answer. Giving the comparison an id to use would mean p
 line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
 list was renamed between the two sends, freezing the new name"
 (`apps/server/src/working-order.test.ts`). A line already sent (it or one of its extras sent, or
-its ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
+either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
 `updateHeldOrder` passes `keepSentAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names
 no answer the line does not already hold by the staff names of its list and label
