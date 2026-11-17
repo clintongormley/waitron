@@ -35,11 +35,11 @@ const chartBody = (primary: string) => ({
   nodes: [{ nodeId: primary, standing: "serving-primary" as const, contactUrl: "" }],
 });
 
-async function writeChart(primary: string) {
+async function writeChart(primary: string, privateKey = source.privateKey) {
   await writeNodeMembership(suite.db, {
     body: chartBody(primary),
     signerNodeId: sourceId,
-    signature: signDocumentBody(chartBody(primary), source.privateKey),
+    signature: signDocumentBody(chartBody(primary), privateKey),
     endorsements: [],
   });
 }
@@ -278,6 +278,24 @@ it("refuses a copy whose chart cannot be read", async () => {
   const hash = await place();
   await expect(check(bindingFor(hash))).rejects.toMatchObject({
     code: "emergency_copy.source_not_primary",
+  });
+});
+
+it("refuses a chart signed with a key no machine row in the copy holds", async () => {
+  await writeChart(sourceId, generateNodeKeyPair().privateKey);
+  const hash = await place();
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.chart_unverified",
+  });
+});
+
+it("refuses a chart altered after it was signed", async () => {
+  await suite.db.run(
+    sql`update node_membership set document = json_set(document, '$.body.nodes[0].contactUrl', 'https://elsewhere.example') where id = 1`,
+  );
+  const hash = await place();
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.chart_unverified",
   });
 });
 

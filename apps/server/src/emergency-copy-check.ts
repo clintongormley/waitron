@@ -3,7 +3,11 @@ import { createReadStream, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { decodeSettingsRow, VENUE_SETTINGS, type DeploymentEnvironment } from "@waitron/db";
-import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/membership";
+import {
+  servingPrimaryNodeId,
+  verifyMembershipDocument,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { NODE_FILE, openBackupQuery, WAL_SUFFIX, type BackupQuery } from "@waitron/store";
@@ -98,6 +102,13 @@ export async function checkEmergencyCopy(deps: {
       servingPrimaryNodeId(chart as SignedMembershipDocument) !== binding.sourceNodeId
     )
       throw new AppError("emergency_copy.source_not_primary", {});
+
+    // Consistency with the copy's own keys, not authenticity: that rests on Cloud's hash.
+    const trustSet: Record<string, string> = {};
+    for await (const row of query.rows("select id, public_key from nodes"))
+      trustSet[String(row.id)] = String(row.public_key);
+    if (!verifyMembershipDocument(chart as SignedMembershipDocument, trustSet).valid)
+      throw new AppError("emergency_copy.chart_unverified", {});
 
     if (
       (await firstRow(query, "select id from nodes where id = ?", [binding.copyNodeId])) !==
