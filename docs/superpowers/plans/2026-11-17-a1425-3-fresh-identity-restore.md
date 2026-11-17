@@ -105,7 +105,8 @@ beside the file (a stand-in for the source's `node.dump`) refused, and the file'
 afterwards. Its opens are immutable, so checking a WAL-mode file leaves no `-wal` or `-shm` beside it.
 About 190 production, 340 test lines.
 
-**PR 2: the copy's own `node.db`.** `emergency-copy-placement.ts` (steps 3–4, the reader). First failing
+**PR 2: the copy's own `node.db`.** `emergency-copy-placement.ts` (steps 3–4, the reader; as built,
+2026-11-17, the reader is in `emergency-copy-check.ts`, which needs it). First failing
 test: `emergency-copy-placement.test.ts` "a placed copy has its own key and the venue file is byte for
 byte the one Cloud chose". Then: the key opens only under `copyNodeId` on the copy's ring; `node.db`
 holds no row for `sourceNodeId`; the role reads `mirror`; `trading.env` names `copyNodeId`; a repeat

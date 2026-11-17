@@ -141,8 +141,8 @@ export async function placeEmergencyCopy(deps: {
 async function placeHeld(deps: PlacementDeps): Promise<void> {
   const { binding } = deps;
   // `loadBoxEnv`, which every start reads the ring through, lets a vault key variable set in this
-  // process's environment, or present in `trading.env`, win over `secrets.env`: either way the
-  // next start would not read the copy's ring as `secrets.env` holds it.
+  // process's environment, `trading.env` or `backup.env` win over `secrets.env`. The first two are
+  // refused here; `backup.env` is not read.
   const inEnvironment = Object.keys(keyRingVariables(deps.processEnv));
   if (inEnvironment.length > 0)
     throw new AppError("emergency_copy.vault_key_in_environment", { variables: inEnvironment });
@@ -159,8 +159,6 @@ async function placeHeld(deps: PlacementDeps): Promise<void> {
   // The binding was in date when it was read, but the checks can take many minutes.
   assertEmergencyCopyBindingUnexpired(binding, deps.now());
   deps.signal?.throwIfAborted();
-  // A repeat passes only when the files beside the placed `node.db` already make the copy start
-  // as placed.
   if (placed) {
     if (trading === null) throw new AppError("emergency_copy.trading_env_missing", {});
     await assertSavedRingOpensKey(
@@ -201,6 +199,7 @@ async function placeHeld(deps: PlacementDeps): Promise<void> {
       await store.close();
     }
     await writeCredentialsRing(deps.stateDir, encoded);
+    // No `WAITRON_ACCOUNT_KEY`: Cloud's launcher passes the account key (plan decision 5).
     if (trading === null)
       await writeTradingEnv(deps.stateDir, {
         nodeId: binding.copyNodeId,

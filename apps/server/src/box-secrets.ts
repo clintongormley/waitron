@@ -60,7 +60,7 @@ function boxTlsPaths(stateDir: string) {
 }
 
 /**
- * Replaces `secrets.env` whole with `ring`, so the next boot opens what the main box sealed.
+ * Replaces `secrets.env` whole with `ring`, so the next boot opens what was sealed under `ring`.
  */
 export async function writeCredentialsRing(stateDir: string, ring: EncodedKeyRing): Promise<void> {
   // Durable: node.db's commit is, and a key it holds sealed under this ring opens only with it.
