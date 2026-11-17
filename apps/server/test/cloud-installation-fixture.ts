@@ -9,6 +9,8 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     email?: MachineHandler;
+    emailConfiguration?: true;
+    environment?: "test" | "production";
     billing?: MachineHandler;
     emergency?: MachineHandler;
     emergencyCode?: MachineHandler;
@@ -34,7 +36,10 @@ export async function installationFixture(
   // Contract, "Seeing the service": any other configuration body is an invalid proof.
   const configurationBodies = options.cloudBeforeVersion2
     ? ["{}"]
-    : ["{}", '{"servicesVersion":2}'];
+    : [
+        "{}",
+        '{"servicesVersion":2}',
+      ];
   const services = (four: boolean) => [
     ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
       service,
@@ -115,7 +120,10 @@ export async function installationFixture(
     }
     expect(req.url).toBe(`/api/installations/${values[2]}`);
     const lifecycle = saved.lifecycle as { pending: { operationId: string } };
-    expect(lifecycle.pending.operationId).toBe(values[4]);
+    if (options.emailConfiguration && !lifecycle?.pending) {
+      expect(values[2]).toBe("configuration");
+      expect(configurationBodies).toContain(values[7]);
+    } else expect(lifecycle.pending.operationId).toBe(values[4]);
     await delay();
     if (offline) {
       res.writeHead(503);
@@ -177,7 +185,7 @@ export async function installationFixture(
     }
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ...(replies.get(operation) as object), ...patch }));
-  });
+  }, options.environment);
   const client = createCloudConnection(f.options);
   await client.start();
   f.approve();

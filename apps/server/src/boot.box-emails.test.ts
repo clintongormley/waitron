@@ -20,9 +20,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import type { Transaction } from "@waitron/db";
 import type { EmailDelivery } from "./email-delivery.js";
-type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
+type AccountMode = () => Promise<EmailDelivery["mode"] | "cloud">;
 import { runMailLoop, runMailPass } from "./mail-sender.js";
 import { AppError } from "@waitron/shared";
 import type { startMailSender } from "./mail-sender.js";
@@ -250,75 +249,87 @@ async function venueName(): Promise<string> {
 }
 
 describe("the running server's notice and email checks", () => {
-  it("wires paired account mail through Cloud while other notice delivery stays local", async () => {
-    const venue = await setupVenue(suite.db);
-    const booted: Booted = {};
-    let submitted: Record<string, unknown> | undefined;
-    const f = await installationFixture(undefined, {
-      email: async (v, _saved, _req, res) => {
-        submitted = JSON.parse(String(v[7]));
-        res.end(
-          JSON.stringify({
-            version: 1,
-            messageId: v[4],
-            state: "accepted",
-            statusRevision: 2,
-            expiresAt: submitted!.expiresAt,
-            reason: null,
-          }),
-        );
-      },
-    });
-    try {
-      const recipientId = randomUUID();
-      await seedPersons(suite.db, {
-        id: recipientId,
-        displayName: "Relay recipient",
-        email: "relay@example.test",
-        locale: "en-GB",
-      });
-      await withTransaction(suite.db, (tx) => saveCloudVenueId(tx, f.venueId));
-      f.patch({
-        emailRelay: {
-          version: 1,
-          grant: {
-            id: randomUUID(),
-            revision: 1,
-            enabled: true,
-            expiresAt: new Date(Date.now() + 3600000).toISOString(),
-          },
+  it.each(["on", "off", "never_enabled"] as const)(
+    "wires paired account mail with relay %s while other notice delivery stays local",
+    async (relay) => {
+      const venue = await setupVenue(suite.db);
+      const booted: Booted = {};
+      let submitted: Record<string, unknown> | undefined;
+      const f = await installationFixture(undefined, {
+        emailConfiguration: true,
+        email: async (v, _saved, _req, res) => {
+          submitted = JSON.parse(String(v[7]));
+          res.end(
+            JSON.stringify({
+              version: 1,
+              messageId: v[4],
+              state: "accepted",
+              statusRevision: 2,
+              expiresAt: submitted!.expiresAt,
+              reason: null,
+            }),
+          );
         },
       });
-      await withTransaction(suite.db, (tx) =>
-        queueAccountMail(tx, { personId: recipientId, purpose: "password_reset" }),
-      );
-      holder.pauseMail = true;
-      await bootServer(
-        booted,
-        venue,
-        { intent: "demo", development: true },
-        undefined,
-        {},
-        { origin: f.options.origin, stateDir: f.stateDir },
-      );
-      expect(await withTransaction(holder.mail!.db, (tx) => holder.managementMode!(tx))).toBe(
-        "cloud",
-      );
-      expect(await withTransaction(holder.mail!.db, (tx) => holder.profileMode!(tx))).toBe("cloud");
-      await runMailPass(holder.mail!);
-      expect(submitted).toMatchObject({ class: "password_reset", locale: "en-GB" });
-      expect(holder.smtp).toEqual([]);
-      expect(
-        suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
-      ).toMatchObject({ status: "sent" });
-      expect(
-        await withTransaction(holder.mail!.db, (tx) => holder.mail!.resolveDelivery(tx, "notice")),
-      ).toMatchObject({ mode: "local_capture" });
-    } finally {
-      await shutDown(booted);
-      await f.close();
-    }
-  });
+      try {
+        const recipientId = randomUUID();
+        await seedPersons(suite.db, {
+          id: recipientId,
+          displayName: "Relay recipient",
+          email: "relay@example.test",
+          locale: "en-GB",
+        });
+        await withTransaction(suite.db, (tx) => saveCloudVenueId(tx, f.venueId));
+        f.patch({
+          emailRelay: {
+            version: 1,
+            grant:
+              relay === "never_enabled"
+                ? null
+                : {
+                    id: randomUUID(),
+                    revision: 1,
+                    enabled: relay === "on",
+                    expiresAt: new Date(Date.now() + 3600000).toISOString(),
+                  },
+          },
+        });
+        await withTransaction(suite.db, (tx) =>
+          queueAccountMail(tx, { personId: recipientId, purpose: "password_reset" }),
+        );
+        holder.pauseMail = true;
+        await bootServer(
+          booted,
+          venue,
+          { intent: "demo", development: true },
+          undefined,
+          {},
+          { origin: f.options.origin, stateDir: f.stateDir },
+        );
+        expect(await holder.managementMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
+        expect(await holder.profileMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
+        await runMailPass(holder.mail!);
+        if (relay === "on") {
+          expect(submitted).toMatchObject({ class: "password_reset", locale: "en-GB" });
+          expect(holder.smtp).toEqual([]);
+        } else {
+          expect(submitted).toBeUndefined();
+          expect(holder.smtp).toHaveLength(1);
+        }
+        expect(
+          suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
+        ).toMatchObject({ status: "sent" });
+        expect(
+          await withTransaction(holder.mail!.db, (tx) =>
+            holder.mail!.resolveDelivery(tx, "notice"),
+          ),
+        ).toMatchObject({ mode: "local_capture" });
+      } finally {
+        await shutDown(booted);
+        await f.close();
+      }
+    },
+  );
   it("boot wires venue-space errors and retries failed notice checks through the bell", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
@@ -427,10 +438,8 @@ describe("the running server's notice and email checks", () => {
         await bootServer(booted, venue, { intent: "prepare", development: false });
         expect(holder.managementMode).toBeTypeOf("function");
         expect(holder.profileMode).toBeTypeOf("function");
-        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
-          "unconfigured",
-        );
-        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("unconfigured");
+        await expect(holder.managementMode!()).resolves.toBe("unconfigured");
+        await expect(holder.profileMode!()).resolves.toBe("unconfigured");
         if (!repair) {
           const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
             headers: { cookie: venue.managerCookie },
@@ -456,10 +465,8 @@ describe("the running server's notice and email checks", () => {
       const booted: Booted = {};
       try {
         await bootServer(booted, venue, { intent: "demo", development });
-        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
-          "local_capture",
-        );
-        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("local_capture");
+        await expect(holder.managementMode!()).resolves.toBe("local_capture");
+        await expect(holder.profileMode!()).resolves.toBe("local_capture");
       } finally {
         await shutDown(booted);
       }
@@ -490,8 +497,8 @@ describe("the running server's notice and email checks", () => {
       expect(holder.mail!.owners).toContainEqual(
         expect.objectContaining({ kind: "role_membership_changed", deliveryRule: "notice" }),
       );
-      await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
-      await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
+      await expect(holder.managementMode!()).resolves.toBe("smtp");
+      await expect(holder.profileMode!()).resolves.toBe("smtp");
       expect(
         (await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice"))).mode,
       ).toBe("smtp");
@@ -547,10 +554,10 @@ describe("the running server's notice and email checks", () => {
           await response.body?.cancel();
         }
         await expect.poll(() => holder.smtp.length, { timeout: 10000 }).toBe(2);
-        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+        await expect(holder.managementMode!()).resolves.toBe(
           outcome === "captured" ? "local_capture" : "smtp",
         );
-        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe(
+        await expect(holder.profileMode!()).resolves.toBe(
           outcome === "captured" ? "local_capture" : "smtp",
         );
         const delivery =

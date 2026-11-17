@@ -384,10 +384,12 @@ tests SMTP outside development; ordinary Prepare uses the relay or reports unava
 inbox link is offered publicly and to signed-in admins. Users and Account settings distinguish queued, captured and unconfigured
 account mail; throttled invitation actions say nothing changed.
 Ordinary SMTP and the Settings test use the venue name with the configured mailbox; setup tests
-retain their own sender. Outside development, Demo captures reminders, alerts and account mail using SMTP, even with a saved
-server; development keeps its saved-server preference. A paired test Cloud takes precedence for
+retain their own sender. Outside development, Demo's normal route captures reminders, alerts and
+account mail even with a saved server; development keeps its saved-server preference. A paired test Cloud takes precedence for
 invitation, password_reset and email_change only when a fresh grant says enabled. Explicit off
-uses the normal SMTP/capture rule; missing authority waits without fallback. BOX-EMAIL-RELAY's
+uses the normal SMTP/capture rule. One optional boolean in the existing private Cloud state
+remembers whether relay was enabled: null, unreadable or expired authority defers only after an
+enabled read; otherwise the normal route remains available. Confirmed local revoke remembers off. BOX-EMAIL-RELAY's
 local signed-client and worker checks are separate from live qualification: the joint test must
 still prove three real deliveries and link/code consumption, SMTP after off, a refusal while sales
 continue and linked Demo priority. Cloud's published interface is #1254 at

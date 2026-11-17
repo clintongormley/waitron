@@ -79,7 +79,7 @@ export interface MailSenderDeps {
   signal: AbortSignal;
   resolveDelivery: (tx: Transaction, rule: MailDeliveryRule) => Promise<EmailDelivery>;
   send?: MailTransport;
-  resolveAccountRelay?: () => Promise<CloudEmailGrant | null>;
+  resolveAccountRelay?: (signal: AbortSignal) => Promise<CloudEmailGrant | null>;
   sendCloudEmail?: (
     grant: CloudEmailGrant,
     id: string,
@@ -203,6 +203,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           | { mode: "cloud"; grant: CloudEmailGrant };
       }
     | undefined;
+  let accountRelayRead = deps.resolveAccountRelay === undefined;
   let accountDelivery:
     { mode: "cloud"; grant: CloudEmailGrant } | { mode: "unconfigured" } | undefined;
   if (
@@ -215,13 +216,10 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     )
   ) {
     try {
-      const grant = await deps.resolveAccountRelay();
+      accountRelayRead = true;
+      const grant = await deps.resolveAccountRelay(deps.signal);
       if (grant) accountDelivery = { mode: "cloud", grant };
-    } catch (error) {
-      deps.log("error", "mail.delivery_unavailable", {
-        rule: "account_action",
-        errorCode: codeOf(error),
-      });
+    } catch {
       accountDelivery = { mode: "unconfigured" };
     }
   }
@@ -267,6 +265,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       for (const row of rows) {
         const owner = owners.get(row.kind)!;
         if (!due(row, owner, now.getTime()) || Date.parse(row.notAfter) <= now.getTime()) continue;
+        if (row.kind === "account_action" && !accountRelayRead) continue;
         const delivery =
           (row.kind === "account_action" ? accountDelivery : undefined) ??
           deliveries.get(owner.deliveryRule)!;
@@ -449,7 +448,7 @@ export async function runMailLoop(
   },
 ): Promise<void> {
   let waitingForSetup = false;
-  const unavailable = new Set<MailDeliveryRule>();
+  const unavailable = new Set<MailDeliveryRule | "account_action">();
   const resolveDelivery: MailSenderDeps["resolveDelivery"] = async (tx, rule) => {
     try {
       const delivery = await deps.resolveDelivery(tx, rule);
@@ -462,6 +461,23 @@ export async function runMailLoop(
       return { mode: "unconfigured" };
     }
   };
+  const resolveAccountRelay: MailSenderDeps["resolveAccountRelay"] =
+    deps.resolveAccountRelay &&
+    (async (signal) => {
+      try {
+        const grant = await deps.resolveAccountRelay!(signal);
+        unavailable.delete("account_action");
+        return grant;
+      } catch (error) {
+        if (!unavailable.has("account_action"))
+          deps.log("error", "mail.delivery_unavailable", {
+            rule: "account_action",
+            errorCode: codeOf(error),
+          });
+        unavailable.add("account_action");
+        throw error;
+      }
+    });
   await runLoop({
     ...deps,
     minTickMs: deps.minTickMs ?? 500,
@@ -469,7 +485,7 @@ export async function runMailLoop(
     sleep: deps.sleep ?? realSleep,
     log: (level, event, fields) => deps.log(level, `mail.${event}`, fields),
     pass: async () => {
-      const result = await runMailPass({ ...deps, resolveDelivery });
+      const result = await runMailPass({ ...deps, resolveDelivery, resolveAccountRelay });
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;

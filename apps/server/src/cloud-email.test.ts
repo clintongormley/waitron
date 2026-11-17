@@ -1,7 +1,10 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
-import { createCloudConnection } from "./cloud-client.js";
+import { sendCloudEmail } from "./cloud-email.js";
+import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
 
 const grant = () => ({
   id: randomUUID(),
@@ -10,8 +13,47 @@ const grant = () => ({
   enabled: true,
 });
 
+it("keeps SMTP for a paired box that never relayed, then remembers enabled across restart", async () => {
+  const f = await installationFixture(undefined, { emailConfiguration: true });
+  try {
+    f.patch({ emailRelay: { version: 1, grant: null } });
+    expect(await f.client.emailRelay()).toBeNull();
+    f.offline();
+    expect(await f.client.emailRelay()).toBeNull();
+    f.online();
+    const authority = grant();
+    f.patch({ emailRelay: { version: 1, grant: authority } });
+    expect(await f.client.emailRelay()).toEqual(authority);
+    const restarted = createCloudConnection(f.options);
+    f.patch({ emailRelay: { version: 1, grant: null } });
+    await expect(restarted.emailRelay()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.patch({
+      emailRelay: { version: 1, grant: { ...authority, expiresAt: new Date(0).toISOString() } },
+    });
+    await expect(restarted.emailRelay()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.patch({ emailRelay: { version: 1, grant: { ...authority, enabled: false } } });
+    expect(await restarted.emailRelay()).toBeNull();
+    f.offline();
+    expect(await createCloudConnection(f.options).emailRelay()).toBeNull();
+  } finally {
+    await f.close();
+  }
+});
+
+it("restores SMTP after a confirmed local pairing revoke", async () => {
+  const f = await installationFixture(undefined, { emailConfiguration: true });
+  try {
+    f.patch({ emailRelay: { version: 1, grant: grant() } });
+    await f.client.emailRelay();
+    await f.client.revoke(async () => {});
+    expect(await createCloudConnection(f.options).emailRelay()).toBeNull();
+  } finally {
+    await f.close();
+  }
+});
+
 it("reads fresh email authority over configuration and uses only explicit off for SMTP", async () => {
-  const f = await installationFixture();
+  const f = await installationFixture(undefined, { emailConfiguration: true });
   try {
     const authority = grant();
     f.patch({ emailRelay: { version: 1, grant: authority } });
@@ -20,6 +62,8 @@ it("reads fresh email authority over configuration and uses only explicit off fo
     expect(f.requests.at(-1)?.[7]).toBe('{"servicesVersion":2}');
     f.patch({ emailRelay: { version: 1, grant: { ...authority, enabled: false } } });
     expect(await f.client.emailRelay()).toBeNull();
+    f.patch({ emailRelay: { version: 1, grant: authority } });
+    await f.client.emailRelay();
     for (const hint of [
       undefined,
       { version: 1, grant: null },
@@ -40,17 +84,53 @@ it("reads fresh email authority over configuration and uses only explicit off fo
 });
 
 it("keeps unpaired installations on SMTP and refuses a revoked paired relay", async () => {
-  const f = await installationFixture();
+  const f = await installationFixture(undefined, { emailConfiguration: true });
   try {
     f.patch({ emailRelay: { version: 1, grant: grant() } });
-    expect(await f.client.accountEmailPaired()).toBe(true);
+    await f.client.emailRelay();
     f.revoke();
-    await expect(f.client.emailRelay()).rejects.toMatchObject({ code: "cloud.not_configured" });
-    expect(await f.client.accountEmailPaired()).toBe(true);
+    await expect(f.client.emailRelay()).rejects.toMatchObject({ code: "cloud.unavailable" });
     const unpaired = createCloudConnection({ ...f.options, readVenueId: async () => null });
-    expect(await unpaired.accountEmailPaired()).toBe(false);
     expect(await unpaired.emailRelay()).toBeNull();
   } finally {
+    await f.close();
+  }
+});
+
+it("does not hold the shared Cloud turn during the grant network read", async () => {
+  const f = await installationFixture(undefined, { emailConfiguration: true });
+  let release = () => {},
+    entered = () => {};
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let pending: Promise<unknown> | undefined;
+  try {
+    f.patch({ emailRelay: { version: 1, grant: grant() } });
+    await f.client.emailRelay();
+    let first = true;
+    f.delay(async () => {
+      if (first) {
+        first = false;
+        entered();
+        await hold;
+      }
+    });
+    pending = f.client.emailRelay();
+    await started;
+    const refreshError = await f.client.refresh().then(
+      () => null,
+      (e) => e.code,
+    );
+    release();
+    await pending;
+    expect(refreshError).toBeNull();
+  } finally {
+    release();
+    await pending?.catch(() => {});
     await f.close();
   }
 });
@@ -70,6 +150,7 @@ it("submits one signed structured message and waits for acceptance with a separa
     payload = message(),
     authority = grant();
   const f = await installationFixture(undefined, {
+    emailConfiguration: true,
     email: async (v, _s, req, res) => {
       expect(req.url).toBe(
         v[2] === "email-submit"
@@ -104,6 +185,9 @@ it("submits one signed structured message and waits for acceptance with a separa
   });
   try {
     expect(await f.client.sendEmail(authority, id, payload)).toEqual({ status: "sent" });
+    expect(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")).not.toContain(
+      payload.token,
+    );
     expect(f.requests.filter((v) => String(v[2]).startsWith("email-")).map((v) => v[2])).toEqual([
       "email-submit",
       "email-status",
@@ -113,54 +197,71 @@ it("submits one signed structured message and waits for acceptance with a separa
   }
 });
 
-it.each(["refused", "lost", "bad_identity", "bad_revision", "deadline"])(
-  "does not resubmit after %s and distinguishes a definite refusal",
-  async (failure) => {
-    const id = randomUUID(),
-      payload = message(),
-      controller = new AbortController();
-    const f = await installationFixture(undefined, {
-      email: async (v, _s, req, res) => {
-        if (failure === "refused") {
-          res.writeHead(429);
-          res.end('{"error":"allowance_exhausted"}');
-          return;
-        }
-        if (failure === "lost") {
-          req.socket.destroy();
-          return;
-        }
-        if (failure === "deadline" && v[2] === "email-status") controller.abort();
+it.each([
+  "refused",
+  "unavailable",
+  "lost",
+  "bad_identity",
+  "bad_revision",
+  "backwards_revision",
+  "deadline",
+])("does not resubmit after %s and distinguishes a definite refusal", async (failure) => {
+  const id = randomUUID(),
+    payload = message(),
+    controller = new AbortController();
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    email: async (v, _s, req, res) => {
+      if (failure === "refused" || failure === "unavailable") {
+        res.writeHead(failure === "refused" ? 429 : 503);
         res.end(
           JSON.stringify({
-            version: 1,
-            messageId: failure === "bad_identity" ? randomUUID() : id,
-            state: "queued",
-            statusRevision: failure === "bad_revision" ? 0 : 1,
-            expiresAt: payload.expiresAt,
-            reason: null,
+            error: failure === "refused" ? "allowance_exhausted" : "relay_unavailable",
           }),
         );
-      },
-    });
-    try {
-      expect(await f.client.sendEmail(grant(), id, payload, controller.signal)).toEqual(
-        failure === "refused"
-          ? { status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }
-          : { status: "unknown", failureCode: "mail.relay_unknown" },
+        return;
+      }
+      if (failure === "lost") {
+        req.socket.destroy();
+        return;
+      }
+      if (failure === "deadline" && v[2] === "email-status") controller.abort();
+      res.end(
+        JSON.stringify({
+          version: 1,
+          messageId: failure === "bad_identity" ? randomUUID() : id,
+          state:
+            failure === "backwards_revision" && v[2] === "email-status" ? "accepted" : "queued",
+          statusRevision:
+            failure === "bad_revision"
+              ? 0
+              : failure === "backwards_revision" && v[2] === "email-submit"
+                ? 2
+                : 1,
+          expiresAt: payload.expiresAt,
+          reason: null,
+        }),
       );
-      expect(f.requests.filter((v) => v[2] === "email-submit")).toHaveLength(1);
-    } finally {
-      await f.close();
-    }
-  },
-);
+    },
+  });
+  try {
+    expect(await f.client.sendEmail(grant(), id, payload, controller.signal)).toEqual(
+      failure === "refused" || failure === "unavailable"
+        ? { status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }
+        : { status: "unknown", failureCode: "mail.relay_unknown" },
+    );
+    expect(f.requests.filter((v) => v[2] === "email-submit")).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
 
 it("honours the relay wait before its first status read", async () => {
   const id = randomUUID(),
     payload = message();
   let submittedAt = 0;
   const f = await installationFixture(undefined, {
+    emailConfiguration: true,
     email: async (v, _s, _req, res) => {
       if (v[2] === "email-submit") {
         submittedAt = Date.now();
@@ -188,3 +289,97 @@ it("honours the relay wait before its first status read", async () => {
     await f.close();
   }
 });
+
+it("retries a lease failure before submission instead of claiming uncertain delivery", async () => {
+  let submits = 0;
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    email: async (_v, _s, _req, res) => {
+      submits++;
+      res.end("{}");
+    },
+  });
+  try {
+    const authority = grant();
+    f.patch({ emailRelay: { version: 1, grant: authority } });
+    await f.client.emailRelay();
+    const file = join(f.stateDir, "cloud/connection.json");
+    const saved = JSON.parse(await readFile(file, "utf8"));
+    delete saved.lifecycle.lease;
+    await writeFile(file, JSON.stringify(saved));
+    f.offline();
+    expect(await f.client.sendEmail(authority, randomUUID(), message())).toEqual({
+      status: "rejected",
+      failureCode: "mail.relay_refused",
+      serverRefused: true,
+    });
+    expect(submits).toBe(0);
+  } finally {
+    await f.close();
+  }
+});
+
+it("keeps production Cloud out of both discovery and submission", async () => {
+  const f = await installationFixture(undefined, {
+    environment: "production",
+    emailConfiguration: true,
+    email: async (v, _s, _req, res) => {
+      res.end(
+        JSON.stringify({
+          version: 1,
+          messageId: v[4],
+          state: "accepted",
+          statusRevision: 1,
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          reason: null,
+        }),
+      );
+    },
+  });
+  try {
+    await f.client.refresh();
+    const before = f.requests.length;
+    f.patch({ emailRelay: { version: 1, grant: grant() } });
+    expect(await f.client.emailRelay()).toBeNull();
+    const saved = JSON.parse(
+      await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
+    ) as SavedCloudState;
+    expect(await sendCloudEmail(saved, grant(), randomUUID(), message())).toEqual({
+      status: "rejected",
+      failureCode: "mail.relay_refused",
+      serverRefused: true,
+    });
+    expect(f.requests).toHaveLength(before);
+  } finally {
+    await f.close();
+  }
+});
+
+it("ends queued Cloud delivery within the mail claim even without a caller stop", async () => {
+  const id = randomUUID(),
+    payload = message();
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    email: async (_v, _s, _req, res) => {
+      res.end(
+        JSON.stringify({
+          version: 1,
+          messageId: id,
+          state: "queued",
+          statusRevision: 1,
+          expiresAt: payload.expiresAt,
+          reason: null,
+        }),
+      );
+    },
+  });
+  try {
+    expect(await f.client.sendEmail(grant(), id, payload)).toEqual({
+      status: "unknown",
+      failureCode: "mail.relay_unknown",
+    });
+    expect(f.requests.filter((v) => v[2] === "email-submit")).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+}, 45000);

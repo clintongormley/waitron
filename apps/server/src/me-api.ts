@@ -75,7 +75,7 @@ export interface MeApiDeps {
   rpId?: string;
   origin?: string;
   accountActionCodeKey?: Buffer;
-  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
+  accountMailMode?: () => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
   now?: () => Date;
 }
@@ -219,14 +219,22 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locale: textField(body, "locale"),
         ...credentials(body),
       };
-      const { changed, mode } = await updateProfile(
+      const changingEmail = await asStaff(async (tx) => {
+        const person = await resolveManagementSession(tx, managementSessionId, { touch: false });
+        if (input.email.trim().toLowerCase() === person.email) return false;
+        await deps.assertAccountMailPrimary?.();
+        return true;
+      });
+      const mode = changingEmail
+        ? ((await deps.accountMailMode?.()) ?? "unconfigured")
+        : "unconfigured";
+      const { changed } = await updateProfile(
         managementSessionId,
         () => input,
         async (tx, change) => {
           const person = await resolveManagementSession(tx, managementSessionId, { touch: false });
           if (change.email.trim().toLowerCase() !== person.email)
             await deps.assertAccountMailPrimary?.();
-          const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
           const changed = await saveOwnProfile(tx, {
             ...change,
             queueEmailChange: mode !== "unconfigured",

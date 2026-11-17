@@ -195,10 +195,58 @@ describe("account mail owner", () => {
   it("expires old account mail without asking Cloud for sending authority", async () => {
     await queue();
     time = new Date(time.getTime() + 1800001);
-    deps.resolveAccountRelay = vi.fn(async () => { throw new Error("offline"); });
+    deps.resolveAccountRelay = vi.fn(async () => {
+      throw new Error("offline");
+    });
     await runMailPass(deps);
-    expect(suite.db.get(sql`select status from outgoing_mail`)).toMatchObject({ status: "expired" });
+    expect(suite.db.get(sql`select status from outgoing_mail`)).toMatchObject({
+      status: "expired",
+    });
     expect(deps.resolveAccountRelay).not.toHaveBeenCalled();
+    expect(connections).toEqual([]);
+  });
+  it("passes the worker stop signal into the grant read", async () => {
+    await queue();
+    const controller = new AbortController();
+    deps.signal = controller.signal;
+    let entered = () => {},
+      observed: AbortSignal | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    deps.resolveAccountRelay = async (signal) => {
+      observed = signal;
+      entered();
+      if (!signal) return null;
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+      );
+      return null;
+    };
+    const pass = runMailPass(deps);
+    await started;
+    controller.abort();
+    await pass;
+    expect(observed).toBe(controller.signal);
+    expect(connections).toEqual([]);
+  });
+  it("leaves an account row arriving after the first snapshot for a prepared pass", async () => {
+    await queue();
+    time = new Date(time.getTime() + 1800001);
+    deps.beforeClaim = async () => {
+      await queue();
+    };
+    deps.resolveAccountRelay = async () => ({
+      id: randomUUID(),
+      revision: 1,
+      enabled: true,
+      expiresAt: new Date(time.getTime() + 3600000).toISOString(),
+    });
+    await runMailPass(deps);
+    expect(suite.db.all(sql`select status from outgoing_mail order by seq`)).toEqual([
+      { status: "expired" },
+      { status: "pending" },
+    ]);
     expect(connections).toEqual([]);
   });
   it("waits for unreadable Cloud authority without issuing a token or using SMTP", async () => {
@@ -257,7 +305,7 @@ describe("account mail owner", () => {
             class: "email_change",
             recipient: "second@example.test",
             timeZone: "Europe/Madrid",
-            locale: "en-GB",
+            locale: transport === "cloud" ? "es-ES" : "en-GB",
           });
           expect(payload).not.toHaveProperty("token");
           expect(Date.parse(payload.codeExpiresAt!)).toBeLessThan(Date.parse(payload.expiresAt));
@@ -283,7 +331,7 @@ describe("account mail owner", () => {
             managementSessionId: session.token,
             displayName: "Recipient",
             email,
-            locale: "en-GB",
+            locale: transport === "cloud" ? "es-ES" : "en-GB",
             keyRing,
             queueEmailChange: true,
           }),

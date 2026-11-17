@@ -13,7 +13,10 @@ export type MachineHandler = (
   sent: Record<string, unknown>,
 ) => Promise<void>;
 
-export async function cloudFixture(machine?: MachineHandler) {
+export async function cloudFixture(
+  machine?: MachineHandler,
+  environment: "test" | "production" = "test",
+) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-client-"));
   const requests: unknown[][] = [];
   let replyPatch: Record<string, unknown> = {};
@@ -143,7 +146,7 @@ export async function cloudFixture(machine?: MachineHandler) {
   const options = {
     stateDir,
     origin,
-    environment: "test" as const,
+    environment,
     readVenueId: async () => storedVenueId,
     recordVenueId: async (id: string) => {
       storedVenueId = id;

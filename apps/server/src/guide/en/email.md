@@ -36,6 +36,9 @@ Cloud account links lead back to your box. Open them on a network that can reach
 invitation does not list your roles or include the venue's optional privacy link. If an email
 does not arrive, request a fresh link or code; an earlier message may still arrive later.
 Turning the relay off restores your normal mail-server or Demo-capture route for new sends.
+Pairing alone keeps your existing route until the box has used an enabled relay. If Cloud then
+becomes unavailable, account email waits for it; saving SMTP settings does not reroute those
+messages. Restore Cloud or explicitly turn its relay off before requesting a fresh link or code.
 
 ## Check the test result {#test-results}
 
@@ -61,7 +64,8 @@ Continue becomes available after the server accepts a test of those settings for
 With box administration (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the server clears its saved login details too; enter them again if you set it up later.
 
-In Prepare or Live, receipts and notices need a configured server. Account links can still use
-an enabled test Cloud relay; otherwise they also wait for a server. Sales continue. On a development box, email
+In Prepare or Live, receipts and notices need a configured server. Account email follows the
+[Cloud route](email.md#cloud-account-email) when enabled, or your normal mail-server route. Sales continue.
+On a development box, mail using the normal route
 goes back to its test inbox. If the settings fail to reload after removal, retry loading them;
 the removal has already succeeded.

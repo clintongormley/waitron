@@ -34,6 +34,66 @@ export function readCloudEmailGrant(value: unknown): CloudEmailGrant | null {
   return g.enabled ? (g as unknown as CloudEmailGrant) : null;
 }
 
+async function emailExchange(
+  state: SavedCloudState,
+  action: "configuration" | "email-submit" | "email-status",
+  operationId: string,
+  body: string,
+  signal?: AbortSignal,
+) {
+  const bytes = machinePayload(state, {
+    action,
+    operationId,
+    lease: JSON.stringify(state.lifecycle!.lease),
+    body,
+  });
+  const response = await fetch(
+    state.origin +
+      (action === "configuration"
+        ? "/api/installations/configuration"
+        : "/v1/installations/email/" + action.slice(6)),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        payload: bytes.toString("base64url"),
+        signature: signCloudPayload(bytes, state.privateKey),
+      }),
+      redirect: "error",
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000),
+    },
+  );
+  const value: unknown = JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(
+      await readCloudResponseBytes(response, action === "configuration" ? 65536 : 4096),
+    ),
+  );
+  return { response, value };
+}
+export async function fetchCloudEmailGrant(
+  state: SavedCloudState,
+  signal?: AbortSignal,
+) {
+  const { response, value } = await emailExchange(
+    state,
+    "configuration",
+    randomUUID(),
+    '{"servicesVersion":2}',
+    signal,
+  );
+  const registration = state.view!.registration!;
+  if (
+    !response.ok ||
+    !record(value) ||
+    value.environment !== state.environment ||
+    Object.entries(registration).some(([key, expected]) => value[key] !== expected)
+  )
+    throw new AppError("cloud.unavailable", {});
+  return readCloudEmailGrant(value.emailRelay);
+}
+
 export interface CloudAccountEmail {
   class: "invitation" | "password_reset" | "email_change";
   recipient: string;
@@ -94,29 +154,12 @@ export async function sendCloudEmail(
           : { version: 1, messageId },
       );
       if (Buffer.byteLength(body) > 4096) return submit ? refused() : unknown();
-      const bytes = machinePayload(state, {
-        action: submit ? "email-submit" : "email-status",
-        operationId: submit ? messageId : randomUUID(),
-        lease: JSON.stringify(state.lifecycle.lease),
+      const { response, value } = await emailExchange(
+        state,
+        submit ? "email-submit" : "email-status",
+        submit ? messageId : randomUUID(),
         body,
-      });
-      const response = await fetch(
-        state.origin + "/v1/installations/email/" + (submit ? "submit" : "status"),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            payload: bytes.toString("base64url"),
-            signature: signCloudPayload(bytes, state.privateKey),
-          }),
-          redirect: "error",
-          signal: AbortSignal.any([stop, AbortSignal.timeout(8000)]),
-        },
-      );
-      const value: unknown = JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(
-          await readCloudResponseBytes(response, 4096),
-        ),
+        stop,
       );
       if (!response.ok)
         return submit && record(value) && REFUSALS[response.status]?.includes(String(value.error))

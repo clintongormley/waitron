@@ -41,7 +41,10 @@ Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no
 llega un correo, solicita un enlace o código nuevo; un mensaje anterior aún puede llegar después.
 Al desactivar el envío por Cloud, los nuevos envíos vuelven al servidor de correo o al buzón
-de Demostración que corresponda.
+de Demostración que corresponda. Vincular la caja conserva tu ruta anterior hasta que haya usado
+Cloud activado. Si Cloud deja de estar disponible después, el correo de cuentas espera; guardar
+ajustes SMTP no desvía esos mensajes. Restablece Cloud o desactiva explícitamente su correo
+antes de solicitar otro enlace o código.
 
 ## Comprueba el resultado de la prueba {#test-results}
 
@@ -71,8 +74,7 @@ Con el permiso de administración del equipo (Admin de forma predeterminada), el
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
-En Preparación o En vivo, los recibos y avisos necesitan un servidor configurado. Los enlaces
-de cuentas pueden seguir usando Cloud de prueba si está activado; en caso contrario, también
-esperan a que configures un servidor. Las ventas continúan.
-En una caja de desarrollo, el correo vuelve al buzón de prueba. Si los ajustes no se cargan tras
+En Preparación o En vivo, los recibos y avisos necesitan un servidor configurado. El correo de
+cuentas sigue la [ruta de Cloud](email.md#cloud-account-email) si está activada, o tu servidor habitual.
+Las ventas continúan. En una caja de desarrollo, el correo por la ruta habitual vuelve al buzón de prueba. Si los ajustes no se cargan tras
 quitar el servidor, vuelve a cargarlos; el servidor ya se ha quitado.

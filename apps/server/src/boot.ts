@@ -2569,12 +2569,17 @@ async function bootServer(
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
-  const accountMailMode = async (tx: Transaction) =>
-    (await cloudConnection?.accountEmailPaired())
-      ? ("cloud" as const)
-      : (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
+  const accountMailMode = async () => {
+    try {
+      if (await cloudConnection?.emailRelay()) return "cloud" as const;
+    } catch {
+      return "cloud" as const;
+    }
+    return (await resolveAccountEmail()).mode;
+  };
   const cloudMail = {
-    resolveAccountRelay: () => cloudConnection?.emailRelay() ?? Promise.resolve(null),
+    resolveAccountRelay: (signal: AbortSignal) =>
+      cloudConnection?.emailRelay(signal) ?? Promise.resolve(null),
     sendCloudEmail: cloudConnection?.sendEmail,
   };
   const assertAccountMailPrimary = async () => {

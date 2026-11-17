@@ -162,7 +162,7 @@ export interface ManagementApiDeps {
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
-  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
+  accountMailMode?: () => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
   passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
@@ -180,9 +180,9 @@ async function queueInvitationAnswer(
   tx: Transaction,
   deps: ManagementApiDeps,
   input: { managementSessionId: string; personId: string; origin: string },
+  mode: EmailDelivery["mode"] | "cloud",
 ) {
   await deps.assertAccountMailPrimary?.();
-  const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
   if (mode === "unconfigured")
     return { invitationSent: false, problem: "email.unconfigured", uncertain: false };
   await queueInvitation(tx, input);
@@ -914,16 +914,16 @@ export function mountManagementApi(
         // Shutdown waits for the write through `settle`, not for the email.
         const email = body.email;
         const recovery: Promise<void> = new Promise<void>((resolve) => setImmediate(resolve))
-          .then(() =>
-            withTransaction(deps.db, async (tx) => {
-              const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
+          .then(async () => {
+            const mode = (await deps.accountMailMode?.()) ?? "unconfigured";
+            return withTransaction(deps.db, async (tx) => {
               if (mode === "unconfigured") {
                 log("warn", "account_mail.unconfigured", {});
                 return;
               }
               await queueAccountRecovery(tx, { email, origin: passkeySite(c).origin });
-            }),
-          )
+            });
+          })
           .catch((error) => {
             log("error", "account_action.request_failed", { errorCode: codeOf(error) });
           })
@@ -1179,6 +1179,13 @@ export function mountManagementApi(
       }
       const { displayName, firstNames, lastNames, telephone = null, email } = body;
 
+      // Cloud reads follow authorisation; the write transaction rechecks before changing accounts.
+      await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
+        await deps.assertAccountMailPrimary?.();
+        await requireFreshManagementSignIn(tx, sessionId);
+      });
+      const mode = (await deps.accountMailMode?.()) ?? "unconfigured";
       const { created, delivery } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
         await deps.assertAccountMailPrimary?.();
@@ -1192,11 +1199,16 @@ export function mountManagementApi(
           roleIds: body.roleIds as string[],
           email,
         });
-        const delivery = await queueInvitationAnswer(tx, deps, {
-          managementSessionId: sessionId,
-          personId: created.id,
-          origin: passkeySite(c).origin,
-        });
+        const delivery = await queueInvitationAnswer(
+          tx,
+          deps,
+          {
+            managementSessionId: sessionId,
+            personId: created.id,
+            origin: passkeySite(c).origin,
+          },
+          mode,
+        );
         return { created, delivery };
       });
       return c.json({ ...created, ...delivery }, 201);
@@ -1215,14 +1227,20 @@ export function mountManagementApi(
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
+      const mode = (await deps.accountMailMode?.()) ?? "unconfigured";
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await requireFreshManagementSignIn(tx, sessionId);
-        return queueInvitationAnswer(tx, deps, {
-          managementSessionId: sessionId,
-          personId,
-          origin: passkeySite(c).origin,
-        });
+        return queueInvitationAnswer(
+          tx,
+          deps,
+          {
+            managementSessionId: sessionId,
+            personId,
+            origin: passkeySite(c).origin,
+          },
+          mode,
+        );
       });
       return c.json(delivery);
     }),
@@ -1298,17 +1316,29 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
+      // The external delivery read must not hold this account's write transaction.
+      await withTransaction(deps.db, async (tx) => {
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await deps.assertAccountMailPrimary?.();
+        await requireFreshManagementSignIn(tx, sessionId);
+      });
+      const mode = (await deps.accountMailMode?.()) ?? "unconfigured";
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         if (!acceptInvitation(personId)) return { invitationSent: false };
-        return queueInvitationAnswer(tx, deps, {
-          managementSessionId: sessionId,
-          personId,
-          origin: passkeySite(c).origin,
-        });
+        return queueInvitationAnswer(
+          tx,
+          deps,
+          {
+            managementSessionId: sessionId,
+            personId,
+            origin: passkeySite(c).origin,
+          },
+          mode,
+        );
       });
       return c.json(delivery);
     }),
@@ -1326,15 +1356,21 @@ export function mountManagementApi(
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
+      const mode = (await deps.accountMailMode?.()) ?? "unconfigured";
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await requireFreshManagementSignIn(tx, sessionId);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
-        return queueInvitationAnswer(tx, deps, {
-          managementSessionId: sessionId,
-          personId,
-          origin: passkeySite(c).origin,
-        });
+        return queueInvitationAnswer(
+          tx,
+          deps,
+          {
+            managementSessionId: sessionId,
+            personId,
+            origin: passkeySite(c).origin,
+          },
+          mode,
+        );
       });
       return c.json(delivery);
     }),
