@@ -2119,9 +2119,9 @@ passes with controlled timers and unchanged assertions. This reproduces main CI 
 
 ## A page that sets its next timer after an answer cannot be moved on by one clock jump
 
-If a page sets its next timer only after a request has answered, one jump of Playwright's fake
-clock can pass the moment that timer is set, and the timer then falls due after the test stopped
-looking. Pause the clock, step it a second at a time, and step only once the page has set its
+If a page sets its next timer only after a request has answered, a jump of Playwright's fake clock
+made before the page has set that timer fires nothing; the timer, set afterwards, falls due beyond
+the time the test moved the clock to, so the test waits for a look that never comes. Pause the clock, step it a second at a time, and step only once the page has set its
 next timer; bound the steps by page time, not by a real-time wait.
 
 Playwright 1.65's `page.clock.install` leaves the page's clock running at real speed until

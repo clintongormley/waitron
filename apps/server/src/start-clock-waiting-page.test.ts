@@ -106,6 +106,11 @@ async function open(
     }) as typeof setTimeout;
   });
   await page.goto("http://waitron.local:8080/till/");
+  // The look counter must see the page's first look, or every wait on it passes at once.
+  if (options.paused)
+    expect(
+      await page.evaluate(() => (window as unknown as { looks: { armed: number } }).looks.armed),
+    ).toBe(1);
   return { ...subject, sets, control };
 }
 
@@ -123,12 +128,15 @@ const words = START_CLOCK_WAITING_WORDS["en-GB"];
 /** Holds until no look is under way: the page sets its next look only when the last one ends. */
 async function lookEnded(page: Page) {
   await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const { looks } = window as unknown as { looks: { armed: number; ran: number } };
-        // None set: the page has left for the server.
-        return looks.armed === 0 || looks.armed > looks.ran;
-      }),
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const { looks } = window as unknown as { looks: { armed: number; ran: number } };
+          // None set: the page has left for the server.
+          return looks.armed === 0 || looks.armed > looks.ran;
+        }),
+      // The clock is paused, so a longer real wait moves no page time.
+      { timeout: 5_000 },
     )
     .toBe(true);
 }
