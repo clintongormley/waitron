@@ -1090,7 +1090,7 @@ it("raises no undelivered-invoice alert when a replacement of a full invoice's o
       .where(eq(printJobs.id, printed!.id)),
   );
   const alerts = await inTx(venue, (tx) =>
-    invoiceDeliveryAlertSource({ testPages: createPageTestPages(() => new Date()) }).read({
+    invoiceDeliveryAlertSource({ testPages: createPageTestPages() }).read({
       tx,
       now: new Date(),
     }),

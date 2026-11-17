@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { A4HoldCode } from "@waitron/db";
+import { steadyNow } from "@waitron/shared";
 import {
   INVOICE_DELIVERY_LEASE_MS,
   tokenHash,
@@ -42,9 +43,10 @@ interface TestPage extends TestPageView {
 
 /**
  * Test pages for office printers, held in memory only: at most one per printer, which a printer's
- * next request replaces once it has finished. A test page is never a delivery and has no row.
+ * next request replaces once it has finished. A test page is never a delivery and has no row. Its
+ * limits run on the `steady` clock.
  */
-export function createPageTestPages(now: () => Date) {
+export function createPageTestPages(steady: () => number = steadyNow) {
   const pages = new Map<string, TestPage>();
 
   const finish = (
@@ -58,9 +60,8 @@ export function createPageTestPages(now: () => Date) {
     page.finishedAt = at;
   };
   const settle = (): number => {
-    const at = now().getTime();
-    // A time further ahead than its limit was stamped before the clock stepped back.
-    const past = (since: number, limit: number) => at - since >= limit || since - at > limit;
+    const at = steady();
+    const past = (since: number, limit: number) => at - since >= limit;
     for (const [printerId, page] of pages) {
       if (page.status === "waiting" && past(page.requestedAt, TEST_PAGE_CLAIM_WINDOW_MS)) {
         finish(page, "failed", "not_claimed", at);

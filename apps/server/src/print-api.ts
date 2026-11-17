@@ -525,7 +525,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         };
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
-  const testPages = deps.testPages ?? createPageTestPages(() => deps.now?.() ?? new Date());
+  const testPages = deps.testPages ?? createPageTestPages();
   const bluetoothCommands = createPrinterBluetoothCommands();
   const pullWakes = new Set<(agentId?: string) => void>();
   const wakePulls = (agentId?: string): void => {

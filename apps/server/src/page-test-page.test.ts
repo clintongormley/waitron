@@ -33,7 +33,7 @@ import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
-import { createPageTestPages } from "./page-test-pages.js";
+import { TEST_PAGE_CLAIM_WINDOW_MS, createPageTestPages } from "./page-test-pages.js";
 import { sampleDocument } from "./sample-receipt.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { TradingContext } from "./trading-context.js";
@@ -124,6 +124,7 @@ async function venue(opts: { render?: Render } = {}) {
         state.reads++;
         return state.now;
       },
+      testPages: createPageTestPages(() => state.now.getTime()),
       readInvoiceDocument: (tx, saleId) => readInvoiceDocument(backend, tx, cfg, saleId),
       layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       ...(opts.render === undefined ? {} : { renderInvoicePage: opts.render }),
@@ -904,7 +905,7 @@ describe("a test page the printer is holding", () => {
 
   it("answers a printer's held test page's hold, and null for any other printer or state", () => {
     const state = { now: at(0) };
-    const pages = createPageTestPages(() => state.now);
+    const pages = createPageTestPages(() => state.now.getTime());
     const printers = ["x", "y"].map((id) => ({
       id,
       active: true,
@@ -942,62 +943,25 @@ describe("a test page the printer is holding", () => {
   });
 });
 
-describe("a test page's time limits after a step back of the clock", () => {
-  const printers = [
-    {
-      id: "x",
-      active: true,
-      agentId: "agent",
-      documentFormat: "application/pdf" as const,
-      resolutionDpi: 300,
-    },
-  ];
-  const DAY = 86_400_000;
-
-  it("ends a page claimed further ahead than its 60 s lease, frees its printer, and keeps one exactly 60 s ahead", () => {
-    for (const [back, status] of [
-      [60_000, "printing"],
-      [60_001, "unknown"],
-      [400 * DAY, "unknown"],
-    ] as const) {
-      const state = { now: at(0) };
-      const pages = createPageTestPages(() => state.now);
+describe("a test page's time limits on the default clock", () => {
+  it("times a page on the steady clock, whatever the wall clock does", () => {
+    let wall = T0;
+    let steady = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    try {
+      const pages = createPageTestPages();
       pages.request("x", "es-ES");
-      pages.claim("agent", printers);
-      state.now = at(-back);
-      expect(pages.read("x")!.status).toBe(status);
-      expect(pages.printingOn()).toEqual(status === "printing" ? ["x"] : []);
-    }
-  });
-
-  it("fails a page requested further ahead than its five-minute window, and keeps one exactly five minutes ahead", () => {
-    for (const [back, status] of [
-      [300_000, "waiting"],
-      [300_001, "failed"],
-    ] as const) {
-      const state = { now: at(0) };
-      const pages = createPageTestPages(() => state.now);
-      pages.request("x", "es-ES");
-      state.now = at(-back);
-      expect(pages.read("x")!.status).toBe(status);
-    }
-  });
-
-  it("forgets an outcome finished further ahead than its ten minutes, and keeps one exactly ten minutes ahead", () => {
-    for (const [back, kept] of [
-      [600_000, true],
-      [600_001, false],
-    ] as const) {
-      const state = { now: at(0) };
-      const pages = createPageTestPages(() => state.now);
-      pages.request("x", "es-ES");
-      const job = pages.claim("agent", printers)!;
-      pages.report(
-        { deliveryId: job.id, generation: 1, token: job.token, holder: "agent" },
-        { status: "sent" },
-      );
-      state.now = at(-back);
-      expect(pages.read("x") !== null).toBe(kept);
+      for (const stepped of [T0 - 400 * 86_400_000, T0 + 400 * 86_400_000]) {
+        wall = stepped;
+        expect(pages.read("x")!.status).toBe("waiting");
+      }
+      steady += TEST_PAGE_CLAIM_WINDOW_MS - 1;
+      expect(pages.read("x")!.status).toBe("waiting");
+      steady += 1;
+      expect(pages.read("x")).toMatchObject({ status: "failed", failureCode: "not_claimed" });
+    } finally {
+      vi.restoreAllMocks();
     }
   });
 });
