@@ -62,6 +62,7 @@ const holder = vi.hoisted(() => ({
   profileMode: undefined as AccountMode | undefined,
   mail: undefined as Parameters<typeof startMailSender>[0] | undefined,
   smtp: [] as Parameters<typeof import("./smtp-send.js").sendSmtpMessage>[0][],
+  cloudPass: undefined as Promise<void> | undefined,
 }));
 
 vi.mock("./management-api.js", async (load) => {
@@ -91,6 +92,28 @@ vi.mock("./mail-sender.js", async (load) => {
     startMailSender: (deps: Parameters<typeof actual.startMailSender>[0]) => {
       holder.mail = deps;
       return holder.pauseMail ? Promise.resolve() : actual.startMailSender(deps);
+    },
+  };
+});
+// Boot starts the Cloud connection job without awaiting it; its first pass sends its own requests.
+vi.mock("./cloud-worker.js", async (load) => {
+  const actual = await load<typeof import("./cloud-worker.js")>();
+  return {
+    ...actual,
+    cloudConnectionJob: (options: Parameters<typeof actual.cloudConnectionJob>[0]) => {
+      const job = actual.cloudConnectionJob(options);
+      let settle!: () => void;
+      holder.cloudPass = new Promise((resolve) => (settle = resolve));
+      return {
+        ...job,
+        pass: async (context: Parameters<typeof job.pass>[0]) => {
+          try {
+            return await job.pass(context);
+          } finally {
+            settle();
+          }
+        },
+      };
     },
   };
 });
@@ -238,6 +261,7 @@ async function shutDown(booted: Booted): Promise<void> {
   holder.managementMode = undefined;
   holder.profileMode = undefined;
   holder.mail = undefined;
+  holder.cloudPass = undefined;
   holder.pauseMail = false;
   holder.armed.length = 0;
   holder.sent.length = 0;
@@ -308,6 +332,8 @@ describe("the running server's notice and email checks", () => {
           {},
           { origin: f.options.origin, stateDir: f.stateDir },
         );
+        expect(holder.cloudPass).toBeInstanceOf(Promise);
+        await holder.cloudPass;
         const requestsBeforeAdmission = f.requests.length;
         expect(await withTransaction(suite.db, holder.managementMode!)).toBe("local_capture");
         expect(await withTransaction(suite.db, holder.profileMode!)).toBe("local_capture");
