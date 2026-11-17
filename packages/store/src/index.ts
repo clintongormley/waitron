@@ -31,6 +31,7 @@ export type {
   StatementTarget,
 } from "./append-only.js";
 export { archiveTo } from "./archive.js";
+export { archiveInWorker } from "./archive-worker.js";
 export type { CommitListener, DiskFullListener } from "./connections.js";
 export { connectionPair } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
