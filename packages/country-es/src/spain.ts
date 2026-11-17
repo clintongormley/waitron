@@ -247,7 +247,6 @@ const BALEARIC_ISLANDS: LanguageRules = {
 // The owner's choice, not a law: service is offered in Spanish; docs/developers/products.md →
 // "Content languages per region".
 const SPANISH: LanguageRules = {
-  contentLanguageNames: { "ca-ES-valencia": { en: "Valencian", es: "valenciano" } },
   requiredContentLocales: ["es-ES"],
   defaultContentLocale: "es-ES",
 };
