@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { formatAmount, formatVatRate } from "./receipt-money.js";
 import { taxTableLines, type TaxTableRow } from "./receipt-tax-table.js";
 
-const HEADER: TaxTableRow = { rate: "Tipo", base: "Base", tax: "IVA", total: "Total" };
+const HEADER: TaxTableRow = { rate: "Rate", base: "Base", tax: "VAT", total: "Total" };
 
 /** The text grid's column counts of every printer setting: 30 on 58 mm, 42 on 80 mm. */
 const ROLL_COLUMNS = [
@@ -23,7 +23,7 @@ describe("taxTableLines", () => {
       42,
     );
     expect(lines).toEqual([
-      { text: "Tipo         Base         IVA        Total", header: true },
+      { text: "Rate         Base         VAT        Total", header: true },
       { text: "10%         24,09        2,41        26,50", header: false },
     ]);
   });
@@ -38,7 +38,7 @@ describe("taxTableLines", () => {
       30,
     );
     expect(lines.map(({ text }) => text)).toEqual([
-      "Tipo       Base    IVA   Total",
+      "Rate       Base    VAT   Total",
       "A 10%   1234,56 123,46 1358,02",
       "B 21%   1000,00 210,00 1210,00",
     ]);
@@ -52,8 +52,8 @@ describe("taxTableLines", () => {
   it("puts each rate on its own line above its amounts when a row does not fit 30 columns", () => {
     const lines = taxTableLines(HEADER, REFUND, 30);
     expect(lines).toEqual([
-      { text: "Tipo", header: true },
-      { text: "       Base      IVA     Total", header: true },
+      { text: "Rate", header: true },
+      { text: "       Base      VAT     Total", header: true },
       { text: "A 10%", header: false },
       { text: "   -2727,27  -272,73  -3000,00", header: false },
       { text: "B 21%", header: false },
@@ -74,9 +74,9 @@ describe("taxTableLines", () => {
       30,
     );
     expect(lines).toEqual([
-      { text: `${"Tipo".padEnd(25)}A 10%`, header: false },
+      { text: `${"Rate".padEnd(25)}A 10%`, header: false },
       { text: `${"Base".padEnd(20)}-12.345,67`, header: false },
-      { text: `${"IVA".padEnd(21)}-1.234,57`, header: false },
+      { text: `${"VAT".padEnd(21)}-1.234,57`, header: false },
       { text: `${"Total".padEnd(20)}-13.580,24`, header: false },
     ]);
   });
@@ -88,10 +88,10 @@ describe("taxTableLines", () => {
       14,
     );
     expect(lines.map(({ text }) => text)).toEqual([
-      "Tipo     A 10%",
+      "Rate     A 10%",
       "Base",
       "    -12.345,67",
-      "IVA  -1.234,57",
+      "VAT  -1.234,57",
       "Total",
       "    -13.580,24",
     ]);
@@ -99,7 +99,7 @@ describe("taxTableLines", () => {
 
   it("leaves two spaces between amounts that hold a space themselves", () => {
     const lines = taxTableLines(
-      { rate: "Tipo", base: "Base", tax: "IVE", total: "Total" },
+      { rate: "Rate", base: "Base", tax: "Tax", total: "Total" },
       [{ rate: "A 10%", base: "1 234,56", tax: "123,46", total: "1 358,02" }],
       30,
     );
@@ -108,7 +108,7 @@ describe("taxTableLines", () => {
 
   it("keeps two spaces between such amounts when they nearly fill the line on their own", () => {
     const lines = taxTableLines(
-      { rate: "Tipo", base: "Base", tax: "IVE", total: "Total" },
+      { rate: "Rate", base: "Base", tax: "Tax", total: "Total" },
       [{ rate: "21%", base: "-4 132,23", tax: "-867,77", total: "-5 000,00" }],
       30,
     );
