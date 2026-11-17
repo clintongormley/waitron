@@ -127,8 +127,16 @@ async function answerOf(response: Response) {
 describe("the box host routes in the running server", () => {
   it("binds the local name-tag duty at server startup", async () => {
     const host = fakeHost();
+    let markAsked!: () => void;
+    const asked = new Promise<void>((resolve) => (markAsked = resolve));
+    const answer = host.tagWrite.getMockImplementation()!;
+    host.tagWrite.mockImplementationOnce(async (tag) => {
+      markAsked();
+      return answer(tag);
+    });
     await withServer({ boxHostRequests: host }, async () => {
-      await vi.waitFor(() => expect(host.tagWrite).toHaveBeenCalledTimes(1));
+      await asked;
+      expect(host.tagWrite).toHaveBeenCalledTimes(1);
       expect(host.tagWrite.mock.calls[0]?.[0]).toEqual({ name: expect.any(String), live: false });
     });
   });
