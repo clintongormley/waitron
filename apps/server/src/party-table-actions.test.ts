@@ -389,6 +389,8 @@ describe("move guests", () => {
     expect(await zoneOf(v, anna.tabId)).toBe(terraceZone);
     expect(await zoneOf(v, second)).toBe(terraceZone);
     expect((await billRow(v, second)).status).toBe("placed");
+    expect((await billRow(v, anna.tabId)).billNumber).toBe(1);
+    expect((await billRow(v, second)).billNumber).toBe(2);
   });
 
   it("combines the party into the party at a held table, which keeps its name and its Bill 1, and every bill stays its own", async () => {

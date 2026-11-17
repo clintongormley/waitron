@@ -510,7 +510,12 @@ export async function takeIntoParty(
 ): Promise<void> {
   const [bill] = await tx
     .update(workingOrders)
-    .set({ partyId, billNumber: null, deliveryTableId: null, revision: movedRevision })
+    .set({
+      partyId,
+      billNumber: sql`case when ${workingOrders.partyId} is ${partyId} then ${workingOrders.billNumber} else null end`,
+      deliveryTableId: null,
+      revision: movedRevision,
+    })
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);

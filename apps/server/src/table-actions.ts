@@ -551,7 +551,7 @@ async function addTable(tx: Transaction, partyId: string, tableId: string): Prom
 async function billsTaking(
   tx: Transaction,
   partyId: string,
-  statuses: ("open" | "placed")[],
+  statuses: ("open" | "placed" | "settled")[],
 ): Promise<string[]> {
   const rows = await tx
     .select({ id: workingOrders.id })

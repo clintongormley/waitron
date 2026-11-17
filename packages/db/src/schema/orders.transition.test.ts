@@ -773,7 +773,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         ),
     )) {
       const error = await captureError(() =>
-        inTx((tx) =>
+        inTx(async (tx) =>
           tx.execute(
             sql`update working_orders set ${sql.identifier(name)} = ${"changed"} where id = ${id}`,
           ),

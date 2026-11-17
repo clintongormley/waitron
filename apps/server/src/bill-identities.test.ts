@@ -230,6 +230,7 @@ describe("A803 bill numbers: created", () => {
     ).rejects.toMatchObject({ code: "party.out_of_date" });
 
     expect(await lastBillNumberOf(v, partyId)).toBe(2);
+    expect((await billRow(v, first.billId)).billNumber).toBe(2);
     await everyPartyBillNumbered();
   });
 });
