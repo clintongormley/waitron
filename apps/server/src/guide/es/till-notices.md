@@ -38,7 +38,7 @@ disco. El encargado tiene que liberar espacio en el servidor, en la [página Est
 servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de reserva para
 arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres unos 24 MB.
 
-**No se pueden registrar ventas: la hora del servidor es incorrecta · Avisa al encargado** es rojo.
+**No se pueden registrar ventas: la hora del servidor es incorrecta · Consulta Estado del servidor en el panel** es rojo.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
 se corrija, el servidor también rechaza los cobros y las devoluciones. Un administrador puede poner
 la hora desde su propio móvil u ordenador, en la [página Estado del
@@ -62,7 +62,7 @@ así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
 que alguien compruebe la hora. · Comprobar la hora** es rojo. Que los dispositivos coincidan con el
 servidor no vuelve a activar los cobros: usa **Comprobar la hora**.
 
-**Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
+**Comprobar la hora** al final de una línea roja de la hora, en lugar de **Consulta Estado del servidor en el panel**,
 significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí
 mismo. Termina cualquiera de las líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
@@ -95,8 +95,8 @@ la hora desde la misma caja.
 **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo** es ámbar: el
 servidor mantiene su hora por internet, y el reloj de este terminal se aleja de ella más de un minuto.
 
-**Queda poco espacio en el servidor · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
-pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en
+**Queda poco espacio en el servidor · Consulta Estado del servidor en el panel** es ámbar. El trabajo se sigue guardando,
+pero se está acabando el espacio. Libera espacio antes de que se acabe, en
 la [página Estado del servidor](box-status.md#free-space).
 
 **12 ventas sin enviar a Hacienda · Se reintenta solo** es azul. El envío de ventas a Hacienda ha
@@ -116,8 +116,8 @@ comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muest
 imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o un reenvío desde
 **Impresoras**.
 
-**El servidor necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
-texto, quizá de una versión más reciente del servidor. Avisa al encargado para que revise el servidor.
+**El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este terminal no tiene
+texto, quizá de una versión más reciente del servidor.
 
 Si una acción dice **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.**,
 avisa al encargado y espera a que se libere espacio antes de reintentarlo. Que se rechace la

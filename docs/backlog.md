@@ -716,8 +716,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   started dish's saved answer means.
   [Detail](backlog/till.md#a1416-a-started-or-served-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
 
-- **Other till sentences still send the person to somebody else, against the refusal rule (left open
-  by A1382).** Listed by code in the detail.
+- **Other till sentences still send the person to somebody else, against the refusal rule (left
+  open by A1382, #3605 and #3604; fiscal and invoice wording remains).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
 
 - **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**

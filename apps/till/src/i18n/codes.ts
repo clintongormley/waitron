@@ -823,8 +823,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo ya no tiene ese lector de tarjetas. Elige un lector en Equipo e inténtalo de nuevo. No se ha cobrado ninguna tarjeta.",
   },
   "reader.payment_in_progress": {
-    en: "Another device is taking a card payment on that reader. Try again when it finishes. A stuck payment can be resolved in the dashboard, under Card payments.",
-    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine. Un cobro atascado se puede resolver en el panel, en Pagos con tarjeta.",
+    en: "Another device is taking a card payment on that reader. Try again when it finishes. A stuck payment can be resolved in the dashboard, under Check card payments.",
+    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine. Un cobro atascado se puede resolver en el panel, en Comprobar pagos con tarjeta.",
   },
   "device_profile.not_approved": {
     en: "This device can no longer switch to that profile. Choose another",

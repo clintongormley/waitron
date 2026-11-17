@@ -312,7 +312,7 @@ actualización, **Reiniciar el servidor** o a mano.
 Aquí se llama arranque al tiempo que va desde que el servidor arranca hasta que el reloj deja de
 parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el servidor ha
 visto que no puede confirmar su hora por sí mismo, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
-la hora con **Comprobar la hora** en lugar de **Avisa al encargado**. En un servidor cuyo reloj marca
+la hora con **Comprobar la hora** en lugar de **Consulta Estado del servidor en el panel**. En un servidor cuyo reloj marca
 una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace en
 la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
 permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo

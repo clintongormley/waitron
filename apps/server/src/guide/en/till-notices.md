@@ -32,7 +32,7 @@ freed: a new sign-in also needs disk space. A manager needs to free space on the
 status page](box-status.md#free-space). If the server had to use its spare space to start, the
 notice stays, also after a restart, until about 24 MB is free again.
 
-**Sales can't be recorded: the server's clock is wrong · Tell a manager** is red. The server's clock is
+**Sales can't be recorded: the server's clock is wrong · See Box status in the dashboard** is red. The server's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the server also
 refuses payments and refunds. An administrator can set the clock from their own phone or computer,
 on the [Box status page](box-status.md#clock-own-device). Just after the server starts, the hint can read
@@ -54,7 +54,7 @@ start again in the same ways.
 checks the time. · Check the time** is red. Devices agreeing with the server do not start payments
 again: use **Check the time**.
 
-**Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server's
+**Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the server's
 clock is in doubt and the server could not confirm it by itself. It ends any of the red
 clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
@@ -84,8 +84,8 @@ with their PIN and set the clock from the same till.
 **This device's time is wrong · Correct it in this device's settings** is amber: the server keeps its
 time over the internet, and this till's clock is more than a minute away from it.
 
-**The server is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
-running out. A manager should free space before it runs out, on the
+**The server is nearly out of space · See Box status in the dashboard** is amber. Work is still saved, but space is
+running out. Free space before it runs out, on the
 [Box status page](box-status.md#free-space).
 
 **12 sales not yet sent to the tax agency · Retried automatically** is blue. Sending sales to the
@@ -102,8 +102,8 @@ ticket. If the server stopped trying to send a ticket, the tills then show **Pri
 could not print a ticket · Reprint it** in amber until a reprint of it (a station ticket from the
 table, a receipt from its sale) or a resend from **Printers** has printed.
 
-**The server needs attention · Tell a manager** is a notice this till has no words for, perhaps from
-a newer version of the server. Tell a manager so they can check the server.
+**The server needs attention · See Box status in the dashboard** is a notice this till has no words for, perhaps from
+a newer version of the server.
 
 If an action says **Not saved: the server is out of disk space. Tell a manager.**, tell a manager
 and wait for space to be freed before trying again. A refused receipt print, payment-slip print or

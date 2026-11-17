@@ -22,7 +22,7 @@ rule.
 A second exception, the owner's of 2026-10-28 (A1127 Q4): the till and handheld full-disk strip
 keeps «Tell a manager». A waiter at a stopped till has no step of their own to take, and the
 in-place sign-in that would have given them one (A1127's slice 4) was declined. It is stated at the
-strip's words, `FIXED` in `apps/till/src/i18n/staff-notices.ts`. The owner extended it on
+strip's words, the `storage.disk_full` branch of `staffNoticeText` in `apps/till/src/i18n/staff-notices.ts`. The owner extended it on
 2026-11-06 (A1384) to the till's other full-disk refusals, `storage.disk_full` in
 `apps/till/src/i18n/codes.ts` and the `sale.disk_full` group in `apps/till/src/i18n/strings.ts`, for
 the same reason; it is stated at both sites.
@@ -2180,14 +2180,15 @@ signed in, not through `#readDeviceEquipment`. `waitingStartNotice`
 `box-clock`, and keeps it while `box-clock` is unavailable; it is drawn as one line without its
 action, and cleared on `device.unauthorized`, at sign-in and at boot. The same poll keeps the box's
 `storage.disk_full` and `storage.space_low` notices through `nextNotices`, including an unavailable
-box source, and draws their FIXED words with the manager hint above the waiting-start line.
+box source, and draws their words with their hints (Tell a manager on a full disk, See Box status in
+the dashboard on low space) above the waiting-start line.
 These storage lines are also cleared when the device is refused or the PIN poll stops. Pinned under "a till or
 handheld at the PIN screen" in `apps/till/src/till-app.notices.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in
 `apps/till/src/i18n/strings.ts`, in English and Spanish. It words only the codes it names, so a
-code it does not name is drawn as "The server needs attention · Tell a manager", in its own tone,
+code it does not name is drawn as "The server needs attention · See Box status in the dashboard", in its own tone,
 whatever the strings file holds. `scripts/staff-notice-codes.test.ts` requires, for every code a
 source sends, words in both languages in the strings file and a wording from `staffNoticeText` in
 both languages other than that one. It is weaker than its name:

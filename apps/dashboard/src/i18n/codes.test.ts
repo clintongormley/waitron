@@ -899,6 +899,13 @@ it.each([
   );
 });
 
+it("says a stopped venue time zone is confirmed by reloading the dashboard, not by somebody else", () => {
+  expect(en["venue.time_zone_confirm"]).toContain("Reload the dashboard");
+  expect(es["venue.time_zone_confirm"]).toContain("Vuelve a cargar el panel");
+  expect(en["venue.time_zone_confirm"]).not.toMatch(/manager/i);
+  expect(es["venue.time_zone_confirm"]).not.toMatch(/responsable|encargado/i);
+});
+
 describe("receipt language refusal while orders are open", () => {
   const code = "receipt.language_orders_open";
 
