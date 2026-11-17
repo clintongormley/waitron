@@ -32,9 +32,13 @@ import { shiftSwaps } from "./schema/shift-swaps.js";
 import { shifts } from "./schema/shifts.js";
 import type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
 export type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
-import { readTimeRecord, type TimeRecordQuery } from "./record-reads.js";
+import {
+  readLatestLiveEntry,
+  readPeriodEntries,
+  readTimeRecord,
+  type TimeRecordQuery,
+} from "./record-reads.js";
 import type { TimeRecord } from "./record-types.js";
-import { readRecordedEntries, readLatestLiveEntry } from "./record-reads.js";
 import {
   dailyContractedTargetMinutes,
   projectWorkSessions,
@@ -42,7 +46,6 @@ import {
   type OvertimeModel,
   type Period,
   type PeriodSummary,
-  type TimeEntryRecord,
   type WorkforceEntryKind,
 } from "./projection.js";
 import {
@@ -208,7 +211,7 @@ export class WorkforceBackend {
   ): Promise<PeriodSummary> {
     const { workingDaysPerWeek, overtimeModel, dailyTargetMinutes } = ruleset;
     const contractedPerWeek = await this.contractedMinutesPerWeek(tx, query.personId);
-    const entries = await this.entriesForPerson(tx, query.personId);
+    const entries = await readPeriodEntries(tx, query);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
     return summarisePeriod(
@@ -230,7 +233,7 @@ export class WorkforceBackend {
     policy: PaidBreakPolicy | null = null,
   ): Promise<PlannedVsActual[]> {
     const plannedShifts = await this.plannedShiftsInPeriod(tx, query.period);
-    const entries = await readRecordedEntries(tx, {});
+    const entries = await readPeriodEntries(tx, query);
     const sessions = projectWorkSessions(entries, policy).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
     );
@@ -623,10 +626,6 @@ export class WorkforceBackend {
       throw new AppError("employment.not_found", { personId });
     }
     return employment.contracted;
-  }
-
-  private entriesForPerson(tx: Transaction, personId: string): Promise<TimeEntryRecord[]> {
-    return readRecordedEntries(tx, { personId });
   }
 
   private alreadyOpen(input: ClockEventInput): AppError {

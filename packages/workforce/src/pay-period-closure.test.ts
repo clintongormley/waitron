@@ -8,6 +8,10 @@ import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue, seedEmployment } from "../test/fixtures.js";
 import * as api from "./index.js";
+import { computeClosureHash } from "./pay-period-chain.js";
+import { recordInPeriod } from "./record-period.js";
+import { projectTimeRecord } from "./record-projection.js";
+import { readRecordedEntries } from "./record-reads.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
 });
@@ -158,6 +162,76 @@ it("freezes an already counted automatic end without a worker response or change
     ok: true,
   });
   expect(api.verifyPayPeriodClosures([frozen])).toEqual({ ok: true });
+});
+it("freezes the same boundary-crossing history as the full period read", async () => {
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2026-09-28T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-09-28T17:00:00Z"));
+    await backend.clockIn(tx, event("2026-09-30T20:00:00Z"));
+    await backend.clockOut(tx, event("2026-09-30T23:30:00Z"));
+  });
+  const target = (
+    await suite.db
+      .select()
+      .from(api.timeEntries)
+      .where(eq(api.timeEntries.eventAt, "2026-09-30T23:30:00.000Z"))
+  )[0]!.id;
+  const decision = await run(async (tx) => {
+    const request = await backend.requestCorrection(tx, {
+      nodeId,
+      correctsEntryId: target,
+      at: "2026-10-01T16:30:00Z",
+      offsetMinutes: 0,
+      reason: "Worked into October",
+      actorPersonId: worker,
+      origin,
+    });
+    return backend.approveCorrection(tx, {
+      nodeId,
+      correctionId: request,
+      approverPersonId: manager,
+    });
+  });
+  await run((tx) => backend.clockIn(tx, event("2026-10-31T22:00:00Z")));
+  const openEntryId = (
+    await suite.db
+      .select()
+      .from(api.timeEntries)
+      .where(eq(api.timeEntries.eventAt, "2026-10-31T22:00:00.000Z"))
+  )[0]!.id;
+  const edge = await run(async (tx) => {
+    const entryId = await backend.recordAutomaticClose(tx, {
+      ...event("2026-11-01T02:00:00Z"),
+      openEntryId,
+    });
+    await backend.clockIn(tx, event("2026-11-02T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-11-02T17:00:00Z"));
+    return entryId;
+  });
+
+  const full = recordInPeriod(projectTimeRecord(await readRecordedEntries(suite.db, {})), period);
+  expect(full.sessions.map((session) => session.workedMinutes)).toEqual([240]);
+  expect(full.entries.map((row) => row.entry.entryId)).toEqual(
+    expect.arrayContaining([target, decision, openEntryId, edge]),
+  );
+  const snapshot = {
+    sessions: full.sessions,
+    entries: full.entries,
+    summaries: [
+      {
+        personId: worker,
+        summary: api.summarisePeriod(full.sessions, period, {
+          periodMinutes: Math.round((2400 * 31) / 7),
+          dailyTargetMinutes: 480,
+        }),
+      },
+    ],
+    markedAutomaticEntryIds: [edge],
+  };
+  const closure = await close();
+  expect(closure.snapshot).toEqual(snapshot);
+  expect(closure.snapshot.markedAutomaticEntryIds).toEqual([edge]);
+  expect(closure.closureHash).toBe(computeClosureHash({ ...closure, snapshot }));
 });
 it("keeps open no-activity shifts uncounted and visible", async () => {
   const entryId = await open();

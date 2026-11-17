@@ -1123,9 +1123,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
 
-- **Workforce period reads still load complete history.** Narrow them without losing late or
-  cross-period corrections; retain the new latest-instant and person-scoped reads. The remaining query paths are in
-  [workforce detail](backlog/workforce.md#a10-period-read-cost).
+- **Hours reads a person's full clock history for open and outstanding work.**
+  [Detail](backlog/workforce.md#hours-open-and-outstanding-work).
 
 - **A711. Special-day staffing dates come from the first area.** The read has no top-level date list. [Detail](backlog/workforce.md#a711-special-day-staffing-dates-come-from-the-first-area)
 

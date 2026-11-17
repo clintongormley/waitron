@@ -21,17 +21,11 @@ The final policy and any additional required format remain the advisor's decisio
 Ask the gestoría which payroll package and import format it accepts before building a payroll export.
 Keep that separate from the working-time PDF/CSV. Build shift-template and availability features as separate scheduling work.
 
-## A10 period read cost
+## Hours open and outstanding work
 
-A10-1 narrowed ordinary clock state to the latest live instant; A798-B slice 9b (Task 15a) reads it
-from each chain's latest entry through `time_entries_person_chain_idx`, and corrections only from that
-entry's time on. A10-1 also narrows targets and acknowledgments to their
-ids, and own records to that person before projection. Period summaries, planned-versus-actual
-and pay-period closure still load the venue's complete history; future bounded reads must retain
-late answers and corrections that move a session across period boundaries.
-
-Optimise the remaining period paths with their cross-window
-and frozen-history assertions intact; do not replace them with a bare event-time filter.
+Selecting a week, month or pay period in Hours still loads the person's full clock history once
+to find open shifts, pending corrections and unconfirmed automatic ends. Narrow this read while
+keeping older outstanding work visible in any selected period.
 
 ## A708. Special-day staffing on a date with its own changeover
 

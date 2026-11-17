@@ -151,7 +151,10 @@ it("reads a January target answered in March with the actual recorder metadata",
   expect(record.entries.map((e) => e.entry.entryId)).toContain(ids.answer);
   expect(record.entries.find((e) => e.entry.entryId === ids.answer)).toMatchObject({
     author: { kind: "manager", personId: manager },
-    entry: { recordedAt: "2026-03-10T12:00:00.000Z" },
+    entry: {
+      eventAt: "2026-01-05T18:00:00.000Z",
+      recordedAt: "2026-03-10T12:00:00.000Z",
+    },
   });
 });
 it("does not lose a correction that moves an end outside the requested window", async () => {
@@ -238,6 +241,61 @@ it("includes the end of a session starting in the period and ending in the next 
   expect(record.sessions.map((s) => s.workedMinutes)).toEqual([180]);
   expect(record.entries.map((e) => e.entry.entryKind)).toEqual(["in", "out"]);
 });
+async function expectFullJanuaryRecord() {
+  const full = await readRecordedEntries(suite.db, { personId });
+  const record = await query();
+  expect(record).toEqual(recordInPeriod(projectTimeRecord(full), january));
+  return record;
+}
+
+it("keeps a pending retime into January attached to the earlier start", async () => {
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2025-12-30T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-01-01T08:00:00Z"));
+  });
+  const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
+  const request = await run((tx) =>
+    backend.requestCorrection(tx, {
+      nodeId,
+      correctsEntryId: start!.id,
+      at: "2026-01-01T01:00:00Z",
+      offsetMinutes: 0,
+      reason: "Correct arrival",
+      actorPersonId: personId,
+      origin,
+    }),
+  );
+  const record = await expectFullJanuaryRecord();
+  expect(record.sessions).toEqual([]);
+  expect(record.entries.map((row) => row.entry.entryId)).toEqual(
+    expect.arrayContaining([start!.id, request]),
+  );
+});
+
+it("keeps every event at the next start when it shares the last session's end time", async () => {
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2026-01-31T20:00:00Z"));
+    await backend.clockOut(tx, event("2026-02-01T16:00:00Z"));
+    await backend.clockIn(tx, event("2026-02-01T16:00:00Z"));
+    await backend.clockOut(tx, event("2026-02-01T16:00:00Z"));
+  });
+  const record = await expectFullJanuaryRecord();
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([1200]);
+  expect(record.entries.map((row) => row.entry.entryKind)).toEqual(["in", "out", "in", "out"]);
+});
+
+it("follows the only earlier clock-in when its approved time moves into January", async () => {
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2025-12-29T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-01-01T08:00:00Z"));
+  });
+  const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
+  await correct(start!.id, "2026-01-01T01:00:00Z");
+  const record = await expectFullJanuaryRecord();
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([420]);
+  expect(record.entries.map((row) => row.entry.entryId)).toContain(start!.id);
+});
+
 it.each([
   { period: null },
   { period: { start: "bad", end: "2026-02-01" } },
