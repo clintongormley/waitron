@@ -125,6 +125,10 @@ declare module "@waitron/shared" {
     "emergency_copy.chart_unverified": Record<string, never>;
     "emergency_copy.copy_node_known": Record<string, never>;
     "emergency_copy.chain_broken": { module: string };
+    /** Vault key variables this process's environment sets, which would win over the copy's ring. */
+    "emergency_copy.vault_key_in_environment": { variables: string[] };
+    /** An existing `trading.env` names a node other than the copy. */
+    "emergency_copy.trading_node_differs": Record<string, never>;
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };

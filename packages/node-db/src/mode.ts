@@ -12,7 +12,7 @@ import { box } from "./schema/box.js";
 import { writeBoxRoleTx } from "./box.js";
 import { appendHandoverEventTx } from "./handover.js";
 
-export type BoxRoleCause = "adopt" | "promote" | "fenced";
+export type BoxRoleCause = "adopt" | "promote" | "fenced" | "emergency_copy";
 type NodeRole = { mode: DeploymentMode; singletonRole: SingletonRole };
 
 async function writeRoleTx(
