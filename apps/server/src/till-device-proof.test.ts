@@ -459,6 +459,7 @@ const actionRoutes = [
   ["GET", "/api/parties/:id/lines/:lineId/cancellation", 401],
   ["POST", "/api/parties/:id/lines/:lineId/cancel-item", 401],
   ["POST", "/api/parties/:id/unpaid-departure", 401],
+  ["POST", "/api/parties/:id/end-meal", 401],
   ["GET", "/api/working-orders/:id/kitchen-note", 401],
   ["PUT", "/api/working-orders/:id/kitchen-note", 401],
   ["GET", "/api/parties/:id/kitchen-note", 401],

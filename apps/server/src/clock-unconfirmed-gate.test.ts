@@ -10,6 +10,7 @@ import {
   deviceProfiles,
   devices,
   sales,
+  taxpayer,
   tenderRefunds,
   tenders,
   withTransaction,
@@ -624,6 +625,54 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     return {
       send: (app) => as(app, "POST", `/api/parties/${partyId}/unpaid-departure`, body),
       grows: ["departures", "records"],
+    };
+  },
+  "a Print the bill of a full invoice sent by email": async () => {
+    // A full invoice names the seller's address.
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
+    const { partyId, tabId } = await seatedWith(venue, "Red wine bottle");
+    const edit = await readBillEditState(venue.db, tabId);
+    const chosen = await as(venue.app, "PUT", `/api/working-orders/${tabId}/invoice-choice`, {
+      revision: revisionOf(tabId),
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      },
+      expectedEdit: edit,
+    });
+    expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
+    // Staged for email, so the bill needs no receipt printer on this till.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.com",
+            personId: venue.operatorId,
+          },
+        })
+        .where(eq(workingOrders.id, tabId)),
+    );
+    const { editorVersion, draftId, draftRevision } = await readBillEditState(venue.db, tabId);
+    const [party] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${partyId}`,
+    );
+    const body = {
+      billId: tabId,
+      expectedPartyRevision: party!.revision,
+      expectedEdits: [{ billId: tabId, editorVersion, draftId, draftRevision }],
+      submissionId: randomUUID(),
+      printAnyway: true,
+    };
+    return {
+      send: (app) => as(app, "POST", `/api/parties/${partyId}/end-meal`, body),
+      grows: ["sales", "records"],
     };
   },
   "a close as a deferred payment": async () => {
