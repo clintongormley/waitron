@@ -17,6 +17,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
+  clearDeletedPrinter,
   clearUnlistedPrinterChoices,
   readPrinterEquipment,
   readPrinterRoles,
@@ -1314,5 +1315,79 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
     expect(read.printers.get(receiptPrinter)).toMatchObject({ kind: "receipt" });
     const unlisted = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: false }));
     expect([...unlisted.printers.keys()]).toEqual([page]);
+  });
+});
+
+describe("clearDeletedPrinter", () => {
+  it("clears every device choice, profile list row and holder naming the printer, and no other", async () => {
+    await seedFixtureVenue("Here");
+    const first = await seedDevice(suite.db, { label: "Till A" });
+    const a = first.deviceId;
+    const b = (await seedDevice(suite.db, { label: "Till B", profileId: first.profileId }))
+      .deviceId;
+    const c = (await seedDevice(suite.db, { label: "Till C", profileId: first.profileId }))
+      .deviceId;
+    const gone = await seedPrinter("Bar", { portable: true, hasCashDrawer: true });
+    const kept = await seedPrinter("Counter", { portable: true, hasCashDrawer: true });
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        first.profileId,
+        lists({
+          receiptPrinterIds: [gone, kept],
+          paymentSlipPrinterIds: [gone, kept],
+          cashDrawerPrinterIds: [gone, kept],
+          invoicePrinterIds: [gone, kept],
+        }),
+      ),
+    );
+    const every = (id: string) => ({
+      receiptPrinterId: id,
+      paymentSlipPrinterId: id,
+      cashDrawerPrinterId: id,
+      invoicePrinterId: id,
+    });
+    await suite.db.update(devices).set(every(gone)).where(eq(devices.id, a));
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: gone, cashDrawerPrinterId: kept })
+      .where(eq(devices.id, b));
+    await suite.db.update(devices).set(every(kept)).where(eq(devices.id, c));
+    await suite.db.insert(printerHolders).values([
+      { printerId: gone, deviceId: a },
+      { printerId: kept, deviceId: c },
+    ]);
+
+    await inTx((tx) => clearDeletedPrinter(tx, gone));
+
+    const choices = await suite.db
+      .select({
+        id: devices.id,
+        receipt: devices.receiptPrinterId,
+        slip: devices.paymentSlipPrinterId,
+        drawer: devices.cashDrawerPrinterId,
+        invoice: devices.invoicePrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.deviceProfileId, first.profileId));
+    expect(new Map(choices.map(({ id, ...rest }) => [id, rest]))).toEqual(
+      new Map([
+        [a, { receipt: null, slip: null, drawer: null, invoice: null }],
+        [b, { receipt: null, slip: null, drawer: kept, invoice: null }],
+        [c, { receipt: kept, slip: kept, drawer: kept, invoice: kept }],
+      ]),
+    );
+    const listed = await suite.db
+      .select({ printerId: deviceProfilePrinters.printerId, role: deviceProfilePrinters.role })
+      .from(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, first.profileId))
+      .orderBy(asc(deviceProfilePrinters.role));
+    expect(listed).toEqual(
+      ["cash_drawer", "invoice", "payment_slip", "receipt"].map((role) => ({
+        printerId: kept,
+        role,
+      })),
+    );
+    expect(await holders()).toEqual([[kept, c]]);
   });
 });

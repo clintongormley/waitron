@@ -1,5 +1,3 @@
-// The registry of `printer.not_found`, which this file throws.
-import "@waitron/printing";
 import {
   deviceProfilePrinters,
   deviceProfiles,
@@ -10,7 +8,8 @@ import {
   printers,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
+import { refuseDeletedPrinters } from "@waitron/printing";
 import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import type { ProfilePrinterRole } from "./device-printers.js";
@@ -290,24 +289,6 @@ function roleState(state: DeviceState, role: ProfilePrinterRole): PrinterRoleSta
   };
 }
 
-/**
- * Refuses `printer.not_found` for the first of `ids` naming a deleted printer, whether or not the
- * caller already stores it. An unknown or switched-off printer passes this check.
- */
-export async function refuseDeletedPrinters(
-  tx: Transaction,
-  ids: readonly (string | null | undefined)[],
-): Promise<void> {
-  const named = [...new Set(ids.filter((id): id is string => typeof id === "string"))];
-  if (named.length === 0) return;
-  const deleted = await tx
-    .select({ id: printers.id })
-    .from(printers)
-    .where(and(inArray(printers.id, named), isNotNull(printers.deletedAt)));
-  const first = named.find((id) => deleted.some((row) => row.id === id));
-  if (first !== undefined) throw new AppError("printer.not_found", { id: first });
-}
-
 /** The printer `role` prints or opens on for the device, switched on or not; `null` for none. */
 export async function resolveDevicePrinterId(
   tx: Transaction,
@@ -503,6 +484,19 @@ export async function settleDevicePrinters(
         ? eq(printerHolders.deviceId, deviceId)
         : and(eq(printerHolders.deviceId, deviceId), notInArray(printerHolders.printerId, used)),
     );
+}
+
+/** Clears a deleted printer from every device's choices, every profile's lists and its holder. */
+export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
+  for (const role of ROLES) {
+    const column = COLUMN[role];
+    await tx
+      .update(devices)
+      .set({ [column]: null })
+      .where(eq(devices[column], printerId));
+  }
+  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, printerId));
+  await tx.delete(printerHolders).where(eq(printerHolders.printerId, printerId));
 }
 
 /** Lets go of every printer the device holds; keeps its choices. */

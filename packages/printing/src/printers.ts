@@ -1,6 +1,6 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -193,4 +193,22 @@ export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
     .where(isNull(printers.deletedAt))
     .orderBy(printers.name);
   return rows.map((row) => ({ ...row, pickupRoles: [...new Set(row.pickupRoles)] }));
+}
+
+/**
+ * Refuses `printer.not_found` for the first of `ids` naming a deleted printer, whether or not the
+ * caller already stores it. An unknown or switched-off printer passes this check.
+ */
+export async function refuseDeletedPrinters(
+  tx: Transaction,
+  ids: readonly (string | null | undefined)[],
+): Promise<void> {
+  const named = [...new Set(ids.filter((id): id is string => typeof id === "string"))];
+  if (named.length === 0) return;
+  const deleted = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(and(inArray(printers.id, named), isNotNull(printers.deletedAt)));
+  const first = named.find((id) => deleted.some((row) => row.id === id));
+  if (first !== undefined) throw new AppError("printer.not_found", { id: first });
 }

@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { refuseDeletedPrinters } from "@waitron/layouts";
+import { refuseDeletedPrinters } from "@waitron/printing";
 import {
   kitchenStations,
   printers,

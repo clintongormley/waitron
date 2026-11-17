@@ -20,7 +20,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printing";
-import { readPrinterEquipment } from "@waitron/layouts";
+import { clearDeletedPrinter, readPrinterEquipment } from "@waitron/layouts";
 import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 
@@ -176,15 +176,8 @@ export async function deletePrinter(
   const rules = await printerDeleteRules(tx, id);
   await endDeletedPrinterJobs(tx, id);
   await endInvoicePrintDeliveries(tx, rules.invoiceJobIds, now);
-  for (const { column } of ROLES) {
-    await tx
-      .update(devices)
-      .set({ [column]: null })
-      .where(eq(devices[column], id));
-  }
-  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, id));
+  await clearDeletedPrinter(tx, id);
   await removeIdFromJson(tx, kitchenStations.printerIds, id);
-  await tx.delete(printerHolders).where(eq(printerHolders.printerId, id));
   await tx
     .update(printers)
     .set({ active: false, deletedAt: now.toISOString() })

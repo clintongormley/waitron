@@ -54,11 +54,11 @@ export {
 } from "./device-printers.js";
 export {
   chosenPrinterOf,
+  clearDeletedPrinter,
   clearUnlistedPrinterChoices,
   readPrinterRoles,
   readPrinterEquipment,
   releaseDevicePrinters,
-  refuseDeletedPrinters,
   resolveDevicePrinterId,
   resolveDevicePrinterIds,
   selectDevicePrinter,
