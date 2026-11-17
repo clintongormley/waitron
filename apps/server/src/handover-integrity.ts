@@ -87,7 +87,7 @@ export async function checkCopyIntegrity(
  * of its own: on a venue-sized file they take long enough that the box would answer nothing
  * meanwhile. A thread that fails or ends without answering rejects, because that says nothing about
  * the file. `immutable` reads the main file alone and leaves no `-wal` or `-shm` beside it; it is
- * only for a caller that has already refused a `-wal` there.
+ * only for a caller that has already refused a `-wal` or a `-journal` there.
  */
 export function isCopyIntact(
   path: string,

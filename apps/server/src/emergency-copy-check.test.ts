@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
+import { endorseKey, generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
@@ -312,6 +312,20 @@ it("refuses a chart altered after it was signed", async () => {
   await expect(check(bindingFor(hash))).rejects.toMatchObject({
     code: "emergency_copy.chart_unverified",
   });
+});
+
+it("accepts a chart whose signer has a keyless machine row and an endorsement giving its key", async () => {
+  const signer = generateNodeKeyPair();
+  const signerId = "e7000000-0000-4000-8000-000000000006";
+  await suite.db.insert(nodes).values({ id: signerId, name: "Signer", publicKey: null });
+  await writeNodeMembership(suite.db, {
+    body: chartBody(sourceId),
+    signerNodeId: signerId,
+    signature: signDocumentBody(chartBody(sourceId), signer.privateKey),
+    endorsements: [endorseKey(signerId, signer.publicKey, sourceId, source.privateKey)],
+  });
+  const hash = await place();
+  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
 });
 
 it("refuses a copy that already knows the new machine", async () => {

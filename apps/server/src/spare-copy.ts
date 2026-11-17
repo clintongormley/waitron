@@ -194,7 +194,7 @@ function openCopy(path: string, immutable = false) {
 /**
  * Opened read-only. Refuses a copy of `venue.db` whose schema is ahead of this software.
  * `immutable` leaves no `-wal` or `-shm` beside the copy; it is only for a caller that has already
- * refused a `-wal` there.
+ * refused a `-wal` or a `-journal` there.
  */
 export async function assertVenueCopyNotAhead(
   path: string,

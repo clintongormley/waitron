@@ -117,7 +117,9 @@ export async function checkPlacedEmergencyCopy(deps: {
 
     // Consistency with the copy's own keys, not authenticity: that rests on Cloud's hash.
     const trustSet: Record<string, string> = {};
-    for await (const row of query.rows("select id, public_key from nodes"))
+    for await (const row of query.rows(
+      "select id, public_key from nodes where public_key is not null",
+    ))
       trustSet[String(row.id)] = String(row.public_key);
     if (!verifyMembershipDocument(chart as SignedMembershipDocument, trustSet).valid)
       throw new AppError("emergency_copy.chart_unverified", {});

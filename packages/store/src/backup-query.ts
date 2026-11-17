@@ -18,7 +18,7 @@ function target(path: string, options: { immutable?: boolean }): string | URL {
 const PURE_FUNCTIONS = new Set(["count", "max", "min", "length", "hex", "coalesce", "json_valid"]);
 /**
  * `immutable` opens a file to read its main file alone, leaving no `-wal` or `-shm` beside it; it is
- * only for a caller that has already refused a `-wal` there. Bytes ignore it.
+ * only for a caller that has already refused a `-wal` or a `-journal` there. Bytes ignore it.
  */
 export async function openBackupQuery(
   databasePath: string | Uint8Array,
