@@ -8019,18 +8019,20 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     },
   );
 
-  it("hands the payments face the request primitive and the venue's onboarding mode", async () => {
+  it("hands the payments face the request primitive and the actual simulator status", async () => {
     history.replaceState(null, "", "/payments");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: faceApi(),
+      api: Object.assign(faceApi(), {
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, simulatedCardPayments: true }),
+      }),
       request: stubRequest,
     });
     await flush(el);
     const payments = el.shadowRoot!.querySelector<
-      HTMLElement & { request: DashboardRequest; mode?: string }
+      HTMLElement & { request: DashboardRequest; simulatedCardPayments: boolean }
     >("dashboard-payments-screen")!;
     expect(payments.request).toBe(stubRequest);
-    expect(payments.mode).toBe("prepare");
+    expect(payments.simulatedCardPayments).toBe(true);
   });
 
   it("follows a Go to from the Alerts face, keeping the event inside the shell", async () => {

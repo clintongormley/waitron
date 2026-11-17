@@ -387,6 +387,7 @@ describe("receipt charge wording", () => {
       amount: 140,
     });
     expect((await f.read("es-ES", true)).simulatedCardPayment).toBe(expected);
+    expect((await f.read("es-ES", false)).simulatedCardPayment).toBe(false);
   });
 
   it.each(["sumup", "simulator"] as const)(

@@ -1,3 +1,4 @@
+import { SimulatorPaymentProvider } from "@waitron/payments";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
@@ -485,22 +486,37 @@ describe("saved-zone payment transactions", () => {
         }
       },
     );
-    it("recovers a persisted capture without collecting again or changing capture facts", async () => {
+    it.each([false, true])("recovers a persisted capture (simulator=%s)", async (simulated) => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-14T21:59:00.000Z"));
       const source = zoneClock();
       const deps = zoneDeps(source.clock);
       const req = zoneRequest();
-      deps.provider.crashNextCollect("captured");
-      await expect(readerPay(deps, zoneVenue.cfg, req)).rejects.toThrow("process stopped");
+      const provider = simulated ? new SimulatorPaymentProvider(zoneDb.db) : deps.provider;
+      const capture = provider.collect.bind(provider);
+      const collect = vi.spyOn(provider, "collect");
+      if (simulated) {
+        collect.mockImplementationOnce(async (params) => {
+          await capture(params);
+          throw new Error("process stopped");
+        });
+      } else deps.provider.crashNextCollect("captured");
+      const recoveryDeps = { ...deps, provider };
+      const cfg = { ...zoneVenue.cfg, practiceMode: true };
+      await expect(readerPay(recoveryDeps, cfg, req)).rejects.toThrow("process stopped");
       const before = zoneDb.db.all<Record<string, unknown>>(
         sql`select * from payments where working_order_id = ${req.id}`,
       );
       expect(await issueFacts(req.id)).toEqual([]);
-      const out = await readerPay(deps, zoneVenue.cfg, req);
+      const out = await readerPay(recoveryDeps, cfg, req);
       expect(out.outcome).toBe("captured");
+      if (out.outcome === "captured") expect(out.ticket.simulatedCardPayment).toBe(simulated);
+      const replay = await readerPay(recoveryDeps, cfg, req);
+      expect(replay.outcome).toBe("captured");
+      if (replay.outcome === "captured") expect(replay.ticket.simulatedCardPayment).toBe(simulated);
       expect(await issueFacts(req.id)).toEqual([nightFacts]);
-      expect(deps.provider.collectCalls).toHaveLength(1);
+      expect(collect).toHaveBeenCalledTimes(1);
+      if (!simulated) expect(deps.provider.collectCalls).toHaveLength(1);
       const after = zoneDb.db.all<Record<string, unknown>>(
         sql`select * from payments where working_order_id = ${req.id}`,
       );

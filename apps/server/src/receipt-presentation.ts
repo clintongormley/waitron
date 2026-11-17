@@ -36,7 +36,7 @@ export async function readReceiptPresentation(
   tx: Transaction,
   saleId: string,
   printedLanguage: string,
-  practiceMode = false,
+  practiceMode: boolean,
 ): Promise<
   ReceiptPresentation & {
     simulatedCardPayment: boolean;

@@ -341,6 +341,7 @@ describe("Me API — the identity property: the session's person, never the body
         sessionIdleTimeoutSeconds: number;
         permissions: string[];
         modules: string[];
+        simulatedCardPayments: boolean;
       },
     ).toEqual({
       personId: p,
@@ -362,6 +363,7 @@ describe("Me API — the identity property: the session's person, never the body
       // A staff person holds only the payment permission; this fixture injects no enabled modules.
       permissions: ["payment.take"],
       modules: [],
+      simulatedCardPayments: false,
     });
 
     const res = await send(

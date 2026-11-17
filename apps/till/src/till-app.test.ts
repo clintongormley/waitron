@@ -11832,29 +11832,45 @@ describe("till-app", () => {
       expect(pay.mock.calls[1]![0]).toMatchObject({ id: c.store.id, guestCount: 3 });
     });
 
-    it("pays over the integrated terminal with the mapped lines(+tip), then shows the ticket", async () => {
-      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
-      const { el } = await mountApp({ pay });
-      const c = await toCounter(el);
-      const store = c.store;
-      store.addProduct(coffee, "2");
-      await el.updateComplete;
-      const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
+    it.each([false, true])(
+      "pays over the integrated terminal with the mapped lines(+tip), then shows the ticket (simulator=%s)",
+      async (simulatedCardPayment) => {
+        const result = {
+          ...saleResult,
+          simulatedCardPayment,
+          tender: { method: "card" as const, change: "0.00" },
+        };
+        const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: result });
+        const { el } = await mountApp({
+          pay,
+          getTransactionReceipt: vi.fn().mockResolvedValue(result),
+        });
+        const c = await toCounter(el);
+        const store = c.store;
+        store.addProduct(coffee, "2");
+        await el.updateComplete;
+        const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
 
-      emit(c, "collect-card", { tip: "0.50" });
-      await flush(el);
+        emit(c, "collect-card", { tip: "0.50" });
+        await flush(el);
 
-      expect(pay).toHaveBeenCalledWith({
-        dining: "eat_in",
-        expectedEdit: null,
-        id: workingOrderId,
-        lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
-        tip: "0.50",
-      });
-      const view = ticket(el)!;
-      expect(view).not.toBeNull();
-      expect(view.result).toBe(saleResult);
-    });
+        expect(pay).toHaveBeenCalledWith({
+          dining: "eat_in",
+          expectedEdit: null,
+          id: workingOrderId,
+          lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
+          tip: "0.50",
+        });
+        const view = ticket(el)!;
+        expect(view).not.toBeNull();
+        expect(view.result).toBe(result);
+        expect(view.simulatedCardPayment).toBe(simulatedCardPayment);
+        await openFiledReceipt(el);
+        expect(
+          el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view")!.simulatedCardPayment,
+        ).toBe(simulatedCardPayment);
+      },
+    );
 
     it("omits tip from the request when the event detail carries neither", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });

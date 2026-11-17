@@ -328,7 +328,12 @@ describe("recordTillSale", () => {
       lines: [{ menuItemId: waterOfferId, quantity: "1" }],
       tender: { method: "card" as const, amount: "1.50", addedTip: "0.30", externalRef: "OP-TIP" },
     };
-    const paid = await recordTillSale(deps, { ...cfg, tipsEnabled: true }, request);
+    const paid = await recordTillSale(
+      deps,
+      { ...cfg, tipsEnabled: true, practiceMode: true },
+      request,
+    );
+    expect(paid.simulatedCardPayment).toBe(false);
     expect(paid.total).toBe("2.25");
     expect(paid.vatBreakdown).toEqual([{ rate: "21.00", base: "1.86", tax: "0.39" }]);
     expect(paid.tender).toMatchObject({ charged: "2.55", tip: "0.30", reference: "OP-TIP" });
@@ -3155,7 +3160,7 @@ describe("receipt presentation sources", () => {
     const { cfg, seriesId } = await setupVenue();
 
     const absent = await withTransaction(suite.db, (tx) =>
-      readReceiptPresentation(tx, randomUUID(), "en-GB"),
+      readReceiptPresentation(tx, randomUUID(), "en-GB", false),
     );
     expect(absent).toEqual({
       simulatedCardPayment: false,
@@ -3197,12 +3202,14 @@ describe("receipt presentation sources", () => {
       printTradingName: true,
     });
     const noDepartment = await withTransaction(suite.db, (tx) =>
-      readReceiptPresentation(tx, sale.saleId, "es-ES"),
+      readReceiptPresentation(tx, sale.saleId, "es-ES", false),
     );
     expect(noDepartment).toEqual(absent);
 
     expect(
-      await withTransaction(suite.db, (tx) => readReceiptPresentation(tx, randomUUID(), "en-GB")),
+      await withTransaction(suite.db, (tx) =>
+        readReceiptPresentation(tx, randomUUID(), "en-GB", false),
+      ),
     ).toEqual({
       simulatedCardPayment: false,
       receiptHeader: undefined,
@@ -3248,7 +3255,7 @@ describe("receipt presentation sources", () => {
             sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
           );
         const presentation = await withTransaction(suite.db, (tx) =>
-          readReceiptPresentation(tx, saved!.saleId, "es-ES"),
+          readReceiptPresentation(tx, saved!.saleId, "es-ES", false),
         );
         expect(presentation.receiptTrim).toEqual(
           source === "venue" ? { footerMessage: "Own footer", email: "own@example.test" } : {},
