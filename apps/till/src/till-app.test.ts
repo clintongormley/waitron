@@ -1820,7 +1820,7 @@ describe("till-app", () => {
         unitPrice: "1.50",
       }),
     ]);
-    expect(c.operatorName).toBe("Ana");
+    expect(el.shadowRoot!.querySelector("till-shell")!.operatorName).toBe("Ana");
   });
 
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
@@ -14684,10 +14684,7 @@ describe("till-app", () => {
       const s = shell(el)!;
       expect(s).not.toBeNull();
       expect(s.activeScreen).toBe("counter");
-      // The counter tab's body is the counter screen, mounted EMBEDDED — the shell owns the header, so
-      // the screen suppresses its own (no duplicate chrome).
       expect(counter(el)).not.toBeNull();
-      expect(counter(el)!.shadowRoot!.querySelector(".header")).toBeNull();
     });
 
     it("switches the active tab body on tab-select", async () => {
@@ -15633,7 +15630,6 @@ describe("till-app", () => {
       const c = await toCounterAs(el, null);
       // The counter is still handed the app's api (threaded by the shell's tab body).
       expect(c.api).toBe(currentApi);
-      // The shell owns the chooser while the counter stays embedded.
       expect(shell(el)!.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
     });
 

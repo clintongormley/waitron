@@ -34,7 +34,7 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
   it("has no violations composing the four widgets over an empty basket", async () => {
     const { host } = await mountWidget<TillCounterScreen>(
       "till-counter-screen",
-      { store: new WorkingOrderStore(), products, operatorName: "Ana" },
+      { store: new WorkingOrderStore(), products },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -53,7 +53,6 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
       {
         store: new WorkingOrderStore(),
         products,
-        operatorName: "Ana",
         serviceZones,
         selectedServiceZoneId: "zone-1",
       },
@@ -64,7 +63,7 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
   it("a partly paid Counter offering to take the rest has no violations", async () => {
     const { host } = await mountWidget<TillCounterScreen>(
       "till-counter-screen",
-      { store: new WorkingOrderStore(), payRest: "70.00", embedded: true },
+      { store: new WorkingOrderStore(), payRest: "70.00" },
       theme,
     );
     await expectNoA11yViolations(host);

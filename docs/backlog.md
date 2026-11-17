@@ -769,8 +769,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     [Detail](backlog/till.md#resets-any-leftover-drillactive-tab-on-login-still-passes-with-logins-own-clearing-line-deleted)
   - Till widget points from #616 that were read but not run (`apps/till/src/widgets`).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
-  - The till always mounts the counter screen `embedded` (#614).
-    [Detail](backlog/till.md#the-till-always-mounts-the-counter-screen-embedded)
+  - The till always mounts the floor screen `embedded` (#614).
+    [Detail](backlog/till.md#the-till-always-mounts-the-floor-screen-embedded)
   - Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite
     `provider.ts:66-83` (#613). The checker compares tool comments character for character, so
     repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not a

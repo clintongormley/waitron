@@ -53,18 +53,15 @@ their full text.
   configuration audited; the tab shell and the supervisor dialog emit
   events not named `wt-*` (CLAUDE.md §3; not checked whether the rule reaches till widgets).
 
-## The till always mounts the counter screen `embedded`
+## The till always mounts the floor screen `embedded`
 
 - Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
-  the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
-  `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
-  Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
-  screen's own tests; its fixed mount passes `embedded` and `canExitToCounter=false`, so its
-  standalone header, Back button and that property are likewise test-only. The screens' `css`
-  templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
-  allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
-  confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the
-  server does not call `grossOf`).
+  the till's one floor mount (`apps/till/src/till-app.ts`, the `<till-floor-screen>` in its
+  render) passes `embedded` and `canExitToCounter=false`, so the floor screen's standalone header,
+  its Back button and that property are reached only by the screen's own tests. The floor
+  screen's `css` template still carries a spec number ("KDS-1 §3d"), and the ticket view's a
+  design section ("design §8"). Not restored because nothing confirms it: the table-order
+  screen's `#lineGross` comment "same arithmetic the server files with".
 
 ## Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite `provider.ts:66-83`
 

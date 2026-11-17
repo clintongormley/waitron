@@ -59,7 +59,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                         "till-counter-screen",
                         {
                           ...shared,
-                          embedded: true,
                           store,
                           selectedServiceZoneId: "counter",
                         },

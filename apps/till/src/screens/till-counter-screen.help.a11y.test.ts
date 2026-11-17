@@ -66,7 +66,6 @@ describe.each(["light", "dark"] as const)("Counter's help badges a11y (%s theme)
         "till-counter-screen",
         {
           store: new WorkingOrderStore(),
-          operatorName: "Ana",
           asksGuests: true,
           orderList: list as "parked" | "waiting",
           heldOrders: [heldOrder],

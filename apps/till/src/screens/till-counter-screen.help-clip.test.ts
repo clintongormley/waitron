@@ -132,7 +132,6 @@ async function mount(over: Partial<TillCounterScreen>) {
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
     ),
-    operatorName: "Ana",
     ...over,
   });
   // As in the till, whose shell sets the badge's size and gives the screen the window's height.

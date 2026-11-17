@@ -95,7 +95,6 @@ async function mountCounter(
     menus,
     selectedMenuId: "drinks",
     makeAtStations: stations,
-    operatorName: "Ana",
   });
   return el;
 }
@@ -284,7 +283,6 @@ async function mountLongNames(width: number, height: number, lang: string): Prom
     ),
     selectedMenuId: "drinks",
     makeAtStations: stations,
-    operatorName: "Ana",
   });
   const noBreak = new CSSStyleSheet();
   noBreak.replaceSync(".name, .product-name { overflow-wrap: normal !important; }");
@@ -450,7 +448,6 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
         const grid = await mountCounter(width, height);
         const counter = grid as TillCounterScreen;
         setLocale(locale);
-        counter.embedded = true;
         counter.serviceZones = [
           {
             id: "bar",
@@ -530,7 +527,6 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
 it("keeps a usable basket and payment controls when many orders are held", async () => {
   const grid = await mountCounter(1280, 800);
   const counter = grid as TillCounterScreen;
-  counter.embedded = true;
   counter.orderList = "parked";
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
     zoneId: null,

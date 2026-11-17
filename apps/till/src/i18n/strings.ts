@@ -1087,7 +1087,6 @@ export const en = {
   "schedule.status.approved": "Approved",
   "schedule.status.rejected": "Rejected",
   // Live floor. The count labels are suffix words, rendered as `${n} ${t(key)}`.
-  "floor.open": "Floor",
   "floor.closed": "Closed",
   "floor.title": "Floor",
   "floor.back": "Back to counter",
@@ -3193,7 +3192,6 @@ export const es: Record<StringKey, string> = {
   "schedule.status.accepted": "Aceptado",
   "schedule.status.approved": "Aprobado",
   "schedule.status.rejected": "Rechazado",
-  "floor.open": "Sala",
   "floor.closed": "Cerrada",
   "floor.title": "Sala",
   "floor.back": "Volver a la caja",

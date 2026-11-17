@@ -22548,11 +22548,9 @@ export class TillApp extends LitElement {
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
-      // `embedded`: the shell owns the header.
       return html`<till-counter-screen
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
         .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
-        embedded
         .api=${this.api}
         .store=${this.#store}
         .products=${this.products}
@@ -22579,7 +22577,6 @@ export class TillApp extends LitElement {
         .tables=${this.tables}
         .zones=${this.zones}
         .defaultStationId=${this.#defaultStationId()}
-        .operatorName=${this.operatorName}
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}

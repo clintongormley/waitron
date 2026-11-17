@@ -4,7 +4,6 @@ import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, floorChipStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -45,9 +44,6 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { CollectCardDetail, CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
-/** A brand wordmark is a fixed name, not translated UI copy. */
-const BRAND = "Waitron";
-
 @customElement("till-counter-screen")
 export class TillCounterScreen extends LitElement {
   constructor() {
@@ -72,30 +68,6 @@ export class TillCounterScreen extends LitElement {
         flex-direction: column;
         height: 100%;
         min-height: 0;
-      }
-
-      .header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .brand {
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .session {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-      }
-
-      .operator {
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .body.grid-body {
@@ -255,7 +227,6 @@ export class TillCounterScreen extends LitElement {
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
   @property({ type: Boolean }) paymentWindow = false;
-  @property() operatorName = "";
   @property() invoiceLocale = "es-ES";
 
   @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
@@ -288,8 +259,6 @@ export class TillCounterScreen extends LitElement {
   /** Whether the server still lets {@link store}'s saved order switch its way; ignored while the
    * order is an unsaved draft, and read as `"none"` when not known. */
   @property({ attribute: false }) diningChoice: DiningChoice | null = null;
-  /** The enclosing shell owns the header. */
-  @property({ type: Boolean }) embedded = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
 
@@ -297,26 +266,6 @@ export class TillCounterScreen extends LitElement {
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
   readonly #unfilteredSearchProducts = memoVisibleProducts();
-
-  #logout(): void {
-    this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
-  }
-
-  #showSchedule(): void {
-    this.dispatchEvent(new CustomEvent("show-schedule", { bubbles: true, composed: true }));
-  }
-
-  #showFloor(): void {
-    this.dispatchEvent(new CustomEvent("show-floor", { bubbles: true, composed: true }));
-  }
-
-  #showStation(): void {
-    this.dispatchEvent(new CustomEvent("show-station", { bubbles: true, composed: true }));
-  }
-
-  #showExpo(): void {
-    this.dispatchEvent(new CustomEvent("show-expo", { bubbles: true, composed: true }));
-  }
 
   #pickFilters(filters: MenuFilters): void {
     this.selectedFilters = filters;
@@ -467,58 +416,7 @@ export class TillCounterScreen extends LitElement {
   }
 
   override render() {
-    return html`
-      <div class="screen">
-        ${
-          this.embedded
-            ? nothing
-            : html`<div class="header">
-                <span class="brand">${BRAND}</span>
-                <div class="session">
-                  <wt-button
-                    class="equipment"
-                    variant="secondary"
-                    @click=${() =>
-                      this.dispatchEvent(
-                        new CustomEvent("open-equipment", { bubbles: true, composed: true }),
-                      )}
-                  >
-                    ${t("equipment.open")}
-                  </wt-button>
-                  <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
-                    ${t("floor.open")}
-                  </wt-button>
-                  <wt-button
-                    class="station"
-                    variant="secondary"
-                    @click=${() => this.#showStation()}
-                  >
-                    ${t("station.open")}
-                  </wt-button>
-                  <wt-button class="expo" variant="secondary" @click=${() => this.#showExpo()}>
-                    ${t("expo.open")}
-                  </wt-button>
-                  <wt-button
-                    class="schedule"
-                    variant="secondary"
-                    @click=${() => this.#showSchedule()}
-                  >
-                    ${t("schedule.open")}
-                  </wt-button>
-                  <wt-language-chooser
-                    active=${currentLocale()}
-                    .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-                  ></wt-language-chooser>
-                  <span class="operator">${this.operatorName}</span>
-                  <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
-                    ${t("action.logout")}
-                  </wt-button>
-                </div>
-              </div>`
-        }
-        ${this.#gridBody()}
-      </div>
-    `;
+    return html`<div class="screen">${this.#gridBody()}</div>`;
   }
 }
 

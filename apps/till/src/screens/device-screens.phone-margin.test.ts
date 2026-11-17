@@ -101,7 +101,6 @@ const screens: [string, () => Promise<HTMLElement>, string, { left: number; widt
       (
         await mountWidget<TillCounterScreen>("till-counter-screen", {
           store: new WorkingOrderStore(),
-          operatorName: "Ana",
         })
       ).el,
     ".body.grid-body",

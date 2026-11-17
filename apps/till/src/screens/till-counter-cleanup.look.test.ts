@@ -157,7 +157,6 @@ for (const kind of ["counter", "table"] as const)
             ],
           }));
           const shared = {
-            embedded: true,
             products,
             zoneName: "Garden terrace",
             departmentName: "Restaurant",
@@ -203,7 +202,7 @@ for (const kind of ["counter", "table"] as const)
                   },
                   theme,
                 )
-              : await mountTable(shared);
+              : await mountTable({ ...shared, embedded: true });
           const screen = mounted.el;
           const { el: shell, host } = await mountWidget<TillShell>(
             "till-shell",

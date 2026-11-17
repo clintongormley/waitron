@@ -47,7 +47,6 @@ function mount(over: Partial<TillCounterScreen> = {}) {
   store.addProduct(dish, "1");
   return mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
-    embedded: true,
     products: [dish],
     menus: servedMenus([{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }], []),
     ...over,

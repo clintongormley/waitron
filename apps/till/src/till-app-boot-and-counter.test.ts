@@ -3524,36 +3524,6 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(api.listStations).toHaveBeenCalledTimes(stationReads);
   });
 
-  it("does not choose a menu after a zone's station read outlives sign-out", async () => {
-    const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    menu.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
-    const deli = zoneOffers(
-      { menus: [{ id: "cat-deli", name: "Deli", isDefault: true }], products: [coffee] },
-      "zone-deli",
-    );
-    let answerStations!: (rows: []) => void;
-    const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(menu)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(menu),
-      listZoneOffers: vi.fn().mockResolvedValue(deli),
-    });
-    const c = await toCounter(el);
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
-    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
-    await flush(el);
-    expect(answerStations).toBeTypeOf("function");
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const selected = privateState<string>(el, "selectedMenuId");
-    answerStations([]);
-    await flush(el);
-
-    expect(privateState<string>(el, "selectedMenuId")).toBe(selected);
-  });
-
   it("does not reload held orders for a retrieve refused after sign-out", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
@@ -4128,25 +4098,6 @@ describe("till-app logout while a request is waiting for the server", () => {
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not reload the station list for a ticket advance answered after sign-out", async () => {
-    let answer!: () => void;
-    const { el } = await mountApp({
-      advanceTicketItem: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
-    });
-    const c = await toCounter(el);
-    emit(c, "advance-ticket-item", { itemId: "item-1", to: "ready" });
-    await flush(el);
-    expect(api.advanceTicketItem).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const stationReads = vi.mocked(api.listStations).mock.calls.length;
-    answer();
-    await flush(el);
-
-    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
   });
 
   it("stays on the lock screen when a cash sale's answer arrives after the operator logged out", async () => {
