@@ -19,23 +19,30 @@ Use `readTaxpayer` in the existing transaction, with its absent country treated 
   and expose a small pure locale selector taking language, country and the supported
   list. Return the selected full locale from the reader. In `kitchen-print.ts`, widen
   the three `KitchenLanguage` parameter/field types to `string`, removing that type import.
-  Trace `buildTicketItems`, `PortionRead`, `MovedSlipPrinting`, every reader caller,
-  and collection slips; their downstream wording functions already accept locale strings.
+  Trace `buildTicketItems`, `PortionRead`, `MovedSlipPrinting` and every reader caller.
+  At the two allergen-wording calls, reduce the full locale through `kitchenLanguageFor`;
+  those tables still index by the wording language. In `order-number-slip.ts`, accept
+  a string and resolve `collectionOrder` through `kitchenTicketWords`, preserving its
+  output for raw language codes and adding full-locale support.
   Do not change any shared list helper, wording table or content-language setting.
 - [ ] First add a venue-to-paper regression in `apps/server/src/kitchen-language.test.ts`:
-  save English content, set the taxpayer country to GB, read the kitchen locale, format
-  a kitchen ticket carrying three other-station names, and assert its printed cue is
-  `Goes with Grill, Fryer and Pastry`. Run the file and observe the extra comma before fixing.
+  keep selector/reader checks in this file. In `kitchen-print.language.test.ts`, use
+  its existing four-station fixture and grouped-order helpers to fire an English
+  order whose other-station cue has three names. Decode the queued print job and
+  assert the literal cue has no comma before `and`; observe the extra comma before fixing.
+  This must reach `enqueueKitchenTickets`, not call the formatter directly.
   Update existing reader assertions from reduced wording language to the full locale;
   retain every stored-settings unchanged assertion and unsupported-language fallback.
   Add a small table for the selector using two supported regional variants of another
   language: matching country, no country/region match (first), and no language match
   (fallback). The selector owns these choices; callers add no copies of those tests.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/kitchen-language.test.ts
-  src/kitchen-ticket.test.ts src/kitchen-print.language.test.ts` and
+  src/kitchen-ticket.test.ts src/kitchen-print.language.test.ts src/order-number-slip.test.ts
+  src/receipt-print.test.ts src/kitchen-print.allergy.test.ts` and
   `pnpm --filter @waitron/server typecheck`, observing passing test counts. Keep all
   raw-locale kitchen-ticket assertions unchanged: `en` remains a valid request to Intl.
-  The reader suite owns locale selection and the printed-list regression; existing
+  These raw-Intl wrapping cases are not examples of the new production English paper.
+  The reader suite owns locale selection and the print-language suite the queued cue; existing
   kitchen suites own paper wrapping, translation, reprints and correction slips.
 - [ ] Delete only the serial-comma point in `docs/backlog/till.md` and use
   `1 entry, size S.` for that bundle; change its `docs/backlog.md` count to 1.
@@ -44,7 +51,7 @@ Use `readTaxpayer` in the existing transaction, with its absent country treated 
 
 **Leave out:** changing the till, dashboard, shared helper, Spanish wording, raw `en`
 formatting, settings, guides, counter-order cues, and unrelated cleanup.
-**Expected size:** production 15–25 added/changed lines including three type annotations;
-tests 40–65 added/changed lines; docs this short plan and the two named backlog edits.
+**Expected size:** production 25–40 added/changed lines across kitchen-language.ts,
+kitchen-print.ts and order-number-slip.ts; tests 45–75 added/changed lines; docs this short plan and the two named backlog edits.
 No new package, file, setting, record or framework. Outside opinion before growth past
 roughly 140 production/test changed lines.
