@@ -425,3 +425,27 @@ test("a capped table holds grouped, wrapped headings together and reveals rows b
     root.querySelector('th[scope="col"]')!.getBoundingClientRect().bottom - 0.5,
   );
 });
+
+test("cell inline spacing preserves the narrow tree target and leaves other spacing alone", async () => {
+  const previous = { width: innerWidth, height: innerHeight };
+  onTestFinished(() => page.viewport(previous.width, previous.height));
+  await page.viewport(390, 844);
+  const el = await table({ rowParent: (row) => row.parent, searchable: true });
+  await vi.waitFor(() => expect(el.hasAttribute("narrow")).toBe(true));
+  const root = el.shadowRoot!;
+  const cell = root.querySelector<HTMLElement>('tbody tr[data-row-key="food"] td')!;
+  const toggle = cell.querySelector<HTMLElement>(".tree-toggle")!;
+  const toolbar = root.querySelector<HTMLElement>(".table-toolbar")!;
+  const toolbarGap = getComputedStyle(toolbar).gap;
+  expect(getComputedStyle(cell).paddingInlineStart).toBe("12px");
+  el.style.setProperty("--wt-table-cell-padding-inline", "var(--wt-space-1)");
+  for (const painted of root.querySelectorAll("th, td")) {
+    expect(getComputedStyle(painted).paddingInlineStart).toBe("4px");
+    expect(getComputedStyle(painted).paddingBlockStart).toBe("12px");
+  }
+  expect(box(toggle).width).toBe(44);
+  expect(box(toggle).height).toBe(44);
+  expect(box(toggle).left).toBeGreaterThanOrEqual(box(cell).left);
+  expect(getComputedStyle(toggle).marginInlineStart).toBe("-4px");
+  expect(getComputedStyle(toolbar).gap).toBe(toolbarGap);
+});

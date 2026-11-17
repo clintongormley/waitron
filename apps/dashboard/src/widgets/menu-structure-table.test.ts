@@ -4606,11 +4606,14 @@ it("offers localized remembered column choices for waitron.menu-structure.table"
   }
 });
 
-it.each(
-  [390, 600, 700, 1280].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))),
-)(
-  "keeps long Structure names and availability readable before Actions ($width px, $locale)",
-  async ({ width, locale }) => {
+it.each([
+  ...[390, 600, 700, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].map((locale) => ({ width, locale, font: "system" })),
+  ),
+  { width: 390, locale: "es-ES", font: "Verdana" },
+])(
+  "keeps long Structure names and availability readable before Actions ($width px, $locale, $font)",
+  async ({ width, locale, font }) => {
     const before = currentLocale();
     onTestFinished(() => setLocale(before));
     setLocale(locale);
@@ -4626,6 +4629,7 @@ it.each(
       })),
       current: ["m-drinks"],
     });
+    if (font !== "system") el.parentElement!.style.setProperty("--wt-font-family", font);
     await vi.waitFor(() => {
       const root = table(el).shadowRoot!;
       const scroll = root.querySelector<HTMLElement>(".scroll")!;
@@ -4639,8 +4643,9 @@ it.each(
       ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
       const treeCell = root.querySelector('[part~="tree-cell"]')!;
       expect(
-        treeCell.children[1]!.getBoundingClientRect().left - treeCell.getBoundingClientRect().left,
-      ).toBe(width === 390 ? 32 : 44);
+        treeCell.children[1]!.getBoundingClientRect().left -
+          treeCell.closest("td")!.getBoundingClientRect().left,
+      ).toBe(width === 390 ? 44 : 56);
       const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
       expect(names.length).toBeGreaterThan(2);
       if (width < 800) {

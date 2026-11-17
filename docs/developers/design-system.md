@@ -1547,8 +1547,7 @@ Otherwise a table is never narrower than its headings and cell text laid out on 
 where a cell caps its own width, and its box scrolls sideways when that is wider than the box. A table given `wrapToFit` (the `wrap-to-fit` attribute) lets its
 headings and cell text wrap at spaces first, so it scrolls only when even its longest words and its
 `white-space: nowrap` items do not fit. Structure uses this below 800 px of table width, with
-anywhere wrapping on its name stacks. At 440 px or less, Structure uses `--wt-space-1` heading
-padding and keeps the heading over the root name, so whole headings fit before Actions. The Menus
+anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults to `--wt-space-3`; Structure sets it to `--wt-space-1` at 440 px or less, for cells and the tree toggle’s reach, leaving vertical and toolbar spacing unchanged. The Menus
 list wraps below its wide layout. Products keeps its separately fitted names and default table scrolling. The primitive is checked by the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
 
@@ -1774,8 +1773,8 @@ while a search is typed, even one that matches itself, and what passes the filte
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
 match's place is held open. A tree whose box is 440px wide or less indents each level
 `--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
-one cell padding (`--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
-`--wt-tap-min` wide by reaching back over the 12 px before it, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
+one cell padding (`--wt-table-cell-padding-inline`, normally `--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
+`--wt-tap-min` wide by reaching back over that padding, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
 whole; its focus ring is then drawn inside the button, because a top-level
 one can sit against the scrolling box's edge. The table publishes
 the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
