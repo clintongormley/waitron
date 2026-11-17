@@ -79,19 +79,24 @@ Yes / No / Note: ____________________________________________
 *The situation.* The adviser answered that a meal is one service, supplied when it ends, and that
 the ticket is due then, not held back until the bill is fully paid.
 
-*What Waitron proposes.* The meal ends when staff close the table: at the last payment, or when they
-record that the table has left with part unpaid. The ticket is issued then and carries that date. A
-separate date of the meal appears only when the table is closed on a later trading day than its
-last dish was served (the venue's trading day ends at the start-of-day time it sets), for example a
-bill left open overnight by mistake; the date of the meal is then the day of its last dish.
+*What Waitron proposes.* When a table asks for the bill, staff print it: the ticket is issued at
+that moment, for everything on the bill, and the guests pay against it, in one payment or several.
+Separate bills at one table are printed separately. Before printing, staff are shown any dish not
+yet served, and may print anyway. A bill nobody printed is issued at its last payment, or when staff
+record that the guests left with part unpaid. The ticket carries the date it is issued. A separate
+date of the meal appears only when a bill is issued on a later trading day than its last dish was
+served (the venue's trading day ends at the start-of-day time it sets), for example a bill left open
+overnight by mistake; the date of the meal is then the day of its last dish.
 
-*Example.* The last dish is served at 23:40 on the 1st; the guests have coffee, then pay and leave at
-00:30 on the 2nd. With a 05:00 start of day, both fall in the evening's service: the ticket is dated
-the 2nd, with no separate date of the meal. With midnight, the ticket is dated the 2nd and shows the
-1st as the date of the meal.
+*Example.* The last dish is served at 23:40 on the 1st. At 00:20 on the 2nd the guests ask for
+the bill and staff print it; at 00:30 one pays half by card and the other the rest in cash. With a
+05:00 start of day, all of it falls in the evening's service: the ticket is dated the 2nd, with no
+separate date of the meal. With midnight, the ticket is dated the 2nd and shows the 1st as the date
+of the meal. Both payments are recorded against that ticket.
 
-*We ask:* Does the meal end when the table is closed, rather than when the last dish is served? Is
-the trading-day rule acceptable for a table closed late?
+*We ask:* Does the meal end when the bill is printed for the guests to pay, rather than when the
+last dish is served or when the last payment is made? Is the trading-day rule acceptable for a
+bill issued late?
 
 Yes / No / Note: ____________________________________________
 
@@ -610,23 +615,28 @@ Sí / No / Nota: ____________________________________________
 
 **3. Cuándo termina la comida (a partir de sus respuestas 1.1, 1.3 y 1.4).**
 
-*Situación.* Indica que una comida es un único servicio que se presta al terminar, y que el tique se
-expide entonces, sin quedar condicionado al cobro total.
+*Situación.* Indica que una comida es un único servicio que se presta al terminar, y que el tique
+se expide entonces, sin quedar condicionado al cobro total.
 
-*Propuesta de Waitron.* La comida termina cuando el personal cierra la mesa: con el último pago, o
-cuando registra que la mesa se ha marchado sin pagarlo todo. El tique se expide en ese momento y
-lleva su fecha. Solo se indica otra fecha de operación cuando la mesa se cierra en una jornada
-comercial posterior a la de su último plato (la jornada termina a la hora de inicio del día que fija
-el local), por ejemplo una cuenta que se dejó abierta por error durante la noche; la fecha de
-operación es entonces el día de su último plato.
+*Propuesta de Waitron.* Cuando la mesa pide la cuenta, el personal la imprime: el tique se expide en
+ese momento, por todo lo que figura en la cuenta, y los clientes pagan con él, en uno o varios
+pagos. Las cuentas separadas de una misma mesa se imprimen por separado. Antes de imprimir, el
+personal ve los platos aún no servidos y puede imprimir igualmente. Una cuenta que nadie imprimió se
+expide con su último pago, o cuando el personal registra que los clientes se han marchado sin
+pagarlo todo. El tique lleva la fecha en que se expide. Solo se indica otra fecha de operación
+cuando la cuenta se expide en una jornada comercial posterior a la de su último plato (la jornada
+termina a la hora de inicio del día que fija el local), por ejemplo una cuenta que se dejó abierta
+por error durante la noche; la fecha de operación es entonces el día de su último plato.
 
-*Ejemplo.* El último plato se sirve a las 23:40 del día 1; después toman café, y pagan y se marchan a
-las 00:30 del día 2. Con el inicio del día a las 05:00, ambos momentos caen en el servicio de la
-noche: el tique se fecha el día 2, sin otra fecha de operación. Con la medianoche, el tique se fecha
-el día 2 e indica el día 1 como fecha de la operación.
+*Ejemplo.* El último plato se sirve a las 23:40 del día 1. A las 00:20 del día 2 piden la cuenta
+y el personal la imprime; a las 00:30 uno paga la mitad con tarjeta y el otro el resto en
+efectivo. Con el inicio del día a las 05:00, todo cae en el servicio de la noche: el tique se fecha
+el día 2, sin otra fecha de operación. Con la medianoche, el tique se fecha el día 2 e indica el
+día 1 como fecha de la operación. Los dos pagos se registran contra ese tique.
 
-*Preguntamos:* ¿Termina la comida al cerrarse la mesa, y no al servirse el último plato? ¿Es
-aceptable la regla de la jornada comercial para una mesa cerrada tarde?
+*Preguntamos:* ¿Termina la comida cuando se imprime la cuenta para que los clientes paguen, y no al
+servirse el último plato ni con el último pago? ¿Es aceptable la regla de la jornada comercial para
+una cuenta expedida tarde?
 
 Sí / No / Nota: ____________________________________________
 
