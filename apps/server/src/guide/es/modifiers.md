@@ -166,19 +166,19 @@ tres nombres de la lista y los tres de la opción elegida, y la caja empareja po
 de cada una. Un extra conserva el producto y la lista de la que se eligió, así que otra lista que ofrece
 el mismo producto no puede ocupar su lugar sin avisar.
 
-En un pedido aparcado de caja, si cambias el nombre del personal de una lista o de una opción, o
-desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: pide al operador que abra esa línea y vuelva a
-elegir antes de poder enviar el pedido.
+Renombrar una lista o una opción deja un plato ya enviado a su estación tal como se envió, en su
+comanda, su cuenta y su ticket. Solo las líneas que aún no se han enviado toman el texto nuevo.
 
-Cambiar solo un nombre para el cliente o un nombre de estación de preparación sigue emparejando, así que nadie se
-queda parado en la caja, pero tiene un coste. El pedido recuerda los tres nombres, y Waitron no
-puede distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar o
-corregida la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
-texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
-precios a los que se vendieron. Una línea que la estación ya tiene se retira y se le vuelve a enviar
-como una comanda nueva. La caja rechaza el cambio si la estación ya ha empezado esa línea, si ya se ha servido parte de ella, o si
-**Cambios tras el envío** de la estación de esa línea, o de uno de sus extras enviado a otra
-estación, no lo permite. Cambia los nombres
-entre servicios y no mientras haya pedidos aparcados. Una lista de extras es la excepción, porque un
+En un pedido aparcado de caja, si cambias el nombre del personal de una lista o de una opción, o
+desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: en una
+línea que aún no se ha enviado, pide al operador que abra esa línea y vuelva a elegir antes de poder
+enviar el pedido.
+
+Cambiar solo un nombre para el cliente o un nombre de estación de preparación sigue emparejando, así
+que nadie se queda parado en la caja. El pedido recuerda los tres nombres, y Waitron no puede
+distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar o corregida
+la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
+texto nuevo en todas las líneas aún no enviadas que llevan la respuesta renombrada. Esas líneas
+conservan los precios a los que se vendieron. Una lista de extras es la excepción, porque un
 extra se empareja por su producto: renombrar una lista de extras, o el producto que contiene, no
 afecta a un pedido aparcado.

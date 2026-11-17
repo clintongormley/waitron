@@ -6208,6 +6208,9 @@ async function applyLineEdits(
     fresh: RequestedLine[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
+    /** Keep a sent dish's options answer unread: the till cannot edit one, and a rename cannot
+     * be told from a change. */
+    keepSentAnswers?: true;
   },
   operatorId: string | undefined,
   attendance?: OrderAttendance,
@@ -6411,7 +6414,9 @@ async function applyLineEdits(
       await requireMakeAtStation(tx, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
-    if (intent.options !== null) {
+    const keepAnswer =
+      plan.keepSentAnswers === true && (parent.sentAt !== null || parent.ticket?.firedAt != null);
+    if (intent.options !== null && !keepAnswer) {
       optionSnapshots =
         editLineOptions(
           modifiers.options,
@@ -7436,6 +7441,7 @@ export async function updateHeldOrder(
         removed: order.parents.filter((parent) => !claimed.has(parent.id)),
         fresh,
         refuseSentDrop: true,
+        keepSentAnswers: true,
       },
       req.operatorId,
       attendance,

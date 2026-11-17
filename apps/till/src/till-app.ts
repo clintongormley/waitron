@@ -8419,7 +8419,7 @@ export class TillApp extends LitElement {
       this.errorKey = "held.reread_failed";
       return false;
     }
-    const { lines, banner } = this.#basketLinesOf(order, zone.offered);
+    const { lines, banner } = this.#basketLinesOf(order, listed, zone.offered);
     if (banner !== undefined) this.errorKey = banner;
     this.#store.adoptSaved(
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
@@ -10110,7 +10110,7 @@ export class TillApp extends LitElement {
       this.#dismissStationChoices();
       this.#counterMoveSubmitting = null;
     }
-    const { lines, banner } = this.#basketLinesOf(order, offered);
+    const { lines, banner } = this.#basketLinesOf(order, listed, offered);
     if (banner !== undefined) this.errorKey = banner;
     this.#store.loadFrom(
       order.id,
@@ -10147,6 +10147,7 @@ export class TillApp extends LitElement {
    * changed. */
   #basketLinesOf(
     order: HeldOrder,
+    listed: StoredLines | null,
     offered: readonly TillProduct[] = this.products,
   ): { lines: OrderLine[]; banner?: StringKey } {
     const lines: OrderLine[] = [];
@@ -10180,7 +10181,10 @@ export class TillApp extends LitElement {
       // A still-offered list that nothing matched must be answered again: the server refuses the
       // edit until it is, and falling back to the list's default would change what the diner asked for.
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
-      if (answers.unanswered.length > 0) mustChooseAgain = true;
+      // A sent line is read-only, and a whole-order save keeps its answer.
+      const row = listed?.lines.find((each) => each.id === line.workingOrderLineId);
+      const sent = row !== undefined && (row.sentAt !== null || row.firedAt !== null);
+      if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
       lines.push({
         product,
         quantity: displayQuantity(product, line.quantity),

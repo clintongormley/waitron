@@ -1278,53 +1278,6 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   unless the owner says otherwise.
   [Detail](till.md#a841-slice-11-waitrons-own-headings-are-one-step-lighter-2026-10-27)
 
-## A1416. A started or served dish whose option was renamed blocks every save of its order until it is cancelled
-
-Left open by A1382. The order holds a dish the kitchen has started, or one any of which has been
-served (refused `ticket.already_served`), and that dish's options list or
-option is renamed and the menu published. Every change to the order is then refused, including a new
-dish, a change to another dish and the order's label, and nothing on screen says the rename is why.
-The run reached this on a table's bill moved to the counter and on the same bill saved whole while
-still at its table. A table's own routes are not affected: a note on another dish and a new round
-both saved. A counter order sent with Send did not reach it: once placed, a save answers
-`working_order.not_open`. Other routes to an open order holding a started dish were not looked for.
-
-**What the person sees.**
-
-- A customer or kitchen name changed: the save from Park, Send or Pay is refused and the till
-  reloads the order, dropping its unsaved changes, the added dish among them, and says the dish can
-  no longer be changed and to use Cancel on it. Each later save is refused the same way. The owner
-  chose (2026-11-07) to replace this path with a separate action for changing a sent dish (A1426);
-  A1426 built it, but the whole-order save still refuses, so this stays open.
-- A staff name changed: "An item's choices have changed — open the line and choose again". The
-  basket's line window is read-only on a dish already sent (run on a started dish), and Change dish
-  refuses a started dish, so nobody can; whether Change dish clears a dish not yet started was not
-  run. The box refuses each save `options.label_required`, started or not, and the till says "Could
-  not park the order, try again".
-
-**The ways out that ran:** cancel the started dish, then save; or rename it back and publish. Sending
-the order unchanged still works, so a dish added meanwhile has to go on another order (not run).
-
-**Receipt.** A throwaway server test on main 59be31e3b7, `pnpm --filter @waitron/server exec vitest
-run src/working-order.test.ts -t "A1382 probe" --coverage.enabled=false`: seven saves after a
-kitchen-name rename, adding a dish or changing only the other dish or the label, all printed `refused
-ticket.already_started`, the last with the dish `ready`, and the save after cancelling it printed
-`saved`. Controls printed `saved`: no rename, renamed but not
-published, and renamed with nothing started. The served case ran as a throwaway server test in
-R3-fixes (2026-11-11): after a serve and a published kitchen-name rename, basket saves were refused
-`ticket.already_served`; served with no rename, and renamed but only fired, saved. The till's reload
-and sentence run in `apps/till/src/till-app-counter-adjustments.test.ts` with the refusal stubbed; no
-real till ran this case.
-
-**State of the fix.** None built, and it is not small: it needs a decision on what a started dish's
-saved answer means. A save sends every line's answers again and the box compares them by value with
-what the line holds. An answer stores names and no ids, so a rename cannot be told from a different
-answer, which `docs/developers/modifiers.md` records as a decision and the guide states
-(`apps/server/src/guide/en/modifiers.md`). Having the box keep a started dish's answer whatever a save
-sends would silently drop a real change from a till that could not read the lines, whose line window
-stays editable (`#lineReadOnly`, by reading). The other routes, such as a mark from the till that the
-line was not touched or an id on the answer, change what the till and the box agree on.
-
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
 Left open by A1382 (`device.forbidden_action`), #3605 (eight `codes.ts` refusals) and #3604 (the
@@ -1481,8 +1434,7 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
   withdrawn label matches nothing, and the till surfaces `held.options_changed`. A whole-order
-  save after an options list is deleted removes its answer from a parked counter order;
-  a fired table dish is recalled and resent; a served one refuses `ticket.already_served`. Preserve
+  save after an options list is deleted removes its answer from a parked counter order. Preserve
   these recorded answers when reopening and saving the order.
 - **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
   the variant, and says it saved.** Needs a decision first about whether a basket edit may change a

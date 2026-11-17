@@ -153,17 +153,17 @@ is stored as wording, all three names of the list and all three of the chosen op
 matches on the staff name of each. An extra keeps the product and the list it was picked from, so
 another list offering the same product cannot silently take its place.
 
-On a parked counter order, changing the staff name of a list or an option, or turning an option off,
-means an options answer no longer matches. The till will not guess: it asks the operator to open that line and choose again before the
-order can be sent.
+Renaming a list or an option leaves a dish already sent to its station as it was sent, on its
+ticket, bill and receipt. Only lines not yet sent take the new wording.
 
-Changing only a customer-facing or prep station name still matches, so nobody is stopped at the till, but
-it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
-different one. So once the menu is published again or patched, the next change made to that parked order, even
-to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
-the prices they were sold at. A line the station already has is recalled and sent to it again as a
-new ticket. The till refuses the change instead if the station has started such a line, if any of it has been served, or if **Changes after sending**
-at the station of that line, or of one of its extras routed elsewhere, does not allow it. Do your renaming between
-services rather than while orders are parked.
+On a parked counter order, changing the staff name of a list or an option, or turning an option off,
+means an options answer no longer matches. The till will not guess: on a line not yet sent, it asks
+the operator to open that line and choose again before the order can be sent.
+
+Changing only a customer-facing or prep station name still matches, so nobody is stopped at the till.
+The order remembers all three names, and Waitron cannot tell a renamed answer from a different one.
+So once the menu is published again or patched, the next change made to that parked order, even to
+another line, saves the new wording onto every line not yet sent that carries the renamed answer.
+Those lines keep the prices they were sold at.
 An extras list is the exception, because an extra is matched by its product: renaming an extras
 list, or the product on it, leaves a parked order alone.

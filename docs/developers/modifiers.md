@@ -298,10 +298,16 @@ ids, so the wording is the only evidence the line carries about what was chosen,
 be told from a different answer. Giving the comparison an id to use would mean putting one on the
 line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
 list was renamed between the two sends, freezing the new name"
-(`apps/server/src/working-order.test.ts`). On a line the kitchen already has, a changed answer is a
-change like any other: the kitchen gets a recall notice and a new ticket, unless the kitchen has started it, any of it has been served, or its stations'
-Changes after sending refuse it (`ticket.already_started`, `ticket.already_served`,
-`ticket.already_fired`). An EXTRAS list is different: its children are compared by
+(`apps/server/src/working-order.test.ts`). A line already sent (sent, or its ticket fired) is
+different on a whole-order save: `updateHeldOrder` passes `keepSentAnswers` to `applyLineEdits`,
+which then neither checks nor freezes that line's options answer, so it keeps what was sent whatever
+the request carries (owner decision 2026-11-17, A1416), pinned by "saves the whole order around a
+$state dish whose option's $renamed was renamed, keeping what was sent". Changing one sent dish
+through `updateOrderLine` still treats a changed answer as a change like any other: the kitchen
+gets a recall notice and a new ticket, unless the kitchen has started it, any of it has been served,
+or its stations' Changes after sending refuse it (`ticket.already_started`,
+`ticket.already_served`, `ticket.already_fired`), pinned by "still recalls and resends a fired dish
+whose options answer one dish's change replaces". An EXTRAS list is different: its children are compared by
 the list's and the picked product's ids, so renaming the list — or the product — disturbs nothing and
 the line is preserved.
 
@@ -314,10 +320,11 @@ answer's STAFF names back against the dish's live offer and rebuilds the `{ list
 which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
 `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
 the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
-the server then freezes the new wording on that line, as it does for any other changed wording. What it will not
+the server then freezes the new wording on that line if it is not yet sent. What it will not
 do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
 tells the operator to open the line and choose again rather than substituting the list's own
-default.
+default — on a line not yet sent only (`#basketLinesOf`, `apps/till/src/till-app.ts`): a sent line
+is read-only and the server keeps its answer.
 
 ## What a till is offered
 
