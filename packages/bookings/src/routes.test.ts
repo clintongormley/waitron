@@ -528,6 +528,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
       contactPhone: null,
       notes: null,
       tableId: null,
+      tableName: null,
     });
   });
 });

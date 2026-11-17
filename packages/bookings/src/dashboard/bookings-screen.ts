@@ -66,6 +66,7 @@ export class BookingsScreen extends LitElement {
         color: var(--wt-color-text);
       }
       .party,
+      .table,
       .status {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -404,6 +405,14 @@ export class BookingsScreen extends LitElement {
     return nothing;
   }
 
+  #renderTable(b: Booking): TemplateResult | typeof nothing {
+    const label = b.tableName;
+    if (label === null || label === "") return nothing;
+    return html`<span class="table" data-test="row-table"
+      >${t("booking.row_table").replace("{label}", () => label)}</span
+    >`;
+  }
+
   #renderRow(b: Booking): TemplateResult {
     const arming = this.seatingId === b.id;
     return html`<wt-card data-test="row">
@@ -412,6 +421,7 @@ export class BookingsScreen extends LitElement {
           <span class="time" data-test="row-time">${b.bookingTime.slice(0, 5)}</span>
           <span class="name" data-test="row-name">${b.contactName}</span>
           <span class="party" data-test="row-party">${b.partySize}</span>
+          ${this.#renderTable(b)}
           <span class="status" data-test="row-status">${bookingStatusName(b.status)}</span>
         </div>
         ${this.#renderControls(b)}

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
-import { BOOKINGS_STRINGS, bookingStatusName } from "./strings.js";
+import { BOOKINGS_STRINGS, bookingStatusName, t } from "./strings.js";
 import { today } from "./date-utils.js";
 import type { Booking, BookingApi, DashboardTable } from "./client.js";
 import type { BookingForm } from "./booking-form.js";
@@ -25,6 +25,7 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     notes: null,
     tableId: null,
     tableLabel: null,
+    tableName: null,
     tabId: null,
     status: "booked",
     createdBy: "p1",
@@ -37,7 +38,13 @@ function booking(overrides: Partial<Booking> = {}): Booking {
 // orders them rather than trusting insert order.
 const BOOKINGS: Booking[] = [
   booking({ id: "bk-late", bookingTime: "20:00:00", contactName: "Morgan" }),
-  booking({ id: "bk-early", bookingTime: "13:30:00", contactName: "Taylor", tableId: "t-2" }),
+  booking({
+    id: "bk-early",
+    bookingTime: "13:30:00",
+    contactName: "Taylor",
+    tableId: "t-2",
+    tableName: "Table 2",
+  }),
 ];
 
 function stubApi(overrides: Partial<BookingApi> = {}): BookingApi {
@@ -82,7 +89,7 @@ describe("bookings-screen", () => {
     expect(api.listBookings).toHaveBeenCalledWith(today());
   });
 
-  it("renders the day list ordered by time, each row as time · party · name · status", async () => {
+  it("renders the day list ordered by time, each row as time · name · party · table · status", async () => {
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", {
       api: stubApi(),
     });
@@ -95,6 +102,9 @@ describe("bookings-screen", () => {
     // Time is HH:MM (sliced from the server's HH:MM:SS), party + name shown.
     expect(rows[0]!.querySelector("[data-test=row-name]")!.textContent).toContain("Taylor");
     expect(rows[0]!.querySelector("[data-test=row-party]")!.textContent).toContain("4");
+    expect(rows[0]!.querySelector("[data-test=row-table]")!.textContent!.trim()).toBe(
+      t("booking.row_table").replace("{label}", "Table 2"),
+    );
   });
 
   it("labels the status through the i18n layer (no hardcoded literal) and defaults to English", async () => {
@@ -686,6 +696,22 @@ it("refreshes the selected day's bookings after an external change", async () =>
   await vi.waitFor(() => expect((el as unknown as { bookings: Booking[] }).bookings).toEqual([]));
 });
 
+it("re-reads the day's bookings when a table changes, so a renamed table's row follows", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  vi.mocked(api.listBookings).mockResolvedValue([
+    booking({ id: "bk-early", contactName: "Taylor", tableId: "t-2", tableName: "Window" }),
+  ]);
+  liveData.invalidate([{ type: "dining_tables", id: "t-2" }]);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=row-table]")?.textContent!.trim()).toBe(
+      t("booking.row_table").replace("{label}", "Window"),
+    ),
+  );
+});
+
 it("refreshes the tables through the api's background copy after an external change", async () => {
   const liveData = new LiveData();
   const background = stubApi({ listTables: vi.fn().mockResolvedValue([TABLES[0]]) });
@@ -892,4 +918,59 @@ it("updates the default seating table after the page language changes", async ()
   } finally {
     setLocale(previous);
   }
+});
+
+describe("the table each booking row shows", () => {
+  async function rowTables(
+    locale: string,
+    bookings: Booking[],
+  ): Promise<Record<string, string | null>> {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const api = stubApi({ listBookings: vi.fn().mockResolvedValue(bookings) });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      const rows = [...el.shadowRoot!.querySelectorAll("[data-test=row]")];
+      return Object.fromEntries(
+        rows.map((row) => [
+          row.querySelector("[data-test=row-name]")!.textContent!.trim(),
+          row.querySelector("[data-test=row-table]")?.textContent!.trim() ?? null,
+        ]),
+      );
+    } finally {
+      setLocale(before);
+    }
+  }
+
+  it("shows the table name the server sent, whether or not the table is on the seating list", async () => {
+    const shown = await rowTables("en-GB", [
+      booking({ id: "bk-a", contactName: "Ana", tableId: "t-1", tableName: "Window" }),
+      booking({ id: "bk-b", contactName: "Bea", tableId: "t-off-floor", tableName: "Patio" }),
+    ]);
+    expect(shown).toEqual({ Ana: "Table Window", Bea: "Table Patio" });
+  });
+
+  it("shows no table when the booking has none", async () => {
+    const shown = await rowTables("en-GB", [
+      booking({ id: "bk-a", contactName: "Ana", tableId: null, tableName: null }),
+    ]);
+    expect(shown).toEqual({ Ana: null });
+  });
+
+  it("shows no table when the table's name is empty", async () => {
+    const shown = await rowTables("en-GB", [
+      booking({ id: "bk-a", contactName: "Ana", tableId: "t-1", tableName: "" }),
+    ]);
+    expect(shown).toEqual({ Ana: null });
+  });
+
+  it("names the table in Spanish", async () => {
+    const shown = await rowTables("es-ES", [
+      booking({ id: "bk-a", contactName: "Ana", tableId: "t-1", tableName: "Terrace 7" }),
+    ]);
+    expect(shown).toEqual({
+      Ana: BOOKINGS_STRINGS.es["booking.row_table"].replace("{label}", "Terrace 7"),
+    });
+  });
 });

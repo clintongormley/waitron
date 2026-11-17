@@ -1,12 +1,15 @@
 // Booking operations run on the caller's transaction. Route handlers own authorization.
 import "./errors.js";
-import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, sql, type InferSelectModel } from "drizzle-orm";
 import { tableInService, diningTables, type Transaction } from "@waitron/db";
 import { AppError, isValidGuestCount } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
 export type Booking = InferSelectModel<typeof bookings>;
+
+/** `tableName` is the assigned table's current label, or a removed table's kept name. */
+export type ListedBooking = Booking & { tableName: string | null };
 
 export interface CreateBookingInput {
   bookingDate: string;
@@ -84,8 +87,12 @@ export async function createBooking(
 
 export function bookingsOnDay(tx: Transaction, date: string) {
   return tx
-    .select()
+    .select({
+      ...getTableColumns(bookings),
+      tableName: sql<string | null>`coalesce(${diningTables.label}, ${bookings.tableLabel})`,
+    })
     .from(bookings)
+    .leftJoin(diningTables, eq(diningTables.id, bookings.tableId))
     .where(eq(bookings.bookingDate, date))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
@@ -93,7 +100,7 @@ export function bookingsOnDay(tx: Transaction, date: string) {
 export async function listBookings(
   tx: Transaction,
   { date }: { date: string },
-): Promise<Booking[]> {
+): Promise<ListedBooking[]> {
   return bookingsOnDay(tx, date);
 }
 
@@ -109,7 +116,8 @@ export async function updateBooking(
 ): Promise<void> {
   requireValidBooking(patch);
   const tableChanges = patch.tableId !== undefined && patch.tableId !== null;
-  if (tableChanges || patch.bookingDate !== undefined) {
+  let tableLabel: null | undefined;
+  if (patch.tableId !== undefined || patch.bookingDate !== undefined) {
     const [stored] = await tx
       .select({ bookingDate: bookings.bookingDate, tableId: bookings.tableId })
       .from(bookings)
@@ -119,6 +127,9 @@ export async function updateBooking(
       patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
     if (tableId !== null && (tableChanges || dateChanges)) {
       await requireActiveTable(tx, tableId);
+    }
+    if (patch.tableId !== undefined && patch.tableId !== (stored?.tableId ?? null)) {
+      tableLabel = null;
     }
   }
   const updated = await tx
@@ -132,6 +143,7 @@ export async function updateBooking(
       contactPhone: patch.contactPhone,
       notes: patch.notes,
       tableId: patch.tableId,
+      tableLabel,
     })
     .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });

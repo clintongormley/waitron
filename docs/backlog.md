@@ -799,8 +799,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   bookings in both places can double-book a table. Not started.
 
 - **Loose ends left by A429 slice 1 (#1493).**
-  The bookings list shows no table for any booking, and a past booking's kept table name
-  (`bookings.table_label`) is stored but shown nowhere.
+  No boot-level test of the till API's table-removal seats, and two small floor-plan refusals.
   [Detail](backlog/till.md#loose-ends-left-by-a429-slice-1-1493)
 
 - **One measuring pass over the till at 390 and 1024** (1 entry remains for the owner's floor-map redesign; header observations stay with the top-bar bundle). [Detail](backlog/till.md#bundle-one-measuring-pass-over-the-till-at-390-and-1024)

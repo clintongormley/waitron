@@ -41,6 +41,7 @@ const baseOnlyReaders = [
   "till:menu", // Available offers depend on the zone.
   "till:transfers", // Transfers show destination table names.
   "till:allergy", // Allergy context includes party tables.
+  "bookings:bookings", // Booking rows name their tables.
 ];
 it("retains every base table and zone dependency", () => {
   const actual = Object.entries({ dashboard, "venue-service": service, bookings, till }).flatMap(

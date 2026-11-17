@@ -70,6 +70,7 @@ const EDIT_BOOKING: Booking = {
   notes: "Window",
   tableId: "t-2",
   tableLabel: null,
+  tableName: "Table 2",
   tabId: null,
   status: "booked",
   createdBy: "p1",

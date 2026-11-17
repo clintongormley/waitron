@@ -1,4 +1,4 @@
 export const QUERY_DEPENDENCIES = {
-  bookings: ["bookings"],
+  bookings: ["bookings", "dining_tables"],
   tables: ["dining_tables", "dining_tables.today", "floor_zones"],
 } as const;
