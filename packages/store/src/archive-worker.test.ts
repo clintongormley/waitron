@@ -118,7 +118,7 @@ describe("archiveInWorker", () => {
     }
   });
 
-  it("aborts a running copy and removes its partial file before answering", async () => {
+  it("waits for a running copy, then discards it on abort before answering", async () => {
     const { source, target } = fixture(true);
     const controller = new AbortController();
     const copy = archiveInWorker(source, target, controller.signal);

@@ -15,7 +15,7 @@ const copyScript = `
   }
 `;
 
-/** The caller holds the venue folder until this promise settles, including after an abort. */
+/** The caller holds the venue folder until the copy finishes, including after an abort. */
 export async function archiveInWorker(
   sourcePath: string,
   targetPath: string,
@@ -34,20 +34,15 @@ export async function archiveInWorker(
     });
     await new Promise<void>((resolve, reject) => {
       let failure: unknown;
-      const abort = () => {
-        void worker.terminate();
-      };
       worker.once("error", (error) => {
         failure = error;
       });
       worker.once("exit", (code) => {
-        signal?.removeEventListener("abort", abort);
         if (signal?.aborted) reject(signal.reason);
         else if (failure) reject(failure);
         else if (code !== 0) reject(new Error(`Archive worker exited with code ${code}`));
         else resolve();
       });
-      signal?.addEventListener("abort", abort, { once: true });
     });
     signal?.throwIfAborted();
     await rename(working, targetPath);

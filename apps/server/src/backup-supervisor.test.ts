@@ -2140,6 +2140,40 @@ describe("scheduled backup passes", () => {
     }
   });
 
+  it("a runner stop reaches the copy and prevents upload", async () => {
+    let entered!: (signal: AbortSignal) => void;
+    let release!: () => void;
+    const reached = new Promise<AbortSignal>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, target, signal) => {
+      entered(signal!);
+      await held;
+      await archive(source, target, signal);
+    });
+    const { sup, dest } = await prepared();
+    const controller = new AbortController();
+    let running: Promise<unknown> | undefined;
+    try {
+      await sup.reload();
+      running = sup.pass(new Date("2026-11-17T12:00:00Z"), controller.signal);
+      const copySignal = await reached;
+      controller.abort();
+      expect(copySignal.aborted).toBe(true);
+      release();
+      await running;
+      expect(await listArchives(dest)).toEqual([]);
+    } finally {
+      release();
+      await running;
+      await sup.stop();
+    }
+  });
+
   it("a primary pass reloads settings last loaded while not primary", async () => {
     const { sup, refs, dest } = await prepared();
     refs.role = "secondary";

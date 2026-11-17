@@ -22,6 +22,24 @@ calls it. Writes stay on the main thread.
 README §7; CLAUDE.md §3 ("One process owns a venue folder at a time"; Litestream's
 `_litestream_seq`, `_litestream_lock` and `.venue.db-litestream/`). Slice rules apply.
 
+## 2026-11-17 cancellation amendment — watcher-cleared at 21:28
+
+The build's two Claude run-it reviews and the driver's 600 MB probe found that terminating the
+worker did not interrupt a running `VACUUM INTO`. A running copy finishes before an abort rejects,
+then its working file is removed and nothing is uploaded. Reload, close and stepdown can therefore
+wait for that copy. The Mac probes measured about 1–2 seconds per GB; this is not a time bound.
+
+This replaces the termination constraint, Review Focus 3 and Task 1's abort-test wording below.
+Remove `worker.terminate`; the abort test asserts completion followed by discard and cleanup.
+For Task 2, `runOnce` passes its actual sweep signal to `archive(outFile, signal)`, which the
+supervisor forwards to `archiveInWorker`, covering both reload and runner stops. Add the sweep
+module to the changed files for that forwarding and remove its two stale `archiveTo` comments.
+Keep the no-upload and cleanup assertions. No interruptible-copy design is part of this slice.
+
+The watcher also cleared the authority record: the A1308 programme and lane assignment, the earlier
+plan review as recorded in the queue, and the watcher's build and amendment clearances. No owner
+approval of this slice's design is claimed.
+
 ## What it builds
 
 `archiveInWorker`, its use by the backup sweep, and a test that the main thread keeps answering

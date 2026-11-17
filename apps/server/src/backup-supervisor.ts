@@ -313,8 +313,8 @@ export class BackupSupervisor {
         stateDir: this.#deps.stateDir,
         venueDir: this.#deps.venueDir,
         stagingDir: join(this.#deps.stateDir, BACKUP_STAGING_DIR),
-        archive: (outFile) =>
-          archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, controller.signal),
+        archive: (outFile, signal) =>
+          archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, signal),
         stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,
