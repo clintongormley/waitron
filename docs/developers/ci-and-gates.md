@@ -432,6 +432,7 @@ local call in `ci.yml`, rather than substituting the checked-out PR head.
 | Natural server choice and completed PR | [43762363482/1](https://github.com/clintongormley/waitron/actions/runs/43762363482), `dae0624175bb2b25b029f5011fcd7c2b8a62cb7c` | `409ba29a3530164811315c2090a41c4ad05bab86`; planner `132959766471` / `22063` | At 21:13:37 UTC, fresh server 1+0/12 versus hosted 2+0/20 selected server. All 13 selected server jobs and the hosted aggregate passed. |
 | Natural idle server choice | [43763090634/1](https://github.com/clintongormley/waitron/actions/runs/43763090634), `a06769381334fd3f9609c6012269f0bebbdf5e87` | Same commit; planner `132962043266` / `1000350116` | At 21:20:33 UTC, fresh server 0+0/12 selected server without hosted counts, age 19172 ms. Four server jobs and the aggregate passed. |
 | Natural busy server, hosted choice | [43762851651/1](https://github.com/clintongormley/waitron/actions/runs/43762851651), `6e38f045569187a9e3028865e8714669fc6ff007` | `95fbb76b1e0762c5e09191e612372ccaaf5b87f8`; planner `132961296135` / `22076` | At 21:18:32 UTC, fresh server 7+0/12 versus hosted 1+0/20 selected hosted, age 129872 ms. The server planner and 77 hosted jobs passed. |
+| Natural agreeing-row inventory exception | [43948927220/1](https://github.com/clintongormley/waitron/actions/runs/43948927220), `16f327ed8a3c80b800e454665c47e166627a7eac` | `d7aff3a1b35bacf68a0dcf82f6030b945d56e777`; planner `133585902765` / `25670` | On 16 November at 20:22:33 UTC, empty agreeing queued-run rows with starting counts 1,1 were accepted; the subsequent hosted choice and all 38 selected jobs, including aggregate `133590760703`, passed. |
 
 API runner names for the disposable jobs above are `dt-1314919489-RUN-1-JOB`;
 labels are `self-hosted` plus the job-family label, not that runner name. The health
@@ -470,6 +471,19 @@ These are observations of the repaired module, not new capacity or speed qualifi
 Raw attempt records, source identities and logs are retained in Lane I's
 `receipts/ci-routing-post-3514-20261116/`. Use creation-to-start intervals only as a proxy;
 the retry's retained jobs include inconsistent timestamps, so no wait is inferred for them.
+
+**17 November, natural stale-count reconciliation.** The last row above closes only
+routing's agreeing-row inventory proof from the earlier observation. The planner logged empty
+run IDs, `rows=0`, `counts=1,1` and cutoff `2026-11-15T20:22:32.234Z`, then selected hosted
+from fresh capacity at 20:22:43 UTC: server 1+0/12 versus hosted 0+0/20, snapshot age 68865 ms.
+Its runner was `dt-1314919489-43948927220-1-133585902765`, version `2.338.2`;
+the remaining selected jobs ran on GitHub. Attempt-specific jobs and the planner log,
+rechecked against the exact workflow/module source, are retained in Lane I's
+`receipts/ci-stale-count-20261117/` and `receipts/ci-idle-20261116-2123/`.
+The workflow identity comes from the referenced local reusable workflow; `ci.yml` fetches the
+routing module at `GITHUB_WORKFLOW_SHA`. Planner shortfall recovery, scheduled idle pickup and
+the other [qualification gaps](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
+remain open. This records an event, with no speed or whole-bundle qualification claim.
 
 The public repository still exposes the runner VM, host and reachable network to code that
 obtains admission. Labels are routing information, not isolation. Lane I owns disposable VMs
