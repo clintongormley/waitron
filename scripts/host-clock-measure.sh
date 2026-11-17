@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
-# A798-B slice 9b's measurement: can a root service on a systemd host set the wall clock and the
-# battery clock, keep its time service in charge, and answer an unprivileged container through a
-# socket? Rows M1–M9 are the plan's table
-# (docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md, "Measurement").
 # It SETS THIS MACHINE'S CLOCK: run it only on a throwaway runner, never on a box or a laptop.
-# Every line it prints starts "M<n>:"; a row's verdict line ends "expected", "FAILING CASE" or
-# "not measured". It exits 1 when any of M2–M6, M8 or M9 printed its failing case.
-# With --shipped it measures instead the files deploy/box/ ships (Task 4: M5′, M7′, M8′, M9′,
-# M10′), after a first run has written the time service's name to $RUNNER_TEMP/time-unit.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -98,7 +90,6 @@ if [ "${1:-}" = --shipped ]; then
   install -m 0644 deploy/box/waitron-box.socket deploy/box/waitron-box@.service "$UNIT_DIR/"
   $T systemctl daemon-reload
 
-  # ---- M9′: the shipped units, as systemd reads them
   rc=0
   out=$($T systemd-analyze verify "$UNIT_DIR/waitron-box.socket" "$UNIT_DIR/waitron-box@.service" 2>&1) || rc=$?
   say M9′ "systemd-analyze verify rc=$rc output: ${out:-<none>}"
@@ -111,7 +102,6 @@ if [ "${1:-}" = --shipped ]; then
     verdict M9′ no "the shipped units are not read as written"
   fi
 
-  # ---- M5′: the shipped socket and handler, from an unprivileged container
   rc=0
   $T systemctl start waitron-box.socket || rc=$?
   say M5′ "socket start rc=$rc; $(stat -c '%A %U:%G' /run/waitron-box/box.sock 2>&1)"
@@ -138,7 +128,6 @@ if [ "${1:-}" = --shipped ]; then
   $T journalctl -t waitron-box --no-pager -n 3 -o cat 2>&1 | sed 's/^/M5′: logged: /' || true
   verdict M5′ "$m5_ok" "the shipped handler answers status and sets the host clock for an unprivileged container, then starts $UNIT again${m5_why:+ — but:$m5_why}"
 
-  # ---- M8′: a backward set through the shipped handler moves timesyncd's clock file with it
   CLOCK_FILE=/var/lib/systemd/timesync/clock
   made_clock=no
   if [ ! -e "$CLOCK_FILE" ]; then
@@ -161,7 +150,6 @@ if [ "${1:-}" = --shipped ]; then
   fi
   [ "$made_clock" = yes ] && rm -f "$CLOCK_FILE"
 
-  # ---- M7′: compose mounts the socket's folder only when .env names it
   : >"${RUNNER_TEMP:-/tmp}/empty.env"
   for value in "" /run/waitron-box; do
     mount=$(WAITRON_BOX_SOCKET_DIR="$value" $T docker compose --env-file "${RUNNER_TEMP:-/tmp}/empty.env" -f deploy/compose.yml config --format json 2>&1 \
@@ -175,7 +163,6 @@ if [ "${1:-}" = --shipped ]; then
     verdict M7′ no "the app's mount does not follow the variable"
   fi
 
-  # ---- M10′: a kill at RuntimeMaxSec still starts the time service again (ExecStopPost)
   mkdir -p "$UNIT_DIR/waitron-box@.service.d"
   cat >"$UNIT_DIR/waitron-box@.service.d/measure.conf" <<DROPIN
 [Service]
@@ -213,7 +200,6 @@ DROPIN
   exit 0
 fi
 
-# ---- M1: which time service runs, and is it in the list set-time and set-ntp know?
 say M1 "$($T timedatectl show -p NTP -p NTPSynchronized | tr '\n' ' ')"
 say M1 "systemd: $($T systemd --version | head -1)"
 LISTED=""
@@ -249,7 +235,6 @@ else
   fi
 fi
 
-# ---- M2: set-time while the unit runs (the control for M3)
 before=$(date +%s)
 rc=0
 out=$($T timedatectl set-time "@$((before + 120))" 2>&1) || rc=$?
@@ -262,7 +247,6 @@ else
   verdict M2 no "the clock moved or the refusal differs: stopping the unit may not be needed"
 fi
 
-# ---- M3: stop the unit at runtime only, set with a fraction, read every clock
 enabled_before=$($T systemctl is-enabled "$UNIT" 2>&1 || true)
 REF_WALL_NS=$(wall_ns)
 REF_UP=$(uptime_s)
@@ -311,7 +295,6 @@ else
   fi
 fi
 
-# ---- M4: start the unit again; does network time win within 120 s?
 $T systemctl start "$UNIT" || say M4 "starting $UNIT failed"
 off=$(true_offset_s)
 say M4 "offset from the reference just after start: $off s"
@@ -324,7 +307,6 @@ done
 say M4 "offset after polling: $off s"
 verdict M4 "$m4_ok" "the time service brings the clock back to network time within 120 s"
 
-# ---- M5, M6, M9: a socket a container user may reach, and a request with a time limit
 mkdir -p "$MEASURE_DIR" "$HANDLER_DIR"
 chmod 0755 "$MEASURE_DIR" "$HANDLER_DIR"
 cat >"$HANDLER_DIR/handler.sh" <<HANDLER
@@ -400,7 +382,6 @@ if [ -z "$after_ms" ] || ! within "$after_ms" "$set_target" 2000; then
 fi
 verdict M5 "$m5_ok" "an unprivileged container reads status, sets the host clock, and shares the host's boot id${m5_why:+ — but:$m5_why}"
 
-# ---- M5b: the plan's fallback for a refused numeric group: a named host group with gid 10001
 if getent group 10001 >/dev/null; then
   say M5b "not measured (gid 10001 already names $(getent group 10001 | cut -d: -f1))"
 else
@@ -437,7 +418,6 @@ fi
 
 say M7 "not measured — Docker Desktop on the plan's Mac was not answering on 2026-10-31; the bind is optional for development"
 
-# ---- M8: after a backward set, does touching the saved-clock file keep the next boot behind?
 CLOCK_FILE=/var/lib/systemd/timesync/clock
 if [ ! -e "$CLOCK_FILE" ]; then
   say M8 "not measured (no file $CLOCK_FILE on this runner)"
