@@ -768,6 +768,29 @@ On the Debian 13 test box once the watcher reports it back, or a preproduction b
 
 **PRs 3-4:** press Make the series, block 443 and UDP 123, press Restore backup. **Expect** the waiting line and page, `failures` unchanged over five minutes, one log line a minute, the start-failure log not grown (`wc -c` before and after); unblock UDP 123 only and expect the restore to finish within about two minutes with no AEAT ask. Report one try's length from the log times.
 
+### As run on the test box, 2026-11-17
+
+On the Debian 13 test box (192.168.10.10), lane B, main 7cf65e7eea, on a restored Live venue kept pre-production by `WAITRON_ENV=dev` in a `compose.override.yml`. `WAITRON_FISCAL_TEST_SUBMISSIONS=enabled` was added for each check that needs a box that files, and removed after: without it the start does not wait, and a first try of step 2 sold through a waiting start for that reason. Two browsers on the Mac stood in for the till and the handheld. The server counts devices at one address as one witness (`packages/fiscal/src/clock-witnesses.ts`) and ignores readings from the box's own addresses, so the handheld's browser reached the box through a relay container with an address of its own. "Blocked" is an `nft` drop on UDP 123 (and outbound TCP 443 where named). Times are UTC from the box log; the full log is lane B's ledger, runs 5 and 6.
+
+| Check | Result |
+| --- | --- |
+| PR 1a (1): three reboots (R4) | Met: on each boot the server's first clock look came before the time service's first synchronisation, by 23.5, 23.4 and 23.3 s; internet confirmation followed about 37 s after the first look |
+| PR 1a (2): UDP 123 blocked, restart | Met: "(1 of 2 so far)" and a cash sale refused with the waiting words; the second device opening gave one `clock_start.confirmed` with source `devices`, and the next sale went through. The second device had not finished signing in, so this ran PR 1c's path |
+| PR 1a (2): clock 2 days ahead | Met except the requester: the devices did not confirm ("0 of 2 so far"); This device made one `clock.set` and the next sale was dated right. The requester read `admin`, not `staff`, because the till's only signed-in person was the administrator; a Staff user made for the run never appeared on the till's PIN screen (not traced) |
+| PR 1a (3): WAN unplugged, one real tablet | Not run: needs hands on the hardware |
+| PR 1a (4): clock service stopped (D12) | Met: `clock_start.waiting` with `hostAnswers` false; Box status showed D12's sentence; two devices confirmed |
+| PR 1a (5): power off at the wall | Not run: needs hands on the hardware |
+| PR 1c: both devices at the PIN screen, nobody signed in | Met with the two browsers: "(1 of 2 so far)" on the PIN screen; the second device confirmed 27 s after its page loaded, with no tap. Not yet on two real tablets |
+| PR 1b: UDP 123 blocked (in place of the WAN unplugged), no till on, clock 2 days ahead, a phone-sized browser | Met: "Check with this device's time" on Box status made one `clock.set` with requester `admin`; the next sale was dated right |
+| PR 2: AEAT's test service (`prewww1.aeat.es`) | Met: after "The date and time are right", three cash sales dated a day ahead were each refused `1112` ("El campo FechaExpedicionFactura es superior a la fecha actual."); one `clock_start.future_date_refused`; a fourth sale refused at the till; This device on the till set the clock back; a fifth sale filed `Correcto` while the three stay refused; no `fiscal.refusals_repeated` |
+| PRs 3-4: 443 and UDP 123 blocked after the series was named, then Restore backup | Replaced by the restore plan (`2026-11-13-a1420-restore-series-check.md`, PR 3b1): the database was placed 3.6 s after the press in the same boot, on the page's series choice, so there was no waiting page and no tries; `failures` 0 after five minutes. Unblocking UDP 123 only: internet confirmation 111 s later, with no AEAT time ask. The restore that must wait (after a reboot) is that plan's PR 4 (1) and PR 3b2, met there |
+
+Seen on the way, none of them a failed expectation:
+- A new sale is not sent at once; it waits for the filing loop's next pass. PR 2's sales were sent with the route Box status's "Retry now" calls (`POST /management-api/fiscal-outbox/retry`); the button itself is offered only after a failed send.
+- Each clock step signed the dashboard out ("Please log in to continue").
+- With test filing on and no certificate installed, `/health` answers 503 (`credentials.missing`).
+- The dashboard offers no way to remove an installed AEAT certificate, only Replace and Diagnose.
+
 ## Deliberately unchanged, and limits
 
 - **A venue whose network blocks the time protocol confirms by devices or a person at every start** (R4); with PIN-screen tablets (PR 1c) that needs nobody to tap. Nothing falls back to AEAT's time (owner: "NTP is the answer for now"); the existing `clock.sync_off` alert tells the administrator the time service is not synchronised.
@@ -783,7 +806,7 @@ On the Debian 13 test box once the watcher reports it back, or a preproduction b
 - **Before PR 5**, a clock that a confirmation or the sync leaves more than a minute behind the latest sale still meets today's stop; its existing "Check the time" and AEAT paths lift it as today.
 - **The record remedies are not gated** (R7): production refuses them all. A1407's entry carries the rule for the day one is switched on.
 - **Promotion and first setup keep their own series check**; the restore and setup pages keep their own clock check, because a person on a page can act. A box that becomes primary without a restart is gated by D1 until its time is confirmed.
-- **Nothing measured on a real box yet**: R4's timing, the router path, the device confirmation and a real `1112` are Task 19's.
+- **Not yet measured on a real box**: the router path (WAN unplugged), a power cut, and two real tablets at the PIN screen. R4's timing, the device confirmation and a real `1112` are in Task 19's "As run" table.
 
 ## Review responses (revision 4's two reviews)
 
