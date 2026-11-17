@@ -600,10 +600,14 @@ finding, 17 November).
 
 ## PR B — till and guide
 
+**2026-11-17:** Tasks 6 and 9 moved to PR A after the finish-branch review: two run-it reviewers found that PR A alone left the existing till overstating a part-paid departure's debt and unable to collect its rest.
+
 Before each till run, check memory (`memory_pressure | grep free`; CLAUDE.md §2) and run files with
 `pnpm --filter @waitron/till exec vitest run <files>`.
 
 ### Task 6: paying a printed bill, and what the departure window owes
+
+**2026-11-17:** moved to PR A after the finish-branch review: two run-it reviewers found that PR A alone left the existing till overstating a part-paid departure's debt and unable to collect its rest.
 
 **Files:** modify `apps/till/src/screens/till-table-order-screen.ts` (`#paySheetButton`),
 `apps/till/src/till-app.ts` (`#showPaidTicket`, `#onRecordUnpaidDeparture`),
@@ -670,6 +674,8 @@ id per press, `#resend` under `TABLE_REQUEST_LIMIT_MS`, nothing sent when the sc
 - [ ] **Step 5: commit** `git commit -s -m "Print the bill from the till, and from Finish table's refusal"`.
 
 ### Task 9: Find bill collects the rest of a printed bill
+
+**2026-11-17:** moved to PR A after the finish-branch review: two run-it reviewers found that PR A alone left the existing till overstating a part-paid departure's debt and unable to collect its rest.
 
 **Files:** modify `apps/till/src/till-app.ts` (the Find bill row handler, `:8670-8790`); tests
 `apps/till/src/till-app-find-bill.test.ts` (or the file holding the Find bill row cases; Step 1 names
