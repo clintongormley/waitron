@@ -4632,6 +4632,11 @@ it.each(
       const pinned = root
         .querySelector('thead th[data-pinned="end"]')!
         .getBoundingClientRect().left;
+      const toggle = root.querySelector('tr[data-row-key="root"] .tree-toggle')!;
+      expect(
+        toggle.getBoundingClientRect().left,
+        "root toggle stays inside its cell",
+      ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
       const treeCell = root.querySelector('[part~="tree-cell"]')!;
       expect(
         treeCell.children[1]!.getBoundingClientRect().left - treeCell.getBoundingClientRect().left,
