@@ -89,7 +89,7 @@ it("lets a fresh local administrator discover and decide with the server's perso
     );
   }
 });
-it.each(["manager", "delegated box permission"] as const)(
+it.each(["manager", "delegated box permission", "no management permission"] as const)(
   "refuses %s without naming a permission they lack",
   async (kind) => {
     const f = await fixture("manager");
@@ -100,6 +100,10 @@ it.each(["manager", "delegated box permission"] as const)(
           .update(roles)
           .set({ permissions: [...role!.permissions, "system.box_admin"] })
           .where(eq(roles.id, role!.id));
+      });
+    if (kind === "no management permission")
+      await withTransaction(suite.db, async (tx) => {
+        await tx.update(roles).set({ permissions: [] }).where(eq(roles.builtInKey, "manager"));
       });
     for (const action of ["read", "approve", "refuse"]) {
       const reply = await f.send(action);
@@ -191,13 +195,25 @@ it.each([
     else await withTransaction(suite.db, (tx) => setBuiltInRoleForTest(tx, f.person.id, "manager"));
   };
   if (phase === "renewal") f.delay(change);
-  else {
-    f.reply({ requestId: f.request.requestId, state: "approved" });
-    f.hold(change);
-  }
-  const response = await f.send("approve");
+  else f.hold(change);
+  const response = await f.send(phase === "reply" ? "read" : "approve");
   expect((await response.json()).error.code).toBe(
     kind === "primary" ? "cloud.not_primary" : "cloud.owner_recovery_admin_required",
   );
   expect(f.calls).toHaveLength(phase === "renewal" ? 0 : 1);
+});
+
+it("reports Cloud's recorded approval when fresh proof expires during the call", async () => {
+  const f = await fixture();
+  f.reply({ requestId: f.request.requestId, state: "approved" });
+  f.hold(() =>
+    withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, f.person.token, false)),
+  );
+  const response = await f.send("approve");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ requestId: f.request.requestId, state: "approved" });
+  expect(f.calls).toHaveLength(1);
+  const read = await f.send();
+  expect((await read.json()).error.code).toBe("management_session.proof_required");
+  expect(f.calls).toHaveLength(1);
 });

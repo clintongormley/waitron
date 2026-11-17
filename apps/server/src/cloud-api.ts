@@ -108,6 +108,10 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
               managementSessionId: sessionId,
               permission: "system.manage",
               touch,
+            }).catch((error: unknown) => {
+              if (error instanceof AppError && error.code === "authorization.not_permitted")
+                throw new AppError("cloud.owner_recovery_admin_required", {});
+              throw error;
             });
             if (!result.authority.admin)
               throw new AppError("cloud.owner_recovery_admin_required", {});

@@ -484,7 +484,11 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     const state = await read();
     if (ownerRecoveryBinding(state) !== binding) throw new AppError("cloud.binding_conflict", {});
     const result = await fetchOwnerRecovery(state!, actor, decision, deadline, recordRefusal);
-    if ((await authorize()) !== actor || ownerRecoveryBinding(await read()) !== binding)
+    // A confirmed decision has taken effect; a later authority change cannot withdraw it.
+    if (
+      !decision &&
+      ((await authorize()) !== actor || ownerRecoveryBinding(await read()) !== binding)
+    )
       throw new AppError("cloud.binding_conflict", {});
     return result;
   }

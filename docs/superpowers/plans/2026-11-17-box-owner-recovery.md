@@ -29,3 +29,5 @@
 **Expected size:** production +350/−0; tests +460/−0; shared fixture support +70/−0 (Cloud fixture recovery response and saved registration setup); docs about +40/−0. No runtime verification yet. Material growth returns to the watcher.
 
 **17 November, watcher 15:43 correction for PR(b):** `authorization.not_permitted` requires a permission name, while this check requires the actual administrator role. Use `cloud.owner_recovery_admin_required` with empty params at 403; retain neutral 403 JSON for a remote or foreign origin. PR(c) supplies English/Spanish wording and existing administrator sign-in. This changes the exact refusal code, not the role check.
+
+**17 November, watcher 15:56 correction:** keep administrator, primary and pairing checks immediately before signing and after discovery replies. For decisions return the exact matched terminal Cloud result without a post-write authority gate: proof expiry after sending must not hide a recorded approval or permanent refusal. Test the near-expiry case.
