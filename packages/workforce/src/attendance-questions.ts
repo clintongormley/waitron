@@ -92,7 +92,11 @@ async function canonicalQuestion(tx: Transaction, id: string): Promise<QuestionR
   }
 }
 
-async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Promise<void> {
+async function ensureReminder(
+  tx: Transaction,
+  row: typeof attendanceQuestions.$inferSelect,
+  at: Date,
+): Promise<void> {
   if (row.kind === "automatic-out" || !row.active || row.resolvedByEntryId !== null) {
     await cancelUnclaimed(tx, row.id);
     return;
@@ -100,7 +104,7 @@ async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Prom
   await queueAttendanceReminder(tx, row, at);
 }
 
-function mergedFields(row: QuestionRow, input: QuestionInput) {
+function mergedFields(row: typeof attendanceQuestions.$inferSelect, input: QuestionInput) {
   if (
     (row.automaticEntryId !== null &&
       input.automaticEntryId !== null &&
@@ -137,7 +141,7 @@ export async function upsertAttendanceQuestion(
         eq(attendanceQuestions.shiftKey, input.shiftKey),
       ),
     );
-  let row: QuestionRow;
+  let row: typeof attendanceQuestions.$inferSelect;
   if (existing) {
     row = await canonicalQuestion(tx, existing.id);
     if (row.attendanceDayId !== attendanceDayId) {
@@ -161,12 +165,7 @@ export async function upsertAttendanceQuestion(
         createdAt: at.toISOString(),
       })
       .returning();
-    row = {
-      ...created!,
-      businessDay: input.day.businessDay,
-      startAt: new Date(input.day.startAt).toISOString(),
-      endAt: new Date(input.day.endAt).toISOString(),
-    };
+    row = created!;
   }
   await ensureReminder(tx, row, at);
   return row.id;
