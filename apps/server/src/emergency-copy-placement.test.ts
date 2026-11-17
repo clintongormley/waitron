@@ -3,6 +3,8 @@ const faults = vi.hoisted(() => ({
   separateFilesystems: null as readonly string[] | null,
   /** Runs after each saved `secrets.env`, before the placement carries on. */
   afterRingSaved: null as (() => Promise<void>) | null,
+  /** How many placed-copy checks have begun. */
+  checksBegun: 0,
 }));
 vi.mock("node:fs/promises", async (original) => {
   const real = await original<typeof import("node:fs/promises")>();
@@ -17,6 +19,16 @@ vi.mock("node:fs/promises", async (original) => {
           code: "EXDEV",
         });
       return real.rename(from, to);
+    },
+  };
+});
+vi.mock("./emergency-copy-check.js", async (original) => {
+  const real = await original<typeof import("./emergency-copy-check.js")>();
+  return {
+    ...real,
+    checkPlacedEmergencyCopy: (...args: Parameters<typeof real.checkPlacedEmergencyCopy>) => {
+      faults.checksBegun++;
+      return real.checkPlacedEmergencyCopy(...args);
     },
   };
 });
@@ -84,6 +96,7 @@ beforeEach(async () => {
 afterEach(async () => {
   faults.separateFilesystems = null;
   faults.afterRingSaved = null;
+  faults.checksBegun = 0;
   await rm(root, { recursive: true, force: true });
 });
 
@@ -476,6 +489,14 @@ it("replaces a half-copied node.db a stopped placement left in the venue folder"
   await expectPlacedLayout();
 });
 
+it("replaces a folder left where node.db is copied in", async () => {
+  const binding = await placedBinding();
+  await mkdir(join(venueDir, `${NODE_FILE}${INCOMING_SUFFIX}`, "inside"), { recursive: true });
+  await place(binding);
+  expect(await placedKey()).toEqual(expect.any(String));
+  await expectPlacedLayout();
+});
+
 it("writes nothing when the signal aborts as the checks finish", async () => {
   const binding = await placedBinding();
   const before = await bothFolders();
@@ -498,8 +519,8 @@ it("throws rather than place when this machine's clock is not a time, writing no
 
 /**
  * Starts a placement of `second` once a placement of `first` has saved its ring and is held before
- * it moves its node.db, then lets the first carry on. A placement that overlaps the first finishes
- * well inside the wait; one that takes its turn is still waiting when the wait ends.
+ * it moves its node.db, then lets the first carry on. `checksBeforeRelease` counts the placed-copy
+ * checks begun while the first was held: 1 when the second waits its turn.
  */
 async function overlapping(first: EmergencyCopyBinding, second: EmergencyCopyBinding) {
   let firstSaved!: () => void;
@@ -517,8 +538,9 @@ async function overlapping(first: EmergencyCopyBinding, second: EmergencyCopyBin
     await Promise.race([saved, placing]);
     const later = place(second);
     await Promise.race([later.catch(() => {}), delay(1000)]);
+    const checksBeforeRelease = faults.checksBegun;
     releaseFirst();
-    return await Promise.allSettled([placing, later]);
+    return { checksBeforeRelease, outcomes: await Promise.allSettled([placing, later]) };
   } finally {
     releaseFirst();
     await placing.catch(() => {});
@@ -527,7 +549,8 @@ async function overlapping(first: EmergencyCopyBinding, second: EmergencyCopyBin
 
 it("two overlapping placements of the same binding leave a key the saved ring opens", async () => {
   const binding = await placedBinding();
-  const outcomes = await overlapping(binding, binding);
+  const { checksBeforeRelease, outcomes } = await overlapping(binding, binding);
+  expect(checksBeforeRelease).toBe(1);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
   expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
@@ -537,7 +560,11 @@ it("two overlapping placements of the same binding leave a key the saved ring op
 it("of two overlapping placements of different bindings, the second is refused and the first's key opens", async () => {
   const binding = await placedBinding();
   const other = { ...binding, copyOperationId: "e7000000-0000-4000-8000-0000000000ee" };
-  const [first, second] = await overlapping(binding, other);
+  const {
+    checksBeforeRelease,
+    outcomes: [first, second],
+  } = await overlapping(binding, other);
+  expect(checksBeforeRelease).toBe(1);
   expect(first!.status).toBe("fulfilled");
   expect(second).toMatchObject({
     status: "rejected",

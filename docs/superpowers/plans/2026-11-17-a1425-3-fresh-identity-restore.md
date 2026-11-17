@@ -78,7 +78,9 @@ It holds the venue folder's lock throughout (`lockVenueDatabase`), then:
    operation id** and the binding (with `copyOperationId`) in `detail`, so the restricted page's step
    list (`restricted-page.ts:85-94`) never shows it (decision 3). Then it writes `trading.env` naming
    `copyNodeId` through `writeTradingEnv` (decision 6), and moves `node.db` beside `venue.db`, flushing
-   file and folder, so `venue.db` never sits with half a `node.db`.
+   file and folder, so `venue.db` never sits with half a `node.db`. (As built, 2026-11-17: it copies
+   `node.db` in as `node.db.incoming`, owner-only, flushes it and renames it inside the venue folder,
+   which may be on another filesystem; placements in one process take turns.)
 4. **A repeat** with the same binding makes no new key; another binding is refused. Nothing of the
    source's `node.db`, sealed state or recovery key is read.
 
