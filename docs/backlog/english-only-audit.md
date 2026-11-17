@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-17, SumUp real-card followups: the practice mark and conditional simulator no-charge line are now separate; see [the current plan](../superpowers/plans/2026-11-17-sumup-real-card-followups.md). The wording below records the audited tree._
+
 _2026-11-17, A1308 pp4: the comparison fold moved to `packages/db/src/schema/identity/fold.ts`; identity re-exports it. The person schema no longer carries the accented fallback example. Bucket A below records the audited tree._
 
 _2026-11-15, A1526: fresh venues and new departments now get course-linked Dessert? and Coffee or bill? visits (¿Postre? and ¿Café o la cuenta?) instead of Anything else?. The Bucket D row below records the audited defaults; current names are in `packages/venue-service/src/starter-content.ts`._

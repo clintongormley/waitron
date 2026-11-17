@@ -109,3 +109,21 @@ for (const language of ["en-GB", "es-ES"])
           await page.viewport(viewport.width, viewport.height);
         }
       });
+
+for (const theme of ["light", "dark"] as const)
+  it(`simulator payment notice is accessible in ${theme}`, async () => {
+    const { host } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        result: {
+          ...invoiceOf("30.00"),
+          payments: undefined,
+          tender: { method: "card", charged: "30.00", tip: "0.00", reference: null },
+        },
+        simulated: true,
+        simulatedCardPayment: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });

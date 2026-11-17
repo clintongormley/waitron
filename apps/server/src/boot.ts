@@ -3547,6 +3547,7 @@ async function bootServer(
       readTradingAdmission: () => tradingAdmission.snapshot(),
       venueLocale,
       onboardingIntent: config.onboardingIntent,
+      simulatedCardPayments: cardProvider?.provider === "simulator",
       modules: enabledAtStart.map((m) => m.name),
       credentialKeyRing: ring,
       rpId: config.managementRpId,

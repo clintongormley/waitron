@@ -224,6 +224,7 @@ async function buildReceiptBytes(
     namesLocale: ticket.namesLocale ?? ticket.locale,
     printer,
     simulated: cfg.practiceMode,
+    simulatedCardPayment: ticket.simulatedCardPayment,
     duplicate,
     ...(guests === undefined ? {} : { guests }),
   });

@@ -716,7 +716,7 @@ describe("till-ticket-view", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });
 
-  it("marks a practice receipt as a simulated payment with no real charge", async () => {
+  it("marks a practice receipt without claiming whether money moved", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result,
       issuer,
@@ -724,9 +724,25 @@ describe("till-ticket-view", () => {
       simulated: true,
     });
     expect(el.shadowRoot!.querySelector("[data-test=simulation-notice]")?.textContent).toContain(
-      "SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     );
   });
+
+  it.each([false, true])(
+    "limits the ticket's no-charge line to a simulator payment (%s)",
+    async (simulatedCardPayment) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result,
+        issuer,
+        invoiceLocale: "es-ES",
+        simulated: true,
+        simulatedCardPayment,
+      });
+      const notice = el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!;
+      expect(notice).toContain("DOCUMENTO DE PRUEBA");
+      expect(notice.includes("SIN COBRO REAL")).toBe(simulatedCardPayment);
+    },
+  );
 
   it("prints the issuer venue name and NIF (RD 1619/2012 art. 7.1.d)", async () => {
     const { el } = await mount();
@@ -2066,8 +2082,8 @@ describe("till-ticket-view: the sale's own language", () => {
     const notice = (el: TillTicketView) =>
       el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!.trim();
 
-    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA — SENSE COBRAMENT REAL");
-    expect(notice((await practice({})).el)).toBe("PRUEBA — SIN COBRO REAL");
+    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA");
+    expect(notice((await practice({})).el)).toBe("DOCUMENTO DE PRUEBA");
   });
 
   it("falls back to the till's boot language when the result names none", async () => {

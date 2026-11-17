@@ -258,6 +258,26 @@ describe("the top block (A497)", () => {
   const t = (text: string) => ({ kind: "text", text, indent: 0 });
   const bold = (text: string) => ({ ...t(text), style: { bold: true } });
 
+  it.each([false, true])(
+    "keeps a practice mark and limits the no-charge line to a simulator payment (%s)",
+    (simulatedCardPayment) => {
+      const document = buildReceiptDocument({
+        ...input,
+        result: SIMPLIFIED,
+        invoiceLocale: "es-ES",
+        simulated: true,
+        simulatedCardPayment,
+      });
+      const text = document.elements
+        .filter((element) => element.kind === "text")
+        .map((element) => element.text);
+      expect(text.filter((line) => line === "DOCUMENTO DE PRUEBA")).toHaveLength(2);
+      expect(text.filter((line) => line === "SIN COBRO REAL")).toHaveLength(
+        simulatedCardPayment ? 2 : 0,
+      );
+    },
+  );
+
   it("prints a simplified invoice's block in order, one fact a line, in the language's own labels", () => {
     expect(
       topBlock(buildReceiptDocument({ ...input, result: SIMPLIFIED, invoiceLocale: "eu-ES" })),
@@ -415,7 +435,7 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
       receipt: { ...FULL_INVOICE_DOCUMENT_FIXTURE.receipt, footerMessage: undefined },
       result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
     });
-    expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "PRUEBA - SIN COBRO REAL"]);
+    expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "DOCUMENTO DE PRUEBA"]);
   });
 
   const withAddresses = (venueAddress: string[], domicile: string) =>

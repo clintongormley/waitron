@@ -218,6 +218,21 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountMeApi — whoami", () => {
+  it.each([false, true])("reports actual card simulation: %s", async (simulatedCardPayments) => {
+    const res = await send(
+      mountApp({ simulatedCardPayments }),
+      "GET",
+      "/management-api/session/me",
+      {
+        cookie: await cookieFor(me),
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { simulatedCardPayments: boolean }).simulatedCardPayments).toBe(
+      simulatedCardPayments,
+    );
+  });
+
   it("keeps a person with no access roles signed in and returns no fixed role", async () => {
     const [person] = await seedPersons(suite.db, { displayName: "No access role" });
     await suite.db.delete(personRoles).where(eq(personRoles.personId, person!.id));
@@ -263,6 +278,7 @@ describe("mountMeApi — whoami", () => {
       sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
       onboardingIntent: "prepare",
+      simulatedCardPayments: false,
       permissions: ["payment.take"],
       modules: MODULES,
       sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,
@@ -333,6 +349,7 @@ describe("mountMeApi — whoami", () => {
       sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
       onboardingIntent: "prepare",
+      simulatedCardPayments: false,
       permissions: ["payment.take"],
       modules: MODULES,
       sessionExpiresInSeconds: IDLE_TIMEOUT_MS / 1000,

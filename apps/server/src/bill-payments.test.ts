@@ -3536,3 +3536,19 @@ async function invoiceContactDepartment() {
   );
   return rows.find((row) => row.isDefault)!.id;
 }
+
+it("marks the simulator payment in the settled bill's customer document", async () => {
+  const billId = await tabWith("Beer");
+  const result = await takeReaderBillPayment(
+    {
+      ...fiscal(),
+      admission: testTradingAdmission(),
+      provider: new SimulatorPaymentProvider(suite.db),
+    },
+    { ...venue.cfg, practiceMode: true },
+    billId,
+    cash("3.00", { method: "card", tendered: undefined }),
+    venue.operator,
+  );
+  expect(result.invoice?.simulatedCardPayment).toBe(true);
+});

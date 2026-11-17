@@ -24,6 +24,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
   }
 
   override render() {
+    const labels = receiptLabelsFor(this.result.locale ?? this.invoiceLocale);
     const receipt = this.choice === "receipt" || this.result.invoiceType !== "F1";
     const designation = this.receiptDesignation();
     const printer = this.receiptEquipment?.resolved;
@@ -39,7 +40,8 @@ export class TillSettlementDocumentDialog extends TillTicketView {
       ${
         this.simulated
           ? html`<p class="simulation-notice" data-test="simulation-notice">
-              ${receiptLabelsFor(this.result.locale ?? this.invoiceLocale).practice.replace(" - ", " — ")}
+              ${labels.practice}
+              ${this.simulatedCardPayment ? html`<br />${labels.noRealCharge}` : nothing}
             </p>`
           : nothing
       }

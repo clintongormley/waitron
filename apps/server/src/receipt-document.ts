@@ -62,14 +62,16 @@ export interface ReceiptDocumentInput {
   /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
   paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
-  result: Omit<TillSaleResult, keyof ReceiptPresentation>;
+  result: Omit<TillSaleResult, keyof ReceiptPresentation | "simulatedCardPayment">;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;
   venueAddress?: readonly string[];
   invoiceLocale: string;
   namesLocale?: string;
+  /** Marks a practice document, regardless of whether money moved. */
   simulated?: boolean;
+  simulatedCardPayment?: boolean;
   duplicate?: boolean;
   guests?: number;
 }
@@ -169,6 +171,7 @@ export function buildReceiptDocument({
   invoiceLocale,
   namesLocale = invoiceLocale,
   simulated = false,
+  simulatedCardPayment = false,
   duplicate = false,
   guests,
 }: ReceiptDocumentInput): ReceiptDocument {
@@ -231,6 +234,7 @@ export function buildReceiptDocument({
   };
   if (simulated) {
     text(label.practice);
+    if (simulatedCardPayment) text(label.noRealCharge);
     rule();
   }
 
@@ -605,6 +609,7 @@ export function buildReceiptDocument({
   if (simulated) {
     rule();
     text(label.practice);
+    if (simulatedCardPayment) text(label.noRealCharge);
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 

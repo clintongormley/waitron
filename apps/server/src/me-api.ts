@@ -68,6 +68,7 @@ export interface MeApiDeps {
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the dashboard. */
   onboardingIntent?: OnboardingIntent;
+  simulatedCardPayments?: boolean;
   /** The enabled module names, `core` included. */
   modules: string[];
   credentialKeyRing: KeyRing;
@@ -405,6 +406,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         sessionDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         venueName,
         onboardingIntent: deps.onboardingIntent,
+        simulatedCardPayments: deps.simulatedCardPayments === true,
         permissions: [...authority.permissions],
         modules: deps.modules,
         sessionExpiresInSeconds: Math.min(

@@ -333,7 +333,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
     expect(linesOf(result, footerMessage!.end, footerMessage!.end + 2)).toEqual([
       RULE,
-      "PRUEBA - SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     ]);
   });
 
@@ -749,7 +749,7 @@ describe("POST /management-api/receipt-preview", () => {
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {
     expect((await rendered({}, { practiceMode: true })).preview.text).toContain(
-      "PRUEBA - SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     );
     expect((await rendered({})).preview.text).not.toContain("PRUEBA");
   });

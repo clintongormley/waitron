@@ -1,3 +1,4 @@
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -10,6 +11,7 @@ import {
   openTable,
   resetBillPayDrafts,
   stubApi,
+  till,
   shell,
 } from "../test/bill-pay-app.js";
 
@@ -341,5 +343,70 @@ it.each([true, false])(
     await vi.waitFor(() => expect(completed).toHaveBeenCalled());
     expect(completed.mock.calls[0]![0]).toBe(saved);
     if (!saved) expect(completed.mock.calls[0]![1]).toEqual(expect.any(String));
+  },
+);
+
+it.each([
+  ["prepare", false, true],
+  ["prepare", true, true],
+  ["demo", true, true],
+  ["live", false, false],
+] as const)(
+  "splits the %s settlement mark for simulator %s",
+  async (onboardingIntent, simulatedCardPayment, practice) => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        onboardingIntent,
+        cardProvider: simulatedCardPayment ? "simulator" : "none",
+      }),
+      recordSale: vi
+        .fn()
+        .mockResolvedValue({ ...invoiceOf("120.00"), simulatedCardPayment: false }),
+      pay: vi.fn().mockResolvedValue({
+        outcome: "captured",
+        ticket: {
+          ...invoiceOf("120.00"),
+          simulatedCardPayment,
+          tender: {
+            method: "card",
+            charged: "120.00",
+            tip: "0.00",
+            change: "0.00",
+            reference: null,
+          },
+          payments: [
+            {
+              method: "card",
+              amount: "120.00",
+              tip: "0.00",
+              tendered: null,
+              change: null,
+              refunds: [],
+            },
+          ],
+        },
+      }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    if (simulatedCardPayment) {
+      emit(order, "pay-presented", { workingOrderId: "wo-4" });
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-presented-pay-dialog")!, "presented-pay", {
+        method: "card",
+      });
+    } else emit(order, "pay-tab", { method: "cash", amount: "120.00" });
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+    const notice = dialog.shadowRoot!.querySelector("[data-test=simulation-notice]");
+    expect(notice !== null).toBe(practice);
+    if (practice) {
+      expect(notice!.textContent).toContain(receiptLabelsFor("es-ES").practice);
+      expect(notice!.textContent!.includes(receiptLabelsFor("es-ES").noRealCharge)).toBe(
+        simulatedCardPayment,
+      );
+    }
   },
 );

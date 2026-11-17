@@ -347,7 +347,7 @@ export class PaymentsScreen extends LitElement {
   /** A provider panel builds its own typed client on this. */
   @property({ attribute: false }) request!: DashboardRequest;
 
-  @property({ attribute: false }) mode?: "demo" | "prepare" | "live";
+  @property({ attribute: false }) simulatedCardPayments?: boolean;
 
   @property({ attribute: false }) surface: "readers" | "checks" = "readers";
 
@@ -719,10 +719,6 @@ export class PaymentsScreen extends LitElement {
     this.editor = null;
     this.discoveringId = null;
     this.busy = false;
-  }
-
-  #simulator(): boolean {
-    return this.mode === "demo" || this.mode === "prepare";
   }
 
   #panelFor(providerId: string): CardProviderPanel | undefined {
@@ -2782,7 +2778,7 @@ export class PaymentsScreen extends LitElement {
   #renderReaders(): TemplateResult {
     return html`
       ${
-        this.#simulator()
+        this.simulatedCardPayments === true
           ? html`<p class="banner" data-test="simulator-banner" role="status">
               ${t("payments.simulator_banner")}
             </p>`

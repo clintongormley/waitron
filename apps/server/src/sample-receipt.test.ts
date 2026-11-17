@@ -75,7 +75,7 @@ describe("formatSampleReceipt", () => {
     const lines = commands.filter((c) => c.text !== undefined);
     for (const line of lines) expect(line.widthDots).toBe(576);
     const text = printedLines(bytes).join("\n");
-    expect(text.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
+    expect(text.match(/DOCUMENTO DE PRUEBA/g)).toHaveLength(2);
     expect(text).toContain("Café y tostada");
     expect(text).toContain("16,50 €");
     expect(text).toContain("MUESTRA/1");

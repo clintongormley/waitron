@@ -91,6 +91,8 @@ To add a reader, open **Card payments** in Hardware and choose **Add reader** ab
 Choose the provider if asked, then add a reader from its list or pair a new one.
 If no provider is connected, choose **Configure card providers** to set one up first.
 
+Before paying, open **Hardware → Devices**, select your device and choose **Edit** to set its card reader. If a card reader’s battery percentage is missing, check its charge on the reader itself.
+
 In **Card payments**, find the reader under **Card readers** and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
 
 When you add a deleted reader again, a recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.

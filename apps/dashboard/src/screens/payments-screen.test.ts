@@ -459,15 +459,23 @@ describe("payments-screen", () => {
     expect(await sentence(none.el)).toBe(t("payments.readers_empty"));
   });
 
-  it("shows the simulator banner in demo mode", async () => {
-    const { el } = await mount(stubApi(), { mode: "demo" });
+  it("shows the banner when card payments use the simulator", async () => {
+    const { el } = await mount(stubApi(), { simulatedCardPayments: true });
 
     expect(q(el, "[data-test=simulator-banner]")).not.toBeNull();
     expect(q(el, "[data-test=provider-state-acme]")).toBeNull();
   });
 
-  it("hides the simulator banner in live mode", async () => {
-    const { el } = await mount(stubApi(), { mode: "live" });
+  it.each([undefined, false, true])(
+    "waits for the actual simulator fact and follows it: %s",
+    async (simulatedCardPayments) => {
+      const { el } = await mount(stubApi(), { simulatedCardPayments });
+      expect(q(el, "[data-test=simulator-banner]") !== null).toBe(simulatedCardPayments === true);
+    },
+  );
+
+  it("hides the banner when payments use real providers", async () => {
+    const { el } = await mount(stubApi(), { simulatedCardPayments: false });
 
     expect(q(el, "[data-test=simulator-banner]")).toBeNull();
   });

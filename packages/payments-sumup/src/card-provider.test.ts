@@ -1,5 +1,5 @@
 import { captureAlerts, heldAlerts } from "@waitron/payments/test/capture-alerts.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -241,6 +241,11 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
   });
 
   it("keeps structured status and rounds battery without losing zero", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-12T11:04:00Z"));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     let battery: number | null = 99.6;
     const fetch = routedFetch({
       "GET /v0.1/merchants/MABC123/readers/rdr_x/status": () =>

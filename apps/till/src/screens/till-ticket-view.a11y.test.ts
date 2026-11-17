@@ -687,6 +687,7 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
         issuer,
         invoiceLocale: "es-ES",
         simulated: true,
+        simulatedCardPayment: true,
       },
       theme,
     );

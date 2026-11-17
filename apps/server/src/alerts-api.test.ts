@@ -2,7 +2,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   devices,
   incidents,
@@ -662,6 +662,11 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("reports a SumUp reader's low battery through its real credential read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const v = await seedVenueWithStaff();
     const ring = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -687,10 +692,15 @@ describe("ongoing alert sources through the route", () => {
       const path = new URL(String(input)).pathname;
       paths.push(path);
       if (path.endsWith("/status"))
-        return new Response(JSON.stringify({ data: { status: "ONLINE", battery_level: 5 } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            data: { status: "ONLINE", battery_level: 5, last_activity: NOW.toISOString() },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       return new Response(JSON.stringify({ id: "rdr_low", status: "paired" }), {
         status: 200,
         headers: { "content-type": "application/json" },

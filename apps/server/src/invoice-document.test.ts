@@ -1,3 +1,5 @@
+import { payments } from "@waitron/payments";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { readVenueSettings } from "@waitron/db";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
@@ -1325,3 +1327,37 @@ describe("the simplified receipt's A4 tax table", () => {
     },
   );
 });
+
+it.each(["sumup", "simulator"] as const)(
+  "splits marks on a saved %s Prepare invoice",
+  async (provider) => {
+    const backend = none();
+    const sale = await issue(backend);
+    const order = await seedWorkingOrder(suite.db);
+    await suite.db.insert(payments).values({
+      workingOrderId: order.id,
+      source: "readiness_test",
+      saleId: sale.saleId,
+      provider,
+      state: "captured",
+      paymentRef: randomUUID(),
+      amount: 758,
+    });
+    const document = await withTransaction(suite.db, (tx) =>
+      readInvoiceDocument(backend, tx, { ...venue.cfg, practiceMode: true }, sale.saleId),
+    );
+    const ticket = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(backend, tx, { ...venue.cfg, practiceMode: true }, sale.saleId),
+    );
+    expect(ticket.simulatedCardPayment).toBe(provider === "simulator");
+    expect(document.simulated).toBe(true);
+    expect(
+      buildReceiptDocument(document).elements.some(
+        (element) => element.kind === "text" && element.text === "SIN COBRO REAL",
+      ),
+    ).toBe(provider === "simulator");
+    expect(buildReceiptDocument(document).elements).toContainEqual(
+      expect.objectContaining({ kind: "text", text: "DOCUMENTO DE PRUEBA" }),
+    );
+  },
+);
