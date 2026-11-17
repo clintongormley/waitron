@@ -30,6 +30,7 @@ import { assertNotAhead } from "./upgrade-schema-check.js";
 export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
+import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -859,11 +860,17 @@ async function runAdmittedEntry(
       await (deps.clearReplacedDatabases ?? clearReplacedDatabases)(deps.venueDir, deps.log);
       await (deps.clearRestoreSecretFiles ?? clearRestoreSecretFiles)(deps.stateDir, deps.log);
 
+      const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
+      // Before the ahead check, whose store open switches a venue.db not in WAL mode: Cloud could
+      // then no longer place the same copy again.
+      await refuseUnactivatedEmergencyCopy(
+        deps.venueDir,
+        isUnset(env.WAITRON_NODE_ID) ? undefined : env.WAITRON_NODE_ID,
+      );
       // Unchecked, an ahead database would surface as an unclassified driver error in whatever
       // query first touched the changed schema.
       await (deps.assertNotAhead ?? assertNotAhead)(deps.venueDir, migrationsRoot);
 
-      const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
       // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
       // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
       // one.

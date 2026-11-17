@@ -1295,6 +1295,8 @@ async function bootServer(
   } catch (error) {
     log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
+  // Before either placement and any open of venue.db, which would switch a file not in WAL mode.
+  await refuseUnactivatedEmergencyCopy(config.venueDir, config.node?.nodeId);
   // Both placements run here and not in entry so that `startServer`-based starts and the dev entry
   // place too. It follows entry's ahead check, whose close drains the old file's -wal before placing
   // removes it (pinned in `boot.place-copy.test.ts`). A box with no identity has no node id to read
@@ -1321,7 +1323,6 @@ async function bootServer(
   let migrationModules: readonly WaitronModule[] = availableModules;
   let letGoOfCheckedAddresses: () => Promise<void>;
   try {
-    await refuseUnactivatedEmergencyCopy(stampProbe.node, config.node?.nodeId);
     // The first moment this start holds a node handle.
     if (placement?.kind === "copy_placed_owed") {
       await recordCopyPlaced({

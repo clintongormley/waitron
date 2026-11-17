@@ -126,6 +126,9 @@ alert-codes, errors-reachable and recovery-page wording. First failing test,
 copy's id (the new code before migrations, not `:2112` after); an older schema (refused unmigrated).
 Docs: A1425 and A1188 backlog entries, `docs/developers/conventions-data.md`, and `state-layout.ts` if
 its guard asks. About 60 production, 160 test lines.
+As built, 2026-11-17: the check reads `node.db` alone, through its own read-only connection, before
+both placements in `boot.ts` and before entry's ahead check (`node-entry.ts`): any store open switches a
+`venue.db` not in WAL mode, after which Cloud's repeat placement refuses `emergency_copy.hash_mismatch`.
 
 **Unedited, run beside each PR:** `apps/server/src/` `restore.test.ts`, `restore-stream.test.ts`,
 `restore-request*.test.ts`, `restore-fiscal-e2e.test.ts`, `handover-copy-from-backup.test.ts`,
