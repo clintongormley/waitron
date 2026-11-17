@@ -63,6 +63,19 @@ describe("parseEmergencyCopyBinding", () => {
     expect(refusal(rest)).toEqual(invalid("installationId"));
   });
 
+  it("refuses a key present only on the prototype", () => {
+    const rest: Record<string, unknown> = { ...valid };
+    delete rest.installationId;
+    const inherited = Object.assign(Object.create({ installationId: "copy-installation" }), rest);
+    expect(refusal(inherited)).toEqual(invalid("installationId"));
+  });
+
+  it("refuses a node id whose variant digit is not 8, 9, a or b", () => {
+    expect(refusal({ ...valid, copyNodeId: "0a1b2c3d-4e5f-4a6b-cc7d-8e9f0a1b2c3d" })).toEqual(
+      invalid("copyNodeId"),
+    );
+  });
+
   it("refuses an extra key", () => {
     expect(refusal({ ...valid, recoveryKey: "x" })).toEqual(invalid("recoveryKey"));
   });
@@ -164,6 +177,9 @@ describe("parseEmergencyCopyBinding", () => {
     expect(refusal({ ...valid, expiresAt: "2026-11-17T10:50:00.001Z" })).toEqual(
       invalid("expiresAt"),
     );
+    expect(refusal({ ...valid, expiresAt: "2026-11-17T10:49:59.999Z" })).toEqual(
+      invalid("expiresAt"),
+    );
   });
 
   it("treats a binding as expired from the instant it expires, and valid one millisecond before", () => {
@@ -173,6 +189,12 @@ describe("parseEmergencyCopyBinding", () => {
     });
     expect(parseEmergencyCopyBinding(valid, new Date(Date.parse(valid.expiresAt) - 1))).toEqual(
       valid,
+    );
+  });
+
+  it("throws rather than accept a binding when the clock it is given is not a time", () => {
+    expect(() => parseEmergencyCopyBinding(valid, new Date("garbage"))).toThrow(
+      "parseEmergencyCopyBinding needs a valid clock",
     );
   });
 });

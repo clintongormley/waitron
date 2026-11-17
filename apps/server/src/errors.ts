@@ -87,8 +87,6 @@ declare module "@waitron/shared" {
     "cloud.unavailable": Record<string, never>;
     "cloud.emergency_hosting_closed": { reason: string };
     "cloud.emergency_code_rate_limited": { seconds: number };
-    "emergency_copy.binding_invalid": { field: string };
-    "emergency_copy.binding_expired": { expiresAt: string };
     "cloud.tunnel_unavailable": Record<string, never>;
     "cloud.tunnel_conflict": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
@@ -101,6 +99,9 @@ declare module "@waitron/shared" {
     "cloud.replacement_not_restored": Record<string, never>;
     "cloud.replacement_state_invalid": Record<string, never>;
     "cloud.replacement_refused": Record<string, never>;
+
+    "emergency_copy.binding_invalid": { field: string };
+    "emergency_copy.binding_expired": { expiresAt: string };
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };

@@ -48,7 +48,7 @@ function exactObject(
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuse(field);
   const record = raw as Record<string, unknown>;
   const prefix = field === "binding" ? "" : `${field}.`;
-  for (const key of keys) if (!(key in record)) refuse(`${prefix}${key}`);
+  for (const key of keys) if (!Object.hasOwn(record, key)) refuse(`${prefix}${key}`);
   for (const key of Object.keys(record)) if (!keys.includes(key)) refuse(`${prefix}${key}`);
   return record;
 }
@@ -71,6 +71,8 @@ function instant(value: unknown, field: string): number {
 }
 
 export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyCopyBinding {
+  if (!Number.isFinite(now.getTime()))
+    throw new TypeError("parseEmergencyCopyBinding needs a valid clock");
   const top = exactObject(input, "binding", BINDING_KEYS);
   const copyOperationId = uuidV4(top.copyOperationId, "copyOperationId");
   const venueId = nonEmpty(top.venueId, "venueId");
