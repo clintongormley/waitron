@@ -16,7 +16,6 @@ import {
 } from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
-import { MediaQueryController } from "../state/media-query-controller.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
@@ -296,8 +295,6 @@ export class TillCounterScreen extends LitElement {
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
 
-  readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
-
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
@@ -425,7 +422,7 @@ export class TillCounterScreen extends LitElement {
             this.stage === "collect" || this.busy || this.orderInFlight,
           )}
           <till-basket
-            ?stacked=${this.#phone.matches}
+            stacked
             .store=${this.store}
             .lineDetails=${true}
             .revealAdded=${true}

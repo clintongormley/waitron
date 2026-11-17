@@ -18,6 +18,7 @@ import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
+  currentContentLanguages,
   floorChipStyles,
   formatDecimalInput,
   formMessageStyles,
@@ -1050,6 +1051,11 @@ export class TillTableOrderScreen extends LitElement {
       .move-dishes-to {
         min-width: var(--wt-tap-min);
         text-align: start;
+      }
+
+      .draft-product-name {
+        hyphens: auto;
+        hyphenate-limit-chars: 8 auto auto;
       }
 
       .draft-line-name {
@@ -4723,7 +4729,9 @@ export class TillTableOrderScreen extends LitElement {
     ];
     if (store.editsLocked)
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
-        >${name}${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+        ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
+          >${name}</span
+        >${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
       >`;
     return html`${
         family?.[0] === line
@@ -4760,7 +4768,9 @@ export class TillTableOrderScreen extends LitElement {
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
         <span class="draft-line-name"
-          >${name}${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+          ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
+            >${name}</span
+          >${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
         >
       </button>
       ${

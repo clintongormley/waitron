@@ -5,6 +5,9 @@ import {
   expectChooserFaces,
   cleanupWidgets,
   mountWidget,
+  measured,
+  pageAt,
+  resetPage,
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
@@ -816,4 +819,26 @@ describe("eaten here or taken away", () => {
     expect(outer).toEqual([]);
     expect(store.dining).toBe("eat_in");
   });
+});
+
+it("Counter gives names at 1280 at least the room they get at 1024", async () => {
+  try {
+    await pageAt(1024, 768);
+    const store = new WorkingOrderStore();
+    store.addProduct(
+      { ...coffee, name: "Roasted pumpkin soup with seasonal garden vegetables" },
+      "2",
+    );
+    const { el } = await mount({ store });
+    const basket = el.shadowRoot!.querySelector("till-basket")!;
+    await basket.updateComplete;
+    await measured();
+    const name = basket.shadowRoot!.querySelector<HTMLElement>(".line .name")!;
+    const narrow = name.getBoundingClientRect().width;
+    await pageAt(1280, 768);
+    await measured();
+    expect(name.getBoundingClientRect().width).toBeGreaterThanOrEqual(narrow);
+  } finally {
+    await resetPage();
+  }
 });

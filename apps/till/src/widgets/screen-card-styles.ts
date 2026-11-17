@@ -1,3 +1,4 @@
+import { cardFrameStyles } from "@waitron/ui";
 import { css, unsafeCSS } from "lit";
 import { PHONE_WIDTH } from "./chooser-styles.js";
 
@@ -8,11 +9,7 @@ import { PHONE_WIDTH } from "./chooser-styles.js";
  */
 export const screenCardStyles = css`
   .screen {
-    background: var(--wt-color-surface);
-    --wt-form-actions-surface: var(--wt-color-surface);
-    border: 1px solid var(--wt-color-border);
-    border-radius: var(--wt-radius-lg);
-    padding: var(--wt-space-4);
+    ${cardFrameStyles}
   }
 
   @media ${unsafeCSS(PHONE_WIDTH)} {
