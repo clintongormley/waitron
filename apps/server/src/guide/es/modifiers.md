@@ -116,10 +116,10 @@ esos productos antes de que confirmes. No se puede deshacer.
 **Un pedido abierto no impide eliminarla, y nadie te pide que lo termines o lo anules.** Eliminarla
 no cambia por sí sola nada de un pedido abierto: una selección de extras es su propia línea del
 pedido, y una respuesta de opciones se guarda como el texto que se eligió. El siguiente guardado de
-un pedido aparcado de caja descarta las respuestas de las listas de opciones eliminadas. Un extra
-elegido de una lista eliminada sigue en un pedido aparcado de caja, con su cargo, hasta que el
-personal abra el plato que lo lleva y guarde un cambio, lo que lo quita; mientras tanto, + no puede
-aumentar la cantidad de ese plato.
+un pedido aparcado de caja descarta, en los platos aún no enviados, las respuestas de las listas de
+opciones eliminadas. Un extra elegido de una lista eliminada sigue en un pedido aparcado de caja, con
+su cargo, hasta que el personal abra el plato que lo lleva y guarde un cambio, lo que lo quita;
+mientras tanto, + no puede aumentar la cantidad de ese plato.
 
 Para quitar también una lista eliminada de la carta para clientes, vuelve a publicar esa carta.
 
@@ -167,18 +167,10 @@ de cada una. Un extra conserva el producto y la lista de la que se eligió, así
 el mismo producto no puede ocupar su lugar sin avisar.
 
 Renombrar una lista o una opción deja un plato ya enviado a su estación tal como se envió, en su
-comanda, su cuenta y su ticket. Solo las líneas que aún no se han enviado toman el texto nuevo.
+comanda, su cuenta y su ticket.
 
 En un pedido aparcado de caja, si cambias el nombre del personal de una lista o de una opción, o
 desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: en una
 línea que aún no se ha enviado, pide al operador que abra esa línea y vuelva a elegir antes de poder
-enviar el pedido.
-
-Cambiar solo un nombre para el cliente o un nombre de estación de preparación sigue emparejando, así
-que nadie se queda parado en la caja. El pedido recuerda los tres nombres, y Waitron no puede
-distinguir una respuesta renombrada de una distinta. Así que, una vez vuelta a publicar o corregida
-la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
-texto nuevo en todas las líneas aún no enviadas que llevan la respuesta renombrada. Esas líneas
-conservan los precios a los que se vendieron. Una lista de extras es la excepción, porque un
-extra se empareja por su producto: renombrar una lista de extras, o el producto que contiene, no
-afecta a un pedido aparcado.
+enviar el pedido. Una lista de extras es la excepción, porque un extra se empareja por su producto:
+renombrar una lista de extras, o el producto que contiene, no afecta a un pedido aparcado.

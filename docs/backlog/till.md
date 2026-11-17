@@ -1434,8 +1434,8 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
   withdrawn label matches nothing, and the till surfaces `held.options_changed`. A whole-order
-  save after an options list is deleted removes its answer from a parked counter order. Preserve
-  these recorded answers when reopening and saving the order.
+  save after an options list is deleted removes its answer from a line not yet sent on a parked
+  counter order. Preserve these recorded answers when reopening and saving the order.
 - **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
   the variant, and says it saved.** Needs a decision first about whether a basket edit may change a
   variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
@@ -1653,6 +1653,13 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
 ## Decisions and deliberate limits
+
+- **A sent dish keeps the options answer it was sent with on a whole-order save (owner, 2026-11-17,
+  A1416: "Keep what was sent").** `updateHeldOrder` neither checks it against today's menu nor
+  rewrites it while the save names no answer the dish does not already hold, so a rename after
+  sending cannot block the order. A save naming a different answer is a change, as through Change
+  dish (`updateOrderLine`): the kitchen gets a recall and a new ticket, or the save is refused once
+  the dish is started or served.
 
 - **The server still works out each pass dish's age colour, which the till does not read (A773-2
   B4 plan, D68, 2026-11-02, not the owner).** "The server's `band` stays correct for any other

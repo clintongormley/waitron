@@ -1449,7 +1449,8 @@ export interface HeldOrder {
      * `options` is deliberately NOT here: a frozen answer carries no list or label id, so the till
      * re-derives them by matching these names against the dish's live offered lists
      * (`deriveOptionSelections`, `../state/held-options.ts`). The match is on the STAFF name alone, so
-     * a list or label whose staff wording changed matches nothing and the operator answers it again.
+     * a list or label whose staff wording changed matches nothing; on a line not yet sent the operator
+     * answers it again, and a sent line keeps its answer.
      */
     optionSnapshots?: OptionSnapshot[];
   })[];

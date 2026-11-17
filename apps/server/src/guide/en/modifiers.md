@@ -105,9 +105,9 @@ products before you confirm. Deleting cannot be undone.
 **An open order does not block a delete, and you are not told to finish or void one.** The delete
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
 answer is stored as the wording that was chosen. The next save of a parked counter order drops
-answers from deleted options lists. An extra picked from a deleted list stays on a parked counter
-order, with its charge, until staff open the dish it is on and save a change there, which takes it
-off; until then, + cannot raise that dish's count.
+answers from deleted options lists on dishes not yet sent. An extra picked from a deleted list stays
+on a parked counter order, with its charge, until staff open the dish it is on and save a change
+there, which takes it off; until then, + cannot raise that dish's count.
 
 To remove a deleted list from the guest menu too, publish that menu again.
 
@@ -154,16 +154,10 @@ matches on the staff name of each. An extra keeps the product and the list it wa
 another list offering the same product cannot silently take its place.
 
 Renaming a list or an option leaves a dish already sent to its station as it was sent, on its
-ticket, bill and receipt. Only lines not yet sent take the new wording.
+ticket, bill and receipt.
 
 On a parked counter order, changing the staff name of a list or an option, or turning an option off,
 means an options answer no longer matches. The till will not guess: on a line not yet sent, it asks
-the operator to open that line and choose again before the order can be sent.
-
-Changing only a customer-facing or prep station name still matches, so nobody is stopped at the till.
-The order remembers all three names, and Waitron cannot tell a renamed answer from a different one.
-So once the menu is published again or patched, the next change made to that parked order, even to
-another line, saves the new wording onto every line not yet sent that carries the renamed answer.
-Those lines keep the prices they were sold at.
-An extras list is the exception, because an extra is matched by its product: renaming an extras
-list, or the product on it, leaves a parked order alone.
+the operator to open that line and choose again before the order can be sent. An extras list is the
+exception, because an extra is matched by its product: renaming an extras list, or the product on
+it, leaves a parked order alone.
