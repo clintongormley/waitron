@@ -75,6 +75,8 @@ export function assertEmergencyCopyBindingUnexpired(
   binding: Pick<EmergencyCopyBinding, "expiresAt">,
   now: Date,
 ): void {
+  if (!Number.isFinite(now.getTime()))
+    throw new TypeError("assertEmergencyCopyBindingUnexpired needs a valid clock");
   if (now.getTime() >= Date.parse(binding.expiresAt))
     throw new AppError("emergency_copy.binding_expired", { expiresAt: binding.expiresAt });
 }

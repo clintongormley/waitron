@@ -1,9 +1,43 @@
-import { existsSync, readFileSync } from "node:fs";
+const faults = vi.hoisted(() => ({
+  /** Folders a rename between which fails as it does between two filesystems. */
+  separateFilesystems: null as readonly string[] | null,
+  /** Runs after each saved `secrets.env`, before the placement carries on. */
+  afterRingSaved: null as (() => Promise<void>) | null,
+}));
+vi.mock("node:fs/promises", async (original) => {
+  const real = await original<typeof import("node:fs/promises")>();
+  const { resolve, sep } = await import("node:path");
+  const filesystemOf = (path: string) =>
+    faults.separateFilesystems?.findIndex((root) => resolve(path).startsWith(`${root}${sep}`));
+  return {
+    ...real,
+    rename: async (from: string, to: string) => {
+      if (filesystemOf(from) !== filesystemOf(to))
+        throw Object.assign(new Error(`EXDEV: cross-device link not permitted, rename '${from}'`), {
+          code: "EXDEV",
+        });
+      return real.rename(from, to);
+    },
+  };
+});
+vi.mock("./box-secrets.js", async (original) => {
+  const real = await original<typeof import("./box-secrets.js")>();
+  return {
+    ...real,
+    writeCredentialsRing: async (...args: Parameters<typeof real.writeCredentialsRing>) => {
+      await real.writeCredentialsRing(...args);
+      await faults.afterRingSaved?.();
+    },
+  };
+});
+
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   KEY_RING_VARIABLES,
   loadKeyRing,
@@ -16,7 +50,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { box, NODE_MIGRATIONS, nodeHandoverEvents, readNodeMode } from "@waitron/node-db";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateKeyRing } from "@waitron/provisioning";
-import { NODE_FILE } from "@waitron/store";
+import { INCOMING_SUFFIX, NODE_FILE } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import { PLACED, readImmutableNodeDb, readPlacedEmergencyCopy } from "./emergency-copy-check.js";
@@ -48,6 +82,8 @@ beforeEach(async () => {
   await seedEmergencyCopySource(suite.db);
 });
 afterEach(async () => {
+  faults.separateFilesystems = null;
+  faults.afterRingSaved = null;
   await rm(root, { recursive: true, force: true });
 });
 
@@ -67,6 +103,7 @@ async function expectPlacedLayout() {
   expect(await listing(venueDir)).toEqual(["node.db", "venue.db", "venue.lock"]);
   expect(await listing(stateDir)).toEqual(["scratch", "secrets.env", "trading.env"]);
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+  expect(statSync(join(venueDir, NODE_FILE)).mode & 0o777).toBe(0o600);
 }
 
 const writtenRing = () =>
@@ -436,4 +473,96 @@ it("places a binding the checks finish a moment before it expires", async () => 
   const binding = await placedBinding();
   await place(binding, {}, clockMovedByTheCheck("2026-11-17T10:29:59.999Z"));
   expect(existsSync(join(venueDir, NODE_FILE))).toBe(true);
+});
+
+it("places node.db when the state folder and the venue folder are on different filesystems", async () => {
+  const binding = await placedBinding();
+  faults.separateFilesystems = [stateDir, venueDir];
+  await place(binding);
+  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+  expect(key).toEqual(expect.any(String));
+  await expectPlacedLayout();
+});
+
+it("replaces a half-copied node.db a stopped placement left in the venue folder", async () => {
+  const binding = await placedBinding();
+  await writeFile(join(venueDir, `${NODE_FILE}${INCOMING_SUFFIX}`), "half copied");
+  await place(binding);
+  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+  expect(key).toEqual(expect.any(String));
+  await expectPlacedLayout();
+});
+
+it("writes nothing when the signal aborts as the checks finish", async () => {
+  const binding = await placedBinding();
+  const controller = new AbortController();
+  const stopped = new Error("stopped");
+  const now = () => {
+    controller.abort(stopped);
+    return beforeExpiry();
+  };
+  await expect(place(binding, {}, { signal: controller.signal, now })).rejects.toBe(stopped);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual([]);
+});
+
+it("throws rather than place when this machine's clock is not a time, writing nothing", async () => {
+  const binding = await placedBinding();
+  await expect(place(binding, {}, { now: () => new Date(Number.NaN) })).rejects.toThrow(TypeError);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual([]);
+});
+
+/**
+ * Starts a placement of `second` once a placement of `first` has saved its ring and is held before
+ * it moves its node.db, then lets the first carry on. A placement that overlaps the first finishes
+ * well inside the wait; one that takes its turn is still waiting when the wait ends.
+ */
+async function overlapping(first: EmergencyCopyBinding, second: EmergencyCopyBinding) {
+  let firstSaved!: () => void;
+  let releaseFirst!: () => void;
+  const saved = new Promise<void>((resolve) => (firstSaved = resolve));
+  const released = new Promise<void>((resolve) => (releaseFirst = resolve));
+  let rings = 0;
+  faults.afterRingSaved = async () => {
+    if (++rings !== 1) return;
+    firstSaved();
+    await released;
+  };
+  const placing = place(first);
+  try {
+    await Promise.race([saved, placing]);
+    const later = place(second);
+    await Promise.race([later.catch(() => {}), delay(1000)]);
+    releaseFirst();
+    return await Promise.allSettled([placing, later]);
+  } finally {
+    releaseFirst();
+    await placing.catch(() => {});
+  }
+}
+
+it("two overlapping placements of the same binding leave a key the saved ring opens", async () => {
+  const binding = await placedBinding();
+  const outcomes = await overlapping(binding, binding);
+  expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
+  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+  expect(key).toEqual(expect.any(String));
+  await expectPlacedLayout();
+  await expect(place(binding)).resolves.toBeUndefined();
+});
+
+it("of two overlapping placements of different bindings, the second is refused and the first's key opens", async () => {
+  const binding = await placedBinding();
+  const other = { ...binding, copyOperationId: "e7000000-0000-4000-8000-0000000000ee" };
+  const [first, second] = await overlapping(binding, other);
+  expect(first!.status).toBe("fulfilled");
+  expect(second).toMatchObject({
+    status: "rejected",
+    reason: { code: "emergency_copy.other_binding_placed" },
+  });
+  expect(await readPlacedNode((node) => readPlacedEmergencyCopy(node))).toEqual(binding);
+  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+  expect(key).toEqual(expect.any(String));
+  await expectPlacedLayout();
 });

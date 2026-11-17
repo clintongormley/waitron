@@ -16,7 +16,10 @@ const server = Object.fromEntries(
     ["cloud-replacement", "links an unreadable request aside and flushes"],
     ["cloud-snapshot-worker", "snapshot state and archives; jr10 owns replacement"],
     ["cloud-tunnel", "tunnel volume outside state"],
-    ["emergency-copy-placement", "the copy's node.db moved beside venue.db; reachDisk"],
+    [
+      "emergency-copy-placement",
+      "the copy's node.db copied in beside venue.db, then renamed; reachDisk",
+    ],
     ["handover-acceptance", "A1018 reachDisk"],
     ["handover-place-copy", "A1018 reachDisk"],
     ["handover-source-api", "A1018 final-copy retake"],
