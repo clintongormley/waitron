@@ -1,4 +1,3 @@
-import { serviceDishPredicate } from "./service-dishes.js";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   ticketItems,
@@ -72,11 +71,10 @@ async function readAsServedAllergens(
     tx,
     lines.map((line) => line.id),
   );
-  const ownLines = new Set(parents);
   const byParent = new Map<string, (AllergenMap | null | undefined)[]>();
   for (const line of lines) {
     if (line.quantity <= (cancelled.get(line.id) ?? 0)) continue;
-    const parentId = ownLines.has(line.id) ? line.id : (line.parentId ?? line.id);
+    const parentId = line.parentId ?? line.id;
     const entries = byParent.get(parentId) ?? [];
     entries.push(nutrition.get(line.id)?.allergens);
     byParent.set(parentId, entries);
@@ -107,15 +105,7 @@ export async function resolveKitchenAllergyBlocks(
       ),
     );
   if (tickets.length === 0) return new Map();
-  const isDish = await serviceDishPredicate(
-    tx,
-    tickets.map((ticket) => ({ id: ticket.lineId, parentLineId: ticket.parentId })),
-  );
-  const dishId = (ticket: (typeof tickets)[number]) =>
-    isDish({ id: ticket.lineId, parentLineId: ticket.parentId })
-      ? ticket.lineId
-      : (ticket.parentId ?? ticket.lineId);
-  const parents = [...new Set(tickets.map(dishId))];
+  const parents = [...new Set(tickets.map((ticket) => ticket.parentId ?? ticket.lineId))];
   const byParent = await readAsServedAllergens(tx, parents);
   const guestsByLine = new Map<string, PartyAllergyGuest>();
   const survivors = new Map<string, string>();
@@ -132,10 +122,8 @@ export async function resolveKitchenAllergyBlocks(
   }
   const blocks = new Map<string, KitchenAllergyBlock | null>();
   for (const ticket of tickets) {
-    const parentId = dishId(ticket);
-    const guest =
-      guestsByLine.get(parentId) ??
-      (ticket.parentId === null ? undefined : guestsByLine.get(ticket.parentId));
+    const parentId = ticket.parentId ?? ticket.lineId;
+    const guest = guestsByLine.get(parentId);
     if (guest === undefined) {
       blocks.set(ticket.id, null);
       continue;

@@ -886,8 +886,6 @@ function isPartyOutOfDate(error: unknown): boolean {
 function tableWriteError(error: unknown): CounterError {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined) return recovery;
-  const setLunch = setLunchTakeawayOf(error);
-  if (setLunch !== undefined) return setLunch;
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   const refused = error as { code?: string; tableId?: unknown } | undefined;
@@ -1172,17 +1170,9 @@ function periodRefusal(error: unknown): CounterError | undefined {
   return { code, ...(typeof menuId === "string" ? { menuId } : {}) };
 }
 
-/** `order.set_lunch_takeaway`, keeping whether the order may still switch to eaten here. */
-function setLunchTakeawayOf(error: unknown): CounterError | undefined {
-  const { code, canSwitch } = (error ?? {}) as { code?: unknown; canSwitch?: unknown };
-  return code === "order.set_lunch_takeaway" ? { setLunchTakeaway: canSwitch === true } : undefined;
-}
-
 function counterError(error: unknown, fallback: StringKey): CounterError {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined) return recovery;
-  const setLunch = setLunchTakeawayOf(error);
-  if (setLunch !== undefined) return setLunch;
   const unsent = billUnsentOf(error);
   if (unsent !== undefined) return { unsentBill: unsent };
   const period = periodRefusal(error);
@@ -1688,9 +1678,7 @@ type CounterError =
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey | { code: string } }
-  | { sentDishRefused: SentDishRefusal }
-  /** A set lunch refused on a takeaway order: whether the order may still switch to eaten here. */
-  | { setLunchTakeaway: boolean };
+  | { sentDishRefused: SentDishRefusal };
 
 /** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
 interface SentDishRefusal {
@@ -1859,24 +1847,6 @@ function errorText(
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
   if ("sentDishRefused" in error) return sentDishRefusalText(error.sentDishRefused);
-  if ("setLunchTakeaway" in error) {
-    const said = codeMessage("order.set_lunch_takeaway");
-    return error.setLunchTakeaway
-      ? html`<span class="error-part">${said}. ${t("dining.switch_to_eat_in_explained")}</span
-          ><span class="error-action"
-            ><wt-button
-              variant="secondary"
-              size="sm"
-              data-switch-eat-in
-              @click=${(event: Event) =>
-                event.currentTarget!.dispatchEvent(
-                  new CustomEvent("switch-to-eat-in", { bubbles: true, composed: true }),
-                )}
-              >${t("dining.switch_to_eat_in")}</wt-button
-            ></span
-          >`
-      : said;
-  }
   if ("clockUnusable" in error)
     return clockUnusableText(
       error.clockUnusable.clockAt,
@@ -9435,13 +9405,6 @@ export class TillApp extends LitElement {
       : this.#switchCounterDining(event.detail.dining);
   }
 
-  #onSwitchToEatIn(): Promise<void> {
-    this.errorKey = undefined;
-    return this.#orderScreenShown()
-      ? this.#switchTableDining("eat_in")
-      : this.#switchCounterDining("eat_in");
-  }
-
   /** A refused switch leaves the screen's control on the way the order still has. */
   #redrawDining(): void {
     for (const screen of this.renderRoot.querySelectorAll<LitElement>(
@@ -14647,7 +14610,7 @@ export class TillApp extends LitElement {
         name: lineProductName(line.product),
         unitName: productUnit(line.product).name,
         soldInEach: soldByTheUnit(line.product),
-        ...((purpose === "extras" || purpose === "extras-save") && line.extras !== undefined
+        ...(purpose === "extras" && line.extras !== undefined
           ? {
               extras: line.extras.map((extra) =>
                 extra.quantity > 1 ? `${extra.name} x${extra.quantity}` : extra.name,
@@ -14708,8 +14671,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A table send or fire refused for stored set-lunch courses whose period has ended opens the
-   * window over the courses it names, whose secondary choice leaves them unsent; one refused for
+   * A table send or fire refused for stored dishes whose period has ended opens the
+   * window over the dishes it names, whose secondary choice leaves them unsent; one refused for
    * want of a manager asks for their PIN. Answers whether it was either.
    */
   async #askTableLateSend(
@@ -15110,46 +15073,36 @@ export class TillApp extends LitElement {
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
-    const { lineId: firstLineId, lineIds } = (
-      event as CustomEvent<{ lineId: string; lineIds?: string[] }>
-    ).detail;
-    await this.#fireHeldLines(lineIds ?? [firstLineId]);
+    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
+    await this.#fireHeldLine(lineId);
   }
 
-  /** A refusal for an ended period asks, and the station's agreement fires again from the refused
-   * line on. */
-  async #fireHeldLines(lineIds: readonly string[], lateSend?: LateSend): Promise<void> {
-    for (const [index, lineId] of lineIds.entries()) {
-      let sent = false;
-      await this.#onGroupCommand(async (party) => {
-        const allergy = await this.#prepareTableAllergy(
-          party.id,
-          { kind: "held-line", lineId },
-          () => true,
+  async #fireHeldLine(lineId: string, lateSend?: LateSend): Promise<void> {
+    await this.#onGroupCommand(async (party) => {
+      const allergy = await this.#prepareTableAllergy(
+        party.id,
+        { kind: "held-line", lineId },
+        () => true,
+      );
+      if (allergy === null) return;
+      let written;
+      try {
+        written = await this.#writeTableAllergy(
+          allergy,
+          (command, signal) =>
+            allergy.api.fireHeldLine(party.id, lineId, withLateSend(command, lateSend), {
+              signal,
+            }),
+          lateSend,
         );
-        if (allergy === null) return;
-        let written;
-        try {
-          written = await this.#writeTableAllergy(
-            allergy,
-            (command, signal) =>
-              allergy.api.fireHeldLine(party.id, lineId, withLateSend(command, lateSend), {
-                signal,
-              }),
-            lateSend,
-          );
-        } catch (error) {
-          const retry = (confirmed: LateSend) =>
-            this.#fireHeldLines(lineIds.slice(index), confirmed);
-          if (await this.#askTableLateSend(error, lateSend, retry, allergy.current)) return;
-          throw error;
-        }
-        if (written === null || !allergy.current()) return;
-        this.#notePartyRevision(party.id, written.value.revision);
-        sent = true;
-      });
-      if (!sent) break;
-    }
+      } catch (error) {
+        const retry = (confirmed: LateSend) => this.#fireHeldLine(lineId, confirmed);
+        if (await this.#askTableLateSend(error, lateSend, retry, allergy.current)) return;
+        throw error;
+      }
+      if (written === null || !allergy.current()) return;
+      this.#notePartyRevision(party.id, written.value.revision);
+    });
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
@@ -16874,30 +16827,6 @@ export class TillApp extends LitElement {
 
   async #onChangeLine(event: Event, lateSend?: LateSend): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
-    let saved = false;
-    try {
-      await this.#applyLineChange(
-        event,
-        () => {
-          saved = true;
-          change.completed?.(true);
-        },
-        lateSend,
-      );
-    } finally {
-      if (!saved)
-        change.completed?.(
-          false,
-          this.changeRefusal?.message ??
-            (this.errorKey === undefined
-              ? undefined
-              : errorText(this.errorKey, this.tableMenus, this.tables)),
-        );
-    }
-  }
-
-  async #applyLineChange(event: Event, onSaved: () => void, lateSend?: LateSend): Promise<void> {
-    const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
@@ -16952,7 +16881,6 @@ export class TillApp extends LitElement {
       return;
     }
     if ("saved" in outcome) {
-      onSaved();
       if (this.activeTabId !== orderId) return;
       this.#noteBillParty(outcome.saved.party);
       this.tabRevision = outcome.saved.revision;
@@ -16997,9 +16925,7 @@ export class TillApp extends LitElement {
     if (asked !== undefined) {
       // Don't add them only abandons the change: the dish was never changed, so Sent is read as it
       // stands.
-      const purpose = change.waitsForSend === true ? "extras-save" : "extras";
-      this.#openLateSend(asked.listed, asked.periods, purpose, retry, () => {
-        change.abandoned?.();
+      this.#openLateSend(asked.listed, asked.periods, "extras", retry, () => {
         if (identity() && !left()) void this.#loadTabLines();
       });
       return;
@@ -17063,14 +16989,11 @@ export class TillApp extends LitElement {
   }
 
   /** The sent dish a change adds extras to, for the late-send window; undefined when the change sets
-   * no extras, or the dish is not in the till's lists, or its offer is neither offered now nor
-   * recorded on a set lunch. */
+   * no extras, or the dish or its offer is not in the till's lists. */
   #lateExtrasDish(change: ChangeLineDetail): OrderLine | undefined {
     if (change.patch.extras === undefined) return undefined;
     const line = this.tabLines.find((each) => each.lineNo === change.lineNo);
-    const offer =
-      this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "") ??
-      line?.lunchOffer;
+    const offer = this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "");
     if (line === undefined || offer === undefined) return undefined;
     // The line's staff name already names its variant.
     const product = {
@@ -17078,10 +17001,7 @@ export class TillApp extends LitElement {
       name: change.lineName,
     };
     delete product.variantName;
-    const extras = this.#addedExtras(line, change.patch.extras, [
-      ...(line.lunchOffer?.offeredModifiers ?? []),
-      ...offer.offeredModifiers,
-    ]);
+    const extras = this.#addedExtras(line, change.patch.extras, offer.offeredModifiers);
     return {
       product,
       quantity: change.saleLine?.quantity ?? line.quantity,
@@ -17097,12 +17017,7 @@ export class TillApp extends LitElement {
     requested: NonNullable<OrderLinePatch["extras"]>,
     lists: TillMenuOffer["offeredModifiers"],
   ): SelectedExtra[] {
-    const remaining = this.tabLines.filter(
-      (child) =>
-        child.parentLineNo === dish.lineNo &&
-        (dish.lunchOffer === undefined ||
-          compareDecimal(decimal(child.cancelledQuantity ?? "0"), decimal(child.quantity)) < 0),
-    );
+    const remaining = this.tabLines.filter((child) => child.parentLineNo === dish.lineNo);
     const added: SelectedExtra[] = [];
     for (const { listId, picks } of requested)
       for (const pick of picks) {
@@ -23292,10 +23207,6 @@ export class TillApp extends LitElement {
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
         @dining-change=${(event: CustomEvent<{ dining: Dining }>) => void this.#onDiningChange(event)}
-        @switch-to-eat-in=${(event: Event) => {
-          event.stopPropagation();
-          void this.#onSwitchToEatIn();
-        }}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}

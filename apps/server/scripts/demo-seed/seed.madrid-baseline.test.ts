@@ -1051,12 +1051,6 @@ for (const locale of ["en", "es"] as const) {
       });
       const products = expected[phase].tables.products!;
       products.columns.splice(
-        products.columns.findIndex((column) => column.name === "variant_order") + 1,
-        0,
-        { name: "set_lunch", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
-      );
-      for (const row of Object.values(products.rows)) row.set_lunch = 0;
-      products.columns.splice(
         products.columns.findIndex((column) => column.name === "vat_class") + 1,
         0,
         { name: "takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },

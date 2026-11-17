@@ -248,7 +248,6 @@ async function buildTicketItems(
       groupPartyId: orderGroups.partyId,
       position: orderGroups.position,
       parentName: parentLine.name,
-      parentNote: parentLine.note,
       parentKitchenName: parentLine.kitchenName,
       parentVariantName: parentLine.variantName,
       parentVariantKitchenName: parentLine.variantKitchenName,
@@ -266,11 +265,6 @@ async function buildTicketItems(
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
     .leftJoin(parentStation, eq(parentStation.id, parentRecord.stationId))
     .where(inArray(workingOrderLines.id, lineIds));
-  const lunches = await VENUE_SERVICE.readLunchLineIds(tx, [
-    ...new Set(
-      storedLineRows.flatMap((row) => (row.parentLineId === null ? [] : [row.parentLineId])),
-    ),
-  ]);
   const allergies = await VENUE_SERVICE.readTicketAllergies(
     tx,
     storedLineRows.flatMap((row) => (row.ticketItemId === null ? [] : [row.ticketItemId])),
@@ -405,10 +399,7 @@ async function buildTicketItems(
         qty: row.quantity,
         unit,
         name: kitchenPresentationName(row),
-        note:
-          row.note ??
-          (row.parentLineId !== null && lunches.has(row.parentLineId) ? row.parentNote : null) ??
-          undefined,
+        note: row.note ?? undefined,
         ...(contains.length === 0 ? {} : { contains }),
         ...(unit === undefined ? {} : { printedAsSold: true }),
         ...afterPeriodOf(lateMarks.get(row.id)),

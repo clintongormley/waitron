@@ -215,7 +215,6 @@ export interface ServiceZoneSummary {
 }
 
 export interface ZoneMenuOffer {
-  readonly setLunch?: true;
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;
@@ -735,7 +734,6 @@ export interface LineContextInput {
    * dish's.
    */
   variantId?: string;
-  recorded?: { offer: ZoneMenuOffer; versionId: string };
   unit?: {
     id: string;
     name: Record<string, string>;
@@ -934,8 +932,7 @@ export interface VenueServiceContribution {
     workingOrderIds: readonly string[],
   ): Promise<ReadonlySet<string>>;
   /** An existing order's way once its department becomes `to.departmentId`; called when an order's
-   *  department changes or is first set. Refuses `order.set_lunch_takeaway` when it would take a set
-   *  lunch away. */
+   *  department changes or is first set. */
   applyDepartmentDining(
     tx: Transaction,
     workingOrderId: string,
@@ -1172,15 +1169,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
-  readLunchLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>>;
-  /** Whether any of the order's lines is a set lunch, as its recorded menu version says. */
-  orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean>;
-  readLunchOffers(
-    tx: Transaction,
-    workingOrderId: string,
-    lineIds: readonly string[],
-    knownContexts?: Awaited<ReturnType<VenueServiceContribution["listLineContexts"]>>,
-  ): Promise<ReadonlyMap<string, { offer: ZoneMenuOffer; versionId: string }>>;
   listLineContexts(
     tx: Transaction,
     workingOrderId: string,

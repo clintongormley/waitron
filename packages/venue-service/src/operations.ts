@@ -43,7 +43,6 @@ import {
   documentOffers,
   isEachUnit,
   readLiveDocuments,
-  readRecordedDocuments,
   readLiveState,
   NO_LIVE_FIELDS,
   units,
@@ -59,7 +58,6 @@ import type {
   ServiceMode,
   ZoneMenuState,
   ZoneOffers,
-  ZoneMenuOffer,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
@@ -1156,90 +1154,6 @@ export async function findOrderServiceZones(
   );
 }
 
-/** Whether any of the order's lines is a set lunch, as {@link readLunchLineIds} reads it. */
-export async function orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean> {
-  const lines = await tx
-    .select({ id: workingOrderLines.id })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-  return (
-    (
-      await readLunchLineIds(
-        tx,
-        lines.map((line) => line.id),
-      )
-    ).size > 0
-  );
-}
-
-export async function readLunchLineIds(
-  tx: Transaction,
-  lineIds: readonly string[],
-): Promise<Set<string>> {
-  if (lineIds.length === 0) return new Set();
-  const contexts = await tx
-    .select({
-      lineId: workingOrderLines.id,
-      menuItemId: workingOrderLines.menuItemId,
-      versionId: workingOrderLines.menuVersionId,
-    })
-    .from(workingOrderLines)
-    .where(
-      inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(lineIds)}))`),
-    );
-  const documents = await readRecordedDocuments(
-    tx,
-    contexts.flatMap((row) => (row.versionId === null ? [] : [row.versionId])),
-  );
-  return new Set(
-    contexts.flatMap((row) =>
-      row.versionId !== null &&
-      row.menuItemId !== null &&
-      documents.get(row.versionId)?.offers[row.menuItemId]?.setLunch === true
-        ? [row.lineId]
-        : [],
-    ),
-  );
-}
-
-export async function readLunchOffers(
-  tx: Transaction,
-  workingOrderId: string,
-  lineIds: readonly string[],
-  knownContexts?: ReadonlyArray<Awaited<ReturnType<typeof listWorkingLineContexts>>[number]>,
-) {
-  const selected = new Set(lineIds);
-  const contexts =
-    knownContexts === undefined
-      ? await listWorkingLineContexts(tx, workingOrderId, lineIds)
-      : knownContexts.filter((row) => selected.has(row.workingOrderLineId));
-  const documents = await readRecordedDocuments(
-    tx,
-    contexts.flatMap((row) => (row.menuVersionId === null ? [] : [row.menuVersionId])),
-  );
-  const versions = new Map<string, ZoneMenuOffer[]>();
-  for (const [versionId, document] of documents) {
-    const menuItemIds = new Set(
-      contexts
-        .filter(
-          (row) => row.menuVersionId === versionId && document.offers[row.menuItemId]?.setLunch,
-        )
-        .map((row) => row.menuItemId),
-    );
-    if (menuItemIds.size === 0) continue;
-    const { offers } = await applyLiveFields(tx, [document], menuItemIds);
-    versions.set(versionId, offers.get(document.menuId) ?? []);
-  }
-  return new Map(
-    contexts.flatMap((row) => {
-      const offer = versions.get(row.menuVersionId!)?.find((offer) => offer.id === row.menuItemId);
-      return offer?.setLunch
-        ? [[row.workingOrderLineId, { offer, versionId: row.menuVersionId! }] as const]
-        : [];
-    }),
-  );
-}
-
 export async function listWorkingLineContexts(
   tx: Transaction,
   workingOrderId: string,
@@ -1438,7 +1352,7 @@ export async function lineContextColumns(
   };
   return new Map(
     lines.map((line) => {
-      const offer = line.recorded?.offer ?? byMenuItem.get(line.menuItemId);
+      const offer = byMenuItem.get(line.menuItemId);
       if (offer === undefined) {
         throw new AppError("service_zone.offer_not_allowed", {
           zoneId: context.zoneId,
@@ -1452,7 +1366,7 @@ export async function lineContextColumns(
         {
           menuItemId: offer.id,
           menuId: offer.menuId,
-          menuVersionId: line.recorded?.versionId ?? versionOf(offer.menuId),
+          menuVersionId: versionOf(offer.menuId),
           menuName: offer.menuName,
           offerDepartmentId: context.departmentId,
           departmentName: department.name,

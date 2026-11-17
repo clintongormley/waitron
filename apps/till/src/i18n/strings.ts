@@ -15,8 +15,6 @@ export const en = {
   "problem_report.download": "Download report",
   "problem_report.download_failed": "Could not create the download. Try again.",
 
-  "lunch.choose_later": "Choose later",
-  "lunch.choices": "Lunch choices",
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped":
     "New invoices are stopped. Open recovery with the current server key.",
@@ -2137,8 +2135,6 @@ export const es: Record<StringKey, string> = {
   "problem_report.download": "Descargar informe",
   "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
 
-  "lunch.choose_later": "Elegir más tarde",
-  "lunch.choices": "Elegir platos",
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
     "La emisión de facturas está detenida. Abre la recuperación con la clave del servidor actual.",

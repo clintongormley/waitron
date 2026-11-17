@@ -316,7 +316,7 @@ describe("firing with charged cancellations", () => {
         wasStarted: false,
         actorId: venue.staffId,
       });
-      await fireOrderLines(tx, venue.cfg, order.billId, [parent!.id], { ask: undefined });
+      await fireOrderLines(tx, venue.cfg, order.billId, [parent!.id]);
     });
     expect((await rows(order.billId))[0]!.sentAt).toBeNull();
   });

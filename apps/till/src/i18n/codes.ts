@@ -641,10 +641,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "One of these bills is to eat here and the other to take away, so dishes cannot move between them. Switch one bill to match the other first, if it has not gone to the kitchen",
     es: "Una de estas cuentas es para tomar aquí y la otra para llevar, así que los platos no pueden pasar de una a otra. Cambia primero una de ellas para que coincidan, si aún no ha ido a cocina",
   },
-  "order.set_lunch_takeaway": {
-    en: "Set lunches are only served to eat here for now, so a takeaway order cannot include one. Remove the set lunch to sell this order to take away",
-    es: "Por ahora el menú del día solo se sirve para tomar aquí, así que un pedido para llevar no puede incluirlo. Quita el menú del día para vender este pedido para llevar",
-  },
+
   "station.no_default": {
     en: "No prep station can make one of these dishes. Fix this in the dashboard, on the Prep stations page.",
     es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",

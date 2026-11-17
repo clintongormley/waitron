@@ -1,4 +1,3 @@
-import { readLunchLineIds } from "./operations.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   insertInChunks,
@@ -259,16 +258,6 @@ export async function setAllergyLineTicks(
       ))
       found.add(id);
   if (workingLineIds.length > 0) {
-    const parents = await tx
-      .select({ id: workingOrderLines.parentLineId })
-      .from(workingOrderLines)
-      .where(inArray(workingOrderLines.id, workingLineIds));
-    const lunches = [
-      ...(await readLunchLineIds(
-        tx,
-        parents.flatMap((row) => (row.id === null ? [] : [row.id])),
-      )),
-    ];
     for (const { id } of await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
@@ -285,10 +274,7 @@ export async function setAllergyLineTicks(
               ) select id from family
             )`,
           ),
-          or(
-            isNull(workingOrderLines.parentLineId),
-            inArray(workingOrderLines.parentLineId, lunches),
-          ),
+          isNull(workingOrderLines.parentLineId),
         ),
       ))
       found.add(id);

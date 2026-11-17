@@ -44,7 +44,6 @@ declare module "@waitron/shared" {
     "department_transfer.reason_required": Record<string, never>;
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     "order.dining_fixed": { dining: Dining };
-    "order.set_lunch_takeaway": { canSwitch: boolean };
     "order.payment_in_flight": { workingOrderId: string };
     "bill.refund_in_progress": { workingOrderId: string };
     "department.not_found": { departmentId: string };

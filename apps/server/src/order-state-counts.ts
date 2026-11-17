@@ -1,5 +1,4 @@
 import { takesExtras } from "@waitron/menu/src/unit-extras.js";
-import { serviceDishPredicate } from "./service-dishes.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
@@ -144,14 +143,13 @@ export async function readOrderStateCounts(
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
     .where(inArray(workingOrderLines.workingOrderId, [...orderIds]));
-  const isDish = await serviceDishPredicate(tx, lines);
   const extras = new Map<string, KitchenPart[]>();
   for (const line of lines) {
-    if (line.parentLineId === null || isDish(line)) continue;
+    if (line.parentLineId === null) continue;
     extras.set(line.parentLineId, [...(extras.get(line.parentLineId) ?? []), kitchenPart(line)]);
   }
   for (const line of lines) {
-    if (!isDish(line)) continue;
+    if (line.parentLineId !== null) continue;
     const dish: CountedLine = {
       ...kitchenPart(line),
       quantity: line.quantity,

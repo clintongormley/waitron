@@ -5,7 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { dishLine } from "./dish-format.js";
 
-export type LateSendPurpose = "send" | "save" | "extras" | "extras-save" | "stored";
+export type LateSendPurpose = "send" | "save" | "extras" | "stored";
 
 export interface LateSendDish {
   quantity: string;
@@ -47,10 +47,8 @@ export class TillLateSendDialog extends LitElement {
   @property({ attribute: false }) periodNames: readonly [string, ...string[]] = [""];
 
   /** `save`: a Park, which stores the order without sending it to the kitchen. `extras`: a change
-   * adding extras to a sent dish, which the secondary choice abandons; `extras-save`: the same, for
-   * a change that is saved without being sent. `stored`: a send of dishes already stored on the
-   * order (a Place, or a table's Send, Fire course or Fire line), which the secondary choice leaves
-   * there unsent. */
+   * adding extras to a sent dish, which the secondary choice abandons. `stored`: a Place of dishes
+   * already stored on the order, which the secondary choice leaves there unsent. */
   @property() purpose: LateSendPurpose = "send";
 
   #emit(type: "wt-late-send-removed" | "wt-late-send-agreed" | "wt-late-send-cancelled"): void {
@@ -94,7 +92,7 @@ export class TillLateSendDialog extends LitElement {
         @click=${() => this.#emit("wt-late-send-removed")}
       >
         ${t(
-          this.purpose === "extras" || this.purpose === "extras-save"
+          this.purpose === "extras"
             ? "late_send.dont_add"
             : this.purpose === "stored"
               ? "late_send.dont_send"
@@ -107,11 +105,7 @@ export class TillLateSendDialog extends LitElement {
         variant="primary"
         @click=${() => this.#emit("wt-late-send-agreed")}
       >
-        ${t(
-          this.purpose === "save" || this.purpose === "extras-save"
-            ? "late_send.agreed_save"
-            : "late_send.agreed",
-        )}
+        ${t(this.purpose === "save" ? "late_send.agreed_save" : "late_send.agreed")}
       </wt-button>
     </wt-dialog>`;
   }

@@ -5562,7 +5562,6 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct({ ...offer, available: true })).toMatchObject({
       available: true,
     });
-    expect(menuOfferToTillProduct({ ...offer, setLunch: true })).toHaveProperty("setLunch", true);
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
   });
 

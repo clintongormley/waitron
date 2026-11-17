@@ -290,20 +290,6 @@ describe("switching an order's way of selling", () => {
     expect(await orderOf(id)).toEqual(before);
   });
 
-  it("refuses taking a set lunch away", async () => {
-    const id = await parked(menu.setLunch);
-    const before = await orderOf(id);
-
-    const switched = await switchTo(id, "takeaway");
-
-    expect(switched.status).toBe(409);
-    expect(switched.json).toEqual({
-      code: "order.set_lunch_takeaway",
-      params: { canSwitch: false },
-    });
-    expect(await orderOf(id)).toEqual(before);
-  });
-
   it("refuses a table bill another waiter is editing", async () => {
     const { partyId, tabId } = await unsentTab([{ productId: menu.cola }]);
     await inTx(venue, (tx) =>
@@ -388,40 +374,6 @@ describe("switching an order's way of selling", () => {
       expect((await orderOf(id)).dining).toBe("takeaway");
     });
   });
-
-  it("says a takeaway order may still switch for a set lunch when its zone moves to a department eaten here", async () => {
-    const id = await parked(menu.cola);
-    expect((await switchTo(id, "takeaway")).status).toBe(200);
-    await withCounterIn("eat_in", async () => {
-      const saved = await addSetLunch(id);
-      expect(saved.status).toBe(409);
-      expect(saved.json).toEqual({ code: "order.set_lunch_takeaway", params: { canSwitch: true } });
-
-      const switched = await switchTo(id, "eat_in");
-
-      expect(switched.status).toBe(200);
-      expect((await orderOf(id)).dining).toBe("eat_in");
-    });
-  });
-
-  it("says a takeaway order fixed by its department cannot switch for a set lunch when its zone moves to a till-choice one", async () => {
-    await departmentsSell("takeaway");
-    const id = await parked(menu.cola);
-    expect((await orderOf(id)).dining).toBe("takeaway");
-    await withCounterIn("till_choice", async () => {
-      const saved = await addSetLunch(id);
-      expect(saved.status).toBe(409);
-      expect(saved.json).toEqual({
-        code: "order.set_lunch_takeaway",
-        params: { canSwitch: false },
-      });
-
-      const switched = await switchTo(id, "eat_in");
-
-      expect(switched.status).toBe(409);
-      expect(switched.json).toEqual({ code: "order.dining_fixed", params: { dining: "takeaway" } });
-    });
-  });
 });
 
 /**
@@ -450,18 +402,6 @@ async function withCounterIn(dining: DiningPolicy, body: () => Promise<void>): P
       configureZone(tx, { zoneId: counter.zoneId, departmentId: zone!.departmentId! }),
     );
   }
-}
-
-/** Save a parked cola order with a set lunch added. */
-async function addSetLunch(id: string) {
-  return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
-    dining: "takeaway",
-    lines: [menu.cola, menu.setLunch].map((productId) => ({
-      menuItemId: counter.offerFor(productId),
-      quantity: "1",
-    })),
-    revision: (await orderOf(id)).revision,
-  });
 }
 
 describe("moving dishes between a party's bills", () => {

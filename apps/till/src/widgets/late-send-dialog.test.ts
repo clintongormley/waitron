@@ -120,26 +120,6 @@ describe("till-late-send-dialog", () => {
     },
   );
 
-  it.each([
-    ["en-GB", "Don't add them", "Station agreed — save"],
-    ["es-ES", "No añadirlos", "La estación acepta — guardar"],
-  ])(
-    "says save on extras a change saves without sending, in %s",
-    async (locale, dontAdd, agreed) => {
-      const { el } = await mount(
-        {
-          dishes: [{ quantity: "1.000", name: "Omelette", extras: ["Bacon"] }],
-          periodNames: ["Breakfast"],
-          purpose: "extras-save",
-        },
-        locale,
-      );
-      expect(rows(el)).toEqual(["1× Omelette + Bacon"]);
-      expect(words(button(el, "remove"))).toBe(dontAdd);
-      expect(words(button(el, "agreed"))).toBe(agreed);
-    },
-  );
-
   it("shows a dish sold by weight with its unit", async () => {
     const { el } = await mount({
       dishes: [{ quantity: "0.320", name: "Ham", unitName: { en: "kg" }, soldInEach: false }],

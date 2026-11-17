@@ -3093,7 +3093,6 @@ async function fireTabLines(
     cfg,
     orderId,
     lines.map((line) => line.id),
-    { ask: undefined },
   );
 }
 

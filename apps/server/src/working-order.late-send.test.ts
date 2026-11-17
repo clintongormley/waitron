@@ -1,7 +1,7 @@
 import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { workingOrderLines, workingOrders, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -12,8 +12,6 @@ import {
   createExtraList,
   createProduct,
   readProductModifiers,
-  removeMember,
-  sectionMembers,
   setProductVariants,
   updateProduct,
   writeProductModifiers,
@@ -726,141 +724,6 @@ describe("extras added later to a stored dish", () => {
       { latePeriodName: null, lateConfirmedBy: null },
       { latePeriodName: null, lateConfirmedBy: null },
     ]);
-  });
-
-  it("on a set lunch with a course sent, as a later course choice, are late like any other extra", async () => {
-    at("13:50");
-    const v = await mealVenue();
-    await withTransaction(suite.db, async (tx) => {
-      await updateProduct(tx, v.saladId, { setLunch: true });
-      await publishWorkingMenu(tx, v.menus.setLunch);
-    });
-    const picks = (productIds: string[]) => [
-      {
-        listId: v.avocado.listId,
-        picks: productIds.map((productId) => ({ productId, quantity: 1 })),
-      },
-    ];
-    const id = await sendAtTable(v, [
-      { menuItemId: v.salad, quantity: "1", extras: picks([v.avocado.productId]) },
-    ]);
-    const [lunch] = await suite.db
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    const addEgg = async (lateSend?: LateSendConfirmation) =>
-      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
-        revision: await revisionOf(id),
-        operatorId: OPERATOR,
-        expectedEdit: await editState(id),
-        lines: [
-          {
-            workingOrderLineId: lunch!.id,
-            menuItemId: v.salad,
-            quantity: "1",
-            extras: picks([v.avocado.productId, v.eggId]),
-          },
-        ],
-        ...(lateSend === undefined ? {} : { lateSend }),
-      });
-    at("14:05");
-    await expect(addEgg()).rejects.toMatchObject({
-      code: "menu_period.ended",
-      params: {
-        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
-        menuItemIds: [v.salad],
-      },
-    });
-    const { personId, lateSend } = confirming([v.menus.setLunch]);
-    await addEgg(lateSend);
-    const marks = await suite.db
-      .select({
-        productId: workingOrderLines.productId,
-        latePeriodName: workingOrderLines.latePeriodName,
-        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
-      })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id));
-    expect(marks).toHaveLength(3);
-    expect(marks).toEqual(
-      expect.arrayContaining([
-        { productId: v.saladId, latePeriodName: null, lateConfirmedBy: null },
-        { productId: v.avocado.productId, latePeriodName: null, lateConfirmedBy: null },
-        { productId: v.eggId, latePeriodName: "Lunch", lateConfirmedBy: personId },
-      ]),
-    );
-  });
-
-  it("on a set lunch whose offer left the menu after it was sent, are late against the offer it recorded", async () => {
-    at("13:50");
-    const v = await mealVenue();
-    await withTransaction(suite.db, async (tx) => {
-      await updateProduct(tx, v.saladId, { setLunch: true });
-      await publishWorkingMenu(tx, v.menus.setLunch);
-    });
-    const picks = (productIds: string[]) => [
-      {
-        listId: v.avocado.listId,
-        picks: productIds.map((productId) => ({ productId, quantity: 1 })),
-      },
-    ];
-    const id = await sendAtTable(v, [
-      { menuItemId: v.salad, quantity: "1", extras: picks([v.avocado.productId]) },
-    ]);
-    await withTransaction(suite.db, async (tx) => {
-      const [member] = await tx
-        .select({ id: sectionMembers.id, sectionId: sectionMembers.sectionId })
-        .from(sectionMembers)
-        .where(eq(sectionMembers.productId, v.saladId));
-      await removeMember(tx, member!.sectionId, member!.id);
-      await publishWorkingMenu(tx, v.menus.setLunch);
-    });
-    const [lunch] = await suite.db
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    const addEgg = async (lateSend?: LateSendConfirmation) =>
-      updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, v.cfg, id, {
-        revision: await revisionOf(id),
-        operatorId: OPERATOR,
-        expectedEdit: await editState(id),
-        lines: [
-          {
-            workingOrderLineId: lunch!.id,
-            menuItemId: v.salad,
-            quantity: "1",
-            extras: picks([v.avocado.productId, v.eggId]),
-          },
-        ],
-        ...(lateSend === undefined ? {} : { lateSend }),
-      });
-    at("14:05");
-    const before = await linesOf(id);
-    const revision = await revisionOf(id);
-    await expect(addEgg()).rejects.toMatchObject({
-      code: "menu_period.ended",
-      params: {
-        departmentId: v.restaurant,
-        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
-        menuItemIds: [v.salad],
-      },
-    });
-    expect(await linesOf(id)).toEqual(before);
-    expect(await revisionOf(id)).toBe(revision);
-    const { personId, lateSend } = confirming([v.menus.setLunch]);
-    await addEgg(lateSend);
-    const [egg] = await suite.db
-      .select({
-        latePeriodName: workingOrderLines.latePeriodName,
-        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
-      })
-      .from(workingOrderLines)
-      .where(
-        and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.productId, v.eggId)),
-      );
-    expect(egg).toEqual({ latePeriodName: "Lunch", lateConfirmedBy: personId });
   });
 
   describe("through the one-line edit", () => {

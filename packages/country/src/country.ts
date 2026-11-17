@@ -75,7 +75,6 @@ export const RECEIPT_LABEL_KEYS = [
   "charged",
   "refund",
   "discount",
-  "supplement",
   "vatIncluded",
   "reference",
   "duplicate",

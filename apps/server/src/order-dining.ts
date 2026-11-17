@@ -86,39 +86,6 @@ export async function storedOrderDining(tx: Transaction, workingOrderId: string)
 }
 
 /**
- * Refuse `order.set_lunch_takeaway`, saying whether staff may still switch the order to eaten here:
- * an existing order as {@link readOrderDinings} offers it, and an order not yet written by whether
- * its zone's department takes both ways.
- */
-export async function refuseTakeawaySetLunch(
-  tx: Transaction,
-  workingOrderId: string,
-  zoneId: string | undefined,
-): Promise<never> {
-  const existing = (await readOrderDinings(tx, [workingOrderId])).get(workingOrderId);
-  throw new AppError("order.set_lunch_takeaway", {
-    canSwitch:
-      existing === undefined
-        ? zoneId !== undefined && (await takesEitherWay(tx, zoneId))
-        : existing.diningChoice === "open",
-  });
-}
-
-// `resolveOrderDining` accepts both requests only for a till-choice department in a region that
-// charges takeaway VAT: either other case fixes one way and refuses the other.
-async function takesEitherWay(tx: Transaction, zoneId: string): Promise<boolean> {
-  for (const dining of DININGS) {
-    try {
-      await VENUE_SERVICE.resolveOrderDining(tx, zoneId, dining);
-    } catch (error) {
-      if (error instanceof AppError && error.code === "order.dining_fixed") return false;
-      throw error;
-    }
-  }
-  return true;
-}
-
-/**
  * Switch an open order between eaten here and takeaway at `revision`, moving its revision on. The
  * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
  * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
@@ -153,8 +120,6 @@ export async function switchOrderDining(
   }
   const locked = await orderDiningLocked(tx, workingOrderId);
   if (locked !== null) throw new AppError("order.dining_locked", { reason: locked });
-  if (dining === "takeaway" && (await VENUE_SERVICE.orderHasSetLunch(tx, workingOrderId)))
-    throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
   await tx
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })

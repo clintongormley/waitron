@@ -535,7 +535,6 @@ describe("A773 pass release: set and stamps", () => {
         f.venue.cfg,
         f.venue.party.tabId,
         [f.burgerLine],
-        { ask: undefined },
         undefined,
         routingOnce(tx, new Date("2026-03-14T12:10:00.000Z")),
       ),

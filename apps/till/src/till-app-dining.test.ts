@@ -38,19 +38,6 @@ const cola: TillProduct = {
   allergens: null,
 };
 
-const lunch: TillProduct = {
-  id: "set-lunch",
-  menuItemId: "offer-lunch",
-  menuId: "cat-default",
-  name: "Set lunch",
-  pricingUnit: "each",
-  unitPrice: "14.00",
-  vatClass: "reduced",
-  category: null,
-  allergens: null,
-  setLunch: true,
-};
-
 let previous = currentLocale();
 beforeEach(() => {
   previous = currentLocale();
@@ -258,86 +245,18 @@ describe("the counter's way of selling (A1522)", () => {
     expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
   });
 
-  it("a set lunch refused on a takeaway sale offers Switch to eat here, which keeps the set lunch", async () => {
-    const recordSale = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "order.set_lunch_takeaway", canSwitch: true })
-      .mockResolvedValue(invoiceOf("14.00"));
-    const { el, api, counter } = await counterApp({ recordSale });
-    await chooseWay(el, counter(), "Take away");
-    counter().store.addProduct(lunch, "1");
-    await flush(el);
-
-    await payCash(el, counter());
-
-    expect(banner(el)?.textContent).toContain(codeMessage("order.set_lunch_takeaway"));
-    expect(banner(el)?.textContent).toContain(t("dining.switch_to_eat_in_explained"));
-    const action = switchToEatIn(el)!;
-    expect(action.textContent?.trim()).toBe(t("dining.switch_to_eat_in"));
-
-    await userEvent.click(action);
-    await flush(el);
-
-    expect(api.switchDining).not.toHaveBeenCalled();
-    expect(counter().store.dining).toBe("eat_in");
-    expect(counter().store.lines.map((line) => line.product.name)).toEqual(["Set lunch"]);
-    expect(banner(el)).toBeNull();
-    await payCash(el, counter());
-    expect(recordSale.mock.calls[1]![9]).toBe("eat_in");
-  });
-
-  it("Switch to eat here on a saved order switches it on the server", async () => {
-    const { el, api, counter } = await counterApp({
-      retrieveWorkingOrder: vi
-        .fn()
-        .mockResolvedValue({ ...savedOrder("open"), dining: "takeaway" }),
-      updateWorkingOrder: vi
-        .fn()
-        .mockRejectedValue({ code: "order.set_lunch_takeaway", canSwitch: true }),
-    });
-    emit(counter(), "retrieve-order", { id: "wo-1" });
-    await flush(el);
-    counter().store.addProduct(lunch, "1");
-    await flush(el);
-    await payCash(el, counter());
-
-    await userEvent.click(switchToEatIn(el)!);
-    await flush(el);
-
-    expect(api.switchDining).toHaveBeenCalledExactlyOnceWith("wo-1", "eat_in", 2, null);
-    expect(counter().store.dining).toBe("eat_in");
-    expect(counter().store.lines.map((line) => line.product.name)).toContain("Set lunch");
-  });
-
-  it("a set lunch refused where the order cannot switch offers no Switch to eat here", async () => {
+  it.each(["order.dining_fixed"])("a sale refused %s says so in its own words", async (code) => {
     const { el, counter } = await counterApp({
-      recordSale: vi.fn().mockRejectedValue({ code: "order.set_lunch_takeaway", canSwitch: false }),
+      recordSale: vi.fn().mockRejectedValue({ code, canSwitch: false, dining: "eat_in" }),
     });
-    await chooseWay(el, counter(), "Take away");
-    counter().store.addProduct(lunch, "1");
+    counter().store.addProduct(cola, "1");
     await flush(el);
 
     await payCash(el, counter());
 
-    expect(banner(el)?.textContent).toContain(codeMessage("order.set_lunch_takeaway"));
-    expect(switchToEatIn(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
+    expect(banner(el)?.textContent).not.toContain(codeMessage("server.internal"));
   });
-
-  it.each(["order.dining_fixed", "order.set_lunch_takeaway"])(
-    "a sale refused %s says so in its own words",
-    async (code) => {
-      const { el, counter } = await counterApp({
-        recordSale: vi.fn().mockRejectedValue({ code, canSwitch: false, dining: "eat_in" }),
-      });
-      counter().store.addProduct(cola, "1");
-      await flush(el);
-
-      await payCash(el, counter());
-
-      expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
-      expect(banner(el)?.textContent).not.toContain(codeMessage("server.internal"));
-    },
-  );
 });
 
 describe("a table bill's way of selling (A1522)", () => {
@@ -402,40 +321,6 @@ describe("a table bill's way of selling (A1522)", () => {
     expect(tableOrder(el).diningChoice).toBe("locked");
     expect(tableOrder(el).dining).toBe("eat_in");
     expect(segmented(tableOrder(el))).toBeNull();
-  });
-
-  it("a round with a set lunch refused on a takeaway bill offers Switch to eat here, which switches the bill on the server", async () => {
-    const { el, api } = await tableApp(
-      {
-        submitDraft: vi
-          .fn()
-          .mockRejectedValue({ code: "order.set_lunch_takeaway", canSwitch: true }),
-      },
-      "takeaway",
-    );
-    tableOrder(el).draftStore!.addProduct(lunch, "1");
-    await flush(el);
-    tableOrder(el)
-      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
-      .click();
-    await flush(el, 6);
-    expect(api.submitDraft).toHaveBeenCalledOnce();
-    expect(banner(el)?.textContent).toContain(codeMessage("order.set_lunch_takeaway"));
-
-    await userEvent.click(switchToEatIn(el)!);
-    await flush(el);
-
-    expect(api.switchDining).toHaveBeenCalledExactlyOnceWith(
-      "wo-4",
-      "eat_in",
-      5,
-      expect.objectContaining({ billId: "wo-4" }),
-    );
-    expect(banner(el)).toBeNull();
-    expect(tableOrder(el).dining).toBe("eat_in");
-    expect(tableOrder(el).draftStore!.lines.map((line) => line.product.name)).toEqual([
-      "Set lunch",
-    ]);
   });
 
   it("a second choice while a switch is out sends nothing more", async () => {
@@ -526,21 +411,21 @@ describe("a table bill's way of selling (A1522)", () => {
     expect(banner(el)?.textContent).toContain(codeMessage("order.dining_differs"));
   });
 
-  it.each([
-    ["order.dining_fixed", { dining: "eat_in" }],
-    ["order.set_lunch_takeaway", { canSwitch: false }],
-  ])("a switch refused %s says so in its own words", async (code, params) => {
-    const { el } = await tableApp({
-      switchDining: vi.fn().mockRejectedValue({ code, ...params }),
-    });
+  it.each([["order.dining_fixed", { dining: "eat_in" }]])(
+    "a switch refused %s says so in its own words",
+    async (code, params) => {
+      const { el } = await tableApp({
+        switchDining: vi.fn().mockRejectedValue({ code, ...params }),
+      });
 
-    await chooseWay(el, tableOrder(el), "Take away");
-    await flush(el);
+      await chooseWay(el, tableOrder(el), "Take away");
+      await flush(el);
 
-    expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
-    expect(switchToEatIn(el)).toBeNull();
-    expect(segmented(tableOrder(el))!.value).toBe("eat_in");
-  });
+      expect(banner(el)?.textContent).toContain(codeMessage(code, undefined, { dining: "eat_in" }));
+      expect(switchToEatIn(el)).toBeNull();
+      expect(segmented(tableOrder(el))!.value).toBe("eat_in");
+    },
+  );
 });
 
 function deferred<T>() {

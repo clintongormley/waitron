@@ -1,5 +1,7 @@
 # A1515. Set lunch menus: proposal
 
+**Superseded 2026-11-17:** the old set-lunch build is removed; the [set-menu design](../specs/2026-11-17-set-menus-design.md) replaces it. The historical text below is unchanged.
+
 **Historical draft, 12 November 2026.** Later dated sections supersede earlier recommendations, including receipt layout, closing choices and the VAT wait. These are recommendations, not agreed features. Lane L reviewed the invoice part on 12 November; its corrections are incorporated below. Nothing is built; implementation, schema,
 fiscal changes and public printed-menu design are outside this proposal.
 
