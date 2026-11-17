@@ -74,6 +74,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountMenuApi } from "./menu-api.js";
 import type { TranslationItemPage } from "@waitron/menu/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
+import { readSettledTicket, type TillSaleResult } from "./till-sale.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
 
@@ -3385,5 +3387,64 @@ describe("explicit F1 receipt delivery enrollment", () => {
     expect((await post("receipt")).status).toBe(200);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+  });
+});
+
+describe("receipt lines' VAT rates", () => {
+  it("a reprinted simplified receipt's lines carry their filed VAT rates", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    const pan = await withTransaction(suite.db, async (tx) => {
+      const [category] = await tx.select({ id: products.categoryId }).from(products);
+      const product = await createProduct(tx, {
+        categoryId: category!.id,
+        name: "Pan",
+        pricingUnit: "each",
+        unitPrice: "2.20",
+        vatClass: "reduced",
+      });
+      const item = await addProductToMenu(tx, {
+        menuId: each.menuId,
+        productId: product.id,
+        grossPrice: "2.20",
+      });
+      await publishWorkingMenu(tx, each.menuId);
+      return item;
+    });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const workingOrderId = randomUUID();
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        dining: "eat_in",
+        workingOrderId,
+        lines: [
+          { menuItemId: each.menuItemId, quantity: "1" },
+          { menuItemId: pan.id, quantity: "1" },
+        ],
+        tender: { method: "cash", amount: "3.70" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const sold = (await res.json()) as TillSaleResult;
+    const [sale] = await suite.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    const reprinted = await withTransaction(suite.db, (tx) =>
+      readSettledTicket(backend, tx, cfg, workingOrderId),
+    );
+    const transaction = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(backend, tx, cfg, sale!.id),
+    );
+    for (const ticket of [sold, reprinted, transaction]) {
+      expect(ticket.vatBreakdown.map((band) => band.rate)).toEqual(["21.00", "10.00"]);
+      expect(ticket.lines.map((line) => [line.gross, line.vatRate])).toEqual([
+        ["1.50", "21.00"],
+        ["2.20", "10.00"],
+      ]);
+    }
   });
 });

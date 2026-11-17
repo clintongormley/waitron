@@ -86,11 +86,15 @@ export async function receiptLines(
         )
         .map((row) => row.lineNo),
     );
-    lines = lines.map((line, i) =>
-      lunchLines.has(priced.lines[i]!.lineNo) ? { ...line, setLunch: true as const } : line,
-    );
+    const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
+    lines = lines.map((line, i) => {
+      const lineNo = priced.lines[i]!.lineNo;
+      const vatRate = basisPointsToDecimal(byLineNo.get(lineNo)!.rate);
+      return lunchLines.has(lineNo)
+        ? { ...line, vatRate, setLunch: true as const }
+        : { ...line, vatRate };
+    });
     if (filed[0]?.counterpartyTaxId != null) {
-      const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
       lines = lines.map((line, i) => {
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };

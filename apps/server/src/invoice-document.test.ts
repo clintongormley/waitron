@@ -174,6 +174,7 @@ describe("stored invoice document projection", () => {
         unitName: { "es-ES": "kg" },
         unitPrecision: 3,
         gross: "6.05",
+        vatRate: "21.00",
         listGross: "7.26",
         parentLineNo: null,
         net: {
@@ -192,6 +193,7 @@ describe("stored invoice document projection", () => {
         unitName: null,
         unitPrecision: null,
         gross: "1.53",
+        vatRate: "10.00",
         parentLineNo: 4,
         net: {
           unitPrice: "1.39",
@@ -484,6 +486,7 @@ describe("stored invoice document projection", () => {
         unitName: null,
         unitPrecision: null,
         gross: "1.00",
+        vatRate: "0.00",
         parentLineNo: null,
         net: { unitPrice: "1.00", priceQuantity: "1.000", base: "1.00", rate: "0.00" },
       },
