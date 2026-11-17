@@ -141,13 +141,16 @@ it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second chec
   expect(await sha256(venuePath)).toBe(hash);
 });
 
-it("refuses a write-ahead log beside the copy, which the hash would not cover", async () => {
-  const hash = await place();
-  await writeFile(`${venuePath}-wal`, "");
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.wal_present",
-  });
-});
+it.each(["-wal", "-journal"])(
+  "refuses a %s beside the copy, which the hash would not cover and an immutable open ignores",
+  async (suffix) => {
+    const hash = await place();
+    await writeFile(`${venuePath}${suffix}`, "");
+    await expect(check(bindingFor(hash))).rejects.toMatchObject({
+      code: "emergency_copy.journal_present",
+    });
+  },
+);
 
 it("refuses a node.db already beside the copy, so the source's is never adopted", async () => {
   const hash = await place();

@@ -61,8 +61,8 @@ It holds the venue folder's lock throughout (`lockVenueDatabase`), then:
    `copyOperationId` distinct from both, instants in ISO UTC with milliseconds, `expiresAt` exactly 30
    minutes after `startedAt` and not yet passed by this machine's clock. The two installation ids are
    recorded, not checked (above).
-2. **Checks the placed file without opening it for writing:** no `-wal` beside it (the hash would not
-   cover it); no `node.db` beside it unless it holds this binding's record (so the source's `node.dump`
+2. **Checks the placed file without opening it for writing:** no `-wal` or `-journal` beside it (the hash
+   would not cover it, and an immutable open ignores it); no `node.db` beside it unless it holds this binding's record (so the source's `node.dump`
    is never adopted); SHA-256 equals `databaseSha256`; integrity; schema not ahead of this software;
    `deployment.environment` equals the binding's and this process's; the settings' Cloud venue id and
    stream id match; the generation's name names `sourceNodeId`; `sourceNodeId` has a `nodes` row and the
@@ -146,7 +146,7 @@ None: existing `node_handover_events` and `box` columns via their listed writers
 - **`mirror` with no mirror link** is, I believe, new (not checked). Today's emergency declaration needs
   `mirror` and takes the source from the held chart (`handover-emergency-api.ts:327-336`), which on the
   copy names the source; part 4 may reuse it, checking it against this record.
-- **The hash covers one file** (a `-wal` is refused) and proves Cloud's choice, not the newest copy.
+- **The hash covers one file** (a `-wal` or `-journal` is refused) and proves Cloud's choice, not the newest copy.
 - **Time:** integrity (provisional 30-minute limit, `handover-integrity.ts:48-49`), hash and chain checks
   run inside Cloud's fixed 30-minute window; part 3's qualification measures placement on the bench's
   year-size `venue.db` (my call: placement and locked start share the window).

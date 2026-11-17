@@ -10,7 +10,13 @@ import {
 } from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { NODE_FILE, openBackupQuery, WAL_SUFFIX, type BackupQuery } from "@waitron/store";
+import {
+  JOURNAL_SUFFIX,
+  NODE_FILE,
+  openBackupQuery,
+  WAL_SUFFIX,
+  type BackupQuery,
+} from "@waitron/store";
 import { parseGenerationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { checkCopyIntegrity } from "./handover-integrity.js";
@@ -49,8 +55,9 @@ export async function checkPlacedEmergencyCopy(deps: {
 }): Promise<void> {
   const { binding, venuePath } = deps;
   // Every open below is immutable, so a WAL-mode file gains no `-wal` or `-shm`: safe only because
-  // a `-wal` beside the file is refused first, and an immutable open would read past it.
-  if (existsSync(`${venuePath}${WAL_SUFFIX}`)) throw new AppError("emergency_copy.wal_present", {});
+  // a `-wal` or `-journal` beside the file is refused first, and an immutable open would ignore it.
+  if ([WAL_SUFFIX, JOURNAL_SUFFIX].some((suffix) => existsSync(`${venuePath}${suffix}`)))
+    throw new AppError("emergency_copy.journal_present", {});
   if (existsSync(join(dirname(venuePath), NODE_FILE)))
     throw new AppError("emergency_copy.node_db_present", {});
   if ((await fileSha256(venuePath, deps.signal)) !== binding.selectedStream.databaseSha256)

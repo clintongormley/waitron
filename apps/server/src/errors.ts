@@ -102,7 +102,8 @@ declare module "@waitron/shared" {
 
     "emergency_copy.binding_invalid": { field: string };
     "emergency_copy.binding_expired": { expiresAt: string };
-    "emergency_copy.wal_present": Record<string, never>;
+    /** A `-wal` or `-journal` beside the placed file. */
+    "emergency_copy.journal_present": Record<string, never>;
     "emergency_copy.node_db_present": Record<string, never>;
     "emergency_copy.hash_mismatch": Record<string, never>;
     "emergency_copy.integrity_failed": Record<string, never>;
