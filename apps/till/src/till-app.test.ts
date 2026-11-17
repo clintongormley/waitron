@@ -14280,7 +14280,7 @@ describe("till-app", () => {
     });
   });
 
-  describe("receipt trim (design §8)", () => {
+  describe("receipt trim", () => {
     it("shows each successive invoice presentation without boot or previous-answer text", async () => {
       const presentations = [
         {

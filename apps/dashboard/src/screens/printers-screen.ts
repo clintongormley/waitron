@@ -2609,7 +2609,7 @@ export class PrintersScreen extends LitElement {
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}`;
   }
 
-  /** No join number is shown or fetched for the row (design §1.2 rule 1). */
+  /** No join number is shown or fetched for the row. */
   #renderJoinRequest(request: JoinRequestRow): TemplateResult {
     const armed = this.armedDenyId === request.id;
     return html`<li data-test="join-row-${request.id}">

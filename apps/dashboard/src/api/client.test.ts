@@ -1756,7 +1756,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const api = new DashboardApi("", fetchImpl);
     const got = await api.joinRequests("device");
     expect(got).toEqual(rows);
-    // The row's OWN shape is the guarantee (design §1.2 rule 1) — not a search of rendered markup.
+    // The row's OWN shape is the guarantee — not a search of rendered markup.
     expect(Object.keys(got[0]!)).toEqual(["id", "kind", "label", "createdAt", "pairingBy"]);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests?kind=device", {
       method: "GET",

@@ -509,7 +509,7 @@ export class ModifiersScreen extends LitElement {
       .rowKey=${(entry: Dependant) => entry.id}
     ></wt-data-table>`;
   }
-  /** An options list is carried by products alone, so its table has no Type column (spec D3). */
+  /** An options list is carried by products alone, so its table has no Type column. */
   #renderUsage(viewing: Target) {
     if (this.usageError)
       return html`<p class="error" data-test="usage-error" role="alert">

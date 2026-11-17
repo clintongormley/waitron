@@ -14,7 +14,7 @@ import { kitchenPortionKey, portionGroups } from "./portion-groups.js";
 export interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
-  /** Its dishes as drawn: identical portions of one bill as one row (spec §3.1), each row's
+  /** Its dishes as drawn: identical portions of one bill as one row (A803 design §3.1), each row's
    * dishes in the read's order. */
   rows: StationQueueItem[][];
 }

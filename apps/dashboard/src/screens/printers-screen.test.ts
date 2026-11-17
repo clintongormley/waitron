@@ -2033,7 +2033,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=join-dialog]")).toBeNull();
   });
 
-  // A wrong tap has already denied the request server-side (design §1.2).
+  // A wrong tap has already denied the request server-side.
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {
     const api = stubApi({
       acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),

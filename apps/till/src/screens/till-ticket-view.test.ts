@@ -1028,7 +1028,7 @@ describe("till-ticket-view", () => {
     expect(t).toContain("0,60 €");
   });
 
-  describe("card tender (design §3b)", () => {
+  describe("card tender", () => {
     it("keeps card identity off the fiscal ticket while retaining the card tender", async () => {
       const { el } = await mount({
         tender: {
@@ -1548,7 +1548,7 @@ describe("till-ticket-view", () => {
     });
   });
 
-  describe("receipt trim (design §8)", () => {
+  describe("receipt trim", () => {
     const following = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 

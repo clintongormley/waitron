@@ -280,7 +280,7 @@ describe("dashboard-overview-screen", () => {
   });
 });
 
-describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts, design §7.4)", () => {
+describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts)", () => {
   it("fetches overdue orders on load and renders the count tile + a worst-first list", async () => {
     setLocale("en"); // asserts the literal English copy; afterEach restores es-ES
     const api = stubApi({ getOverdueOrders: vi.fn().mockResolvedValue({ orders: overdueOrders }) });

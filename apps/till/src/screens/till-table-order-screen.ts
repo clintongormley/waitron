@@ -3516,7 +3516,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** `count` identical portions' line, shown once with its price multiplied; a dish's quantity is
-   * multiplied too, while an extra keeps its count per portion (spec §3.1). */
+   * multiplied too, while an extra keeps its count per portion (A803 design §3.1). */
   #sentFallbackLine(line: TabLine, count = 1): TemplateResult {
     const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
     const quantity = decimal(line.quantity);
