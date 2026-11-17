@@ -6364,7 +6364,7 @@ paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), a
 order detail (`readBillLines`, `apps/server/src/orders-list.ts`). Two rows stay apart when anything
 the row draws or acts on
 differs: the dish, its names and answers, note, course, release group, station, preparation state,
-served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
+held or asked for, served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
 screen shows for the line, such as an allergy or paid mark. Only a whole portion groups, a line of
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.

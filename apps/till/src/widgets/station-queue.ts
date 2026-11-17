@@ -1248,8 +1248,8 @@ export class TillStationQueue extends LitElement {
     return html`<span class="whole-ticket" data-whole-ticket>${t("station.whole_ticket")}</span>`;
   }
 
-  /** A dish says nothing where its card's column or heading already says its state (D12); a
-   * mixedHeld card's heading says none. */
+  /** A held or Requested dish says its word unless its card's heading speaks for every dish on it
+   * (D12); a fired dish says its state only ahead of its card's column. */
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
     let word: string | undefined;
     if (item.firedAt === null) {
