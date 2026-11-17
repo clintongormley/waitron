@@ -175,7 +175,9 @@ export default defineConfig({
       // `exclude` replaces the default list rather than merging, so the spread keeps any future default.
       exclude: [
         ...coverageConfigDefaults.exclude,
-        // ui-core's own source, loaded by these tests, also matches `src/**/*.ts`.
+        // `packages/ui-core` starts with `packages/ui`, so Vitest counts ui-core's files as this
+        // package's: testing-guide.md, "A package's `coverage.include` does not mean
+        // "this package's src"".
         "**/ui-core/**",
         // Helpers that exist only for *.test.ts files (mounting, axe, icon buttons).
         "src/test-helpers.ts",

@@ -758,7 +758,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
-- **Loose ends left by the comments sweep (#604–#623).** Found while pruning comments.
+- **Loose ends left by the comments sweep (#613–#623).** Found while pruning comments.
   - Split-off checks may reach the same path as a held-order edit that changes sent lines (#623).
     Nothing tests two `openTab` calls racing on one table or concurrent rounds landing on
     consecutive line numbers (the sequential versions are in `tabs.test.ts`).
