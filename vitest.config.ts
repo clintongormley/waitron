@@ -1,121 +1,20 @@
 import { defineConfig } from "vitest/config";
 import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 
-// The repo-level test project — the one gate that is never narrowed away. It holds the work that
-// belongs to no package, which since 2026-08-01 is three kinds:
-//
-//   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
-//   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole — among
-//   them, guarded-teardowns scans every `*.test.ts` under both, english-only reads every tracked
-//   text file under both outside its homes, errors-reachable walks each `packages/*` public barrel's import graph
-//   for an `errors.ts` that has gone unreachable, allergen-names-drift pins the 14 EU allergen
-//   display names equal across the till and dashboard i18n copies, module-graph-honesty
-//   cross-checks every module descriptor's `requires` against the FK/trigger edges its
-//   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
-//   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
-//   "<regime package>"` prefix, coverage-thresholds pins
-//   every package's coverage bar, column-vocabulary reads every `.ts` file under both
-//   roots for a column builder imported straight from `drizzle-orm/sqlite-core` — which only
-//   `packages/db/src/schema/columns.ts` may do, so that the NEXT engine change replaces one file —
-//   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, a retired helper no
-//   source file under either root may write again,
-//   brand-icons pins each app's `index.html` icon
-//   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
-//   journal-monotonic reads every migration set named by
-//   `packages/migrations/migrations.manifest.json` for a `when` value at or below one
-//   already recorded, which drizzle's `max(created_at)` watermark skips with no error,
-//   and starting-migrations requires one starting migration per set and runs a check-only
-//   rebuild of each;
-//   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
-//   runs ci.yml's sign-off step extracted from the workflow file.
-//
-// The guards lived in `packages/db` until then, and both gates had stopped running them on most
-// pushes: they only load when `packages/db` is in scope, and the scoping ships two shapes that do
-// not reach it. Measured on 2026-08-01 in this worktree —
-// `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone, and
-// `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`. CI's
-// `test-heavy` shard is gated on `@waitron/db` being in scope too, so on such a pull request their
-// first run was the unfiltered `main` merge.
-//
-// WHAT THE MOVE COST, stated because nothing else in the tree says it: the guards under `scripts/`
-// are TypeScript and NOTHING TYPECHECKS THEM ANY MORE. The workspace root is outside `pnpm -r`, so
-// `pnpm typecheck` never visits it, and there is no root `tsconfig.json` to visit — CLAUDE.md §2
-// carries the mutation that measured that. Run here in both directions on 2026-08-01, one line,
-// `export const brokenProbe: number = "not a number";`:
-//
-//   in packages/db/src/<name>.test.ts   `pnpm --filter @waitron/db typecheck` fails,
-//                                       `error TS2322: Type 'string' is not assignable to type
-//                                       'number'`, `Exit status 2`
-//   appended to scripts/guarded-        `pnpm typecheck` exits 0 and the suite still passes 12/12
-//   teardowns.test.ts                   — Vitest transpiles without typechecking
-//
-// So a type error in one of these files is now caught only when it is also a runtime error.
-//
-// Deliberately not fixed here, for a reason that is about this repository rather than about
-// effort: the pre-push hook's typecheck step is SCOPED (`pnpm "$@" typecheck`), so on the
-// `packages/ui` push this whole change exists for, a root `tsconfig.json` would not be typechecked
-// either. It would buy the property back in CI's unfiltered `typecheck` job alone, at the price of
-// `@types/node` as a root devDependency and an inverted CLAUDE.md §2 receipt. (`typescript` was the
-// other half of that price until 2026-09-20, when the root gained it anyway: the version 6 API
-// package typescript-eslint needs now that packages compile with version 7.)
-// docs/backlog.md carries it as a follow-up.
+// Root guard suites are outside the workspace packages and are not typechecked.
 export default defineConfig({
   test: {
     globals: true,
     maxWorkers: process.env.CI ? undefined : rootGuardWorkers(),
     clearMocks: false,
-    // Scoped deliberately. Vitest's default include is `**/*.{test,spec}.?(c|m)[jt]s?(x)`, which
-    // from the repo root sweeps up every package's suite and would run the whole workspace twice —
-    // once here and once through `pnpm -r`. Two extensions rather than one glob with a brace:
-    // `.mjs` is the classifiers, `.ts` is the guards.
+    // The default discovery would also run package suites from this root project.
     include: ["scripts/**/*.test.mjs", "scripts/**/*.test.ts"],
-    // Above the longest a HEALTHY case here can take, not above the time one takes on an idle
-    // machine. Most suites in this project shell out — `node scripts/<cli>`, `git`, the hook — so a
-    // case's cost is a child process, and a loaded machine stretches the child rather than this
-    // process's own work. At Vitest's 5000ms default that failed healthy runs: measured 2026-09-21
-    // in this worktree, a full `npx vitest run` (51 files in parallel) with a package coverage run
-    // alongside it failed `mutation-shard`, `changed-packages` and `changed-scope` with
-    // "Test timed out in 5000ms" — the assertions never ran — while each file on its own finishes
-    // in under a second per case and the same full run passes on a quiet machine. Fixing two of
-    // them file by file surfaced the third, which is why the bound is here rather than in three
-    // files: the shape belongs to the project, not to a suite. `CLAUDE.md` §4 states the cost — a
-    // bound that fires under load produces a suite people rerun, and a suite people rerun no longer
-    // gates. Thirty seconds is what the root guards that already declare one use.
-    //
-    // What thirty seconds does NOT buy, stated so nobody reads it as a guarantee: at a load average
-    // near 48 on this machine — four subagents' suites, a coverage run and the other campaign lane
-    // all at once — `scripts/ci-workflow.test.mjs` still timed out, though some of its cases then
-    // declared sixty seconds of their own. No bound survives an oversubscribed machine. This raises
-    // the floor from a default that a normal parallel run trips to one it does not; deciding test
-    // concurrency from measured headroom (`CLAUDE.md` §2) is the other half and this cannot replace
-    // it.
-    //
-    // `scripts/spawn-timeout-budget.test.ts` does NOT read this: for a suite under `scripts/` it
-    // reads that file's own text and falls back to Vitest's default, so it still asks a suite
-    // declaring a long WAIT to declare its own bound. That is stricter than reality, not looser.
+    // These guards spawn child processes, whose startup slows under shared machine load.
     testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      // `include` REPLACES vitest's default rather than merging with it, so a path not named here is
-      // measured NOWHERE — and a coverage gate cannot fail on a file it never opened. Read the
-      // per-file table, not the exit code (CLAUDE.md §4).
-      //
-      // What belongs here: code whose only test suite lives in THIS root project and is covered
-      // nowhere else. That is the two classifiers under `scripts/` (their suites are the root
-      // `*.test.mjs`) and `packages/db/src/english-only.ts`, the vocabulary guard's module —
-      // `@waitron/db`'s typecheck covers it, `packages/db` excludes it from its own coverage, and its
-      // suite is `scripts/english-only.test.ts`, so this `include` is the ONE place that measures it.
-      //
-      // `scripts/**/*.ts` is deliberately NOT here, and not for the reason this comment used to
-      // give. Nearly every `.ts` under `scripts/` is a guard SUITE, which vitest leaves out of its
-      // own table whatever this says — but `scripts/dev-server-proxy.ts` is real source, imported by
-      // the three front-ends' `vite.config.ts`. Naming it drops this project's branch margin from
-      // 1.07 to 0.18, for two branches: one no test can assert at all, and one assertable only by
-      // writing a TLS leaf into the box's real state directory or by exercising a copy of this file
-      // (measured 2026-09-23; ci-and-gates.md -> "What the storage switch did to the bars"). So it
-      // is measured by no coverage table in the repository. There is
-      // deliberately no `exclude` (a suite is never measured, so naming one changes nothing).
+      // scripts/**/*.ts stays unmeasured: ci-and-gates.md → "What the storage switch did to the bars".
       include: ["scripts/**/*.mjs", "packages/db/src/english-only.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

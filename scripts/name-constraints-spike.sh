@@ -1,21 +1,7 @@
 #!/usr/bin/env bash
-#
-# Prove that name constraints on a self-signed CA are enforced by openssl verify,
-# Safari/iOS, and Chrome on desktop — but NOT on Android user-installed roots.
-# This script verifies the constraint is well-formed; the programmatic proof lives at
-# apps/server/src/name-constraints.test.ts.
-#
-# Failing case (stated first per CLAUDE.md §1): if Leaf B (example.com) is ACCEPTED,
-# name constraints are NOT enforced, and installing this root on a personal phone is
-# not safe. A pass requires Leaf A (waitron.local + 192.168.x) accepted AND Leaf B refused
-# with "permitted subtree violation".
-#
-# Dependencies: openssl only (OpenSSL 3.x or compatible).
-#
 
 set -euo pipefail
 
-# Temporary directory for certificate generation and verification.
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -23,7 +9,6 @@ echo "=== Name Constraint Verification ==="
 echo "Temporary directory: $TMPDIR"
 echo ""
 
-# Root CA configuration: nameConstraints + basicConstraints + pathlen:0
 ROOT_CONF="$TMPDIR/root.conf"
 cat > "$ROOT_CONF" <<'EOF'
 [req]
@@ -46,7 +31,6 @@ echo "  Root CA: $TMPDIR/root.crt"
 echo "  Constraints verified in certificate."
 echo ""
 
-# Leaf A: waitron.local + 192.168.1.10 (permitted)
 LEAF_A_CONF="$TMPDIR/leaf_a.conf"
 cat > "$LEAF_A_CONF" <<'EOF'
 [req]
@@ -71,7 +55,6 @@ openssl x509 -req -days 1 -in "$TMPDIR/leaf_a.csr" \
 echo "  Leaf A: $TMPDIR/leaf_a.crt"
 echo ""
 
-# Leaf B: example.com (OUTSIDE permitted set — control)
 LEAF_B_CONF="$TMPDIR/leaf_b.conf"
 cat > "$LEAF_B_CONF" <<'EOF'
 [req]
@@ -96,14 +79,12 @@ openssl x509 -req -days 1 -in "$TMPDIR/leaf_b.csr" \
 echo "  Leaf B: $TMPDIR/leaf_b.crt"
 echo ""
 
-# Verify both leaves against the constrained root.
 echo "=== Verification Results ==="
 echo ""
 
 LEAF_A_OK=0
 LEAF_B_REFUSED=0
 
-# Test Leaf A
 echo -n "Leaf A (waitron.local + 192.168.1.10): "
 if openssl verify -CAfile "$TMPDIR/root.crt" "$TMPDIR/leaf_a.crt" >/dev/null 2>&1; then
   echo "✓ VERIFIED"
@@ -113,10 +94,8 @@ else
   openssl verify -CAfile "$TMPDIR/root.crt" "$TMPDIR/leaf_a.crt" 2>&1 | head -1 || true
 fi
 
-# Test Leaf B (should fail with permitted subtree violation)
 echo -n "Leaf B (example.com, control):        "
 if ! openssl verify -CAfile "$TMPDIR/root.crt" "$TMPDIR/leaf_b.crt" >/dev/null 2>&1; then
-  # Extract error to confirm it's the name constraint violation
   ERR=$(openssl verify -CAfile "$TMPDIR/root.crt" "$TMPDIR/leaf_b.crt" 2>&1 || true)
   if echo "$ERR" | grep -q "permitted subtree"; then
     echo "✗ REJECTED (permitted subtree violation)"

@@ -5,12 +5,11 @@ import wcPlugin from "eslint-plugin-wc";
 import { importX } from "eslint-plugin-import-x";
 import eslintConfigPrettier from "eslint-config-prettier";
 
+// Exception globs must be absolute: a `./` form does not match, and a leading `**`
+// does not cross a dot-prefixed folder.
 export default tseslint.config(
   {
-    // `.stryker-tmp` holds mutated `@ts-nocheck`d copies of the source that a KILLED mutation run
-    // leaves behind (Stryker cleans it up only on a clean exit). Without this ignore, one interrupted
-    // `pnpm --filter @waitron/db mutation` makes `pnpm lint` fail with thousands of errors from the
-    // sandbox — the same reason packages/db/vitest.config.ts excludes it from test discovery.
+    // Interrupted mutation runs can leave mutated source in .stryker-tmp.
     ignores: [
       "**/dist/**",
       "**/node_modules/**",
@@ -23,18 +22,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
-  // Catches real web-component bugs plain TS lint does not: invalid lit templates,
-  // incorrect property/attribute usage, missing custom-element definitions.
   litPlugin.configs["flat/recommended"],
   wcPlugin.configs["flat/recommended"],
 
   {
-    // packages/shared is the leaf of the dependency graph: every other package depends on it,
-    // so anything it depends on becomes a transitive dependency of the entire repo. A missing
-    // `dependencies` block in its package.json does NOT enforce this — `main` points at TS
-    // source with no build step, so a relative escape like `../../db/src/index.js` resolves,
-    // typechecks and runs while the manifest still reads as dependency-free. The manifest
-    // constrains bare specifiers; only this rule constrains paths.
+    // A dependency-free manifest does not prevent relative imports of another package's source.
     files: ["packages/shared/**/*.ts"],
     plugins: { "import-x": importX },
     settings: {
@@ -49,11 +41,6 @@ export default tseslint.config(
             {
               target: "./packages/shared/**/*",
               from: ["./packages/**", "./apps/**"],
-              // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars
-              // refuse to cross a dot-prefixed path segment (e.g. a checkout under
-              // `.claude/worktrees/...`), which silently broke the equivalent exception on an
-              // earlier zone and let same-package relative imports false-positive as
-              // boundary violations.
               except: [`${import.meta.dirname}/packages/shared/**`],
               message:
                 "packages/shared is the leaf every other package depends on and must have zero " +
@@ -89,13 +76,6 @@ export default tseslint.config(
     },
   },
   {
-    // packages/print-agent is the db-free half of the printing subsystem: it becomes a standalone
-    // process on a restaurant's LAN that reaches the server over HTTP only, so it must never import
-    // @waitron/db (or anything that drags it in). An empty `dependencies` block does NOT enforce
-    // that, for the reason spelled out on the packages/shared zone below: `main` points at TS source
-    // with no build step, so a relative escape like `../../db/src/index.js` resolves, typechecks and
-    // runs while the manifest still reads dependency-free. The dependency arrow is one-way —
-    // @waitron/printing depends on this package, never the reverse.
     files: ["packages/print-agent/**/*.ts"],
     plugins: { "import-x": importX },
     settings: {
@@ -110,10 +90,6 @@ export default tseslint.config(
             {
               target: "./packages/print-agent/**/*",
               from: ["./packages/**", "./apps/**"],
-              // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars refuse to
-              // cross a dot-prefixed path segment (e.g. a checkout under `.claude/worktrees/...`),
-              // which silently broke the equivalent exception on an earlier zone and let
-              // same-package relative imports false-positive as boundary violations.
               except: [`${import.meta.dirname}/packages/print-agent/**`],
               message:
                 "packages/print-agent runs as a standalone process on the venue's LAN with no " +
@@ -128,12 +104,6 @@ export default tseslint.config(
   },
 
   {
-    // The generic layer is regime-neutral. A second fiscal backend —
-    // TicketBAI, Italy, Portugal — brings its own tables and its own
-    // vocabulary and touches none of these packages. The moment packages/db
-    // imports the Veri*Factu module, "generic" becomes a comment rather than a
-    // property, and the English-only guard would be policing the vocabulary of
-    // a dependency it cannot see.
     files: ["packages/db/**/*.ts", "packages/core/**/*.ts", "packages/fiscal/**/*.ts"],
     plugins: { "import-x": importX },
     settings: {
@@ -143,9 +113,6 @@ export default tseslint.config(
       "import-x/no-restricted-paths": [
         "error",
         {
-          // As above: resolved from this config's own directory, never a
-          // leading `**/` — minimatch globstars refuse to cross a
-          // dot-prefixed segment such as `.claude/worktrees/`.
           basePath: import.meta.dirname,
           zones: [
             {
@@ -159,9 +126,7 @@ export default tseslint.config(
           ],
         },
       ],
-      // @waitron/verifactu is now an external package, so no-restricted-paths (which matches
-      // in-repo paths) can no longer fence it out; a name-based rule does. Same boundary as the
-      // zone above: the generic layer must not depend on the Veri*Factu regime.
+      // External regime packages need a name-based boundary as well as the path boundary.
       "no-restricted-imports": [
         "error",
         {
@@ -180,13 +145,7 @@ export default tseslint.config(
   },
 
   {
-    // packages/payments/src/reconciliation-schedule is a duty-NEUTRAL runner: duties are injected
-    // and typed structurally, so it must never import a duty's own code, the rest of payments
-    // included, though it lives in that package. `reconciliation_runs` is declared in payments' schema,
-    // which is the one payments file outside this folder the runner may import (`except` below).
-    //
-    // Test files are exempt: the fit test and the AppError-code augmentation both name payments
-    // deliberately, and neither ships in the runtime path.
+    // Duties are injected; only the runner's schema import may reach the rest of payments.
     files: ["packages/payments/src/reconciliation-schedule/**/*.ts"],
     ignores: ["packages/payments/src/reconciliation-schedule/**/*.test.ts"],
     plugins: { "import-x": importX },
@@ -197,15 +156,11 @@ export default tseslint.config(
       "import-x/no-restricted-paths": [
         "error",
         {
-          // As above: resolved from this config's own directory, never a leading `**/` —
-          // minimatch globstars refuse to cross a dot-prefixed segment such as
-          // `.claude/worktrees/`.
           basePath: import.meta.dirname,
           zones: [
             {
               target: "./packages/payments/src/reconciliation-schedule/**/*",
               from: ["./packages/payments/**"],
-              // Absolute globs: a `./` form does not match.
               except: [
                 import.meta.dirname + "/packages/payments/src/reconciliation-schedule/**",
                 import.meta.dirname + "/packages/payments/src/schema/reconciliation-runs.*",
@@ -228,9 +183,7 @@ export default tseslint.config(
           ],
         },
       ],
-      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
-      // it out; a name-based rule does. Same boundary: the duty-neutral runner must not import a
-      // duty's own package.
+      // External regime packages need a name-based boundary as well as the path boundary.
       "no-restricted-imports": [
         "error",
         {
@@ -250,14 +203,6 @@ export default tseslint.config(
   },
 
   {
-    // packages/credentials is a leaf: `PURPOSES` in packages/credentials/src/purposes.ts holds a
-    // purpose's field names as plain string data, never a provider's own types or vocabulary. Its
-    // package.json does NOT enforce that — `main` points at TS source with no build step, so
-    // `import { reconcilePayments } from "@waitron/payments"` inside src/store.ts would typecheck,
-    // lint clean and pass every test with no manifest dependency declared at all. The manifest
-    // constrains nothing here; only this rule does. Brought forward from Task 7 (originally
-    // scheduled there) because Tasks 5 and 6 add a CLI and rotation on top of this package before
-    // Task 7 lands, and purposes.ts's own comment claims this enforcement exists starting now.
     files: ["packages/credentials/src/**/*.ts"],
     plugins: { "import-x": importX },
     settings: {
@@ -267,9 +212,6 @@ export default tseslint.config(
       "import-x/no-restricted-paths": [
         "error",
         {
-          // As above: resolved from this config's own directory, never a leading `**/` —
-          // minimatch globstars refuse to cross a dot-prefixed segment such as
-          // `.claude/worktrees/`.
           basePath: import.meta.dirname,
           zones: [
             {
@@ -291,9 +233,7 @@ export default tseslint.config(
           ],
         },
       ],
-      // @waitron/verifactu is now an external package, so no-restricted-paths can no longer fence
-      // it out; a name-based rule does. Same boundary: the credentials leaf must stay free of any
-      // regime or provider knowledge.
+      // External regime packages need a name-based boundary as well as the path boundary.
       "no-restricted-imports": [
         "error",
         {
@@ -313,21 +253,6 @@ export default tseslint.config(
   },
 
   {
-    // `js.configs.recommended` defines no environment, so a plain Node script has no `process`
-    // global — unlike a `.ts` file, where `tseslint.configs.recommended` turns `no-undef` off
-    // entirely (TS's own checker already catches that class of error, per ts(2304)/ts(2552)).
-    // `apps/server/scripts/copy-migrations.mjs` was the first `.mjs` in this repo, and ships the
-    // migration folders beside the server's own bundle. It needs the one global.
-    // The repo-root `scripts/` directory holds the two that are not build steps —
-    // `changed-packages.mjs` maps a diff onto workspace packages, `changed-scope.mjs` turns a
-    // resolved scope into CI's gate lines — and they are the ones that need a SECOND global. The
-    // build step, `copy-migrations.mjs`, only ever announces progress on stdout and reaches for
-    // `process.stdout.write` to do it (grepped: no `console` in that file); these two have to keep
-    // two streams apart, because their stdout is read by machine — appended straight to
-    // `$GITHUB_OUTPUT` in CI, and `sed`-ed by `.husky/pre-push` — so it must carry `<name>=<value>`
-    // lines and nothing else, while the reason for each verdict goes to stderr for a human reading
-    // the job log or watching the push. The line COUNT is part of the contract, not just the
-    // content: a stray line becomes an extra job output.
     files: ["apps/server/scripts/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: {
       globals: { console: "readonly", process: "readonly" },

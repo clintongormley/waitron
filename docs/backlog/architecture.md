@@ -21,10 +21,9 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
   it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
-  golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/`, the root
-  `vitest.config.ts` and
-  `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
-  checker and were left.
+  golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/`,
+  `scripts/release/github-release.sh`, `scripts/fake-bluez.py` and `scripts/write-path-tables.json`.
+  The three named `scripts/` files are outside the checker.
 
 ## Payments test points and transfer lock cases left by the comment-pruning sweeps
 
