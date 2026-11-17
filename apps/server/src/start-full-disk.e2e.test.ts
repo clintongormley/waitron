@@ -1,3 +1,4 @@
+import { runBoxEmailDuty } from "./testing/box-email-duty.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/start names, or on macOS a disk
@@ -82,7 +83,6 @@ import {
   boxEmailMessage,
   readBoxEmailContext,
   readOpenEmailedIncidents,
-  startBoxEmailDuty,
 } from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { collectBoxHealth, type BoxHealth } from "./box-health.js";
@@ -1289,7 +1289,7 @@ describe("a start on a real full disk", () => {
     let full = true;
     const send = vi.fn(async () => "sent" as const);
     const armed: (() => void)[] = [];
-    let handle: ReturnType<typeof startBoxEmailDuty> | undefined;
+    let handle: ReturnType<typeof runBoxEmailDuty> | undefined;
     try {
       await seedVenue(db, {
         name: "Corner Bistro",
@@ -1303,7 +1303,7 @@ describe("a start on a real full disk", () => {
       await withTransaction(db, () => {});
       expect(db.all(sql`select count(*) as n from change_log`)).toEqual([{ n: 0 }]);
       db.all(sql`pragma wal_checkpoint(truncate)`);
-      handle = startBoxEmailDuty({
+      handle = runBoxEmailDuty({
         db,
         now: () => now,
         disk: { since: () => (full ? now : null) },

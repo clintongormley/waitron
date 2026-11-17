@@ -5,7 +5,7 @@ import type {
   CertificateReminderSender,
 } from "./certificate-reminder-email.js";
 import type { EmailDelivery } from "./email-delivery.js";
-import { realSleep } from "./loop.js";
+import type { JobDefinition } from "./job-runner.js";
 import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
 export interface CertificateReminderPassDeps {
@@ -18,30 +18,6 @@ export interface CertificateReminderPassDeps {
   signal: AbortSignal;
   resolveDelivery(): Promise<EmailDelivery>;
   send: CertificateReminderSender;
-}
-
-export async function runCertificateReminderLoop(
-  deps: CertificateReminderPassDeps & {
-    onError(error: unknown): void;
-    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-  },
-): Promise<void> {
-  const sleep = deps.sleep ?? realSleep;
-  while (!deps.signal.aborted) {
-    // A failed pass waits the idle hour, so a lasting fault is not retried twice a second.
-    let processed = false;
-    try {
-      processed = (await runCertificateReminderPass(deps)).processed;
-    } catch (error) {
-      deps.onError(error);
-    }
-    if (deps.signal.aborted) break;
-    try {
-      await sleep(processed ? 500 : 3_600_000, deps.signal);
-    } catch (error) {
-      deps.onError(error);
-    }
-  }
 }
 
 export async function runCertificateReminderPass(
@@ -77,4 +53,21 @@ export async function runCertificateReminderPass(
     );
   }
   return { processed };
+}
+
+export function certificateReminderJob(
+  deps: Omit<CertificateReminderPassDeps, "signal">,
+): JobDefinition {
+  return {
+    name: "fiscal.certificate_reminders",
+    applies: deps.isPrimary,
+    minSleepMs: 500,
+    maxSleepMs: 3_600_000,
+    backoff: { firstMs: 3_600_000, maxMs: 3_600_000 },
+    async pass({ now, signal }) {
+      return {
+        nextDueAt: (await runCertificateReminderPass({ ...deps, signal })).processed ? now : null,
+      };
+    },
+  };
 }

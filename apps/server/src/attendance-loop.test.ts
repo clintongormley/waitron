@@ -1,13 +1,14 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, getTableColumns, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, installChangeFeed, withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
+  WORKFORCE_CHANGE_SOURCES,
   WorkforceBackend,
   attendanceDays,
   attendanceQuestions,
@@ -20,6 +21,7 @@ import {
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { realSleep } from "./loop.js";
+import { createJobRunner } from "./job-runner.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -373,33 +375,28 @@ describe("a running shift across a clock days off", () => {
   });
 });
 
-describe("attendance loop lifecycle", () => {
-  it("reports a failed sleep and keeps the duty alive for the next tick", async () => {
-    const abort = new AbortController();
-    const failure = new Error("timer refused");
-    const errors: unknown[] = [];
-    let sleeps = 0;
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
-    await runAttendanceLoop({
-      ...deps(),
-      signal: abort.signal,
-      onError: (e) => {
-        errors.push(e);
+describe("attendance job lifecycle", () => {
+  const runAttendanceJob = async (
+    options: ReturnType<typeof deps> & {
+      signal: AbortSignal;
+      onError(error: unknown): void;
+      sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+    },
+  ) => {
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const { runTestJob } = await import("./testing/run-job.js");
+    return runTestJob(attendanceJob({ ...options, maxSleepMs: 60_000 }), options.signal, {
+      sleep: options.sleep,
+      log: (_level, event) => {
+        if (event === "job.failed") options.onError(new Error(event));
       },
-      sleep: async () => {
-        if (++sleeps === 1) throw failure;
-        abort.abort();
-      },
-    });
-    expect(errors).toEqual([failure]);
-    expect(sleeps).toBe(2);
-  });
+    }).done;
+  };
   it("uses short continuation ticks and an idle tick after durable work settles", async () => {
     await seed();
     const abort = new AbortController();
     const ticks: number[] = [];
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
-    await runAttendanceLoop({
+    await runAttendanceJob({
       ...deps(),
       signal: abort.signal,
       onError: (e) => {
@@ -407,14 +404,14 @@ describe("attendance loop lifecycle", () => {
       },
       sleep: async (ms) => {
         ticks.push(ms);
-        if (ms === 30_000 || ticks.length > 20) abort.abort();
+        if (ms === 60_000 || ticks.length > 20) abort.abort();
       },
     });
     expect(ticks).toContain(500);
-    expect(ticks.at(-1)).toBe(30_000);
+    expect(ticks.at(-1)).toBe(60_000);
     expect((await snapshot()).entries.map((e) => e.entryKind)).toEqual(["in", "out"]);
   });
-  it("reports a failed pass and retries on the short tick without losing the day", async () => {
+  it("reports a failed pass and retries with backoff without losing the day", async () => {
     await seed();
     await suite.db.execute(
       sql`create trigger reject_question before insert on attendance_questions begin select raise(abort, 'question refused'); end`,
@@ -422,8 +419,7 @@ describe("attendance loop lifecycle", () => {
     const abort = new AbortController();
     const errors: unknown[] = [];
     const ticks: number[] = [];
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
-    await runAttendanceLoop({
+    await runAttendanceJob({
       ...deps(),
       signal: abort.signal,
       onError: (e) => {
@@ -436,7 +432,7 @@ describe("attendance loop lifecycle", () => {
       },
     });
     expect(errors).toHaveLength(1);
-    expect(ticks[0]).toBe(500);
+    expect(ticks[0]).toBe(5_000);
     expect((await snapshot()).entries.map((e) => e.entryKind)).toEqual(["in", "out"]);
   });
   it("an already aborted loop makes no pass or writes", async () => {
@@ -444,8 +440,7 @@ describe("attendance loop lifecycle", () => {
     const before = await snapshot();
     const abort = new AbortController();
     abort.abort();
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
-    await runAttendanceLoop({
+    await runAttendanceJob({
       ...deps(),
       signal: abort.signal,
       onError: (e) => {
@@ -457,9 +452,8 @@ describe("attendance loop lifecycle", () => {
   it("aborts the real idle sleep promptly", async () => {
     const abort = new AbortController();
     const idle = gate();
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
     let finished = false;
-    const done = runAttendanceLoop({
+    const done = runAttendanceJob({
       ...deps(),
       signal: abort.signal,
       onError: (e) => {
@@ -483,7 +477,6 @@ describe("attendance loop lifecycle", () => {
     const entered = gate(),
       held = gate(),
       queued = gate();
-    const { runAttendanceLoop } = await import("./attendance-loop.js");
     const holder = withTransaction(suite.db, async () => {
       entered.release();
       await held.promise;
@@ -501,7 +494,7 @@ describe("attendance loop lifecycle", () => {
       finished = false;
     let sleeps = 0;
     try {
-      done = runAttendanceLoop({
+      done = runAttendanceJob({
         ...deps(),
         signal: abort.signal,
         onError: (e) => {
@@ -525,5 +518,182 @@ describe("attendance loop lifecycle", () => {
     expect(finished).toBe(true);
     expect(sleeps).toBe(0);
     expect((await snapshot()).entries.map((e) => e.entryKind)).toEqual(["in", "out"]);
+  });
+});
+
+describe("attendance runner job", () => {
+  it("an idle pass opens no write transaction and waits for the next day end", async () => {
+    await seed();
+    let at = new Date("2026-01-05T18:00:00Z");
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      expect(await job.pass({ now: at, signal: new AbortController().signal })).toEqual({
+        nextDueAt: new Date("2026-01-06T04:00:00Z"),
+      });
+      expect(lock).not.toHaveBeenCalled();
+      at = new Date("2026-01-06T04:00:00Z");
+      await job.pass({ now: at, signal: new AbortController().signal });
+      expect(lock).toHaveBeenCalled();
+      expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
+  it("processes a day at its end with no change written", async () => {
+    await seed();
+    let at = new Date("2026-01-05T18:00:00Z");
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const { runTestJob } = await import("./testing/run-job.js");
+    const controller = new AbortController();
+    const sleeps: number[] = [];
+    await runTestJob(
+      attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 }),
+      controller.signal,
+      {
+        now: () => at,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          if (sleeps.length === 1) at = new Date(at.getTime() + ms);
+          else controller.abort();
+        },
+      },
+    ).done;
+    expect(sleeps).toEqual([36_000_000, 500]);
+    expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+  });
+
+  it("settled rows do not cause a write turn and deferred work keeps its later due time", async () => {
+    await suite.db.insert(attendanceDays).values([
+      {
+        businessDay: "2026-01-04",
+        startAt: "2026-01-04T04:00:00.000Z",
+        endAt: "2026-01-05T04:00:00.000Z",
+        nextDueAt: "2026-01-05T04:00:00.000Z",
+        dirtyRevision: 1,
+        evaluatedRevision: 1,
+      },
+      {
+        businessDay: "2026-01-05",
+        startAt: "2026-01-05T04:00:00.000Z",
+        endAt: "2026-01-06T04:00:00.000Z",
+        nextDueAt: "2026-01-06T05:00:00.000Z",
+        dirtyRevision: 1,
+        evaluatedRevision: 1,
+      },
+    ]);
+    const at = new Date("2026-01-06T04:30:00Z");
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+      expect(await job.pass({ now: at, signal: new AbortController().signal })).toEqual({
+        nextDueAt: new Date("2026-01-06T05:00:00Z"),
+      });
+      expect(lock).not.toHaveBeenCalled();
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
+  it("reads the role each turn and processes a due day after promotion", async () => {
+    await seed();
+    primary = false;
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const { runTestJob } = await import("./testing/run-job.js");
+    const controller = new AbortController();
+    let turns = 0;
+    const before = await snapshot();
+    const work = runTestJob(attendanceJob({ ...deps(), maxSleepMs: 60_000 }), controller.signal, {
+      sleep: async () => {
+        if (++turns === 1) {
+          expect(await snapshot()).toEqual(before);
+          primary = true;
+        } else controller.abort();
+      },
+    });
+    await work.done;
+    expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+  });
+
+  it("a failing pass backs off 5 s, then 10 s without losing its day", async () => {
+    await seed();
+    await suite.db.execute(
+      sql`create trigger reject_question before insert on attendance_questions begin select raise(abort, 'question refused'); end`,
+    );
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const { runTestJob } = await import("./testing/run-job.js");
+    const controller = new AbortController();
+    const ticks: number[] = [];
+    const work = runTestJob(attendanceJob({ ...deps(), maxSleepMs: 60_000 }), controller.signal, {
+      sleep: async (ms) => {
+        ticks.push(ms);
+        if (ticks.length === 2) await suite.db.execute(sql`drop trigger reject_question`);
+        if ((await snapshot()).entries.length === 2) controller.abort();
+      },
+    });
+    await work.done;
+    expect(ticks.slice(0, 2)).toEqual([5_000, 10_000]);
+    expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+  });
+});
+
+describe("attendance job change feed", () => {
+  it("a clock-out through the workforce chain wakes and evaluates its marked day", async () => {
+    await suite.db.insert(attendanceDays).values({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T04:00:00.000Z",
+      endAt: "2026-01-06T04:00:00.000Z",
+      nextDueAt: "2026-01-06T04:00:00.000Z",
+      dirtyRevision: 1,
+      evaluatedRevision: 1,
+    });
+    await installChangeFeed(
+      suite.db,
+      WORKFORCE_CHANGE_SOURCES.filter((source) => source.table === "time_entries"),
+    );
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const asleep = gate();
+    const runner = createJobRunner({
+      now: () => now,
+      log: () => {},
+      delay: async (ms, signal) => {
+        asleep.release();
+        await realSleep(ms, signal);
+      },
+    });
+    runner.add(attendanceJob({ ...deps(), maxSleepMs: 60_000 }));
+    try {
+      await asleep.promise;
+      await withTransaction(suite.db, async (tx) => {
+        await backend.clockIn(tx, {
+          nodeId,
+          personId,
+          at: "2026-01-05T09:00:00Z",
+          offsetMinutes: 60,
+          origin: jobOrigin("dashboard"),
+        });
+        await backend.clockOut(tx, {
+          nodeId,
+          personId,
+          at: "2026-01-05T17:00:00Z",
+          offsetMinutes: 60,
+          origin: jobOrigin("dashboard"),
+        });
+      });
+      await vi.waitFor(
+        async () => {
+          const [day] = await suite.db.select().from(attendanceDays);
+          expect(day!.dirtyRevision).toBe(3);
+          expect(day!.evaluatedRevision).toBe(3);
+        },
+        { timeout: 2_000 },
+      );
+    } finally {
+      await runner.stopJobs();
+    }
+    expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
   });
 });

@@ -60,6 +60,21 @@ const keyEnv = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 const ring = loadKeyRing(keyEnv);
+import type { JobDefinition } from "./job-runner.js";
+const realAttendanceJob = attendance.attendanceJob;
+const realMailJob = mailSender.mailSendJob;
+function holding<T>(
+  factory: (deps: T) => JobDefinition,
+  pass: (deps: T & { signal: AbortSignal }) => Promise<void>,
+) {
+  return (deps: T): JobDefinition => ({
+    ...factory(deps),
+    pass: async ({ signal }) => {
+      await pass({ ...deps, signal });
+      return { nextDueAt: null };
+    },
+  });
+}
 const gate = () => {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -115,8 +130,8 @@ describe("attendance boot with permanent workforce", () => {
       let server: StartedServer | undefined;
       const sender = vi.fn<MailTransport>(async () => ({ status: "sent" }));
       const sendSpy = vi.spyOn(smtpSend, "sendSmtpMessage").mockImplementation(sender);
-      const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
-      const mailSpy = vi.spyOn(mailSender, "startMailSender");
+      const loopSpy = vi.spyOn(attendance, "attendanceJob");
+      const mailSpy = vi.spyOn(mailSender, "mailSendJob");
       const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
       let other: string | undefined;
       {
@@ -290,15 +305,22 @@ describe("attendance boot with permanent workforce", () => {
               setSingletonRoleTx(tx, f.venue.cfg.nodeId, "secondary", "fenced"),
             );
           }
-          const loopSpy = vi.spyOn(attendance, "runAttendanceLoop"),
-            mailSpy = vi.spyOn(mailSender, "startMailSender");
+          const loopSpy = vi.spyOn(attendance, "attendanceJob"),
+            mailSpy = vi.spyOn(mailSender, "mailSendJob");
           try {
             server = await startServer(
               mode === "setup" ? { ...f.env, WAITRON_NODE_ID: undefined } : f.env,
             );
             await awaitListening(httpPort());
-            expect(loopSpy).not.toHaveBeenCalled();
-            expect(mailSpy).not.toHaveBeenCalled();
+            if (mode === "secondary") {
+              expect(loopSpy).toHaveBeenCalledOnce();
+              expect(loopSpy.mock.results[0]!.value.applies()).toBe(false);
+              expect(mailSpy).toHaveBeenCalledOnce();
+              expect(mailSpy.mock.results[0]!.value.applies()).toBe(false);
+            } else {
+              expect(loopSpy).not.toHaveBeenCalled();
+              expect(mailSpy).not.toHaveBeenCalled();
+            }
           } finally {
             await server?.close();
             loopSpy.mockRestore();
@@ -332,8 +354,12 @@ describe("attendance boot with permanent workforce", () => {
           expect(deps.db.all(sql`select 1 as alive`)).toEqual([{ alive: 1 }]);
           finished.push(name);
         };
-        const loopSpy = vi.spyOn(attendance, "runAttendanceLoop").mockImplementation(hold("day"));
-        const mailSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(hold("mail"));
+        const loopSpy = vi
+          .spyOn(attendance, "attendanceJob")
+          .mockImplementation(holding(realAttendanceJob, hold("day")));
+        const mailSpy = vi
+          .spyOn(mailSender, "mailSendJob")
+          .mockImplementation(holding(realMailJob, hold("mail")));
         let closing: Promise<void> | undefined;
         try {
           server = await startServer(f.env);
@@ -367,13 +393,13 @@ describe("attendance boot with permanent workforce", () => {
           release = gate();
         let daySignal: AbortSignal | undefined,
           completed = false;
-        const loopSpy = vi
-          .spyOn(attendance, "runAttendanceLoop")
-          .mockImplementation(async (deps) => {
+        const loopSpy = vi.spyOn(attendance, "attendanceJob").mockImplementation(
+          holding(realAttendanceJob, async (deps) => {
             daySignal = deps.signal;
             await release.promise;
-          });
-        const senderSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(() => {
+          }),
+        );
+        const senderSpy = vi.spyOn(mailSender, "mailSendJob").mockImplementation(() => {
           created.release();
           throw new Error("creating mail sender");
         });
@@ -413,8 +439,12 @@ describe("attendance boot with permanent workforce", () => {
           await Promise.resolve();
           finished.push(name);
         };
-        const loopSpy = vi.spyOn(attendance, "runAttendanceLoop").mockImplementation(hold("day"));
-        const mailSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(hold("mail"));
+        const loopSpy = vi
+          .spyOn(attendance, "attendanceJob")
+          .mockImplementation(holding(realAttendanceJob, hold("day")));
+        const mailSpy = vi
+          .spyOn(mailSender, "mailSendJob")
+          .mockImplementation(holding(realMailJob, hold("mail")));
         const mdnsSpy = vi.spyOn(mdns, "startMdnsResponder").mockImplementation(() => {
           throw new Error("after attendance started");
         });

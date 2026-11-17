@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Execution scope, 2026-11-17:** the watcher cleared shape B at 14:35: DB-GROWTH retired
+> the discovery scan while retaining `attendance-discovery.ts` for reconciliation and day selection.
+> No scan is recreated. The build order's 11 November promotion deferral still applies.
+> The watcher cleared the loop-only assertion ports at 15:34 after checking the real delay:
+> `loop.ts:42–51` resolves when aborted, including an already-aborted signal (both probe calls ran).
+> Only the synthetic sleep-failure portions retire; pass failures, backoff, abort/join and processing
+> assertions stay, and the mail sleep-log check becomes an observed runner waiting-state check.
+
 **Owner lands:** no (rules §6). The certificate reminder job only changes when an existing decision
 runs; nothing reaches AEAT.
 

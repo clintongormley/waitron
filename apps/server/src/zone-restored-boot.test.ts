@@ -28,7 +28,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { TRADING_STATE_DIR, withMockedKill } from "./testing/boot-harness.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
-import { runAttendanceLoop } from "./attendance-loop.js";
+import { attendanceJob } from "./attendance-loop.js";
 import type { StartedServer } from "./boot.js";
 
 const listener = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ vi.mock("./pending-card-recovery.js", async (load) => {
 });
 vi.mock("./attendance-loop.js", async (load) => {
   const a = await load<typeof import("./attendance-loop.js")>();
-  return { ...a, runAttendanceLoop: vi.fn(a.runAttendanceLoop) };
+  return { ...a, attendanceJob: vi.fn(a.attendanceJob) };
 });
 
 afterAll(async () => {
@@ -140,7 +140,7 @@ it.each(["archive", "bucket"] as const)(
       } as RequestInit);
     try {
       vi.mocked(runPendingCardLoop).mockClear();
-      vi.mocked(runAttendanceLoop).mockClear();
+      vi.mocked(attendanceJob).mockClear();
       await entry();
       const login = await request("/management-api/session", "POST", {
         email: "restore@example.test",
@@ -158,7 +158,7 @@ it.each(["archive", "bucket"] as const)(
       const view = await (await request(path)).json();
       expect(view).toMatchObject({ eligible: true, category: "invalid", nodeId: node.nodeId });
       expect(runPendingCardLoop).not.toHaveBeenCalled();
-      expect(runAttendanceLoop).not.toHaveBeenCalled();
+      expect(attendanceJob).not.toHaveBeenCalled();
       await withMockedKill(async (kills) => {
         const response = await request(path, "POST", {
           timeZone: "Europe/Madrid",
@@ -196,7 +196,7 @@ it.each(["archive", "bucket"] as const)(
       await entry();
       expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
       expect(runPendingCardLoop).toHaveBeenCalledOnce();
-      expect(runAttendanceLoop).toHaveBeenCalledOnce();
+      expect(attendanceJob).toHaveBeenCalledOnce();
     } finally {
       await server?.close();
       await agent.close();

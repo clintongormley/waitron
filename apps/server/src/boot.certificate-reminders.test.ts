@@ -79,12 +79,13 @@ function holdingLoop() {
   const release = gate(),
     aborted = gate();
   const state = { db: undefined as Database | undefined, finished: false, aliveAtEnd: false };
-  const spy = vi
-    .spyOn(reminderWorker, "runCertificateReminderLoop")
-    .mockImplementation(async (deps) => {
+  const realJob = reminderWorker.certificateReminderJob;
+  const spy = vi.spyOn(reminderWorker, "certificateReminderJob").mockImplementation((deps) => ({
+    ...realJob(deps),
+    pass: async ({ signal }) => {
       state.db = deps.db;
       await new Promise<void>((resolve) =>
-        deps.signal.addEventListener(
+        signal.addEventListener(
           "abort",
           () => {
             aborted.release();
@@ -96,7 +97,9 @@ function holdingLoop() {
       await release.promise;
       state.aliveAtEnd = deps.db.all(sql`select 1 as alive`).length === 1;
       state.finished = true;
-    });
+      return { nextDueAt: null };
+    },
+  }));
   return { spy, state, release: release.release, aborted: aborted.promise };
 }
 
@@ -108,7 +111,7 @@ const settle = async () => {
 describe("the certificate reminder loop at boot", () => {
   it("does not start where fiscal records are not filed", async () => {
     const f = await prepared(false);
-    const spy = vi.spyOn(reminderWorker, "runCertificateReminderLoop");
+    const spy = vi.spyOn(reminderWorker, "certificateReminderJob");
     let server: StartedServer | undefined;
     try {
       server = await startServer(f.env);

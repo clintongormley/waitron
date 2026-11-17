@@ -11,11 +11,12 @@ import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CertificateReminderSender } from "./certificate-reminder-email.js";
 import {
-  runCertificateReminderLoop,
+  certificateReminderJob,
   runCertificateReminderPass,
 } from "./certificate-reminder-worker.js";
 import type { EmailDelivery } from "./email-delivery.js";
 import { realSleep } from "./loop.js";
+import { runTestJob } from "./testing/run-job.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const seat = FISCAL_SLOT.certificate!;
@@ -171,61 +172,52 @@ describe("certificate reminder pass", () => {
   });
 });
 
-describe("certificate reminder loop", () => {
-  const throwing = (error: unknown) => {
-    throw error;
-  };
-
+describe("certificate reminder job", () => {
   it("sleeps 500 ms after work and an hour when idle", async () => {
     const sleeps: number[] = [];
-    await runCertificateReminderLoop({
-      ...deps(),
-      onError: throwing,
+    await runTestJob(certificateReminderJob(deps()), controller.signal, {
       sleep: async (ms) => {
         sleeps.push(ms);
         if (ms === 3_600_000) controller.abort();
       },
-    });
+    }).done;
     expect(sleeps).toEqual([500, 3_600_000]);
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it("reports a failed pass and a failed sleep, and carries on", async () => {
+  it("reports a failed pass and carries on after the idle hour", async () => {
     const failure = new Error("credential lookup refused");
-    const sleepFailure = new Error("sleep failed");
-    const errors: unknown[] = [];
+    const log = vi.fn();
     const resolveDelivery = vi.fn(deps().resolveDelivery).mockRejectedValueOnce(failure);
     let sleeps = 0;
-    await runCertificateReminderLoop({
-      ...deps(),
-      resolveDelivery,
-      onError: (error) => errors.push(error),
+    await runTestJob(certificateReminderJob({ ...deps(), resolveDelivery }), controller.signal, {
+      log,
       sleep: async () => {
-        sleeps += 1;
-        if (sleeps === 1) throw sleepFailure;
-        controller.abort();
+        if (++sleeps === 2) controller.abort();
       },
+    }).done;
+    expect(log).toHaveBeenCalledExactlyOnceWith("error", "job.failed", {
+      job: "fiscal.certificate_reminders",
+      errorCode: "unknown",
+      consecutiveFailures: 1,
     });
-    expect(errors).toEqual([failure, sleepFailure]);
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it("the loop returns promptly when aborted during its hourly sleep", async () => {
+  it("returns promptly when aborted during its hourly sleep", async () => {
     await suite.db.delete(persons);
     let entered!: () => void;
     const sleeping = new Promise<void>((resolve) => {
       entered = resolve;
     });
     let finished = false;
-    const work = runCertificateReminderLoop({
-      ...deps(),
-      onError: throwing,
+    const work = runTestJob(certificateReminderJob(deps()), controller.signal, {
       sleep: async (ms, signal) => {
         expect(ms).toBe(3_600_000);
         entered();
         await realSleep(ms, signal);
       },
-    }).then(() => {
+    }).done.then(() => {
       finished = true;
     });
     await sleeping;
@@ -238,37 +230,47 @@ describe("certificate reminder loop", () => {
 
   it("waits the idle hour after a pass that throws, and abort still ends that wait", async () => {
     const failure = new Error("smtp credential unreadable");
-    const errors: unknown[] = [];
+    const log = vi.fn();
     const sleeps: number[] = [];
     let entered!: () => void;
     const sleeping = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    const work = runCertificateReminderLoop({
-      ...deps(),
-      resolveDelivery: async () => {
-        throw failure;
+    const work = runTestJob(
+      certificateReminderJob({
+        ...deps(),
+        resolveDelivery: async () => {
+          throw failure;
+        },
+      }),
+      controller.signal,
+      {
+        log,
+        sleep: async (ms, signal) => {
+          sleeps.push(ms);
+          entered();
+          await realSleep(ms, signal);
+        },
       },
-      onError: (error) => errors.push(error),
-      sleep: async (ms, signal) => {
-        sleeps.push(ms);
-        entered();
-        await realSleep(ms, signal);
-      },
-    });
+    ).done;
     await sleeping;
     const started = Date.now();
     controller.abort();
     await work;
     expect(Date.now() - started).toBeLessThan(1_000);
-    expect(errors).toEqual([failure]);
+    expect(log).toHaveBeenCalledExactlyOnceWith("error", "job.failed", {
+      job: "fiscal.certificate_reminders",
+      errorCode: "unknown",
+      consecutiveFailures: 1,
+    });
     expect(sleeps).toEqual([3_600_000]);
   });
 
   it("uses no database, configuration or sender once aborted", async () => {
     controller.abort();
     const resolveDelivery = vi.fn(deps().resolveDelivery);
-    await runCertificateReminderLoop({ ...deps(), resolveDelivery, onError: throwing });
+    await runTestJob(certificateReminderJob({ ...deps(), resolveDelivery }), controller.signal)
+      .done;
     expect(resolveDelivery).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });

@@ -24,7 +24,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { appendOnlyTriggerFaults } from "@waitron/store";
 import { tamperWatchJob } from "./append-only-watch.js";
 import { freeSpaceJob } from "./free-space-watch.js";
-import { startBoxEmailDuty } from "./box-alert-email.js";
+import { createBoxEmailDuty } from "./box-alert-email.js";
 import { startSpareFollow } from "./spare-follow.js";
 import { runSpareSettings } from "./spare-settings.js";
 import { StreamHost } from "./stream-host.js";
@@ -132,7 +132,7 @@ vi.mock("./free-space-watch.js", async (importOriginal) => {
 
 vi.mock("./box-alert-email.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./box-alert-email.js")>();
-  return { ...actual, startBoxEmailDuty: vi.fn(actual.startBoxEmailDuty) };
+  return { ...actual, createBoxEmailDuty: vi.fn(actual.createBoxEmailDuty) };
 });
 
 vi.mock("./spare-follow.js", async (original) => {
@@ -264,13 +264,20 @@ async function spyOnFreeSpaceWatchStop() {
 
 /** Spies on the stop of the next managers' email check boot starts. */
 async function spyOnBoxEmailDutyStop() {
-  const { startBoxEmailDuty: realStart } =
+  const { createBoxEmailDuty: realStart } =
     await vi.importActual<typeof import("./box-alert-email.js")>("./box-alert-email.js");
   const stop = vi.fn<() => Promise<void>>();
-  vi.mocked(startBoxEmailDuty).mockImplementationOnce((deps) => {
+  vi.mocked(createBoxEmailDuty).mockImplementationOnce((deps) => {
     const duty = realStart(deps);
-    stop.mockImplementation(() => duty.stop());
-    return { stop, remember: duty.remember };
+    stop.mockImplementation(async () => {
+      duty.halt();
+    });
+    return {
+      ...duty,
+      halt: () => {
+        void stop();
+      },
+    };
   });
   return stop;
 }

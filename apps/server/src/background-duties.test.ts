@@ -11,9 +11,6 @@ const ABORTS = [
   "pendingCardController",
   "cloudController",
   "invoiceEmailController",
-  "mailController",
-  "attendanceController",
-  "certificateReminderController",
   "tenderRefundController",
   "jobRunner",
 ];
@@ -22,13 +19,9 @@ const CLOSERS = [
   "jobRunner",
   "pendingCardLoop",
   "tenderRefundLoop",
-  "attendanceLoop",
-  "certificateReminderLoop",
   "certificateDiagnosis",
   "invoiceEmailLoop",
-  "mailLoop",
   "unsubscribeFromChanges",
-  "boxEmails",
   "spareSettings",
   "liveEvents",
   "loop",
@@ -59,17 +52,11 @@ function recordingHandles(
     pendingCardController: aborter("pendingCardController"),
     cloudController: aborter("cloudController"),
     invoiceEmailController: aborter("invoiceEmailController"),
-    mailController: aborter("mailController"),
-    attendanceController: aborter("attendanceController"),
-    certificateReminderController: aborter("certificateReminderController"),
     tenderRefundController: aborter("tenderRefundController"),
     pendingCardLoop: awaited("pendingCardLoop"),
     tenderRefundLoop: awaited("tenderRefundLoop"),
-    attendanceLoop: awaited("attendanceLoop"),
-    certificateReminderLoop: awaited("certificateReminderLoop"),
     certificateDiagnosis: stopper("certificateDiagnosis"),
     invoiceEmailLoop: awaited("invoiceEmailLoop"),
-    mailLoop: awaited("mailLoop"),
     cloudSnapshots: awaited("cloudSnapshots"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     jobRunner: {
@@ -81,7 +68,6 @@ function recordingHandles(
         calls.push("stop jobRunner");
       },
     },
-    boxEmails: stopper("boxEmails"),
     spareSettings: stopper("spareSettings"),
     liveEvents: { close: () => void calls.push("close liveEvents") },
     loop: awaited("loop"),
@@ -135,13 +121,9 @@ describe("background duties", () => {
       "stop jobRunner",
       "await pendingCardLoop",
       "await tenderRefundLoop",
-      "await attendanceLoop",
-      "await certificateReminderLoop",
       "stop certificateDiagnosis",
       "await invoiceEmailLoop",
-      "await mailLoop",
       "call unsubscribeFromChanges",
-      "stop boxEmails",
       "stop spareSettings",
       "close liveEvents",
       "await loop",
@@ -207,15 +189,11 @@ describe("background duties", () => {
   it("skips the duties a box did not start", async () => {
     const calls: string[] = [];
     const handles = recordingHandles(calls, {
-      certificateReminderController: undefined,
-      attendanceLoop: undefined,
       certificateDiagnosis: undefined,
       handoverDestinationDuty: undefined,
       spareStore: undefined,
     });
     await stopBackgroundDuties(backgroundDuties(handles));
-    expect(calls).not.toContain("abort certificateReminderController");
-    expect(calls).not.toContain("await attendanceLoop");
     expect(calls).not.toContain("stop certificateDiagnosis");
     expect(calls).not.toContain("stop handoverDestinationDuty");
     expect(calls).not.toContain("stop spareStore");
@@ -251,7 +229,7 @@ describe("background duties", () => {
           throw first;
         },
       },
-      boxEmails: { stop: () => Promise.reject(new Error("box email failed")) },
+      spareSettings: { stop: () => Promise.reject(new Error("box email failed")) },
     });
     await expect(stopBackgroundDuties(backgroundDuties(handles))).rejects.toBe(first);
     expect(calls.at(-1)).toBe("await cloudSnapshots");
@@ -269,13 +247,13 @@ describe("background duties", () => {
           throw first;
         },
       },
-      attendanceController: {
+      invoiceEmailController: {
         abort: () => {
           throw new Error("attendance abort failed");
         },
       },
       loop: running,
-      boxEmails: { stop: () => Promise.reject(new Error("box email failed")) },
+      spareSettings: { stop: () => Promise.reject(new Error("box email failed")) },
     });
 
     let settled = false;
@@ -327,7 +305,7 @@ describe("background duties", () => {
     const failure = new Error("stop failed");
     const duties = backgroundDuties(
       recordingHandles([], {
-        boxEmails: {
+        spareSettings: {
           stop: () => {
             stops += 1;
             throw failure;
@@ -335,7 +313,7 @@ describe("background duties", () => {
         },
       }),
     );
-    const closer = duties.closers.find((c) => c.name === "boxEmails")!;
+    const closer = duties.closers.find((c) => c.name === "spareSettings")!;
     expect(() => closer.close()).toThrow(failure);
     expect(() => closer.close()).toThrow(failure);
     expect(stops).toBe(1);
@@ -378,7 +356,7 @@ describe("fiscal reconciliation shutdown", () => {
 });
 
 describe("spare join shutdown", () => {
-  it("stops the spare join at a stepdown, once, after the box emails", async () => {
+  it("stops the spare join at a stepdown, once, after unsubscribing from changes", async () => {
     const calls: string[] = [];
     const handles = Object.assign(recordingHandles(calls), {
       spareJoin: { stop: () => void calls.push("stop spareJoin") },
@@ -387,7 +365,7 @@ describe("spare join shutdown", () => {
     expect(duties.closers.find((item) => item.name === "spareJoin")?.atStepdown).toBe(true);
     await stopBackgroundDuties(duties);
     expect(calls.filter((call) => call === "stop spareJoin")).toHaveLength(1);
-    expect(calls.indexOf("stop spareJoin")).toBe(calls.indexOf("stop boxEmails") + 1);
+    expect(calls.indexOf("stop spareJoin")).toBe(calls.indexOf("call unsubscribeFromChanges") + 1);
   });
 
   it("has no spare join closer on a box that did not start one", () => {
