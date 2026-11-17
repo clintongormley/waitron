@@ -849,7 +849,10 @@ declare module "@waitron/shared" {
      * it or while one of its extras is held.
      */
     "group.line_held": { tabId: string; lineNo: number };
-    /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
+    /**
+     * A payment was asked of a bill with nothing left to pay and no card pending on it, or Print
+     * the bill of a bill its payments already cover.
+     */
     "bill.nothing_outstanding": { workingOrderId: string };
     "bill.unsent_dishes": { billId: string };
     /**

@@ -385,7 +385,7 @@ Open:
   `amountDue` too, which W26 (#1136) left out because other screens and the floor read
   `outstanding`.
 - **A bill presented without an invoice keeps the label it was placed with when the departure
-  invoices it.** Every other path that invoices such a bill saves the receipt label in the
+  or Print the bill invoices it.** Every other path that invoices such a bill saves the receipt label in the
   update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
   of `working_orders_enforce_transition` (now in `packages/db/drizzle/0000_baseline.sql`) requires
   the label to stay as it is

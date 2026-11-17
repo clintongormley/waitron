@@ -420,7 +420,7 @@ in full first (§6), then abandon.
 is an unpaid departure, plan Task 17, which waits on asesor Q28; until it lands such a bill stays
 open and visible on the table. Open point §11.8. *(2026-10-01: Task 17 as built refuses a bill
 holding any payment, even one given back in full (`unpaid_departure.bill_holds_payment`); the owner
-decided on 2026-10-01 to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)* *(2026-11-12, R6-2: only a bill still holding money is refused now; one whose payments were all declined or given back in full can be left unpaid, owner, 2026-11-12, `docs/backlog/till.md`.)*
+decided on 2026-10-01 to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)* *(2026-11-12, R6-2: only a bill still holding money is refused now; one whose payments were all declined or given back in full can be left unpaid, owner, 2026-11-12, `docs/backlog/till.md`.)* *(2026-11-17, MEAL-END-TICKET: no longer refused; a part-paid bill is left unpaid owing the rest, and `unpaid_departure.bill_holds_payment` is deleted.)*
 
 ---
 
@@ -1120,7 +1120,7 @@ The owner answered each on 2026-09-26. The design above is written with these an
 8. **A walk-out after a contribution** (§4.5): **the default, pending Q28.** The unpaid bill stays
    visible; Task 14 adds no close-without-invoice route. *(2026-10-01: Task 17 as built refuses a
    bill holding any payment (`unpaid_departure.bill_holds_payment`); the owner decided on 2026-10-01
-   to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)* *(2026-11-12, R6-2: only a bill still holding money is refused now; one whose payments were all declined or given back in full can be left unpaid, owner, 2026-11-12, `docs/backlog/till.md`.)*
+   to keep that refusal — the B17 entry of [the backlog](../../backlog.md).)* *(2026-11-12, R6-2: only a bill still holding money is refused now; one whose payments were all declined or given back in full can be left unpaid, owner, 2026-11-12, `docs/backlog/till.md`.)* *(2026-11-17, MEAL-END-TICKET: no longer refused; a part-paid bill is left unpaid owing the rest, and `unpaid_departure.bill_holds_payment` is deleted.)*
 9. **Offline card acceptance for a payment that does not complete the bill** (§5.4): **the direction
    is accepted for the future Tap to Pay work, and Task 14 does not enable it.** That work must test
    declines both before and after the invoice, including releasing an item payment's lines when an
