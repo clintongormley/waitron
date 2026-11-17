@@ -4656,6 +4656,7 @@ export class DashboardApi {
     modules: string[];
     venueName: string;
     onboardingIntent?: "demo" | "prepare" | "live";
+    simulatedCardPayments?: boolean;
     sessionExpiresInSeconds?: number;
     sessionIdleTimeoutSeconds?: number;
   }> {
@@ -4671,6 +4672,7 @@ export class DashboardApi {
       modules: string[];
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
+      simulatedCardPayments?: boolean;
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
     }>("/management-api/session/me", "GET", undefined, options);

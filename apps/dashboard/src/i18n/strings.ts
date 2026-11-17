@@ -3166,8 +3166,7 @@ export const en = {
   "payments.filter_provider_count": "{count} providers",
   "payments.filter_status_all": "Any status",
   "payments.filter_status_count": "{count} statuses",
-  "payments.simulator_banner":
-    "This venue is running in demo mode — card payments are simulated and no real cards are charged.",
+  "payments.simulator_banner": "Card payments are simulated. No real card is charged.",
   "payments.disconnect": "Disconnect",
   "payments.disconnect_confirm": "Disconnect this provider?",
   "payments.add_reader": "Add reader",
@@ -7649,7 +7648,7 @@ export const es: Record<StringKey, string> = {
   "payments.filter_status_all": "Cualquier estado",
   "payments.filter_status_count": "{count} estados",
   "payments.simulator_banner":
-    "Este local funciona en modo de demostración: los pagos con tarjeta se simulan y no se cobra ninguna tarjeta real.",
+    "Los pagos con tarjeta se simulan. No se cobra ninguna tarjeta real.",
   "payments.disconnect": "Desconectar",
   "payments.disconnect_confirm": "¿Desconectar este proveedor?",
   "payments.add_reader": "Añadir lector",

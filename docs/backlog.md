@@ -968,8 +968,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Sandbox checks and the owner’s 15-minute settlement script](research/2026-11-15-a949-sandbox-and-settlement-check.md)
   record the successful €10 Virtual A control, two virtual decline scenarios and a separate
   successful €10 Virtual B payment on 16 November. The €11 late result needed manager confirmation;
-  €42.51 used generic decline wording. Physical-card qualification and the real-card settlement check
-  still need the owner. No further paid request unattended.
+  €42.51 used generic decline wording. The owner's 17 November paired-Solo check captured EUR 1.40;
+  its daily comparison awaits the post-midnight evidence and the owner. Backup-machine, PIN and
+  signature qualification remain open. Idle SumUp battery refresh timing is unqualified; missing
+  battery percentages need checking on the reader itself. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
 - **The deli's outage card machine.** Buy the standalone machine and

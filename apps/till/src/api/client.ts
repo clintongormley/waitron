@@ -1057,6 +1057,7 @@ export type TenderBlock =
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult extends ReceiptPresentation {
+  simulated?: boolean;
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
   invoiceType?: "F1" | "F2" | "R4" | "R5";

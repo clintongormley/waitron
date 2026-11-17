@@ -70,7 +70,7 @@ function receiptGrosses(
 export async function readTransactionReceipt(
   backend: FiscalBackend,
   tx: Transaction,
-  _cfg: TradingContext,
+  cfg: TradingContext,
   saleId: string,
 ): Promise<TillSaleResult> {
   const scope = await resolveTransactionScope(tx, saleId);
@@ -128,7 +128,7 @@ export async function readTransactionReceipt(
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
       : await readReceiptOrder(tx, groupId)),
-    ...(await readReceiptPresentation(tx, saleId, sale.locale)),
+    ...(await readReceiptPresentation(tx, saleId, sale.locale, cfg.practiceMode === true)),
     ...issuer,
     ...(issuer.issuer === undefined && taxpayer !== null
       ? {

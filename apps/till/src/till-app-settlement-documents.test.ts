@@ -10,6 +10,7 @@ import {
   openTable,
   resetBillPayDrafts,
   stubApi,
+  till,
   shell,
 } from "../test/bill-pay-app.js";
 
@@ -341,5 +342,49 @@ it.each([true, false])(
     await vi.waitFor(() => expect(completed).toHaveBeenCalled());
     expect(completed.mock.calls[0]![0]).toBe(saved);
     if (!saved) expect(completed.mock.calls[0]![1]).toEqual(expect.any(String));
+  },
+);
+
+it.each([false, true])(
+  "uses the saved charge flag for Prepare settlement: %s",
+  async (simulated) => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+      recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), simulated }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    emit(order, "pay-tab", { method: "cash", amount: "120.00" });
+    await flush(el);
+    const document = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+    expect(document.shadowRoot!.querySelector("[data-test=simulation-notice]") !== null).toBe(
+      simulated,
+    );
+  },
+);
+
+it.each([false, true])(
+  "uses the saved charge flag in historical Prepare documents: %s",
+  async (simulated) => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
+      getTransactionReceipt: vi
+        .fn()
+        .mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2", simulated }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await openTable(el);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
+      row: transactionRow({ workingOrderId: "wo-4" }),
+    });
+    await flush(el);
+    const document = el.shadowRoot!.querySelector("till-ticket-view")!;
+    expect(document.shadowRoot!.querySelector("[data-test=simulation-notice]") !== null).toBe(
+      simulated,
+    );
   },
 );

@@ -62,7 +62,7 @@ export interface ReceiptDocumentInput {
   /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
   paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
-  result: Omit<TillSaleResult, keyof ReceiptPresentation>;
+  result: Omit<TillSaleResult, keyof ReceiptPresentation | "simulated">;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;

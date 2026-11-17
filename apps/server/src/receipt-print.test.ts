@@ -1,3 +1,4 @@
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
@@ -91,6 +92,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 import {
   collectOrderOrchestration as collectOrder,
+  payWorkingOrderIntegratedOrchestration as readerPay,
   printSaleReceipt,
   readSettledTicket,
   recordTillSaleOrchestration as recordTillSale,
@@ -1146,6 +1148,31 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     );
     expect(decoded).toContain("VERI*FACTU"); // still a real fiscal receipt
     expect(decoded).not.toContain("Gracias por su visita");
+  });
+
+  it("does not print a no-charge heading for a saved provider charge in Prepare", async () => {
+    const base = await setupVenue();
+    const cfg = { ...base.cfg, practiceMode: true };
+    const printerId = await makePrinter();
+    await configureReceipt(cfg, { printerId });
+    const orderId = randomUUID();
+    const result = await readerPay(
+      { ...deps(), admission: testTradingAdmission(), provider: new FakePaymentProvider(suite.db) },
+      cfg,
+      {
+        id: orderId,
+        zoneId: base.zoneId,
+        lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
+      },
+      OPERATOR,
+    );
+    expect(result.outcome).toBe("captured");
+    await printSaleReceipt(deps(), cfg, orderId, false);
+    const receipt = (await printJobsFor(cfg)).find((job) =>
+      decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
+    )!;
+    expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("TOTAL");
+    expect(decodeTicket(new Uint8Array(receipt.payload))).not.toContain("SIN COBRO REAL");
   });
 
   it("marks an explicitly printed practice sale as simulated", async () => {

@@ -1242,6 +1242,7 @@ export class DashboardApp extends LitElement {
 
   @state() private venueName = "";
   @state() private onboardingIntent?: "demo" | "prepare" | "live";
+  @state() private simulatedCardPayments?: boolean;
 
   // Returning to sign-in must have a language even when the server is unreachable.
   #venueLocale: string = FALLBACK_LOCALE;
@@ -1433,6 +1434,7 @@ export class DashboardApp extends LitElement {
       modules: string[];
       venueName: string;
       onboardingIntent?: "demo" | "prepare" | "live";
+      simulatedCardPayments?: boolean;
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
       tradingAdmission?: TradingAdmissionView;
@@ -1473,6 +1475,7 @@ export class DashboardApp extends LitElement {
     // A plain field: redraw so the screens given a permission see the change.
     this.requestUpdate();
     this.onboardingIntent = me.onboardingIntent;
+    this.simulatedCardPayments = me.simulatedCardPayments;
     this.#venueLocale = me.venueLocale;
     this.venueName = me.venueName;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
@@ -3625,7 +3628,7 @@ export class DashboardApp extends LitElement {
           .surface=${"readers"}
           .api=${this.api}
           .request=${this.request}
-          .mode=${this.onboardingIntent}
+          .simulatedCardPayments=${this.simulatedCardPayments}
         ></dashboard-payments-screen>`;
       case "alerts":
         return html`<dashboard-alerts-screen

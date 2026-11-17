@@ -122,6 +122,8 @@ before paying. Codex needs read-only access to this venue database for the later
 check; arrange that now. The intended merchant and reader must be selected, without the payment
 simulator. Preserve the venue until the later check. Do not re-pair the reader for this test.
 
+Open **Hardware → Devices**, select the device you will use and choose **Edit**. Set its **Card reader** to the intended Solo and save before taking the payment.
+
 1. Choose an existing item for a total of about €1, with no tip. Note the exact total before
    you choose **Pay → Card**.
 2. Present your card once on the Solo. Wait for Waitron's final result. Finish the bill normally;
@@ -178,3 +180,24 @@ selection are in `packages/payments/src/reconcile.ts` and `store.ts`. The saved 
 written by `apps/server/src/reconcile-duty.ts`; the backup panel is
 `apps/dashboard/src/widgets/backup-audit.ts`. Follow those current paths when gathering
 the later evidence. No new report viewer or bank-payout audit is part of this check.
+
+
+## Real-card session and battery reading, 17 November
+
+Your paired Solo captured EUR 1.40 through Waitron, SumUp transaction TAAA7H7DNAD, at 18:36 CET.
+The daily comparison remains pending after 00:00 UTC on 18 November; this payment does not
+qualify the backup reader, signature flow or settlement matching by itself.
+
+During the session, SumUp returned battery 1.67 with activity at 15:22 UTC while you reported the
+reader charged to 100%. That value remained unchanged through at least 17:31 UTC. A fresh read
+at 17:41 UTC returned 100.0 with activity at 17:36:33 UTC. These observations show that a
+successful status read can return an older battery snapshot; they do not establish an idle update cadence.
+
+| Source, read 17 November | Source wording | What the reading means here |
+| --- | --- | --- |
+| [SumUp reader status API](https://developer.sumup.com/api/readers/get-status/) | “Battery level percentage” | The documented range is 0–100. The response is the reader's last known status, with its activity timestamp, rather than a guarantee of current charge. |
+
+Waitron omits a SumUp battery percentage when its activity time is missing, invalid, in the future
+or over ten minutes old at the status read. The existing alert cache can retain an accepted reading
+for another five minutes. An idle reader may therefore show no percentage or low-battery alert;
+check its charge on the reader. These are Waitron limits, not a provider freshness guarantee.

@@ -22936,7 +22936,7 @@ export class TillApp extends LitElement {
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
-          .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
+          .simulated=${this.result?.simulated === true}
         ></till-ticket-view>`;
       case "hours":
         return html`<till-hours-screen
@@ -23541,7 +23541,7 @@ export class TillApp extends LitElement {
           this.settlementDocument === null
             ? nothing
             : html`<till-settlement-document-dialog
-                .simulated=${this.onboardingIntent === "prepare"}
+                .simulated=${this.onboardingIntent === "prepare" && this.result?.simulated === true}
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
                 .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { getEventListeners } from "node:events";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { decimal, hasCode, isAppError } from "@waitron/shared";
 import type { AppError } from "@waitron/shared";
 import type { SumUpClient } from "./client.js";
@@ -341,6 +341,39 @@ describe("sumupClient reader management", () => {
     expect(status.connection).toBe("Wi-Fi");
     expect(status.activity).toBe("IDLE");
     expect(s.calls).toContainEqual(["GET", "/v0.1/merchants/MC/readers/rdr_1/status"]);
+  });
+
+  it.each([
+    ["fresh rounded level", 99.6, "2026-11-17T17:36:33Z", 100],
+    ["fresh empty battery", 0, "2026-11-17T17:36:33Z", 0],
+    ["ten-minute boundary", 1.67, "2026-11-17T17:31:00Z", 2],
+    ["old charging snapshot", 1.67, "2026-11-17T15:22:00Z", undefined],
+    ["just expired snapshot", 5, "2026-11-17T17:30:59.999Z", undefined],
+    ["missing activity time", 5, undefined, undefined],
+    ["invalid activity time", 5, "unknown", undefined],
+    ["future activity time", 5, "2026-11-17T17:41:01Z", undefined],
+    ["non-numeric level", "5", "2026-11-17T17:36:33Z", undefined],
+    ["negative level", -1, "2026-11-17T17:36:33Z", undefined],
+    ["out-of-range level", 101, "2026-11-17T17:36:33Z", undefined],
+  ])("interprets the reader battery: %s", async (_name, battery, activity, expected) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-17T17:41:00Z"));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const s = stub(() => ({
+      status: 200,
+      body: { data: { status: "ONLINE", battery_level: battery, last_activity: activity } },
+    }));
+    const status = await sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: s.fetch,
+    }).readerStatus("rdr_1");
+    expect(status.online).toBe(true);
+    expect(status.lastSeenAt).toBe(activity);
+    if (expected === undefined) expect(status).not.toHaveProperty("batteryPercent");
+    else expect(status.batteryPercent).toBe(expected);
   });
 
   it("maps an OFFLINE reader status to online:false", async () => {

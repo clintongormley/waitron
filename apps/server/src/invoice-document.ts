@@ -1,3 +1,4 @@
+import { readReceiptSimulation } from "./receipt-presentation.js";
 import { readInvoiceTyping } from "./invoice-typing.js";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
 import "./errors.js";
@@ -153,7 +154,7 @@ async function readDocument(
     venueAddress: [],
     invoiceLocale: sale.locale,
     namesLocale: sale.invoiceLocales[0]!,
-    simulated: cfg.practiceMode,
+    simulated: await readReceiptSimulation(tx, saleId, cfg.practiceMode === true),
     ...(guests === undefined ? {} : { guests }),
     result: {
       ...(sale.workingOrderId === null

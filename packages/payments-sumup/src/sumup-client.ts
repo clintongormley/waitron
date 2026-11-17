@@ -412,11 +412,21 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
           };
         }
       ).data;
+      const age =
+        typeof data.last_activity === "string"
+          ? Date.now() - Date.parse(data.last_activity)
+          : Number.NaN;
+      const battery = data.battery_level;
+      const usable =
+        typeof battery === "number" &&
+        Number.isFinite(battery) &&
+        battery >= 0 &&
+        battery <= 100 &&
+        age >= 0 &&
+        age <= 10 * 60_000;
       return {
         online: data.status === "ONLINE",
-        ...(data.battery_level != null
-          ? { batteryPercent: Math.max(0, Math.min(100, Math.round(data.battery_level))) }
-          : {}),
+        ...(usable ? { batteryPercent: Math.round(battery) } : {}),
         ...(data.connection_type !== undefined ? { connection: data.connection_type } : {}),
         ...(data.state !== undefined ? { activity: data.state } : {}),
         ...(data.firmware_version !== undefined ? { firmwareVersion: data.firmware_version } : {}),

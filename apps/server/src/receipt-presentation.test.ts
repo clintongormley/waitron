@@ -2,10 +2,22 @@ import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceSeries,
+  sales,
+  saleSubstitutions,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seedVenue,
+  seedDepartmentReceipt,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -15,21 +27,21 @@ import { putThemeInUse, UNTRUSTED_CASES, type UntrustedCase } from "./testing/th
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
-async function fixture(header: "department" | "null" | "absent" = "department") {
-  await seedVenue(suite.db, {
+async function fixture(header: "department" | "null" | "absent" = "department", db = suite.db) {
+  await seedVenue(db, {
     name: randomUUID(),
     invoiceLocales: ["es-ES"],
     addressLine1: "Current street",
     city: "Madrid",
   });
   const cfg = {};
-  const nodeId = await seedNode(suite.db);
-  const [department] = await suite.db
+  const nodeId = await seedNode(db);
+  const [department] = await db
     .insert(departments)
     .values({ name: "Dining", tradingName: "Live brand" })
     .returning();
-  const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
-  const [sale] = await suite.db
+  const [series] = await db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
+  const [sale] = await db
     .insert(sales)
     .values({
       source: "readiness_test",
@@ -47,7 +59,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     })
     .returning();
   if (header !== "absent")
-    await suite.db.insert(saleReceiptHeaders).values({
+    await db.insert(saleReceiptHeaders).values({
       saleId: sale!.id,
       departmentId: header === "null" ? null : department!.id,
       tradingName: "Recorded brand",
@@ -55,11 +67,11 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     });
 
   const authored = async (receipt: Record<string, unknown>) => {
-    await seedDepartmentReceipt(suite.db, department!.id, receipt);
+    await seedDepartmentReceipt(db, department!.id, receipt);
   };
-  const read = (language = "es-ES") =>
-    withTransaction(suite.db, (tx) => readReceiptPresentation(tx, sale!.id, language));
-  return { cfg, departmentId: department!.id, read, authored };
+  const read = (language = "es-ES", practice = false) =>
+    withTransaction(db, (tx) => readReceiptPresentation(tx, sale!.id, language, practice));
+  return { cfg, sale: sale!, departmentId: department!.id, read, authored };
 }
 
 describe("department-only on-screen receipt", () => {
@@ -343,4 +355,93 @@ describe("the theme's logo on the ticket view", () => {
       expectNoLogo(untrusted, presentation);
     },
   );
+});
+
+describe("receipt charge wording", () => {
+  const paid = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+
+  it.each([
+    ["sumup", "captured", false],
+    ["sumup", "refunded", false],
+    ["sumup", "partially_refunded", false],
+    ["sumup", "attempting", true],
+    ["sumup", "failed", true],
+    ["sumup", "voided", true],
+    ["sumup", "initiated", true],
+    ["simulator", "captured", true],
+    ["manual", "captured", true],
+  ] as const)("uses saved %s %s facts in Prepare", async (provider, state, expected) => {
+    const f = await fixture("absent", paid.db);
+    const order = await seedWorkingOrder(paid.db);
+    await paid.db.insert(payments).values({
+      workingOrderId: order.id,
+      source: "readiness_test",
+      saleId: f.sale.id,
+      provider,
+      state,
+      paymentRef: randomUUID(),
+      amount: 140,
+    });
+    expect((await f.read("es-ES", true)).simulated).toBe(expected);
+  });
+
+  it("keeps a split real charge on its corrective and substituted documents after refund", async () => {
+    const f = await fixture("absent", paid.db);
+    const order = await seedWorkingOrder(paid.db);
+    await paid.db.insert(payments).values([
+      {
+        workingOrderId: order.id,
+        source: "readiness_test",
+        saleId: f.sale.id,
+        provider: "simulator",
+        state: "captured",
+        paymentRef: randomUUID(),
+        amount: 40,
+      },
+      {
+        workingOrderId: order.id,
+        source: "readiness_test",
+        saleId: f.sale.id,
+        provider: "sumup",
+        state: "refunded",
+        paymentRef: randomUUID(),
+        amount: 100,
+      },
+    ]);
+    const [corrective] = await paid.db
+      .insert(sales)
+      .values({
+        ...f.sale,
+        id: randomUUID(),
+        invoiceNumber: 2,
+        correctsSaleId: f.sale.id,
+      })
+      .returning();
+    const [substitute] = await paid.db
+      .insert(sales)
+      .values({
+        ...f.sale,
+        id: randomUUID(),
+        invoiceNumber: 3,
+      })
+      .returning();
+    await paid.db.insert(saleSubstitutions).values({
+      substitutionSaleId: substitute!.id,
+      substitutedSaleId: corrective!.id,
+    });
+    for (const id of [f.sale.id, corrective!.id, substitute!.id]) {
+      const receipt = await withTransaction(paid.db, (tx) =>
+        readReceiptPresentation(tx, id, "es-ES", true),
+      );
+      expect(receipt.simulated).toBe(false);
+    }
+  });
+});
+
+describe("receipt wording with Payments off", () => {
+  it("retains practice wording without a payments table and hides it outside practice", async () => {
+    const f = await fixture("absent");
+    expect((await f.read("es-ES", true)).simulated).toBe(true);
+    expect((await f.read("es-ES", false)).simulated).toBe(false);
+  });
 });

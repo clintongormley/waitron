@@ -95,6 +95,8 @@ Para añadir un lector, abre **Pagos con tarjeta** en Hardware y elige **Añadir
 Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
 Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
 
+Antes de cobrar, abre **Hardware → Dispositivos**, selecciona tu dispositivo y elige **Editar** para asignarle un lector de tarjetas. Si no aparece el porcentaje de batería de un lector, comprueba su carga en el propio lector.
+
 En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
 Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
