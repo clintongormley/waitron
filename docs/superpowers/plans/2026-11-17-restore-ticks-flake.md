@@ -14,15 +14,16 @@
 - `docs/backlog/ci.md`: remove the two restore paragraphs and only their portion of the shared incident row. Preserve every other incident. Rewrite the shared row’s second cell to “See detail” after removing its restore-only latest-sighting link. Leave the generic `docs/backlog.md` incident link unchanged: it names no restore incident; the watcher cleared this exception to the queue’s mandatory index edit at 06:09 CET.
 - This plan. Read/run, but do not edit, `apps/server/src/handover-integrity.test.ts`: its existing `setImmediate`/`turned === true` case owns the event-loop yield check.
 
-**Implementation and proof:**
+**Implementation and proof (checkpoint, 17 November 2026 at 06:27 CET):**
 
-- [x] Retain the Linux loaded/unloaded injected reproduction and historical uncertainty in the PR. No separate spy/framework control is needed: the mutation must produce recorded main-thread calls.
+- [ ] Retain the Linux loaded/unloaded injected reproduction and historical uncertainty in the PR. No separate spy/framework control is needed: the mutation must produce recorded main-thread calls.
 - [x] In an installed disposable checkout, mutate each boundary separately: `isCopyIntact` in `handover-integrity.ts`, then restore’s `checkIntegrity` in `restore-stream.ts` bypassing `checkCopyIntegrity`. Each mutation first awaits `setImmediate`, then performs the real read-only main-thread integrity/foreign-key queries with the existing false-on-damage handling. Require the new case to fail with recorded preparation calls while the existing `setImmediate` case still passes; restore and require green. These mutations prove the new guard adds coverage beyond yielding once. No production mutation enters the feature checkout or PR.
 - [x] Run the changed file and the unchanged integrity suite: `pnpm --filter @waitron/server exec vitest run src/restore-stream.test.ts src/handover-integrity.test.ts`. Also check the new case against Lane L’s current integrity change in a disposable candidate before landing; preserve its live worktree. Record test counts and results. Preserve every other assertion, including damaged files and missing parents.
-- Remove settled backlog text (done). Continue through `finish-branch`, the normal push hook, selected current-head CI and `land-branch` under the existing campaign rules.
+- [x] Remove settled backlog text.
+- [ ] Run `finish-branch`, the normal push hook, selected current-head CI and `land-branch` under the existing campaign rules.
 
 **Excluded:** Production changes, Lane L's read-only-open work, other test edits beyond that healthy-case merge, worker gates, new helpers, fixture-size thresholds, timer changes, retries and CI changes. A production finding returns to the watcher before editing.
 
 **Expected physical additions + deletions:** production 0; tests 50–65; docs 55–80; total 105–145. Reproduction scripts remain in local receipts. Ask the watcher before growth beyond 217 changed lines.
 
-**Local result (17 November 2026):** Both deferred-main-thread mutations failed the new assertion with two preparation calls while the existing yield case passed; restored controls passed. Both suites passed 96 cases, including with Lane L’s current three-file integrity/store overlay in a disposable checkout. Physical diff before this status update: production +0/−0; tests +7/−36; support 0; docs +27/−21; total 91 changed lines. The forecast above was an estimate.
+**Local result (17 November 2026):** Both deferred-main-thread mutations failed the new assertion with two preparation calls while the existing yield case passed; restored controls passed. 96 cases passed across both files, including with Lane L’s three-file integrity/store overlay at `6539a1df64ac0d3dbc580685d523401ab6862d94` in a disposable checkout. Physical diff before this status update: production +0/−0; tests +7/−36; support 0; docs +27/−21; total 91 changed lines. The forecast above was an estimate.
