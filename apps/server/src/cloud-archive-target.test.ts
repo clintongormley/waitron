@@ -265,8 +265,7 @@ it("labels the first capture of a month monthly and later captures daily", async
   const f = await fixture();
   const w = createCloudArchiveTarget(f.deps);
   await w.store(f.input());
-  const reopened = createCloudArchiveTarget(f.deps);
-  expect(await reopened.readCaptureState?.()).toEqual({
+  expect(await createCloudArchiveTarget(f.deps).readCaptureState?.()).toEqual({
     storedAt: f.input().at.getTime(),
     pending: false,
   });

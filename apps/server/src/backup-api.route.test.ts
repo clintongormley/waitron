@@ -1705,13 +1705,13 @@ describe("backup admin routes", () => {
     });
 
     const weekly = { ...DAILY_AT_0330, days: [1] };
-    const cloudOnly = {
-      cloud: true,
+    const archiveSettings = {
       destinations: [],
       recoveryKey: KEY_1,
       schedule: DAILY_AT_0330,
       retention: RETENTION,
     };
+    const cloudOnly = { ...archiveSettings, cloud: true };
 
     it("refuses Cloud with a weekly schedule, naming the schedule", async () => {
       const { post } = await primaryApp({
@@ -1732,8 +1732,7 @@ describe("backup admin routes", () => {
       const saved = await post("/api/backup/apply", cloudOnly);
       expect(saved.status).toBe(200);
       const before = await readSealed();
-      const { cloud: _cloud, ...edit } = cloudOnly;
-      const response = await post("/api/backup/apply", { ...edit, schedule: weekly });
+      const response = await post("/api/backup/apply", { ...archiveSettings, schedule: weekly });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
         error: { code: "backup.cloud_needs_daily", params: { field: "schedule" } },
@@ -1768,9 +1767,10 @@ describe("backup admin routes", () => {
       environment = "test";
       expect((await post("/api/backup/apply", cloudOnly)).status).toBe(200);
       environment = "production";
-      const { cloud: _cloud, ...edit } = cloudOnly;
       const destinations = [{ kind: "local-fs", dir: makeDestDir() }];
-      expect((await post("/api/backup/apply", { ...edit, destinations })).status).toBe(200);
+      expect((await post("/api/backup/apply", { ...archiveSettings, destinations })).status).toBe(
+        200,
+      );
       expect(await readSealed()).toMatchObject({ cloud: true, destinations });
     });
 

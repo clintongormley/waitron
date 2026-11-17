@@ -56,7 +56,7 @@ it("flushes the Cloud parent when an unpaired Cloud backup attempt precedes pair
         await expect(
           target.store({
             entries: async function* () {
-              await never();
+              yield await never();
             },
             plaintextBytes: 1,
             modules: {},
