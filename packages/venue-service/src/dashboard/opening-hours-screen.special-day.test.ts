@@ -3,6 +3,7 @@ import { LitElement, html } from "lit";
 import { commands, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
+import { isDashboardPath } from "@waitron/shared";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
@@ -337,7 +338,7 @@ class GuardedApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this, "/");
+    this.releaseLinks = captureAppLinks(this, isDashboardPath);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();

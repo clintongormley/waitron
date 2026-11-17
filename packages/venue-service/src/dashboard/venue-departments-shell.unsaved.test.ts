@@ -9,6 +9,7 @@ import {
   navigationGuardFor,
 } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { isDashboardPath } from "@waitron/shared";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import "./venue-departments-shell.js";
@@ -65,7 +66,7 @@ class App extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this, "/");
+    this.releaseLinks = captureAppLinks(this, isDashboardPath);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();

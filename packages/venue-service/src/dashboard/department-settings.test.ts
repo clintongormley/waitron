@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, captureAppLinks } from "@waitron/ui";
+import { isDashboardPath } from "@waitron/shared";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type VenueServiceView, type DepartmentSettingsInput } from "./client.js";
@@ -1059,7 +1060,7 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   const shell: string[] = [];
   const zones: unknown[] = [];
   el.addEventListener("zone-change", (e) => zones.push((e as CustomEvent).detail));
-  captureAppLinks(hosts[0]!, "/", (url) => shell.push(url.pathname + url.search));
+  captureAppLinks(hosts[0]!, isDashboardPath, (url) => shell.push(url.pathname + url.search));
   const zone = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-zone=z1]")!;
   zone.click();
   expect(zones).toEqual([{ zoneId: "z1" }]);
