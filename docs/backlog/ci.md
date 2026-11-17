@@ -313,8 +313,10 @@ one untouched-run overflow and a natural blind hosted choice. Fresh-capacity ser
 choices, including an idle-server decision followed by successful server jobs on 15 November,
 are reconciled with their workflow commits. The natural agreeing-row inventory exception is
 also qualified by run 43948927220 attempt 1: acceptance of the recorded empty rows and counts
-1,1 was followed by a hosted choice, and all selected jobs and aggregate passed. Later idle snapshots did not
-invalidate earlier busy-server choices. The 17 November scheduled health run dispatched
+1,1 was followed by a hosted choice, and all selected jobs and aggregate passed. On 17 November,
+three flagged runs selected GitHub from snapshots showing two occupied server slots and zero
+hosted jobs counted. A fourth used the hosted fallback after a short running-workflow list.
+The 17 November scheduled health run dispatched
 an idle probe that passed on the server at its first attempt, followed by the hosted aggregate.
 The bundle still needs a full-day queue measurement. Keep the corrected v41 controller and the
 [13 November measured-memory decision](#decisions-and-deliberate-limits).

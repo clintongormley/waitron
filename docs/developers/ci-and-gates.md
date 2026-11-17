@@ -442,6 +442,10 @@ local call in `ci.yml`, rather than substituting the checked-out PR head.
 | Natural agreeing-row inventory exception | [43948927220/1](https://github.com/clintongormley/waitron/actions/runs/43948927220), `16f327ed8a3c80b800e454665c47e166627a7eac` | `d7aff3a1b35bacf68a0dcf82f6030b945d56e777`; planner `133585902765` / `25670` | On 16 November at 20:22:33 UTC, empty agreeing queued-run rows with starting counts 1,1 were accepted; the subsequent hosted choice and all 38 selected jobs, including aggregate `133590760703`, passed. |
 | Scheduled idle pickup | [44159930128/1](https://github.com/clintongormley/waitron/actions/runs/44159930128) and [44160033077/1](https://github.com/clintongormley/waitron/actions/runs/44160033077), `b042abc1899e7c763f7404b9bb147290ecfc6df9` | Same commit for both workflows and the health module. Health `134310681452` / `1000362367`, probe `134311058616` / `27722`, aggregate `134312119693` / `1000362371` | On 17 November at 19:34:31 UTC, scheduled health logged that it dispatched a probe after observing no recent server traffic. The probe ran on the disposable server on its first attempt. Both selected jobs, the probe and the hosted aggregate, passed. |
 | Short repository running list | [44179139053/1](https://github.com/clintongormley/waitron/actions/runs/44179139053), `c99c16f6a9c20ce963e6059f22c483b246a9553f` | `dfb7f1ea74c872ab9bfe8392bbe8be28b8ad836a`, planner `134378447960` / `27854`, aggregate `134385184335` / `1000362876` | At 21:23:42 UTC on 17 November, the repository-wide `in_progress` list ended after three of six advertised rows on its second read. The fresh capacity read succeeded and the strict inventory check selected the documented hosted fallback. The server planner and all 41 selected hosted jobs passed. |
+| Fresh capacity before a hosted queue formed | [44190102408/1](https://github.com/clintongormley/waitron/actions/runs/44190102408), `bbf0e321c1b39efff5416d2c6376a3d54703c6e2` | `9c7b7682cfc7c017bda8122c1b332388adc3a9db`, planner `134416897891` / `27958`, aggregate `134425140009` / `1000363086` | At 22:28:36 UTC on 17 November, server 2+0/13 versus hosted 0+0/20 selected GitHub. The server planner and all 45 selected hosted jobs passed. |
+| Concurrent hosted choice | [44190187920/1](https://github.com/clintongormley/waitron/actions/runs/44190187920), `3268891727d08838ad0574199f271e2bbc564717` | `f428964d2eb07b054122398de5ed5ddc65808fb9`, planner `134417201882` / `27957`, aggregate `134422947121` / `1000363049` | The same counts at 22:28:36 UTC selected GitHub. The server planner and all 37 selected hosted jobs passed. |
+| Fresh capacity after those hosted jobs entered the queue | [44190991851/1](https://github.com/clintongormley/waitron/actions/runs/44190991851), `16edf5ea94d3cf016158673b5fdc5848b24d7d7e` | `ca786d1af4771a975dfaabcb74fe30b72480b19a`, planner `134420020222` / `27959`, aggregate `134429100925` / `1000363117` | At 22:33:28 UTC, server 1+0/12 versus hosted 20+35/20 selected the server. The planner, 42 downstream disposable jobs and the hosted watchdog and aggregate passed. |
+| Fresh capacity before a later idle alarm | [44195162897/1](https://github.com/clintongormley/waitron/actions/runs/44195162897), `65fd278381e837901d323fd8856075a861cf7d8c` | `90e77acb28eea03682a4084474dd05fa249d5470`, planner `134434569359` / `28010`, aggregate `134440102545` / `1000363213` | At 23:00:20 UTC, server 2+0/12 versus hosted 0+0/20 selected GitHub. The server snapshot was 52,552 ms old. The server planner and all 57 selected hosted jobs passed. |
 
 API runner names for the disposable jobs above are `dt-1314919489-RUN-1-JOB`;
 labels are `self-hosted` plus the job-family label, not that runner name. The health
@@ -452,7 +456,12 @@ exercises stale-count acceptance. The contributor-approval API returned
 
 When a later status check shows an idle server, read the choosing job's route and reason.
 Run 44179139053 had already selected the hosted fallback before the 21:27:46 UTC idle
-snapshot. The eight runs created from 21:06 through 21:25 UTC on
+snapshot. The two 22:28 choices preceded the creation of their hosted jobs. By the 22:33
+choice, those two batches accounted for the 20 running and 35 waiting hosted jobs in the
+router's log, using job creation, start and end times. Run 44195162897's first hosted job
+started at 23:00:30 UTC, before the 23:05 idle alarm. The choosing job logs how old the server
+snapshot is when it reads it. The later alarm checks whether hosted jobs are waiting while
+the server is idle. The eight runs created from 21:06 through 21:25 UTC on
 15 November had 22 successful server assignments across four CI runs; three of the eight
 were hosted Server health runs. The routing logs above distinguish an idle-server choice
 from a busy-server choice. To inspect assignments, read
