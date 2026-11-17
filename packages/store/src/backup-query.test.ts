@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -217,5 +217,40 @@ describe.each(["file", "bytes"])("query-only backup reads (%s)", (source) => {
 it("refuses an empty byte copy before exposing a callback", async () => {
   await expect(openBackupQuery(new Uint8Array())).rejects.toMatchObject({
     code: "ERR_INVALID_ARG_VALUE",
+  });
+});
+
+describe("an immutable open", () => {
+  function walModeFixture() {
+    const { path, directory } = fixture();
+    const db = new DatabaseSync(path);
+    try {
+      db.exec("pragma journal_mode = wal");
+    } finally {
+      db.close();
+    }
+    expect([...readFileSync(path).subarray(18, 20)]).toEqual([2, 2]);
+    expect(readdirSync(directory)).toEqual(["venue.db"]);
+    return { path, directory };
+  }
+
+  it("reads a WAL-mode file and leaves nothing beside it", async () => {
+    const { path, directory } = walModeFixture();
+    const handle = await openBackupQuery(path, { immutable: true });
+    handles.push(handle);
+    expect(await rows(handle.query, "select value from evidence where id = 1")).toEqual([
+      { value: "original" },
+    ]);
+    await handle.close();
+    expect(readdirSync(directory)).toEqual(["venue.db"]);
+  });
+
+  it("is what keeps the side files away: the default open leaves them", async () => {
+    const { path, directory } = walModeFixture();
+    const handle = await openBackupQuery(path);
+    handles.push(handle);
+    await rows(handle.query, "select value from evidence where id = 1");
+    await handle.close();
+    expect(readdirSync(directory)).toEqual(["venue.db", "venue.db-shm", "venue.db-wal"]);
   });
 });

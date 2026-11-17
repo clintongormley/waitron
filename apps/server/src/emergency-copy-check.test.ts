@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import {
@@ -63,6 +64,18 @@ async function place(): Promise<string> {
   return sha256(venuePath);
 }
 
+/** A file in WAL mode (header bytes 18 and 19 are 2), closed cleanly so nothing sits beside it. */
+async function placeInWalMode(): Promise<string> {
+  await suite.db.archiveTo(venuePath);
+  const db = new DatabaseSync(venuePath);
+  try {
+    db.exec("pragma journal_mode = wal");
+  } finally {
+    db.close();
+  }
+  return sha256(venuePath);
+}
+
 async function sha256(path: string): Promise<string> {
   return createHash("sha256")
     .update(await readFile(path))
@@ -110,6 +123,20 @@ function check(
 
 it("accepts a copy whose binding matches", async () => {
   const hash = await place();
+  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  expect(await sha256(venuePath)).toBe(hash);
+});
+
+it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second check still passes", async () => {
+  const hash = await placeInWalMode();
+  expect([...(await readFile(venuePath)).subarray(18, 20)]).toEqual([2, 2]);
+  expect(await readdir(root)).toEqual(["venue.db"]);
+  await expect(
+    check(bindingFor(hash, { venueId: "e7000000-0000-4000-8000-0000000000ff" })),
+  ).rejects.toMatchObject({ code: "emergency_copy.venue_mismatch" });
+  expect(await readdir(root)).toEqual(["venue.db"]);
+  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  expect(await readdir(root)).toEqual(["venue.db"]);
   await expect(check(bindingFor(hash))).resolves.toBeUndefined();
   expect(await sha256(venuePath)).toBe(hash);
 });

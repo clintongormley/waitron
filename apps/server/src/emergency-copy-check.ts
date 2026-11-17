@@ -39,16 +39,18 @@ export async function checkEmergencyCopy(deps: {
   signal?: AbortSignal;
 }): Promise<void> {
   const { binding, venuePath } = deps;
+  // Every open below is immutable, so a WAL-mode file gains no `-wal` or `-shm`: safe only because
+  // a `-wal` beside the file is refused first, and an immutable open would read past it.
   if (existsSync(`${venuePath}${WAL_SUFFIX}`)) throw new AppError("emergency_copy.wal_present", {});
   if (existsSync(join(dirname(venuePath), NODE_FILE)))
     throw new AppError("emergency_copy.node_db_present", {});
   if ((await fileSha256(venuePath)) !== binding.selectedStream.databaseSha256)
     throw new AppError("emergency_copy.hash_mismatch", {});
-  if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal })))
+  if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal, immutable: true })))
     throw new AppError("emergency_copy.integrity_failed", {});
-  await assertVenueCopyNotAhead(venuePath, deps.migrationsRoot);
+  await assertVenueCopyNotAhead(venuePath, deps.migrationsRoot, { immutable: true });
 
-  const opened = await openBackupQuery(venuePath);
+  const opened = await openBackupQuery(venuePath, { immutable: true });
   try {
     const { query } = opened;
     const deployed = await firstRow(query, "select environment from deployment where id = 1");

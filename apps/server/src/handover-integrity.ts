@@ -12,9 +12,16 @@ import { Worker, type WorkerOptions } from "node:worker_threads";
 const INTEGRITY_SOURCE = String.raw`
 const { workerData, parentPort } = process.getBuiltinModule("node:worker_threads");
 const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+const { pathToFileURL } = process.getBuiltinModule("node:url");
 let intact = false;
 try {
-  const db = new DatabaseSync(workerData.path, { readOnly: true, allowExtension: false });
+  let target = workerData.path;
+  if (workerData.immutable) {
+    target = pathToFileURL(workerData.path);
+    target.searchParams.set("mode", "ro");
+    target.searchParams.set("immutable", "1");
+  }
+  const db = new DatabaseSync(target, { readOnly: true, allowExtension: false });
   try {
     db.exec("pragma query_only=on");
     const checks = db.prepare("pragma integrity_check").all();
@@ -79,14 +86,21 @@ export async function checkCopyIntegrity(
  * Whether `pragma integrity_check` and `pragma foreign_key_check` both pass on `path`, on a thread
  * of its own: on a venue-sized file they take long enough that the box would answer nothing
  * meanwhile. A thread that fails or ends without answering rejects, because that says nothing about
- * the file.
+ * the file. `immutable` reads the main file alone and leaves no `-wal` or `-shm` beside it; it is
+ * only for a caller that has already refused a `-wal` there.
  */
 export function isCopyIntact(
   path: string,
-  options: { signal?: AbortSignal; startWorker?: WorkerStarter; stopWaitMs?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    startWorker?: WorkerStarter;
+    stopWaitMs?: number;
+    immutable?: boolean;
+  } = {},
 ): Promise<boolean> {
   const {
     signal,
+    immutable = false,
     startWorker = (source, opts) => new Worker(source, opts),
     stopWaitMs = STOP_WAIT_MS,
   } = options;
@@ -95,7 +109,7 @@ export function isCopyIntact(
     const key = resolvePath(path);
     if (runningChecks.has(key))
       throw new AppError("handover.copy_check_failed", { module: "core" });
-    const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path } });
+    const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path, immutable } });
     runningChecks.add(key);
     let stopWait: NodeJS.Timeout | undefined;
     const stop = () => {
