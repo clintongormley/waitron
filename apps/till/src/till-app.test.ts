@@ -21934,6 +21934,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     const c = await toCounter(el);
     await flush(el);
     expect(readerName(el)).toBe(R1.name);
+    const identityReads = getDeviceIdentity.mock.calls.length;
 
     await openEquipmentFromSettings(el);
     await flush(el);
@@ -21960,7 +21961,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(pay.mock.calls[0]![0]).not.toHaveProperty("readerId");
     // Neither the app nor the device was read again: the equipment answer names the provider.
     expect(getTill).toHaveBeenCalledOnce();
-    expect(getDeviceIdentity).toHaveBeenCalledOnce();
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(identityReads);
   });
 
   it.each([false, true])(
@@ -22676,17 +22677,18 @@ describe("switching the device's profile from the header", () => {
     expect(dialog.profiles).toEqual([COUNTER, BAR]);
     expect(dialog.activeProfileId).toBe(COUNTER.id);
     expect(dialog.notice).toBeNull();
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(3);
   });
 
   it("opens on the profiles last read when reading the device again fails", async () => {
     const getDeviceIdentity = vi
       .fn()
       .mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce(identity)
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await openProfile({ getDeviceIdentity });
     const dialog = profileDialog(el)!;
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(3);
     expect(dialog.open).toBe(true);
     expect(dialog.profiles).toEqual([COUNTER, BAR]);
     expect(dialog.activeProfileId).toBe(COUNTER.id);
@@ -22896,6 +22898,68 @@ describe("switching the device's profile from the header", () => {
     await flush(el);
     expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
     expect(profileDialog(el)).toBeNull();
+  });
+
+  describe("the Profile button follows the profiles the device is read to offer", () => {
+    let offered: (typeof COUNTER)[];
+    const getDeviceIdentity = () => vi.fn(async () => ({ ...identity, approvedProfiles: offered }));
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** One poll tick: only `setInterval` is faked, so every other wait in the app keeps real time. */
+    async function poll(el: TillApp): Promise<void> {
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+    }
+
+    it("appears and goes as a poll reads approvals added and taken away", async () => {
+      offered = [COUNTER];
+      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      await toCounter(el);
+      expect(profileButton(el)).toBeNull();
+
+      offered = [COUNTER, BAR];
+      await poll(el);
+      expect(profileButton(el)).not.toBeNull();
+
+      offered = [COUNTER];
+      await poll(el);
+      expect(profileButton(el)).toBeNull();
+    });
+
+    it("is gone as soon as a person admitted to no other profile signs in", async () => {
+      offered = [COUNTER, BAR];
+      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      await flush(el);
+      offered = [COUNTER];
+      await toCounter(el);
+      await flush(el);
+      expect(profileButton(el)).toBeNull();
+    });
+
+    it("shows as soon as a person admitted to another profile signs in after one who was not", async () => {
+      offered = [COUNTER, BAR];
+      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      await flush(el);
+      offered = [COUNTER];
+      await toCounter(el);
+      await flush(el);
+      expect(profileButton(el)).toBeNull();
+
+      emit(shell(el)!, "logout");
+      await flush(el);
+      offered = [COUNTER, BAR];
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+      await flush(el);
+      await flush(el);
+      expect(profileButton(el)).not.toBeNull();
+    });
   });
 });
 

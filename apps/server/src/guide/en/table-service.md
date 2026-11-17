@@ -738,9 +738,8 @@ you to confirm **Take it**; scanning takes it over without asking, so check whic
 
 ## Switch this device's profile {#device-profile}
 
-When this device is approved for more than one profile, **More** (☰) offers **Profile**.
-Choose another **Device profile** and tap **Switch**. You can only switch to a profile you are
-allowed to use.
+When this device is approved for another profile you are allowed to use, **More** (☰) offers
+**Profile**. Choose another **Device profile** and tap **Switch**.
 
 Before switching, park or clear the order in progress. If a card payment is still in progress,
 choose **Check card payments / sign in** to check its outcome, signing in there if asked.

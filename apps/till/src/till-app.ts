@@ -6226,6 +6226,7 @@ export class TillApp extends LitElement {
     if (!clocking) this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
+    void this.#readIdentity();
     this.#stopPinScreenPoll();
     this.#kitchenSetupPoll.stop();
     this.#equipmentPoll.start();

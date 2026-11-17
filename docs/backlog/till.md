@@ -660,14 +660,12 @@ paragraphs rather than beside a field; and the supervisor override dialog
 (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
 empty, before any press.
 
-## The till's Profile button shows whenever the device has more than one approved profile
+## A disabled device's profile approvals come back when it is enabled again
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
 
-- The till's Profile button shows whenever the device has more than one approved profile, read
-  at boot: neither approvals added later nor the signed-in person's admission hide or show it
-  until the dialog reads `/api/device/me` again. Approvals stored on a disabled device come
-  back when it is enabled again through a join (unchecked whether that is wanted).
+- Approvals stored on a disabled device come back when it is enabled again through a join
+  (unchecked whether that is wanted).
 
 ## The profile editor reads people and the venue's departments and zones
 
