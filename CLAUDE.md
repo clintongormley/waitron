@@ -1039,9 +1039,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   administrator sign-in). A restore's start uses the restore page's choice while the box's boot id
   is unchanged and its clock has not been stepped since. Otherwise it waits until the time service
   synchronises or the node recovery key confirms again, held by the browser that pressed Restore
-  backup or typed on the waiting page. First setup's Provision likewise uses a device time the
-  person confirmed when the series was named, while the box has not rebooted, the server has not
-  restarted and its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's).
+  backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
+  person confirmed on that page, while the box has not rebooted, the server has not restarted and
+  its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's).
   A minute whose name is already in a history the box reads is not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.

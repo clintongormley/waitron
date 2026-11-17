@@ -6625,8 +6625,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)), and otherwise waits until
   the time service synchronises or the node recovery key confirms again, held by the browser that
   pressed Restore backup or typed on the waiting page; first setup's Provision takes its own fresh
-  reading and, without the time service, uses a device time the person confirmed when the series
-  was named while the box has not rebooted, the server has not restarted and its clock has not been
+  reading and, on the setup page without the time service, uses a device time the person confirmed
+  on that page while the box has not rebooted, the server has not restarted and its clock has not been
   stepped (the watcher's choice, 2026-11-17, not the owner's;
   `packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "without a time service, a confirmed
   device time counts two minutes later while %s", and `apps/server/src/module-operation-host.test.ts`,
