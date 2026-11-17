@@ -130,7 +130,8 @@ it("labels guest language links in their own languages", async () => {
     renderGuestMenuPage({ ...menu, language: "es" }, "The Restaurant", "en", true),
   );
   expect(await p.getByRole("navigation", { name: "Idiomas" }).count()).toBe(1);
-  expect(await p.locator('a[href="?language=en"]').textContent()).toBe("English");
+  expect(await p.locator('a[href="?lang=en"]').textContent()).toBe("English");
+  expect(await p.locator('a[href^="?language="]').count()).toBe(0);
   await p.setContent(
     renderGuestMenuPage({ ...menu, language: "fr" }, "The Restaurant", "en", true),
   );
@@ -317,7 +318,6 @@ it("shows the publication time in the venue's time zone", async () => {
       "en",
       true,
       undefined,
-      "lang",
       "2026-11-14T05:00:00.000Z",
       "Europe/Madrid",
     ),

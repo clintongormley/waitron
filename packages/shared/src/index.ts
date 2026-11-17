@@ -553,3 +553,5 @@ export { PERSON_STATUS_NAMES, NO_ACCESS_ROLE_NAMES } from "./i18n/person-list-la
 export { normalisePrefix } from "./bucket-prefix.js";
 
 export { steadyNow } from "./steady-clock.js";
+
+export { matchLanguage } from "./language-match.js";

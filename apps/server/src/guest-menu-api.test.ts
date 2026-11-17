@@ -66,7 +66,7 @@ it("builds every Cloud page from published content without dropping content-lang
   await withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, {
       defaultLanguage: "ca-ES-valencia",
-      languages: ["ca-ES-valencia", "en", "fr"],
+      languages: ["ca-ES-valencia", "fr", "en"],
     });
     await setVenueDefaultMenu(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
@@ -78,7 +78,7 @@ it("builds every Cloud page from published content without dropping content-lang
   });
   const body = await guestMenuApi.readGuestMenuPages(suite.db, "en");
   expect(body!.defaultLanguage).toBe("ca-ES-valencia");
-  expect(Object.keys(body!.pages).sort()).toEqual(["ca-ES-valencia", "en", "fr"]);
+  expect(Object.keys(body!.pages)).toEqual(["ca-ES-valencia", "fr", "en"]);
   expect(body!.pages.en).toContain("Soup for guests");
   expect(body!.pages.en).toMatch(/<time datetime="[^"]+">/);
   for (const html of Object.values(body!.pages)) {
@@ -150,7 +150,7 @@ it("serves live declarations in Cloud, preview, earlier-edition paper and public
     }),
   });
   expect(paper.status, await paper.clone().text()).toBe(200);
-  const publicPage = await f.app.request("/public/menu?language=en");
+  const publicPage = await f.app.request("/public/menu?lang=en");
   expect(publicPage.status).toBe(200);
   for (const html of [
     cloud!.pages.en,
@@ -250,7 +250,7 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   expect(answer.headers.get("content-type")).toContain("text/html");
   const html = await answer.text();
   expect(html).toContain("Soup for guests");
-  expect(html).toContain("?language=en");
+  expect(html).toContain("?lang=en");
   expect(html).not.toContain("Secret draft");
   expect(html).not.toContain(f.soup);
   expect((await read("HEAD")).status).toBe(200);
@@ -292,13 +292,13 @@ it("serves a French venue's Spanish menu to a guest asking in Mexican Spanish", 
       personId: null,
     });
   });
-  const mexican = await f.app.request("/public/menu?language=es-MX");
+  const mexican = await f.app.request("/public/menu?lang=es-MX");
   expect(mexican.status).toBe(200);
   const spanish = await mexican.text();
   expect(spanish).toContain('<html lang="es"');
   expect(spanish).toContain("Soup in Spanish");
   expect(spanish).not.toContain("Soup in French");
-  const german = await f.app.request("/public/menu?language=de-DE");
+  const german = await f.app.request("/public/menu?lang=de-DE");
   expect(german.status).toBe(200);
   const french = await german.text();
   expect(french).toContain('<html lang="fr"');
@@ -580,16 +580,64 @@ it("serves the London regional names and distinct language links from the publis
       personId: null,
     });
   });
-  const response = await f.app.request("/public/menu?language=en-US");
+  const response = await f.app.request("/public/menu?lang=en-US");
   expect(response.status).toBe(200);
   const html = await response.text();
   expect(html).toContain("fries");
   expect(html).toContain("English (United States)");
   for (const language of ["en", "en-GB", "es", "en-CA"]) {
-    const answer = await f.app.request(`/public/menu?language=${language}`);
+    const answer = await f.app.request(`/public/menu?lang=${language}`);
     expect(answer.status).toBe(200);
     const body = await answer.text();
     expect(body).toContain("chips");
     expect(body).not.toContain("fries");
+  }
+});
+
+it("follows phone languages unless lang is present, and varies successful and unavailable pages", async () => {
+  const f = await fixture();
+  const headers = { "Accept-Language": "fr, es-MX;q=0.8, en;q=0.5" };
+  await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+    await updateProduct(tx, f.soup, {
+      customerName: { en: "Soup for guests", es: "Soup in Spanish" },
+    });
+    await publishMenu(tx, f.lunch, (await previewMenu(tx, f.lunch)).hash, f.cookies.managerId);
+    await setVenueDefaultMenu(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+  });
+  for (const [query, language, name] of [
+    ["", "es", "Soup in Spanish"],
+    ["?language=en", "es", "Soup in Spanish"],
+    ["?lang=en", "en", "Soup for guests"],
+    ["?lang=", "en", "Soup for guests"],
+    ["?lang=invalid_tag", "en", "Soup for guests"],
+  ]) {
+    const response = await f.app.request(`/public/menu${query}`, { headers });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("vary")).toBe("Accept-Language");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const html = await response.text();
+    expect(html).toContain(`<html lang="${language}"`);
+    expect(html).toContain(name);
+  }
+  const excluded = await f.app.request("/public/menu", {
+    headers: { "Accept-Language": "*;q=1, es;q=0" },
+  });
+  expect(await excluded.text()).toContain('<html lang="en"');
+  f.serve(false);
+  for (const [query, text] of [
+    ["", "Carta no disponible"],
+    ["?lang=en", "Menu unavailable"],
+  ]) {
+    const response = await f.app.request(`/public/menu${query}`, { headers });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("vary")).toBe("Accept-Language");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toContain(text);
   }
 });

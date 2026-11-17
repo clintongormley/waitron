@@ -25,3 +25,10 @@ it.each([
     expect(Object.values(result.text).every(Boolean)).toBe(true);
   },
 );
+
+it("uses the first phone language with a registered wording bundle", () => {
+  expect(guestMenuWords(["fr", "gl-ES"], "es")).toMatchObject({
+    language: "gl",
+    text: { unavailable: "Carta non dispoñible" },
+  });
+});

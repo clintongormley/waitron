@@ -34,7 +34,6 @@ export function renderGuestMenuPage(
   defaultLanguage: string,
   languageLinks = false,
   paper?: GuestMenuPaperOptions,
-  languageQuery: "language" | "lang" = "language",
   publishedAt?: string,
   timeZone = "UTC",
 ): string {
@@ -152,10 +151,13 @@ ${paper.preset === "lunch-wine" ? `main{display:grid;grid-template-columns:2fr 1
 `
     : ""
 }
-</style></head><body><main><header>${paper?.logo ? `<img src="${esc(paper.logo)}" alt="">` : ""}<p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1>${publishedAt ? `<p><time datetime="${esc(publishedAt)}">${esc(new Intl.DateTimeFormat(menu.language, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone, timeZoneName: "short" }).format(new Date(publishedAt)))}</time></p>` : ""}</header>${paper ? "" : `<nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>`}${languageLinks && !paper ? `<nav lang="${language}" aria-label="${esc(words.languages!)}">${menu.languages.map((code) => `<a href="?${languageQuery}=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(contentLanguageDisplayName(code, code))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
+</style></head><body><main><header>${paper?.logo ? `<img src="${esc(paper.logo)}" alt="">` : ""}<p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1>${publishedAt ? `<p><time datetime="${esc(publishedAt)}">${esc(new Intl.DateTimeFormat(menu.language, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone, timeZoneName: "short" }).format(new Date(publishedAt)))}</time></p>` : ""}</header>${paper ? "" : `<nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>`}${languageLinks && !paper ? `<nav lang="${language}" aria-label="${esc(words.languages!)}">${menu.languages.map((code) => `<a href="?lang=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(contentLanguageDisplayName(code, code))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
 }
 
-export function renderGuestMenuUnavailable(requested: string, fallback: string): string {
+export function renderGuestMenuUnavailable(
+  requested: string | readonly string[],
+  fallback: string,
+): string {
   const { language, text } = guestMenuWords(requested, fallback);
   return `<!doctype html><html lang="${esc(language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(text.unavailable!)}</title><style>:root{${pageTokens}}body{margin:0;font-size:var(--wt-font-size-md);font-family:var(--wt-font-family);color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-4)}h1{font-size:var(--wt-font-size-xl)}</style></head><body><h1>${esc(text.unavailable!)}</h1></body></html>`;
 }

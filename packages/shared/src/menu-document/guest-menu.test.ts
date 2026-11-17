@@ -251,3 +251,33 @@ it("keeps the enabled regional guest page and inherits every unchanged dish name
   }
   expect(publicGuestMenu(document(), languages, "en-US").members[0]!.name).toBe("Soup");
 });
+
+it("matches phone preferences before resolving authored text and keeps saved link order", () => {
+  const doc = document({
+    ...offer,
+    customerName: { en: "chips", "en-US": "fries", es: "Spanish potatoes" },
+  });
+  const config = { defaultLanguage: "es", languages: ["en-US", "es", "en"] };
+  for (const [preferences, language, name] of [
+    [["fr", "en-US"], "en-US", "fries"],
+    [["en-GB", "es"], "en", "chips"],
+    [["de"], "es", "Spanish potatoes"],
+  ] as const) {
+    expect(publicGuestMenu(doc, config, preferences)).toMatchObject({
+      language,
+      languages: ["en-US", "es", "en"],
+      members: [{ name }],
+    });
+  }
+  expect(
+    publicGuestMenu(doc, { defaultLanguage: "en-US", languages: ["en", "en-US"] }, "en-AU")
+      .language,
+  ).toBe("en");
+  expect(
+    publicGuestMenu(
+      doc,
+      { defaultLanguage: "en-US", languages: ["en-GB", "en-US", "es"] },
+      "en-AU",
+    ),
+  ).toMatchObject({ language: "en-US", languages: ["en-GB", "en-US", "es"] });
+});
