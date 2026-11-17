@@ -56,11 +56,18 @@ async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
     .toFile(join(out, file));
 }
 
-const line = (quantity: string, name: string, gross: string, unit = "ea") => ({
+const line = (
+  quantity: string,
+  name: string,
+  gross: string,
+  unit = "ea",
+  sold: { unitPriceGross?: string; vatRate?: string } = {},
+) => ({
   descriptions: { "es-ES": name },
   unitName: { en: unit },
   quantity,
   gross,
+  ...sold,
 });
 
 const MOCKUP: ReceiptDocumentInput = {
@@ -74,9 +81,9 @@ const MOCKUP: ReceiptDocumentInput = {
     vatBreakdown: [{ rate: "10.00", base: "370.00", tax: "37.00" }],
     lines: [
       line("1", "Bloody Mary", "15.00"),
-      line("4", "Water, bread and olive oil", "24.00"),
-      line("4", "Tasting menu", "320.00"),
-      line("4", "Glass of red wine", "28.00"),
+      line("4", "Water, bread and olive oil", "24.00", "ea", { unitPriceGross: "6.00" }),
+      line("4", "Tasting menu", "320.00", "ea", { unitPriceGross: "80.00" }),
+      line("4", "Glass of red wine", "28.00", "ea", { unitPriceGross: "7.00" }),
       line("1", "Glass of white wine", "8.00"),
       line("1", "Double coffee", "4.00"),
       line("1", "Grape spirit", "8.00"),
@@ -147,18 +154,19 @@ const WATER_DISCOUNTED = filed(
     adjustments: [{ kind: "discount", percentBp: 1000, amount: "2.40" }],
   },
 );
-const WATER = filed("4", "Water, bread and olive oil", "24.00", {
-  unitPrice: "5.45",
-  base: "21.82",
-  tax: "2.18",
-  rate: "10.00",
-});
+const WATER = filed(
+  "4",
+  "Water, bread and olive oil",
+  "24.00",
+  { unitPrice: "5.45", base: "21.82", tax: "2.18", rate: "10.00" },
+  { unitPriceGross: "6.00" },
+);
 const HAM = filed(
   "0.35",
   "Iberian ham",
   "42.00",
   { unitPrice: "109.09", base: "38.18", tax: "3.82", rate: "10.00" },
-  {},
+  { unitPriceGross: "120.00" },
   "kg",
 );
 const VENUE_DOMICILE = "215 Sample Avenue, Ground floor, 08005 Barcelona";
@@ -452,9 +460,12 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
         { rate: "21.00", base: "21.57", tax: "4.53" },
       ],
       lines: [
-        line("1", "Bloody Mary", "15.00"),
-        line("0.35", "Iberian ham", "42.00", "kg"),
-        line("2", "Takeaway soft drink", "26.10"),
+        line("1", "Bloody Mary", "15.00", "ea", { vatRate: "10.00" }),
+        line("0.35", "Iberian ham", "42.00", "kg", { vatRate: "10.00", unitPriceGross: "120.00" }),
+        line("2", "Takeaway soft drink", "26.10", "ea", {
+          vatRate: "21.00",
+          unitPriceGross: "13.05",
+        }),
       ],
       tender: { method: "cash", change: "6.90" },
     },
