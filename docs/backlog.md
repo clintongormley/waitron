@@ -1837,11 +1837,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   export from a box running other modules now has its own code, `setup.configuration_parts_differ`
   (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
-- **A1544. Finish the year-history memory comparison and measure the real box's cache allowance.**
-  The 366-day / 91,500-sale history and uncapped reference are complete. Full 7 GiB and 8 GiB
-  conditions remain unfinished after a priority change and shutdown. Run 7 GiB first,
-  then 8 GiB, and measure actual appliance service use separately. No archiving decision changes.
-  [Dataset, reference timings and resume state](developers/a1544-memory-measurement.md).
+- **A1544. Measure the real box's memory use and database-cache allowance.**
+  The 366-day / 91,500-sale comparison completed uncapped, at 8 GiB and at an assumed 7 GiB.
+  The 7 GiB run's counter-sale median was 13.752 ms against 12.323 ms uncapped; host load was
+  not controlled, and actual appliance service use remains unmeasured. Measure that remainder
+  on the appliance before treating either envelope as its available cache. No archiving decision
+  changes. [Results, limits and retained dataset](developers/a1544-memory-measurement.md).
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.

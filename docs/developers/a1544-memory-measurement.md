@@ -1,8 +1,10 @@
-# A1544: year-history reference; memory comparisons still open
+# A1544: sale requests with a year of history and limited memory
 
-Measured on 17 November 2026. Only the uncapped reference completed. The 7 GiB and
-8 GiB comparisons still need full runs, so these results do not answer whether limited
-memory slows the sale or change A1531's archiving recommendation.
+Measured on 17 November 2026. The uncapped, 7 GiB and 8 GiB conditions all completed.
+At 7 GiB, the counter-sale median rose from 12.323 to 13.752 ms (11.6%); partial and final
+payments rose by 2.6% and 9.8%. The 8 GiB run varied more and overlapped other host workloads.
+You cannot use these runs to isolate a memory-only effect or predict an appliance's response time.
+They leave A1531's archiving recommendation unchanged. Actual appliance memory use remains open.
 
 ## Dataset and method
 
@@ -55,34 +57,108 @@ they do not isolate SQLite's allocation. A fresh connection to the closed copy r
 `cache_size=-2000`, `mmap_size=0`, `page_size=4096`. The store opens writer/reader pairs for
 venue and node files without overriding those cache settings (`packages/store/src/index.ts`).
 
-## Interrupted conditions and what remains
+## Completed capped conditions
 
-The first 8 GiB attempt ran for 7 min 32.657 s. It was deliberately stopped when the watcher's
-08:52 note prioritised 7 GiB. Its observations showed about 7.95–7.97 GB of the copied database
-resident, with re-reading of evicted pages continuing after the copy; no completed timing file
-was written. The subsequent 7 GiB attempt was deliberately stopped after 1 min 10.321 s under
-the watcher's 08:59 shutdown instruction. Both stopped with status 143. Neither is a completed
-measurement or evidence of a product failure. Their partial working copies were removed.
+The 7 GiB run completed in 36 min 53.771 s; 8 GiB completed in 46 min 55.809 s. Both exited 0,
+with no swap. The 7 GiB condition assumes 1 GiB for the operating system and other services on
+an 8 GiB box; it does not measure that remainder. Node and its child process share each cap.
+Every case below retains three rounds of 200 samples, the same outcomes and `leastSeen` as the
+uncapped table. Cells give rounds 1, 2 and 3 in milliseconds.
 
-Resume 7 GiB first, then a fresh full 8 GiB run, keeping 200 samples and three rounds. Compare
-their completed files with the retained uncapped reference using the existing `compare` command,
-and read its verdicts. The 7 GiB condition assumes 1 GiB for the operating system and other
-services on an 8 GiB box. Actual appliance service use and the memory left for database caching
-remain unmeasured. The watcher's 10:30 measurement deadline was superseded by shutdown; follow
-the latest queue and scheduling instructions when the campaign resumes.
+### 7 GiB
 
-The retained dataset is `/srv/waitron-bench/a1544-j-20261116-2240/history`; source and small
-results sit beside it. Restore the checksum-verified private Node 26.13.1 and frozen dependencies
-before resuming. The [cleared plan](../superpowers/plans/2026-11-16-a1544-memory-measurement.md)
-gives the commands. Lane J's `receipts/a1544-plan-20261116/checkpoint.json` records the exact state,
-with `unlimited.json`, `volume.json`, all daily timings and observer logs beside it.
+| Case | Median ms | 95th percentile ms |
+| --- | --- | --- |
+| `payment.partial` | 5.457 / 5.441 / 5.460 | 7.377 / 7.224 / 7.216 |
+| `payment.final` | 12.922 / 12.983 / 13.063 | 16.450 / 16.514 / 16.633 |
+| `sale.counter` | 13.752 / 13.917 / 13.690 | 17.417 / 17.912 / 17.171 |
+| `floor.read` | 19.483 / 19.520 / 19.637 | 20.484 / 20.018 / 20.244 |
+| `floor.open` | 20.481 / 21.036 / 21.011 | 20.947 / 22.027 / 21.951 |
+| `kitchen.queue` | 17.462 / 17.926 / 17.681 | 18.103 / 18.999 / 18.642 |
+| `kitchen.screen` | 18.028 / 18.350 / 18.226 | 18.649 / 19.402 / 19.303 |
+| `kitchen.pass` | 501.380 / 503.393 / 522.234 | 505.861 / 507.127 / 525.258 |
+| `kitchen.pass-screen` | 660.373 / 655.927 / 670.888 | 664.490 / 660.794 / 676.732 |
+| `dashboard.open` | 777.276 / 777.893 / 777.703 | 786.564 / 782.958 / 787.761 |
+| `kitchen.pass-release` | 7.308 / 8.093 / 7.548 | 10.838 / 8.995 / 8.918 |
+| `print.problems` | 22.743 / 22.639 / 22.550 | 23.192 / 23.027 / 23.063 |
+| `filing.pass` | 13.169 / 13.122 / 13.237 | 16.922 / 18.523 / 17.058 |
+
+### 8 GiB
+
+| Case | Median ms | 95th percentile ms |
+| --- | --- | --- |
+| `payment.partial` | 5.407 / 6.065 / 9.451 | 7.124 / 9.071 / 20.783 |
+| `payment.final` | 12.631 / 14.690 / 17.013 | 16.040 / 18.832 / 25.906 |
+| `sale.counter` | 13.386 / 15.419 / 19.339 | 16.736 / 19.939 / 27.804 |
+| `floor.read` | 19.534 / 21.535 / 25.409 | 20.438 / 23.264 / 29.295 |
+| `floor.open` | 20.893 / 23.252 / 26.681 | 21.468 / 24.713 / 29.970 |
+| `kitchen.queue` | 17.845 / 20.365 / 23.500 | 18.361 / 21.484 / 28.766 |
+| `kitchen.screen` | 18.279 / 21.747 / 25.509 | 18.860 / 23.767 / 31.749 |
+| `kitchen.pass` | 504.866 / 502.479 / 737.108 | 509.985 / 593.123 / 1217.182 |
+| `kitchen.pass-screen` | 662.832 / 921.790 / 654.632 | 667.708 / 1270.761 / 800.053 |
+| `dashboard.open` | 1117.249 / 1077.700 / 777.824 | 1632.329 / 1231.300 / 783.110 |
+| `kitchen.pass-release` | 8.995 / 10.219 / 7.343 | 18.071 / 15.440 / 8.559 |
+| `print.problems` | 61.273 / 44.372 / 22.892 | 72.472 / 58.569 / 23.751 |
+| `filing.pass` | 17.537 / 19.259 / 13.227 | 39.455 / 34.128 / 17.391 |
+
+Taking the median of each case's three round medians gives this comparison. Ratios use the
+uncapped value as 1.00; they describe these runs, without attributing their cause.
+
+| Sale request | Uncapped ms | 7 GiB ms | Ratio | 8 GiB ms | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `payment.partial` | 5.319 | 5.457 | 1.026 | 6.065 | 1.140 |
+| `payment.final` | 11.830 | 12.983 | 1.098 | 14.690 | 1.242 |
+| `sale.counter` | 12.323 | 13.752 | 1.116 | 15.419 | 1.251 |
+
+The existing `compare` command flags only `sale.counter` as slower at 7 GiB against uncapped.
+At 8 GiB against uncapped it flags partial/final payment, counter sale, kitchen queue/screen,
+pass release, print problems and filing. Comparing 8 GiB with 7 GiB flags every case as `same`:
+that verdict includes a 10% margin outside the earlier run's range of round medians, and the
+8 GiB spread is wide. It is not evidence of equivalent performance.
+
+After each round's copy child had exited, 7 GiB snapshots showed 6.81–6.99 GB of the round
+database resident; 8 GiB showed 7.93–8.00 GB. Each database grew from about 12.47 to 12.58 GB
+during requests. The capped runs therefore exercised partially resident databases. Anonymous
+memory ranged from 248 to 385 MB at 7 GiB and 261 to 386 MB at 8 GiB. These are decimal GB/MB,
+not GiB/MiB. They describe observed residency and charges, not SQLite's private cache allocation.
+
+Within rounds, file-cache refault counters rose by about 98,000–107,000 at 7 GiB and
+81,000–87,000 at 8 GiB after the first post-copy snapshot. These count pages needed again after
+eviction. Memory-limit counters also continued rising after copies, by 272–309 and 207–224
+respectively; observed OOM and OOM-kill counters stayed zero. Copy work contributes to cumulative
+counters, so these within-round changes exclude the next copy rather than treating the whole
+unit's counters as request-only activity. Ten-second sampling does not capture every transition.
+
+## Limits and retained evidence
+
+The 8 GiB run's sale medians increased across rounds, while its print-problem median fell from
+61.273 to 22.892 ms. At 15:27:58, the host snapshot showed several other QEMU guests active,
+103,317,164,032 bytes available and no CPU affinity set on the measurement unit. Other lanes'
+workloads were preserved. Host scheduling and load were not controlled, so the slower 8 GiB
+run does not show that giving the database more memory makes it slower.
 
 These are synthetic, in-process requests with fake AEAT, without boot's middleware, network,
-physical devices or background maintenance. The build was resumed across firings with other
-workloads observed, so its daily times are not a controlled history comparison. Each measurement
-runs its cases serially against an idle database; the JSON's `load: "idle"` does not establish an
-idle host or physical-box fidelity. Round two's dashboard and pass-screen tails are retained above.
+physical devices or background maintenance. Each measurement runs cases serially against an idle
+database; the JSON's `load: "idle"` does not establish an idle host. The build was resumed across
+firings with other workloads observed, so its daily times are not a controlled history comparison.
+There is no matched short-history run here to isolate history growth. Actual appliance service
+use, database-cache allowance and physical-box response times remain unmeasured.
 
-Claude reviewed the plan in 243 and 128 seconds; the watcher cleared it on 16 November at 22:40.
-The watcher changed the run order at 08:52 on 17 November and required a WIP push, no PR or merge,
-at 08:59. No owner approval of an archiving design or a measured appliance allowance is claimed.
+The retained dataset is `/srv/waitron-bench/a1544-j-20261116-2240/history`, 12,472,128,368 bytes;
+the whole owned folder is 12,707,240,467 bytes after cleanup. The unchanged source and all three
+result files sit beside it. Owned round copies, private Node and dependencies were removed;
+the host's Node remains 26.13.0. To reuse the dataset, restore the checksum-verified private
+Node 26.13.1 and frozen dependencies. The [cleared plan](../superpowers/plans/2026-11-16-a1544-memory-measurement.md)
+gives the commands.
+
+Lane J's `receipts/a1544-plan-20261116/` retains `unlimited.json`, `remainder.json`, `8g.json`,
+`volume.json`, daily timings, all observer logs, comparison output, runtime provenance and
+`final-dataset-check.json`. Each complete result was checked for 13 cases, 200 samples per round,
+three rounds, matching source/runtime/profile/machine, exact outcomes and `leastSeen`, and finite
+ordered median/p95/maximum values. The final stopped-copy check found 366 daily closes, 91,500
+sales, 7,230,630 rows, `quick_check=ok` and zero WAL content. Earlier intentionally interrupted
+attempts are retained as partial logs, separate from these complete results.
+
+Claude reviewed the plan in 243 and 128 seconds; the watcher cleared it on 16 November at 22:40,
+and cleared docs-only publication on 17 November at 15:38. The owner decides any change to
+A1531's recommendation; this measurement makes none.

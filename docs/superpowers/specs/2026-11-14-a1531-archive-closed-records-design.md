@@ -303,9 +303,12 @@ may reach that point; that is unmeasured. Archiving would relieve it only for th
 Most of the growth is in working tables an archive of immutable records would not move, so the
 trim is also the main lever for speed.
 
-**2026-11-17 measurement checkpoint:** A1544 now has a 366-day history and completed uncapped
-reference. A priority change and shutdown left the capped runs unfinished, so that question remains
-open. [Results and remaining measurement](../../developers/a1544-memory-measurement.md).
+**2026-11-17 measured update:** A1544 completed a 366-day / 91,500-sale history (11.61 GiB)
+and uncapped, 7 GiB and 8 GiB comparisons. Counter-sale medians were 12.323, 13.752 and
+15.419 ms respectively. Both capped conditions exercised partially resident databases, but host
+load was not controlled; these timings do not isolate memory's effect. The 7 GiB condition
+assumes 1 GiB for other services, whose actual appliance use remains unmeasured. This leaves
+the archiving recommendation unchanged. [Full results and limits](../../developers/a1544-memory-measurement.md).
 
 ## The recommended next item: trim finished working rows
 
