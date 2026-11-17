@@ -260,7 +260,7 @@ export async function combineParties(
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
   const numbered = await tx
-    .select({ id: workingOrders.id, status: workingOrders.status })
+    .select({ id: workingOrders.id })
     .from(workingOrders)
     .where(and(eq(workingOrders.partyId, from), ne(workingOrders.status, "abandoned")))
     .orderBy(asc(workingOrders.billNumber), asc(workingOrders.id));
@@ -276,8 +276,6 @@ export async function combineParties(
     await takeIntoParty(tx, cfg, billId, into, zoneId);
   }
 
-  for (const bill of numbered.filter((bill) => bill.status === "settled"))
-    await tx.update(workingOrders).set({ partyId: into }).where(eq(workingOrders.id, bill.id));
   await VENUE_SERVICE.rescopeBillNumbers(tx, billIds, into);
   await moveDraftsToParty(
     tx,
