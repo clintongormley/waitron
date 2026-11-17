@@ -12,7 +12,6 @@ import {
   table,
   timeOfDay,
 } from "@waitron/db";
-import { shifts } from "../shifts.js";
 
 const STEP = (column: unknown) => sql`substr(${column}, 4, 2) in ('00', '15', '30', '45')`;
 
@@ -97,42 +96,5 @@ export const staffingBlocks = table(
     check("staffing_blocks_headcount_ck", sql`${t.headcount} between 1 and 50`),
     check("staffing_blocks_step_ck", sql`${STEP(t.startsAt)} and ${STEP(t.endsAt)}`),
     index("staffing_blocks_day_idx").on(t.dayId, t.startsAt),
-  ],
-);
-
-/** Which area and staff role a shift fills. No row: the shift is "not in a slot". */
-export const shiftAssignments = table(
-  "shift_assignments",
-  {
-    shiftId: id("shift_id").primaryKey(),
-    departmentId: id("department_id"),
-    stationId: id("station_id"),
-    staffRoleId: id("staff_role_id").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.shiftId],
-      foreignColumns: [shifts.id],
-      name: "shift_assignments_shift_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "shift_assignments_department_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.stationId],
-      foreignColumns: [kitchenStations.id],
-      name: "shift_assignments_station_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.staffRoleId],
-      foreignColumns: [staffRoles.id],
-      name: "shift_assignments_role_fk",
-    }).onDelete("restrict"),
-    check(
-      "shift_assignments_one_area_ck",
-      sql`(${t.departmentId} is null) <> (${t.stationId} is null)`,
-    ),
   ],
 );

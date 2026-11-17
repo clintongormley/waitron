@@ -105,8 +105,6 @@ function rowValid(table: string, row: BackupRow): boolean {
       time(row.ends_at) &&
       row.starts_at !== row.ends_at
     );
-  if (table === "shift_assignments")
-    return (row.department_id === null) !== (row.station_id === null);
   return true;
 }
 async function checkData(query: BackupQuery): Promise<BackupModuleStatus> {

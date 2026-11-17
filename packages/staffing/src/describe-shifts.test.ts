@@ -1,9 +1,10 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { staffRoles } from "@waitron/db";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
 
@@ -25,6 +26,7 @@ describe("describeShifts", () => {
         const [shift] = await tx
           .insert(shifts)
           .values({
+            rosterVersionId: await seedRosterWeek(tx, "2026-01-05"),
             personId: venue.ana,
             startsAt: "2026-01-05T09:00:00Z",
             startsOffsetMinutes: 0,
@@ -35,8 +37,9 @@ describe("describeShifts", () => {
         ids.push(shift!.id);
         if (area)
           await tx
-            .insert(shiftAssignments)
-            .values({ shiftId: shift!.id, staffRoleId: staffRole!.id, ...area });
+            .update(shifts)
+            .set({ staffRoleId: staffRole!.id, ...area })
+            .where(eq(shifts.id, shift!.id));
       }
       return ids;
     });

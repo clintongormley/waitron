@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "334adef5-ab82-4256-8069-19bf042803a7",
+  "id": "22691a4b-ad48-4d4d-a467-ccab8df44fad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -1389,6 +1389,27 @@
           "name": "roster_version_id",
           "type": "text",
           "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "staff_role_id": {
+          "name": "staff_role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "station_id": {
+          "name": "station_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
@@ -1441,13 +1462,56 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shifts_role_fk": {
+          "name": "shifts_role_fk",
+          "tableFrom": "shifts",
+          "tableTo": "staff_roles",
+          "columnsFrom": [
+            "staff_role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_department_fk": {
+          "name": "shifts_department_fk",
+          "tableFrom": "shifts",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_station_fk": {
+          "name": "shifts_station_fk",
+          "tableFrom": "shifts",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "shifts_one_area_ck": {
+          "name": "shifts_one_area_ck",
+          "value": "(\"shifts\".\"staff_role_id\" is null and \"shifts\".\"department_id\" is null and \"shifts\".\"station_id\" is null) or\n        (\"shifts\".\"staff_role_id\" is not null and (\"shifts\".\"department_id\" is null) <> (\"shifts\".\"station_id\" is null))"
+        },
         "shifts_starts_offset_ck": {
           "name": "shifts_starts_offset_ck",
           "value": "\"shifts\".\"starts_offset_minutes\" between -840 and 840"
@@ -1962,102 +2026,6 @@
         "time_entries_correction_status_ck": {
           "name": "time_entries_correction_status_ck",
           "value": "\"time_entries\".\"correction_status\" in ('requested', 'approved', 'declined', 'disputed')"
-        }
-      }
-    },
-    "shift_assignments": {
-      "name": "shift_assignments",
-      "columns": {
-        "shift_id": {
-          "name": "shift_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "staff_role_id": {
-          "name": "staff_role_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "shift_assignments_shift_fk": {
-          "name": "shift_assignments_shift_fk",
-          "tableFrom": "shift_assignments",
-          "tableTo": "shifts",
-          "columnsFrom": [
-            "shift_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shift_assignments_department_fk": {
-          "name": "shift_assignments_department_fk",
-          "tableFrom": "shift_assignments",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shift_assignments_station_fk": {
-          "name": "shift_assignments_station_fk",
-          "tableFrom": "shift_assignments",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shift_assignments_role_fk": {
-          "name": "shift_assignments_role_fk",
-          "tableFrom": "shift_assignments",
-          "tableTo": "staff_roles",
-          "columnsFrom": [
-            "staff_role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "shift_assignments_one_area_ck": {
-          "name": "shift_assignments_one_area_ck",
-          "value": "(\"shift_assignments\".\"department_id\" is null) <> (\"shift_assignments\".\"station_id\" is null)"
         }
       }
     },

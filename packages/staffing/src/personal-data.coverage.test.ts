@@ -10,12 +10,7 @@ import * as schema from "@waitron/workforce/schema/staffing.js";
 const CLASSIFIED: Record<
   string,
   { readonly in: readonly string[]; readonly out: readonly string[] }
-> = {
-  shift_assignments: {
-    in: ["department_id", "station_id", "staff_role_id", "shift_id"],
-    out: [],
-  },
-};
+> = {};
 
 const tables = Object.values(schema as Record<string, unknown>).flatMap((value) =>
   is(value, SQLiteTable) ? [value] : [],
@@ -23,7 +18,7 @@ const tables = Object.values(schema as Record<string, unknown>).flatMap((value) 
 
 /**
  * Whether a foreign key leads from `table` to `persons`, directly or through other tables, other
- * packages' included (`shift_assignments` reaches it through workforce's `shifts`).
+ * packages' included.
  */
 function reachesPersons(table: SQLiteTable, visited = new Set<SQLiteTable>()): boolean {
   if (visited.has(table)) return false;

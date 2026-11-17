@@ -4,7 +4,7 @@ import { kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { departments } from "@waitron/venue-service";
-import { localWallClock, shiftAssignments, shifts } from "@waitron/workforce";
+import { localWallClock, shifts } from "@waitron/workforce";
 
 export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
   files: ["staff-roles.json"],
@@ -26,11 +26,10 @@ export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
         area: sql<string>`coalesce(${departments.name}, ${kitchenStations.name})`,
         staffRole: staffRoles.name,
       })
-      .from(shiftAssignments)
-      .innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId))
-      .innerJoin(staffRoles, eq(staffRoles.id, shiftAssignments.staffRoleId))
-      .leftJoin(departments, eq(departments.id, shiftAssignments.departmentId))
-      .leftJoin(kitchenStations, eq(kitchenStations.id, shiftAssignments.stationId))
+      .from(shifts)
+      .innerJoin(staffRoles, eq(staffRoles.id, shifts.staffRoleId))
+      .leftJoin(departments, eq(departments.id, shifts.departmentId))
+      .leftJoin(kitchenStations, eq(kitchenStations.id, shifts.stationId))
       .where(eq(shifts.personId, personId))
       .orderBy(asc(shifts.startsAt), asc(shifts.id));
 

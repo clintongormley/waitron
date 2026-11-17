@@ -141,9 +141,9 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     ).toBe("superseded");
   });
 
-  it("publication discovers newly attached unversioned shifts", async () => {
+  it("publication discovers shifts already on its draft week", async () => {
     const draft = await version();
-    await suite.db.insert(shifts).values({ ...shiftBody(), rosterVersionId: null });
+    await suite.db.insert(shifts).values({ ...shiftBody(), rosterVersionId: draft });
     expect((await send("POST", `roster/${draft}/publish`)).status).toBe(200);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);
   });
@@ -204,10 +204,10 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     },
   );
 
-  it("an unattached shift can move and delete without losing either affected day", async () => {
+  it("a draft shift can move and delete without losing either affected day", async () => {
     const [row] = await suite.db
       .insert(shifts)
-      .values({ ...shiftBody(), rosterVersionId: null })
+      .values({ ...shiftBody(), rosterVersionId: await version() })
       .returning();
     expect(
       (
@@ -222,10 +222,10 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
   });
 
-  it("deleting a retained unattached shift captures its day before the row disappears", async () => {
+  it("deleting a draft shift captures its day before the row disappears", async () => {
     const [row] = await suite.db
       .insert(shifts)
-      .values({ ...shiftBody(), rosterVersionId: null })
+      .values({ ...shiftBody(), rosterVersionId: await version() })
       .returning();
     expect((await send("DELETE", `roster/shifts/${row!.id}`)).status).toBe(204);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);

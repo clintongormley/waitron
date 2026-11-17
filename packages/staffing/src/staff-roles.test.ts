@@ -1,3 +1,4 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import {
   deviceProfileAdmissionRoles,
@@ -11,13 +12,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  WORKFORCE_MIGRATIONS,
-  shiftAssignments,
-  shifts,
-  staffingBlocks,
-  staffingDays,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts, staffingBlocks, staffingDays } from "@waitron/workforce";
 import { createLabelComparator } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
 import {
@@ -64,6 +59,7 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
     const [shift] = await tx
       .insert(shifts)
       .values({
+        rosterVersionId: await seedRosterWeek(tx, "2026-10-14"),
         personId,
         startsAt: "2026-10-14T08:00:00Z",
         startsOffsetMinutes: 120,
@@ -72,8 +68,9 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
       })
       .returning({ id: shifts.id });
     await tx
-      .insert(shiftAssignments)
-      .values({ shiftId: shift!.id, departmentId: v.departmentId, staffRoleId });
+      .update(shifts)
+      .set({ departmentId: v.departmentId, staffRoleId })
+      .where(eq(shifts.id, shift!.id));
   });
 }
 
@@ -508,9 +505,9 @@ describe("staff roles", () => {
     expect(stored).toMatchObject({ name: "Waiter", hiddenAt: expect.any(String) });
     expect(await suite.db.select().from(personStaffRoles)).toEqual([]);
     expect(await suite.db.select().from(staffingBlocks)).toEqual([]);
-    expect(
-      await suite.db.select({ staffRoleId: shiftAssignments.staffRoleId }).from(shiftAssignments),
-    ).toEqual([{ staffRoleId: role.id }]);
+    expect(await suite.db.select({ staffRoleId: shifts.staffRoleId }).from(shifts)).toEqual([
+      { staffRoleId: role.id },
+    ]);
     expect(await inTx(listStaffRoles)).toEqual([]);
     expect(await inTx(listStaffRolesWithHolderNames)).toEqual([]);
     await expect(

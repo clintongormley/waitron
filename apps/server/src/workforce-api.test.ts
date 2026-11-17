@@ -1,3 +1,4 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { WorkforceBackend } from "@waitron/workforce";
@@ -505,6 +506,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
       const [shift] = await tx
         .insert(shifts)
         .values({
+          rosterVersionId: await seedRosterWeek(tx, "2026-03-02"),
           personId,
           startsAt: "2026-03-02T09:00:00Z",
           startsOffsetMinutes: 0,
@@ -716,7 +718,12 @@ describe("roster warnings while planning", () => {
         endsAt,
         startsOffsetMinutes: offset,
         endsOffsetMinutes: offset,
-        rosterVersionId,
+        rosterVersionId:
+          rosterVersionId ??
+          (await seedRosterWeek(
+            suite.db,
+            new Date(Date.parse(startsAt) + offset * 60000).toISOString().slice(0, 10),
+          )),
       })
       .returning();
     return row!.id;

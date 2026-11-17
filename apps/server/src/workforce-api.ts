@@ -3,7 +3,7 @@ import type { ModuleTimeRecordExport } from "@waitron/module";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
@@ -14,7 +14,6 @@ import {
   setAbsenceStatus,
   listPendingAbsences,
   rosterVersions,
-  shifts,
   validateRoster,
   type PlannedShift,
 } from "@waitron/workforce";
@@ -128,21 +127,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const start = dayAt(0),
           end = dayAt(7);
         const all: PlannedShift[] = [];
-        const localShiftDate = sql<string>`date(${shifts.startsAt}, ${shifts.startsOffsetMinutes} || ' minutes')`;
         for (const offset of [-7, 0, 7]) {
           const week = dayAt(offset);
           const roster = await backend.getRoster(tx, { period: week });
-          const unattached = await tx
-            .select()
-            .from(shifts)
-            .where(
-              and(
-                isNull(shifts.rosterVersionId),
-                gte(localShiftDate, week),
-                lt(localShiftDate, dayAt(offset + 7)),
-              ),
-            );
-          for (const shift of [...roster.shifts, ...unattached])
+          for (const shift of roster.shifts)
             all.push({
               shiftId: shift.id,
               personId: shift.personId,

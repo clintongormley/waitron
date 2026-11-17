@@ -1,3 +1,4 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedDeviceProfiles, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -31,12 +32,7 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import {
-  WORKFORCE_MIGRATIONS,
-  shiftAssignments,
-  shifts,
-  WorkforceBackend,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts, WorkforceBackend } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
@@ -322,6 +318,7 @@ describe("the staff-role routes", () => {
       const [shift] = await tx
         .insert(shifts)
         .values({
+          rosterVersionId: await seedRosterWeek(tx, "2026-10-14"),
           personId: r.ana,
           startsAt: "2026-10-14T08:00:00Z",
           startsOffsetMinutes: 120,
@@ -330,8 +327,9 @@ describe("the staff-role routes", () => {
         })
         .returning({ id: shifts.id });
       await tx
-        .insert(shiftAssignments)
-        .values({ shiftId: shift!.id, departmentId: r.departmentId, staffRoleId: staffRole.id });
+        .update(shifts)
+        .set({ departmentId: r.departmentId, staffRoleId: staffRole.id })
+        .where(eq(shifts.id, shift!.id));
     });
     await answers(await r.send("DELETE", `/${staffRole.id}`, r.manager), 200, {
       outcome: "hidden",

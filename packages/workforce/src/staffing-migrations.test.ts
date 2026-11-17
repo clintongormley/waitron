@@ -28,7 +28,7 @@ describe("the staffing tables in workforce's set", () => {
     );
     expect(WORKFORCE_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_workforce");
     expect(WORKFORCE_CLASSIFICATION.map(({ table }) => table)).toEqual(
-      expect.arrayContaining(["staffing_days", "staffing_blocks", "shift_assignments"]),
+      expect.arrayContaining(["staffing_days", "staffing_blocks"]),
     );
   });
 
@@ -68,15 +68,6 @@ describe("the staffing tables in workforce's set", () => {
       headcount: { notNull: 1, pk: 0 },
       starts_at: { notNull: 1, pk: 0 },
       ends_at: { notNull: 1, pk: 0 },
-    });
-  });
-
-  it("creates shift_assignments keyed by the shift", async () => {
-    expect(await columnsOf("shift_assignments")).toEqual({
-      shift_id: { notNull: 1, pk: 1 },
-      department_id: { notNull: 0, pk: 0 },
-      station_id: { notNull: 0, pk: 0 },
-      staff_role_id: { notNull: 1, pk: 0 },
     });
   });
 });

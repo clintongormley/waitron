@@ -20,6 +20,7 @@ import {
   makeRuleset,
   seedFixtureVenue,
   seedPerson,
+  seedRosterWeek,
 } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
@@ -124,7 +125,7 @@ describe("publishRoster", () => {
     },
   );
 
-  it("flips a draft version to published, stamps published_at and published_by, and attaches its in-period shift", async () => {
+  it("flips a draft version to published, stamps published_at and published_by, and keeps its in-period shift", async () => {
     const versionId = await insertRosterVersion(suite.db, {});
     const shiftId = await insertDraftShift(suite.db, { personId });
 
@@ -144,8 +145,7 @@ describe("publishRoster", () => {
     expect(await attachedVersion(shiftId)).toBe(versionId);
   });
 
-  it("attaches only in-period draft shifts (the predicate is not vacuous)", async () => {
-    // Two null-version shifts differing only in their date. publishedByPersonId is omitted here.
+  it("publishes only the chosen week and leaves another draft week unchanged", async () => {
     const versionId = await insertRosterVersion(suite.db, {
       periodStart: "2026-03-02",
       periodEnd: "2026-03-08",
@@ -165,7 +165,7 @@ describe("publishRoster", () => {
     await run((tx) => backend.publishRoster(tx, { versionId }));
 
     expect(await attachedVersion(inPeriod)).toBe(versionId);
-    expect(await attachedVersion(outOfPeriod)).toBeNull();
+    expect(await attachedVersion(outOfPeriod)).toBe(await seedRosterWeek(suite.db, "2026-04-01"));
   });
 
   it("matches a shift by its LOCAL wall date, not its UTC instant", async () => {
@@ -270,22 +270,6 @@ describe("publishRoster", () => {
     await insertDraftShift(suite.db, { personId });
     const breaches = await run((tx) => backend.publishRoster(tx, { versionId }));
     expect(breaches).toEqual([]);
-  });
-
-  it("detaches — never deletes — a shift when its roster version is deleted (ON DELETE set null)", async () => {
-    // Planning data is discardable: the shift survives with roster_version_id back to null.
-    const versionId = await insertRosterVersion(suite.db, {});
-    const shiftId = await insertDraftShift(suite.db, { personId });
-    await run((tx) => backend.publishRoster(tx, { versionId }));
-    expect(await attachedVersion(shiftId)).toBe(versionId);
-
-    await suite.db.execute(sql`delete from roster_versions where id = ${versionId}`);
-
-    const rows = await suite.db.execute<{ id: string; roster_version_id: string | null }>(
-      sql`select id, roster_version_id from shifts where id = ${shiftId}`,
-    );
-    expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0]!.roster_version_id).toBeNull();
   });
 });
 
@@ -764,12 +748,8 @@ describe("getPlannedVsActual", () => {
       eventAt: outAt,
     });
   }
-  // `publishRoster` attaches every in-period null-version shift.
   async function publishWeek(): Promise<void> {
-    const versionId = await insertRosterVersion(suite.db, {
-      periodStart: week.start,
-      periodEnd: "2026-03-08",
-    });
+    const versionId = await seedRosterWeek(suite.db, week.start);
     await run((tx) => backend.publishRoster(tx, { versionId }));
   }
 
@@ -820,7 +800,7 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-02T13:00:00Z",
     });
     await publishWeek();
-    // B supersedes A; publishWeek attaches only null-version shifts, so 03-02 stays on A.
+    // Publishing B leaves the earlier shift on superseded A.
     await insertDraftShift(suite.db, {
       personId: p,
       startsAt: "2026-03-03T09:00:00Z",
@@ -1049,7 +1029,11 @@ describe("copyPublishedToDraft", () => {
   it("retargets a return shift from this week even when the offered shift belongs to another week", async () => {
     const { versionId, shiftId } = await publishedWeek();
     const other = await seedPerson(suite.db, "Other week worker");
-    const outside = await insertDraftShift(suite.db, { personId: other });
+    const outside = await insertDraftShift(suite.db, {
+      personId: other,
+      startsAt: "2026-01-12T09:00:00Z",
+      endsAt: "2026-01-12T17:00:00Z",
+    });
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: other,
       fromShiftId: outside,
@@ -1132,5 +1116,31 @@ describe("copyPublishedToDraft", () => {
     expect(
       (await suite.db.execute(sql`select from_shift_id from shift_swaps where id=${swapId}`)).rows,
     ).toEqual([{ from_shift_id: shiftId }]);
+  });
+});
+
+describe("a shift's rota week", () => {
+  it("refuses a shift with no rota week", async () => {
+    await expect(
+      run(async (tx) =>
+        tx.execute(sql`
+      insert into shifts (id, person_id, starts_at, starts_offset_minutes,
+        ends_at, ends_offset_minutes, roster_version_id, created_at)
+      values ('weekless', ${personId}, '2026-01-05T09:00:00.000Z', 0,
+        '2026-01-05T17:00:00.000Z', 0, null, '2026-01-05T08:00:00.000Z')`),
+      ),
+    ).rejects.toThrow("NOT NULL constraint failed: shifts.roster_version_id");
+  });
+
+  it("deleting a draft week deletes its shifts", async () => {
+    const versionId = await insertRosterVersion(suite.db, {
+      periodStart: "2040-01-02",
+      periodEnd: "2040-01-08",
+    });
+    const shiftId = await insertDraftShift(suite.db, { personId, rosterVersionId: versionId });
+    await run(async (tx) => tx.execute(sql`delete from roster_versions where id=${versionId}`));
+    expect((await suite.db.execute(sql`select id from shifts where id=${shiftId}`)).rows).toEqual(
+      [],
+    );
   });
 });

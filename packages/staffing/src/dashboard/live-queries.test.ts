@@ -21,7 +21,6 @@ describe("QUERY_DEPENDENCIES", () => {
     expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
       "shifts",
       "roster_versions",
-      "shift_assignments",
       "staffing_days",
       "staffing_blocks",
       "staff_roles",

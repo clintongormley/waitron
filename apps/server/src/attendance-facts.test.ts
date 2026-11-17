@@ -79,7 +79,7 @@ describe("planned attendance shifts", () => {
     });
     return id;
   }
-  async function shift(rosterVersionId: string | null, startsAt: string, endsAt: string) {
+  async function shift(rosterVersionId: string, startsAt: string, endsAt: string) {
     const id = newId();
     await suite.db.insert(shifts).values({
       id,
@@ -102,7 +102,6 @@ describe("planned attendance shifts", () => {
       "2026-01-05T09:00:00.000Z",
       "2026-01-05T10:00:00.000Z",
     );
-    await shift(null, "2026-01-05T09:00:00.000Z", "2026-01-05T10:00:00.000Z");
     await shift(published, "2026-01-06T03:00:00.000Z", "2026-01-06T04:00:00.000Z");
     await shift(published, "2026-01-04T20:00:00.000Z", "2026-01-05T04:00:00.000Z");
     expect(await planned()).toEqual([
