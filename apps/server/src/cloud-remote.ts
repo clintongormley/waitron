@@ -225,7 +225,6 @@ export function startStaffListener(
     const key = readFileSync(tls.keyFile),
       cert = readFileSync(tls.certFile);
     validateTlsIdentity(key, cert, certificateHostname(cert));
-    let watcher: ReturnType<typeof watchTlsFiles>;
     const server = serve(
       buildServeOptions(
         {
@@ -246,7 +245,7 @@ export function startStaffListener(
     );
     server.on("error", failure);
     if (!(server instanceof HttpsServer)) throw new Error("Staff listener requires HTTPS");
-    watcher = watchTlsFiles(server, tls, undefined, () =>
+    const watcher = watchTlsFiles(server, tls, undefined, () =>
       log("error", "cloud.certificate_reload_failed"),
     );
     return {
