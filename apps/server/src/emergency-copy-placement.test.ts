@@ -325,6 +325,63 @@ it("a repeat with the same binding makes no new key and rewrites nothing", async
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
+/** Every file in both folders, by name and bytes, and what the scratch folder holds. */
+async function bothFolders() {
+  const read = async (dir: string) =>
+    Object.fromEntries(
+      await Promise.all(
+        (await listing(dir))
+          .filter((name) => name !== "scratch")
+          .map(async (name) => [name, await readFile(join(dir, name))] as const),
+      ),
+    );
+  return {
+    venue: await read(venueDir),
+    state: await read(stateDir),
+    scratch: await listing(join(stateDir, "scratch")),
+  };
+}
+
+const anotherRing = () => {
+  const ring = generateKeyRing();
+  return `WAITRON_CREDENTIALS_KEY=${ring.key}\nWAITRON_CREDENTIALS_KEY_VERSION=${ring.version}\n`;
+};
+
+it.each([
+  {
+    change: "secrets.env holds another ring",
+    apply: () => writeFile(join(stateDir, "secrets.env"), anotherRing()),
+    code: "emergency_copy.placed_key_unopenable",
+  },
+  {
+    change: "secrets.env is gone",
+    apply: () => rm(join(stateDir, "secrets.env")),
+    code: "emergency_copy.placed_key_unopenable",
+  },
+  {
+    change: "trading.env is gone",
+    apply: () => rm(join(stateDir, "trading.env")),
+    code: "emergency_copy.trading_env_missing",
+  },
+  {
+    change: "trading.env names another environment",
+    apply: () => writeFile(join(stateDir, "trading.env"), keptTrading("WAITRON_ENV=production\n")),
+    code: "emergency_copy.trading_environment_differs",
+  },
+  {
+    change: "trading.env sets the vault key",
+    apply: () => writeFile(join(stateDir, "trading.env"), keptTrading(anotherRing())),
+    code: "emergency_copy.vault_key_in_trading_env",
+  },
+])("refuses a repeat once $change, writing nothing", async ({ apply, code }) => {
+  const binding = await placedBinding();
+  await place(binding);
+  await apply();
+  const before = await bothFolders();
+  await expect(place(binding)).rejects.toMatchObject({ code });
+  expect(await bothFolders()).toEqual(before);
+});
+
 it("refuses another binding once a copy is placed, writing nothing", async () => {
   const binding = await placedBinding();
   await place(binding);

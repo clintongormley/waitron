@@ -5,6 +5,7 @@ import {
   encodeKeyRing,
   KEY_RING_VARIABLES,
   loadKeyRing,
+  readNodeSigningKey,
   sealNodeSigningKeyTx,
 } from "@waitron/credentials";
 import {
@@ -13,14 +14,23 @@ import {
   openVenueDatabase,
   withNodeTransaction,
   type DeploymentEnvironment,
+  type NodeDatabase,
 } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { appendHandoverEventTx, setNodeModeTx } from "@waitron/node-db";
-import { generateKeyRing } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
-import { NODE_FILE, SCRATCH_DIR, TRADING_ENV_FILE, VENUE_FILE } from "@waitron/store";
+import { generateKeyRing, openImmutable } from "@waitron/provisioning";
+import { AppError, isAppError } from "@waitron/shared";
+import {
+  connectionPair,
+  drizzleNodeSqlite,
+  NODE_FILE,
+  SCRATCH_DIR,
+  SECRETS_ENV_FILE,
+  TRADING_ENV_FILE,
+  VENUE_FILE,
+} from "@waitron/store";
 import { keyRingVariables } from "./box-env.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import {
@@ -56,6 +66,31 @@ function assertKeptTradingEnv(trading: Record<string, string>, binding: Emergenc
   const variables = KEY_RING_VARIABLES.filter((name) => Object.hasOwn(trading, name));
   if (variables.length > 0)
     throw new AppError("emergency_copy.vault_key_in_trading_env", { variables });
+}
+
+/** Refuses unless the ring in this state folder's `secrets.env` opens the copy's sealed key. */
+async function assertSavedRingOpensKey(stateDir: string, nodePath: string, nodeId: string) {
+  let text: string;
+  try {
+    text = await readFile(join(stateDir, SECRETS_ENV_FILE), "utf8");
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") throw new AppError("emergency_copy.placed_key_unopenable", {});
+    throw error;
+  }
+  const connection = openImmutable(nodePath);
+  try {
+    const node = drizzleNodeSqlite(connectionPair(connection, connection), {
+      schema: {},
+    }) as unknown as NodeDatabase;
+    if ((await readNodeSigningKey(node, loadKeyRing(parseEnvFile(text)), nodeId)) === null)
+      throw new AppError("emergency_copy.placed_key_unopenable", {});
+  } catch (error) {
+    if (isAppError(error) && error.code.startsWith("credentials."))
+      throw new AppError("emergency_copy.placed_key_unopenable", {});
+    throw error;
+  } finally {
+    connection.close();
+  }
 }
 
 /**
@@ -97,8 +132,14 @@ export async function placeEmergencyCopy(deps: {
     });
     // The binding was in date when it was read, but the checks can take many minutes.
     assertEmergencyCopyBindingUnexpired(binding, deps.now());
-    // The check admits a `node.db` here only when it records this very binding: a repeat.
-    if (existsSync(join(deps.venueDir, NODE_FILE))) return;
+    // The check admits a `node.db` here only when it records this very binding: a repeat. It
+    // passes only when the files beside it already make the copy start as placed.
+    const placedNode = join(deps.venueDir, NODE_FILE);
+    if (existsSync(placedNode)) {
+      if (trading === null) throw new AppError("emergency_copy.trading_env_missing", {});
+      await assertSavedRingOpensKey(deps.stateDir, placedNode, binding.copyNodeId);
+      return;
+    }
 
     const parent = join(deps.stateDir, SCRATCH_DIR);
     await mkdir(parent, { recursive: true, mode: 0o700 });

@@ -135,6 +135,10 @@ declare module "@waitron/shared" {
     "emergency_copy.trading_environment_differs": Record<string, never>;
     /** Vault key variables an existing `trading.env` sets, which would replace the copy's ring. */
     "emergency_copy.vault_key_in_trading_env": { variables: string[] };
+    /** A copy is placed, but the state folder holds no `trading.env`. */
+    "emergency_copy.trading_env_missing": Record<string, never>;
+    /** A copy is placed, but the ring in the state folder's `secrets.env`, if any, does not open its key. */
+    "emergency_copy.placed_key_unopenable": Record<string, never>;
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };
