@@ -326,7 +326,7 @@ describe("business-day schedule compatibility", () => {
     ["05:45", "05:50", "06:00", "transition_strip"],
     ["05:50", "06:00", "05:40", "overlap"],
   ])(
-    "reports %s–%s as %s changes the start with reason %s",
+    "reports %s–%s when the start changes to %s with reason %s",
     async (startsAt, endsAt, dayCutover, reason) => {
       await writtenFixture([range(startsAt, endsAt)], { weekday: 3, dayCutover: "05:50" });
       const oldClock = { ...before, dayCutover: "05:50" };
