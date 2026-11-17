@@ -8,7 +8,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
-import { VENUE_FILE } from "@waitron/store";
+import { archiveInWorker, VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
@@ -313,7 +313,8 @@ export class BackupSupervisor {
         stateDir: this.#deps.stateDir,
         venueDir: this.#deps.venueDir,
         stagingDir: join(this.#deps.stateDir, BACKUP_STAGING_DIR),
-        archive: (outFile) => venue.venue.archiveTo(outFile),
+        archive: (outFile) =>
+          archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, controller.signal),
         stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,

@@ -3,8 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
+import * as threads from "node:worker_threads";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { archiveInWorker, archiveTo, connectionPair, drizzleNodeSqlite } from "./index.js";
+
+vi.mock("node:worker_threads", { spy: true });
 
 const directories: string[] = [];
 const connections: DatabaseSync[] = [];
@@ -142,6 +145,30 @@ describe("archiveInWorker", () => {
       message: expect.stringContaining("unable to open database"),
     });
     expect(existsSync(`${source}.missing`)).toBe(false);
+    expect(existsSync(target)).toBe(false);
+    expect(existsSync(`${target}.partial`)).toBe(false);
+  });
+
+  it("cleans up when the worker cannot start", async () => {
+    const { source, target } = fixture();
+    const error = new Error("worker resource limit");
+    vi.spyOn(threads, "Worker").mockImplementationOnce(function () {
+      throw error;
+    });
+    await expect(archiveInWorker(source, target)).rejects.toBe(error);
+    expect(existsSync(target)).toBe(false);
+    expect(existsSync(`${target}.partial`)).toBe(false);
+  });
+
+  it("refuses to publish a copy when the worker exits without completing", async () => {
+    const { source, target } = fixture();
+    const Worker = threads.Worker;
+    vi.spyOn(threads, "Worker").mockImplementationOnce(function () {
+      return new Worker("process.exit(7)", { eval: true });
+    });
+    await expect(archiveInWorker(source, target)).rejects.toThrow(
+      "Archive worker exited with code 7",
+    );
     expect(existsSync(target)).toBe(false);
     expect(existsSync(`${target}.partial`)).toBe(false);
   });

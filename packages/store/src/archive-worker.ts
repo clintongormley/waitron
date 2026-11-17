@@ -33,7 +33,7 @@ export async function archiveInWorker(
       workerData: { source: sourcePath, working },
     });
     await new Promise<void>((resolve, reject) => {
-      let failure: Error | undefined;
+      let failure: unknown;
       const abort = () => {
         void worker.terminate();
       };
@@ -48,7 +48,6 @@ export async function archiveInWorker(
         else resolve();
       });
       signal?.addEventListener("abort", abort, { once: true });
-      if (signal?.aborted) abort();
     });
     signal?.throwIfAborted();
     await rename(working, targetPath);
