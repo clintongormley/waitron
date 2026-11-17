@@ -477,9 +477,6 @@ reset and operator gates; this entry does not start that job.
 - The till's status for an original whose printer was deleted uses the error code's sentence
   ("…this job will not be retried."), where its neighbours speak of "the original". Owner to
   choose the wording.
-- The Spanish for `printer.deleted` breaks its twin's pattern: "por lo que no se volverá a
-  intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
-  intentar".
 - Shorter printer-delete copy was offered to the owner during the build: for the till's
   deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
   shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
@@ -499,8 +496,6 @@ reset and operator gates; this entry does not start that job.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
-- "A device that is not deleted" is written by hand as `isNull(devices.deletedAt)` in several
-  files; one named check would keep a new query from forgetting it. Step 4 (#1519).
 - A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
   a SumUp reader's does while SumUp is not connected. Step 3b.
 - The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
