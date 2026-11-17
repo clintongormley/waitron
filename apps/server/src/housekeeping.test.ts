@@ -165,7 +165,7 @@ describe("daily housekeeping steps", () => {
     );
     diagnostic("command-prune-complete", { scanned, largest });
     expect(scanned).toBe(250000);
-    expect(largest).toBe(500);
+    expect(largest).toBe(100);
     expect(
       suite.db.get(sql`select count(*) n from service_commands where scope_id = 'missing'`),
     ).toEqual({ n: 200000 });
@@ -244,7 +244,7 @@ describe("daily housekeeping steps", () => {
     await insertInChunks(
       suite.db,
       signInChallenges,
-      Array.from({ length: 1001 }, (_, index) => ({
+      Array.from({ length: 201 }, (_, index) => ({
         id: String(index),
         kind: "passkey_login" as const,
         challenge: "test",
@@ -258,7 +258,7 @@ describe("daily housekeeping steps", () => {
     try {
       await pass(tidy({ steps: [step] }), controller.signal);
       await stop;
-      expect(await suite.db.select().from(signInChallenges)).toHaveLength(501);
+      expect(await suite.db.select().from(signInChallenges)).toHaveLength(101);
       expect(locks).toHaveBeenCalledTimes(2);
       locks.mockClear();
       await pass(tidy({ steps: [step] }));

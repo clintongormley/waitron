@@ -17,7 +17,7 @@ import { printJobInTrouble } from "./print-job-trouble.js";
 import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
 
-export const HOUSEKEEPING_BATCH = 500;
+export const HOUSEKEEPING_BATCH = 100;
 export const HOUSEKEEPING_SERVICE_COMMANDS = false;
 
 export interface HousekeepingStep {
