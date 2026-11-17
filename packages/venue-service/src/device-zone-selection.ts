@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
-  deviceProfiles,
   deviceNotDeleted,
+  deviceProfiles,
   devices,
   deviceZoneSelections,
   deviceZoneSelectionZones,

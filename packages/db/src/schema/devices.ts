@@ -67,5 +67,4 @@ export const devices = table(
   ],
 );
 
-/** A device that has not been deleted. */
 export const deviceNotDeleted = (): SQL => isNull(devices.deletedAt);

@@ -4,8 +4,8 @@ import { and, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
-  deviceProfiles,
   deviceNotDeleted,
+  deviceProfiles,
   devices,
   joinRequests,
   nowIso,

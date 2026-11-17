@@ -7,8 +7,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { AppError, compareStationNames } from "@waitron/shared";
 import {
-  deviceProfiles,
   deviceNotDeleted,
+  deviceProfiles,
   devices,
   kitchenStations,
   ticketItems,

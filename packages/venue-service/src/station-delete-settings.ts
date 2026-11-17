@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
+  deviceNotDeleted,
   deviceProfileKitchenScreenStations,
   deviceProfiles,
-  deviceNotDeleted,
   devices,
   kitchenStations,
   routingCellPeriods,

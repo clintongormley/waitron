@@ -6,9 +6,9 @@ import {
   type DeleteTarget,
 } from "@waitron/shared";
 import {
+  deviceNotDeleted,
   deviceProfilePrinters,
   deviceProfiles,
-  deviceNotDeleted,
   devices,
   invoiceDeliveries,
   kitchenStations,
