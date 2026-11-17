@@ -5,7 +5,7 @@ import type { TimeEntryRecord } from "./projection.js";
 import { compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { recordRoot } from "./record-projection.js";
 import { attendanceQuestions } from "./schema/attendance.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { projectCorrectionItems } from "./attendance-responses.js";
 import { cancelUnclaimedAttendanceMail } from "./attendance-mail.js";
@@ -89,8 +89,8 @@ export async function reconcileAttendanceResponses(
   const entries = await readRecordedEntries(tx, { personId });
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId));
   const items = projectCorrectionItems(entries, commands);
   const questions = await tx
     .select()

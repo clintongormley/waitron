@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, tillSessions } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
-import { attendanceDayWork, timeEntries, WorkforceBackend } from "@waitron/workforce";
+import { attendanceDays, timeEntries, WorkforceBackend } from "@waitron/workforce";
 import { createClockVenue, type ClockVenue } from "./testing/clock-venue.js";
 import type { TillClockState } from "./till-clock-state.js";
 
@@ -119,12 +119,12 @@ describe("the till's clock across a backward step of the box's clock", () => {
     expect((await act("out", "2026-01-06T03:35:00Z")).status).toBe(200);
     expect((await act("in", "2026-01-06T03:40:00Z")).status).toBe(200);
     // Clock writes already mark their days; isolate the state read's reconciliation below.
-    await suite.db.delete(attendanceDayWork);
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
+    await suite.db.delete(attendanceDays);
+    expect(await suite.db.select().from(attendanceDays)).toEqual([]);
 
     instant = new Date("2026-01-06T04:10:00Z");
     await state();
-    expect((await suite.db.select().from(attendanceDayWork)).map((row) => row.businessDay)).toEqual(
+    expect((await suite.db.select().from(attendanceDays)).map((row) => row.businessDay)).toEqual(
       ["2026-01-05"],
     );
   });

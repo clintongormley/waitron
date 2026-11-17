@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
-  attendanceDayWork,
+  attendanceDays,
   enqueueAttendanceDay,
   rosterVersions,
   shifts,
@@ -33,14 +33,14 @@ export async function markAttendanceSourceChanged(
       days.add(businessDayAt(clock, new Date(Date.parse(row.endsAt) - 1)));
     }
   for (const businessDay of days) {
-    const scope = eq(attendanceDayWork.businessDay, businessDay);
-    const [saved] = await tx.select().from(attendanceDayWork).where(scope);
+    const scope = eq(attendanceDays.businessDay, businessDay);
+    const [saved] = await tx.select().from(attendanceDays).where(scope);
     // A mutable rota cannot relabel the bounds of an already captured attendance day.
     if (saved) {
       await tx
-        .update(attendanceDayWork)
+        .update(attendanceDays)
         .set({
-          dirtyRevision: sql`${attendanceDayWork.dirtyRevision} + 1`,
+          dirtyRevision: sql`${attendanceDays.dirtyRevision} + 1`,
         })
         .where(scope);
     } else {

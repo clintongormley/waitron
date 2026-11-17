@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/menu";
 
 import { setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
 import { switchOrderDining } from "./order-dining.js";
@@ -84,7 +84,7 @@ async function expectActivity(_id: string, _revision: number, _action: string, p
     [personId, "2026-01-05T16:40:00.000Z"],
   ]);
   expect(
-    (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
+    (await suite.db.select().from(attendanceDays)).map((r) => [r.businessDay, r.dirtyRevision]),
   ).toEqual([["2026-01-05", 1]]);
 }
 type Action = "park" | "save" | "line" | "label" | "dining" | "discard";

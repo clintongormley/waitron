@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { attendanceFixture } from "../test/attendance-fixture.js";
 import {
-  attendanceDayWork,
+  attendanceDays,
   enqueueAttendanceDay,
   readChain,
   verifyChain,
@@ -55,7 +55,7 @@ describe("completed attendance day", () => {
     const before = await f.entries();
     expect(await f.process()).toEqual({ automaticEntryIds: [], questionIds: first.questionIds });
     expect(await f.entries()).toEqual(before);
-    const [work] = await f.suite.db.select().from(attendanceDayWork);
+    const [work] = await f.suite.db.select().from(attendanceDays);
     expect(work).toMatchObject({ dirtyRevision: 3, evaluatedRevision: 3, deferredShiftIds: [] });
     expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
   });
@@ -295,7 +295,7 @@ describe("completed attendance day", () => {
     const planned = [f.plan("overnight", "2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z")];
     await f.process({ facts: [], planned });
     expect(await f.questions()).toEqual([]);
-    expect(await f.suite.db.select().from(attendanceDayWork)).toMatchObject([
+    expect(await f.suite.db.select().from(attendanceDays)).toMatchObject([
       {
         evaluatedRevision: 1,
         nextDueAt: "2026-01-06T06:00:00.000Z",
@@ -312,7 +312,7 @@ describe("completed attendance day", () => {
       questionIds: first.questionIds,
     });
     expect(await attendanceMailRows(f.suite.db)).toHaveLength(1);
-    expect(await f.suite.db.select().from(attendanceDayWork)).toMatchObject([
+    expect(await f.suite.db.select().from(attendanceDays)).toMatchObject([
       { deferredShiftIds: [] },
     ]);
   });

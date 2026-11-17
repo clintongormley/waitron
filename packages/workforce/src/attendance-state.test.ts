@@ -6,7 +6,7 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { attendanceDayWork, enqueueAttendanceDay } from "./index.js";
+import { attendanceDays, enqueueAttendanceDay } from "./index.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -24,7 +24,7 @@ beforeEach(async () => {
 describe("durable attendance day work", () => {
   it("re-enqueue preserves identity, bounds and deferred work while dirtying the revision", async () => {
     await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
-    const [first] = await suite.db.select().from(attendanceDayWork);
+    const [first] = await suite.db.select().from(attendanceDays);
     expect(first).toMatchObject({
       ...day(),
       dirtyRevision: 1,
@@ -33,15 +33,15 @@ describe("durable attendance day work", () => {
       deferredShiftIds: [],
     });
     await suite.db
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({
         evaluatedRevision: 1,
         deferredShiftIds: ["overnight"],
         nextDueAt: "2026-01-06T06:00:00.000Z",
       })
-      .where(eq(attendanceDayWork.id, first!.id));
+      .where(eq(attendanceDays.id, first!.id));
     await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([
+    expect(await suite.db.select().from(attendanceDays)).toEqual([
       {
         ...first,
         dirtyRevision: 2,
@@ -59,19 +59,19 @@ describe("durable attendance day work", () => {
         endAt: "2026-01-06T04:00:00.000Z",
       }),
     );
-    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
+    expect(await suite.db.select().from(attendanceDays)).toMatchObject([
       { businessDay: "2026-01-05" },
     ]);
   });
   it("refuses changed saved historical bounds without altering the work", async () => {
     await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
-    const before = await suite.db.select().from(attendanceDayWork);
+    const before = await suite.db.select().from(attendanceDays);
     await expect(
       withTransaction(suite.db, (tx) =>
         enqueueAttendanceDay(tx, { ...day(), endAt: "2026-01-06T06:00:00.000Z" }),
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(before);
+    expect(await suite.db.select().from(attendanceDays)).toEqual(before);
   });
   it.each([
     { businessDay: "2026-02-31" },
@@ -82,7 +82,7 @@ describe("durable attendance day work", () => {
     await expect(
       withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, { ...day(), ...bad })),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
+    expect(await suite.db.select().from(attendanceDays)).toEqual([]);
   });
   it("rolls back an enqueued day with the caller's logical write", async () => {
     await expect(
@@ -91,6 +91,6 @@ describe("durable attendance day work", () => {
         throw new Error("after enqueue");
       }),
     ).rejects.toThrow("after enqueue");
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
+    expect(await suite.db.select().from(attendanceDays)).toEqual([]);
   });
 });

@@ -15,7 +15,7 @@ import { isRecordDate } from "./record-dates.js";
 import { readAttendanceRevision, projectCorrectionItems } from "./attendance-responses.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { attendanceQuestions } from "./schema/attendance.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import "./errors.js";
 
 const invalid = () => new AppError("attendance.invalid", { reason: "record_scope_or_period" });
@@ -30,8 +30,8 @@ export async function readAttendanceInbox(
   const entries = await readRecordedEntries(tx, { personId });
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId));
   const items = projectCorrectionItems(entries, commands);
   const questions = await tx
     .select()
@@ -129,8 +129,8 @@ export async function readAttendanceDay(
   const entries = await readRecordedEntries(tx, { personId: scope.personId });
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, scope.personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, scope.personId));
   const record = await readTimeRecord(
     tx,
     {
@@ -154,7 +154,7 @@ export async function readAttendanceDay(
 }
 export async function readAttendanceManagerQueue(tx: Transaction): Promise<AttendanceManagerQueue> {
   const entries = await readRecordedEntries(tx, {});
-  const commands = await tx.select().from(attendanceResponseCommands);
+  const commands = await tx.select().from(attendanceAnswers);
   const items = projectCorrectionItems(entries, commands).filter(
     (item) =>
       item.status === "waiting-manager" ||

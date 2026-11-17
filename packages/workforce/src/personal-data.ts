@@ -8,7 +8,7 @@ import { asc, eq, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { staffActivity, attendanceQuestions } from "./schema/attendance.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
@@ -142,16 +142,16 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const responseRows = await tx
       .select({
-        action: attendanceResponseCommands.action,
-        requestedByPersonId: attendanceResponseCommands.requestedByPersonId,
+        action: attendanceAnswers.action,
+        requestedByPersonId: attendanceAnswers.requestedByPersonId,
         authorizedBy: authorizer.displayName,
-        input: attendanceResponseCommands.input,
-        createdAt: attendanceResponseCommands.createdAt,
+        input: attendanceAnswers.input,
+        createdAt: attendanceAnswers.createdAt,
       })
-      .from(attendanceResponseCommands)
-      .innerJoin(authorizer, eq(authorizer.id, attendanceResponseCommands.authorizedByPersonId))
-      .where(eq(attendanceResponseCommands.personId, personId))
-      .orderBy(asc(attendanceResponseCommands.createdAt), asc(attendanceResponseCommands.id));
+      .from(attendanceAnswers)
+      .innerJoin(authorizer, eq(authorizer.id, attendanceAnswers.authorizedByPersonId))
+      .where(eq(attendanceAnswers.personId, personId))
+      .orderBy(asc(attendanceAnswers.createdAt), asc(attendanceAnswers.id));
 
     const activityRows = await tx
       .select({

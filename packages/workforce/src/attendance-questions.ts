@@ -11,7 +11,7 @@ import {
 } from "./attendance-mail.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { readRecordedEntries } from "./record-reads.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { projectCorrectionItems } from "./attendance-responses.js";
 import "./errors.js";
 
@@ -188,8 +188,8 @@ export async function listPendingAttendanceQuestions(
   const entries = await readRecordedEntries(tx, { personId });
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId));
   const items = projectCorrectionItems(entries, commands);
   return rows.map((row) => ({
     ...asQuestion(row),

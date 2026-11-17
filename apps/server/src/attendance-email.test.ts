@@ -16,7 +16,7 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   attendanceQuestions,
-  attendanceDayWork,
+  attendanceDays,
   enqueueAttendanceDay,
   processAttendanceDay,
   rosterVersions,
@@ -748,7 +748,7 @@ describe("attendance_question queue owner", () => {
       authorKind: "automatic",
       eventAt: "2026-01-05T16:40:00.000Z",
     });
-    const [work] = await suite.db.select().from(attendanceDayWork);
+    const [work] = await suite.db.select().from(attendanceDays);
     expect(work!.dirtyRevision).toBeGreaterThan(work!.evaluatedRevision);
   });
   it("cancels a current-question reminder when its published rota is superseded before claim", async () => {

@@ -23,7 +23,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
@@ -203,7 +203,7 @@ async function state() {
     orderGroups: await suite.db.select().from(orderGroups),
     moves: await suite.db.select().from(ticketItemMoves),
     facts: await suite.db.select().from(staffActivity),
-    days: await suite.db.select().from(attendanceDayWork),
+    days: await suite.db.select().from(attendanceDays),
   };
 }
 describe("kitchen service attendance", () => {

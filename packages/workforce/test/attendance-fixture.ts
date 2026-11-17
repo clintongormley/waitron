@@ -80,7 +80,7 @@ export function attendanceFixture() {
     entries: await entries(),
     questions: await suite.db.select().from(api.attendanceQuestions),
     mail: await attendanceMailRows(suite.db),
-    work: await suite.db.select().from(api.attendanceDayWork),
+    work: await suite.db.select().from(api.attendanceDays),
   });
   const open = async (at = "2026-01-05T09:00:00Z") => {
     await run((tx) => backend.clockIn(tx, event(at)));

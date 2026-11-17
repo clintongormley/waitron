@@ -7,7 +7,7 @@ import { parties, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -106,7 +106,7 @@ const state = async () => ({
   lines: await suite.db.select().from(workingOrderLines),
   parties: await suite.db.select().from(parties),
   facts: await suite.db.select().from(staffActivity),
-  days: await suite.db.select().from(attendanceDayWork),
+  days: await suite.db.select().from(attendanceDays),
 });
 describe("accepted bill edits as order activity", () => {
   it.each(actions)(

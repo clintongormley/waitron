@@ -71,7 +71,7 @@ it("a day query names only the date, without adding a person to the wire", async
   const { api, calls } = await client(() => day);
   const query = api.dayQuery(day.date);
   expect(query.key).not.toBe(api.dayQuery("2026-01-06").key);
-  expect(query.dependencies).toContainEqual({ type: "attendance_response_commands" });
+  expect(query.dependencies).toContainEqual({ type: "attendance_answers" });
   expect(query.dependencies).toContainEqual({ type: "pay_period_settings" });
   expect(await query.read()).toEqual(day);
   expect(calls[0]!.path).not.toContain("personId");

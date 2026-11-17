@@ -56,7 +56,7 @@ function receipt(patch: Record<string, string | null> = {}) {
 const insert = (r: ReturnType<typeof receipt>) =>
   withTransaction(suite.db, (tx) =>
     tx.execute(sql`
-  insert into attendance_response_commands
+  insert into attendance_answers
     (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at)
   values (${r.id}, ${r.requester}, ${r.authorizer}, ${r.subject}, ${r.question}, ${r.action}, ${r.input}, ${r.entries}, '2026-01-06T08:00:00.000Z')`),
   );
@@ -64,7 +64,7 @@ const insert = (r: ReturnType<typeof receipt>) =>
 it("stores a question-linked response receipt and both legal result ids", async () => {
   const r = receipt();
   await expect(insert(r)).resolves.toBeDefined();
-  expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([
+  expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([
     {
       id: r.id,
       requested_by_person_id: personId,
@@ -90,7 +90,7 @@ it.each(["requester", "authorizer", "subject", "question"])(
         }),
       ),
     ).rejects.toThrow("FOREIGN KEY constraint failed");
-    expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);
+    expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
   },
 );
 
@@ -98,24 +98,24 @@ it("refuses another person's question even when every individual id exists", asy
   const scopes: Record<string, string | null>[] = [{ subject: manager }];
   for (const patch of scopes) {
     await expect(insert(receipt(patch))).rejects.toThrow("FOREIGN KEY constraint failed");
-    expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);
+    expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
   }
 });
 
 it.each(["unknown", "", "APPROVE"])("refuses unrecognised action %j", async (action) => {
   await expect(insert(receipt({ action }))).rejects.toThrow(
-    "attendance_response_commands_action_ck",
+    "attendance_answers_action_ck",
   );
-  expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);
+  expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
 });
 
 it.each(["[]", "{}", '"entry"', "null"])(
   "refuses an empty or non-array result %s",
   async (entries) => {
     await expect(insert(receipt({ entries }))).rejects.toThrow(
-      "attendance_response_commands_entries_ck",
+      "attendance_answers_entries_ck",
     );
-    expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);
+    expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
   },
 );
 
@@ -124,6 +124,6 @@ it("accepts a manager command with no question and keeps the exact command id un
   await insert(r);
   await expect(insert(r)).rejects.toThrow("UNIQUE constraint failed");
   expect(
-    suite.db.execute(sql`select id, question_id from attendance_response_commands`).rows,
+    suite.db.execute(sql`select id, question_id from attendance_answers`).rows,
   ).toEqual([{ id: r.id, question_id: null }]);
 });

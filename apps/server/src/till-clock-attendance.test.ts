@@ -7,7 +7,7 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tillSessions } from "@waitron/identity";
 import {
-  attendanceDayWork,
+  attendanceDays,
   attendanceQuestions,
   appendToChain,
   readChain,
@@ -114,7 +114,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
   it("refuses changed saved day bounds before appending anything", async () => {
     await open();
     await fact();
-    await suite.db.update(attendanceDayWork).set({ endAt: "2026-01-06T05:00:00.000Z" });
+    await suite.db.update(attendanceDays).set({ endAt: "2026-01-06T05:00:00.000Z" });
     const before = await rows();
     instant = new Date("2026-01-06T09:00:00Z");
     const response = await request();
@@ -195,7 +195,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
       role: "staff",
     });
     await fact("2026-01-05T18:00:00Z", other!.id);
-    const work = await suite.db.select().from(attendanceDayWork);
+    const work = await suite.db.select().from(attendanceDays);
     instant = new Date("2026-01-06T09:00:00Z");
     const response = await request();
     expect(response.status).toBe(200);
@@ -212,7 +212,7 @@ describe("own clock reconciliation at the business-day boundary", () => {
       },
     ]);
     expect(state).toMatchObject({ state: "out", firstClockIn: true, businessDay: "2026-01-06" });
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(
+    expect(await suite.db.select().from(attendanceDays)).toEqual(
       work.map((row) => ({ ...row, dirtyRevision: row.dirtyRevision + 1 })),
     );
     expect(await suite.db.select().from(attendanceQuestions)).toMatchObject([

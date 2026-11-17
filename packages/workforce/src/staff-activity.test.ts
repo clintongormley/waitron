@@ -9,7 +9,7 @@ import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { shifts } from "./schema/shifts.js";
 import { recordStaffActivity, readStaffActivityFacts } from "./staff-activity.js";
 import { staffActivity } from "./schema/attendance.js";
-import { attendanceDayWork } from "./schema/attendance.js";
+import { attendanceDays } from "./schema/attendance.js";
 import { appendToChain } from "./chain.js";
 import { enqueueAttendanceDay } from "./attendance-state.js";
 
@@ -47,10 +47,10 @@ it("many unscheduled actions keep one pair, with replay and intermediate actions
   await record("2026-01-05T09:00:00.987Z");
   await record("2026-01-05T17:00:00Z");
   const before = await rows();
-  const beforeWork = await f.suite.db.select().from(attendanceDayWork);
+  const beforeWork = await f.suite.db.select().from(attendanceDays);
   for (let n = 0; n < 100; n++) await record("2026-01-05T12:00:00Z");
   expect(await rows()).toEqual(before);
-  expect(await f.suite.db.select().from(attendanceDayWork)).toEqual(beforeWork);
+  expect(await f.suite.db.select().from(attendanceDays)).toEqual(beforeWork);
   expect(before).toMatchObject([
     {
       personId: f.personId,
@@ -135,7 +135,7 @@ it("records activity while a changed future cutover awaits the day-bounds refres
 
 it("a legal clock entry marks its day, and a later correction marks every corrected day", async () => {
   const original = await f.open();
-  expect((await f.suite.db.select().from(attendanceDayWork))[0]?.dirtyRevision).toBe(2);
+  expect((await f.suite.db.select().from(attendanceDays))[0]?.dirtyRevision).toBe(2);
   const correction = await f.run((tx) =>
     appendToChain(
       tx,
@@ -173,7 +173,7 @@ it("a legal clock entry marks its day, and a later correction marks every correc
     ),
   );
   expect(
-    (await f.suite.db.select().from(attendanceDayWork).orderBy(attendanceDayWork.businessDay)).map(
+    (await f.suite.db.select().from(attendanceDays).orderBy(attendanceDays.businessDay)).map(
       (r) => [r.businessDay, r.dirtyRevision],
     ),
   ).toEqual([

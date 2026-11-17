@@ -10,7 +10,7 @@ import {
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import { attendanceDayWork, staffActivity, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { attendanceDays, staffActivity, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 
 const suite = useVenueDb({
@@ -60,7 +60,7 @@ describe("transactional attendance capture", () => {
         capture({ ...fact(), ...bad } as Parameters<typeof capture>[0]),
       ).rejects.toMatchObject({ code: "attendance.invalid" });
       expect(await suite.db.select().from(staffActivity)).toEqual([]);
-      expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
+      expect(await suite.db.select().from(attendanceDays)).toEqual([]);
     },
   );
   it("a capture failure rolls back the surrounding accepted command", async () => {

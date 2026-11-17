@@ -14,7 +14,7 @@ import type {
 } from "./attendance-types.js";
 import { assertAttendanceDay } from "./attendance-state.js";
 import { mergeAttendanceQuestions, upsertAttendanceQuestion } from "./attendance-questions.js";
-import { attendanceDayWork, attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -96,8 +96,8 @@ export async function processAttendanceDay(
     throw invalid("attendance day not due");
   const [work] = await tx
     .select()
-    .from(attendanceDayWork)
-    .where(eq(attendanceDayWork.businessDay, day.businessDay));
+    .from(attendanceDays)
+    .where(eq(attendanceDays.businessDay, day.businessDay));
   if (!work || work.startAt !== startAt || work.endAt !== endAt)
     throw invalid("saved attendance day mismatch");
   const planned = input.planned
@@ -472,12 +472,12 @@ export async function processAttendanceDay(
   }
   if (input.personId === undefined)
     await tx
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({
         evaluatedRevision: work.dirtyRevision,
         deferredShiftIds: deferred.map((d) => d.id).sort(),
         nextDueAt: deferred.map((d) => d.at).sort()[0] ?? endAt,
       })
-      .where(eq(attendanceDayWork.id, work.id));
+      .where(eq(attendanceDays.id, work.id));
   return result;
 }

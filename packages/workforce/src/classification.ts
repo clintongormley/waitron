@@ -16,10 +16,10 @@ export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("availability", "state", STATE),
   classify("roster_versions", "state", STATE),
   ...[
-    "attendance_day_work",
+    "attendance_days",
     "staff_activity",
     "attendance_questions",
-    "attendance_response_commands",
+    "attendance_answers",
   ].map((name) =>
     classify(
       name,

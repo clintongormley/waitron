@@ -40,8 +40,8 @@ export const staffActivity = table(
   ],
 );
 
-export const attendanceDayWork = table(
-  "attendance_day_work",
+export const attendanceDays = table(
+  "attendance_days",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     businessDay: day("business_day").notNull(),
@@ -53,11 +53,11 @@ export const attendanceDayWork = table(
     deferredShiftIds: json<string[]>("deferred_shift_ids").notNull().default([]),
   },
   (t) => [
-    uniqueIndex("attendance_day_work_scope_uq").on(t.businessDay),
-    index("attendance_day_work_due_idx").on(t.nextDueAt),
-    check("attendance_day_work_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
+    uniqueIndex("attendance_days_scope_uq").on(t.businessDay),
+    index("attendance_days_due_idx").on(t.nextDueAt),
+    check("attendance_days_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
     check(
-      "attendance_day_work_revision_ck",
+      "attendance_days_revision_ck",
       sql`${t.dirtyRevision} > 0 and ${t.evaluatedRevision} >= 0 and ${t.evaluatedRevision} <= ${t.dirtyRevision}`,
     ),
   ],

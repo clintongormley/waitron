@@ -12,7 +12,7 @@ import {
   nowIso,
 } from "@waitron/db";
 import { attendanceQuestions } from "./schema/attendance.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
@@ -576,7 +576,7 @@ describe("question ownership", () => {
       })
       .returning();
     const command = (subject: string) =>
-      single.db.insert(attendanceResponseCommands).values({
+      single.db.insert(attendanceAnswers).values({
         id: newId(),
         requestedByPersonId: personId,
         authorizedByPersonId: personId,
@@ -592,8 +592,8 @@ describe("question ownership", () => {
     await command(personId);
     expect(
       await single.db
-        .select({ personId: attendanceResponseCommands.personId })
-        .from(attendanceResponseCommands),
+        .select({ personId: attendanceAnswers.personId })
+        .from(attendanceAnswers),
     ).toEqual([{ personId }]);
   });
 });

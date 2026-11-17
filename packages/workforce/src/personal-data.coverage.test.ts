@@ -1,7 +1,7 @@
 // Weaker than its name: it finds a person's table only through declared foreign keys, so a person
-// id held without one, or inside a JSON column (`attendance_response_commands.input`,
+// id held without one, or inside a JSON column (`attendance_answers.input`,
 // `pay_period_closures.snapshot`, `attendance_questions.evidence_keys`), is not seen, nor is a
-// JSON list of ids of rows that name a person (`attendance_day_work.deferred_shift_ids`, shift
+// JSON list of ids of rows that name a person (`attendance_days.deferred_shift_ids`, shift
 // ids); the columns of `time_entries`, exported whole as the working-time record, are not checked
 // at all; and it proves a column was classified, not that WORKFORCE_PERSONAL_DATA honours the
 // classification (personal-data.test.ts's exact-files cases do that).
@@ -105,7 +105,7 @@ const CLASSIFIED: Record<string, Classification> = {
       "resolved_by_entry_id",
     ],
   },
-  attendance_response_commands: {
+  attendance_answers: {
     in: ["action", "requested_by_person_id", "authorized_by_person_id", "input", "created_at"],
     out: ["id", "person_id", "question_id", "entry_ids"],
   },

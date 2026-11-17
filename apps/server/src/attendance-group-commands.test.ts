@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
 import { mountTillApi } from "./till-api.js";
@@ -136,7 +136,7 @@ async function state() {
     parties: await suite.db.select().from(parties),
     commands: await suite.db.select().from(serviceCommands),
     facts: await suite.db.select().from(staffActivity),
-    days: await suite.db.select().from(attendanceDayWork),
+    days: await suite.db.select().from(attendanceDays),
   };
 }
 describe("accepted group attendance snapshots", () => {

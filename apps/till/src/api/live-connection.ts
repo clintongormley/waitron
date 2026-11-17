@@ -122,7 +122,7 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "persons",
     "time_entries",
     "settings.venue",
-    "attendance_day_work",
+    "attendance_days",
     "staff_activity",
   ],
   menu: [

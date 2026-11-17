@@ -17,7 +17,7 @@ import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
 import { planningEveryStatement } from "../test/query-plans.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { staffActivity, attendanceQuestions } from "./schema/attendance.js";
 import { absences } from "./schema/absences.js";
 import { availability } from "./schema/availability.js";
@@ -507,7 +507,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   });
 
   // The manager's proposal is inserted first and carries the lower id, but was recorded later.
-  await db.insert(attendanceResponseCommands).values({
+  await db.insert(attendanceAnswers).values({
     id: "00000000-0000-4000-8000-0000000000b1",
     requestedByPersonId: manager.id,
     authorizedByPersonId: manager.id,
@@ -526,7 +526,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     entryIds: [automaticEntry],
     createdAt: "2026-04-20T10:05:00.000Z",
   });
-  await db.insert(attendanceResponseCommands).values({
+  await db.insert(attendanceAnswers).values({
     id: "00000000-0000-4000-8000-0000000000b2",
     requestedByPersonId: marta,
     authorizedByPersonId: marta,
@@ -583,7 +583,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     recipient: "ruiz.mail@example.test",
     outcome: "rejected",
   });
-  await db.insert(attendanceResponseCommands).values({
+  await db.insert(attendanceAnswers).values({
     id: "00000000-0000-4000-8000-0000000000c2",
     requestedByPersonId: colleague,
     authorizedByPersonId: colleague,
@@ -1010,7 +1010,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       evidenceKeys: [],
       createdAt: "2026-06-03T04:00:00.000Z",
     });
-    await suite.db.insert(attendanceResponseCommands).values({
+    await suite.db.insert(attendanceAnswers).values({
       id: "00000000-0000-4000-8000-0000000000d2",
       requestedByPersonId: person,
       authorizedByPersonId: person,
@@ -1076,7 +1076,7 @@ describe("prepare's reads", () => {
       "availability",
       "shift_swaps",
       "attendance_questions",
-      "attendance_response_commands",
+      "attendance_answers",
       "staff_activity",
       "settings",
       "time_entries",

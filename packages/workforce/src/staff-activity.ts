@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, gte, lt, or, sql } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds, timeZoneOffsetMinutes } from "@waitron/shared";
-import { attendanceDayWork, staffActivity } from "./schema/attendance.js";
+import { attendanceDays, staffActivity } from "./schema/attendance.js";
 import { shifts } from "./schema/shifts.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -39,8 +39,8 @@ export async function markAttendanceEntry(
   for (const businessDay of days) {
     const [saved] = await tx
       .select()
-      .from(attendanceDayWork)
-      .where(eq(attendanceDayWork.businessDay, businessDay));
+      .from(attendanceDays)
+      .where(eq(attendanceDays.businessDay, businessDay));
     await enqueueAttendanceDay(
       tx,
       saved ?? { businessDay, ...businessDayBounds(clock, businessDay) },
@@ -108,8 +108,8 @@ export async function recordStaffActivity(
     for (const businessDay of days) {
       const [saved] = await tx
         .select()
-        .from(attendanceDayWork)
-        .where(eq(attendanceDayWork.businessDay, businessDay));
+        .from(attendanceDays)
+        .where(eq(attendanceDays.businessDay, businessDay));
       await enqueueAttendanceDay(
         tx,
         saved ?? { businessDay, ...businessDayBounds(clock, businessDay) },

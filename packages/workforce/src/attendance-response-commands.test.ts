@@ -33,7 +33,7 @@ import {
 } from "./attendance-questions.js";
 import * as api from "./index.js";
 import type { AttendanceCommand, AttendanceCommandPayload } from "./attendance-contract.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { readChain } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
@@ -209,8 +209,8 @@ async function snapshot() {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
     receipts: await suite.db
       .select()
-      .from(attendanceResponseCommands)
-      .orderBy(attendanceResponseCommands.id),
+      .from(attendanceAnswers)
+      .orderBy(attendanceAnswers.id),
   };
 }
 async function refused(action: () => unknown, code: string) {
@@ -356,7 +356,7 @@ it("two device commands using one revision append only the first answer", async 
 });
 it("receipt failure rolls back both requests and the chain head", async () => {
   await suite.db.execute(
-    sql`create trigger refuse_response before insert on attendance_response_commands begin select raise(abort, 'response fault'); end`,
+    sql`create trigger refuse_response before insert on attendance_answers begin select raise(abort, 'response fault'); end`,
   );
   try {
     const value = await command(pair());

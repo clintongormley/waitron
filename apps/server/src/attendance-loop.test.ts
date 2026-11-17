@@ -9,7 +9,7 @@ import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
-  attendanceDayWork,
+  attendanceDays,
   attendanceQuestions,
   readChain,
   rosterVersions,
@@ -64,7 +64,7 @@ async function seed() {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries),
-    work: await suite.db.select().from(attendanceDayWork),
+    work: await suite.db.select().from(attendanceDays),
     questions: await suite.db.select().from(attendanceQuestions),
   };
 }

@@ -15,7 +15,7 @@ describe("the public surface", () => {
         "WORKFORCE_PERMISSIONS",
         "maySelfApproveAttendance",
         "WORKFORCE_PERSONAL_DATA",
-        "attendanceDayWork",
+        "attendanceDays",
         "staffActivity",
         "recordStaffActivity",
         "readStaffActivityFacts",

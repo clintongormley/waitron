@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -68,7 +68,7 @@ async function state() {
     prints: await suite.db.select().from(printJobs),
     departures: await suite.db.select().from(unpaidDepartures),
     facts: await suite.db.select().from(staffActivity),
-    days: await suite.db.select().from(attendanceDayWork),
+    days: await suite.db.select().from(attendanceDays),
   };
 }
 describe("remaining accepted order attendance", () => {

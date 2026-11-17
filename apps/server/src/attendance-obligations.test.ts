@@ -9,7 +9,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
-  attendanceDayWork,
+  attendanceDays,
   attendanceQuestions,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
@@ -85,11 +85,11 @@ async function replace() {
 
 describe("selected-day rota reconciliation", () => {
   it("retires the prior publication's question before returning a newly dirty day", async () => {
-    const [work] = await suite.db.select().from(attendanceDayWork);
+    const [work] = await suite.db.select().from(attendanceDays);
     await suite.db
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({ evaluatedRevision: work!.dirtyRevision })
-      .where(eq(attendanceDayWork.id, work!.id));
+      .where(eq(attendanceDays.id, work!.id));
     await replace();
     expect(await next()).toEqual(day());
     expect(await own()).toEqual([]);
