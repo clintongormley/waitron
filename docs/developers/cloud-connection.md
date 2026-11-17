@@ -1022,6 +1022,6 @@ Build the separate emergency page with `pnpm --filter @waitron/setup build:emerg
 starting the locked entry. Its default directory is `apps/setup/emergency/dist`; set
 `emergencyAppDir` in the launch object to use a packaged copy. The ordinary setup build is separate.
 Open the copy's HTTPS origin to sign in with your password and authenticator or recovery code.
-After sign-in, you see your name and the copy's fixed stop time. The page offers no activation yet.
+After sign-in, you see your name and the copy's latest stop time. The page offers no activation yet.
 Its owner-account link comes from `/locked-api/context`, using the server's configured Cloud origin.
-The page uses the server’s remaining session time, so a fast device clock does not end sign-in early.
+The page uses the server's remaining session time, so a fast device clock does not end sign-in early.

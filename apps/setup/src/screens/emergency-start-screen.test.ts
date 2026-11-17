@@ -199,14 +199,16 @@ it("expires a fresh sign-in without marking empty fields, even on a device with 
   }
 });
 
-it("returns to sign-in when the server already dropped the session", async () => {
-  const { el } = await mount("management_session.required", true);
-  el.transport = async () =>
-    Response.json({ error: { code: "management_session.expired" } }, { status: 401 });
-  await click(el, "sign-out");
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull());
-  expect(el.shadowRoot!.textContent).not.toContain("Nora");
-});
+it.each(["management_session.expired", "management_session.required"])(
+  "returns to sign-in after %s",
+  async (code) => {
+    const { el } = await mount("management_session.required", true);
+    el.transport = async () => Response.json({ error: { code } }, { status: 401 });
+    await click(el, "sign-out");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull());
+    expect(el.shadowRoot!.textContent).not.toContain("Nora");
+  },
+);
 
 it("retries a failed initial read and loads only the emergency entry", async () => {
   const app = document.createElement("div");
