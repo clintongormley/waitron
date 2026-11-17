@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LitElement } from "lit";
-import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
+import { validateRoster, type WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
 import { STAFFING_STRINGS, tf } from "./strings.js";
 import { STAFFING_DASHBOARD } from "./index.js";
+vi.mock("@waitron/workforce/roster-validation", { spy: true });
 void STAFFING_DASHBOARD;
 const frames: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -234,6 +235,19 @@ describe("the slot picker", () => {
     const el = await mount();
     expect(el.shadowRoot!.textContent).toContain("Mostrar a todo el equipo");
     expect(el.shadowRoot!.textContent).toContain(STAFFING_STRINGS.es["staffing.rota.leave"]);
+  });
+  it("checks the unchanged week once per redraw, then once for each person listed", async () => {
+    const el = await mount();
+    (el as Picker & { ruleset: WorkTimeRuleset | null }).ruleset = rules;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-everyone]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-person]")).toHaveLength(5);
+    vi.mocked(validateRoster).mockClear();
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(
+      vi.mocked(validateRoster).mock.calls.map(([shifts]) => shifts === el.week.shifts),
+    ).toEqual([true, false, false, false, false, false]);
   });
 });
 
