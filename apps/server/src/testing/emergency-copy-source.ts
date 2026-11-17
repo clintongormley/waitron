@@ -1,15 +1,22 @@
 // A venue whose main box is the source of Cloud's emergency copy, and a binding naming it, for the
 // emergency copy check and placement tests.
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   deployment,
   nodes,
   saveVenueFields,
   withTransaction,
+  withNodeTransaction,
   writeNodeMembership,
+  openVenueDatabase,
   type Database,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { appendHandoverEventTx } from "@waitron/node-db";
 import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "../emergency-copy-binding.js";
 
@@ -65,4 +72,38 @@ export function bindingFor(
     expiresAt: "2026-11-17T10:30:00.000Z",
     ...overrides,
   };
+}
+
+/**
+ * Writes `nodePath` as a migrated `node.db` holding one `emergency_copy.placed` record with `detail`
+ * (a binding, or anything else), and nothing more.
+ */
+export async function writePlacedRecord(nodePath: string, detail: unknown): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), "emergency-copy-record-"));
+  try {
+    await applyMigrations(
+      dir,
+      migrationOptionsFor(
+        manifestSets().filter((set) => set.database === "node"),
+        null,
+      ),
+    );
+    const store = await openVenueDatabase(dir);
+    try {
+      await withNodeTransaction(store.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: copyId,
+          operationId: null,
+          kind: "emergency_copy.placed",
+          detail: { binding: detail },
+          envelope: null,
+        }),
+      );
+    } finally {
+      await store.close();
+    }
+    await copyFile(join(dir, "node.db"), nodePath);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }

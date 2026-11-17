@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { eq, inArray } from "drizzle-orm";
+import { isDeepStrictEqual } from "node:util";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import {
   deployment,
   nodes,
@@ -9,6 +10,8 @@ import {
   readSettings,
   VENUE_SETTINGS,
   type DeploymentEnvironment,
+  type NodeDatabase,
+  type NodeTransaction,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -17,6 +20,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
+import { nodeHandoverEvents } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { openImmutable } from "@waitron/provisioning";
 import {
@@ -33,6 +37,42 @@ import { checkCopyIntegrity } from "./handover-integrity.js";
 import { isReadableChart } from "./membership-trust.js";
 import { assertCopyNotAhead } from "./spare-copy.js";
 import "./errors.js";
+
+export const PLACED = "emergency_copy.placed";
+
+/** The binding a placed emergency copy recorded, or `null` when this `node.db` holds none. */
+export async function readPlacedEmergencyCopy(
+  node: NodeDatabase | NodeTransaction,
+): Promise<EmergencyCopyBinding | null> {
+  const [row] = await node
+    .select({ detail: nodeHandoverEvents.detail })
+    .from(nodeHandoverEvents)
+    .where(eq(nodeHandoverEvents.kind, PLACED))
+    .orderBy(asc(sql`rowid`))
+    .limit(1);
+  return (row?.detail.binding as EmergencyCopyBinding | undefined) ?? null;
+}
+
+/** The binding the `node.db` at `path` recorded, or `null` when it holds none or is no database. */
+async function bindingPlacedAt(path: string): Promise<EmergencyCopyBinding | null> {
+  let connection;
+  try {
+    connection = openImmutable(path);
+  } catch {
+    return null;
+  }
+  try {
+    return await readPlacedEmergencyCopy(
+      drizzleNodeSqlite(connectionPair(connection, connection), {
+        schema: {},
+      }) as unknown as NodeDatabase,
+    );
+  } catch {
+    return null;
+  } finally {
+    connection.close();
+  }
+}
 
 /** `digestFile`'s hash, rejecting a stop with the signal's own reason rather than an `AbortError`. */
 async function fileSha256(path: string, signal: AbortSignal | undefined): Promise<string> {
@@ -62,8 +102,15 @@ export async function checkPlacedEmergencyCopy(deps: {
   // a `-wal` or `-journal` beside the file is refused first, and an immutable open would ignore it.
   if ([WAL_SUFFIX, JOURNAL_SUFFIX].some((suffix) => existsSync(`${venuePath}${suffix}`)))
     throw new AppError("emergency_copy.journal_present", {});
-  if (existsSync(join(dirname(venuePath), NODE_FILE)))
-    throw new AppError("emergency_copy.node_db_present", {});
+  const nodePath = join(dirname(venuePath), NODE_FILE);
+  if (existsSync(nodePath)) {
+    // Only this binding's own placement is admitted, so a repeat can pass; anything else, the
+    // source's `node.dump` among them, is never adopted.
+    const placed = await bindingPlacedAt(nodePath);
+    if (placed === null) throw new AppError("emergency_copy.node_db_present", {});
+    if (!isDeepStrictEqual(placed, binding))
+      throw new AppError("emergency_copy.other_binding_placed", {});
+  }
   if ((await fileSha256(venuePath, deps.signal)) !== binding.selectedStream.databaseSha256)
     throw new AppError("emergency_copy.hash_mismatch", {});
   if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal, immutable: true })))

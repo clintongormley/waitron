@@ -13,10 +13,12 @@ import {
 import { CORE_MIGRATIONS, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { box, NODE_MIGRATIONS, nodeHandoverEvents, readNodeMode } from "@waitron/node-db";
+import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateKeyRing, openImmutable } from "@waitron/provisioning";
 import { connectionPair, drizzleNodeSqlite } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
-import { placeEmergencyCopy, readPlacedEmergencyCopy } from "./emergency-copy-placement.js";
+import { readPlacedEmergencyCopy } from "./emergency-copy-check.js";
+import { placeEmergencyCopy } from "./emergency-copy-placement.js";
 import { parseEnvFile } from "./env-file.js";
 import {
   bindingFor,
@@ -62,7 +64,13 @@ async function readPlacedNode<T>(read: (node: NodeDatabase) => Promise<T>): Prom
 const writtenRing = () =>
   loadKeyRing(parseEnvFile(readFileSync(join(root, "secrets.env"), "utf8")));
 
-function place(binding: EmergencyCopyBinding, processEnv: NodeJS.ProcessEnv = {}) {
+const beforeExpiry = () => new Date("2026-11-17T10:10:00.000Z");
+
+function place(
+  binding: EmergencyCopyBinding,
+  processEnv: NodeJS.ProcessEnv = {},
+  extra: Partial<Parameters<typeof placeEmergencyCopy>[0]> = {},
+) {
   return placeEmergencyCopy({
     binding,
     venueDir: root,
@@ -71,6 +79,8 @@ function place(binding: EmergencyCopyBinding, processEnv: NodeJS.ProcessEnv = {}
     processEnv,
     migrationsRoot: null,
     modules: [],
+    now: beforeExpiry,
+    ...extra,
   });
 }
 
@@ -211,4 +221,67 @@ it("refuses when this process's environment sets the vault key, which would win 
     params: { variables: ["WAITRON_CREDENTIALS_KEY"] },
   });
   expect((await readdir(root)).sort()).toEqual(["venue.db", "venue.lock"]);
+});
+
+const placedFiles = async () => ({
+  secrets: await readFile(join(root, "secrets.env")),
+  trading: await readFile(join(root, "trading.env")),
+  node: await readFile(join(root, "node.db")),
+});
+
+it("a repeat with the same binding makes no new key and rewrites nothing", async () => {
+  const binding = await placedBinding();
+  await place(binding);
+  const before = await placedFiles();
+  const publicKey = async () => {
+    const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+    expect(key).toEqual(expect.any(String));
+    return nodeSigningPublicKey(key!);
+  };
+  const keyBefore = await publicKey();
+  await expect(place(binding)).resolves.toBeUndefined();
+  expect(await placedFiles()).toEqual(before);
+  expect(await publicKey()).toBe(keyBefore);
+  expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
+});
+
+it("refuses another binding once a copy is placed, writing nothing", async () => {
+  const binding = await placedBinding();
+  await place(binding);
+  const before = await placedFiles();
+  await expect(
+    place({ ...binding, copyOperationId: "e7000000-0000-4000-8000-0000000000ee" }),
+  ).rejects.toMatchObject({ code: "emergency_copy.other_binding_placed" });
+  expect(await placedFiles()).toEqual(before);
+});
+
+/** A clock that reads `at` once the copy's chain check, the check's last step, has run. */
+function clockMovedByTheCheck(at: string) {
+  let time = beforeExpiry();
+  const module = {
+    ...fakeSetlessModule("test-chain", "core"),
+    handover: {
+      summarise: async () => null,
+      checkCopy: async () => {
+        time = new Date(at);
+        return "ok" as const;
+      },
+    },
+  };
+  return { modules: [module], now: () => time };
+}
+
+it("refuses a binding that expires while the checks run, writing nothing", async () => {
+  const binding = await placedBinding();
+  await expect(place(binding, {}, clockMovedByTheCheck(binding.expiresAt))).rejects.toMatchObject({
+    code: "emergency_copy.binding_expired",
+    params: { expiresAt: binding.expiresAt },
+  });
+  expect((await readdir(root)).sort()).toEqual(["venue.db", "venue.lock"]);
+});
+
+it("places a binding the checks finish a moment before it expires", async () => {
+  const binding = await placedBinding();
+  await place(binding, {}, clockMovedByTheCheck("2026-11-17T10:29:59.999Z"));
+  expect(existsSync(join(root, "node.db"))).toBe(true);
 });

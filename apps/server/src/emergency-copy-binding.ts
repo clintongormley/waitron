@@ -70,6 +70,15 @@ function instant(value: unknown, field: string): string {
   return value;
 }
 
+/** Refuses a binding whose `expiresAt` this machine's clock, `now`, has reached. */
+export function assertEmergencyCopyBindingUnexpired(
+  binding: Pick<EmergencyCopyBinding, "expiresAt">,
+  now: Date,
+): void {
+  if (now.getTime() >= Date.parse(binding.expiresAt))
+    throw new AppError("emergency_copy.binding_expired", { expiresAt: binding.expiresAt });
+}
+
 export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyCopyBinding {
   if (!Number.isFinite(now.getTime()))
     throw new TypeError("parseEmergencyCopyBinding needs a valid clock");
@@ -98,7 +107,7 @@ export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyC
   const expiresAt = instant(top.expiresAt, "expiresAt");
   const expires = Date.parse(expiresAt);
   if (expires - Date.parse(startedAt) !== LIFETIME_MS) refuse("expiresAt");
-  if (now.getTime() >= expires) throw new AppError("emergency_copy.binding_expired", { expiresAt });
+  assertEmergencyCopyBindingUnexpired({ expiresAt }, now);
 
   return {
     copyOperationId,

@@ -18,6 +18,7 @@ import {
   source,
   sourceId,
   writeChart as writeChartTo,
+  writePlacedRecord,
 } from "./testing/emergency-copy-source.js";
 import { sha } from "./testing/place-copy-box.js";
 
@@ -107,6 +108,45 @@ it.each(["-wal", "-journal"])(
 it("refuses a node.db already beside the copy, so the source's is never adopted", async () => {
   const hash = await place();
   await writeFile(join(root, "node.db"), "the source's node dump");
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.node_db_present",
+  });
+});
+
+/** The same binding with every key, its stream's included, in reverse order. */
+function reordered(binding: EmergencyCopyBinding): unknown {
+  const stream = Object.fromEntries(Object.entries(binding.selectedStream).reverse());
+  return Object.fromEntries(Object.entries({ ...binding, selectedStream: stream }).reverse());
+}
+
+it("admits a node.db holding this binding's placed record, keys in any order, so a repeat passes", async () => {
+  const hash = await place();
+  const binding = bindingFor(hash);
+  await writePlacedRecord(join(root, "node.db"), reordered(binding));
+  const before = await readFile(join(root, "node.db"));
+  await expect(check(binding)).resolves.toBeUndefined();
+  expect(await readFile(join(root, "node.db"))).toEqual(before);
+  expect((await readdir(root)).sort()).toEqual(["node.db", "venue.db"]);
+});
+
+it("refuses a node.db holding another binding's placed record", async () => {
+  const hash = await place();
+  const other = bindingFor(hash, { copyOperationId: "e7000000-0000-4000-8000-0000000000ee" });
+  await writePlacedRecord(join(root, "node.db"), other);
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.other_binding_placed",
+  });
+});
+
+it("refuses a node.db holding no placed record", async () => {
+  const hash = await place();
+  await writePlacedRecord(join(root, "node.db"), bindingFor(hash));
+  const db = new DatabaseSync(join(root, "node.db"));
+  try {
+    db.exec("delete from node_handover_events");
+  } finally {
+    db.close();
+  }
   await expect(check(bindingFor(hash))).rejects.toMatchObject({
     code: "emergency_copy.node_db_present",
   });

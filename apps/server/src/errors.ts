@@ -112,6 +112,8 @@ declare module "@waitron/shared" {
     /** A `-wal` or `-journal` beside the placed file. */
     "emergency_copy.journal_present": Record<string, never>;
     "emergency_copy.node_db_present": Record<string, never>;
+    /** The `node.db` beside the file records the placement of a different binding. */
+    "emergency_copy.other_binding_placed": Record<string, never>;
     "emergency_copy.hash_mismatch": Record<string, never>;
     "emergency_copy.integrity_failed": Record<string, never>;
     "emergency_copy.environment_mismatch": {

@@ -1,33 +1,32 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { asc, eq, sql } from "drizzle-orm";
 import { encodeKeyRing, loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import {
   lockVenueDatabase,
   openVenueDatabase,
   withNodeTransaction,
   type DeploymentEnvironment,
-  type NodeDatabase,
-  type NodeTransaction,
 } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
-import { appendHandoverEventTx, nodeHandoverEvents, setNodeModeTx } from "@waitron/node-db";
+import { appendHandoverEventTx, setNodeModeTx } from "@waitron/node-db";
 import { generateKeyRing } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { NODE_FILE, SCRATCH_DIR, TRADING_ENV_FILE, VENUE_FILE } from "@waitron/store";
 import { keyRingVariables } from "./box-env.js";
 import { writeCredentialsRing } from "./box-secrets.js";
-import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
-import { checkPlacedEmergencyCopy } from "./emergency-copy-check.js";
+import {
+  assertEmergencyCopyBindingUnexpired,
+  type EmergencyCopyBinding,
+} from "./emergency-copy-binding.js";
+import { checkPlacedEmergencyCopy, PLACED } from "./emergency-copy-check.js";
 import { parseEnvFile } from "./env-file.js";
 import { errnoOf } from "./errno.js";
 import { reachDisk } from "./sync-path.js";
 import { writeTradingEnv } from "./trading-config.js";
 import "./errors.js";
-
-const PLACED = "emergency_copy.placed";
 
 /** The node id an existing `trading.env` names, `""` when it names none, or `null` with no file. */
 async function configuredNodeId(stateDir: string): Promise<string | null> {
@@ -55,6 +54,8 @@ export async function placeEmergencyCopy(deps: {
   processEnv: Readonly<Record<string, string | undefined>>;
   migrationsRoot: string | null;
   modules: readonly WaitronModule[];
+  /** This machine's clock. */
+  now: () => Date;
   signal?: AbortSignal;
 }): Promise<void> {
   const { binding } = deps;
@@ -76,6 +77,10 @@ export async function placeEmergencyCopy(deps: {
       modules: deps.modules,
       signal: deps.signal,
     });
+    // The binding was in date when it was read, but the checks can take many minutes.
+    assertEmergencyCopyBindingUnexpired(binding, deps.now());
+    // The check admits a `node.db` here only when it records this very binding: a repeat.
+    if (existsSync(join(deps.venueDir, NODE_FILE))) return;
 
     const parent = join(deps.stateDir, SCRATCH_DIR);
     await mkdir(parent, { recursive: true, mode: 0o700 });
@@ -131,17 +136,4 @@ export async function placeEmergencyCopy(deps: {
   } finally {
     hold.release();
   }
-}
-
-/** The binding a placed emergency copy recorded, or `null` when this `node.db` holds none. */
-export async function readPlacedEmergencyCopy(
-  node: NodeDatabase | NodeTransaction,
-): Promise<EmergencyCopyBinding | null> {
-  const [row] = await node
-    .select({ detail: nodeHandoverEvents.detail })
-    .from(nodeHandoverEvents)
-    .where(eq(nodeHandoverEvents.kind, PLACED))
-    .orderBy(asc(sql`rowid`))
-    .limit(1);
-  return (row?.detail.binding as EmergencyCopyBinding | undefined) ?? null;
 }
