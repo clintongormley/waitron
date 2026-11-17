@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
@@ -695,9 +696,11 @@ it("hides foreign receipts and refuses another worker's question, item and targe
     .insert(attendanceQuestions)
     .values({
       personId: other!.id,
-      businessDay: "2026-01-04",
-      startAt: "2026-01-04T04:00:00.000Z",
-      endAt: "2026-01-05T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-01-04",
+        startAt: "2026-01-04T04:00:00.000Z",
+        endAt: "2026-01-05T04:00:00.000Z",
+      }),
       shiftKey: "foreign",
       kind: "missing-times",
       missingKinds: ["in", "out"],
@@ -819,9 +822,11 @@ it("lets the worker answer a reopened missing-time question without a reminder p
     .insert(attendanceQuestions)
     .values({
       personId: venue.personId,
-      businessDay: "2026-01-04",
-      startAt: "2026-01-04T04:00:00.000Z",
-      endAt: "2026-01-05T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-01-04",
+        startAt: "2026-01-04T04:00:00.000Z",
+        endAt: "2026-01-05T04:00:00.000Z",
+      }),
       shiftKey: "missed-shift",
       kind: "missing-times",
       missingKinds: ["in", "out"],

@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -57,6 +58,7 @@ beforeEach(async () => {
     }),
   );
   await run((tx) => backend.publishRoster(tx, { versionId }));
+  await seedAttendanceDay(suite.db, day());
   questionId = await run((tx) =>
     upsertAttendanceQuestion(
       tx,

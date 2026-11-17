@@ -1,5 +1,5 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, getTableColumns, isNull } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type {
@@ -14,7 +14,7 @@ import { recordRoot } from "./record-projection.js";
 import { isRecordDate } from "./record-dates.js";
 import { readAttendanceRevision, projectCorrectionItems } from "./attendance-responses.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
-import { attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { attendanceAnswers } from "./schema/attendance-responses.js";
 import "./errors.js";
 
@@ -34,8 +34,14 @@ export async function readAttendanceInbox(
     .where(eq(attendanceAnswers.personId, personId));
   const items = projectCorrectionItems(entries, commands);
   const questions = await tx
-    .select()
+    .select({
+      ...getTableColumns(attendanceQuestions),
+      businessDay: attendanceDays.businessDay,
+      startAt: attendanceDays.startAt,
+      endAt: attendanceDays.endAt,
+    })
     .from(attendanceQuestions)
+    .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
     .where(
       and(
         eq(attendanceQuestions.personId, personId),

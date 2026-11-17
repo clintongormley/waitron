@@ -96,10 +96,7 @@ async function normalize(
   return { action: command.action, itemId: command.itemId };
 }
 async function findItem(tx: Transaction, id: string, replay: boolean): Promise<CorrectionItem> {
-  const [command] = await tx
-    .select()
-    .from(attendanceAnswers)
-    .where(eq(attendanceAnswers.id, id));
+  const [command] = await tx.select().from(attendanceAnswers).where(eq(attendanceAnswers.id, id));
   const [entry] = command ? [] : await readRecordedEntries(tx, { entryId: id });
   const personId = command?.personId ?? entry?.personId;
   if (!personId) throw new AppError("correction.target_not_found", { entryId: id });

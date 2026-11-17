@@ -84,18 +84,10 @@ const CLASSIFIED: Record<string, Classification> = {
     out: ["id", "from_shift_id", "to_shift_id"],
   },
   attendance_questions: {
-    in: [
-      "business_day",
-      "kind",
-      "missing_kinds",
-      "start_at",
-      "end_at",
-      "created_at",
-      "active",
-      "inactive_reason",
-    ],
+    in: ["kind", "missing_kinds", "created_at", "active", "inactive_reason"],
     out: [
       "id",
+      "attendance_day_id",
       "person_id",
       "canonical_question_id",
       "shift_key",

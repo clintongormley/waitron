@@ -71,9 +71,7 @@ export const attendanceQuestions = table(
     personId: id("person_id")
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
-    businessDay: day("business_day").notNull(),
-    startAt: tsString("start_at").notNull(),
-    endAt: tsString("end_at").notNull(),
+    attendanceDayId: id("attendance_day_id").notNull(),
     shiftKey: label("shift_key").notNull(),
     kind: questionKind("kind").notNull(),
     missingKinds: json<("in" | "out")[]>("missing_kinds").notNull(),
@@ -89,14 +87,18 @@ export const attendanceQuestions = table(
   (t) => [
     uniqueIndex("attendance_questions_shift_uq").on(t.personId, t.shiftKey),
     uniqueIndex("attendance_questions_subject_uq").on(t.id, t.personId),
-    index("attendance_questions_own_idx").on(
+    index("attendance_questions_own_day_idx").on(
       t.personId,
       t.active,
       t.resolvedByEntryId,
-      t.businessDay,
-      t.startAt,
+      t.attendanceDayId,
       t.id,
     ),
+    foreignKey({
+      columns: [t.attendanceDayId],
+      foreignColumns: [attendanceDays.id],
+      name: "attendance_questions_day_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.openEntryId, t.personId],
       foreignColumns: [timeEntries.id, timeEntries.personId],
@@ -118,7 +120,6 @@ export const attendanceQuestions = table(
       name: "attendance_questions_canonical_fk",
     }).onDelete("restrict"),
     check("attendance_questions_kind_ck", enumCheck(t.kind)),
-    check("attendance_questions_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
     check(
       "attendance_questions_activity_ck",
       sql`(${t.active} = 1 and ${t.inactiveReason} is null and ${t.canonicalQuestionId} is null) or (${t.active} = 0 and ${t.inactiveReason} is not null)`,

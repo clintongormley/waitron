@@ -1,12 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
-import {
-  attendanceDays,
-  enqueueAttendanceDay,
-  rosterVersions,
-  shifts,
-} from "@waitron/workforce";
+import { attendanceDays, enqueueAttendanceDay, rosterVersions, shifts } from "@waitron/workforce";
 
 export async function markAttendanceSourceChanged(
   tx: Transaction,

@@ -133,7 +133,7 @@ export async function processAttendanceDay(
     .from(attendanceQuestions)
     .where(
       and(
-        eq(attendanceQuestions.businessDay, day.businessDay),
+        eq(attendanceQuestions.attendanceDayId, work.id),
         eq(attendanceQuestions.active, true),
         sql`${attendanceQuestions.resolvedByEntryId} is null`,
         sql`${attendanceQuestions.shiftKey} like 'activity:%'`,
@@ -199,7 +199,7 @@ export async function processAttendanceDay(
     const keys = new Set(evidence(ownFacts));
     const retired = prior.filter(
       (q) =>
-        q.businessDay === day.businessDay &&
+        q.attendanceDayId === work.id &&
         q.inactiveReason === "rota_superseded" &&
         q.evidenceKeys.some((key) => keys.has(key)),
     );
@@ -220,7 +220,7 @@ export async function processAttendanceDay(
     );
     const related = prior.filter(
       (q) =>
-        q.businessDay === day.businessDay &&
+        q.attendanceDayId === work.id &&
         q.active &&
         q.id !== id &&
         q.openEntryId === null &&
@@ -234,7 +234,7 @@ export async function processAttendanceDay(
     const identities = new Set([...keys].map(endpointIdentity));
     const displaced = prior.filter(
       (q) =>
-        q.businessDay !== day.businessDay &&
+        q.attendanceDayId !== work.id &&
         q.evidenceKeys.some(
           (key) => key.startsWith("order:staff:") && identities.has(endpointIdentity(key)),
         ),
@@ -325,7 +325,7 @@ export async function processAttendanceDay(
           .where(
             and(
               eq(attendanceQuestions.personId, personId),
-              eq(attendanceQuestions.businessDay, day.businessDay),
+              eq(attendanceQuestions.attendanceDayId, work.id),
               eq(attendanceQuestions.active, true),
               eq(attendanceQuestions.kind, "missing-times"),
               sql`${attendanceQuestions.resolvedByEntryId} is null`,

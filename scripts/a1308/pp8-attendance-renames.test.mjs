@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { run } from "./pp8-attendance-renames.mjs";
@@ -51,4 +52,39 @@ it("refuses an identifier collision before writing any file", () => {
   });
   expect(() => run({ root, write: true })).toThrow("apps/b.ts");
   expect(readFileSync(join(root, "apps/a.ts"), "utf8")).toBe(old);
+});
+
+it("writes and reports through the CLI while leaving deleted, non-file and binary entries alone", async () => {
+  const root = fixture({
+    "apps/a.ts": old,
+    "apps/deleted.ts": old,
+    "apps/binary.bin": "\0attendance_day_work",
+    "apps/unchanged.ts": "unchanged",
+  });
+  rmSync(join(root, "apps/deleted.ts"));
+  symlinkSync("a.ts", join(root, "apps/link.ts"));
+  execFileSync("git", ["-C", root, "add", "apps/link.ts"], { env });
+  const argv = process.argv;
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue(root);
+  const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    process.argv = [
+      process.execPath,
+      fileURLToPath(new URL("./pp8-attendance-renames.mjs", import.meta.url)),
+    ];
+    vi.resetModules();
+    await import("./pp8-attendance-renames.mjs");
+    expect(output.mock.calls.map(([line]) => line)).toEqual(["apps/a.ts\n"]);
+    expect(readFileSync(join(root, "apps/a.ts"), "utf8")).toBe(old);
+    process.argv.push("--write");
+    vi.resetModules();
+    await import("./pp8-attendance-renames.mjs");
+    expect(readFileSync(join(root, "apps/a.ts"), "utf8")).toBe(renamed);
+    expect(readFileSync(join(root, "apps/binary.bin"), "utf8")).toBe("\0attendance_day_work");
+  } finally {
+    process.argv = argv;
+    cwd.mockRestore();
+    output.mockRestore();
+    vi.resetModules();
+  }
 });

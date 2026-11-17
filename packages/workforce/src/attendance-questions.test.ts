@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   outgoingMail,
@@ -17,6 +17,8 @@ import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   attendanceQuestions,
+  attendanceDays,
+  enqueueAttendanceDay,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
   mergeAttendanceQuestions,
@@ -54,6 +56,10 @@ beforeEach(async () => {
     { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
   ]);
   [personId, other] = rows.map((r) => r.id) as [string, string];
+  await run(async (tx) => {
+    await enqueueAttendanceDay(tx, day());
+    await enqueueAttendanceDay(tx, day("2026-01-06"));
+  });
 });
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 async function openShift() {
@@ -70,6 +76,32 @@ async function openShift() {
 }
 
 describe("durable own attendance questions", () => {
+  it("a question's view shows its stored day's business day and bounds", async () => {
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const [storedDay] = await suite.db
+      .select()
+      .from(attendanceDays)
+      .where(eq(attendanceDays.businessDay, "2026-01-05"));
+    expect(
+      suite.db.execute(sql`select attendance_day_id from attendance_questions where id = ${id}`)
+        .rows,
+    ).toEqual([{ attendance_day_id: storedDay!.id }]);
+    expect((await own())[0]!.day).toEqual({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T04:00:00.000Z",
+      endAt: "2026-01-06T04:00:00.000Z",
+    });
+  });
+  it("refuses a question for a day that does not exist", async () => {
+    await expect(
+      run(async (tx) =>
+        tx.execute(sql`insert into attendance_questions
+      (id, person_id, attendance_day_id, shift_key, kind, missing_kinds, evidence_keys, created_at)
+      values ('missing-day-question', ${personId}, 'missing-day', 'rota:missing', 'missing-times', '["in"]', '[]', '2026-01-08T04:01:00.000Z')`),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    expect(await own()).toEqual([]);
+  });
   it("queues a question's reminder under its key, for its person, kept seven days", async () => {
     const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
     const [mail] = await suite.db.select().from(outgoingMail);

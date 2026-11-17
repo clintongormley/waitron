@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -449,9 +450,11 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: missingTimes,
     personId: marta,
-    businessDay: "2026-04-18",
-    startAt: "2026-04-18T04:00:00.000Z",
-    endAt: "2026-04-19T04:00:00.000Z",
+    attendanceDayId: await seedAttendanceDay(db, {
+      businessDay: "2026-04-18",
+      startAt: "2026-04-18T04:00:00.000Z",
+      endAt: "2026-04-19T04:00:00.000Z",
+    }),
     shiftKey: "shift:marta-0418",
     kind: "missing-times",
     missingKinds: ["in", "out"],
@@ -464,9 +467,11 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: sameDayLater,
     personId: marta,
-    businessDay: "2026-04-18",
-    startAt: "2026-04-18T04:00:00.000Z",
-    endAt: "2026-04-19T04:00:00.000Z",
+    attendanceDayId: await seedAttendanceDay(db, {
+      businessDay: "2026-04-18",
+      startAt: "2026-04-18T04:00:00.000Z",
+      endAt: "2026-04-19T04:00:00.000Z",
+    }),
     shiftKey: "shift:marta-0418-late",
     kind: "missing-times",
     missingKinds: ["out"],
@@ -482,9 +487,11 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: "00000000-0000-4000-8000-0000000000a2",
     personId: marta,
-    businessDay: "2026-03-07",
-    startAt: "2026-03-07T05:00:00.000Z",
-    endAt: "2026-03-08T05:00:00.000Z",
+    attendanceDayId: await seedAttendanceDay(db, {
+      businessDay: "2026-03-07",
+      startAt: "2026-03-07T05:00:00.000Z",
+      endAt: "2026-03-08T05:00:00.000Z",
+    }),
     shiftKey: "shift:marta-0307",
     kind: "automatic-out",
     missingKinds: [],
@@ -564,9 +571,11 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: colleagueQuestion,
     personId: colleague,
-    businessDay: "2026-04-25",
-    startAt: "2026-04-25T04:00:00.000Z",
-    endAt: "2026-04-26T04:00:00.000Z",
+    attendanceDayId: await seedAttendanceDay(db, {
+      businessDay: "2026-04-25",
+      startAt: "2026-04-25T04:00:00.000Z",
+      endAt: "2026-04-26T04:00:00.000Z",
+    }),
     shiftKey: "shift:colleague-0425",
     kind: "missing-times",
     missingKinds: ["out"],
@@ -999,9 +1008,11 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     await suite.db.insert(attendanceQuestions).values({
       id: questionId,
       personId: person,
-      businessDay: "2026-06-02",
-      startAt: "2026-06-02T04:00:00.000Z",
-      endAt: "2026-06-03T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-06-02",
+        startAt: "2026-06-02T04:00:00.000Z",
+        endAt: "2026-06-03T04:00:00.000Z",
+      }),
       shiftKey: "shift:confirms-0602",
       kind: "automatic-out",
       missingKinds: [],

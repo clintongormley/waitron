@@ -7,7 +7,7 @@ import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
 import { verifyPayPeriodClosures } from "./pay-period-chain.js";
 import type { PayPeriodClosure, RecordExtension } from "./record-types.js";
 
-const immutableTables = ["time_entries", "pay_period_closures"];
+const immutableTables = ["time_entries", "pay_period_closures", "attendance_answers"];
 export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,

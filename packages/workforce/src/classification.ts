@@ -7,6 +7,7 @@ const STATE = "manager configuration / live service; copied to a standby, never 
 export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("time_entries", "ledger", LEDGER),
   appendOnly("pay_period_closures", "ledger", LEDGER),
+  appendOnly("attendance_answers", "ledger", "recorded attendance answers"),
   classify("pay_period_settings", "state", STATE),
   classify("employments", "state", STATE),
   classify("shifts", "state", STATE),
@@ -15,12 +16,7 @@ export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("absences", "state", STATE),
   classify("availability", "state", STATE),
   classify("roster_versions", "state", STATE),
-  ...[
-    "attendance_days",
-    "staff_activity",
-    "attendance_questions",
-    "attendance_answers",
-  ].map((name) =>
+  ...["attendance_days", "staff_activity", "attendance_questions"].map((name) =>
     classify(
       name,
       "state",

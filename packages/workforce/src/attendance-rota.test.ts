@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -297,5 +298,14 @@ describe("obsolete rota attendance obligations", () => {
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
     expect(await attendanceMailRows(suite.db)).toEqual(mail);
     expect((await own()).map((q) => q.id)).toEqual([activity]);
+  });
+});
+
+beforeEach(async () => {
+  await seedAttendanceDay(suite.db, day());
+  await seedAttendanceDay(suite.db, {
+    businessDay: "2026-01-04",
+    startAt: "2026-01-04T04:00:00.000Z",
+    endAt: "2026-01-05T04:00:00.000Z",
   });
 });

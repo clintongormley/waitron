@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -565,9 +566,11 @@ describe("question ownership", () => {
       .insert(attendanceQuestions)
       .values({
         personId,
-        businessDay: "2026-11-01",
-        startAt: "2026-11-01T09:00:00.000Z",
-        endAt: "2026-11-01T10:00:00.000Z",
+        attendanceDayId: await seedAttendanceDay(single.db, {
+          businessDay: "2026-11-01",
+          startAt: "2026-11-01T09:00:00.000Z",
+          endAt: "2026-11-01T10:00:00.000Z",
+        }),
         shiftKey: "probe",
         kind: "missing-times",
         missingKinds: ["in"],
@@ -591,9 +594,7 @@ describe("question ownership", () => {
     expect(isRefusal(refused, FOREIGN_KEY_VIOLATION)).toBe(true);
     await command(personId);
     expect(
-      await single.db
-        .select({ personId: attendanceAnswers.personId })
-        .from(attendanceAnswers),
+      await single.db.select({ personId: attendanceAnswers.personId }).from(attendanceAnswers),
     ).toEqual([{ personId }]);
   });
 });

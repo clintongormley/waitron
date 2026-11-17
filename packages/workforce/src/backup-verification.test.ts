@@ -156,9 +156,7 @@ beforeEach(async () => {
   await restored.db.insert(timeEntries).values(await original.db.select().from(timeEntries));
 
   await restored.db.insert(payPeriodSettings).values({ id: 1, frequency: "monthly" });
-  await restored.db
-    .insert(attendanceDays)
-    .values(await original.db.select().from(attendanceDays));
+  await restored.db.insert(attendanceDays).values(await original.db.select().from(attendanceDays));
 });
 
 async function corrupt(db: Database, statement: string) {
@@ -347,7 +345,11 @@ describe("complete captured workforce backup evidence", () => {
   it("registers explicit obligations for every classified table", () => {
     const owner = validateBackupVerificationContribution(OWNER);
     expect(owner.data.tables).toEqual(WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table));
-    expect(owner.data.immutableTables).toEqual(["time_entries", "pay_period_closures"]);
+    expect(owner.data.immutableTables).toEqual([
+      "time_entries",
+      "pay_period_closures",
+      "attendance_answers",
+    ]);
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });

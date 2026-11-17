@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -65,7 +65,10 @@ async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries),
     work: await suite.db.select().from(attendanceDays),
-    questions: await suite.db.select().from(attendanceQuestions),
+    questions: await suite.db
+      .select({ ...getTableColumns(attendanceQuestions), businessDay: attendanceDays.businessDay })
+      .from(attendanceQuestions)
+      .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId)),
   };
 }
 async function pass() {

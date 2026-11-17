@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
@@ -319,6 +320,11 @@ it("own automatic acknowledgement preserves counted hours and appends worker att
       at: "2026-01-06T17:00:00Z",
       openEntryId: openId,
     });
+    await seedAttendanceDay(tx, {
+      businessDay: "2026-01-06",
+      startAt: "2026-01-06T04:00:00Z",
+      endAt: "2026-01-07T04:00:00Z",
+    });
     questionId = await upsertAttendanceQuestion(
       tx,
       {
@@ -453,6 +459,11 @@ it("another worker's actual target, question and proposal confer no own authorit
       reason: "Check departure",
       actorPersonId: owner,
       origin: jobOrigin("dashboard"),
+    });
+    await seedAttendanceDay(tx, {
+      businessDay: "2026-01-06",
+      startAt: "2026-01-06T04:00:00Z",
+      endAt: "2026-01-07T04:00:00Z",
     });
     questionId = await upsertAttendanceQuestion(
       tx,

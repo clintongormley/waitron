@@ -124,9 +124,9 @@ describe("the till's clock across a backward step of the box's clock", () => {
 
     instant = new Date("2026-01-06T04:10:00Z");
     await state();
-    expect((await suite.db.select().from(attendanceDays)).map((row) => row.businessDay)).toEqual(
-      ["2026-01-05"],
-    );
+    expect((await suite.db.select().from(attendanceDays)).map((row) => row.businessDay)).toEqual([
+      "2026-01-05",
+    ]);
   });
 
   it("lets the person clock in again after clocking out of an approved later-dated clock-in", async () => {

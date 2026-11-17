@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
@@ -207,10 +208,7 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    receipts: await suite.db
-      .select()
-      .from(attendanceAnswers)
-      .orderBy(attendanceAnswers.id),
+    receipts: await suite.db.select().from(attendanceAnswers).orderBy(attendanceAnswers.id),
   };
 }
 async function refused(action: () => unknown, code: string) {
@@ -989,4 +987,12 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
       sql`update roles set permissions = '["workforce.correct"]' where built_in_key = 'manager'`,
     );
   }
+});
+
+beforeEach(async () => {
+  await seedAttendanceDay(suite.db, {
+    businessDay: "2026-01-05",
+    startAt: "2026-01-05T04:00:00.000Z",
+    endAt: "2026-01-06T04:00:00.000Z",
+  });
 });

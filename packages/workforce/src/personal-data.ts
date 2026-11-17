@@ -9,7 +9,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
 import { attendanceAnswers } from "./schema/attendance-responses.js";
-import { staffActivity, attendanceQuestions } from "./schema/attendance.js";
+import { staffActivity, attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
@@ -113,11 +113,11 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const questionRows = await tx
       .select({
-        businessDay: attendanceQuestions.businessDay,
+        businessDay: attendanceDays.businessDay,
         kind: attendanceQuestions.kind,
         missingKinds: attendanceQuestions.missingKinds,
-        startAt: attendanceQuestions.startAt,
-        endAt: attendanceQuestions.endAt,
+        startAt: attendanceDays.startAt,
+        endAt: attendanceDays.endAt,
         createdAt: attendanceQuestions.createdAt,
         active: attendanceQuestions.active,
         inactiveReason: attendanceQuestions.inactiveReason,
@@ -129,13 +129,14 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         nextAttemptAt: outgoingMail.nextAttemptAt,
       })
       .from(attendanceQuestions)
+      .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
       .leftJoin(
         outgoingMail,
         sql`${outgoingMail.dedupeKey} = 'attendance:' || ${attendanceQuestions.id}`,
       )
       .where(eq(attendanceQuestions.personId, personId))
       .orderBy(
-        asc(attendanceQuestions.businessDay),
+        asc(attendanceDays.businessDay),
         asc(attendanceQuestions.createdAt),
         asc(attendanceQuestions.id),
       );

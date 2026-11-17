@@ -115,11 +115,7 @@ export async function nextAttendanceDay(
         sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or ${attendanceDays.nextDueAt} > ${attendanceDays.endAt})`,
       ),
     )
-    .orderBy(
-      asc(attendanceDays.businessDay),
-      asc(attendanceDays.startAt),
-      asc(attendanceDays.id),
-    )
+    .orderBy(asc(attendanceDays.businessDay), asc(attendanceDays.startAt), asc(attendanceDays.id))
     .limit(1);
   if (work) {
     const bounds = businessDayBounds(clock, work.businessDay);

@@ -26,8 +26,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 let personId: string;
 const now = new Date("2026-01-09T12:00:00Z");
 const next = (at = now) => run((tx) => nextAttendanceDay(tx, { now: at }));
-const rows = () =>
-  suite.db.select().from(attendanceDays).orderBy(asc(attendanceDays.businessDay));
+const rows = () => suite.db.select().from(attendanceDays).orderBy(asc(attendanceDays.businessDay));
 const activity = (at: string) => run((tx) => recordStaffActivity(tx, personId, new Date(at)));
 async function evaluate() {
   for (const work of await rows())

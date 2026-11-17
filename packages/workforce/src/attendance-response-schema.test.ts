@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, withTransaction } from "@waitron/db";
@@ -5,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { readAttendanceCommand } from "./attendance-response-commands.js";
 import { attendanceQuestions } from "./schema/attendance.js";
 
 const suite = useVenueDb({
@@ -20,9 +22,11 @@ beforeEach(async () => {
     .insert(attendanceQuestions)
     .values({
       personId,
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T04:00:00.000Z",
-      endAt: "2026-01-06T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-01-05",
+        startAt: "2026-01-05T04:00:00.000Z",
+        endAt: "2026-01-06T04:00:00.000Z",
+      }),
       shiftKey: "rota:one",
       kind: "missing-times",
       missingKinds: ["in", "out"],
@@ -103,18 +107,14 @@ it("refuses another person's question even when every individual id exists", asy
 });
 
 it.each(["unknown", "", "APPROVE"])("refuses unrecognised action %j", async (action) => {
-  await expect(insert(receipt({ action }))).rejects.toThrow(
-    "attendance_answers_action_ck",
-  );
+  await expect(insert(receipt({ action }))).rejects.toThrow("attendance_answers_action_ck");
   expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
 });
 
 it.each(["[]", "{}", '"entry"', "null"])(
   "refuses an empty or non-array result %s",
   async (entries) => {
-    await expect(insert(receipt({ entries }))).rejects.toThrow(
-      "attendance_answers_entries_ck",
-    );
+    await expect(insert(receipt({ entries }))).rejects.toThrow("attendance_answers_entries_ck");
     expect(suite.db.execute(sql`select * from attendance_answers`).rows).toEqual([]);
   },
 );
@@ -123,7 +123,23 @@ it("accepts a manager command with no question and keeps the exact command id un
   const r = receipt({ question: null, action: "propose", requester: manager, authorizer: manager });
   await insert(r);
   await expect(insert(r)).rejects.toThrow("UNIQUE constraint failed");
-  expect(
-    suite.db.execute(sql`select id, question_id from attendance_answers`).rows,
-  ).toEqual([{ id: r.id, question_id: null }]);
+  expect(suite.db.execute(sql`select id, question_id from attendance_answers`).rows).toEqual([
+    { id: r.id, question_id: null },
+  ]);
 });
+
+it.each(["update attendance_answers set action = 'approve'", "delete from attendance_answers"])(
+  "refuses changing an answer: %s",
+  async (statement) => {
+    const saved = receipt();
+    await insert(saved);
+    await expect(
+      withTransaction(suite.db, async (tx) => tx.execute(sql.raw(statement))),
+    ).rejects.toThrow("attendance_answers is append-only");
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readAttendanceCommand(tx, { commandId: saved.id, requestedByPersonId: personId }),
+      ),
+    ).toEqual({ commandId: saved.id, entryIds: ["entry-in", "entry-out"], replayed: true });
+  },
+);
