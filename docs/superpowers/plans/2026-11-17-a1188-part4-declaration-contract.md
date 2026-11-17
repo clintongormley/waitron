@@ -4,7 +4,7 @@ When the venue's box has died, a staff member must be able to declare the emerge
 
 **Ask:** "when the venue's box has died, the venue can be started in Waitron Cloud (emergency start)." Recorded in Lane J `queue.md`, A1188, and the [design](../specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 **Clearance:** WATCHER, Lane J `questions.md`, 2026-11-17 21:52: "Yes: draft the Waitron side of the part 4 declaration-confirmation contract (design §11, §9 item 8) as a short proposal with examples, publish it to lane G in its questions.md as you did for the purpose-key input, and settle it together; no executable activation plan until G agrees. Shipped locked page and fiscal gates unchanged."
-The watcher cleared drafting and publication to Lane G; Claude reviews the proposal before that handoff. Neither G's agreement nor owner approval of these proposed values is claimed.
+Claude's initial read took 250 seconds. WATCHER 22:10 cleared the correction: "one confirmed answer, no mail-provider gate, no redundant fields; Waitron owns actor freshness" and publication to G, including G qualifying source access/write withdrawal (Lane J `questions.md`, 17 November). Neither G's agreement nor owner approval of these proposed values is claimed.
 
 ## One stored declaration, one Cloud command
 
