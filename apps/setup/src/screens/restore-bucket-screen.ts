@@ -81,6 +81,8 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private venueConfirmed = false;
   @state() private previewVenue?: RestoredVenue;
   @state() private attempted = false;
+  /** Restore was pressed with no Review backup matching the copy on screen. */
+  @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
@@ -267,7 +269,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });
-    if (credentials === null) return;
+    if (!credentials) return;
     dispatchBucketRestoreRequested(this, {
       ...credentials,
       kit: this.kit,
@@ -351,6 +353,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       ...(fieldsInvalid || refused !== undefined || this.previewField !== undefined
         ? [t("restore_bucket.fix_fields")]
         : []),
+      ...(this.reviewNeeded ? [t("restore.review_first")] : []),
     ].join(" ");
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
@@ -440,9 +443,14 @@ export class SetupRestoreBucketScreen extends LitElement {
         },
       })}
       <setup-recovery-copy
+        @recovery-review-needed=${(event: Event) => {
+          event.stopPropagation();
+          this.reviewNeeded = true;
+        }}
         @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
           event.stopPropagation();
           const preview = event.detail.preview;
+          if (preview !== undefined) this.reviewNeeded = false;
           if (preview === undefined && this.previewVenue === undefined) return;
           this.previewVenue =
             preview === undefined
@@ -498,7 +506,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="restore"
-          ?disabled=${fieldsInvalid}
+          ?disabled=${fieldsInvalid || this.reviewNeeded}
           @click=${() => this.#restore()}
           >${t("restore_bucket.submit")}</wt-button
         >

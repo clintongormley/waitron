@@ -9,7 +9,12 @@ import {
 import { SetupApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { WtFileInput } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import {
@@ -43,6 +48,12 @@ function requested(host: HTMLElement): Promise<BucketRestoreRequestDetail> {
       resolve((event as CustomEvent<{ request: BucketRestoreRequestDetail }>).detail.request),
     ),
   );
+}
+/** Presses Review backup, enters its recovery details and confirms the business it names. */
+async function reviewed(el: SetupRestoreBucketScreen): Promise<void> {
+  await reviewBackup(el);
+  tick(el, "[data-test=venue-confirmed]");
+  await el.updateComplete;
 }
 /** The one message `wt-form-actions` shows above Restore; "" when there is none. */
 async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
@@ -156,6 +167,24 @@ describe("SetupRestoreBucketScreen", () => {
     );
   });
 
+  it("sends nothing and asks for Review backup first", async () => {
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    const listener = vi.fn();
+    host.addEventListener("bucket-restore-requested", listener);
+    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    tick(el, "[data-test=acknowledge]");
+    await el.updateComplete;
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+  });
+
   it("says the kit is as sensitive as the recovery key", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
     expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
@@ -174,12 +203,14 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toEqual({
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "production",
       oldBoxGone: false,
-      venueConfirmed: null,
+      venueConfirmed: "89890001K",
+      ...REVIEWED_CREDENTIALS,
     });
   });
 
@@ -261,6 +292,7 @@ describe("SetupRestoreBucketScreen", () => {
     await chooseOption(environment!, "preproduction");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
   });
@@ -275,6 +307,7 @@ describe("SetupRestoreBucketScreen", () => {
     await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
   });
@@ -292,6 +325,7 @@ describe("SetupRestoreBucketScreen", () => {
     await el.updateComplete;
     const listener = vi.fn();
     host.addEventListener("bucket-restore-requested", listener);
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
@@ -337,6 +371,7 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ kit: BUCKET_CODE });
     expect(fieldMessages(el)).toEqual([]);
@@ -443,6 +478,7 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=old-box-gone]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ oldBoxGone: true });
   });
@@ -507,8 +543,13 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=venue-confirmed]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
-    await expect(outcome).resolves.toEqual({ ...request, venueConfirmed: "89890001K" });
+    await expect(outcome).resolves.toEqual({
+      ...request,
+      ...REVIEWED_CREDENTIALS,
+      venueConfirmed: "89890001K",
+    });
   });
 
   // The server checked the old server and named the copy for the kit it was sent. A different kit is
@@ -542,12 +583,14 @@ describe("SetupRestoreBucketScreen", () => {
       expect(q(el, "[data-test=live-warning]")).toBeNull();
       expect(q(el, "[data-test=venue]")).toBeNull();
       const outcome = requested(host);
+      await reviewed(el);
       q(el, "[data-test=restore]")!.click();
       await expect(outcome).resolves.toEqual({
         kit: "WAITRON-RECOVERY-KIT-2:second",
         environment: "production",
         oldBoxGone: false,
-        venueConfirmed: null,
+        venueConfirmed: "89890001K",
+        ...REVIEWED_CREDENTIALS,
       });
     },
   );
@@ -667,6 +710,7 @@ describe("SetupRestoreBucketScreen", () => {
         { request: REQUEST, errorMessage: REFUSAL, invalidField: "kit" },
       );
       const sent = requested(host);
+      await reviewed(el);
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
       expect((await sent).kit).toBe(REQUEST.kit);

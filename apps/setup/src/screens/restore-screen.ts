@@ -18,7 +18,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
-import { SetupApi } from "../api/client.js";
+import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 
@@ -62,6 +62,8 @@ export class SetupRestoreScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private attempted = false;
+  /** Restore was pressed with no Review backup matching the copy on screen. */
+  @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
@@ -209,7 +211,7 @@ export class SetupRestoreScreen extends LitElement {
       recoveryKey: this.recoveryKey,
       environment: this.environment,
     });
-    if (credentials === null) return;
+    if (!credentials) return;
     dispatchRestoreRequested(this, {
       ...credentials,
       artifact,
@@ -240,6 +242,7 @@ export class SetupRestoreScreen extends LitElement {
       ...(fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
         ? [t("restore.fix_fields")]
         : []),
+      ...(this.reviewNeeded ? [t("restore.review_first")] : []),
     ].join(" ");
     return html`
       <h1>${t("restore.heading")}</h1>
@@ -331,6 +334,14 @@ export class SetupRestoreScreen extends LitElement {
         >
       </wt-combobox>
       <setup-recovery-copy
+        @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
+          event.stopPropagation();
+          if (event.detail.preview !== undefined) this.reviewNeeded = false;
+        }}
+        @recovery-review-needed=${(event: Event) => {
+          event.stopPropagation();
+          this.reviewNeeded = true;
+        }}
         .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
@@ -390,7 +401,7 @@ export class SetupRestoreScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="restore"
-          ?disabled=${fieldsInvalid}
+          ?disabled=${fieldsInvalid || this.reviewNeeded}
           @click=${() => this.#restore()}
           >${t("restore.submit")}</wt-button
         >

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./cloud-restore-screen.js";
 import { oldBoxProblem } from "./old-box-question.js";
@@ -100,14 +105,33 @@ describe("Cloud restore screen", () => {
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event("change"));
     await el.updateComplete;
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls[0]?.[0].detail).toEqual({
       action: "restore",
+      ...REVIEWED_CREDENTIALS,
       pointId: el.view.point!.id,
       oldBoxGone: false,
     });
     expect(q(el, "[data-test=live-warning]")).toBeNull();
     expect(q(el, "time[datetime='2026-09-24T10:00:00.000Z']")).not.toBeNull();
+  });
+  it("sends nothing and asks for Review backup first", async () => {
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
+      "setup-cloud-restore-screen",
+      {},
+    );
+    el.view = approvedView();
+    await el.updateComplete;
+    await tick(el, "[data-test=acknowledge]");
+    const listener = vi.fn();
+    host.addEventListener("cloud-restore-action", listener);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
   });
   it("offers a new request only when the displayed request has expired", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
@@ -291,9 +315,15 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
     await tick(el, "[data-test=old-box-gone]");
     expect(q(el, "#old-box-gone-error")).toBeNull();
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls.map(([event]) => event.detail)).toEqual([
-      { action: "restore", pointId: el.view!.point!.id, oldBoxGone: true },
+      {
+        action: "restore",
+        ...REVIEWED_CREDENTIALS,
+        pointId: el.view!.point!.id,
+        oldBoxGone: true,
+      },
     ]);
   });
 
@@ -311,6 +341,7 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(q(el, "#old-box-gone-error")).toBeNull();
     await tick(el, "[data-test=acknowledge]");
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls[0]?.[0].detail.oldBoxGone).toBe(true);
   });

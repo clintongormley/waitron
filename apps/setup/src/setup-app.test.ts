@@ -22,6 +22,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
+import { REVIEWED_CREDENTIALS, reviewBackup } from "./widgets/test-helpers.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -1209,11 +1210,12 @@ describe("setup-app", () => {
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event("change"));
     await screen.updateComplete;
+    await reviewBackup(screen);
     const restore = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!;
     restore.click();
     restore.click();
     expect(restoreFromCloud).toHaveBeenCalledTimes(1);
-    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false, REVIEWED_CREDENTIALS);
     finishRestore({ restoreStaged: true, restarting: true });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
@@ -5169,6 +5171,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
           original.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${name}]`)!,
         );
       }
+      await reviewBackup(original);
       await userEvent.click(
         original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
       );
@@ -5189,6 +5192,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
           returned.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${name}]`)!.checked,
         ).toBe(true);
       }
+      await reviewBackup(returned);
       await userEvent.click(
         returned.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
       );
@@ -5197,8 +5201,8 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       );
       expect(restoreFromCloud.mock.calls).toEqual([
         [pointId, false],
-        [pointId, true],
-        [pointId, true],
+        [pointId, true, REVIEWED_CREDENTIALS],
+        [pointId, true, REVIEWED_CREDENTIALS],
       ]);
     },
   );
@@ -5219,6 +5223,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       await userEvent.click(
         original.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!,
       );
+      await reviewBackup(original);
       await userEvent.click(
         original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
       );
@@ -5268,6 +5273,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       await userEvent.click(
         original.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!,
       );
+      await reviewBackup(original);
       await userEvent.click(
         original.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!,
       );
@@ -5493,9 +5499,10 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       await screen.updateComplete;
     }
     expect(screen.shadowRoot!.querySelector("#old-box-gone-error")).toBeNull();
+    await reviewBackup(screen);
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
     await flush(el);
-    expect(restoreFromCloud).toHaveBeenLastCalledWith(pointId, true);
+    expect(restoreFromCloud).toHaveBeenLastCalledWith(pointId, true, REVIEWED_CREDENTIALS);
     screen = await cloudScreen(el);
     expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(sentence);
     expect(

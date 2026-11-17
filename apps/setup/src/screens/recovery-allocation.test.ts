@@ -77,7 +77,7 @@ async function fill(entry: Entry, record = operation) {
 
 it("pairs the public recovery record with the selected copy's separate node key", async () => {
   const { entry } = await selected();
-  expect(entry.readCredentials()).toBeUndefined();
+  expect(entry.readCredentials()).toBeNull();
   await fill(entry);
   expect(entry.readCredentials()).toEqual({
     recoveryOperation: operation,
@@ -167,7 +167,7 @@ it("clears the key and public record when leaving or changing the selected copy"
   change(el, "recovery-key", "different-archive-key");
   await el.updateComplete;
   await vi.waitFor(() => expect(entry.isConnected).toBe(false));
-  expect(entry.readCredentials()).toBeUndefined();
+  expect(entry.readCredentials()).toBeNull();
   host.remove();
 });
 

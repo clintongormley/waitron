@@ -281,13 +281,8 @@ export class SetupRecoveryAllocation extends LitElement {
       return;
     }
   }
-  readCredentials(): RecoveryRestoreCredentials | undefined | null {
+  readCredentials(): RecoveryRestoreCredentials | null {
     if (this.#recoveryEntry) return this.#recoveryEntry.readCredentials();
-    if (
-      !this.preview?.fiscalSelection &&
-      Object.entries(this.draft).every(([, value]) => value === "" || value === false)
-    )
-      return;
     this.attempted = true;
     this.refusalDismissed = true;
     this.#notify();

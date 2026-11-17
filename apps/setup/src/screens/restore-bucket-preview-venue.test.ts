@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, reviewBackup } from "../widgets/test-helpers.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 
 const preview: RecoveryBackupPreview = {
@@ -57,6 +57,7 @@ it("confirms the reviewed bucket business before the first restore request", asy
     requests.push((event as CustomEvent<{ request: BucketRestoreRequestDetail }>).detail.request);
   });
   check(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!);
+  await reviewBackup(el, preview);
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
   await el.updateComplete;
   expect(requests).toEqual([]);

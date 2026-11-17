@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
-import type { CloudRecoveryView } from "../api/client.js";
+import type { CloudRecoveryView, RecoveryBackupPreview } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
 import { localTime, t } from "../i18n/t.js";
@@ -58,6 +58,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private attempted = false;
+  /** Restore was pressed with no Review backup matching the copy on screen. */
+  @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   /** The owner pressed an action after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
@@ -97,6 +99,7 @@ export class SetupCloudRestoreScreen extends LitElement {
       this.acknowledged = confirmation?.acknowledged ?? false;
       this.oldBoxGone = confirmation?.oldBoxGone ?? false;
       this.attempted = false;
+      this.reviewNeeded = false;
       this.refusalDismissed = false;
       this.fieldRefusalDismissed = false;
       this.#approvalBinding = binding;
@@ -163,7 +166,7 @@ export class SetupCloudRestoreScreen extends LitElement {
             { cloudPointId: this.view?.point?.id, selectionId: this.#currentApprovalBinding() },
           )
         : undefined;
-    if (credentials === null) return;
+    if (credentials === null || (action === "restore" && credentials === undefined)) return;
     this.refusalDismissed = true;
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", {
@@ -193,6 +196,7 @@ export class SetupCloudRestoreScreen extends LitElement {
         ? [this.errorMessage]
         : []),
       ...(fieldsInvalid || refused !== undefined ? [t("cloud_restore.fix_fields")] : []),
+      ...(approved && this.reviewNeeded ? [t("restore.review_first")] : []),
     ].join(" ");
     return html`
       <h1>${t("cloud_restore.heading")}</h1>
@@ -268,6 +272,16 @@ export class SetupCloudRestoreScreen extends LitElement {
                             event.stopPropagation();
                             this.recoveryInvalid = event.detail.invalid;
                           }}
+                          @recovery-preview=${(
+                            event: CustomEvent<{ preview?: RecoveryBackupPreview }>,
+                          ) => {
+                            event.stopPropagation();
+                            if (event.detail.preview !== undefined) this.reviewNeeded = false;
+                          }}
+                          @recovery-review-needed=${(event: Event) => {
+                            event.stopPropagation();
+                            this.reviewNeeded = true;
+                          }}
                           .api=${this.api}
                           .boxAddress=${this.boxAddress}
                           .cloudPointId=${approved.id}
@@ -315,7 +329,7 @@ export class SetupCloudRestoreScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="restore"
-                ?disabled=${this.busy || fieldsInvalid}
+                ?disabled=${this.busy || fieldsInvalid || this.reviewNeeded}
                 @click=${() => this.#action("restore")}
                 >${t("cloud_restore.restore")}</wt-button
               >`

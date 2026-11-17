@@ -303,6 +303,7 @@ export class SetupRecoveryCopy extends LitElement {
     }
   }
 
+  /** Null when refused; with no Review backup matching the copy on screen, also sends `recovery-review-needed`. */
   readCredentials(
     selection: Partial<
       Pick<
@@ -316,19 +317,23 @@ export class SetupRecoveryCopy extends LitElement {
         | "oldBoxGone"
       >
     > = {},
-  ): RecoveryRestoreCredentials | undefined | null {
-    const credentials = this.shadowRoot
-      ?.querySelector<SetupRecoveryAllocation>("setup-recovery-allocation")
-      ?.readCredentials();
-    if (credentials === undefined) return;
+  ): RecoveryRestoreCredentials | null {
+    const allocation = this.shadowRoot?.querySelector<SetupRecoveryAllocation>(
+      "setup-recovery-allocation",
+    );
     if (
+      !allocation ||
       !this.#previewCurrent?.() ||
       Object.entries(selection).some(
         ([key, value]) => this[key as keyof typeof selection] !== value,
       )
-    )
+    ) {
+      this.dispatchEvent(
+        new CustomEvent("recovery-review-needed", { bubbles: true, composed: true }),
+      );
       return null;
-    return credentials;
+    }
+    return allocation.readCredentials();
   }
 
   override render() {

@@ -83,3 +83,84 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
+
+/** What Review backup answers in `reviewBackup`, and the recovery details it then enters. */
+export const REVIEWED_PREVIEW = {
+  sourceId: "reviewed-copy",
+  createdAt: "2026-10-01T08:00:00.000Z",
+  environment: "production",
+  nodeId: "00000000-0000-4000-8000-000000000001",
+  nodeRecoveryKeyName: "Amber Hill",
+  taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
+  venueName: "Saved venue",
+} as const;
+export const REVIEWED_CREDENTIALS = {
+  recoveryOperation: {
+    binding: {
+      module: "fiscal-verifactu",
+      action: "restore",
+      eventId: "reviewed-event",
+      sourceId: REVIEWED_PREVIEW.sourceId,
+      targetNodeId: REVIEWED_PREVIEW.nodeId,
+    },
+    input: { allocation: { receipt: "public-signed-reservation" } },
+  },
+  nodeRecoverySecret: "reviewed-node-key",
+};
+
+type Updating = HTMLElement & { updateComplete: Promise<unknown> };
+
+/**
+ * Presses the restore screen's Review backup, then enters the recovery details it asks for, so a
+ * later Restore sends `REVIEWED_CREDENTIALS`. The screen's own fields must already let Review run.
+ * Review is answered with `preview` by replacing the preview reads on the screen's `api`; its other
+ * requests are left alone. The record entered names `preview`'s copy and node.
+ */
+export async function reviewBackup(
+  screen: HTMLElement,
+  preview: { sourceId: string; nodeId: string } = REVIEWED_PREVIEW,
+): Promise<void> {
+  const copy = () => screen.shadowRoot!.querySelector<Updating>("setup-recovery-copy")!;
+  const answer = async () => structuredClone(preview);
+  Object.assign((copy() as Updating & { api: object }).api, {
+    previewRestore: answer,
+    previewBucketRestore: answer,
+    previewCloudRestore: answer,
+  });
+  await copy().updateComplete;
+  const answered = new Promise<void>((resolve) => {
+    const seen = (event: Event) => {
+      if (!(event as CustomEvent<{ preview?: unknown }>).detail.preview) return;
+      copy().removeEventListener("recovery-preview", seen);
+      resolve();
+    };
+    copy().addEventListener("recovery-preview", seen);
+  });
+  copy().shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+  await answered;
+  await copy().updateComplete;
+  const entry = copy().shadowRoot!.querySelector<Updating>("setup-recovery-allocation")!;
+  await entry.updateComplete;
+  const change = (field: string, value: string) =>
+    entry
+      .shadowRoot!.querySelector(`[data-test=${field}]`)!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  const tick = (field: string) => {
+    const input = entry.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${field}]`)!;
+    input.checked = true;
+    input.dispatchEvent(new Event("change"));
+  };
+  const { binding, input } = REVIEWED_CREDENTIALS.recoveryOperation;
+  change(
+    "record",
+    JSON.stringify({
+      binding: { ...binding, sourceId: preview.sourceId, targetNodeId: preview.nodeId },
+      input,
+    }),
+  );
+  change("node-key", REVIEWED_CREDENTIALS.nodeRecoverySecret);
+  tick("isolated");
+  tick("retained");
+  await entry.updateComplete;
+  await (screen as Updating).updateComplete;
+}

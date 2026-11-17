@@ -63,6 +63,8 @@ export const restoreEn = {
     "Check every other server this restaurant still has before restoring. A backup may be older than a server that is still running.",
   "restore.acknowledge_missing": "Confirm that no other running server has newer data.",
   "restore.fix_fields": "Correct the highlighted fields to continue.",
+  "restore.review_first":
+    "Press Review backup and enter the recovery details it asks for before you restore.",
   "restore.check.backup_file": "Check the backup file.",
   "restore.check.recovery_key": "Check the recovery key.",
   "restore.check.environment": "Check the backup environment.",
@@ -257,6 +259,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.acknowledge_missing":
     "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
   "restore.fix_fields": "Corrige los campos marcados para continuar.",
+  "restore.review_first":
+    "Pulsa Revisar copia e introduce los datos de recuperación que pide antes de restaurar.",
   "restore.check.backup_file": "Revisa el archivo de copia de seguridad.",
   "restore.check.recovery_key": "Revisa la clave de recuperación.",
   "restore.check.environment": "Revisa el entorno de la copia.",
