@@ -7,39 +7,44 @@ sets this behavior. Its recorded owner decisions cover part 1. The watcher decid
 needs an owner decision before the build.
 
 1. **Pair clock entries.** In `packages/workforce/src/effective-entries.ts`, order each person's
-   direct entries by the original entry's node and `sequenceNo`. Retimes keep that position and
-   supply their effective time and offset. Merge the next available entry from each node and the
-   time-sorted stream of missing-entry corrections with `compareEvents`. Comparing next entries
-   preserves chain order even when the dates go backward. In `projection.ts`, keep the existing
-   session walk and use its paired entries for membership. Keep both times, count zero minutes
-   for a reversed session and give a reversed break zero duration. In `projection.test.ts`, first
-   show the missing session on the old code, then prove zero minutes, original times, a retime
-   occupying its original position, and the time merge across nodes and missing entries. The old
-   out-of-order-arrivals case changes to feed rows out of order while keeping chain positions
-   intact. Record the changed check in the PR.
-2. **Use that order where the record is read or corrected.** `corrections.ts` validates a proposed
-   change in the same order as the projection. Retain the existing checks for invalid entry
-   sequences and missing pairs. `hours-reads.ts`, `end-of-day.ts`, `automatic-entries.ts`, and
-   `staff-activity.ts` use pairing order for clock state and interval membership, and keep event
-   times for elapsed time and comparisons to activity and roster times. In `record-period.ts`,
-   include the paired entries and their correction history when the session's start belongs to the
-   requested period, even if the clock-out is dated in the previous period. Reuse that membership
-   where `packages/workforce-es/src/registro-jornada.ts` filters the export's history again. Keep
-   `record-reads.ts`'s indexed live clock-state read and its existing controls. Add failing cases
-   first in `corrections.test.ts` (retime an unrelated entry, then repair the reversed shift),
-   `end-of-day.test.ts` (the recorded out prevents an automatic close), and `record-reads.test.ts`
-   (both endpoints of a reversed session across a period boundary). Use `hours-reads.test.ts`,
-   `automatic-entries.test.ts`, `staff-activity.test.ts`, and `registro-jornada.test.ts` to check
-   their distinct results. Run existing correction-group, clocking-step and frozen-record tests.
-3. **Show the warning.** In `apps/dashboard/src/widgets/hours-record.ts`, derive the label from
-   the two UTC times already in the session. Add the English and Spanish strings in
-   `apps/dashboard/src/i18n/strings.ts` and name the existing correction action in the English
-   and Spanish Hours guides. In `hours-record.test.ts`, assert that both times and the warning
-   render for a reversed session and that an ordinary session has no warning. Check both languages
-   and themes at phone and desktop widths. Delete A1268 part 2 from `docs/backlog.md` and
-   `docs/backlog/box.md` once the behavior is verified.
+   direct entries by chain position on each node. Retimes use the original position and effective
+   time. Give a missing-entry correction its place after the last earlier-written entry at or
+   before its effective time on its node, with the next direct write as its upper limit. This
+   lets a later direct clock-out close a missing clock-in dated ahead of it, as the live read does.
+   Merge node streams by their next entry's event time with the existing tie-break. In
+   `projection.ts`, keep the session walk and have it return the paired start, end and member
+   entry IDs internally beside the session. Count zero minutes for reversed endpoints and clamp
+   reversed break durations at zero. In `projection.test.ts`, test both stored times and zero
+   minutes, retiming in the original position, the cross-node merge and both missing-correction
+   cases from review. Change the old ingest-order check to shuffled reads with intact chain
+   positions. Record that check in the PR and add a dated note to the July workforce design about
+   the online clock path and its deferred offline-ingest rule.
+2. **Use the pairs in reads and corrections.** In `corrections.ts`, validate the proposed effective
+   sequence using the position the approval would occupy. Keep invalid-sequence checks and the
+   refusal when a retime would reverse a previously valid session. `hours-reads.ts`, `end-of-day.ts`,
+   `automatic-entries.ts` and `staff-activity.ts` use pairing order for clock state. Comparisons to
+   roster and activity times still use the recorded times. A reversed interval claims no timed
+   activity. `record-projection.ts` passes internal membership to `record-period.ts`, so a shift's
+   period includes both endpoints, breaks and associated history. An endpoint also appears in its
+   own dated period. `automatic-entries.ts` and `pay-period-close.ts` identify the closing entry by
+   ID. `record-reads.ts` keeps the indexed live clock-state read. The prepared export passes the
+   already-scoped current and frozen history from `packages/workforce-es/src/record-export.ts` to
+   `registro-jornada.ts`. Session and hash formats stay as they are. A frozen comparison can show
+   a genuine difference when a historical live session was previously lost.
+   Start with failing cases in `corrections.test.ts` (another retime succeeds, and the reversed
+   shift can be repaired), `end-of-day.test.ts` (a recorded out prevents another close), and
+   `record-reads.test.ts` (both endpoints across a period boundary). Check displayed open state,
+   automatic-close attribution and overnight activity in their sibling tests. Check frozen period
+   membership and impact in `record-closures.test.ts`, and prepared export history in its existing
+   tests. Run the existing clocking-step, correction-group and planned-versus-actual controls.
+3. **Show the warning.** In `apps/dashboard/src/widgets/hours-record.ts`, show the localized label
+   only when the UTC end strictly precedes the UTC start. Use `apps/dashboard/src/i18n/strings.ts`
+   and point to the existing correction action in `apps/server/src/guide/{en,es}/staff.md#hours`.
+   In `hours-record.test.ts`, check both written times and the warning, with no warning for an
+   ordinary session. Check both languages and themes at phone and desktop widths. Remove the
+   completed entry from `docs/backlog.md` and `docs/backlog/box.md` after verification.
 
-The stored rows, indexes, clock actions, append-only hashes, frozen snapshots, and export format
-stay as they are. Period-read cost belongs to A10. Estimate 250–330 production lines and 180–280
-test lines. Run the changed test files in their packages, then the normal push hook and current
-PR CI. The workforce-to-dashboard and export callers are part of the whole-branch review.
+The warning covers reversed session endpoints on the dashboard. Partial clock steps, reversed
+break warnings, till and export labels, schema changes, and period-read performance are outside
+this slice. Estimate 260–375 production lines and 200–290 test lines. Run the changed test files,
+the normal push hook and current PR CI. Include workforce, dashboard and export in branch review.
