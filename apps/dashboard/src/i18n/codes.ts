@@ -138,6 +138,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Extras cannot be moved separately",
     es: "Los extras no se pueden pasar por separado",
   },
+  "cloud.owner_recovery_admin_required": {
+    en: "A box administrator must sign in to load or decide a recovery request.",
+    es: "Debe iniciar sesión un administrador del equipo para cargar o decidir una solicitud de recuperación.",
+  },
+  "cloud.owner_recovery_not_available": {
+    en: "Owner recovery is not available in Cloud yet. Load requests again later.",
+    es: "La recuperación de propietarios aún no está disponible en Cloud. Vuelve a cargar las solicitudes más tarde.",
+  },
   "cloud.unavailable": {
     en: "Waitron could not reach Cloud or verify its reply. Try again.",
     es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",

@@ -274,6 +274,16 @@ Cloud services stay in place. Choose **Turn on remote access** to let the box re
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate permanent stop for all Cloud services.
 
+## Approve Cloud owner recovery {#cloud-owner-recovery}
+
+If you are recovering a Cloud owner account, verify your email on Cloud’s recovery page first.
+At the venue, open **System → Cloud services** on the paired main box and choose **Load recovery requests**.
+A box administrator must be signed in; use **Sign in as administrator** if asked.
+
+Check the email, account, organisation and venue ID. **Approve recovery** lets you finish on the same
+recovery page in Cloud and set up sign-in again. **Refuse recovery** ends that request permanently.
+**Cancel** sends no decision. After approval is recorded, return to the same Cloud recovery page to finish.
+
 ## Check emergency start in Cloud {#cloud-emergency}
 
 Open **System → Cloud services** on the main box to check **Emergency start in Cloud**.

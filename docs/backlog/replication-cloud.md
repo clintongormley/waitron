@@ -1019,9 +1019,8 @@ with `ignoreHTTPSErrors: false`; it did not install an authority in the operatin
 
 ## Loose ends left by the Cloud connection integration
 
-- Paired-box Cloud owner recovery needs the dashboard panel in the
-  [reviewed plan](../superpowers/plans/2026-11-17-box-owner-recovery.md), followed by Cloud's
-  package adoption and joint qualification. Guarded server routes alone do not enable recovery.
+- Paired-box Cloud owner recovery still needs Cloud adoption and joint qualification of the box half in the
+  [reviewed plan](../superpowers/plans/2026-11-17-box-owner-recovery.md). The box panel and guarded routes alone do not enable recovery.
 - Customer remote setup UI and production deployment remain open.
 - Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
   shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly
