@@ -357,7 +357,9 @@ the value itself, since an operator's mistyped input could be a secret pasted in
 
 Preproduction fiscal submission is off by default. A dedicated integration target can set
 `WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`; a Demo or Prepare installation still refuses to drain even
-with that switch present. Production always runs the fiscal drain.
+with that switch present. Production always runs the fiscal drain. On a Demo or Prepare box, or a
+preproduction box without that switch, the dashboard leaves out the records-waiting alert
+(`fiscal.submission_delayed`); the stopped, filing-case and repeated-refusal alerts still show.
 
 Demo and Prepare use the local card simulator by default. To exercise the configured Stripe test
 provider on a Prepare node, set `WAITRON_PAYMENT_TEST_PROVIDERS=enabled` and provision a Stripe test

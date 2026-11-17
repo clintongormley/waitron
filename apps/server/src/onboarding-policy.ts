@@ -1,4 +1,5 @@
 import { emptyDrainResult, type DrainResult, type FiscalCertificateSeat } from "@waitron/fiscal";
+import type { AlertSource } from "@waitron/module";
 import type { DeploymentEnvironment } from "./config.js";
 import type { OnboardingIntent } from "./trading-config.js";
 
@@ -26,6 +27,17 @@ export function certificateDutiesEnabled<
   policy: FiscalDrainPolicy,
 ): fiscal is F & { readonly certificate: FiscalCertificateSeat } {
   return fiscal.certificate !== undefined && fiscalDrainEnabled(policy);
+}
+
+/** Leaves out every `filingOnly` source on a box whose policy does not send fiscal records
+ * (`fiscalDrainEnabled`): its records are not sent while that policy holds, so a "delayed" alert
+ * could not clear. */
+export function alertSourcesFor(
+  sources: readonly AlertSource[],
+  policy: FiscalDrainPolicy,
+): readonly AlertSource[] {
+  if (fiscalDrainEnabled(policy)) return sources;
+  return sources.filter((source) => !source.filingOnly);
 }
 
 /** Apply the submission policy before the regime can construct a client or contact its endpoint. */

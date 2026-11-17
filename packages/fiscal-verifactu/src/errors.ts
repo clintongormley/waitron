@@ -358,8 +358,8 @@ declare module "@waitron/shared" {
     "fiscal.submission_delayed": { count: number; hours: number };
 
     /**
-     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`).
-     * Never thrown.
+     * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records have stopped
+     * submitting (`envios.estado = detenido`).
      */
     "fiscal.submission_stopped": { count: number };
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
+import type { AlertSource } from "@waitron/module";
 import {
+  alertSourcesFor,
   certificateDutiesEnabled,
   fiscalDrainEnabled,
   runFiscalDrain,
@@ -116,5 +118,63 @@ describe("certificateDutiesEnabled", () => {
 
   it("is on when the seat exists and records are filed", () => {
     expect(certificateDutiesEnabled({ certificate: seat }, filing)).toBe(true);
+  });
+});
+
+describe("alertSourcesFor", () => {
+  const filingOnlyRead = vi.fn(async () => []);
+  const filingOnlySource: AlertSource = {
+    area: "fiscal",
+    permission: "fiscal.view",
+    filingOnly: true,
+    read: filingOnlyRead,
+  };
+  const fiscalSource: AlertSource = {
+    area: "fiscal",
+    permission: "fiscal.view",
+    read: async () => [],
+  };
+  const otherSource: AlertSource = {
+    area: "kitchen",
+    permission: "kitchen.view",
+    read: async () => [],
+  };
+  const ctx = { tx: {} as never, now: new Date("2026-09-09T10:00:00Z") };
+
+  it.each([
+    ["demo", { environment: "production", onboardingIntent: "demo", fiscalTestSubmissions: true }],
+    [
+      "prepare",
+      { environment: "production", onboardingIntent: "prepare", fiscalTestSubmissions: true },
+    ],
+    [
+      "preproduction without test submissions",
+      { environment: "preproduction", onboardingIntent: undefined, fiscalTestSubmissions: false },
+    ],
+  ] as const)(
+    "leaves out a filing-only source, never reading it, and keeps the others on a %s box",
+    async (_, policy) => {
+      filingOnlyRead.mockClear();
+      const kept = alertSourcesFor([filingOnlySource, fiscalSource, otherSource], policy);
+      for (const source of kept) await source.read(ctx);
+      expect(filingOnlyRead).not.toHaveBeenCalled();
+      expect(kept).toHaveLength(2);
+      expect(kept[0]).toBe(fiscalSource);
+      expect(kept[1]).toBe(otherSource);
+    },
+  );
+
+  it.each([
+    [
+      "production",
+      { environment: "production", onboardingIntent: "live", fiscalTestSubmissions: false },
+    ],
+    [
+      "preproduction with test submissions",
+      { environment: "preproduction", onboardingIntent: undefined, fiscalTestSubmissions: true },
+    ],
+  ] as const)("keeps every source on a %s box", (_, policy) => {
+    const sources = [filingOnlySource, fiscalSource, otherSource];
+    expect(alertSourcesFor(sources, policy)).toBe(sources);
   });
 });

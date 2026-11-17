@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { clockUnusableSource } from "./clock-behind-alerts.js";
 import { FISCAL_ALERTS } from "./index.js";
-import { fiscalSubmissionSource } from "./submission-alerts.js";
+import { fiscalSubmissionDelayedSource, fiscalSubmissionSource } from "./submission-alerts.js";
 
-it("claims fiscal. incidents for the fiscal area under fiscal.view, links the reply-mismatch and record-check warnings to Fiscal filing, and claims clock.corrected incidents for the box area under system.manage, and contributes the submission and unusable-clock sources", () => {
+it("claims fiscal. incidents for the fiscal area under fiscal.view, links the reply-mismatch and record-check warnings to Fiscal filing, and claims clock.corrected incidents for the box area under system.manage, and contributes the submission, records-waiting and unusable-clock sources", () => {
   expect(FISCAL_ALERTS).toEqual({
     events: [
       { prefix: "fiscal.", area: "fiscal", permission: "fiscal.view" },
@@ -57,6 +57,12 @@ it("claims fiscal. incidents for the fiscal area under fiscal.view, links the re
       },
       { prefix: "clock.corrected", area: "box", permission: "system.manage" },
     ],
-    sources: [fiscalSubmissionSource, clockUnusableSource],
+    sources: [fiscalSubmissionDelayedSource, fiscalSubmissionSource, clockUnusableSource],
   });
+});
+
+it("marks only the records-waiting source filing-only, so the stopped, filing-case and refusal checks show on every box", () => {
+  expect(fiscalSubmissionDelayedSource.filingOnly).toBe(true);
+  expect(fiscalSubmissionSource.filingOnly).toBeUndefined();
+  expect(clockUnusableSource.filingOnly).toBeUndefined();
 });

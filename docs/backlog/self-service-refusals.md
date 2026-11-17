@@ -398,7 +398,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:258` and `apps/dashboard/src
 
 Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.filing_cases_open`.
 
-State: The query finds open filing cases. They require a decision; elapsed time does not make that decision. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:64`.
+State: The query finds open filing cases. They require a decision; elapsed time does not make that decision. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:75`.
 
 Route: Missing: the supported filing-case decision action; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Keep W41s-8 and A696 dependencies visible instead of directing the owner to support.
 
@@ -415,7 +415,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:262` and `apps/dashboard/src
 
 Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.refusals_repeated`.
 
-State: A chain has a run of same-code refusals and eligible stopped work. A refusal run is not a bug-only state. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:143`.
+State: A chain has a run of same-code refusals and eligible stopped work. A refusal run is not a bug-only state. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:155`.
 
 Route: Existing: eligible stopped work has the hourly probe described by the message. Missing: a decision route if that probe cannot resolve the refusal. Do not promise that waiting always recovers.
 
