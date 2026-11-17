@@ -238,7 +238,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   it("keeps another owner's other-bill draft while the current owner discards fresh dishes", async () => {
     const p = await setup();
     const otherBill = await inTx(venue, (tx) =>
-      seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId: p.partyId }),
+      seedWorkingOrder(tx, { source: "dashboard", partyId: p.partyId }),
     );
     const saved = await call(
       "PUT",

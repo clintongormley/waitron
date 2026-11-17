@@ -173,6 +173,8 @@ The venue-wide numbering itself is not a change here: #2570 already replaced
 
 ## Needs
 
+**2026-11-17:** The owner set A446 aside for the foreseeable future (watcher, 15:12); its historical prerequisite below no longer gates os1.
+
 - **In this area:** nothing. **Outside:** batch 1 landed (1a's rebuild command; slice 5 removed
   `working_orders.location_id` and `venueLocationId`). A446 (the pre-bill) landed first (build
   order, "Work beside A1308"). A739 landed or not started: it adds `order_payment_contexts` with a

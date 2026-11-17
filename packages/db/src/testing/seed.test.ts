@@ -244,6 +244,13 @@ describe("seedWorkingOrder", () => {
     db = suite.db;
   });
 
+  it("defaults to the next free order number after an explicit number", async () => {
+    await seedVenue(db);
+    await seedWorkingOrder(db, { orderNumber: 7 });
+    expect((await seedWorkingOrder(db)).orderNumber).toBe(8);
+    expect((await seedWorkingOrder(db)).orderNumber).toBe(9);
+  });
+
   it("seedWorkingOrder writes an open order at the venue", async () => {
     await seedVenue(db);
     const order = await seedWorkingOrder(db);

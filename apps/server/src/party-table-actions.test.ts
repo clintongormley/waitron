@@ -2784,7 +2784,6 @@ describe("A803 split", () => {
       "print_jobs",
       "bill_number_allocations",
       "bill_identities",
-      "working_order_counters",
       "bill_edit_states",
       "order_service_contexts",
     ];
@@ -3187,7 +3186,6 @@ describe("A803 split", () => {
         "kitchen_notices",
         "bill_number_allocations",
         "bill_identities",
-        "working_order_counters",
         "order_service_contexts",
       ]);
       const firedAt = async (billId: string, lineId: string) =>

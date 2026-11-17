@@ -327,6 +327,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "working_order_counters",
   "shift_assignments",
   "webauthn_challenges",
   "google_oidc_states",

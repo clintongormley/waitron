@@ -389,7 +389,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       billPayments: suite.db.all(sql`select * from bill_payments order by id`),
       fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
-      counters: suite.db.all(sql`select * from working_order_counters order by node_id`),
+      numbers: suite.db.all(
+        sql`select count(*) as count, max(order_number) as maximum from working_orders`,
+      ),
       jobs: suite.db.all(sql`select * from print_jobs order by id`),
       drawers: suite.db.all(sql`select * from drawer_opens order by id`),
       orders: suite.db.all(sql`select * from working_orders order by id`),

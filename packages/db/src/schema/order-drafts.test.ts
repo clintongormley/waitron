@@ -38,7 +38,7 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
   const defaultBills = new Map<string, string>();
   async function bill(partyId: string): Promise<string> {
     return inTx(async (tx) => {
-      const row = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1, partyId });
+      const row = await seedWorkingOrder(tx, { source: "dashboard", partyId });
       return row.id;
     });
   }

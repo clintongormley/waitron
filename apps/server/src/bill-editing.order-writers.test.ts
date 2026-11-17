@@ -34,7 +34,6 @@ async function sibling(p: Awaited<ReturnType<typeof fixture>>) {
   const id = await inTx(venue, async (tx) => {
     const order = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: p.partyId,
     });
     await VENUE_SERVICE.recordOrderContext(tx, order!.id, venue.zoneId);

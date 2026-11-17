@@ -73,7 +73,7 @@ async function party() {
 }
 async function otherBill(partyId: string) {
   return inTx(venue, async (tx) => {
-    const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId });
+    const bill = await seedWorkingOrder(tx, { source: "dashboard", partyId });
     return bill!.id;
   });
 }
@@ -500,7 +500,6 @@ describe("table composition compares every affected bill before moving anything"
     const [closed] = await inTx(venue, async (tx) => [
       await seedWorkingOrder(tx, {
         source: "dashboard",
-        orderNumber: 3,
         partyId: into.partyId,
         status: "abandoned",
       }),

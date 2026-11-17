@@ -183,7 +183,6 @@ export {
 } from "./schema/device-profile-printers.js";
 export { printerHolders } from "./schema/printer-holders.js";
 export { customThemes } from "./schema/custom-themes.js";
-export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,
   saleLines,

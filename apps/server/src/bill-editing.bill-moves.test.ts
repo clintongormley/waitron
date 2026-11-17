@@ -59,7 +59,7 @@ async function party() {
 }
 async function otherBill(partyId: string) {
   return inTx(venue, async (tx) => {
-    const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId });
+    const bill = await seedWorkingOrder(tx, { source: "dashboard", partyId });
     await VENUE_SERVICE.recordOrderContext(tx, bill!.id, venue.zoneId);
     return bill!.id;
   });

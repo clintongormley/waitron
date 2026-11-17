@@ -1576,7 +1576,7 @@ export async function createOpenOrder(
     ...row,
     creditedTo: placement.creditedTo ?? null,
   }));
-  const orderNumber = await allocateOrderNumber(tx, cfg.nodeId);
+  const orderNumber = await allocateOrderNumber(tx);
 
   await tx.insert(workingOrders).values({
     id,

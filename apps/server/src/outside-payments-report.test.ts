@@ -45,7 +45,7 @@ beforeEach(async () => {
 async function payment(
   at: string,
   extra: Partial<typeof payments.$inferInsert> = {},
-  orderNumber = 77,
+  orderNumber?: number,
 ) {
   const order = await seedWorkingOrder(suite.db, {
     source: "device",
@@ -80,10 +80,11 @@ it("lists each manual payment once on its box's business day, with current state
     total: "12.34",
     lines: [{ vatRate: "0.00", lineTotal: "12.34" }],
   });
-  const included = await payment("2026-11-04T03:59:59.999Z", {
-    state: "partially_refunded",
-    saleId,
-  });
+  const included = await payment(
+    "2026-11-04T03:59:59.999Z",
+    { state: "partially_refunded", saleId },
+    77,
+  );
   await suite.db.insert(paymentRefunds).values([
     {
       paymentId: included.id,

@@ -829,10 +829,7 @@ describe("whether a party's service can finish, read without writing", () => {
     );
   }
   async function tipOnEmptySibling(partyId: string) {
-    const billId = await inTx(
-      venue,
-      async (tx) => (await seedWorkingOrder(tx, { orderNumber: 2, partyId })).id,
-    );
+    const billId = await inTx(venue, async (tx) => (await seedWorkingOrder(tx, { partyId })).id);
     const origin = { source: venue.cfg.origin.source, deviceId: venue.cfg.origin.deviceId };
     const [payment] = await inTx(venue, (tx) =>
       tx

@@ -185,7 +185,7 @@ describe("which index a read starts from", () => {
 
   it("Unpaid at any date reads bills through the status index", async () => {
     for (const result of await plan({ status: "unpaid" }))
-      expect(result).toMatch(/working_orders_tenant_status_idx/);
+      expect(result).toMatch(/working_orders_status_idx/);
   });
 
   it("a session without report.view reads unfinished bills and today's finished bills", async () => {

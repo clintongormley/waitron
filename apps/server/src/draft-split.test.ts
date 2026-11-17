@@ -1,6 +1,6 @@
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billEditStates,
@@ -16,7 +16,6 @@ import {
   parties,
   workingOrderLines,
   workingOrders,
-  workingOrderCounters,
   serviceCommands,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -167,7 +166,9 @@ async function withSentFood(
 async function frozen() {
   return {
     bills: await venue.db.select().from(workingOrders).orderBy(workingOrders.id),
-    counters: await venue.db.select().from(workingOrderCounters),
+    numbers: venue.db.all(
+      sql`select count(*) as count, max(order_number) as maximum from working_orders`,
+    ),
     states: await venue.db.select().from(billEditStates).orderBy(billEditStates.billId),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),

@@ -138,14 +138,18 @@ it("an explicit zone wins over the profile starting zone", async () => {
 
 it("with no profile start or counter default, refuses an empty order before allocating its number", async () => {
   await suite.db.update(floorZones).set({ isCounterDefault: false });
-  const before = suite.db.all(sql`select * from working_order_counters order by node_id`);
+  const before = suite.db.all(
+    sql`select count(*) as count, max(order_number) as maximum from working_orders`,
+  );
   const id = randomUUID();
   await expect(
     withTransaction(suite.db, (tx) => createOpenOrder(tx, venue.cfg, id, [], null)),
   ).rejects.toMatchObject({ code: "service_zone.default_missing" });
   expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
   expect(await context(id)).toEqual([]);
-  expect(suite.db.all(sql`select * from working_order_counters order by node_id`)).toEqual(before);
+  expect(
+    suite.db.all(sql`select count(*) as count, max(order_number) as maximum from working_orders`),
+  ).toEqual(before);
 });
 
 it("a split of a damaged counter order refuses instead of creating another order without a zone", async () => {

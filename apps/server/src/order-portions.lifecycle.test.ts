@@ -123,7 +123,6 @@ async function fixture(fire = true) {
     });
     const other = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: seated.partyId,
     });
     await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);
@@ -503,7 +502,6 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
         source: "dashboard",
         status: "open",
         nodeId: venue.cfg.nodeId,
-        orderNumber: 2,
         partyId: seated.partyId,
       });
       await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);

@@ -25,9 +25,7 @@ describe("bill editing state", () => {
   });
 
   async function bill() {
-    return withTransaction(suite.db, (tx) =>
-      seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 }),
-    );
+    return withTransaction(suite.db, (tx) => seedWorkingOrder(tx, { source: "dashboard" }));
   }
 
   const read = (billId: string) =>

@@ -53,9 +53,7 @@ async function own(p: Fixture, personId = venue.adminId) {
 /** A second bill on `p`'s party, numbered in `shownBy`, the party whose list shows it. */
 async function sibling(p: Fixture, shownBy = p.partyId) {
   const [bill] = await inTx(venue, async (tx) => {
-    const rows = [
-      await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId: p.partyId }),
-    ];
+    const rows = [await seedWorkingOrder(tx, { source: "dashboard", partyId: p.partyId })];
     await numberBill(tx, rows[0]!.id, shownBy);
     return rows;
   });

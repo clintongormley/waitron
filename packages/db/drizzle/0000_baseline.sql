@@ -159,7 +159,9 @@ CREATE TABLE `working_orders` (
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
 );
 --> statement-breakpoint
-CREATE INDEX `working_orders_tenant_status_idx` ON `working_orders` (`status`);--> statement-breakpoint
+CREATE UNIQUE INDEX `working_orders_order_number_key` ON `working_orders` (`order_number`);--> statement-breakpoint
+CREATE INDEX `working_orders_uncollected_idx` ON `working_orders` (`id`) WHERE "working_orders"."collected_at" is null and "working_orders"."status" <> 'abandoned';--> statement-breakpoint
+CREATE INDEX `working_orders_status_idx` ON `working_orders` (`status`);--> statement-breakpoint
 CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);--> statement-breakpoint
 CREATE TABLE `order_amendments` (
@@ -1139,12 +1141,6 @@ CREATE TABLE `custom_themes` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_name_key_uq` ON `custom_themes` (`name_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_in_use_uq` ON `custom_themes` (`in_use`);--> statement-breakpoint
-CREATE TABLE `working_order_counters` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`next_number` integer DEFAULT 1 NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `bill_payment_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bill_payment_id` text NOT NULL,
