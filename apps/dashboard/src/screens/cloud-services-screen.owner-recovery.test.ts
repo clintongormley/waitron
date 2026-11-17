@@ -333,6 +333,7 @@ it("closes and removes a request Cloud says is no longer available", async () =>
     .toBe(false);
   expect(f.find("recovery-approve")).toBeNull();
   expect(f.el.shadowRoot!.textContent).toContain(t("cloud.recovery_changed"));
+  expect(f.el.shadowRoot!.textContent).not.toContain(t("cloud.recovery_empty"));
 });
 
 it.each(["load", "decision"] as const)(

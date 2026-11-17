@@ -220,6 +220,7 @@ export class CloudServicesScreen extends LitElement {
           this.recoveryRequests = this.recoveryRequests?.filter(
             (r) => r.requestId !== choice.request.requestId,
           );
+          if (!this.recoveryRequests?.length) this.recoveryRequests = undefined;
         }
       }
     } finally {
