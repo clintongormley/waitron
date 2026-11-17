@@ -56,8 +56,6 @@ export default defineConfig({
         "drizzle.config.ts",
         "drizzle/**",
         "src/testing/**",
-        // A re-export barrel, on which v8 reports phantom uncovered branches.
-        "src/index.ts",
         "src/dashboard/test-helpers.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
