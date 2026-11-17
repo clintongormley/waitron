@@ -1071,6 +1071,19 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect((await pull(app, token)).discoveryExpiresInMs).toBe(180_000);
   });
 
+  it("hands out whole milliseconds left, rounded up, from a fractional steady clock", async () => {
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    const steady = vi.spyOn(performance, "now").mockReturnValue(1_000.5);
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    await send(app, "POST", "/management-api/printer-discovery/start", { cookie: managerCookie });
+    steady.mockReturnValue(1_000.75);
+    // 179_999.75 left.
+    expect((await pull(app, token)).discoveryExpiresInMs).toBe(180_000);
+  });
+
   /** A session of its own, so ageing it cannot expire the shared manager cookie. */
   async function ownManagerSession(
     minutesIdle: number,
