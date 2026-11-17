@@ -8,12 +8,9 @@ their full text.
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
 
-- `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
-  all would pass; the server always sends one.
-- Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null` fallbacks in the printers, payments,
-  kitchen, backup, devices, profile, extra-list and option-list files, and a
-  handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
-  receipt each, or leave them as defensive code by decision.
+- Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null`
+  fallbacks in the printers, payments, backup and device files (including device profiles).
+  **Next action:** delete them with a receipt each, or leave them as defensive code by decision.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
@@ -129,9 +126,8 @@ Left open by the completed A331 batches:
 - a password manager filling the profile's current-password field: the owner tried Chrome's
     password manager on 2026-10-08 and reported that it works well; other password managers are
     untried;
-- other purchases-screen and staff-screen tests still send made-up create and
-    update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`) instead of pressing the form's button; they pass, but never prove the button
-    works.
+- staff-screen tests still send made-up create and update events (`create-person`, `save-person`)
+    instead of pressing the form's button; they pass, but never prove the button works.
 
 ### Hardware forms
 
@@ -208,7 +204,7 @@ than becoming new items.
 
 ## Bundle: Wt dialog lifecycle
 
-- **Dashboard leftovers from the coverage branch**: the login-purpose check and unreachable
+- **Dashboard leftovers from the coverage branch**: the printer, payment, backup and device
   fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
 - **Repeated Escape checks for menu/modifier delete and media save/delete flows remain.**
@@ -273,6 +269,11 @@ Size M.
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+- **Dashboard empty-value fallbacks (D-DASHBOARD-TEST-LOOSE-ENDS, 2026-11-17):** keep the
+  remaining `?? []` and `?? null` in `dashboard-app.ts`, `login-screen.ts`, `extra-list-form.ts`
+  and `option-list-form.ts` as deliberate defensive code, without a claim that every fallback
+  has a test.
 
 - **Password-throttle saturation:** during an address spray, an address sharing a counter with
   sprayed addresses can inherit their failed-password count if it has no cache entry or live

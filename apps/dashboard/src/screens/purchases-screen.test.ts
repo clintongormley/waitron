@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -74,8 +75,7 @@ function emitFromChild(child: Element, type: string, detail: unknown): void {
   child.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-/** Fills the open form with `createDetail()`'s values and presses Create, so the request carries what the form holds. */
-async function createThroughForm(el: PurchasesScreen): Promise<void> {
+async function fillForm(el: PurchasesScreen): Promise<void> {
   const add = form(el);
   const { header, lines } = createDetail();
   const values: Record<string, string> = {
@@ -94,7 +94,33 @@ async function createThroughForm(el: PurchasesScreen): Promise<void> {
       .shadowRoot!.querySelector(`[data-test=${test}]`)!
       .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await add.updateComplete;
-  add.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+}
+
+async function pressSave(el: PurchasesScreen): Promise<void> {
+  const save = form(el).shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
+  await form(el).updateComplete;
+  await userEvent.click(save);
+}
+
+async function createThroughForm(el: PurchasesScreen): Promise<void> {
+  if (!form(el).open) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
+    await el.updateComplete;
+  }
+  await fillForm(el);
+  await pressSave(el);
+}
+
+async function updateThroughForm(el: PurchasesScreen, note: string): Promise<void> {
+  if (!form(el).open) {
+    emitFromChild(list(el)!, "edit-purchase", { id: "pi-1" });
+    await el.updateComplete;
+  }
+  await fillForm(el);
+  form(el)
+    .shadowRoot!.querySelector("[data-test=note]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: note } }));
+  await pressSave(el);
 }
 
 afterEach(cleanupWidgets);
@@ -142,7 +168,7 @@ describe("purchases-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await flush(el);
     expect(api.createPurchaseInvoice).toHaveBeenCalledWith(createDetail());
     expect(form(el).open).toBe(false);
@@ -174,8 +200,8 @@ describe("purchases-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    const patch = { header: { note: "corrected" }, lines: createDetail().lines };
-    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
+    const patch = { ...createDetail(), header: { ...createDetail().header, note: "corrected" } };
+    await updateThroughForm(el, "corrected");
     await flush(el);
     expect(api.updatePurchaseInvoice).toHaveBeenCalledWith("pi-1", patch);
     expect(form(el).open).toBe(false);
@@ -200,7 +226,7 @@ describe("purchases-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
     await el.updateComplete;
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await flush(el);
     expect(form(el).open).toBe(true);
     expect(await bottomOf(form(el))).toBe(codeMessage("server.internal", "es-ES"));
@@ -215,7 +241,7 @@ describe("purchases-screen", () => {
     await flush(el);
     emitFromChild(list(el)!, "edit-purchase", { id: "pi-1" });
     await el.updateComplete;
-    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch: { header: { note: "x" } } });
+    await updateThroughForm(el, "x");
     await flush(el);
     expect(form(el).open).toBe(true);
     expect(await bottomOf(form(el))).toBe(codeMessage("purchase.not_found", "es-ES"));
@@ -259,7 +285,7 @@ describe("purchases-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
     await el.updateComplete;
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await flush(el);
     expect(await bottomOf(form(el))).toBe(t("form.fix_fields"));
     for (const key of ["supplier-tax-id", "supplier-invoice-number"])
@@ -291,7 +317,7 @@ describe("purchases-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
     await el.updateComplete;
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await flush(el);
     expect(api.createPurchaseInvoice).toHaveBeenCalledTimes(1);
     expect(form(el).open).toBe(false);
@@ -324,7 +350,8 @@ describe("purchases-screen", () => {
     const api = stubApi({ createPurchaseInvoice });
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
+    expect(createPurchaseInvoice).toHaveBeenCalledTimes(1);
     emitFromChild(form(el), "create-purchase", createDetail());
     await el.updateComplete;
     expect(createPurchaseInvoice).toHaveBeenCalledTimes(1);
@@ -343,7 +370,7 @@ describe("purchases-screen", () => {
     const api = stubApi({ createPurchaseInvoice });
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await el.updateComplete;
     expect(form(el).busy).toBe(true);
     resolve();
@@ -376,15 +403,28 @@ it("refreshes displayed invoices when their data changes elsewhere", async () =>
 });
 
 describe("purchases-screen — single-flight and dismissal", () => {
-  it("updates at most once when update-purchase fires twice", async () => {
-    const api = stubApi();
+  it("drops a duplicate update event after Save starts the held write", async () => {
+    let resolve!: () => void;
+    const api = stubApi({
+      updatePurchaseInvoice: vi.fn(
+        () =>
+          new Promise<void>((done) => {
+            resolve = done;
+          }),
+      ),
+    });
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    const patch = { header: { note: "corrected" }, lines: createDetail().lines };
-    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
-    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
+    await updateThroughForm(el, "corrected");
+    expect(api.updatePurchaseInvoice).toHaveBeenCalledTimes(1);
+    emitFromChild(form(el), "update-purchase", {
+      id: "pi-1",
+      patch: { ...createDetail(), header: { ...createDetail().header, note: "corrected" } },
+    });
     await flush(el);
     expect(api.updatePurchaseInvoice).toHaveBeenCalledTimes(1);
+    resolve();
+    await flush(el);
   });
 
   it("deletes at most once when delete-purchase fires twice", async () => {
