@@ -242,6 +242,7 @@ simultaneous decisions can choose the same side. The run's own `changes` job cou
 Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
 Inspect the printed age: a fresh read still contains the publisher's last observation. The
 decision routes a whole run. The initial allocation of `changes` still uses its run-creation snapshot.
+An idle server can therefore coexist with hosted work: [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 Routing limits its queued-run lists to runs created in the last 24 hours, using
