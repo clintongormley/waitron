@@ -1,4 +1,7 @@
 import { fileURLToPath } from "node:url";
+import { createServer } from "vite";
+import dashboardDev from "./vite.config.js";
+import tillDev from "../till/vite.config.js";
 import { readFileSync } from "node:fs";
 import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
@@ -40,6 +43,37 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
   await page.emulateMedia({ reducedMotion });
 };
 
+const followDevDeviceLink: BrowserCommand<[href: string]> = async (_context, href) => {
+  const servers = [];
+  const previous = process.env.WAITRON_TILL_VITE_PORT;
+  try {
+    for (const [directory, config] of [
+      ["../till/", tillDev],
+      ["./", dashboardDev],
+    ] as const) {
+      const server = await createServer({
+        ...config,
+        configFile: false,
+        root: fileURLToPath(new URL(directory, import.meta.url)),
+        logLevel: "silent",
+        optimizeDeps: { noDiscovery: true },
+        server: { ...config.server, host: "localhost", port: 0, proxy: {} },
+      });
+      servers.push(server);
+      await server.listen();
+    }
+    const tillOrigin = new URL(servers[0]!.resolvedUrls!.local[0]!).origin;
+    process.env.WAITRON_TILL_VITE_PORT = new URL(tillOrigin).port;
+    const dashboardOrigin = new URL(servers[1]!.resolvedUrls!.local[0]!).origin;
+    const response = await fetch(dashboardOrigin + href);
+    return { url: response.url, tillOrigin, html: await response.text() };
+  } finally {
+    if (previous === undefined) delete process.env.WAITRON_TILL_VITE_PORT;
+    else process.env.WAITRON_TILL_VITE_PORT = previous;
+    for (const server of servers) await server.close();
+  }
+};
+
 // The browser context is pinned to UTC so screen tests' wall-clock assertions read the same on every
 // machine. That pin cannot test local-time rendering, so date-utils runs in a Node project below.
 const browserProject = {
@@ -78,6 +112,7 @@ const browserProject = {
         },
       ],
       commands: {
+        followDevDeviceLink,
         emulateColorScheme,
         emulateReducedMotion,
         ...parkPointerCommands,
