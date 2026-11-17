@@ -1655,7 +1655,12 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,
   refuse only a quantity increase").** An extra whose list was deleted or no longer offers it is
-  treated the same (lane A's choice, 2026-11-16, not the owner's; the owner may overrule).
+  treated the same (lane A's choice, 2026-11-16, not the owner's; the owner may overrule). An
+  unsent line stored on a held order keeps its variant after that variant sells out (the watcher's
+  choice, 2026-11-17, not the owner's): the server keeps the line when only its note or answers
+  change, or when a portion is dropped or an extra removed, and
+  refuses a raise, an extra added or changed, or a switch to another sold-out variant with
+  `product.variant_unavailable`, which the till words. The counter does not flag such a line.
 
 - **A step done before a bill moves onto a seated table, or before two parties combine, is asked
   again at the receiving table (watcher, 2026-11-16, #3507, not the owner; the owner may

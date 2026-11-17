@@ -179,40 +179,43 @@ it("refreshes station routing after a confirmed send loses its preparation desti
   expect(tableOrder(el)!.shadowRoot!.querySelector("till-dead-ends-section")).not.toBeNull();
 });
 
-it("returns a sold-out refusal to dish recovery after allergy confirmation", async () => {
-  const submit = vi.fn().mockRejectedValueOnce({
-    code: "product.unavailable",
-    status: 409,
-    productId: "product-offer-steak",
-  });
-  const { el } = await mountApp({ submitDraft: submit });
-  await openTable(el);
-  await addDish(el);
-  const offers = menu("v1");
-  api.listZoneOffers!.mockResolvedValue({
-    ...offers,
-    offers: offers.offers.map((offer) =>
-      offer.id === "offer-steak" ? { ...offer, available: false } : offer,
-    ),
-  });
-  await userEvent.click(
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
-  );
-  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
-  await vi.waitFor(() => expect(draft(el).sending).toBe(false));
-  expect(dialog(el)).toBeNull();
-  expect(submit).toHaveBeenCalledOnce();
-  expect(draft(el).lines).toHaveLength(1);
-  await vi.waitFor(() => expect(draft(el).lines[0]!.blocked).toBe("unavailable"));
-  const markers = [...tableOrder(el)!.shadowRoot!.querySelectorAll("till-basket")].flatMap(
-    (basket) => [...basket.shadowRoot!.querySelectorAll(".line .not-offered")],
-  );
-  expect(markers.map((marker) => marker.textContent!.trim())).toEqual([
-    t("basket.blocked.unavailable"),
-  ]);
-  expect(tableOrder(el)!.shadowRoot!.querySelector('[data-flag-remove="0"]')).not.toBeNull();
-});
+it.each(["product.unavailable", "product.variant_unavailable"])(
+  "returns a %s refusal to dish recovery after allergy confirmation",
+  async (code) => {
+    const submit = vi.fn().mockRejectedValueOnce({
+      code,
+      status: 409,
+      productId: "product-offer-steak",
+    });
+    const { el } = await mountApp({ submitDraft: submit });
+    await openTable(el);
+    await addDish(el);
+    const offers = menu("v1");
+    api.listZoneOffers!.mockResolvedValue({
+      ...offers,
+      offers: offers.offers.map((offer) =>
+        offer.id === "offer-steak" ? { ...offer, available: false } : offer,
+      ),
+    });
+    await userEvent.click(
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+    await vi.waitFor(() => expect(draft(el).sending).toBe(false));
+    expect(dialog(el)).toBeNull();
+    expect(submit).toHaveBeenCalledOnce();
+    expect(draft(el).lines).toHaveLength(1);
+    await vi.waitFor(() => expect(draft(el).lines[0]!.blocked).toBe("unavailable"));
+    const markers = [...tableOrder(el)!.shadowRoot!.querySelectorAll("till-basket")].flatMap(
+      (basket) => [...basket.shadowRoot!.querySelectorAll(".line .not-offered")],
+    );
+    expect(markers.map((marker) => marker.textContent!.trim())).toEqual([
+      t("basket.blocked.unavailable"),
+    ]);
+    expect(tableOrder(el)!.shadowRoot!.querySelector('[data-flag-remove="0"]')).not.toBeNull();
+  },
+);
 
 it("reloads a replaced draft instead of trapping its old allergy answer in a retry form", async () => {
   const submit = vi.fn().mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
