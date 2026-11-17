@@ -1431,8 +1431,9 @@ Not in any track until the standalone primary is done.
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),
   gives a copy Cloud placed a machine identity of its own, in three pull requests
-  ([plan](superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)); the first, the read-only
-  checks of the placed file, is built and nothing calls it yet. Part 2, a staff route that cancels a sale, is
+  ([plan](superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)); the first two are built
+  and nothing calls them yet: the read-only checks of the placed file, and the placement that gives
+  the copy its own `node.db`, signing key and `trading.env`. Part 2, a staff route that cancels a sale, is
   built only if a venue needs one before go-live.
   [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
