@@ -1429,13 +1429,15 @@ Not in any track until the standalone primary is done.
   [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07; plan next.
 
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
-  keeps the old box's identity. Part 3 makes a restore a takeover, after Cloud agrees to change the
-  rule that a restore keeps the old box's identity. Part 2, a staff route that cancels a sale, is
+  keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),
+  gives a copy Cloud placed a machine identity of its own, in three pull requests
+  ([plan](superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)); the first, the read-only
+  checks of the placed file, is built and nothing calls it yet. Part 2, a staff route that cancels a sale, is
   built only if a venue needs one before go-live.
   [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
-  2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. The hosted start still waits for Cloud's half. Local selected-backup placement groundwork keeps the spare's own
+  2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. The hosted start still waits for Cloud's half, and for A1425 part 3's placement of the copy under its own identity. Local selected-backup placement groundwork keeps the spare's own
   identity; since A947 3b-F (#3172) a spare of a Veri*Factu venue can join as well:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
   The emergency-card adapter is built; its facts need Cloud’s display endpoint. The card can reveal a fresh code and list permission/authenticator readiness; Cloud’s code endpoint is still required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. Backups checks the printed emergency code and Cloud links to the existing pack maker. The hosted runtime remains open.

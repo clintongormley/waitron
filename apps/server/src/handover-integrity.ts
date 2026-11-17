@@ -1,5 +1,6 @@
 import { resolve as resolvePath } from "node:path";
 import { AppError } from "@waitron/shared";
+import { immutableFileUrl } from "@waitron/store";
 import "./errors.js";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 
@@ -79,14 +80,20 @@ export async function checkCopyIntegrity(
  * Whether `pragma integrity_check` and `pragma foreign_key_check` both pass on `path`, on a thread
  * of its own: on a venue-sized file they take long enough that the box would answer nothing
  * meanwhile. A thread that fails or ends without answering rejects, because that says nothing about
- * the file.
+ * the file. `immutable` opens it through `immutableFileUrl`.
  */
 export function isCopyIntact(
   path: string,
-  options: { signal?: AbortSignal; startWorker?: WorkerStarter; stopWaitMs?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    startWorker?: WorkerStarter;
+    stopWaitMs?: number;
+    immutable?: boolean;
+  } = {},
 ): Promise<boolean> {
   const {
     signal,
+    immutable = false,
     startWorker = (source, opts) => new Worker(source, opts),
     stopWaitMs = STOP_WAIT_MS,
   } = options;
@@ -95,7 +102,11 @@ export function isCopyIntact(
     const key = resolvePath(path);
     if (runningChecks.has(key))
       throw new AppError("handover.copy_check_failed", { module: "core" });
-    const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path } });
+    const worker = startWorker(INTEGRITY_SOURCE, {
+      eval: true,
+      // As text: a URL object cannot cross to the thread.
+      workerData: { path: immutable ? immutableFileUrl(path).href : path },
+    });
     runningChecks.add(key);
     let stopWait: NodeJS.Timeout | undefined;
     const stop = () => {

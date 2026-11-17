@@ -1,4 +1,4 @@
-import { WAL_SUFFIX, SHM_SUFFIX } from "@waitron/store";
+import { immutableFileUrl, WAL_SUFFIX, SHM_SUFFIX } from "@waitron/store";
 import { constants, type Stats } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -31,15 +31,9 @@ export async function openImmutableWhenWalEmpty(path: string): Promise<Immutable
   }
 }
 
-/**
- * Opens the database at `path` read-only and immutable: it ignores a `-wal` and writes nothing
- * beside it.
- */
+/** Opens the database at `path` through `immutableFileUrl`: it ignores a `-wal` and writes nothing beside it. */
 export function openImmutable(path: string): DatabaseSync {
-  const url = pathToFileURL(path);
-  url.searchParams.set("mode", "ro");
-  url.searchParams.set("immutable", "1");
-  return new DatabaseSync(url, { readOnly: true });
+  return new DatabaseSync(immutableFileUrl(path), { readOnly: true });
 }
 
 export type InPlaceOpen =
