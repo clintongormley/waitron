@@ -284,9 +284,9 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   special_days: ["location_id"],
   special_day_dates: ["location_id"],
   bookings: ["location_id"],
-  attendance_day_work: ["location_id"],
-  attendance_questions: ["location_id"],
-  attendance_response_commands: ["location_id"],
+  attendance_days: ["location_id", "deferred_shift_ids"],
+  attendance_questions: ["location_id", "business_day", "start_at", "end_at"],
+  attendance_answers: ["location_id"],
   roster_versions: ["location_id"],
   shift_templates: ["location_id"],
   shifts: ["location_id"],
@@ -722,6 +722,8 @@ for (const locale of ["en", "es"] as const) {
       }
     }
     const tableRenames = {
+      attendance_day_work: "attendance_days",
+      attendance_response_commands: "attendance_answers",
       tenants: "taxpayer",
       tenant_credentials: "venue_credentials",
       scheduled_runs: "reconciliation_runs",
@@ -1225,7 +1227,7 @@ for (const locale of ["en", "es"] as const) {
         0,
         ...selfApproved,
       );
-      const commandLocation = expected[phase].tables.attendance_response_commands!.columns.find(
+      const commandLocation = expected[phase].tables.attendance_answers!.columns.find(
         (column) => column.name === "location_id",
       )!;
       commandLocation.notnull = 0;
@@ -1360,6 +1362,34 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      for (const name of ["attendance_days", "attendance_questions", "attendance_answers"]) {
+        expect(expected[phase].tables[name]!.rows, `${phase}/${name} captured rows`).toEqual({});
+        expect(canonical[phase].tables[name]!.rows, `${phase}/${name} seeded rows`).toEqual({});
+      }
+      const attendanceQuestions = expected[phase].tables.attendance_questions!;
+      attendanceQuestions.columns.splice(2, 0, {
+        name: "attendance_day_id",
+        type: "TEXT",
+        notnull: 1,
+        dflt_value: null,
+        pk: 0,
+      });
+      attendanceQuestions.foreignKeys = [
+        ...attendanceQuestions.foreignKeys.map((key) => ({
+          ...key,
+          id: key.id + (key.from === "person_id" && key.table === "persons" ? 1 : 0),
+        })),
+        {
+          id: 4,
+          seq: 0,
+          table: "attendance_days",
+          from: "attendance_day_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+      ].sort((a, b) => a.id - b.id || a.seq - b.seq);
       const shiftTable = expected[phase].tables.shifts!;
       expect(shiftTable.rows, `${phase}/shifts captured rows`).toEqual({});
       shiftTable.columns.find((column) => column.name === "roster_version_id")!.notnull = 1;

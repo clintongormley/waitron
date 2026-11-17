@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { AttendanceDay } from "./attendance-types.js";
 import { assertAttendanceDay } from "./attendance-state.js";
-import { attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shifts } from "./schema/shifts.js";
 
@@ -15,6 +15,7 @@ export async function retireObsoleteRotaQuestions(
   const obsolete = await tx
     .select({ id: attendanceQuestions.id })
     .from(attendanceQuestions)
+    .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
     .leftJoin(
       shifts,
       and(
@@ -30,7 +31,7 @@ export async function retireObsoleteRotaQuestions(
     )
     .where(
       and(
-        eq(attendanceQuestions.businessDay, day.businessDay),
+        eq(attendanceDays.businessDay, day.businessDay),
         eq(attendanceQuestions.active, true),
         eq(attendanceQuestions.kind, "missing-times"),
         isNull(attendanceQuestions.openEntryId),

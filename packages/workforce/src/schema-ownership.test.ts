@@ -18,10 +18,10 @@ const OWNED = [
   "availability",
   "shift_templates",
   "shift_swaps",
-  "attendance_day_work",
+  "attendance_days",
   "staff_activity",
   "attendance_questions",
-  "attendance_response_commands",
+  "attendance_answers",
   // Staffing's tables, which live in this package's set.
   "staffing_days",
   "staffing_blocks",

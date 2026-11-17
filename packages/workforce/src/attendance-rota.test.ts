@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -32,6 +33,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 const backend = new WorkforceBackend();
 const now = new Date("2026-01-06T04:01:00.000Z");
 let personId: string, other: string, nodeId: string, versionId: string, shiftId: string;
+let attendanceDayId: string, previousDayId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
@@ -77,7 +79,7 @@ beforeEach(async () => {
 
 describe("obsolete rota attendance obligations", () => {
   it("a different current shift cannot satisfy the deleted shift's obligation", async () => {
-    await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+    await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
     const replacement = await run((tx) =>
       backend.createRosterVersion(tx, { period: "2026-01-05" }),
     );
@@ -98,7 +100,7 @@ describe("obsolete rota attendance obligations", () => {
     expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
   });
   it("replacement publication removes the former question without deleting evidence, even if email is added later", async () => {
-    const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+    const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
     const before = (await suite.db.select().from(attendanceQuestions))[0]!;
     const replacement = await run((tx) =>
       backend.createRosterVersion(tx, { period: "2026-01-05" }),
@@ -134,7 +136,7 @@ describe("obsolete rota attendance obligations", () => {
   it.each(["pending", "rejected", "sending", "sent", "unknown"] as const)(
     "reassignment retires the former worker while retaining %s delivery facts",
     async (status) => {
-      const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+      const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
       await setAttendanceMail(suite.db, id, {
         status,
         claimToken: "old-claim",
@@ -145,7 +147,7 @@ describe("obsolete rota attendance obligations", () => {
       const before = (await attendanceMailRows(suite.db))[0]!;
       await suite.db.update(shifts).set({ personId: other }).where(eq(shifts.id, shiftId));
       const current = await run((tx) =>
-        upsertAttendanceQuestion(tx, { ...input(), personId: other }, now),
+        upsertAttendanceQuestion(tx, { ...input(), personId: other }, now, attendanceDayId),
       );
       await run(retire);
       expect(await own()).toEqual([]);
@@ -161,7 +163,7 @@ describe("obsolete rota attendance obligations", () => {
   it.each(["deleted", "draft", "before-day", "at-end"])(
     "retires a question when its shift becomes %s",
     async (change) => {
-      await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+      await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
       if (change === "deleted") await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
       else if (change === "draft")
         await suite.db
@@ -184,7 +186,7 @@ describe("obsolete rota attendance obligations", () => {
   );
   it("retains a current shift at the inclusive day start without consuming its reminder", async () => {
     await suite.db.update(shifts).set({ startsAt: day().startAt }).where(eq(shifts.id, shiftId));
-    const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+    const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
     const before = await attendanceMailRows(suite.db);
     await run(retire);
     expect((await own()).map((q) => q.id)).toEqual([id]);
@@ -215,16 +217,19 @@ describe("obsolete rota attendance obligations", () => {
           },
         },
         now,
+        previousDayId,
       );
       await upsertAttendanceQuestion(
         tx,
         { ...input(), shiftKey: "activity:2026-01-05:order:original" },
         now,
+        attendanceDayId,
       );
       await upsertAttendanceQuestion(
         tx,
         { ...input(), shiftKey: `in:${open}`, openEntryId: open, missingKinds: ["out"] },
         now,
+        attendanceDayId,
       );
     });
     const before = await suite.db.select().from(attendanceQuestions);
@@ -234,7 +239,7 @@ describe("obsolete rota attendance obligations", () => {
     expect(await attendanceMailRows(suite.db)).toEqual(mail);
   });
   it("rolls back retirement and mail cancellation with its caller", async () => {
-    await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+    await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
     await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
     const questions = await suite.db.select().from(attendanceQuestions);
     const mail = await attendanceMailRows(suite.db);
@@ -267,6 +272,7 @@ describe("obsolete rota attendance obligations", () => {
           missingKinds: ["out"],
         },
         now,
+        attendanceDayId,
       ),
     );
     await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
@@ -278,7 +284,7 @@ describe("obsolete rota attendance obligations", () => {
     expect(await attendanceMailRows(suite.db)).toEqual(mail);
   });
   it("does not overwrite a merged alias's reason or canonical reminder", async () => {
-    const oldRota = await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+    const oldRota = await run((tx) => upsertAttendanceQuestion(tx, input(), now, attendanceDayId));
     const activity = await run((tx) =>
       upsertAttendanceQuestion(
         tx,
@@ -287,6 +293,7 @@ describe("obsolete rota attendance obligations", () => {
           shiftKey: "activity:2026-01-05:order:original",
         },
         now,
+        attendanceDayId,
       ),
     );
     await run((tx) => mergeAttendanceQuestions(tx, activity, oldRota));
@@ -297,5 +304,14 @@ describe("obsolete rota attendance obligations", () => {
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
     expect(await attendanceMailRows(suite.db)).toEqual(mail);
     expect((await own()).map((q) => q.id)).toEqual([activity]);
+  });
+});
+
+beforeEach(async () => {
+  attendanceDayId = await seedAttendanceDay(suite.db, day());
+  previousDayId = await seedAttendanceDay(suite.db, {
+    businessDay: "2026-01-04",
+    startAt: "2026-01-04T04:00:00.000Z",
+    endAt: "2026-01-05T04:00:00.000Z",
   });
 });

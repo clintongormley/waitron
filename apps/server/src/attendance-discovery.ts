@@ -3,7 +3,7 @@ import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
-  attendanceDayWork,
+  attendanceDays,
   enqueueAttendanceDay,
   retireObsoleteRotaQuestions,
   processAttendanceDay,
@@ -36,8 +36,8 @@ export async function reconcileAttendanceBeforeClock(
   if (Date.parse(day.endAt) > at.getTime()) return state;
   const [saved] = await tx
     .select()
-    .from(attendanceDayWork)
-    .where(eq(attendanceDayWork.businessDay, businessDay));
+    .from(attendanceDays)
+    .where(eq(attendanceDays.businessDay, businessDay));
   if (!saved) await enqueueAttendanceDay(tx, day);
   await reconcileAttendanceDay(tx, { nodeId: scope.nodeId, personId: scope.personId, day }, at);
   return null;
@@ -83,11 +83,11 @@ export async function nextAttendanceDay(
   };
   const future = await tx
     .select()
-    .from(attendanceDayWork)
+    .from(attendanceDays)
     .where(
       and(
-        eq(attendanceDayWork.evaluatedRevision, 0),
-        sql`${attendanceDayWork.endAt} > ${scope.now.toISOString()}`,
+        eq(attendanceDays.evaluatedRevision, 0),
+        sql`${attendanceDays.endAt} > ${scope.now.toISOString()}`,
       ),
     );
   for (const work of future) {
@@ -95,7 +95,7 @@ export async function nextAttendanceDay(
     if (work.startAt === bounds.startAt && work.endAt === bounds.endAt) continue;
     await markMovedShifts(work);
     await tx
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({
         ...bounds,
         nextDueAt:
@@ -103,23 +103,19 @@ export async function nextAttendanceDay(
             ? bounds.endAt
             : work.nextDueAt,
       })
-      .where(eq(attendanceDayWork.id, work.id));
+      .where(eq(attendanceDays.id, work.id));
   }
   const [work] = await tx
     .select()
-    .from(attendanceDayWork)
+    .from(attendanceDays)
     .where(
       and(
-        sql`${attendanceDayWork.nextDueAt} <= ${scope.now.toISOString()}`,
-        sql`${attendanceDayWork.endAt} <= ${scope.now.toISOString()}`,
-        sql`(${attendanceDayWork.dirtyRevision} > ${attendanceDayWork.evaluatedRevision} or json_array_length(${attendanceDayWork.deferredShiftIds}) > 0)`,
+        sql`${attendanceDays.nextDueAt} <= ${scope.now.toISOString()}`,
+        sql`${attendanceDays.endAt} <= ${scope.now.toISOString()}`,
+        sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or ${attendanceDays.nextDueAt} > ${attendanceDays.endAt})`,
       ),
     )
-    .orderBy(
-      asc(attendanceDayWork.businessDay),
-      asc(attendanceDayWork.startAt),
-      asc(attendanceDayWork.id),
-    )
+    .orderBy(asc(attendanceDays.businessDay), asc(attendanceDays.startAt), asc(attendanceDays.id))
     .limit(1);
   if (work) {
     const bounds = businessDayBounds(clock, work.businessDay);
@@ -132,9 +128,9 @@ export async function nextAttendanceDay(
           ? bounds.endAt
           : work.nextDueAt;
       await tx
-        .update(attendanceDayWork)
+        .update(attendanceDays)
         .set({ ...bounds, nextDueAt })
-        .where(eq(attendanceDayWork.id, work.id));
+        .where(eq(attendanceDays.id, work.id));
       Object.assign(work, bounds, { nextDueAt });
       if (work.endAt > scope.now.toISOString()) return null;
     }

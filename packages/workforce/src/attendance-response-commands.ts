@@ -8,7 +8,7 @@ import type {
   AttendanceCommandResult,
   CorrectionItem,
 } from "./attendance-contract.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { attendanceQuestions } from "./schema/attendance.js";
 import { confirmAutomaticEntry } from "./automatic-entries.js";
 import {
@@ -34,11 +34,11 @@ export async function readAttendanceCommand(
 ): Promise<AttendanceCommandResult | null> {
   const [row] = await tx
     .select()
-    .from(attendanceResponseCommands)
+    .from(attendanceAnswers)
     .where(
       and(
-        eq(attendanceResponseCommands.id, scope.commandId),
-        eq(attendanceResponseCommands.requestedByPersonId, scope.requestedByPersonId),
+        eq(attendanceAnswers.id, scope.commandId),
+        eq(attendanceAnswers.requestedByPersonId, scope.requestedByPersonId),
       ),
     );
   return row ? { commandId: row.id, entryIds: row.entryIds, replayed: true } : null;
@@ -96,18 +96,15 @@ async function normalize(
   return { action: command.action, itemId: command.itemId };
 }
 async function findItem(tx: Transaction, id: string, replay: boolean): Promise<CorrectionItem> {
-  const [command] = await tx
-    .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.id, id));
+  const [command] = await tx.select().from(attendanceAnswers).where(eq(attendanceAnswers.id, id));
   const [entry] = command ? [] : await readRecordedEntries(tx, { entryId: id });
   const personId = command?.personId ?? entry?.personId;
   if (!personId) throw new AppError("correction.target_not_found", { entryId: id });
   const entries = await readRecordedEntries(tx, { personId });
   const receipts = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId));
   const item = projectCorrectionItems(entries, receipts).find(
     (i) => i.id === id || (replay && i.requestEntryIds.includes(id)),
   );
@@ -172,8 +169,8 @@ export async function executeAttendanceCommand(
   const payload = await normalize(tx, command);
   const [saved] = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.id, command.commandId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.id, command.commandId));
   if (
     saved &&
     (saved.requestedByPersonId !== requester ||
@@ -213,8 +210,8 @@ export async function executeAttendanceCommand(
       const entries = await readRecordedEntries(tx, { personId });
       const commands = await tx
         .select()
-        .from(attendanceResponseCommands)
-        .where(eq(attendanceResponseCommands.personId, personId));
+        .from(attendanceAnswers)
+        .where(eq(attendanceAnswers.personId, personId));
       missingKinds = answerForQuestion(
         question,
         entries,
@@ -262,7 +259,7 @@ export async function executeAttendanceCommand(
       payload.action,
     );
   }
-  await tx.insert(attendanceResponseCommands).values({
+  await tx.insert(attendanceAnswers).values({
     id: command.commandId,
     requestedByPersonId: requester,
     authorizedByPersonId: authorizer,

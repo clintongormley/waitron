@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
+import { attendanceMailRows, setAttendanceMail, seedAttendanceDay } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   outgoingMail,
@@ -17,6 +17,7 @@ import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   attendanceQuestions,
+  attendanceDays,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
   mergeAttendanceQuestions,
@@ -29,6 +30,7 @@ const suite = useVenueDb({
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
 let personId: string, other: string, nodeId: string;
+let attendanceDayId: string, tuesdayDayId: string;
 const now = new Date("2026-01-08T04:01:00.000Z");
 const day = (businessDay = "2026-01-05") => ({
   businessDay,
@@ -54,6 +56,8 @@ beforeEach(async () => {
     { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
   ]);
   [personId, other] = rows.map((r) => r.id) as [string, string];
+  attendanceDayId = await seedAttendanceDay(suite.db, day());
+  tuesdayDayId = await seedAttendanceDay(suite.db, day("2026-01-06"));
 });
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 async function openShift() {
@@ -70,8 +74,34 @@ async function openShift() {
 }
 
 describe("durable own attendance questions", () => {
+  it("a question's view shows its stored day's business day and bounds", async () => {
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
+    const [storedDay] = await suite.db
+      .select()
+      .from(attendanceDays)
+      .where(eq(attendanceDays.businessDay, "2026-01-05"));
+    expect(
+      suite.db.execute(sql`select attendance_day_id from attendance_questions where id = ${id}`)
+        .rows,
+    ).toEqual([{ attendance_day_id: storedDay!.id }]);
+    expect((await own())[0]!.day).toEqual({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T04:00:00.000Z",
+      endAt: "2026-01-06T04:00:00.000Z",
+    });
+  });
+  it("refuses a question for a day that does not exist", async () => {
+    await expect(
+      run(async (tx) =>
+        tx.execute(sql`insert into attendance_questions
+      (id, person_id, attendance_day_id, shift_key, kind, missing_kinds, evidence_keys, created_at)
+      values ('missing-day-question', ${personId}, 'missing-day', 'rota:missing', 'missing-times', '["in"]', '[]', '2026-01-08T04:01:00.000Z')`),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    expect(await own()).toEqual([]);
+  });
   it("queues a question's reminder under its key, for its person, kept seven days", async () => {
-    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     const [mail] = await suite.db.select().from(outgoingMail);
     expect(mail).toMatchObject({
       kind: "attendance_question",
@@ -83,10 +113,10 @@ describe("durable own attendance questions", () => {
     });
   });
   it("a cancelled reminder queued again for the same question stays cancelled", async () => {
-    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     expect(await run((tx) => cancelMail(tx, `attendance:${id}`, now))).toBe(true);
     const before = await suite.db.select().from(outgoingMail);
-    await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     expect(await suite.db.select().from(outgoingMail)).toEqual(before);
   });
   it("retains old own questions on a later day, sorted independently of insertion order", async () => {
@@ -95,22 +125,28 @@ describe("durable own attendance questions", () => {
         tx,
         { ...question(), day: day("2026-01-06"), shiftKey: "rota:tuesday" },
         now,
+        tuesdayDayId,
       ),
     );
-    const monday = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
-    await run((tx) => upsertAttendanceQuestion(tx, { ...question(), personId: other }, now));
+    const monday = await run((tx) =>
+      upsertAttendanceQuestion(tx, question(), now, attendanceDayId),
+    );
+    await run((tx) =>
+      upsertAttendanceQuestion(tx, { ...question(), personId: other }, now, attendanceDayId),
+    );
     expect((await own()).map((q) => q.id)).toEqual([monday, tuesday]);
     expect((await own()).map((q) => q.id)).toEqual([monday, tuesday]);
   });
   it("one reminder identity combines missing ends and preserves old evidence on replay", async () => {
     const first = await run((tx) =>
-      upsertAttendanceQuestion(tx, { ...question(), missingKinds: ["in"] }, now),
+      upsertAttendanceQuestion(tx, { ...question(), missingKinds: ["in"] }, now, attendanceDayId),
     );
     const replay = await run((tx) =>
       upsertAttendanceQuestion(
         tx,
         { ...question(), missingKinds: ["out"], evidenceKeys: ["order:2", "order:1"] },
         new Date("2026-01-09T00:00:00Z"),
+        attendanceDayId,
       ),
     );
     expect(replay).toBe(first);
@@ -128,8 +164,8 @@ describe("durable own attendance questions", () => {
   });
   it("same source key for two people makes separate obligations", async () => {
     await run(async (tx) => {
-      await upsertAttendanceQuestion(tx, question(), now);
-      await upsertAttendanceQuestion(tx, { ...question(), personId: other }, now);
+      await upsertAttendanceQuestion(tx, question(), now, attendanceDayId);
+      await upsertAttendanceQuestion(tx, { ...question(), personId: other }, now, attendanceDayId);
     });
     expect(await suite.db.select().from(attendanceQuestions)).toHaveLength(2);
     expect(await own()).toHaveLength(1);
@@ -140,10 +176,12 @@ describe("durable own attendance questions", () => {
       shiftKey: "activity:2026-01-05:order:2",
       evidenceKeys: ["order:2"],
     };
-    const first = await run((tx) => upsertAttendanceQuestion(tx, input, now));
+    const first = await run((tx) => upsertAttendanceQuestion(tx, input, now, attendanceDayId));
     const mail = await attendanceMailRows(suite.db);
     expect(
-      await run((tx) => upsertAttendanceQuestion(tx, { ...input, evidenceKeys: ["order:1"] }, now)),
+      await run((tx) =>
+        upsertAttendanceQuestion(tx, { ...input, evidenceKeys: ["order:1"] }, now, attendanceDayId),
+      ),
     ).toBe(first);
     expect((await own())[0]!.evidenceKeys).toEqual(["order:1", "order:2"]);
     expect(await attendanceMailRows(suite.db)).toEqual(mail);
@@ -158,7 +196,7 @@ describe("durable own attendance questions", () => {
       openEntryId: open,
       missingKinds: ["out"] as ("in" | "out")[],
     };
-    const first = await run((tx) => upsertAttendanceQuestion(tx, input, now));
+    const first = await run((tx) => upsertAttendanceQuestion(tx, input, now, attendanceDayId));
     const end = await run((tx) =>
       backend.recordAutomaticClose(tx, {
         nodeId,
@@ -181,6 +219,7 @@ describe("durable own attendance questions", () => {
             evidenceKeys: ["order:last"],
           },
           now,
+          attendanceDayId,
         ),
       ),
     ).toBe(first);
@@ -192,7 +231,7 @@ describe("durable own attendance questions", () => {
       evidenceKeys: ["order:1", "order:last"],
     });
     expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
-    await run((tx) => upsertAttendanceQuestion(tx, input, now));
+    await run((tx) => upsertAttendanceQuestion(tx, input, now, attendanceDayId));
     expect((await own())[0]).toMatchObject({
       kind: "automatic-out",
       automaticEntryId: end,
@@ -225,6 +264,7 @@ describe("durable own attendance questions", () => {
           missingKinds: [],
         },
         now,
+        attendanceDayId,
       ),
     );
     expect(await attendanceMailRows(suite.db)).toEqual([]);
@@ -239,7 +279,7 @@ describe("durable own attendance questions", () => {
         openEntryId: open,
         missingKinds: ["out"] as ("in" | "out")[],
       };
-      const id = await run((tx) => upsertAttendanceQuestion(tx, input, now));
+      const id = await run((tx) => upsertAttendanceQuestion(tx, input, now, attendanceDayId));
       await setAttendanceMail(suite.db, id, {
         status,
         claimToken: "claim",
@@ -263,6 +303,7 @@ describe("durable own attendance questions", () => {
           tx,
           { ...input, kind: "automatic-out", automaticEntryId: end, missingKinds: [] },
           now,
+          attendanceDayId,
         ),
       );
       expect(await attendanceMailRows(suite.db)).toEqual(before);
@@ -288,13 +329,17 @@ describe("durable own attendance questions", () => {
       automaticEntryId: end,
       missingKinds: [],
     };
-    await run((tx) => upsertAttendanceQuestion(tx, input, now));
+    await run((tx) => upsertAttendanceQuestion(tx, input, now, attendanceDayId));
     const before = await suite.db.select().from(attendanceQuestions);
     await expect(
-      run((tx) => upsertAttendanceQuestion(tx, { ...input, automaticEntryId: open }, now)),
+      run((tx) =>
+        upsertAttendanceQuestion(tx, { ...input, automaticEntryId: open }, now, attendanceDayId),
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     await expect(
-      run((tx) => upsertAttendanceQuestion(tx, { ...input, openEntryId: end }, now)),
+      run((tx) =>
+        upsertAttendanceQuestion(tx, { ...input, openEntryId: end }, now, attendanceDayId),
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
     expect(await attendanceMailRows(suite.db)).toEqual([]);
@@ -312,6 +357,7 @@ describe("durable own attendance questions", () => {
           tx,
           { ...question(), ...bad } as Parameters<typeof upsertAttendanceQuestion>[1],
           now,
+          attendanceDayId,
         ),
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
@@ -319,10 +365,12 @@ describe("durable own attendance questions", () => {
     expect(await attendanceMailRows(suite.db)).toEqual([]);
   });
   it("refuses a changed saved question day rather than silently moving its evidence", async () => {
-    await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     const before = await suite.db.select().from(attendanceQuestions);
     await expect(
-      run((tx) => upsertAttendanceQuestion(tx, { ...question(), day: day("2026-01-06") }, now)),
+      run((tx) =>
+        upsertAttendanceQuestion(tx, { ...question(), day: day("2026-01-06") }, now, tuesdayDayId),
+      ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
   });
@@ -330,7 +378,7 @@ describe("durable own attendance questions", () => {
     "merges overlapping questions while retaining %s delivery history",
     async (status) => {
       const first = await run((tx) =>
-        upsertAttendanceQuestion(tx, { ...question(), missingKinds: ["in"] }, now),
+        upsertAttendanceQuestion(tx, { ...question(), missingKinds: ["in"] }, now, attendanceDayId),
       );
       const second = await run((tx) =>
         upsertAttendanceQuestion(
@@ -342,6 +390,7 @@ describe("durable own attendance questions", () => {
             evidenceKeys: ["order:2"],
           },
           now,
+          attendanceDayId,
         ),
       );
       await setAttendanceMail(suite.db, second, { status });
@@ -376,6 +425,7 @@ describe("durable own attendance questions", () => {
             tx,
             { ...question(), shiftKey: "activity:2026-01-05:order:2", evidenceKeys: ["order:3"] },
             now,
+            attendanceDayId,
           ),
         ),
       ).toBe(first);
@@ -383,9 +433,9 @@ describe("durable own attendance questions", () => {
     },
   );
   it("refuses cross-worker question merges without changing either obligation", async () => {
-    const first = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const first = await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     const second = await run((tx) =>
-      upsertAttendanceQuestion(tx, { ...question(), personId: other }, now),
+      upsertAttendanceQuestion(tx, { ...question(), personId: other }, now, attendanceDayId),
     );
     const before = await suite.db.select().from(attendanceQuestions);
     await expect(run((tx) => mergeAttendanceQuestions(tx, first, second))).rejects.toMatchObject({
@@ -394,7 +444,7 @@ describe("durable own attendance questions", () => {
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
   });
   it("lists neither inactive nor legally resolved obligations", async () => {
-    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now, attendanceDayId));
     await suite.db
       .update(attendanceQuestions)
       .set({ active: false, inactiveReason: "rota_superseded" })
@@ -410,7 +460,7 @@ describe("durable own attendance questions", () => {
   it("rolls back a question and reminder when the caller fails", async () => {
     await expect(
       run(async (tx) => {
-        await upsertAttendanceQuestion(tx, question(), now);
+        await upsertAttendanceQuestion(tx, question(), now, attendanceDayId);
         throw new Error("after question");
       }),
     ).rejects.toThrow("after question");

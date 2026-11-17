@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
@@ -33,7 +34,7 @@ import {
 } from "./attendance-questions.js";
 import * as api from "./index.js";
 import type { AttendanceCommand, AttendanceCommandPayload } from "./attendance-contract.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { readChain } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
@@ -46,6 +47,7 @@ const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
 const now = new Date("2026-01-07T08:00:00.000Z");
 let personId: string, manager: string, other: string, nodeId: string;
+let attendanceDayId: string;
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
@@ -91,6 +93,7 @@ function question(subject = personId, key = "rota:first") {
         evidenceKeys: [key],
       },
       now,
+      attendanceDayId,
     ),
   );
 }
@@ -207,10 +210,7 @@ function pair(): AttendanceCommandPayload {
 async function snapshot() {
   return {
     entries: await suite.db.select().from(timeEntries).orderBy(timeEntries.id),
-    receipts: await suite.db
-      .select()
-      .from(attendanceResponseCommands)
-      .orderBy(attendanceResponseCommands.id),
+    receipts: await suite.db.select().from(attendanceAnswers).orderBy(attendanceAnswers.id),
   };
 }
 async function refused(action: () => unknown, code: string) {
@@ -252,6 +252,7 @@ async function automaticQuestion() {
         evidenceKeys: ["order:last"],
       },
       now,
+      attendanceDayId,
     ),
   );
   return { questionId: id, automaticEntryId };
@@ -356,7 +357,7 @@ it("two device commands using one revision append only the first answer", async 
 });
 it("receipt failure rolls back both requests and the chain head", async () => {
   await suite.db.execute(
-    sql`create trigger refuse_response before insert on attendance_response_commands begin select raise(abort, 'response fault'); end`,
+    sql`create trigger refuse_response before insert on attendance_answers begin select raise(abort, 'response fault'); end`,
   );
   try {
     const value = await command(pair());
@@ -989,4 +990,12 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
       sql`update roles set permissions = '["workforce.correct"]' where built_in_key = 'manager'`,
     );
   }
+});
+
+beforeEach(async () => {
+  attendanceDayId = await seedAttendanceDay(suite.db, {
+    businessDay: "2026-01-05",
+    startAt: "2026-01-05T04:00:00.000Z",
+    endAt: "2026-01-06T04:00:00.000Z",
+  });
 });

@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments } from "@waitron/adjustments";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";
@@ -112,7 +112,7 @@ async function state() {
     tickets: await suite.db.select().from(ticketItems),
     jobs: await suite.db.select().from(printJobs),
     facts: await suite.db.select().from(staffActivity),
-    days: await suite.db.select().from(attendanceDayWork),
+    days: await suite.db.select().from(attendanceDays),
   };
 }
 async function heldCancellation(app: Hono) {

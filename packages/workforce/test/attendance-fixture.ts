@@ -15,7 +15,7 @@ export function attendanceFixture() {
   });
   const backend = new api.WorkforceBackend();
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-  let personId: string, other: string, manager: string, nodeId: string;
+  let personId: string, other: string, manager: string, nodeId: string, attendanceDayId: string;
   beforeEach(async () => {
     await seedTaxpayer(suite.db);
     await seedFixtureVenue(suite.db);
@@ -28,6 +28,9 @@ export function attendanceFixture() {
     [personId, other, manager] = rows.map((r) => r.id) as [string, string, string];
     await seedEmployment(suite.db, { personId });
     await run((tx) => api.enqueueAttendanceDay(tx, day()));
+    attendanceDayId = (
+      await suite.db.select({ id: api.attendanceDays.id }).from(api.attendanceDays)
+    )[0]!.id;
   });
   const day = (): api.AttendanceDay => ({
     businessDay: "2026-01-05",
@@ -80,7 +83,7 @@ export function attendanceFixture() {
     entries: await entries(),
     questions: await suite.db.select().from(api.attendanceQuestions),
     mail: await attendanceMailRows(suite.db),
-    work: await suite.db.select().from(api.attendanceDayWork),
+    work: await suite.db.select().from(api.attendanceDays),
   });
   const open = async (at = "2026-01-05T09:00:00Z") => {
     await run((tx) => backend.clockIn(tx, event(at)));
@@ -101,6 +104,9 @@ export function attendanceFixture() {
     state,
     open,
     day,
+    get dayId() {
+      return attendanceDayId;
+    },
     get personId() {
       return personId;
     },

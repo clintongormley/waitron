@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
-import { attendanceDayWork, staffActivity, rosterVersions, shifts } from "@waitron/workforce";
+import { attendanceDays, staffActivity, rosterVersions, shifts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { nextAttendanceDay } from "./attendance-discovery.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
@@ -51,7 +51,7 @@ it("an admitted future cutover change does not block activity on its already dis
   });
 
   await withTransaction(suite.db, (tx) => markAttendanceSourceChanged(tx, "rota", version!.id));
-  const [before] = await suite.db.select().from(attendanceDayWork);
+  const [before] = await suite.db.select().from(attendanceDays);
   expect(before).toMatchObject({
     businessDay: "2026-01-07",
     endAt: "2026-01-08T03:00:00.000Z",
@@ -90,7 +90,7 @@ it("an admitted future cutover change does not block activity on its already dis
       }),
     ),
   ).resolves.toBeUndefined();
-  expect(await suite.db.select().from(attendanceDayWork)).toEqual([
+  expect(await suite.db.select().from(attendanceDays)).toEqual([
     { ...before, dirtyRevision: before!.dirtyRevision + 1 },
   ]);
   expect(await suite.db.select().from(staffActivity)).toMatchObject([
@@ -129,7 +129,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
   });
   const saveAt = new Date("2026-01-07T12:00:00Z");
   await withTransaction(suite.db, (tx) => markAttendanceSourceChanged(tx, "rota", version!.id));
-  const [before] = await suite.db.select().from(attendanceDayWork);
+  const [before] = await suite.db.select().from(attendanceDays);
   expect(before).toMatchObject({
     businessDay: "2026-01-07",
     endAt: "2026-01-08T03:00:00.000Z",
@@ -177,7 +177,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     nextAttendanceDay(tx, { now: new Date("2026-01-08T05:00:00.000Z") }),
   );
   expect(day).toMatchObject({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" });
-  expect(await suite.db.select().from(attendanceDayWork)).toEqual([
+  expect(await suite.db.select().from(attendanceDays)).toEqual([
     expect.objectContaining({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" }),
   ]);
   expect(await suite.db.select().from(staffActivity)).toMatchObject([

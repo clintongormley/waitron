@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle } from "@waitron/identity";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { cancelPlacedOrder, markOrderPlaced, parkOrder } from "./working-order.js";
@@ -81,7 +81,7 @@ async function expectFact(id: string, kind: "order_placed" | "order_cancelled", 
     (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
   ).toEqual([[actor, "2026-01-05T16:40:00.000Z"]]);
   expect(
-    (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
+    (await suite.db.select().from(attendanceDays)).map((r) => [r.businessDay, r.dirtyRevision]),
   ).toEqual([["2026-01-05", 1]]);
   await run((tx) =>
     readAttendanceFacts(tx, {

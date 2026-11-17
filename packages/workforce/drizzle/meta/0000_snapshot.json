@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "22691a4b-ad48-4d4d-a467-ccab8df44fad",
+  "id": "ad32abf3-9b9d-4ad5-ab92-bd4eb3fd4ea0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -134,8 +134,154 @@
         }
       }
     },
-    "attendance_day_work": {
-      "name": "attendance_day_work",
+    "attendance_answers": {
+      "name": "attendance_answers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by_person_id": {
+          "name": "requested_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "authorized_by_person_id": {
+          "name": "authorized_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "input": {
+          "name": "input",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entry_ids": {
+          "name": "entry_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_answers_question_idx": {
+          "name": "attendance_answers_question_idx",
+          "columns": [
+            "person_id",
+            "question_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_answers_requested_by_person_id_persons_id_fk": {
+          "name": "attendance_answers_requested_by_person_id_persons_id_fk",
+          "tableFrom": "attendance_answers",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_answers_authorized_by_person_id_persons_id_fk": {
+          "name": "attendance_answers_authorized_by_person_id_persons_id_fk",
+          "tableFrom": "attendance_answers",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_answers_person_id_persons_id_fk": {
+          "name": "attendance_answers_person_id_persons_id_fk",
+          "tableFrom": "attendance_answers",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_answers_question_fk": {
+          "name": "attendance_answers_question_fk",
+          "tableFrom": "attendance_answers",
+          "tableTo": "attendance_questions",
+          "columnsFrom": [
+            "question_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_answers_action_ck": {
+          "name": "attendance_answers_action_ck",
+          "value": "\"attendance_answers\".\"action\" in ('confirm', 'request', 'propose', 'approve', 'decline', 'accept', 'disagree')"
+        },
+        "attendance_answers_entries_ck": {
+          "name": "attendance_answers_entries_ck",
+          "value": "json_valid(\"attendance_answers\".\"entry_ids\") and json_type(\"attendance_answers\".\"entry_ids\") = 'array' and json_array_length(\"attendance_answers\".\"entry_ids\") > 0"
+        }
+      }
+    },
+    "attendance_days": {
+      "name": "attendance_days",
       "columns": {
         "id": {
           "name": "id",
@@ -187,26 +333,18 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "deferred_shift_ids": {
-          "name": "deferred_shift_ids",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
         }
       },
       "indexes": {
-        "attendance_day_work_scope_uq": {
-          "name": "attendance_day_work_scope_uq",
+        "attendance_days_scope_uq": {
+          "name": "attendance_days_scope_uq",
           "columns": [
             "business_day"
           ],
           "isUnique": true
         },
-        "attendance_day_work_due_idx": {
-          "name": "attendance_day_work_due_idx",
+        "attendance_days_due_idx": {
+          "name": "attendance_days_due_idx",
           "columns": [
             "next_due_at"
           ],
@@ -217,13 +355,13 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "attendance_day_work_bounds_ck": {
-          "name": "attendance_day_work_bounds_ck",
-          "value": "\"attendance_day_work\".\"end_at\" > \"attendance_day_work\".\"start_at\""
+        "attendance_days_bounds_ck": {
+          "name": "attendance_days_bounds_ck",
+          "value": "\"attendance_days\".\"end_at\" > \"attendance_days\".\"start_at\""
         },
-        "attendance_day_work_revision_ck": {
-          "name": "attendance_day_work_revision_ck",
-          "value": "\"attendance_day_work\".\"dirty_revision\" > 0 and \"attendance_day_work\".\"evaluated_revision\" >= 0 and \"attendance_day_work\".\"evaluated_revision\" <= \"attendance_day_work\".\"dirty_revision\""
+        "attendance_days_revision_ck": {
+          "name": "attendance_days_revision_ck",
+          "value": "\"attendance_days\".\"dirty_revision\" > 0 and \"attendance_days\".\"evaluated_revision\" >= 0 and \"attendance_days\".\"evaluated_revision\" <= \"attendance_days\".\"dirty_revision\""
         }
       }
     },
@@ -244,22 +382,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "business_day": {
-          "name": "business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "start_at": {
-          "name": "start_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "end_at": {
-          "name": "end_at",
+        "attendance_day_id": {
+          "name": "attendance_day_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -361,14 +485,13 @@
           ],
           "isUnique": true
         },
-        "attendance_questions_own_idx": {
-          "name": "attendance_questions_own_idx",
+        "attendance_questions_own_day_idx": {
+          "name": "attendance_questions_own_day_idx",
           "columns": [
             "person_id",
             "active",
             "resolved_by_entry_id",
-            "business_day",
-            "start_at",
+            "attendance_day_id",
             "id"
           ],
           "isUnique": false
@@ -381,6 +504,19 @@
           "tableTo": "persons",
           "columnsFrom": [
             "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_day_fk": {
+          "name": "attendance_questions_day_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "attendance_days",
+          "columnsFrom": [
+            "attendance_day_id"
           ],
           "columnsTo": [
             "id"
@@ -456,10 +592,6 @@
           "name": "attendance_questions_kind_ck",
           "value": "\"attendance_questions\".\"kind\" in ('automatic-out', 'missing-times')"
         },
-        "attendance_questions_bounds_ck": {
-          "name": "attendance_questions_bounds_ck",
-          "value": "\"attendance_questions\".\"end_at\" > \"attendance_questions\".\"start_at\""
-        },
         "attendance_questions_activity_ck": {
           "name": "attendance_questions_activity_ck",
           "value": "(\"attendance_questions\".\"active\" = 1 and \"attendance_questions\".\"inactive_reason\" is null and \"attendance_questions\".\"canonical_question_id\" is null) or (\"attendance_questions\".\"active\" = 0 and \"attendance_questions\".\"inactive_reason\" is not null)"
@@ -471,152 +603,6 @@
         "attendance_questions_automatic_ck": {
           "name": "attendance_questions_automatic_ck",
           "value": "(\"attendance_questions\".\"kind\" = 'automatic-out' and \"attendance_questions\".\"open_entry_id\" is not null and \"attendance_questions\".\"automatic_entry_id\" is not null and json_array_length(\"attendance_questions\".\"missing_kinds\") = 0) or (\"attendance_questions\".\"kind\" = 'missing-times' and \"attendance_questions\".\"automatic_entry_id\" is null and json_array_length(\"attendance_questions\".\"missing_kinds\") > 0)"
-        }
-      }
-    },
-    "attendance_response_commands": {
-      "name": "attendance_response_commands",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "requested_by_person_id": {
-          "name": "requested_by_person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "authorized_by_person_id": {
-          "name": "authorized_by_person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "input": {
-          "name": "input",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "entry_ids": {
-          "name": "entry_ids",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "attendance_response_commands_question_idx": {
-          "name": "attendance_response_commands_question_idx",
-          "columns": [
-            "person_id",
-            "question_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "attendance_response_commands_requested_by_person_id_persons_id_fk": {
-          "name": "attendance_response_commands_requested_by_person_id_persons_id_fk",
-          "tableFrom": "attendance_response_commands",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "requested_by_person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "attendance_response_commands_authorized_by_person_id_persons_id_fk": {
-          "name": "attendance_response_commands_authorized_by_person_id_persons_id_fk",
-          "tableFrom": "attendance_response_commands",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "authorized_by_person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "attendance_response_commands_person_id_persons_id_fk": {
-          "name": "attendance_response_commands_person_id_persons_id_fk",
-          "tableFrom": "attendance_response_commands",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "attendance_response_commands_question_fk": {
-          "name": "attendance_response_commands_question_fk",
-          "tableFrom": "attendance_response_commands",
-          "tableTo": "attendance_questions",
-          "columnsFrom": [
-            "question_id",
-            "person_id"
-          ],
-          "columnsTo": [
-            "id",
-            "person_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "attendance_response_commands_action_ck": {
-          "name": "attendance_response_commands_action_ck",
-          "value": "\"attendance_response_commands\".\"action\" in ('confirm', 'request', 'propose', 'approve', 'decline', 'accept', 'disagree')"
-        },
-        "attendance_response_commands_entries_ck": {
-          "name": "attendance_response_commands_entries_ck",
-          "value": "json_valid(\"attendance_response_commands\".\"entry_ids\") and json_type(\"attendance_response_commands\".\"entry_ids\") = 'array' and json_array_length(\"attendance_response_commands\".\"entry_ids\") > 0"
         }
       }
     },

@@ -2,7 +2,7 @@ const record = [
   "time_entries",
   "pay_period_closures",
   "attendance_questions",
-  "attendance_response_commands",
+  "attendance_answers",
   "persons",
   "settings.business_day",
   "settings.venue",

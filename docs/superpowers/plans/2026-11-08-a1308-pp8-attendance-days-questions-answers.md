@@ -6,6 +6,12 @@
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
 
+> **2026-11-17, watcher clearance at 08:54 in Lane E questions.md:** omit
+> `attendance_days_start_idx`, its synthetic instant-lookup test and its predicted protection-list
+> line. DB-GROWTH superseded pp9's lookup, and no product predicate uses the index. The writer takes
+> the day id the evaluator already holds; it adds no day re-read or bounds check. Other pp8 changes
+> remain as below. This records the review correction, not a new owner-design approval.
+
 **Goal:** three reshapes of the attendance checker's own tables, with no change to what it decides:
 (1) `attendance_day_work` becomes `attendance_days` and loses `deferred_shift_ids`; (2)
 `attendance_questions` points at its day through `attendance_day_id` instead of copying the day's

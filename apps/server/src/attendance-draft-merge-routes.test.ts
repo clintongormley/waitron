@@ -17,7 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 
@@ -121,7 +121,7 @@ const state = async () => ({
   lines: await suite.db.select().from(orderDraftLines),
   events: await suite.db.select().from(orderDraftEvents),
   facts: await suite.db.select().from(staffActivity),
-  days: await suite.db.select().from(attendanceDayWork),
+  days: await suite.db.select().from(attendanceDays),
 });
 describe("draft-event attendance in table combines", () => {
   it.each(["join", "move"] as const)(

@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "../test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -84,7 +85,7 @@ function queue() {
   expect(api).toHaveProperty("readAttendanceManagerQueue", expect.any(Function));
   return run((tx) => api.readAttendanceManagerQueue(tx));
 }
-function question(
+async function question(
   input: {
     date?: string;
     subject?: string;
@@ -96,6 +97,11 @@ function question(
   const date = input.date ?? "2026-01-05";
   const end = new Date(`${date}T04:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 1);
+  const attendanceDayId = await seedAttendanceDay(suite.db, {
+    businessDay: date,
+    startAt: `${date}T04:00:00Z`,
+    endAt: end.toISOString(),
+  });
   return run((tx) =>
     upsertAttendanceQuestion(
       tx,
@@ -114,6 +120,7 @@ function question(
         evidenceKeys: [input.key ?? `rota:${date}`],
       },
       now,
+      attendanceDayId,
     ),
   );
 }
@@ -187,6 +194,11 @@ it("keeps canonical active unanswered questions oldest first without exposing an
   });
 });
 it("uses saved business bounds and retains an automatic original outside the business-day calendar date", async () => {
+  await seedAttendanceDay(suite.db, {
+    businessDay: "2026-01-05",
+    startAt: "2026-01-05T04:00:00.000Z",
+    endAt: "2026-01-06T04:00:00.000Z",
+  });
   await run((tx) =>
     backend.clockIn(tx, {
       nodeId,

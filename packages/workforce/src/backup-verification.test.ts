@@ -24,7 +24,7 @@ import { makeRuleset } from "../test/fixtures.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { payPeriodSettings } from "./schema/pay-period-settings.js";
-import { attendanceDayWork } from "./schema/attendance.js";
+import { attendanceDays } from "./schema/attendance.js";
 
 const migrations = [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS];
 const original = useVenueDb({ migrations });
@@ -156,9 +156,7 @@ beforeEach(async () => {
   await restored.db.insert(timeEntries).values(await original.db.select().from(timeEntries));
 
   await restored.db.insert(payPeriodSettings).values({ id: 1, frequency: "monthly" });
-  await restored.db
-    .insert(attendanceDayWork)
-    .values(await original.db.select().from(attendanceDayWork));
+  await restored.db.insert(attendanceDays).values(await original.db.select().from(attendanceDays));
 });
 
 async function corrupt(db: Database, statement: string) {
@@ -303,9 +301,9 @@ describe("complete captured workforce backup evidence", () => {
     );
     const row = (await original.db.select().from(timeEntries)).find((r) => r.id === added.id)!;
     await restored.db.insert(timeEntries).values(row);
-    const [work] = await original.db.select().from(attendanceDayWork);
+    const [work] = await original.db.select().from(attendanceDays);
     await restored.db
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set(work!)
       .where(sql`id=${work!.id}`);
     expect(await run()).toEqual(passed);
@@ -347,7 +345,11 @@ describe("complete captured workforce backup evidence", () => {
   it("registers explicit obligations for every classified table", () => {
     const owner = validateBackupVerificationContribution(OWNER);
     expect(owner.data.tables).toEqual(WORKFORCE_OWN_CLASSIFICATION.map((c) => c.table));
-    expect(owner.data.immutableTables).toEqual(["time_entries", "pay_period_closures"]);
+    expect(owner.data.immutableTables).toEqual([
+      "time_entries",
+      "pay_period_closures",
+      "attendance_answers",
+    ]);
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });
@@ -448,7 +450,7 @@ describe("complete captured workforce backup evidence", () => {
     for (const db of [original.db, restored.db])
       await corrupt(
         db,
-        "delete from time_entries; delete from pay_period_closures; delete from pay_period_settings; delete from attendance_day_work",
+        "delete from time_entries; delete from pay_period_closures; delete from pay_period_settings; delete from attendance_days",
       );
     expect(await run(absent.db)).toEqual(passed);
     await restored.db.insert(payPeriodSettings).values({ frequency: "monthly" });

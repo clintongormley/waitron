@@ -895,7 +895,8 @@ also qualifies the historical operation-description references in this section.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
   Each shift now holds its own job role and area and belongs to a rota week; deleting a draft week
-  deletes its shifts.
+  deletes its shifts. Attendance questions now point at their stored day rather than copying its
+  bounds; the next due time carries deferred work, and recorded answers refuse changes and deletion.
   Authenticator secrets and emailed confirmation codes use purpose keys from the vault ring.
   The existing rotation command re-seals authenticator secrets and pending setups; codes issued
   before the change still work while the ring retains their previous key.

@@ -1,9 +1,9 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertAttendanceDay } from "./attendance-state.js";
 import type { AttendanceQuestion } from "./attendance-types.js";
-import { attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import {
   cancelUnclaimedAttendanceMail as cancelUnclaimed,
   queueAttendanceReminder,
@@ -11,11 +11,12 @@ import {
 } from "./attendance-mail.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { readRecordedEntries } from "./record-reads.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { projectCorrectionItems } from "./attendance-responses.js";
 import "./errors.js";
 
-type QuestionRow = typeof attendanceQuestions.$inferSelect;
+type QuestionRow = typeof attendanceQuestions.$inferSelect &
+  Pick<typeof attendanceDays.$inferSelect, "businessDay" | "startAt" | "endAt">;
 type QuestionInput = Omit<AttendanceQuestion, "id" | "createdAt">;
 const union = <T extends string>(a: readonly T[], b: readonly T[]): T[] =>
   [...new Set([...a, ...b])].sort();
@@ -76,8 +77,14 @@ async function canonicalQuestion(tx: Transaction, id: string): Promise<QuestionR
     if (seen.has(next)) throw invalid("attendance question cycle");
     seen.add(next);
     const [row] = await tx
-      .select()
+      .select({
+        ...getTableColumns(attendanceQuestions),
+        businessDay: attendanceDays.businessDay,
+        startAt: attendanceDays.startAt,
+        endAt: attendanceDays.endAt,
+      })
       .from(attendanceQuestions)
+      .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
       .where(eq(attendanceQuestions.id, next));
     if (!row) throw invalid("attendance question missing");
     if (row.canonicalQuestionId === null) return row;
@@ -85,7 +92,11 @@ async function canonicalQuestion(tx: Transaction, id: string): Promise<QuestionR
   }
 }
 
-async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Promise<void> {
+async function ensureReminder(
+  tx: Transaction,
+  row: typeof attendanceQuestions.$inferSelect,
+  at: Date,
+): Promise<void> {
   if (row.kind === "automatic-out" || !row.active || row.resolvedByEntryId !== null) {
     await cancelUnclaimed(tx, row.id);
     return;
@@ -93,7 +104,7 @@ async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Prom
   await queueAttendanceReminder(tx, row, at);
 }
 
-function mergedFields(row: QuestionRow, input: QuestionInput) {
+function mergedFields(row: typeof attendanceQuestions.$inferSelect, input: QuestionInput) {
   if (
     (row.automaticEntryId !== null &&
       input.automaticEntryId !== null &&
@@ -118,10 +129,11 @@ export async function upsertAttendanceQuestion(
   tx: Transaction,
   input: QuestionInput,
   at: Date,
+  attendanceDayId: string,
 ): Promise<string> {
   validate(input, at);
   const [existing] = await tx
-    .select()
+    .select({ id: attendanceQuestions.id })
     .from(attendanceQuestions)
     .where(
       and(
@@ -129,15 +141,11 @@ export async function upsertAttendanceQuestion(
         eq(attendanceQuestions.shiftKey, input.shiftKey),
       ),
     );
-  let row: QuestionRow;
+  let row: typeof attendanceQuestions.$inferSelect;
   if (existing) {
     row = await canonicalQuestion(tx, existing.id);
-    if (
-      row.businessDay !== input.day.businessDay ||
-      row.startAt !== new Date(input.day.startAt).toISOString() ||
-      row.endAt !== new Date(input.day.endAt).toISOString()
-    ) {
-      throw invalid("attendance question bounds changed");
+    if (row.attendanceDayId !== attendanceDayId) {
+      throw invalid("attendance question day changed");
     }
     const fields = mergedFields(row, input);
     await tx.update(attendanceQuestions).set(fields).where(eq(attendanceQuestions.id, row.id));
@@ -147,9 +155,7 @@ export async function upsertAttendanceQuestion(
       .insert(attendanceQuestions)
       .values({
         personId: input.personId,
-        businessDay: input.day.businessDay,
-        startAt: new Date(input.day.startAt).toISOString(),
-        endAt: new Date(input.day.endAt).toISOString(),
+        attendanceDayId,
         shiftKey: input.shiftKey,
         kind: input.kind,
         missingKinds: union([], input.missingKinds),
@@ -170,8 +176,14 @@ export async function listPendingAttendanceQuestions(
   personId: string,
 ): Promise<AttendanceQuestion[]> {
   const rows = await tx
-    .select()
+    .select({
+      ...getTableColumns(attendanceQuestions),
+      businessDay: attendanceDays.businessDay,
+      startAt: attendanceDays.startAt,
+      endAt: attendanceDays.endAt,
+    })
     .from(attendanceQuestions)
+    .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
     .where(
       and(
         eq(attendanceQuestions.personId, personId),
@@ -181,15 +193,15 @@ export async function listPendingAttendanceQuestions(
       ),
     )
     .orderBy(
-      asc(attendanceQuestions.businessDay),
-      asc(attendanceQuestions.startAt),
+      asc(attendanceDays.businessDay),
+      asc(attendanceDays.startAt),
       asc(attendanceQuestions.id),
     );
   const entries = await readRecordedEntries(tx, { personId });
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId));
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId));
   const items = projectCorrectionItems(entries, commands);
   return rows.map((row) => ({
     ...asQuestion(row),
@@ -207,9 +219,7 @@ export async function mergeAttendanceQuestions(
   if (canonical.id === duplicate.id) return;
   if (
     canonical.personId !== duplicate.personId ||
-    canonical.businessDay !== duplicate.businessDay ||
-    canonical.startAt !== duplicate.startAt ||
-    canonical.endAt !== duplicate.endAt ||
+    canonical.attendanceDayId !== duplicate.attendanceDayId ||
     !canonical.active ||
     !duplicate.active ||
     canonical.resolvedByEntryId !== null ||

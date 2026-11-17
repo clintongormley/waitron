@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { MAIL_LIFETIME_MS, readMail, readVenue, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
+  attendanceDays,
   attendanceQuestions,
   reconcileAttendanceResponses,
   retireObsoleteRotaQuestions,
@@ -40,8 +41,9 @@ export function attendanceReminderMail(deps: {
     if (id === null) return undefined;
     return (
       await tx
-        .select({ question: attendanceQuestions, person: persons })
+        .select({ question: attendanceQuestions, day: attendanceDays, person: persons })
         .from(attendanceQuestions)
+        .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
         .innerJoin(persons, eq(persons.id, attendanceQuestions.personId))
         .where(eq(attendanceQuestions.id, id))
     )[0];
@@ -68,9 +70,9 @@ export function attendanceReminderMail(deps: {
       if (!eligible(candidate)) return later;
       await reconcileAttendanceResponses(tx, candidate.person.id);
       const day = {
-        businessDay: candidate.question.businessDay,
-        startAt: candidate.question.startAt,
-        endAt: candidate.question.endAt,
+        businessDay: candidate.day.businessDay,
+        startAt: candidate.day.startAt,
+        endAt: candidate.day.endAt,
       };
       await retireObsoleteRotaQuestions(tx, day);
       const latest = await reconcileAttendanceDay(
@@ -91,7 +93,7 @@ export function attendanceReminderMail(deps: {
               : current.person.locale === "en-GB"
                 ? "en"
                 : deps.venueLanguage,
-          businessDay: current.question.businessDay,
+          businessDay: current.day.businessDay,
           venueName: (await readVenue(tx)).name,
           missingKinds:
             current.question.openEntryId === null ? current.question.missingKinds : ["out"],

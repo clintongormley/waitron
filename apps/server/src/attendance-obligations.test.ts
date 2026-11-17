@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
-  attendanceDayWork,
+  attendanceDays,
   attendanceQuestions,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
@@ -25,6 +26,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 const backend = new WorkforceBackend();
 const now = new Date("2026-01-08T12:00:00.000Z");
 let personId: string, shiftId: string, questionId: string;
+let attendanceDayId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
@@ -57,6 +59,7 @@ beforeEach(async () => {
     }),
   );
   await run((tx) => backend.publishRoster(tx, { versionId }));
+  attendanceDayId = await seedAttendanceDay(suite.db, day());
   questionId = await run((tx) =>
     upsertAttendanceQuestion(
       tx,
@@ -71,6 +74,7 @@ beforeEach(async () => {
         evidenceKeys: ["rota:original"],
       },
       now,
+      attendanceDayId,
     ),
   );
   await run((tx) => markAttendanceSourceChanged(tx, "shift", shiftId));
@@ -85,11 +89,11 @@ async function replace() {
 
 describe("selected-day rota reconciliation", () => {
   it("retires the prior publication's question before returning a newly dirty day", async () => {
-    const [work] = await suite.db.select().from(attendanceDayWork);
+    const [work] = await suite.db.select().from(attendanceDays);
     await suite.db
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({ evaluatedRevision: work!.dirtyRevision })
-      .where(eq(attendanceDayWork.id, work!.id));
+      .where(eq(attendanceDays.id, work!.id));
     await replace();
     expect(await next()).toEqual(day());
     expect(await own()).toEqual([]);

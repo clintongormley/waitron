@@ -14,7 +14,7 @@ import type {
 } from "./attendance-types.js";
 import { assertAttendanceDay } from "./attendance-state.js";
 import { mergeAttendanceQuestions, upsertAttendanceQuestion } from "./attendance-questions.js";
-import { attendanceDayWork, attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -63,6 +63,7 @@ async function retainQuestion(
   tx: Transaction,
   input: Omit<AttendanceQuestion, "id" | "createdAt">,
   at: Date,
+  attendanceDayId: string,
 ): Promise<string> {
   const [old] = await tx
     .select()
@@ -81,7 +82,7 @@ async function retainQuestion(
     // Ambiguous or accepted delivery must not be retried when an obligation returns.
     await reopenAttendanceMail(tx, old.id, at);
   }
-  return upsertAttendanceQuestion(tx, input, at);
+  return upsertAttendanceQuestion(tx, input, at, attendanceDayId);
 }
 
 export async function processAttendanceDay(
@@ -96,8 +97,8 @@ export async function processAttendanceDay(
     throw invalid("attendance day not due");
   const [work] = await tx
     .select()
-    .from(attendanceDayWork)
-    .where(eq(attendanceDayWork.businessDay, day.businessDay));
+    .from(attendanceDays)
+    .where(eq(attendanceDays.businessDay, day.businessDay));
   if (!work || work.startAt !== startAt || work.endAt !== endAt)
     throw invalid("saved attendance day mismatch");
   const planned = input.planned
@@ -133,7 +134,7 @@ export async function processAttendanceDay(
     .from(attendanceQuestions)
     .where(
       and(
-        eq(attendanceQuestions.businessDay, day.businessDay),
+        eq(attendanceQuestions.attendanceDayId, work.id),
         eq(attendanceQuestions.active, true),
         sql`${attendanceQuestions.resolvedByEntryId} is null`,
         sql`${attendanceQuestions.shiftKey} like 'activity:%'`,
@@ -199,7 +200,7 @@ export async function processAttendanceDay(
     const keys = new Set(evidence(ownFacts));
     const retired = prior.filter(
       (q) =>
-        q.businessDay === day.businessDay &&
+        q.attendanceDayId === work.id &&
         q.inactiveReason === "rota_superseded" &&
         q.evidenceKeys.some((key) => keys.has(key)),
     );
@@ -217,10 +218,11 @@ export async function processAttendanceDay(
         evidenceKeys: [...new Set([...keys, ...retired.flatMap((q) => q.evidenceKeys)])],
       },
       now,
+      work.id,
     );
     const related = prior.filter(
       (q) =>
-        q.businessDay === day.businessDay &&
+        q.attendanceDayId === work.id &&
         q.active &&
         q.id !== id &&
         q.openEntryId === null &&
@@ -234,7 +236,7 @@ export async function processAttendanceDay(
     const identities = new Set([...keys].map(endpointIdentity));
     const displaced = prior.filter(
       (q) =>
-        q.businessDay !== day.businessDay &&
+        q.attendanceDayId !== work.id &&
         q.evidenceKeys.some(
           (key) => key.startsWith("order:staff:") && identities.has(endpointIdentity(key)),
         ),
@@ -325,7 +327,7 @@ export async function processAttendanceDay(
           .where(
             and(
               eq(attendanceQuestions.personId, personId),
-              eq(attendanceQuestions.businessDay, day.businessDay),
+              eq(attendanceQuestions.attendanceDayId, work.id),
               eq(attendanceQuestions.active, true),
               eq(attendanceQuestions.kind, "missing-times"),
               sql`${attendanceQuestions.resolvedByEntryId} is null`,
@@ -472,12 +474,11 @@ export async function processAttendanceDay(
   }
   if (input.personId === undefined)
     await tx
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({
         evaluatedRevision: work.dirtyRevision,
-        deferredShiftIds: deferred.map((d) => d.id).sort(),
         nextDueAt: deferred.map((d) => d.at).sort()[0] ?? endAt,
       })
-      .where(eq(attendanceDayWork.id, work.id));
+      .where(eq(attendanceDays.id, work.id));
   return result;
 }

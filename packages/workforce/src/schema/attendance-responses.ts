@@ -14,8 +14,8 @@ const responseAction = enumType([
   "accept",
   "disagree",
 ]);
-export const attendanceResponseCommands = table(
-  "attendance_response_commands",
+export const attendanceAnswers = table(
+  "attendance_answers",
   {
     id: id("id").primaryKey(),
     requestedByPersonId: id("requested_by_person_id")
@@ -37,12 +37,12 @@ export const attendanceResponseCommands = table(
     foreignKey({
       columns: [t.questionId, t.personId],
       foreignColumns: [attendanceQuestions.id, attendanceQuestions.personId],
-      name: "attendance_response_commands_question_fk",
+      name: "attendance_answers_question_fk",
     }).onDelete("restrict"),
-    index("attendance_response_commands_question_idx").on(t.personId, t.questionId),
-    check("attendance_response_commands_action_ck", enumCheck(t.action)),
+    index("attendance_answers_question_idx").on(t.personId, t.questionId),
+    check("attendance_answers_action_ck", enumCheck(t.action)),
     check(
-      "attendance_response_commands_entries_ck",
+      "attendance_answers_entries_ck",
       sql`json_valid(${t.entryIds}) and json_type(${t.entryIds}) = 'array' and json_array_length(${t.entryIds}) > 0`,
     ),
   ],

@@ -17,54 +17,7 @@ CREATE TABLE `absences` (
 );
 --> statement-breakpoint
 CREATE INDEX `absences_person_idx` ON `absences` (`person_id`,`starts_on`);--> statement-breakpoint
-CREATE TABLE `attendance_day_work` (
-	`id` text PRIMARY KEY NOT NULL,
-	`business_day` text NOT NULL,
-	`start_at` text NOT NULL,
-	`end_at` text NOT NULL,
-	`dirty_revision` integer DEFAULT 1 NOT NULL,
-	`evaluated_revision` integer DEFAULT 0 NOT NULL,
-	`next_due_at` text NOT NULL,
-	`deferred_shift_ids` text DEFAULT '[]' NOT NULL,
-	CONSTRAINT "attendance_day_work_bounds_ck" CHECK("attendance_day_work"."end_at" > "attendance_day_work"."start_at"),
-	CONSTRAINT "attendance_day_work_revision_ck" CHECK("attendance_day_work"."dirty_revision" > 0 and "attendance_day_work"."evaluated_revision" >= 0 and "attendance_day_work"."evaluated_revision" <= "attendance_day_work"."dirty_revision")
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_day_work_scope_uq` ON `attendance_day_work` (`business_day`);--> statement-breakpoint
-CREATE INDEX `attendance_day_work_due_idx` ON `attendance_day_work` (`next_due_at`);--> statement-breakpoint
-CREATE TABLE `attendance_questions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`person_id` text NOT NULL,
-	`business_day` text NOT NULL,
-	`start_at` text NOT NULL,
-	`end_at` text NOT NULL,
-	`shift_key` text NOT NULL,
-	`kind` text NOT NULL,
-	`missing_kinds` text NOT NULL,
-	`open_entry_id` text,
-	`automatic_entry_id` text,
-	`resolved_by_entry_id` text,
-	`evidence_keys` text NOT NULL,
-	`created_at` text NOT NULL,
-	`active` integer DEFAULT true NOT NULL,
-	`canonical_question_id` text,
-	`inactive_reason` text,
-	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`open_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`automatic_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`resolved_by_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`canonical_question_id`,`person_id`) REFERENCES `attendance_questions`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "attendance_questions_kind_ck" CHECK("attendance_questions"."kind" in ('automatic-out', 'missing-times')),
-	CONSTRAINT "attendance_questions_bounds_ck" CHECK("attendance_questions"."end_at" > "attendance_questions"."start_at"),
-	CONSTRAINT "attendance_questions_activity_ck" CHECK(("attendance_questions"."active" = 1 and "attendance_questions"."inactive_reason" is null and "attendance_questions"."canonical_question_id" is null) or ("attendance_questions"."active" = 0 and "attendance_questions"."inactive_reason" is not null)),
-	CONSTRAINT "attendance_questions_canonical_ck" CHECK("attendance_questions"."canonical_question_id" is null or "attendance_questions"."canonical_question_id" <> "attendance_questions"."id"),
-	CONSTRAINT "attendance_questions_automatic_ck" CHECK(("attendance_questions"."kind" = 'automatic-out' and "attendance_questions"."open_entry_id" is not null and "attendance_questions"."automatic_entry_id" is not null and json_array_length("attendance_questions"."missing_kinds") = 0) or ("attendance_questions"."kind" = 'missing-times' and "attendance_questions"."automatic_entry_id" is null and json_array_length("attendance_questions"."missing_kinds") > 0))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_questions_shift_uq` ON `attendance_questions` (`person_id`,`shift_key`);--> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_questions_subject_uq` ON `attendance_questions` (`id`,`person_id`);--> statement-breakpoint
-CREATE INDEX `attendance_questions_own_idx` ON `attendance_questions` (`person_id`,`active`,`resolved_by_entry_id`,`business_day`,`start_at`,`id`);--> statement-breakpoint
-CREATE TABLE `attendance_response_commands` (
+CREATE TABLE `attendance_answers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`requested_by_person_id` text NOT NULL,
 	`authorized_by_person_id` text NOT NULL,
@@ -78,11 +31,55 @@ CREATE TABLE `attendance_response_commands` (
 	FOREIGN KEY (`authorized_by_person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`question_id`,`person_id`) REFERENCES `attendance_questions`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "attendance_response_commands_action_ck" CHECK("attendance_response_commands"."action" in ('confirm', 'request', 'propose', 'approve', 'decline', 'accept', 'disagree')),
-	CONSTRAINT "attendance_response_commands_entries_ck" CHECK(json_valid("attendance_response_commands"."entry_ids") and json_type("attendance_response_commands"."entry_ids") = 'array' and json_array_length("attendance_response_commands"."entry_ids") > 0)
+	CONSTRAINT "attendance_answers_action_ck" CHECK("attendance_answers"."action" in ('confirm', 'request', 'propose', 'approve', 'decline', 'accept', 'disagree')),
+	CONSTRAINT "attendance_answers_entries_ck" CHECK(json_valid("attendance_answers"."entry_ids") and json_type("attendance_answers"."entry_ids") = 'array' and json_array_length("attendance_answers"."entry_ids") > 0)
 );
 --> statement-breakpoint
-CREATE INDEX `attendance_response_commands_question_idx` ON `attendance_response_commands` (`person_id`,`question_id`);--> statement-breakpoint
+CREATE INDEX `attendance_answers_question_idx` ON `attendance_answers` (`person_id`,`question_id`);--> statement-breakpoint
+CREATE TABLE `attendance_days` (
+	`id` text PRIMARY KEY NOT NULL,
+	`business_day` text NOT NULL,
+	`start_at` text NOT NULL,
+	`end_at` text NOT NULL,
+	`dirty_revision` integer DEFAULT 1 NOT NULL,
+	`evaluated_revision` integer DEFAULT 0 NOT NULL,
+	`next_due_at` text NOT NULL,
+	CONSTRAINT "attendance_days_bounds_ck" CHECK("attendance_days"."end_at" > "attendance_days"."start_at"),
+	CONSTRAINT "attendance_days_revision_ck" CHECK("attendance_days"."dirty_revision" > 0 and "attendance_days"."evaluated_revision" >= 0 and "attendance_days"."evaluated_revision" <= "attendance_days"."dirty_revision")
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `attendance_days_scope_uq` ON `attendance_days` (`business_day`);--> statement-breakpoint
+CREATE INDEX `attendance_days_due_idx` ON `attendance_days` (`next_due_at`);--> statement-breakpoint
+CREATE TABLE `attendance_questions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`person_id` text NOT NULL,
+	`attendance_day_id` text NOT NULL,
+	`shift_key` text NOT NULL,
+	`kind` text NOT NULL,
+	`missing_kinds` text NOT NULL,
+	`open_entry_id` text,
+	`automatic_entry_id` text,
+	`resolved_by_entry_id` text,
+	`evidence_keys` text NOT NULL,
+	`created_at` text NOT NULL,
+	`active` integer DEFAULT true NOT NULL,
+	`canonical_question_id` text,
+	`inactive_reason` text,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`attendance_day_id`) REFERENCES `attendance_days`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`open_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`automatic_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`resolved_by_entry_id`,`person_id`) REFERENCES `time_entries`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`canonical_question_id`,`person_id`) REFERENCES `attendance_questions`(`id`,`person_id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "attendance_questions_kind_ck" CHECK("attendance_questions"."kind" in ('automatic-out', 'missing-times')),
+	CONSTRAINT "attendance_questions_activity_ck" CHECK(("attendance_questions"."active" = 1 and "attendance_questions"."inactive_reason" is null and "attendance_questions"."canonical_question_id" is null) or ("attendance_questions"."active" = 0 and "attendance_questions"."inactive_reason" is not null)),
+	CONSTRAINT "attendance_questions_canonical_ck" CHECK("attendance_questions"."canonical_question_id" is null or "attendance_questions"."canonical_question_id" <> "attendance_questions"."id"),
+	CONSTRAINT "attendance_questions_automatic_ck" CHECK(("attendance_questions"."kind" = 'automatic-out' and "attendance_questions"."open_entry_id" is not null and "attendance_questions"."automatic_entry_id" is not null and json_array_length("attendance_questions"."missing_kinds") = 0) or ("attendance_questions"."kind" = 'missing-times' and "attendance_questions"."automatic_entry_id" is null and json_array_length("attendance_questions"."missing_kinds") > 0))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `attendance_questions_shift_uq` ON `attendance_questions` (`person_id`,`shift_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `attendance_questions_subject_uq` ON `attendance_questions` (`id`,`person_id`);--> statement-breakpoint
+CREATE INDEX `attendance_questions_own_day_idx` ON `attendance_questions` (`person_id`,`active`,`resolved_by_entry_id`,`attendance_day_id`,`id`);--> statement-breakpoint
 CREATE TABLE `availability` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

@@ -11,7 +11,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
-  attendanceDayWork,
+  attendanceDays,
   rosterVersions,
   shifts,
 } from "@waitron/workforce";
@@ -72,10 +72,10 @@ async function add(versionId: string, day = "2026-01-05") {
   return ((await response.json()) as { shiftId: string }).shiftId;
 }
 async function days() {
-  return suite.db.select().from(attendanceDayWork).orderBy(asc(attendanceDayWork.businessDay));
+  return suite.db.select().from(attendanceDays).orderBy(asc(attendanceDays.businessDay));
 }
 async function cleanQueue() {
-  await suite.db.delete(attendanceDayWork);
+  await suite.db.delete(attendanceDays);
 }
 
 describe("accepted rota writes invalidate attendance in their transaction", () => {
@@ -105,7 +105,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     const id = await add(await version());
     const [work] = await days();
     expect(work).toBeDefined();
-    await suite.db.update(attendanceDayWork).set({ evaluatedRevision: work!.dirtyRevision });
+    await suite.db.update(attendanceDays).set({ evaluatedRevision: work!.dirtyRevision });
     const response = await send("PATCH", `roster/shifts/${id}`, { personId: otherId });
     expect(response.status).toBe(204);
     const [dirty] = await days();

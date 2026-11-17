@@ -11,7 +11,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
 import { readBillEditState } from "./bill-editing.js";
@@ -92,7 +92,7 @@ const state = async () => ({
   lines: await suite.db.select().from(orderDraftLines),
   events: await suite.db.select().from(orderDraftEvents),
   facts: await suite.db.select().from(staffActivity),
-  days: await suite.db.select().from(attendanceDayWork),
+  days: await suite.db.select().from(attendanceDays),
 });
 
 async function assertSnapshots(_events: unknown, at: string, actor: string) {

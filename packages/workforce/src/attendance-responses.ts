@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { readBusinessDayRevision, readVenueClock, type Transaction } from "@waitron/db";
 import { readRecordedEntries } from "./record-reads.js";
 import { attendanceQuestions } from "./schema/attendance.js";
-import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { attendanceAnswers } from "./schema/attendance-responses.js";
 
 export async function readAttendanceRevision(tx: Transaction, personId: string): Promise<string> {
   const entries = (await readRecordedEntries(tx, { personId })).sort(compareRecording);
@@ -19,9 +19,9 @@ export async function readAttendanceRevision(tx: Transaction, personId: string):
     .orderBy(attendanceQuestions.id);
   const commands = await tx
     .select()
-    .from(attendanceResponseCommands)
-    .where(eq(attendanceResponseCommands.personId, personId))
-    .orderBy(attendanceResponseCommands.id);
+    .from(attendanceAnswers)
+    .where(eq(attendanceAnswers.personId, personId))
+    .orderBy(attendanceAnswers.id);
   const clock = await readVenueClock(tx);
   const settings = await readBusinessDayRevision(tx);
   return createHash("sha256")

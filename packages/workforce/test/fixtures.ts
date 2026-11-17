@@ -1,3 +1,5 @@
+import { attendanceDays } from "../src/schema/attendance.js";
+import type { AttendanceDay } from "../src/attendance-types.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { and, asc, eq } from "drizzle-orm";
@@ -354,4 +356,24 @@ export async function insertAttendanceMail(
     notAfter: new Date(at.getTime() + MAIL_LIFETIME_MS.attendance_question),
   });
   await setAttendanceMail(db, input.questionId, input);
+}
+
+export async function seedAttendanceDay(
+  db: Database | Transaction,
+  day: AttendanceDay,
+): Promise<string> {
+  await db
+    .insert(attendanceDays)
+    .values({
+      businessDay: day.businessDay,
+      startAt: new Date(day.startAt).toISOString(),
+      endAt: new Date(day.endAt).toISOString(),
+      nextDueAt: new Date(day.endAt).toISOString(),
+    })
+    .onConflictDoNothing({ target: attendanceDays.businessDay });
+  const [row] = await db
+    .select({ id: attendanceDays.id })
+    .from(attendanceDays)
+    .where(eq(attendanceDays.businessDay, day.businessDay));
+  return row!.id;
 }

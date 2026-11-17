@@ -463,3 +463,7 @@ Cloud was searched read-only at `da156a31c1dad5c0c33494798f734e612e6aba4f`. The 
 The dynamic consumers also matter. `packages/backups/src/waitron-verifier.ts:18` loads from a supplied checkout, then `packages/backups/src/waitron-verify-child.mjs:22` loads Waitron restore and modules; `:27` passes `migrationsRoot:null` to `validateArtifact`, and `:37` calls `writeValidated`. Waitron `apps/server/src/restore.ts:221` reads expected schema versions from those folders and `:281` applies them. Cloud `scripts/test-local-backups.mjs:257` also invokes Waitron's restore CLI with `WAITRON_MIGRATIONS_DIR` at `:287`.
 
 Record each verifier checkout SHA and rehearsal migration root. Keep old archives paired with the old checkout/root; new-epoch qualification uses new fixtures and new roots. Hold this activity stopped when pairing is unknown. This dependency inspection is not a Cloud rehearsal result. No Cloud edit/reset is part of A760. Recheck active branches at freeze.
+
+**2026-11-17, A1308 pp8:** the attendance processing table is now `attendance_days`; questions
+reference its id, and `attendance_answers` replaces `attendance_response_commands` with append-only
+protection. The inventory above records the earlier squash.

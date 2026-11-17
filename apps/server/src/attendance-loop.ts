@@ -1,6 +1,6 @@
 import { withTransaction, type Database } from "@waitron/db";
 import { and, sql } from "drizzle-orm";
-import { attendanceDayWork, processAttendanceDay } from "@waitron/workforce";
+import { attendanceDays, processAttendanceDay } from "@waitron/workforce";
 import { nextAttendanceDay } from "./attendance-discovery.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
 import { realSleep } from "./loop.js";
@@ -37,13 +37,13 @@ export async function runAttendancePass(
       appended = result.automaticEntryIds.length > 0;
     }
     const [remaining] = await tx
-      .select({ id: attendanceDayWork.id })
-      .from(attendanceDayWork)
+      .select({ id: attendanceDays.id })
+      .from(attendanceDays)
       .where(
         and(
-          sql`${attendanceDayWork.nextDueAt} <= ${now.toISOString()}`,
-          sql`${attendanceDayWork.endAt} <= ${now.toISOString()}`,
-          sql`(${attendanceDayWork.dirtyRevision} > ${attendanceDayWork.evaluatedRevision} or json_array_length(${attendanceDayWork.deferredShiftIds}) > 0)`,
+          sql`${attendanceDays.nextDueAt} <= ${now.toISOString()}`,
+          sql`${attendanceDays.endAt} <= ${now.toISOString()}`,
+          sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or ${attendanceDays.nextDueAt} > ${attendanceDays.endAt})`,
         ),
       )
       .limit(1);

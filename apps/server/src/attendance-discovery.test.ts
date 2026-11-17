@@ -13,7 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   WORKFORCE_MIGRATIONS,
-  attendanceDayWork,
+  attendanceDays,
   rosterVersions,
   shifts,
   recordStaffActivity,
@@ -26,15 +26,14 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 let personId: string;
 const now = new Date("2026-01-09T12:00:00Z");
 const next = (at = now) => run((tx) => nextAttendanceDay(tx, { now: at }));
-const rows = () =>
-  suite.db.select().from(attendanceDayWork).orderBy(asc(attendanceDayWork.businessDay));
+const rows = () => suite.db.select().from(attendanceDays).orderBy(asc(attendanceDays.businessDay));
 const activity = (at: string) => run((tx) => recordStaffActivity(tx, personId, new Date(at)));
 async function evaluate() {
   for (const work of await rows())
     await suite.db
-      .update(attendanceDayWork)
+      .update(attendanceDays)
       .set({ evaluatedRevision: work.dirtyRevision })
-      .where(eq(attendanceDayWork.id, work.id));
+      .where(eq(attendanceDays.id, work.id));
 }
 
 beforeEach(async () => {
@@ -53,13 +52,12 @@ it("allows deferred evaluated work only at its saved due instant", async () => {
   await activity("2026-01-05T12:00:00Z");
   const [work] = await rows();
   await suite.db
-    .update(attendanceDayWork)
+    .update(attendanceDays)
     .set({
       evaluatedRevision: work!.dirtyRevision,
-      deferredShiftIds: ["overnight"],
       nextDueAt: "2026-01-06T05:00:00.000Z",
     })
-    .where(eq(attendanceDayWork.id, work!.id));
+    .where(eq(attendanceDays.id, work!.id));
   expect(await next(new Date("2026-01-06T04:59:59Z"))).toBeNull();
   expect((await next(new Date("2026-01-06T05:00:00Z")))?.businessDay).toBe("2026-01-05");
 });
@@ -120,9 +118,9 @@ it("refuses a changed historical bound rather than relabeling an evaluated day",
   await evaluate();
   const [work] = await rows();
   await suite.db
-    .update(attendanceDayWork)
+    .update(attendanceDays)
     .set({ dirtyRevision: work!.dirtyRevision + 1 })
-    .where(eq(attendanceDayWork.id, work!.id));
+    .where(eq(attendanceDays.id, work!.id));
   const before = await rows();
   await seedBusinessDay(suite.db, { dayCutover: "06:00" });
   await expect(next()).rejects.toMatchObject({ code: "attendance.invalid" });

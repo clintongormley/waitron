@@ -11,9 +11,9 @@ export { shiftSwaps, shiftSwapStatus } from "./shift-swaps.js";
 
 export { payPeriodSettings } from "./pay-period-settings.js";
 export { payPeriodClosures } from "./pay-period-closures.js";
-export { staffActivity, attendanceDayWork, attendanceQuestions } from "./attendance.js";
+export { staffActivity, attendanceDays, attendanceQuestions } from "./attendance.js";
 
-export { attendanceResponseCommands } from "./attendance-responses.js";
+export { attendanceAnswers } from "./attendance-responses.js";
 
 // Staffing's tables, which live in workforce's set.
 export * from "./staffing/index.js";

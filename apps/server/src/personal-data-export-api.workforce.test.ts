@@ -1,3 +1,4 @@
+import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -374,9 +375,11 @@ beforeEach(async () => {
     {
       id: marthaQuestion,
       personId: marthaId,
-      businessDay: "2026-04-18",
-      startAt: "2026-04-18T04:00:00.000Z",
-      endAt: "2026-04-19T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-04-18",
+        startAt: "2026-04-18T04:00:00.000Z",
+        endAt: "2026-04-19T04:00:00.000Z",
+      }),
       shiftKey: "shift:marta-0418",
       kind: "missing-times",
       missingKinds: ["in", "out"],
@@ -386,9 +389,11 @@ beforeEach(async () => {
     {
       id: colleagueQuestion,
       personId: colleagueId,
-      businessDay: "2026-04-25",
-      startAt: "2026-04-25T04:00:00.000Z",
-      endAt: "2026-04-26T04:00:00.000Z",
+      attendanceDayId: await seedAttendanceDay(suite.db, {
+        businessDay: "2026-04-25",
+        startAt: "2026-04-25T04:00:00.000Z",
+        endAt: "2026-04-26T04:00:00.000Z",
+      }),
       shiftKey: "shift:colleague-0425",
       kind: "missing-times",
       missingKinds: ["out"],
@@ -430,7 +435,7 @@ beforeEach(async () => {
     createdAt: string;
   }) => {
     await suite.db.run(
-      sql`insert into attendance_response_commands (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
+      sql`insert into attendance_answers (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
     );
   };
   await response({
