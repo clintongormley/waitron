@@ -352,9 +352,13 @@ export class TillShell extends LitElement {
         border-color: var(--wt-color-border);
       }
 
-      .till-strip button:focus-visible,
-      .till-strip wt-row-actions::part(trigger):focus-visible,
+      .till-strip .tab:focus-visible,
+      .till-strip .bar-action:focus-visible,
       .till-strip wt-button::part(button):focus-visible {
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      .till-strip wt-row-actions::part(trigger):focus-visible {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 

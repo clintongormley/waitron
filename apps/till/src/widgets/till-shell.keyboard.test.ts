@@ -14,7 +14,7 @@ const tabsOf = (el: TillShell) => [
 
 afterEach(cleanupWidgets);
 
-function expectUnclippedOutline(button: HTMLElement): void {
+function expectUnclippedOutline(button: HTMLElement, horizontalRounding = 0.5): void {
   const style = getComputedStyle(button);
   expect(button.matches(":focus-visible")).toBe(true);
   expect(style.outlineStyle).not.toBe("none");
@@ -34,10 +34,10 @@ function expectUnclippedOutline(button: HTMLElement): void {
     const label = `${parent.tagName}.${parent.className}`;
     if (clip.overflowX !== "visible") {
       expect(box.left - extent, `${label} left`).toBeGreaterThanOrEqual(
-        bounds.left + parent.clientLeft - 0.5,
+        bounds.left + parent.clientLeft - horizontalRounding,
       );
       expect(box.right + extent, `${label} right`).toBeLessThanOrEqual(
-        bounds.left + parent.clientLeft + parent.clientWidth + 0.5,
+        bounds.left + parent.clientLeft + parent.clientWidth + horizontalRounding,
       );
     }
     if (clip.overflowY !== "visible") {
@@ -82,7 +82,8 @@ it.each([
         .shadowRoot!.querySelector<HTMLElement>("button")!;
       last.focus();
       last.scrollIntoView({ block: "nearest", inline: "end" });
-      expectUnclippedOutline(last);
+      // Native scroll limits combine integer scroll/client sizes with fractional painted boxes.
+      expectUnclippedOutline(last, 1);
     } finally {
       await page.viewport(before.width, before.height);
     }
