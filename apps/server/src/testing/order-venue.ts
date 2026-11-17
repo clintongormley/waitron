@@ -271,7 +271,7 @@ export async function contribute(venue: OrderVenue, billId: string, amount: stri
 }
 
 /**
- * An invoice with no bill, written as the demo seed writes one (`recordSale`, no `workingOrderId`):
+ * An invoice with no bill (`recordSale`, no `workingOrderId`):
  * `lineCount` lines of `unitPrice` at 21%, paid in cash, from the venue's own origin unless `origin`
  * names another. `unitPrice` is a price whose 21% is whole cents.
  */

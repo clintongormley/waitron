@@ -486,7 +486,7 @@ describe("tax office invoice PDF", () => {
   });
 });
 
-/** An F2 of `lineCount` lines from the demo seed, which sells on no device, under the simplified limit. */
+/** An F2 of `lineCount` lines with no bill, from the demo seed's job origin (no device), under the simplified limit. */
 const seededTicket = (lineCount: number) =>
   billlessSale(venue, { origin: jobOrigin("demo_seed"), lineCount, unitPrice: "1.00" });
 
