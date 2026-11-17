@@ -4053,6 +4053,185 @@ describe("till-app: a bill that already holds money", () => {
   });
 });
 
+describe("till-app: Find bill collects the rest of a printed bill", () => {
+  const edit = {
+    billId: "wo-4",
+    editorVersion: 9,
+    editorId: null,
+    editorName: null,
+    draftId: null,
+    draftRevision: null,
+  };
+  const printedRow = (partyId: string) => ({
+    ...billRow({
+      workingOrderId: "wo-4",
+      partyId,
+      total: "30.00",
+      paid: "5.00",
+      stillOwed: "25.00",
+      state: "part-paid",
+      orderStatus: "placed",
+      collectionStatus: null,
+      invoiceNumber: "A/7",
+    }),
+    edit,
+  });
+
+  async function findAndOpen(partyId: string, overrides: Record<string, unknown> = {}) {
+    const selected = printedRow(partyId);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till }),
+      getTablesState: vi.fn().mockResolvedValue([{ ...heldTable(), zonePolicy: {} }]),
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
+      listBills: vi.fn().mockResolvedValue(listPage([selected])),
+      getFindBill: vi.fn().mockResolvedValue(selected),
+      ...overrides,
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+      row: selected,
+    });
+    await flush(el);
+    return el;
+  }
+
+  it.each([
+    ["finished", "v-departed"],
+    ["still seated", "v1"],
+  ])(
+    "Find bill opens the Pay window for the rest of a printed bill holding a payment, its table %s",
+    async (_, partyId) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { applied: "25.00", tendered: "30.00", change: "5.00" },
+            { total: "30.00", received: "30.00", outstanding: "0.00", status: "settled" },
+            invoiceOf("30.00"),
+          ),
+        );
+      const el = await findAndOpen(partyId, {
+        getBillBalance: vi.fn().mockResolvedValue(
+          balanceOf({
+            status: "placed",
+            total: "30.00",
+            received: "5.00",
+            outstanding: "25.00",
+            payments: [paymentOf({ applied: "5.00", tendered: "5.00" })],
+          }),
+        ),
+        previewBillPayment: vi.fn().mockResolvedValue(cash("25.00", "5.00")),
+        takeBillPayment,
+      });
+
+      expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
+      expect(tableOrder(el)).toBeNull();
+      expect(dialog(el)).not.toBeNull();
+      expect(
+        dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"]:checked')!.value,
+      ).toBe("contribution");
+      await type(el, "tendered", "30");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+
+      expect(takeBillPayment).toHaveBeenCalledOnce();
+      expect(sent()[0]).toMatchObject({
+        kind: "contribution",
+        amount: "25.00",
+        expectedEdit: { billId: "wo-4", editorVersion: 9, draftId: null, draftRevision: null },
+      });
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      expect(dialog(el)).toBeNull();
+      const settlement = el.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["till-settlement-document-dialog"]
+      >("till-settlement-document-dialog")!;
+      expect(settlement.result.invoiceNumber).toBe("F-0007");
+      expect(text(settlement.shadowRoot!.querySelector("[data-settlement-change]"))).toContain(
+        money("5.00"),
+      );
+      expect(settlement.originalReceiptAvailable).toBe(false);
+    },
+  );
+
+  it("Find bill shows the ticket when a read again finds its unanswered payment settled the bill", async () => {
+    const placed = balanceOf({
+      status: "placed",
+      total: "30.00",
+      received: "5.00",
+      outstanding: "25.00",
+      payments: [paymentOf({ applied: "5.00", tendered: "5.00" })],
+    });
+    let shows = placed;
+    const getBillBalance = vi.fn(async () => shows);
+    const el = await findAndOpen("v-departed", {
+      getBillBalance,
+      previewBillPayment: vi.fn().mockResolvedValue(cash("25.00", "0.00")),
+      takeBillPayment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("30.00")),
+    });
+    await type(el, "tendered", "25");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    shows = balanceOf({
+      status: "settled",
+      total: "30.00",
+      received: "30.00",
+      outstanding: "0.00",
+      payments: [
+        paymentOf({ applied: "5.00", tendered: "5.00" }),
+        paymentOf({
+          id: "pay-2",
+          submissionId: sent()[0]!.submissionId,
+          applied: "25.00",
+          tendered: "25.00",
+        }),
+      ],
+    });
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+      row: printedRow("v-departed"),
+    });
+    await flush(el);
+
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+    expect(dialog(el)).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-settlement-document-dialog"]>(
+        "till-settlement-document-dialog",
+      )?.originalReceiptAvailable,
+    ).toBe(false);
+  });
+
+  it("Find bill refuses to pay a printed table bill whose row carried no edit state", async () => {
+    const selected = { ...printedRow("v-departed"), edit: null };
+    const el = await findAndOpen("v-departed", {
+      getFindBill: vi.fn().mockResolvedValue(selected),
+      listBills: vi.fn().mockResolvedValue(listPage([selected])),
+      getBillBalance: vi
+        .fn()
+        .mockResolvedValue(
+          balanceOf({ status: "placed", total: "30.00", received: "5.00", outstanding: "25.00" }),
+        ),
+    });
+    expect(dialog(el)).not.toBeNull();
+    await type(el, "tendered", "25");
+    await press(el, "[data-pay-continue]");
+
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+});
+
 describe("till-app: a change refused on a bill that holds money", () => {
   const partly = billOf({ outstanding: "70.00", hasPayments: true });
   const other = billOf({
