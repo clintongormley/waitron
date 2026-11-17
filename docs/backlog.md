@@ -915,10 +915,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   outside it.
 
 - **Loose ends left by W97 (#1311).**
-  - The till's Profile button shows whenever the device has more than one approved profile, read
-    at boot: neither approvals added later nor the signed-in person's admission hide or show it
-    until the dialog reads `/api/device/me` again.
-    [Detail](backlog/till.md#the-tills-profile-button-shows-whenever-the-device-has-more-than-one-approved-profile)
+  - A disabled device's profile approvals come back when a join enables it again (unchecked
+    whether that is wanted).
   - The profile editor also reads people, so it needs `person.manage` beside
     `venue.configure`; no role holds only the latter today.
     [Detail](backlog/till.md#the-profile-editor-reads-people-and-the-venues-departments-and-zones)

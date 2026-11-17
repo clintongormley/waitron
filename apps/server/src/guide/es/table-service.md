@@ -791,9 +791,8 @@ así que comprueba qué equipo estás escaneando.
 
 ## Cambiar el perfil de este dispositivo {#device-profile}
 
-Cuando este dispositivo está aprobado para más de un perfil, **Más** (☰) ofrece **Perfil**.
-Elige otro **Perfil de dispositivo** y toca **Cambiar**. Solo puedes cambiar a un perfil que
-tengas permiso para usar.
+Cuando este dispositivo está aprobado para otro perfil que tienes permiso para usar, **Más** (☰)
+ofrece **Perfil**. Elige otro **Perfil de dispositivo** y toca **Cambiar**.
 
 Antes de cambiar, aparca o vacía el pedido en curso. Si hay un pago con tarjeta en curso,
 elige **Comprobar pagos con tarjeta / acceder** para consultar el resultado e inicia

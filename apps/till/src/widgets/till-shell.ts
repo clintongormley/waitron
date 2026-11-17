@@ -507,7 +507,6 @@ export class TillShell extends LitElement {
   /** Suppresses the whole operator `<header>`: a kitchen display shows its board, no operator
    * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
-  /** The device is approved for more than one profile, so a signed-in person may switch it. */
   @property({ type: Boolean }) canSwitchProfile = false;
 
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
