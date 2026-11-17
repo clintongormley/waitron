@@ -1444,7 +1444,7 @@ Not in any track until the standalone primary is done.
   The emergency-card adapter is built; its facts need Cloud’s display endpoint. The card can reveal a fresh code and list permission/authenticator readiness; Cloud’s code endpoint is still required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. Backups checks the printed emergency code and Cloud links to the existing pack maker. The hosted runtime remains open.
   [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
   [Part 2 plan](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
-  Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November; the locked-start build and production qualification remain open.
+  Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November; the locked-start build and production qualification remain open. The [reconciled build plan](superpowers/plans/2026-11-15-a1188-part3-locked-entry-build.md) reuses A1425 placement; the watcher cleared independent placement/lifecycle work on 17 November. The proposed TOTP purpose-key input still needs Cloud agreement.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
 - **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
