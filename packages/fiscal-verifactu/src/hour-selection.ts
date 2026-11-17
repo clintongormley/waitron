@@ -459,12 +459,9 @@ export function createHourSelection(options: {
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
       if (!canSelectHour(facts.clock)) return refuse(clockRefusal(facts.clock));
       // A device's time counts only once the person confirms it; the internet time service needs no one.
-      if (
-        persist &&
-        request.confirmed !== true &&
-        !facts.clock.usable.some((sample) => sample.source === "internet")
-      )
-        return refuse("confirmation_required");
+      // Without the time service, an admitted clock is a device's that agreed with the box.
+      const byDevice = !facts.clock.usable.some((sample) => sample.source === "internet");
+      if (persist && request.confirmed !== true && byDevice) return refuse("confirmation_required");
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
       const history = projectHourHistory({
         scope: facts.scope,
@@ -511,10 +508,7 @@ export function createHourSelection(options: {
           : {
               ...read,
               wallMs: now,
-              ...(request.confirmed === true &&
-              facts.clock!.usable.some((sample) => sample.source === "browser")
-                ? { confirmed: true as const }
-                : {}),
+              ...(request.confirmed === true && byDevice ? { confirmed: true as const } : {}),
             };
       };
       if (intent !== undefined) {

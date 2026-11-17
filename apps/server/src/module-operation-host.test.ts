@@ -152,6 +152,7 @@ it.each([
     vi.setSystemTime("2026-10-16T11:40:00Z");
     time.clock = createFakeTimersHourClock();
     const readBoot = () => ({ id: "box-boot", ms: time.clock.monotonic() + 5_000_000 });
+    time.synchronised = false;
     const f = await hourFirstFiscalFixture({
       database: () => venue.db,
       clock: time.clock,
@@ -183,7 +184,6 @@ it.each([
         { ...f.staged.ref, kept: true },
         fresh,
       );
-      time.synchronised = false;
       time.clock.advance(120_000);
       const run = vi.fn(async () => "prepared");
       const attempt = runtime.coordinator.run(async (hold) => {

@@ -299,3 +299,17 @@ it("a fresh confirmed choice after a clock step renews the time Provision carrie
   await activate(f, selected.input);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
+it("a confirmed choice after the time service goes renews a time it alone admitted", async () => {
+  const f = fixture(sameBoot());
+  const selected = await selectAfterSettle(f, () =>
+    f.preparation.compareClocks(binding, null, { onBox: true }),
+  );
+  timeServiceUnavailable();
+  expect(await f.select((await deviceCompare(f)).id, true)).toMatchObject({
+    status: "selected",
+    identity: selected.identity,
+  });
+  vi.advanceTimersByTime(120_000);
+  await activate(f, selected.input);
+  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+});

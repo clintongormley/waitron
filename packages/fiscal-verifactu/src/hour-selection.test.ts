@@ -226,14 +226,14 @@ it("a preview or a selected read after a restart leaves the stored boot reading 
 
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 
-const synchronised = (at = instant) =>
+const synchronised = (at = instant, browserAt = at) =>
   compareHourClocks(
     ["box", "browser", "internet"].map(
       (source) =>
         ({
           source,
           result: "usable",
-          instantMs: at,
+          instantMs: source === "browser" ? browserAt : at,
           uncertaintyMs: 0,
           wallStartedMs: at,
           wallFinishedMs: at,
@@ -254,6 +254,12 @@ it("a device's agreeing time selects only once the person confirms it", async ()
 });
 it.each([
   ["a device's time beside the time service, unconfirmed", synchronised(), undefined],
+  ["the time service beside a confirmed device that agrees", synchronised(), true],
+  [
+    "the time service beside a confirmed device ten minutes off",
+    synchronised(instant, instant + 10 * 60_000),
+    true,
+  ],
   [
     "the time service alone, though the request says confirmed",
     compareHourClocks(
