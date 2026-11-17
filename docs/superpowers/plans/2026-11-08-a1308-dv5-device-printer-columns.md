@@ -40,6 +40,9 @@ before this cannot be restored or imported."
   `apps/server/src/device-delete.ts` only if it names the column. The wire field `pagePrinterId` on
   devices' invoice choices (dashboard and till clients) is filled from `invoice_printer_id` when that
   printer is `a4` (dv4 decision 2: no wire change).
+  > **2026-11-17 (PRINTER-DELETE-HOME):** `device-equipment.ts` also gained `clearDeletedPagePrinter`,
+  > which names `invoicePagePrinterId` and the profile row's `pagePrinterId`, and
+  > `PRINTER_ROLE_COLUMNS`, whose comment says the invoice column holds a receipt printer.
 - **`device_profile_printers`:** `page_printer_id`, `device_profile_printers_target_ck` and
   `device_profile_printers_profile_role_page_printer_key` go; `printer_id` becomes not null.
   `foldPrinterLists` (`packages/layouts/src/device-printers.ts:56-75`) reads `printerId` only;

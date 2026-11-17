@@ -57,6 +57,10 @@ printerLists: json<StoredPrinterLists>("printer_lists").notNull().default({}),
   `null` and the id leaves every list. Its impact read (`:80-110`) finds profiles and default-using
   devices from the column (`exists (select 1 from json_tree(device_profiles.printer_lists) where
   atom = ?)`, then the role and default worked out in code).
+  > **2026-11-17 (PRINTER-DELETE-HOME):** `deletePrinter` no longer deletes `device_profile_printers`
+  > rows itself; it calls layouts' `clearDeletedPrinter` (`packages/layouts/src/device-equipment.ts`),
+  > so the `removeIdFromJson` call belongs there. The later `printer-delete.ts:178` cites (the files
+  > list and Task 1) now mean `clearDeletedPrinter`.
 - Configuration transfer: `device_profiles`' declaration (dv6) gains
   `{ column: "printer_lists", paths: [["*", "ids", "*"], ["*", "defaultId"]] }`;
   `device_profile_printers` leaves `CORE_CONFIGURATION_TRANSFER`
