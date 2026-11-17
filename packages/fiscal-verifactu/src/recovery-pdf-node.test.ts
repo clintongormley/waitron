@@ -15,15 +15,7 @@ import {
   setupPackDocument,
 } from "../test/setup-recovery-pack-inspect.js";
 
-const document: RecoveryDocument = {
-  kind: "waitron-recovery-document",
-  version: 1,
-  scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
-  taxpayerName: "Olivo Restauración SL",
-  venueName: "Olivo Centro",
-  createdAt: "2026-10-17T12:30:00.000Z",
-  nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-};
+const document: RecoveryDocument = setupPackDocument;
 const roots: string[] = [];
 afterAll(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));

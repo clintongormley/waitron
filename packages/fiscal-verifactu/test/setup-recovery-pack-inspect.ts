@@ -13,7 +13,7 @@ export const setupPackDocument: RecoveryDocument = {
   nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
 };
 
-/** Checks a setup recovery pack drawn for {@link setupPackDocument} by a process outside Vitest. */
+/** Checks a setup recovery pack drawn for {@link setupPackDocument}. */
 export async function inspectSetupRecoveryPack(bytes: Uint8Array, locale: "en" | "es") {
   const embedded = new Set(
     Array.from(
