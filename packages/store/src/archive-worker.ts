@@ -1,6 +1,5 @@
-import { closeSync, openSync } from "node:fs";
-import { rename, rm } from "node:fs/promises";
 import { Worker } from "node:worker_threads";
+import { withArchiveFile } from "./archive.js";
 
 // Inline JavaScript also ships inside the server bundle; it imports only Node built-ins.
 const copyScript = `
@@ -22,12 +21,8 @@ export async function archiveInWorker(
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
-  const working = `${targetPath}.partial`;
-  await rm(working, { force: true });
-  try {
+  await withArchiveFile(targetPath, async (working) => {
     signal?.throwIfAborted();
-    // VACUUM preserves an empty file's mode; a file SQLite creates itself may be world-readable.
-    closeSync(openSync(working, "a", 0o600));
     const worker = new Worker(copyScript, {
       eval: true,
       workerData: { source: sourcePath, working },
@@ -45,9 +40,5 @@ export async function archiveInWorker(
       });
     });
     signal?.throwIfAborted();
-    await rename(working, targetPath);
-  } catch (error) {
-    await rm(working, { force: true });
-    throw error;
-  }
+  });
 }
