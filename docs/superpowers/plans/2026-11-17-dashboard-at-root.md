@@ -24,3 +24,5 @@
 **Cloud coordination:** Lane G’s 17:11 source comparison finds no relay path rewrite; no live forwarding claim. Watcher assigns G’s `registration/src/relay-smtp.ts:17` invitation/reset change to `/account`: prepare alongside, deploy Waitron boxes first, then Cloud; qualify destinations. Pre-live, no resend step. Email-change `/` stays. Tell Lane G in its questions.md when PR 2 opens; the watcher updates external `wa-wt` addresses after landing. No Cloud/shared-tool edits here.
 
 **Validation/exclusions:** TDD by owning layer, changed suites, normal hook/current-head CI. Build all apps; LOOK in both themes at phone/desktop widths, refresh deep links, check assets/manifest and existing/fresh enrolment. No redirects, storage migrations, auth redesign, route framework, offline support or unrelated cleanup.
+
+Watcher size clearance (Lane I questions.md, 2026-11-17 18:55): PR2 may grow to about5,000–5,600 added+removed lines because existing URL assertions account for about4,500–4,900; production/config350–500. Keep the mechanical substitution in one recorded-command commit, with no hand edits mixed in. No new behavior was cleared by this size adjustment.
