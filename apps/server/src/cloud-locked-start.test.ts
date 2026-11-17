@@ -297,6 +297,7 @@ it("serves only locked probes over TLS and stops on control failure or the origi
     f.refuse(503);
     await vi.advanceTimersByTimeAsync(300000);
     await vi.waitFor(() => expect(stopped).toBe(true), { timeout: 3000 });
+    expect(await running!.closed).toBe(1);
     expect(f.requests.map((v) => v[2])).toEqual(["renew", "renew"]);
     await holders[0]!.close();
     expect(outsideLock()).toBe("acquired");
@@ -307,7 +308,7 @@ it("serves only locked probes over TLS and stops on control failure or the origi
     vi.setSystemTime(new Date("2026-11-17T10:29:59.999Z"));
     origin = await launch();
     await vi.advanceTimersByTimeAsync(1);
-    await running!.closed;
+    expect(await running!.closed).toBe(0);
     expect(outsideLock()).toBe("acquired");
     await expect(fetch(origin + "/health")).rejects.toThrow();
     expect(await snapshot()).toEqual(before);
@@ -365,17 +366,15 @@ it("closes at lease expiry while a control renewal is still waiting for Cloud", 
     expect(outsideLock()).toBe("held");
     await vi.advanceTimersByTimeAsync(9000);
     expect(
-      await Promise.race([
-        running.closed.then(() => true),
-        new Promise<boolean>((resolve) => {
-          const timer = realSetTimeout(() => resolve(false), 3000);
-          void running!.closed.then(() => {
-            realClearTimeout(timer);
-            resolve(true);
-          });
-        }),
-      ]),
+      await new Promise<boolean>((resolve) => {
+        const timer = realSetTimeout(() => resolve(false), 3000);
+        void running!.closed.then(() => {
+          realClearTimeout(timer);
+          resolve(true);
+        });
+      }),
     ).toBe(true);
+    expect(await running.closed).toBe(1);
     expect(stopped).toBe(true);
     expect(outsideLock()).toBe("acquired");
     expect(f.requests.map((v) => v[2])).toEqual(["renew", "renew"]);

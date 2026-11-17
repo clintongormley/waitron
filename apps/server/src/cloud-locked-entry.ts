@@ -44,7 +44,13 @@ try {
     throw new AppError("cloud.request_invalid", {});
   const now = () => new Date();
   const binding = parseEmergencyCopyBinding(input.binding, now());
-  if (input.environment !== binding.environment) throw new AppError("cloud.request_invalid", {});
+  if (
+    input.environment !== binding.environment ||
+    input.cloud.environment !== (binding.environment === "production" ? "production" : "test") ||
+    input.cloud.view?.registration?.venueId !== binding.venueId ||
+    input.cloud.view?.registration?.installationId !== binding.installationId
+  )
+    throw new AppError("cloud.request_invalid", {});
   const log = createLogger((line) => process.stdout.write(line), now);
   const running = await startLockedCopy({
     ...input,
