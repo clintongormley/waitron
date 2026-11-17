@@ -15,7 +15,7 @@ You create a product independently of menus. `products` has no menu ownership; `
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest menu |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest menu. The till's menu search also matches it, but shows the staff name |
 | **Prep station name** | `products.kitchen_name` — plain text, nullable | Cooks. The station ticket and the prep station display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same

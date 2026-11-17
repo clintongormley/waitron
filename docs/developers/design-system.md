@@ -615,8 +615,11 @@ group headings and no line. The group sections carry no accessible name, because
 share one. The dashboard's preview searches its one menu only and says so above its search field.
 
 On the till, matching sections share the results grid with products, ordered together by closeness
-and then their displayed traversal order. Section matching reads the displayed content-language name;
-product matching reads the staff name and variant names. A section populated before the diet filter
+and then their displayed traversal order; products that match only by their customer-facing name
+follow, ranked the same way. Section matching reads the displayed content-language name; product
+matching reads the staff name, then the customer-facing name resolved as the till resolves content
+(its language, else the content default). A product result shows its staff name, and a product
+matching both names is listed once. Variant names are not searched. A section populated before the diet filter
 but empty after it stays disabled. Tapping an enabled section clears search and opens that copy;
 for another served menu, the app first selects that menu, then opens the requested path. Neither
 section action adds anything to your basket. The dashboard Home preview keeps its product-only search.

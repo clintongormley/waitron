@@ -928,8 +928,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   dashboard's live-update route accepts the management cookie only.
   [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
 
-- **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
-  name only, not a customer name. The till also searches displayed section names (A461).
+- **The till's home page (Task 9, #729).** — left open by the menus plan. Every menu read from an
+  enrolled device also reads the device and the till's setup.
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
 - **Reopening a held order keeps its lines right** (bundle of 2, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
