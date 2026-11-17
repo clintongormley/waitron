@@ -121,13 +121,11 @@ Safari was not tried, so what it draws with no colour chosen, and whether the ri
 
 Left open by the completed A331 batches:
 
-### Password managers and form-button checks
+### Password managers
 
 - a password manager filling the profile's current-password field: the owner tried Chrome's
     password manager on 2026-10-08 and reported that it works well; other password managers are
-    untried;
-- staff-screen tests still send made-up create and update events (`create-person`, `save-person`)
-    instead of pressing the form's button; they pass, but never prove the button works.
+    untried.
 
 ### Hardware forms
 
