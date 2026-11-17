@@ -50,26 +50,18 @@ certificate export. The existing walkthrough above remains open.
 setup languages render three FNMT links under `/en/` and retain the three article identifiers.
 It does not fetch FNMT or check its translations.
 
-## A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)
+## The Venue details edit accepts a time zone outside the country pack's list (A166, owner 2026-10-01)
 
-**OPEN.** The
-owner: _"in fact this should be chosen from a dropdown, and the options specified in the country
-package, eg Spain has two time zones, one for mainland and one for las canarias"_. Today setup does
-not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
-`packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
-`Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
-the `settings.business_day` document stores the zone as plain text, and provisioning copies whatever it is given
-(`packages/provisioning/src/venue-apply.ts`).
-Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
-emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
-and creation/provisioning writers refuse a zone not on its country's list. A dropdown is needed
-only if a venue could ever need a zone other than
-its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
-pack marks the Canary tax territory unsupported.)
-A261 step 7's approved plan separately permits a named-zone override before dated history;
-its editor validates named zones and refuses numeric offsets. Importing configuration into an
-existing venue retains its saved zone (`packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
-not an edit.
+**OPEN.** The owner: _"in fact this should be chosen from a dropdown, and the options specified in
+the country package, eg Spain has two time zones, one for mainland and one for las canarias"_.
+Each pack now lists its zones (Spain: `Europe/Madrid` and `Atlantic/Canary`), and setup's plan,
+provisioning, configuration import and zone repair refuse a zone off that list
+(`requireCountryTimeZone`, `packages/country-packs/src/registry.ts`). The Venue details edit
+(`writeVenueDetails`, `apps/server/src/venue-details.ts`, behind `PATCH
+/management-api/venue-details`) checks only that the zone is a valid named zone, A261's named-zone
+override permitted before sales or dated history: the case "uses an eligible committed zone edit for
+the next sale without restarting admission" in `apps/server/src/venue-details.test.ts` saves `UTC`
+for a Spanish venue and passes. Whether that edit should also keep to the country's list is open.
 
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 
@@ -239,10 +231,7 @@ files include, at any depth, a symbolic link or special file, a lock file (`venu
 20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
 for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
 the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
-`packages/provisioning/src/first-setup-start-again-leftovers.ts`). In every one of these cases
-`classifyStartAgainRefusal` hands back the finisher's own refusal, so the survey's reason for
-explaining is dropped and the start's `recovery.serving_refused_start` log line carries the
-finisher's reason instead. A finisher refusal with any
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`). A finisher refusal with any
 other code is not one of the start's refusals, so that start carries on past it instead
 (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.

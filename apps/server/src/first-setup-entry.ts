@@ -87,6 +87,8 @@ type StartRefused = {
   roots: FirstSetupRoots;
   error: AppError;
   survey?: Extract<StartAgainSurvey, { kind: "choice" }>;
+  /** Why the survey could offer no choice; log-only, like `error.reason`. */
+  explained?: string;
 };
 
 /** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
@@ -158,6 +160,7 @@ async function refusedAtStart(
         code: "setup.start_again_incomplete",
         roots: canonical,
         error: classified.error,
+        ...(classified.explained === undefined ? {} : { explained: classified.explained }),
       };
     return {
       kind: "refused",

@@ -448,6 +448,7 @@ it("classifyStartAgainRefusal gives files_found with the finisher's reason, and 
   expect(classified.error.params).toEqual({});
   expect(classified.error.reason).toBe("unlisted file: venue/venue.db");
   expect(classified.survey).toEqual(await surveyStartAgainLeftovers(roots));
+  expect(classified).not.toHaveProperty("explained");
 
   const explained = await withFoundDatabase();
   await mkdir(dirname(join(explained.stateDir, "flows/setup/record.json")), { recursive: true });
@@ -460,11 +461,13 @@ it("classifyStartAgainRefusal gives files_found with the finisher's reason, and 
   const back = await classifyStartAgainRefusal(explained, unchanged!);
   expect(back.error).toBe(unchanged);
   expect(back.survey).toBeUndefined();
+  expect(back.explained).toBe("setup record changed");
 
   const other = new AppError("setup.not_ready", {}, { reason: "something else" });
   const otherBack = await classifyStartAgainRefusal(roots, other);
   expect(otherBack.error).toBe(other);
   expect(otherBack.survey).toBeUndefined();
+  expect(otherBack).not.toHaveProperty("explained");
 
   const unreadable = await withFoundDatabase();
   await writeFile(join(unreadable.venueDir, "first-setup-deleting.json"), "not json");
@@ -472,6 +475,7 @@ it("classifyStartAgainRefusal gives files_found with the finisher's reason, and 
   const damagedBack = await classifyStartAgainRefusal(unreadable, damaged);
   expect(damagedBack.error).toBe(damaged);
   expect(damagedBack.survey).toBeUndefined();
+  expect(damagedBack.explained).toBe("marker unreadable");
 });
 
 it("a marker naming another attempt or another frozen request than the setup record explains", async () => {
@@ -505,7 +509,9 @@ it.skipIf(process.getuid?.() === 0)(
         {},
         { reason: "refused artifact present: venue/.venue.db-litestream" },
       );
-      expect((await classifyStartAgainRefusal(roots, refused)).error).toBe(refused);
+      const back = await classifyStartAgainRefusal(roots, refused);
+      expect(back.error).toBe(refused);
+      expect(back.explained).toBe(`check failed: EACCES ${join(folder, "a.wal")}`);
     } finally {
       await chmod(folder, 0o700);
     }
@@ -547,6 +553,7 @@ it.skipIf(process.getuid?.() === 0)(
       const back = await classifyStartAgainRefusal(roots, refused!);
       expect(back.error).toBe(refused);
       expect(back.survey).toBeUndefined();
+      expect(back.explained).toBe("nothing found");
     } finally {
       await chmod(folder, 0o755);
     }

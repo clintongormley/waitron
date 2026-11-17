@@ -1391,10 +1391,12 @@ can refuse the start four ways:
   `packages/provisioning/src/first-setup-start-again-leftovers.ts`).
 - `setup.start_again_incomplete`, unchanged, with A1042's explanation, for everything else: the
   setup record gone, changed or unparseable, a found link, device file or lock file, any other
-  reason the finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries. For each of these
-  `classifyStartAgainRefusal` hands back the finisher's own error, so the survey's reason for
-  explaining is dropped and the refusal carries the finisher's reason, such as
-  `unlisted file: venue/venue.db`.
+  reason the finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries. When the finisher refused,
+  `classifyStartAgainRefusal` hands back the finisher's own error, carrying the finisher's reason,
+  such as `unlisted file: venue/venue.db`, and, unless the Start again marker was gone by the time
+  the survey read it, the survey's reason as `explained`, which the start logs as `surveyReason` on
+  `recovery.serving_refused_start`. A failed resume with no Move recorded is not surveyed, so its
+  `surveyReason` is null.
 
 The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
 TLS (`isSecure`, `apps/server/src/encrypted-connection.ts`); over anything else the page shows the
