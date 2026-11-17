@@ -48,7 +48,8 @@ import {
 import { buildReceiptDocument } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
+import { INVOICE_PAGE_WIDTH, invoiceTextWidth, layoutInvoicePages } from "./invoice-page.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
 let venue: AdjustmentVenue;
@@ -1228,5 +1229,53 @@ describe("a takeaway sale's A4 invoice", () => {
     expect(page.result.invoiceType).toBe("R4");
     expect(page.result).not.toHaveProperty("takeAway");
     expect(texts(page)).not.toContain("Para llevar");
+  });
+});
+
+describe("the simplified receipt's A4 tax table", () => {
+  it("draws the simplified tax table on A4", () => {
+    const [page] = layoutInvoicePages({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        invoiceType: "F2",
+        recipient: undefined,
+        lines: FULL_INVOICE_DOCUMENT_FIXTURE.result.lines.map(({ net, ...line }) => ({
+          ...line,
+          vatRate: `${net!.rate}.00`,
+        })),
+      },
+    });
+    const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
+    const at = (text: string, after = 0): (typeof texts)[number] =>
+      texts.find((element, index) => index >= after && element.text === text)!;
+    const heading = at("Tipo");
+    const start = texts.indexOf(heading);
+    expect(texts.slice(start, start + 4).map(({ text }) => text)).toEqual([
+      "Tipo",
+      "Base",
+      "IVA",
+      "Total",
+    ]);
+    expect(texts.slice(start, start + 4).every(({ bold }) => bold)).toBe(true);
+    const rows = [
+      ["A 21%", "9,00", "1,89", "10,89"],
+      ["B 10%", "8,00", "0,80", "8,80"],
+    ];
+    for (const row of rows) {
+      const first = texts.findIndex((element, index) => index > start && element.text === row[0]);
+      const cells = texts.slice(first, first + 4);
+      expect(cells.map(({ text }) => text)).toEqual(row);
+      expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
+      expect(cells[0]!.x).toBe(heading.x);
+      for (const [index, cell] of cells.entries()) {
+        if (index === 0) continue;
+        const head = texts[start + index]!;
+        expect(cell.x + invoiceTextWidth(cell.text, cell.size)).toBeCloseTo(
+          head.x + invoiceTextWidth(head.text, head.size),
+        );
+      }
+    }
+    expect(texts.some(({ text }) => text.startsWith("Base imponible"))).toBe(false);
   });
 });

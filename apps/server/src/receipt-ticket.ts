@@ -14,6 +14,7 @@ import {
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
+import { taxTableLines, type TaxTableRow } from "./receipt-tax-table.js";
 import {
   buildReceiptDocument,
   type ElementRange,
@@ -45,6 +46,15 @@ function preparedTable(table: ReceiptTable): ReceiptTable {
     ...table,
     ...(table.header ? { header: preparedRow(table.header) } : {}),
     rows: table.rows.map(preparedRow),
+  };
+}
+
+function preparedTaxRow(row: TaxTableRow): TaxTableRow {
+  return {
+    rate: prepareText(row.rate),
+    base: prepareText(row.base),
+    tax: prepareText(row.tax),
+    total: prepareText(row.total),
   };
 }
 
@@ -136,6 +146,15 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
       }
       case "table":
         for (const line of tableLines(preparedTable(element.table), columns)) {
+          b.line(line.text, { bold: line.header, double: false });
+        }
+        break;
+      case "taxTable":
+        for (const line of taxTableLines(
+          preparedTaxRow(element.header),
+          element.rows.map(preparedTaxRow),
+          columns,
+        )) {
           b.line(line.text, { bold: line.header, double: false });
         }
         break;

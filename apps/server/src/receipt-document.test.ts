@@ -458,8 +458,15 @@ describe("the simplified receipt's own layout (A663)", () => {
   };
   const rows = (input: Parameters<typeof buildReceiptDocument>[0]) =>
     buildReceiptDocument(input).elements.flatMap((e): unknown[] =>
-      e.kind === "amount" ? [[e.caption, e.amount, e.style]] : e.kind === "rule" ? ["rule"] : [],
+      e.kind === "amount"
+        ? [[e.caption, e.amount, e.style]]
+        : e.kind === "rule"
+          ? ["rule"]
+          : e.kind === "taxTable"
+            ? [["taxTable", e.header, ...e.rows]]
+            : [],
     );
+  const ES_TAX_HEADER = { rate: "Tipo", base: "Base", tax: "IVA", total: "Total" };
 
   it("heads with the order, then the number and date, and prints TOTAL before each rate's base and VAT", () => {
     expect(rows(SIMPLIFIED)).toEqual([
@@ -474,10 +481,12 @@ describe("the simplified receipt's own layout (A663)", () => {
       "rule",
       ["TOTAL", "19,69 €", { double: true }],
       "rule",
-      ["Base imponible 21%", "9,00 €", undefined],
-      ["IVA 21%", "1,89 €", undefined],
-      ["Base imponible 10%", "8,00 €", undefined],
-      ["IVA 10%", "0,80 €", undefined],
+      [
+        "taxTable",
+        ES_TAX_HEADER,
+        { rate: "A 21%", base: "9,00", tax: "1,89", total: "10,89" },
+        { rate: "B 10%", base: "8,00", tax: "0,80", total: "8,80" },
+      ],
       "rule",
       ["Efectivo", "20,00 €", undefined],
       ["Cambio", "0,31 €", undefined],
@@ -496,16 +505,19 @@ describe("the simplified receipt's own layout (A663)", () => {
         },
       });
     const es = oneRate("es-ES");
-    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 6)).toEqual([
+    const oneRow = { rate: "10%", base: "17,90", tax: "1,79", total: "19,69" };
+    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 5)).toEqual([
       ["TOTAL", "19,69 €", { double: true }],
       "rule",
-      ["Base imponible 10%", "17,90 €", undefined],
-      ["IVA 10%", "1,79 €", undefined],
+      ["taxTable", ES_TAX_HEADER, oneRow],
       "rule",
     ]);
     const ca = oneRate("ca-ES");
-    expect(ca).toContainEqual(["Base imposable 10%", "17,90 €", undefined]);
-    expect(ca).toContainEqual(["IVA 10%", "1,79 €", undefined]);
+    expect(ca).toContainEqual([
+      "taxTable",
+      { rate: "Tipus", base: "Base", tax: "IVA", total: "Total" },
+      oneRow,
+    ]);
     const captions = [...es, ...ca].flatMap((row) => (Array.isArray(row) ? [String(row[0])] : []));
     expect(captions.filter((caption) => /incluido|inclòs/u.test(caption))).toEqual([]);
   });
@@ -1363,7 +1375,11 @@ describe("identical dishes on the receipt (A803)", () => {
     };
     delete input.result.recipient;
     return buildReceiptDocument(input).elements.flatMap((e): [string, string][] =>
-      e.kind === "amount" ? [[e.caption, e.amount]] : [],
+      e.kind === "amount"
+        ? [[e.caption, e.amount]]
+        : e.kind === "taxTable"
+          ? e.rows.map((row) => [row.rate, `${row.base} + ${row.tax} = ${row.total}`])
+          : [],
     );
   };
 
@@ -1440,10 +1456,9 @@ describe("identical dishes on the receipt (A803)", () => {
     );
     const cents = goods.reduce((sum, [, amount]) => sum + Number(amount.replace(",", "")), 0);
     expect(cents).toBe(900);
-    expect(rows.slice(-3)).toEqual([
+    expect(rows.slice(-2)).toEqual([
       ["TOTAL", "9,00 €"],
-      ["Base imponible 10%", "8,18 €"],
-      ["IVA 10%", "0,82 €"],
+      ["10%", "8,18 + 0,82 = 9,00"],
     ]);
   });
 
@@ -1638,8 +1653,12 @@ describe("the corrective invoice (R5)", () => {
         `A/41 ${date(CORRECTIVE.corrects!.issuedAt, locale, 60)}`,
       ]);
       expect(lines).toContain(`-1 ${dish} ${formatAmount("-6.00", locale)}`);
-      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("-4.13", locale)}`);
-      expect(lines).toContain(`${label.vat} 21% ${formatMoney("-0.87", locale)}`);
+      expect(lines).toContain(
+        `${label.taxRateColumn} ${label.taxBaseColumn} ${label.taxAmountColumn} ${label.taxTotalColumn}`,
+      );
+      expect(lines).toContain(
+        `21% ${formatAmount("-4.13", locale)} ${formatAmount("-0.87", locale)} ${formatAmount("-5.00", locale)}`,
+      );
       expect(qrs).toHaveLength(1);
     },
   );
@@ -1693,8 +1712,12 @@ describe("the corrective invoice (R5)", () => {
       expect(lines).not.toContain(label.correctsInvoice);
       const dish = CORRECTIVE.lines[0]!.descriptions[locale]!;
       expect(lines).toContain(`1 ${dish} ${formatAmount("6.00", locale)}`);
-      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("4.96", locale)}`);
-      expect(lines).toContain(`${label.vat} 21% ${formatMoney("1.04", locale)}`);
+      expect(lines).toContain(
+        `${label.taxRateColumn} ${label.taxBaseColumn} ${label.taxAmountColumn} ${label.taxTotalColumn}`,
+      );
+      expect(lines).toContain(
+        `21% ${formatAmount("4.96", locale)} ${formatAmount("1.04", locale)} ${formatAmount("6.00", locale)}`,
+      );
     },
   );
 

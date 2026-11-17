@@ -41,6 +41,7 @@ import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
+import type { TaxTableRow } from "./receipt-tax-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -91,7 +92,8 @@ export type ReceiptElement =
   | { kind: "align"; alignment: "left" | "center" }
   | { kind: "logo" }
   | { kind: "qr"; text: string }
-  | { kind: "table"; table: ReceiptTable };
+  | { kind: "table"; table: ReceiptTable }
+  | { kind: "taxTable"; header: TaxTableRow; rows: TaxTableRow[] };
 
 /** A part of the trim the dashboard's preview highlights. */
 export type ReceiptPart =
@@ -210,12 +212,13 @@ export function buildReceiptDocument({
     elements.push({ kind: "align", alignment });
   };
   const letters = simplified ? rateLetters(result.vatBreakdown) : null;
+  const rateLetter = (rate: string): string | undefined =>
+    letters === null
+      ? undefined
+      : [...letters].find(([seen]) => compareDecimal(decimal(seen), decimal(rate)) === 0)?.[1];
   const letter = ({ vatRate }: TillSaleLine): string => {
-    const found =
-      letters === null || vatRate === undefined
-        ? undefined
-        : [...letters].find(([rate]) => compareDecimal(decimal(rate), decimal(vatRate)) === 0);
-    return found === undefined ? "" : ` ${found[1]}`;
+    const found = vatRate === undefined ? undefined : rateLetter(vatRate);
+    return found === undefined ? "" : ` ${found}`;
   };
   const sharedLetter = (covered: readonly TillSaleLine[]): string => {
     const [first, ...rest] = covered.map(letter);
@@ -523,7 +526,26 @@ export function buildReceiptDocument({
   if (simplified) {
     total();
     rule();
-    vatRows();
+    if (result.vatBreakdown.length > 0)
+      elements.push({
+        kind: "taxTable",
+        header: {
+          rate: label.taxRateColumn,
+          base: label.taxBaseColumn,
+          tax: label.taxAmountColumn,
+          total: label.taxTotalColumn,
+        },
+        rows: result.vatBreakdown.map((v) => {
+          const rate = formatVatRate(v.rate, locale);
+          const found = rateLetter(v.rate);
+          return {
+            rate: found === undefined ? rate : `${found} ${rate}`,
+            base: formatAmount(v.base, locale),
+            tax: formatAmount(v.tax, locale),
+            total: formatAmount(addDecimal(decimal(v.base), decimal(v.tax)), locale),
+          };
+        }),
+      });
   } else {
     vatRows();
     rule();

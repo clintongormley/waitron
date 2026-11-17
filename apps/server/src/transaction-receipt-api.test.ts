@@ -1011,8 +1011,8 @@ it("prints a replacement's original in the language chosen at the till", async (
   expect(prints).toEqual([expect.objectContaining({ saleId: replacement.id, receiptCopy: false })]);
   const { decodeTicket } = await import("./testing/decode-ticket.js");
   const text = decodeTicket(prints[0]!.payload);
-  expect(text).toContain("Base imponible");
-  expect(text).not.toContain("Base imposable");
+  expect(text).toMatch(/Tipo +Base +IVA +Total/u);
+  expect(text).not.toMatch(/Tipus +Base/u);
 });
 it("prints one original when two tills reprint a replacement at once", async () => {
   const original = await projectionInvoice();

@@ -1039,8 +1039,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
       // Tipo(s) impositivo(s) + base imponible per rate, plus the cuota (allowed extra) (7.1.f).
       for (const v of FILED_SALE.vatBreakdown) {
-        expect(s).toContain(`Base imponible ${v.rate}%`);
-        expect(s).toContain(`IVA ${v.rate}%`);
+        const comma = (value: string): string => value.replace(".", ",");
+        expect(s).toMatch(new RegExp(` ${v.rate}% +${comma(v.base)} +${comma(v.tax)} `, "u"));
       }
 
       // Contraprestación total (7.1.g).
@@ -1059,8 +1059,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
-      // Label and amount on one line: a bare "2,10" would match inside line 1's "12,10".
-      expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
+      // Rate and amount on one line: a bare "2,10" would match inside line 1's "12,10".
+      expect(s).toMatch(/21% +10,00 +2,10 /u); // IVA 21% cuota
       expect(s).toContain("8,00"); // base 10%
       expect(s).toContain("0,80"); // IVA 10%
       expect(s).toContain("20,90"); // TOTAL
@@ -1099,7 +1099,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       "17 ago 2026",
       lineName(FILED_SALE.lines[0]!),
       "TOTAL",
-      "Base imponible 21%",
+      "A 21%",
       "Efectivo",
       TRIM.footerMessage!,
     ];
@@ -2058,7 +2058,7 @@ describe("formatReceipt — printer layout", () => {
       }),
     );
     expect(lines).toContain(`TOTAL${" ".repeat(3)}20,90 €`);
-    expect(lines).toContain(`Base imponible 21%${" ".repeat(5)}10,00 €`);
+    expect(lines).toContain(`Efectivo${" ".repeat(15)}30,00 €`);
   });
 
   it.each([
@@ -2152,10 +2152,9 @@ describe("a bill paid in parts before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
@@ -2204,10 +2203,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Efectivo 50,00 €",
       "Devolución -6,00 €",
       "Devolución -4,00 €",
@@ -2244,10 +2242,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Tarjeta 20,00 €",
       "Ref. OP-3",
       "Devolución -5,00 €",
@@ -2388,8 +2385,8 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
       rule(PRINTER_80),
       `TOTAL${" ".repeat(10)}5,69 €`,
       rule(PRINTER_80),
-      at80("Base imponible 10%", "5,17 €"),
-      at80("IVA 10%", "0,52 €"),
+      "Tipo         Base         IVA        Total",
+      "10%          5,17        0,52         5,69",
     ]);
     expect(lines.filter((line) => line.startsWith("Descuento"))).toHaveLength(1);
   });
@@ -2710,8 +2707,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicili fiscal: Calle Fiscal 27, Madrid",
         comp: "Descompte 100% -12,00",
         discount: "Descompte 12,5% -1,50",
-        base: "Base imposable 21% 10,00 €",
-        vat: "IVA 21% 2,10 €",
+        taxHeader: "Tipus Base IVA Total",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "TOTAL 20,90 €",
         cash: "Efectiu 50,00 €",
         change: "Canvi 40,00 €",
@@ -2745,8 +2742,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicilio fiscal: Calle Fiscal 27, Madrid",
         comp: "Desconto 100% -12,00",
         discount: "Desconto 12,5% -1,50",
-        base: "Base impoñible 21% 10,00 €",
-        vat: "IVE 21% 2,10 €",
+        taxHeader: "Tipo Base IVE Total",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "TOTAL 20,90 €",
         cash: "Efectivo 50,00 €",
         change: "Cambio 40,00 €",
@@ -2780,8 +2777,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Helbide fiskala: Calle Fiscal 27, Madrid",
         comp: "Deskontua 100% -12,00",
         discount: "Deskontua 12,5% -1,50",
-        base: "Zerga-oinarria 21% 10,00 €",
-        vat: "BEZ 21% 2,10 €",
+        taxHeader: "Tasa Oinarria BEZ Guztira",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "GUZTIRA 20,90 €",
         cash: "Eskudirua 50,00 €",
         change: "Itzulia 40,00 €",
@@ -2964,8 +2961,8 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toContain("Base imposable 10% 3,64 €");
-    expect(text).toContain("IVA 10% 0,36 €");
+    expect(text).toContain("Tipus Base IVA Total");
+    expect(text).toContain("10% 3,64 0,36 4,00");
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/^2 rebanada Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
@@ -3200,13 +3197,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
       }),
     );
     const { columns } = textGrid(PRINTER_80.paperWidth, PRINTER_80.resolution);
-    for (const start of [
-      "1  Menú del día",
-      "2  Agua mineral",
-      "Base imponible 21%",
-      "IVA 10%",
-      "TOTAL",
-    ]) {
+    for (const start of ["1  Menú del día", "2  Agua mineral", "Tipo", "A 21%", "B 10%", "TOTAL"]) {
       const line = lines.find((l) => l.startsWith(start));
       expect(line, start).toBeDefined();
       expect(line!.length, start).toBe(start === "TOTAL" ? Math.floor(columns / 2) : columns);
@@ -3636,16 +3627,16 @@ describe("the simplified receipt's own layout (A663)", () => {
       expect(lines).toContain("1 Bloody Mary 15,00");
       expect(lines).toContain("4 Agua, pan y aceite 24,00");
       expect(lines).toContain("TOTAL 39,00 €");
-      expect(lines).toContain("Base imponible 10% 35,45 €");
-      expect(lines).toContain("IVA 10% 3,55 €");
+      expect(lines).toContain("Tipo Base IVA Total");
+      expect(lines).toContain("10% 35,45 3,55 39,00");
       expect(lines).not.toContain("Factura T-2026/000112");
       expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
       expect(lines.some((line) => line.startsWith("Factura simplificada"))).toBe(false);
       expect(number).toBeLessThan(at("1 Bloody Mary"));
       expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
-      expect(at("TOTAL")).toBeLessThan(at("Base imponible 10%"));
-      expect(at("Base imponible 10%")).toBeLessThan(at("IVA 10%"));
-      expect(at("IVA 10%")).toBeLessThan(at("Efectivo"));
+      expect(at("TOTAL")).toBeLessThan(at("Tipo"));
+      expect(at("Tipo")).toBeLessThan(at("10%"));
+      expect(at("10%")).toBeLessThan(at("Efectivo"));
       expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
       expect(at("VERI*FACTU")).toBeLessThan(heading);
     },
@@ -3734,21 +3725,20 @@ describe("the simplified receipt's own layout (A663)", () => {
     );
   });
 
-  it("prints a base and a VAT line for each of several rates", () => {
+  it("prints a tax-table row for each of several rates", () => {
     const lines = squeezed(FILED_WITHOUT_TEXT, PRINTER_80);
     expect(lines).toEqual(
       expect.arrayContaining([
-        "Base imponible 21% 10,00 €",
-        "IVA 21% 2,10 €",
-        "Base imponible 10% 8,00 €",
-        "IVA 10% 0,80 €",
+        "Tipo Base IVA Total",
+        "A 21% 10,00 2,10 12,10",
+        "B 10% 8,00 0,80 8,80",
       ]),
     );
     expect(lines.some((line) => line.includes("incluido"))).toBe(false);
     expect(lines.findIndex((l) => l.startsWith("TOTAL"))).toBeLessThan(
-      lines.findIndex((l) => l.startsWith("Base imponible 21%")),
+      lines.findIndex((l) => l.startsWith("A 21%")),
     );
-    expect(lines.findIndex((l) => l.startsWith("IVA 10%"))).toBeLessThan(
+    expect(lines.findIndex((l) => l.startsWith("B 10%"))).toBeLessThan(
       lines.findIndex((l) => l.startsWith("Efectivo")),
     );
   });
@@ -3827,7 +3817,7 @@ describe("a rule between TOTAL and the VAT lines on a simplified receipt (owner,
         }),
       );
       const totalAt = lines.findIndex((line) => line.trim().startsWith("TOTAL"));
-      const taxAt = lines.findIndex((line) => line.startsWith("Base imponible"));
+      const taxAt = lines.findIndex((line) => line.startsWith("Tipo "));
       expect(totalAt).toBeGreaterThan(0);
       expect(lines[taxAt - 1]).toBe(rule(printer));
       expect(lines.slice(totalAt, taxAt - 1).every((line) => /TOTAL|€/.test(line))).toBe(true);
@@ -4227,5 +4217,131 @@ describe("simplified receipt: price each and rate letters", () => {
       "2  Mahou caña           5,40 B",
       "   2,70 € por unidad",
     ]);
+  });
+});
+
+describe("simplified receipt: tax table", () => {
+  const santet: TillSaleResult = {
+    ...FILED_SALE,
+    invoiceType: "F2",
+    total: "26.50",
+    vatBreakdown: [{ rate: "10", base: "24.09", tax: "2.41" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Bocadillo de jamón" },
+        quantity: "1",
+        gross: "26.50",
+        vatRate: "10.00",
+        parentLineNo: null,
+      },
+    ],
+    tender: { method: "card", reference: null, tip: "0.00", charged: "26.50" },
+  };
+  const mixed: TillSaleResult = {
+    ...santet,
+    total: "33.76",
+    vatBreakdown: [
+      { rate: "10", base: "24.09", tax: "2.41" },
+      { rate: "21", base: "6.00", tax: "1.26" },
+    ],
+    lines: [
+      ...santet.lines,
+      {
+        descriptions: { "es-ES": "Vino" },
+        quantity: "1",
+        gross: "7.26",
+        vatRate: "21.00",
+        parentLineNo: null,
+      },
+    ],
+  };
+  const print = (result: TillSaleResult, printer: EscSetting): string[] =>
+    printedLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", printer }),
+    );
+  const taxTable = (lines: string[]): string[] => {
+    const total = lines.findIndex((line) => line.startsWith("TOTAL"));
+    const start = total + 2;
+    return lines.slice(start, lines.indexOf(lines[total + 1]!, start));
+  };
+
+  it.each([PRINTER_80, PRINTER_58])(
+    "prints the simplified tax summary as one row per rate ($paperWidth)",
+    (printer) => {
+      const lines = print(santet, printer);
+      const columns = esc(printer).grid.columns;
+      const table = taxTable(lines);
+      expect(table).toHaveLength(2);
+      expect(table[0]!.split(/ +/u)).toEqual(["Tipo", "Base", "IVA", "Total"]);
+      expect(table[1]!.split(/ +/u)).toEqual(["10%", "24,09", "2,41", "26,50"]);
+      for (const line of table) expect(line).toHaveLength(columns);
+      expect(lines.join("\n")).not.toContain("Base imponible");
+      expect(lines.join("\n")).not.toContain("IVA 10%");
+    },
+  );
+
+  it.each([PRINTER_80, PRINTER_58])(
+    "prints the simplified tax summary's rows with their letters on a mixed-rate bill ($paperWidth)",
+    (printer) => {
+      const table = taxTable(print(mixed, printer));
+      expect(table.slice(1).map((line) => line.split(/ +/u))).toEqual([
+        ["A", "10%", "24,09", "2,41", "26,50"],
+        ["B", "21%", "6,00", "1,26", "7,26"],
+      ]);
+      expect(table[1]!.indexOf("24,09") + 5).toBe(table[0]!.indexOf("Base") + 4);
+      expect(table[2]!.indexOf("6,00") + 4).toBe(table[0]!.indexOf("Base") + 4);
+      expect(table[1]!.indexOf("2,41") + 4).toBe(table[0]!.indexOf("IVA") + 3);
+      expect(table[2]!.indexOf("1,26") + 4).toBe(table[0]!.indexOf("IVA") + 3);
+    },
+  );
+
+  it("fits a two-rate tax table with four-figure amounts on 58 mm", () => {
+    const large: TillSaleResult = {
+      ...mixed,
+      total: "2568.02",
+      vatBreakdown: [
+        { rate: "10", base: "1234.56", tax: "123.46" },
+        { rate: "21", base: "1000.00", tax: "210.00" },
+      ],
+    };
+    const table = taxTable(print(large, PRINTER_58));
+    const { columns } = esc(PRINTER_58).grid;
+    expect(table.map((line) => line.split(/ +/u))).toEqual([
+      ["Tipo", "Base", "IVA", "Total"],
+      ["A", "10%", "1234,56", "123,46", "1358,02"],
+      ["B", "21%", "1000,00", "210,00", "1210,00"],
+    ]);
+    for (const line of table) expect(line).toHaveLength(columns);
+  });
+
+  it("prints no tax table when the sale has no tax summary", () => {
+    const lines = print({ ...santet, total: "0.00", vatBreakdown: [] }, PRINTER_80);
+    expect(lines.some((line) => line.startsWith("Tipo "))).toBe(false);
+  });
+
+  it("prints the tax summary's header in bold", () => {
+    const commands = printedCommands(
+      formatReceipt({
+        result: santet,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).filter((command) => command.text !== undefined);
+    const grid = esc(PRINTER_80).grid;
+    const header = commands.find((command) => command.text!.startsWith("Tipo"))!;
+    const row = commands.find((command) => command.text!.startsWith("10%"))!;
+    expect(header.bytes.subarray(8)).toEqual(
+      drawTextBand(header.text!, grid, "left", { bold: true }),
+    );
+    expect(row.bytes.subarray(8)).toEqual(drawTextBand(row.text!, grid, "left", {}));
+  });
+
+  it("leaves a full invoice's tax rows as they were", () => {
+    const lines = printedLines(formatReceipt(FULL_INVOICE_FIXTURE));
+    expect(lines.join("\n")).toContain("Base imponible 21%");
+    expect(lines.join("\n")).toContain("IVA 21%");
+    expect(lines.some((line) => line.startsWith("Tipo "))).toBe(false);
   });
 });
