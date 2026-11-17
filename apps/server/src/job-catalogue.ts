@@ -31,7 +31,9 @@ export const JOB_CATALOGUE = {
   },
   "backups.scheduled": {
     kind: "job",
-    stepdown: { keepRunning: "stops after the sending loop has finished" },
+    stepdown: {
+      keepRunning: "keeps running at stepdown; the close stops it with the other runner jobs",
+    },
   },
   "backups.sealed_state": {
     kind: "job",

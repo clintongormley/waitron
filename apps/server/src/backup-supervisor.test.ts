@@ -2209,26 +2209,49 @@ describe("scheduled backup passes", () => {
     }
   });
 
-  it("the job makes no backup off the primary and stops its supervisor at close", async () => {
-    const { sup, refs, dest } = await prepared();
-    refs.role = "secondary";
-    const runner = createJobRunner({
-      now: () => new Date("2026-11-17T12:00:00Z"),
-      log: () => {},
-      subscribe: () => () => {},
+  it("a due job makes no backup after demotion and closes its supervisor", async () => {
+    let at = new Date("2026-11-17T12:00:00Z");
+    let closes = 0;
+    const { sup, refs, dest } = await prepared({
+      now: () => at,
+      openVenue: async (dir) => {
+        const store = await openVenueDatabase(dir);
+        const close = store.close.bind(store);
+        return {
+          ...store,
+          close: async () => {
+            closes++;
+            await close();
+          },
+        };
+      },
     });
+    const runner = createJobRunner({ now: () => at, log: () => {}, subscribe: () => () => {} });
     try {
       await sup.reload();
       runner.add(backupsJob(sup, () => refs.role === "primary"));
-      await vi.waitFor(() =>
-        expect(runner.views()["backups.scheduled"]?.state).toBe("not_applicable"),
+      await vi.waitFor(() => expect(runner.views()["backups.scheduled"]?.state).toBe("waiting"), {
+        timeout: 5000,
+      });
+      expect(await listArchives(dest)).toHaveLength(1);
+      refs.role = "secondary";
+      at = new Date("2026-11-17T13:00:00Z");
+      runner.wake("backups.scheduled");
+      await vi.waitFor(
+        () => {
+          const view = runner.views()["backups.scheduled"]!;
+          expect(view.lastTurnAt).toBe(at.toISOString());
+          expect(view.state).not.toBe("running");
+        },
+        { timeout: 5000 },
       );
+      await runner.stopJobs();
+      expect(await listArchives(dest)).toHaveLength(1);
+      expect(closes).toBe(1);
     } finally {
       await runner.stopJobs();
       await sup.stop();
     }
-    expect(await listArchives(dest)).toEqual([]);
-    expect(sup.current().enabled).toBe(false);
   });
 
   it("a settings reload wakes the job and uses the new key", async () => {
