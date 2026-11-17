@@ -526,6 +526,41 @@ describe("Cloud restore screen showing the server's refusal of a detail", () => 
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
+  it("keeps a field's refusal away once the owner edits the field, through a new message about it", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: CHECK_OLD_BOX,
+      invalidField: "oldBoxGone",
+    });
+    expect(fieldMessages(el)).toEqual([CHECK_OLD_BOX]);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(fieldMessages(el)).toEqual([]);
+    el.errorMessage = "Still check your answer about the old server.";
+    await el.updateComplete;
+    expect(fieldMessages(el)).toEqual([]);
+  });
+
+  // The old server is answered first: an unanswered box shows its own problem in place of a
+  // refusal, which would hide whether the refusal came back.
+  it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
+    const refusal = "Cloud recovery is unavailable. Try again.";
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: refusal,
+    });
+    await tick(el, "[data-test=old-box-gone]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    const pressed = fieldMessages(el);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    el.invalidField = "oldBoxGone";
+    await el.updateComplete;
+    expect(fieldMessages(el)).toEqual(pressed);
+    expect(fieldMessages(el)).not.toContain(refusal);
+  });
+
   it("shows the old-server refusal above Restore while the server has not asked the question", async () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: approvedView(),

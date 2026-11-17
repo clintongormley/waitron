@@ -578,7 +578,7 @@ export class TillBillPayDialog extends LitElement {
   @state() private chosenReaderId?: string;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   get #shownRefusal(): PayRefusal | null {
-    return this.#feedback.remaining({ refusal: this.refusal }).refusal ?? null;
+    return this.#feedback.shows("refusal") ? this.refusal : null;
   }
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;

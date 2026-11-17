@@ -725,6 +725,36 @@ describe("SetupRestoreBucketScreen", () => {
       expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
+    it("keeps a field's refusal away once the owner edits the field, through a new message about it", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        request: REQUEST,
+        errorMessage: "Check the environment.",
+        invalidField: "environment",
+      });
+      expect(fieldMessages(el)).toEqual(["Check the environment."]);
+      await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+      el.errorMessage = "Still the wrong environment.";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+    });
+
+    it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
+      const refusal = "The bucket in this kit holds no copy of this restaurant.";
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        errorMessage: refusal,
+      });
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      const pressed = fieldMessages(el);
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      el.invalidField = "environment";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual(pressed);
+      expect(fieldMessages(el)).not.toContain(refusal);
+    });
+
     it("drops it on the next press and sends the request again", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",

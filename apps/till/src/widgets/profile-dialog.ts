@@ -65,9 +65,7 @@ export class TillProfileDialog extends LitElement {
 
   #fieldError(): string {
     const code = typeof this.notice === "object" ? this.notice?.code : undefined;
-    return code !== undefined &&
-      ABOUT_CHOICE.has(code) &&
-      this.#feedback.remaining({ choice: true }).choice === true
+    return code !== undefined && ABOUT_CHOICE.has(code) && this.#feedback.shows("choice")
       ? codeMessage(code)
       : "";
   }
@@ -77,7 +75,7 @@ export class TillProfileDialog extends LitElement {
     if (notice === null) return "";
     if (typeof notice === "string") return t(ORDER_NOTICES[notice]);
     if (ABOUT_CHOICE.has(notice.code))
-      return this.#feedback.remaining({ choice: true }).choice === true ? t("form.fix_fields") : "";
+      return this.#feedback.shows("choice") ? t("form.fix_fields") : "";
     return this.#feedback.message(
       {
         notice: codeMessage(notice.code),
