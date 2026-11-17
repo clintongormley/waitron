@@ -561,7 +561,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "opening_hours_one_owner_ck",
   "opening_hours_one_day_ck",
   "opening_hours_weekday_ck",
-  "opening_hours_step_ck",
   "opening_hours_kind_ck",
   "opening_hours_kind_by_owner_ck",
   "declaraciones_responsables_version_ck",

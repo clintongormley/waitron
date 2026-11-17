@@ -203,12 +203,12 @@ describe("copyDay", () => {
 });
 
 describe("stepMinuteAt", () => {
-  it("counts minutes from the changeover, reaching 1440 at the end of a quarter-hour day", () => {
+  it("counts minutes from the changeover, reaching both boundaries on any changeover", () => {
     expect(stepMinuteAt(0, 10, "06:00")).toBe(0);
     expect(stepMinuteAt(40, 10, "06:00")).toBe(60);
     expect(stepMinuteAt(96 * 10, 10, "06:00")).toBe(1440);
-    expect(stepMinuteAt(0, 10, "05:50")).toBe(10);
-    expect(stepMinuteAt(96 * 10, 10, "05:50")).toBe(1435);
+    expect(stepMinuteAt(0, 10, "05:50")).toBe(0);
+    expect(stepMinuteAt(96 * 10, 10, "05:50")).toBe(1440);
   });
 });
 
@@ -233,19 +233,29 @@ describe("stepAt", () => {
     expect(stepAt(95 * 10, 10, "05:30")).toBe("05:15");
   });
 
-  it("on a changeover off the quarter hour, snaps to the clock's quarter hours inside the day", () => {
-    expect(stepAt(0, 10, "05:50")).toBe("06:00");
-    expect(stepAt(-30, 10, "05:50")).toBe("06:00");
+  it("snaps to the off-quarter changeover at either boundary and clock quarters inside", () => {
+    expect(stepAt(0, 10, "05:50")).toBe("05:50");
+    expect(stepAt(-30, 10, "05:50")).toBe("05:50");
     expect(stepAt(10, 10, "05:50")).toBe("06:00");
     expect(stepAt(14, 10, "05:50")).toBe("06:15");
     expect(stepAt(40, 10, "05:50")).toBe("06:45");
-    expect(stepAt(96 * 10, 10, "05:50")).toBe("05:45");
-    expect(stepAt(5000, 10, "05:50")).toBe("05:45");
+    expect(stepAt(96 * 10, 10, "05:50")).toBe("05:50");
+    expect(stepAt(5000, 10, "05:50")).toBe("05:50");
+  });
+
+  it("chooses the nearest boundary, later on a tie, while quarter-only callers keep their bounds", () => {
+    expect(stepMinuteAt(9, 30, "05:50")).toBe(0);
+    expect(stepMinuteAt(10, 30, "05:50")).toBe(10);
+    expect(stepMinuteAt(2874, 30, "05:50")).toBe(1435);
+    expect(stepMinuteAt(2875, 30, "05:50")).toBe(1440);
+    expect(stepMinuteAt(0, 10, "05:50", false)).toBe(10);
+    expect(stepMinuteAt(960, 10, "05:50", false)).toBe(1435);
+    expect(stepAt(0, 0, "05:50", false)).toBe("06:00");
   });
 
   it("a row with no height answers the first row line", () => {
     expect(stepAt(40, 0, "06:00")).toBe("06:00");
-    expect(stepAt(40, 0, "05:50")).toBe("06:00");
+    expect(stepAt(40, 0, "05:50")).toBe("05:50");
     expect(stepAt(40, -10, "06:00")).toBe("06:00");
   });
 });

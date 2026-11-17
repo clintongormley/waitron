@@ -1644,6 +1644,24 @@ test("a 15-minute block's edges leave a gap between them; a long block's are a f
 
 const ROLE_ID = "7d4c1a52-0b8e-4f4e-9a57-3c2f1e6b9d10";
 
+test("shared strokes keep staffing's quarter-only creation and resizing at an off-quarter changeover", async () => {
+  const el = await grid({ mon: [] }, { chosen: ROLE_ID });
+  el.cutover = "05:50";
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 0, 60);
+  const created = [{ staffRoleId: ROLE_ID, headcount: 1, startsAt: "06:00", endsAt: "06:45" }];
+  expect(seen).toEqual([{ key: "mon", blocks: created }]);
+  expect(parseBlocks(seen[0]!.blocks, "blocks", "05:50")).toEqual(created);
+  el.days = new Map([["mon", seen[0]!.blocks]]);
+  await el.updateComplete;
+  await pickBlock(el, "mon", 0);
+  await drag(el, "mon", 55, 1440, edge(el, "mon", 0, "end"));
+  const resized = [{ staffRoleId: ROLE_ID, headcount: 1, startsAt: "06:00", endsAt: "05:45" }];
+  expect(seen[1]).toEqual({ key: "mon", blocks: resized });
+  expect(parseBlocks(seen[1]!.blocks, "blocks", "05:50")).toEqual(resized);
+});
+
 test("an end resize of a block kept on the day's last quarter hour sends a block the server accepts", async () => {
   const el = await grid({
     mon: [{ staffRoleId: ROLE_ID, headcount: 1, startsAt: "06:00", endsAt: "08:00" }],

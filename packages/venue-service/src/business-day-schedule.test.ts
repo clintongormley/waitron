@@ -322,6 +322,32 @@ describe("business-day schedule compatibility", () => {
       },
     });
   });
+  it.each([
+    ["05:45", "05:50", "06:00", "transition_strip"],
+    ["05:50", "06:00", "05:40", "overlap"],
+  ])(
+    "reports %s–%s when the start changes to %s with reason %s",
+    async (startsAt, endsAt, dayCutover, reason) => {
+      await writtenFixture([range(startsAt, endsAt)], { weekday: 3, dayCutover: "05:50" });
+      const oldClock = { ...before, dayCutover: "05:50" };
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          assertBusinessDayClockChange(
+            tx,
+            oldClock,
+            { ...oldClock, cutoverChanges: [{ effectiveBusinessDay: E, dayCutover }] },
+            E,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "venue.business_day_hours_conflict",
+        params: {
+          conflicts: [expect.objectContaining({ startsAt, endsAt, reason })],
+        },
+      });
+    },
+  );
+
   it("refuses a range whose endpoint changes calendar-day ownership", async () => {
     await fixture([range("22:00", "04:30")]);
     await expect(check("03:00")).rejects.toMatchObject({

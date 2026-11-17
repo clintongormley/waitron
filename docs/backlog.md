@@ -606,9 +606,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   kitchen agreed for**
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
 
-- **Painting stops short of an off-quarter-hour changeover**
-  [Detail](backlog/service-periods.md#painting-stops-short-of-an-off-quarter-hour-changeover)
-
 - **Two date helpers read years 0 to 99 as 1900 to 1999**
   [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
 

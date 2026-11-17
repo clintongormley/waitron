@@ -174,6 +174,7 @@ export class OverflowFade implements ReactiveController {
 }
 
 export interface ColumnStrokeOptions {
+  includeChangeover?: boolean;
   cutover: () => string;
   /** Whether a primary-button press on this column begins a stroke. */
   canStart: (key: string) => boolean;
@@ -243,7 +244,12 @@ export class ColumnStroke implements ReactiveController {
 
   #minuteAtY(clientY: number, column: HTMLElement): number {
     const box = column.getBoundingClientRect();
-    return stepMinuteAt(clientY - box.top, box.height / ROWS, this.#options.cutover());
+    return stepMinuteAt(
+      clientY - box.top,
+      box.height / ROWS,
+      this.#options.cutover(),
+      this.#options.includeChangeover,
+    );
   }
 
   /** Begins a stroke from `anchor`, in minutes from the changeover — a block's far edge, to resize

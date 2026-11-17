@@ -585,7 +585,7 @@ CREATE TABLE `floor_zones` (
 	FOREIGN KEY (`today_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "floor_zones_kept_open_ck" CHECK(("floor_zones"."kept_open_day" is null and "floor_zones"."kept_open_from" is null and "floor_zones"."kept_open_until" is null) or ("floor_zones"."kept_open_day" is not null and "floor_zones"."kept_open_from" is not null and "floor_zones"."kept_open_until" is not null)),
-	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_from", 4, 2) in ('00', '15', '30', '45') and substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),
+	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),
 	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
 	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
 	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))
@@ -2699,7 +2699,6 @@ CREATE TABLE `opening_hours` (
 	CONSTRAINT "opening_hours_one_owner_ck" CHECK(("opening_hours"."department_id" is null) <> ("opening_hours"."zone_id" is null)),
 	CONSTRAINT "opening_hours_one_day_ck" CHECK(("opening_hours"."season_id" is null) <> ("opening_hours"."special_day_date_id" is null) and ("opening_hours"."season_id" is null) = ("opening_hours"."weekday" is null)),
 	CONSTRAINT "opening_hours_weekday_ck" CHECK("opening_hours"."weekday" is null or "opening_hours"."weekday" between 0 and 6),
-	CONSTRAINT "opening_hours_step_ck" CHECK(substr("opening_hours"."starts_at", 4, 2) in ('00', '15', '30', '45') and substr("opening_hours"."ends_at", 4, 2) in ('00', '15', '30', '45')),
 	CONSTRAINT "opening_hours_kind_ck" CHECK("opening_hours"."kind" in ('period', 'closed', 'open')),
 	CONSTRAINT "opening_hours_kind_by_owner_ck" CHECK(("opening_hours"."department_id" is not null and (("opening_hours"."kind" = 'period' and "opening_hours"."period_id" is not null) or ("opening_hours"."kind" = 'closed' and "opening_hours"."period_id" is null and "opening_hours"."special_day_date_id" is not null))) or ("opening_hours"."zone_id" is not null and "opening_hours"."period_id" is null and ("opening_hours"."kind" = 'closed' or ("opening_hours"."kind" = 'open' and "opening_hours"."special_day_date_id" is not null))))
 );

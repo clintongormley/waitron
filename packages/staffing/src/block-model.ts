@@ -45,8 +45,6 @@ export function clockAt(minute: number, cutover: string): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-/** The day's last clock quarter hour, in minutes from the changeover, by `stepMinuteAt`'s rule:
- *  the day's end on a quarter-hour changeover. */
 function lastStep(cutover: string): number {
   const first = (STEP_MINUTES - (Number(cutover.slice(3, 5)) % STEP_MINUTES)) % STEP_MINUTES;
   return first + Math.floor((DAY_MINUTES - first) / STEP_MINUTES) * STEP_MINUTES;

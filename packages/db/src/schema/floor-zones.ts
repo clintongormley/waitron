@@ -47,7 +47,7 @@ export const floorZones = table(
     ),
     check(
       "floor_zones_kept_open_step_ck",
-      sql`substr(${t.keptOpenFrom}, 4, 2) in ('00', '15', '30', '45') and substr(${t.keptOpenUntil}, 4, 2) in ('00', '15', '30', '45')`,
+      sql`substr(${t.keptOpenUntil}, 4, 2) in ('00', '15', '30', '45')`,
     ),
     foreignKey({
       columns: [t.departmentId],

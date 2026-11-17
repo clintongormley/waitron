@@ -62,6 +62,7 @@ import {
   clearRoutingCell,
 } from "./routing-store.js";
 import * as periodReads from "./routing-periods.js";
+import { readBusinessDayScheduleRevision } from "./business-day-schedule.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
 import {
@@ -3431,6 +3432,40 @@ describe("saving a cell's period choices", () => {
       ]);
       await configureZone(tx, { zoneId: f.patio, departmentId: f.barDepartment });
       expect(await storedLines(tx)).toEqual([{ periodId: f.lunch, stationId: f.downstairs }]);
+    }));
+
+  it("routes by the saved periods on both sides of an off-quarter business-day changeover", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      await seedBusinessDay(tx, { timeZone: "UTC", dayCutover: "05:50:00" });
+      await replaceMenuWeek(
+        tx,
+        f.department,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [
+            { periodId: f.lunch, startsAt: "05:50", endsAt: "06:00" },
+            { periodId: f.staffLunch, startsAt: "05:45", endsAt: "05:50" },
+          ],
+        })),
+        new Date("2026-10-02T04:00:00Z"),
+        await readBusinessDayScheduleRevision(tx),
+      );
+      await setRoutingCell(tx, everyZone(f), station(f.bar), [
+        line(f.lunch, station(f.upstairs)),
+        line(f.staffLunch, station(f.downstairs)),
+      ]);
+      for (const [time, maker] of [
+        ["05:49", f.downstairs],
+        ["05:50", f.upstairs],
+        ["05:59", f.upstairs],
+        ["06:00", f.bar],
+      ] as const) {
+        const resolver = await routingAt(tx, new Date(`2026-10-02T${time}:00Z`));
+        expect(await resolver.makers(f.terrace, [f.mojito]), time).toEqual(
+          new Map([[f.mojito, { kind: "made", route: station(maker) }]]),
+        );
+      }
     }));
 
   it("routes by a saved No preparation line while its period runs, an extra then following its dish", async () =>

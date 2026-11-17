@@ -282,6 +282,7 @@ export class StaffingGrid extends LitElement {
   } | null = null;
   readonly #fade = new OverflowFade(this);
   readonly #stroke = new ColumnStroke(this, {
+    includeChangeover: false,
     cutover: () => this.cutover,
     canStart: () => !this.readOnly,
     canRelease: () => !this.readOnly && (this.#resizing !== null || this.chosen !== undefined),

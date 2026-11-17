@@ -65,8 +65,8 @@ export function parseRanges<T extends ClosedRange>(
     if (span.start === span.end) invalid(field, "empty");
     if (span.start > span.end) invalid(field, "order");
     if (
-      clockMinutes(startsAt) % SERVICE_STEP_MINUTES !== 0 ||
-      clockMinutes(endsAt) % SERVICE_STEP_MINUTES !== 0
+      (startsAt !== cutover && clockMinutes(startsAt) % SERVICE_STEP_MINUTES !== 0) ||
+      (endsAt !== cutover && clockMinutes(endsAt) % SERVICE_STEP_MINUTES !== 0)
     )
       invalid(field, "step");
     return read(entry as Record<string, unknown>, at, range, index);

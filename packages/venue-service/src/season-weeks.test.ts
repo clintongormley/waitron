@@ -22,7 +22,13 @@ import {
   insertInChunks,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedPerson, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedBusinessDay,
+  seedKitchenStation,
+  seedPerson,
+  seedVenue,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import { resolveDepartmentDays, resolveZoneClosedDays } from "./day-resolver.js";
 import { readPlannedServiceGuides } from "./planned-service-guides.js";
 import {
@@ -134,6 +140,17 @@ const everySeason = <T>(value: T) => ({
   Summer: value,
   Autumn: value,
   Winter: value,
+});
+
+it("saves and reads opening hours up to both off-quarter changeover edges", async () => {
+  const v = await venue();
+  await seedBusinessDay(db, { dayCutover: "05:50:00" });
+  const ranges = [
+    { periodId: v.lunch, startsAt: "05:50", endsAt: "06:00" },
+    { periodId: v.dinner, startsAt: "05:45", endsAt: "05:50" },
+  ];
+  await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(ranges), AT, 1));
+  expect(await departmentTuesdays(v)).toEqual(everySeason(ranges));
 });
 
 it("a saved empty zone week and an unsaved week give the same hours, guides and season split", async () => {
