@@ -23,6 +23,7 @@ import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { originChecks, sourceColumn } from "./origin.js";
+import { persons } from "./identity/persons.js";
 import { parties } from "./parties.js";
 import { dining } from "./sale-rule-types.js";
 
@@ -110,10 +111,26 @@ export const workingOrders = table(
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
+    billNumber: count("bill_number"),
+    billName: label("bill_name"),
+    editorId: id("editor_id").references(() => persons.id),
+    editorVersion: count("editor_version").notNull().default(0),
     // Eaten here or taken away. No default: whoever opens an order decides it.
     dining: dining("dining").notNull(),
   },
   (t) => [
+    uniqueIndex("working_orders_party_bill_number_key")
+      .on(t.partyId, t.billNumber)
+      .where(sql`${t.billNumber} is not null`),
+    check(
+      "working_orders_bill_number_ck",
+      sql`${t.billNumber} is null or (${t.partyId} is not null and typeof(${t.billNumber}) = 'integer' and ${t.billNumber} >= 1)`,
+    ),
+    check(
+      "working_orders_bill_name_ck",
+      sql`${t.billName} is null or (length(${t.billName}) between 1 and 40 and ${t.billName} = trim(${t.billName}))`,
+    ),
+    check("working_orders_editor_version_ck", sql`${t.editorVersion} >= 0`),
     uniqueIndex("working_orders_order_number_key").on(t.orderNumber),
     index("working_orders_uncollected_idx")
       .on(t.id)

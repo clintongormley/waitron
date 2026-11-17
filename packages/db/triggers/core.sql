@@ -911,3 +911,11 @@ CREATE TRIGGER media_blobs_no_update BEFORE UPDATE ON media_blobs
 BEGIN
   SELECT RAISE(ABORT, 'media_blobs rows are never changed');
 END;
+
+--> statement-breakpoint
+CREATE TRIGGER parties_last_bill_number_no_decrease
+BEFORE UPDATE OF last_bill_number ON parties
+FOR EACH ROW WHEN new.last_bill_number < old.last_bill_number
+BEGIN
+  SELECT raise(abort, 'a party''s last bill number never goes down');
+END;

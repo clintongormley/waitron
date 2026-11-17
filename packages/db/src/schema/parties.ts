@@ -42,6 +42,7 @@ export const parties = table(
     billRequestedAt: tsString("bill_requested_at"),
     name: label("name"),
     revision: count("revision").notNull().default(0),
+    lastBillNumber: count("last_bill_number").notNull().default(0),
     tableNames: labelList("table_names"),
     allergyAnswer: enumType(["none", "allergies"])("allergy_answer"),
     allergyAnsweredBy: id("allergy_answered_by"),

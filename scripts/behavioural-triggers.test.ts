@@ -15,6 +15,7 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
 // `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
 // triggers against this file instead of against what the product reads.
 import {
+  BILL_NUMBER_DECREASE_REFUSAL,
   BILL_PAYMENT_CHANGE_REFUSAL,
   BILL_PAYMENT_DELETE_REFUSAL,
   BILL_REFUND_CHANGE_REFUSAL,
@@ -98,6 +99,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "parties_last_bill_number_no_decrease",
   "payments_guard_update",
   "payments_no_delete",
   "activity_log_refuse_update",
@@ -1924,6 +1926,20 @@ describe("day-start history", () => {
     } finally {
       connection.exec("rollback to day_start_case; release day_start_case");
     }
+  });
+});
+
+describe("party bill counter", () => {
+  it("a party's last bill number never goes down", () => {
+    connection.exec(party("bill-counter"));
+    connection.exec("update parties set last_bill_number = 1 where id = 'bill-counter'");
+    connection.exec("update parties set last_bill_number = 2 where id = 'bill-counter'");
+    expect(
+      refusalFor(connection, "update parties set last_bill_number = 1 where id = 'bill-counter'"),
+    ).toBe(BILL_NUMBER_DECREASE_REFUSAL);
+    expect(
+      connection.prepare("select last_bill_number from parties where id = 'bill-counter'").get(),
+    ).toEqual({ last_bill_number: 2 });
   });
 });
 

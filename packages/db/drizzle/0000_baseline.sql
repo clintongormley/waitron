@@ -147,11 +147,19 @@ CREATE TABLE `working_orders` (
 	`receipt_locale` text,
 	`payment_attempt_at` text,
 	`party_id` text,
+	`bill_number` integer,
+	`bill_name` text,
+	`editor_id` text,
+	`editor_version` integer DEFAULT 0 NOT NULL,
 	`dining` text NOT NULL,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`editor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "working_orders_bill_number_ck" CHECK("working_orders"."bill_number" is null or ("working_orders"."party_id" is not null and typeof("working_orders"."bill_number") = 'integer' and "working_orders"."bill_number" >= 1)),
+	CONSTRAINT "working_orders_bill_name_ck" CHECK("working_orders"."bill_name" is null or (length("working_orders"."bill_name") between 1 and 40 and "working_orders"."bill_name" = trim("working_orders"."bill_name"))),
+	CONSTRAINT "working_orders_editor_version_ck" CHECK("working_orders"."editor_version" >= 0),
 	CONSTRAINT "working_orders_status_ck" CHECK("working_orders"."status" in ('open', 'placed', 'settled', 'abandoned')),
 	CONSTRAINT "working_orders_dining_ck" CHECK("working_orders"."dining" in ('eat_in', 'takeaway')),
 	CONSTRAINT "working_orders_source_ck" CHECK("working_orders"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
@@ -159,6 +167,7 @@ CREATE TABLE `working_orders` (
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `working_orders_party_bill_number_key` ON `working_orders` (`party_id`,`bill_number`) WHERE "working_orders"."bill_number" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `working_orders_order_number_key` ON `working_orders` (`order_number`);--> statement-breakpoint
 CREATE INDEX `working_orders_uncollected_idx` ON `working_orders` (`id`) WHERE "working_orders"."collected_at" is null and "working_orders"."status" <> 'abandoned';--> statement-breakpoint
 CREATE INDEX `working_orders_status_idx` ON `working_orders` (`status`);--> statement-breakpoint
@@ -402,6 +411,7 @@ CREATE TABLE `parties` (
 	`bill_requested_at` text,
 	`name` text,
 	`revision` integer DEFAULT 0 NOT NULL,
+	`last_bill_number` integer DEFAULT 0 NOT NULL,
 	`table_names` text,
 	`allergy_answer` text,
 	`allergy_answered_by` text,
@@ -3765,4 +3775,12 @@ BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); 
 CREATE TRIGGER media_blobs_no_update BEFORE UPDATE ON media_blobs
 BEGIN
   SELECT RAISE(ABORT, 'media_blobs rows are never changed');
+END;
+
+--> statement-breakpoint
+CREATE TRIGGER parties_last_bill_number_no_decrease
+BEFORE UPDATE OF last_bill_number ON parties
+FOR EACH ROW WHEN new.last_bill_number < old.last_bill_number
+BEGIN
+  SELECT raise(abort, 'a party''s last bill number never goes down');
 END;

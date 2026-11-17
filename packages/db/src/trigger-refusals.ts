@@ -88,3 +88,5 @@ export const DAY_START_HISTORY_REFUSAL = "day start history cannot change";
 /** A guest requires an answer on its party before insertion or reassignment. */
 export const PARTY_ALLERGY_GUEST_ANSWER_REFUSAL =
   "an allergic guest needs the party's answer first";
+
+export const BILL_NUMBER_DECREASE_REFUSAL = "a party's last bill number never goes down";
