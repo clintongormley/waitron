@@ -1223,13 +1223,20 @@ export class BackupScreen extends LitElement {
         @evidence-close=${() => (this.evidenceOpen = false)}
       ></dashboard-backup-settings-evidence>
       <div class="card">
-        <dashboard-stream-settings
-          .api=${this.api}
-          @recovery-key-needed=${() => void this.#focusKeyStep()}
-          @stream-permission-refused=${(event: CustomEvent<{ refused: boolean }>) => (this.streamPermissionRefused = event.detail.refused)}
-          .archivesEnabled=${s?.enabled}
-        ></dashboard-stream-settings>
-        ${this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
+        ${
+          this.onboardingIntent === "demo"
+            ? html`<section aria-labelledby="stream-demo-title">
+                <h2 id="stream-demo-title">${t("stream.title")}</h2>
+                <p class="hint" data-test="stream-demo">${t("stream.demo")}</p>
+              </section>`
+            : html`<dashboard-stream-settings
+                  .api=${this.api}
+                  @recovery-key-needed=${() => void this.#focusKeyStep()}
+                  @stream-permission-refused=${(event: CustomEvent<{ refused: boolean }>) => (this.streamPermissionRefused = event.detail.refused)}
+                  .archivesEnabled=${s?.enabled}
+                ></dashboard-stream-settings>
+                ${this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}`
+        }
       </div>
     `;
   }

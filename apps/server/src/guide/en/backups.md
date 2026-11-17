@@ -28,6 +28,8 @@ When you change the recovery key, use **Show the current key** to save the old k
 
 ## Continuous copy to your bucket {#bucket-copy}
 
+Demo does not offer this copy.
+
 In **Continuous copy to your bucket**, enter your bucket's connection details. Choose **Test**, then **Save and turn on**. Check **Last confirmed copy** and **Changes not yet in the bucket** to see how recent your copy is.
 
 Use **Change bucket** to update the connection. If you need to restore the copy on another box, follow [Choose your copy](backup-recovery.md#source).

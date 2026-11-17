@@ -256,6 +256,17 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders a Demo venue's line in place of the bucket copy accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { onboardingIntent: "demo", api: stubApi(OFF) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=stream-demo]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the configure wizard accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

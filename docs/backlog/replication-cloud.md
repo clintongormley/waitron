@@ -807,6 +807,11 @@ against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
 - **A missing or revoked Cloud connection uses `cloud.not_configured`** (owner, 2026-10-15,
   lane B question 4, answer (b)). Say “This server is not connected to Waitron Cloud” in English
   and “Este servidor no está conectado a Waitron Cloud” in Spanish.
+- **A Demo venue does not offer a bucket copy** (watcher, 2026-11-17 19:30, lane B questions, point 2,
+  answer (a); not the owner's). Its copy could not be restored, since restoring needs a server key a
+  Demo venue never has and no restore path names a Demo invoice series. The Backups screen shows a
+  line saying so in place of the bucket-copy settings when the venue's setup choice is Demo; an
+  unknown choice still shows them.
 
 From the Cloud connection integration (2026-09-24): Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
 override, gateway replacement and revocation.
