@@ -4537,7 +4537,10 @@ The one allocation outside the clock rule is the preproduction throwaway
 it (`throwawayMarker`, `apps/server/src/setup-api.ts`), and so does the readiness sample
 (`packages/provisioning/src/fiscal-readiness-runner.ts`). It names from the box's clock with no
 second clock and no history check, and is refused outside preproduction
-(`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`).
+(`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`). On a development box
+(`WAITRON_ENV=dev`) a preproduction first setup's second clock on the setup page is the box's own
+(`packages/fiscal-verifactu/src/hour-preparation.ts`; owner, 2026-11-17); the person still confirms
+it there.
 
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts` is weaker than its name: it
 has restore cases (refused at a minute in use, and selected beside later names) and one promotion,
@@ -6267,7 +6270,9 @@ no wait, so it relies on coming long enough after a Start again (up to 120 secon
 30 seconds off); that is reasoning about how long joining as a standby takes, not measured.
 
 The one exception to the second clock and the history check is the preproduction throwaway, which names with no second clock and no history check
-and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
+and is refused outside preproduction. On a development box (`WAITRON_ENV=dev`) a preproduction first setup on
+the setup page takes the box's own clock as its second clock (owner, 2026-11-17); the person still
+confirms it there. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
 `packages/fiscal-verifactu/src/hour-clock.test.ts` and
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, the last weaker than its
 name. One restore takes one source, never both. The working-time chain continues from the
@@ -6652,7 +6657,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   pressed Restore backup or typed on the waiting page; first setup's Provision takes its own fresh
   reading and, on the setup page without the time service, uses a device time the person confirmed
   on that page while the box has not rebooted, the server has not restarted and its clock has not been
-  stepped (the watcher's choice, 2026-11-17, not the owner's;
+  stepped (the watcher's choice, 2026-11-17, not the owner's; on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's);
   `packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "without a time service, a confirmed
   device time counts two minutes later while %s", and `apps/server/src/module-operation-host.test.ts`,
   "a device time confirmed through the setup page counts at Provision two minutes later without the
@@ -6665,7 +6670,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   2026-10-29, A1206): a box and the machine confirming its clock, wrong by the same amount, can
   repeat a name. Setup/restore wait 90–150 seconds; promotion does not. [Detail](conventions-data.md).
   Only preproduction throwaway skips
-  second-clock/history checks; refuse it outside preproduction. Restore takes one source;
+  second-clock/history checks; refuse it outside preproduction. On a development box (`WAITRON_ENV=dev`) a preproduction first setup on the setup page takes the box's own clock as its second clock (owner, 2026-11-17); the person still confirms it there. Restore takes one source;
   working-time chain continues from its head. Guards:
   hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name suites (the
   last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
