@@ -17,6 +17,12 @@ export fails the pull request, but a behaviour break in a dependent shows up onl
 nightly or manual full run. To catch it before merging, run the affected dependents' tests
 locally.
 
+On 17 November 2026, #3612's shared table-padding change broke venue-service's
+part-local station-heading spacing. Its unchanged dependent was outside that PR's selected
+package tests; Lane E's run `44010882278`, venue-service shard 2, caught the Spanish 390 px
+heading crossing Actions. The original test and a primitive part-local spacing case reproduce
+it; retain the geometry assertions when checking a shared styling change.
+
 The signing contract runs in `test-light-a`. When selected, it also runs an independent
 Node consumer against its workspace and locally prepared tarballs. Changes to the shared
 `scripts/release/prepare-ui.mjs` or the shared `packages/ui-core/test/package-consumer.test.mjs`

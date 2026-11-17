@@ -452,3 +452,20 @@ test("cell inline spacing preserves the narrow tree target and leaves other spac
   expect(getComputedStyle(toggle).marginInlineStart).toBe("-4px");
   expect(getComputedStyle(toolbar).gap).toBe(toolbarGap);
 });
+
+test("resolves default cell spacing at a part-local heading override", async () => {
+  const el = await table();
+  const root = el.shadowRoot!;
+  el.style.setProperty("--wt-table-cell-padding-inline", "var(--wt-space-2)");
+  for (const cell of root.querySelectorAll("th, td"))
+    expect(getComputedStyle(cell).paddingInlineStart).toBe("8px");
+  el.style.removeProperty("--wt-table-cell-padding-inline");
+  const style = document.createElement("style");
+  style.textContent = "wt-data-table::part(table-head) { --wt-space-3: var(--wt-space-1); }";
+  document.head.append(style);
+  onTestFinished(() => style.remove());
+  const heading = root.querySelector("th")!;
+  expect(getComputedStyle(heading).paddingBlockStart).toBe("4px");
+  expect(getComputedStyle(root.querySelector("td")!).paddingInlineStart).toBe("12px");
+  expect(getComputedStyle(heading).paddingInlineStart).toBe("4px");
+});
