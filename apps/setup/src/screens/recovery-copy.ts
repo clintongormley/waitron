@@ -14,6 +14,21 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { t } from "../i18n/t.js";
 
+/**
+ * The environment a refused Review names for its copy, when the form asked for the other one. The
+ * server restores a copy only into its own environment (`restore-gate.ts`), so no other value can
+ * pass.
+ */
+export function copyEnvironmentFrom(
+  cause: ApiError | undefined,
+  asked: "production" | "preproduction",
+): "production" | "preproduction" | undefined {
+  const backup = cause?.code === "restore.environment_mismatch" ? cause.params?.backup : undefined;
+  return (backup === "production" || backup === "preproduction") && backup !== asked
+    ? backup
+    : undefined;
+}
+
 interface StagedCopy {
   eventId: string;
   api: SetupApi;

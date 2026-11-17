@@ -22,7 +22,7 @@ import {
 } from "../events.js";
 import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
-import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { SetupRecoveryCopy, copyEnvironmentFrom } from "./recovery-copy.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { currentLocale, t, format } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -205,20 +205,14 @@ export class SetupRestoreBucketScreen extends LitElement {
     if (field === this.invalidField) this.feedback.dismiss("field");
   }
 
-  /**
-   * The server restores a copy only into its own environment (`restore-gate.ts`), so Review's
-   * refusal naming that environment leaves no other value that could pass.
-   */
-  async #followCopyEnvironment(
-    environment: "production" | "preproduction",
-    copy: SetupRecoveryCopy,
-  ): Promise<void> {
+  async #followCopyEnvironment(environment: "production" | "preproduction"): Promise<void> {
     this.environment = environment;
     this.#edited("environment");
     this.#followedCopy = true;
     await this.updateComplete;
-    await copy.updateComplete;
-    await copy.review();
+    const copy = this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy");
+    await copy?.updateComplete;
+    await copy?.review();
   }
 
   /**
@@ -500,14 +494,9 @@ export class SetupRestoreBucketScreen extends LitElement {
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
           event.stopPropagation();
           const error = event.detail.cause;
-          const copied =
-            error?.code === "restore.environment_mismatch" ? error.params?.backup : undefined;
-          if (
-            (copied === "production" || copied === "preproduction") &&
-            copied !== this.environment &&
-            !this.#followedCopy
-          ) {
-            void this.#followCopyEnvironment(copied, event.target as SetupRecoveryCopy);
+          const copied = copyEnvironmentFrom(error, this.environment);
+          if (copied !== undefined && !this.#followedCopy) {
+            void this.#followCopyEnvironment(copied);
             return;
           }
           this.previewOldKit =
