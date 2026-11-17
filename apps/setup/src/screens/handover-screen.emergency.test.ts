@@ -1550,6 +1550,17 @@ it("Stop and Continue go back to the till named in back", async () => {
   });
 });
 
+it("Stop and Continue keep the till when the venue's own address sent it to the switch", async () => {
+  expect(
+    await stopAndContinueLinks(
+      "https://waitron.local/handover/emergency?back=https%3A%2F%2Fwaitron.local%2Ftill%2Ftabs%2Fcounter",
+    ),
+  ).toEqual({
+    stop: "https://waitron.local/till/tabs/counter",
+    proceed: "https://waitron.local/till/tabs/counter",
+  });
+});
+
 it.each([
   "https://evil.example/",
   "http://waitron.local/",

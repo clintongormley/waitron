@@ -156,12 +156,17 @@ const OWN = "https://box-bbbb.waitron.local";
 
 it("at the venue's name a silent main server's spare sends pages to the switch page", async () => {
   const app = fixture(SILENT);
-  for (const path of ["/", "/manage", "/manage/servers", "/till/tabs/counter"]) {
+  for (const [path, destination] of [
+    ["/", "/handover/emergency"],
+    ["/manage", "/handover/emergency"],
+    ["/manage/servers", "/handover/emergency"],
+    [
+      "/till/tabs/counter",
+      "/handover/emergency?back=https%3A%2F%2Fwaitron.local%2Ftill%2Ftabs%2Fcounter",
+    ],
+  ]) {
     const response = await app.request(`${VENUE}${path}`, { headers: { accept: "text/html" } });
-    expect([response.status, response.headers.get("location")]).toEqual([
-      302,
-      "/handover/emergency",
-    ]);
+    expect([response.status, response.headers.get("location")]).toEqual([302, destination]);
     expect(response.headers.get("cache-control")).toBe("no-store");
   }
 });

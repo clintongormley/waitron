@@ -67,7 +67,7 @@ function leaveWhenDone(destination: string): string {
   const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
   const ask = async () => {
     try {
-      const response = await fetch(destination, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      const response = await fetch(destination, { cache: "no-store", headers: { accept: "text/html" }, signal: AbortSignal.timeout(5000) });
       if (response.ok && response.headers.get("${WAITING_HEADER.toLowerCase()}") === null)
         return location.replace(destination);
     } catch {}
@@ -114,7 +114,12 @@ export function waitingPageRoute(
   return (app) => {
     app.get("*", async (c, next) => {
       const path = c.req.path;
-      if (path !== "/" && !/^\/(?:manage|till)(?:\/|$)/.test(path)) return next();
+      if (
+        path !== "/" &&
+        (!/^\/(?:manage|till)(?:\/|$)/.test(path) ||
+          !(c.req.header("Accept") ?? "").includes("text/html"))
+      )
+        return next();
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");

@@ -143,11 +143,12 @@ export class SetupHandoverScreen extends LitElement {
   get #checksMain(): boolean {
     return this.emergency && !this.operationId;
   }
-  /** A till sends its own address; a box is named `box-<id>.<venue name>` and the till sits at the venue name. */
   get #back(): string | undefined {
     const page = new URL(this.pageUrl);
     const back = URL.parse(page.searchParams.get("back") ?? "");
-    const venue = page.hostname.slice(page.hostname.indexOf(".") + 1);
+    const venue = /^box-[^.]+\./.test(page.hostname)
+      ? page.hostname.slice(page.hostname.indexOf(".") + 1)
+      : page.hostname;
     return back?.protocol === "https:" && page.hostname.includes(".") && back.hostname === venue
       ? back.href
       : undefined;

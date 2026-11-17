@@ -66,7 +66,8 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       reachUrls: deps.reachUrls,
       caAvailable: await caExists(),
       caDownloadPath: CA_DOWNLOAD_PATH,
-      httpsUrl: deps.httpsUrl,
+      httpsUrl:
+        c.req.query("app") === "till" ? new URL("/till/", deps.httpsUrl).href : deps.httpsUrl,
       device: trustDeviceForRequest(c.req),
     });
     // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.

@@ -7,8 +7,6 @@ an alert says to. To read the box's log, use **Diagnostics** instead.
 
 ## Open the page {#open}
 
-Open the box’s address for the dashboard, or add `/till/` to open the till. Update any older till bookmark or home-screen shortcut to end in `/till/`. Your enrolled browser keeps its device sign-in.
-
 To keep a file about a problem in the dashboard, choose **Report a problem** in the top banner.
 You can use it before signing in too. Open the dashboard over HTTPS if the button is missing.
 On a phone, use the speech-bubble button with an exclamation mark.

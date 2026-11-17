@@ -78,7 +78,13 @@ export function spareReadGate(deps: {
       const main = deps.main();
       if (new URL(c.req.url).hostname !== BOX_HOSTNAME)
         return c.html(renderSparePage(locale, main, now()));
-      if (main?.silent === true) return c.redirect("/handover/emergency", 302);
+      if (main?.silent === true) {
+        const back =
+          path === "/till" || path.startsWith("/till/")
+            ? `?back=${encodeURIComponent(c.req.url)}`
+            : "";
+        return c.redirect(`/handover/emergency${back}`, 302);
+      }
       return c.html(renderMainBackPage(locale));
     }
     const error = new AppError("node.spare", {});

@@ -965,32 +965,32 @@ describe("the tab routes are gone", () => {
   }[] = [
     {
       name: "move",
-      path: (a) => `/api/till/tabs/${a.tabId}/move`,
+      path: (a) => `/api/tabs/${a.tabId}/move`,
       body: (_a, _b, free) => ({ toTableId: free, expectedPartyRevision: 0 }),
     },
     {
       name: "join",
-      path: (a) => `/api/till/tabs/${a.tabId}/join`,
+      path: (a) => `/api/tabs/${a.tabId}/join`,
       body: (_a, _b, free) => ({ tableId: free, expectedPartyRevision: 0 }),
     },
     {
       name: "merge",
-      path: (a) => `/api/till/tabs/${a.tabId}/merge`,
+      path: (a) => `/api/tabs/${a.tabId}/merge`,
       body: (_a, b) => ({ fromTabId: b.tabId, expectedPartyRevision: 0 }),
     },
     {
       name: "transfer",
-      path: (a) => `/api/till/tabs/${a.tabId}/transfer`,
+      path: (a) => `/api/tabs/${a.tabId}/transfer`,
       body: (_a, b) => ({ toTabId: b.tabId, transfers: [{ lineNo: 1 }], expectedPartyRevision: 0 }),
     },
     {
       name: "split",
-      path: (a) => `/api/till/tabs/${a.tabId}/split`,
+      path: (a) => `/api/tabs/${a.tabId}/split`,
       body: () => ({ transfers: [{ lineNo: 1 }], expectedPartyRevision: 0 }),
     },
     {
       name: "unjoin",
-      path: (a) => `/api/till/tabs/${a.tabId}/unjoin`,
+      path: (a) => `/api/tabs/${a.tabId}/unjoin`,
       body: (a) => ({ tableId: a.tableId, expectedPartyRevision: 0 }),
     },
   ];

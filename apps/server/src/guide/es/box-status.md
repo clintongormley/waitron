@@ -8,8 +8,6 @@ registro del servidor, usa **Diagnóstico**.
 
 ## Abre la página {#open}
 
-Abre la dirección del servidor para entrar al panel de gestión, o añade `/till/` para abrir la caja. Actualiza los marcadores y accesos directos antiguos de la caja para que terminen en `/till/`. El navegador conserva su registro como dispositivo.
-
 Para guardar un archivo sobre un problema del panel, elige **Informar de un problema** en la barra
 superior. También puedes hacerlo antes de iniciar sesión. Abre el panel por HTTPS si no aparece
 el botón.

@@ -892,7 +892,7 @@ describe("the waiting start", () => {
       const waiting = await h.app().request(
         "https://box.test/till/tabs/counter?view=all",
         {
-          headers: { "accept-language": "en-GB" },
+          headers: { "accept-language": "en-GB", accept: "text/html" },
         },
         tls(),
       );

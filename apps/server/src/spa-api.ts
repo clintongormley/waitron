@@ -95,6 +95,7 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
   app.get(`${base}/*`, (c) => serve(c, c.req.path.slice(base.length)));
 }
 
+/** Mount after named routes: the dashboard has an origin-root catch-all. */
 export function mountBuiltApps(
   app: Hono,
   apps: { dashboardAppDir?: string; tillAppDir?: string },

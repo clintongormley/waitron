@@ -1,4 +1,8 @@
 import vm from "node:vm";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mountBuiltApps } from "./spa-api.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -178,11 +182,32 @@ describe("the waiting page", () => {
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-waiting")).toBe("1");
-    const page = openPage(() => Promise.resolve(new Response(null)), "/till/tabs/counter?view=all");
-    await page.advance(5_000);
-    expect(page.fetch).toHaveBeenCalledWith("/till/tabs/counter?view=all", expect.any(Object));
-    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/till/tabs/counter?view=all");
+    const root = await mkdtemp(join(tmpdir(), "waitron-peer-wait-page-"));
+    try {
+      await writeFile(join(root, "index.html"), "<html>till ready</html>");
+      const ready = new Hono();
+      mountBuiltApps(ready, { tillAppDir: root }, () => {});
+      const page = openPage((url, init) => ready.request(url, init), "/till/tabs/counter?view=all");
+      await page.advance(5_000);
+      expect((await page.fetch.mock.results[0]!.value).status).toBe(200);
+      await vi.waitFor(() =>
+        expect(page.replace).toHaveBeenCalledExactlyOnceWith("/till/tabs/counter?view=all"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
     expect((await app.request("/api/working-orders")).status).toBe(404);
+  });
+
+  it("leaves asset requests outside the peer-wait page", async () => {
+    const app = new Hono();
+    waitingPageRoute(
+      () => Promise.resolve(["Spare"]),
+      () => {},
+    )(app);
+    const response = await app.request("/till/assets/app.js", { headers: { accept: "*/*" } });
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).not.toContain("text/html");
   });
 
   it("stays on the waiting page's own answer, a refusal or a failed fetch, and leaves at the next turn that answers otherwise", async () => {
