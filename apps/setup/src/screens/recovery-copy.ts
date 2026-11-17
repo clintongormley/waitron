@@ -247,6 +247,11 @@ export class SetupRecoveryCopy extends LitElement {
         : this.artifact !== undefined && this.recoveryKey !== "";
   }
 
+  /** As the Review backup button does. */
+  review(): Promise<void> {
+    return this.#review();
+  }
+
   async #review(): Promise<void> {
     if (!this.#canReview || this.busy) return;
     const artifact = this.artifact;

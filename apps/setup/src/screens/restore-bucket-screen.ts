@@ -101,6 +101,8 @@ export class SetupRestoreBucketScreen extends LitElement {
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
+  /** Set once Review has switched the environment to the copy's, so it never switches back and forth. */
+  #followedCopy = false;
 
   #form(): BucketForm {
     return { kit: this.kit, environment: this.environment };
@@ -191,6 +193,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #edited(field: BucketField): void {
+    this.#followedCopy = false;
     if (field === "kit" || field === "environment") {
       this.#scope?.changed();
       if (this.previewVenue !== undefined) {
@@ -200,6 +203,22 @@ export class SetupRestoreBucketScreen extends LitElement {
     }
     if (field === this.previewField) this.previewField = undefined;
     if (field === this.invalidField) this.feedback.dismiss("field");
+  }
+
+  /**
+   * The server restores a copy only into its own environment (`restore-gate.ts`), so Review's
+   * refusal naming that environment leaves no other value that could pass.
+   */
+  async #followCopyEnvironment(
+    environment: "production" | "preproduction",
+    copy: SetupRecoveryCopy,
+  ): Promise<void> {
+    this.environment = environment;
+    this.#edited("environment");
+    this.#followedCopy = true;
+    await this.updateComplete;
+    await copy.updateComplete;
+    await copy.review();
   }
 
   /**
@@ -481,6 +500,16 @@ export class SetupRestoreBucketScreen extends LitElement {
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
           event.stopPropagation();
           const error = event.detail.cause;
+          const copied =
+            error?.code === "restore.environment_mismatch" ? error.params?.backup : undefined;
+          if (
+            (copied === "production" || copied === "preproduction") &&
+            copied !== this.environment &&
+            !this.#followedCopy
+          ) {
+            void this.#followCopyEnvironment(copied, event.target as SetupRecoveryCopy);
+            return;
+          }
           this.previewOldKit =
             error?.code === "backup.stream_kit_invalid" && error.params?.reason === "version";
           this.previewField =
