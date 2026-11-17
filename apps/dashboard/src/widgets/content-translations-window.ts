@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -276,7 +277,7 @@ export class ContentTranslationWindow extends LitElement {
                       return html`<wt-input
                           name=${`translation-${cell.kind}-${cell.id}-${cell.language}-${cell.field}`}
                           lang=${language}
-                          label=${`${languageDisplayName(language, currentLocale())}${row.kind === "unit" ? ` · ${t(cell.field === "name" ? "units.name" : "units.abbreviation")}` : ""}`}
+                          label=${`${languageDisplayName(language, currentLocale(), true, installedContentLanguagePresentation())}${row.kind === "unit" ? ` · ${t(cell.field === "name" ? "units.name" : "units.abbreviation")}` : ""}`}
                           placeholder=${cell.effectiveText?.trim() || cell.effectiveDefaultText?.trim() || cell.staffText || ""}
                           .value=${this.rejected.get(key) ?? this.drafts.value(cell)}
                           .error=${fault || (this.rejected.has(key) ? t("translations.input_unavailable") : "")}
@@ -292,7 +293,7 @@ export class ContentTranslationWindow extends LitElement {
                                 data-unstage=${key}
                                 variant="secondary"
                                 ?disabled=${this.disabled}
-                                aria-label=${fill("translations.unstage_named", { name: row.name, language: languageDisplayName(language, currentLocale()), field: t(cell.field === "name" ? "units.name" : "units.abbreviation") })}
+                                aria-label=${fill("translations.unstage_named", { name: row.name, language: languageDisplayName(language, currentLocale(), true, installedContentLanguagePresentation()), field: t(cell.field === "name" ? "units.name" : "units.abbreviation") })}
                                 @click=${() => {
                                   this.drafts.unstage(cell);
                                   const rejected = new Map(this.rejected);

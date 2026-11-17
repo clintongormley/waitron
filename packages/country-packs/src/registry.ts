@@ -19,6 +19,7 @@ import {
   contentLanguageCode,
   FALLBACK_LOCALE,
   type ContentLanguageRules,
+  type ContentLanguagePresentation,
 } from "@waitron/shared";
 import {
   SPAIN,
@@ -48,6 +49,19 @@ export function recipientIdentifierResult(input: unknown): RecipientIdentifierRe
 
 /** The sole registry of country implementations installed in this build. */
 export const COUNTRY_PACKS: readonly CountryPack[] = [SPAIN, UNITED_KINGDOM];
+
+export function installedContentLanguagePresentation(): ContentLanguagePresentation {
+  const names: Record<string, Readonly<Record<string, string>>> = {};
+  for (const pack of COUNTRY_PACKS) {
+    for (const [tag, labels] of Object.entries(pack.contentLanguageNames ?? {})) {
+      names[tag] = { ...names[tag], ...labels };
+    }
+  }
+  return {
+    officialLocales: [...new Set(COUNTRY_PACKS.flatMap((pack) => pack.officialLocales ?? []))],
+    names,
+  };
+}
 
 export function getCountryPack(countryCode: string): CountryPack | undefined {
   const normalized = countryCode.trim().toUpperCase();

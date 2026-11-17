@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -236,7 +237,13 @@ export class ContentLanguagesScreen extends LitElement {
     if (versions.length) {
       this.saveError = fill("content_languages.remove_versions", {
         languages: versions
-          .map((language) => contentLanguageDisplayName(language, currentLocale()))
+          .map((language) =>
+            contentLanguageDisplayName(
+              language,
+              currentLocale(),
+              installedContentLanguagePresentation(),
+            ),
+          )
           .join(", "),
       });
       return;
@@ -262,7 +269,8 @@ export class ContentLanguagesScreen extends LitElement {
 
   #renderConfig(config: ContentLanguages, rules: ContentLanguageRules) {
     const locale = currentLocale();
-    const name = (code: string) => contentLanguageDisplayName(code, locale);
+    const name = (code: string) =>
+      contentLanguageDisplayName(code, locale, installedContentLanguagePresentation());
     const collator = new Intl.Collator(locale);
     const others = config.languages
       .filter((code) => code !== config.defaultLanguage)
@@ -326,7 +334,8 @@ export class ContentLanguagesScreen extends LitElement {
     config: ContentLanguages,
     rules: ContentLanguageRules,
   ): DataTableColumn<string>[] {
-    const name = (code: string) => contentLanguageDisplayName(code, currentLocale());
+    const name = (code: string) =>
+      contentLanguageDisplayName(code, currentLocale(), installedContentLanguagePresentation());
     return [
       {
         key: "language",
@@ -343,7 +352,12 @@ export class ContentLanguagesScreen extends LitElement {
         cell: (code) => {
           if (isRegionalContentLanguage(code))
             return fill("content_languages.inherits", {
-              language: languageDisplayName(code, currentLocale()),
+              language: languageDisplayName(
+                code,
+                currentLocale(),
+                true,
+                installedContentLanguagePresentation(),
+              ),
             });
           if (this.gapsFailed) return t("content_gaps.load_error");
           const report = this.gaps?.find((entry) => entry.language === code);
@@ -352,7 +366,7 @@ export class ContentLanguagesScreen extends LitElement {
             : report.count === 0
               ? t("content_gaps.none")
               : html`${t("content_gaps.count").replace("{count}", String(report.count))}
-                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${fill(report.count === 1 ? "content_gaps.required_warning_one" : "content_gaps.required_warning", { count: String(report.count), language: languageDisplayName(code, currentLocale(), false) })}</span>` : nothing}`;
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${fill(report.count === 1 ? "content_gaps.required_warning_one" : "content_gaps.required_warning", { count: String(report.count), language: languageDisplayName(code, currentLocale(), false, installedContentLanguagePresentation()) })}</span>` : nothing}`;
         },
       },
       {

@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { languageDisplayName } from "@waitron/shared";
@@ -116,7 +117,9 @@ export class TillReprintLanguageDialog extends LitElement {
                     this.chosen = language;
                   }}
                 />
-                <span>${languageDisplayName(language, currentLocale())}</span>
+                <span
+                  >${languageDisplayName(language, currentLocale(), true, installedContentLanguagePresentation())}</span
+                >
               </label>`,
           )}
         </div>

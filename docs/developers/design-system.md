@@ -7247,6 +7247,15 @@ unreviewed-allergen warning.
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
 still selects the dish (owner decision, 2026-10-16).
 
+### Content-language labels
+
+Staff language choices and translation fields pass `installedContentLanguagePresentation()`
+from country-packs to the shared naming helpers. A pack’s short name keeps a tagged variant
+readable; a missing name falls back to the runtime. The picker caches only base-language data,
+then adds the installed packs’ variants and labels for each call. Region-only and script-only
+versions stay grouped with their main language. A variant can be a main language on its own.
+Public guest links use native runtime names separately from these staff labels.
+
 ### Guest menu preview
 
 The menu editor’s **Guest menu preview** opens an authenticated preview of its published content.

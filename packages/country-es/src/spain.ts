@@ -247,6 +247,7 @@ const BALEARIC_ISLANDS: LanguageRules = {
 // The owner's choice, not a law: service is offered in Spanish; docs/developers/products.md →
 // "Content languages per region".
 const SPANISH: LanguageRules = {
+  contentLanguageNames: { "ca-ES-valencia": { en: "Valencian", es: "valenciano" } },
   requiredContentLocales: ["es-ES"],
   defaultContentLocale: "es-ES",
 };
@@ -322,6 +323,7 @@ export const SPAIN: CountryPack = {
   receiptLabels: SPAIN_RECEIPT_LABELS,
   receiptSampleItems: SPAIN_RECEIPT_SAMPLE_ITEMS,
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
+  contentLanguageNames: { "ca-ES-valencia": { en: "Valencian", es: "valenciano" } },
   requiredContentLocales: ["es-ES"],
   moduleIds: ["workforce-es"],
   starterCourses: [

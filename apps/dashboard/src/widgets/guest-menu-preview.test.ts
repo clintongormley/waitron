@@ -33,7 +33,7 @@ it("lets a manager open the rendered page and change its language", async () => 
       JSON.stringify({
         html: `<!doctype html><html lang="${language}"><title>The Restaurant</title><h1>${language === "es" ? "Spanish key" : "Allergen key"}</h1><a href="#last">Last section</a><section id="last">Last dish</section></html>`,
         language,
-        languages: ["en", "es", "en-US"],
+        languages: ["en", "es", "en-US", "ca-ES-valencia"],
       }),
       { headers: { "content-type": "application/json" } },
     );
@@ -62,6 +62,9 @@ it("lets a manager open the rendered page and change its language", async () => 
     const choose = el.shadowRoot!.querySelector("wt-combobox")!;
     expect(choose.options.find((option) => option.value === "en-US")!.label).toBe(
       "English (United States)",
+    );
+    expect(choose.options.find((option) => option.value === "ca-ES-valencia")?.label).toBe(
+      "Valencian",
     );
     const trigger = choose.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
     trigger.focus();

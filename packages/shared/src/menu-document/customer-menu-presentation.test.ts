@@ -249,7 +249,7 @@ it("keeps a Catalan request missing when the menu holds only Valencian", () => {
     ),
   ).toEqual({ text: "Spanish", origin: "default", language: "es", missingRequested: true });
 });
-it("reports an alternate Valencian request with the stored variant key", () => {
+it("keeps an unavailable independent variant on the main language", () => {
   expect(
     resolveMenuText(
       { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
@@ -258,9 +258,9 @@ it("reports an alternate Valencian request with the stored variant key", () => {
       { defaultLanguage: "es", languages: ["ca", "ca-ES-valencia", "es"] },
     ),
   ).toEqual({
-    text: "Valencian",
-    origin: "requested",
-    language: "ca-ES-valencia",
-    missingRequested: false,
+    text: "Spanish",
+    origin: "default",
+    language: "es",
+    missingRequested: true,
   });
 });

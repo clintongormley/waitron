@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { languageDisplayName } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -20,6 +21,11 @@ export function shownReceiptLanguage(
 
 /** "Receipt: Catalan", in the screen's language. */
 export function receiptLanguageLabel(language: string): string {
-  const name = languageDisplayName(language, currentLocale());
+  const name = languageDisplayName(
+    language,
+    currentLocale(),
+    true,
+    installedContentLanguagePresentation(),
+  );
   return t("receipt_language.button").replace("{language}", () => name);
 }

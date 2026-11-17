@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { html, nothing, type TemplateResult } from "lit";
 import { contentLanguageCode, languageDisplayName, type ContentLanguages } from "@waitron/shared";
 import { currentLocale, fill } from "../i18n/t.js";
@@ -11,7 +12,12 @@ function languageCode(tag: string): string | null {
 }
 
 export function receiptLanguageName(tag: string, standalone = true): string {
-  return languageDisplayName(tag, currentLocale(), standalone);
+  return languageDisplayName(
+    tag,
+    currentLocale(),
+    standalone,
+    installedContentLanguagePresentation(),
+  );
 }
 
 /** Customer text missing in the receipt's language prints in the default content language. */

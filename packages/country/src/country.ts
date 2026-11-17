@@ -148,6 +148,7 @@ export interface CountryPack {
   /** Dish names a sample receipt adds, per receipt language, using between them every accented letter the language writes. */
   readonly receiptSampleItems?: Readonly<Record<string, readonly string[]>>;
   readonly officialLocales?: readonly string[];
+  readonly contentLanguageNames?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly requiredContentLocales?: readonly string[];
   readonly moduleIds: readonly string[];
   readonly starterCourses?: readonly {

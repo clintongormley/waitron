@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -1181,7 +1182,7 @@ export class ImageLibrary extends LitElement {
           (language) =>
             html`<fieldset>
               <legend>
-                ${languageDisplayName(language, currentLocale())}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
+                ${languageDisplayName(language, currentLocale(), true, installedContentLanguagePresentation())}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
               </legend>
               <wt-input
                 name=${`name-${language}`}

@@ -104,3 +104,12 @@ it("holds an imported setting to 200 languages without changing the saved order"
   check(input, { country: "GB", area: null });
   expect(input).toEqual(before);
 });
+
+it.each([
+  ["sl-rozaj", ["sl-rozaj", "en"], { country: "GB", area: null }],
+  ["ca-ES-valencia", ["ca-ES-valencia", "es", "en"], { country: "ES", area: "Valencia" }],
+])("accepts imported main variant %s without adding its base", (language, languages, place) => {
+  const config = setting(languages, language);
+  expect(() => check(config, place)).not.toThrow();
+  expect(config).toEqual({ defaultLanguage: language, languages });
+});
