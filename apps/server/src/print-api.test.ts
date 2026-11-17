@@ -1018,18 +1018,20 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { token } = await joinAndAccept(app);
     expect((await pull(app, token)).discoveryExpiresInMs).toBeNull();
 
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    const wall = Date.now();
+    let steady = 1_000;
+    vi.spyOn(Date, "now").mockReturnValue(wall);
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
     const start = await send(app, "POST", "/management-api/printer-discovery/start", {
       cookie: managerCookie,
     });
     expect(start.status).toBe(200);
-    const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
-    expect(discoveryUntil).toBeGreaterThan(Date.now());
+    expect(await start.json()).toEqual({ discoveryUntil: wall + 180_000 });
 
-    onTestFinished(() => {
-      vi.restoreAllMocks();
-    });
-    const at = holdClocks();
-    at(discoveryUntil - Date.now() - 1234);
+    steady += 180_000 - 1234;
     expect((await pull(app, token)).discoveryExpiresInMs).toBe(1234);
   });
 
