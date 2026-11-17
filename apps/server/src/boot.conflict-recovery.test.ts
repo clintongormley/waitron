@@ -17,9 +17,14 @@ import {
   liveConflictNode,
 } from "@waitron/fiscal-verifactu/test/live-conflict-fixture.js";
 import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { serverFixture } from "./testing/server-fixture.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
 
 vi.mock("@waitron/module", async (original) => {
   const actual = await original<typeof import("@waitron/module")>();
@@ -32,7 +37,7 @@ vi.mock("@waitron/module", async (original) => {
   };
 });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const { startServer, beforeServerStarts } = serverFixture();
+const { startServer, beforeServerStarts, httpPort } = ephemeralServerFixture();
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
@@ -69,10 +74,10 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   const material = mintMtlsMaterial();
   await writeFile(join(scratch, "server.pem"), material.serverCertPem + material.serverKeyPem);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-  const [port] = await freePorts(1);
+  const [configuredPort] = await freePorts(1);
   const server = await startServer({
     WAITRON_HTTP_LANDING_PORT: "0",
-    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_PORT: String(configuredPort),
     WAITRON_HTTP_HOST: "127.0.0.1",
     WAITRON_STATE_DIR: scratch,
     WAITRON_VENUE_DIR: dirname(database),
@@ -88,6 +93,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   cleanups.push(() => server.close());
   const { via, close } = httpsVia(material.caPem);
   cleanups.push(close);
+  const port = httpPort();
   const origin = `https://127.0.0.1:${port}`;
   const cold = await fetch(`${origin}/manage/recovery/fiscal-conflict`, {
     ...via,

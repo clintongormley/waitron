@@ -6,7 +6,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { startLandingListener } from "./boot.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
-import { freePort } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 
 /**
  * A real boot of the plain-HTTP landing listener on an ephemeral port. What this surface exists for:
@@ -78,10 +79,14 @@ async function waitFor<T>(find: () => T | undefined, timeoutMs = 5000): Promise<
 describe("startLandingListener", () => {
   it("serves the trust page at / with no redirect and no HSTS", async () => {
     const stateDir = await stateDirWithLeaf();
-    const port = await freePort();
-    const handle = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog);
-    expect(handle).toBeDefined();
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
+    let handle: ReturnType<typeof startLandingListener>;
     try {
+      handle = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog);
+      expect(handle).toBeDefined();
+      await adoption.bound;
       const res = await new Promise<{
         status: number;
         hsts: string | undefined;
@@ -107,7 +112,9 @@ describe("startLandingListener", () => {
       expect(res.hsts).toBeUndefined();
       expect(res.body).toContain('href="/ca.crt"');
     } finally {
+      adoption.restore();
       await handle?.close();
+      if (held.server.listening) await held.close();
     }
   });
 
@@ -116,9 +123,10 @@ describe("startLandingListener", () => {
   // A real EADDRINUSE: a second `startLandingListener` on the SAME port fails to bind.
   it("logs landing.listen_failed on a port collision without throwing or exiting, and the first listener keeps serving", async () => {
     const stateDir = await stateDirWithLeaf();
-    const port = await freePort();
-    const first = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog);
-    expect(first).toBeDefined();
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
+    let first: ReturnType<typeof startLandingListener>;
     // The landing handler must never exit the process (unlike the main HTTPS listener) — make a stray
     // `process.exit` a loud test failure rather than a silent kill of the worker.
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
@@ -130,6 +138,9 @@ describe("startLandingListener", () => {
 
     let second: { close(): Promise<void> } | undefined;
     try {
+      first = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog);
+      expect(first).toBeDefined();
+      await adoption.bound;
       // Constructing the second listener must not throw synchronously — the collision surfaces async.
       second = startLandingListener(configFor({ landingPort: port, stateDir }), spyLog);
       expect(second).toBeDefined();
@@ -143,27 +154,35 @@ describe("startLandingListener", () => {
       // The collision left the FIRST listener untouched — it still serves the trust page.
       expect(await getStatus(port)).toBe(200);
     } finally {
+      adoption.restore();
       exitSpy.mockRestore();
       // The second listener never bound, so its close() rejects; swallow it, then close the real one.
       await second?.close().catch(() => {});
       await first?.close();
+      if (held.server.listening) await held.close();
     }
   });
 
   it("hands the declaration pages it is given to the landing app", async () => {
     const stateDir = await stateDirWithLeaf();
-    const port = await freePort();
-    const handle = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog, {
-      kept: () => ({
-        versions: () => Promise.resolve([]),
-        text: (version) => Promise.resolve(version === "1.0.0" ? "kept 1.0.0" : null),
-      }),
-    });
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
+    let handle: ReturnType<typeof startLandingListener>;
     try {
+      handle = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog, {
+        kept: () => ({
+          versions: () => Promise.resolve([]),
+          text: (version) => Promise.resolve(version === "1.0.0" ? "kept 1.0.0" : null),
+        }),
+      });
+      await adoption.bound;
       expect(await getStatus(port, "/legal/declaration/1.0.0.txt")).toBe(200);
       expect(await getStatus(port, "/legal/declaration/2.0.0.txt")).toBe(404);
     } finally {
+      adoption.restore();
       await handle?.close();
+      if (held.server.listening) await held.close();
     }
   });
 

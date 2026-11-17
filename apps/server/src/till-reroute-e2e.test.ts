@@ -30,7 +30,8 @@ import {
 import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
 import { boxHostnameFor } from "./box-name.js";
@@ -336,12 +337,18 @@ afterAll(async () => {
 
 describe("till reroute — two instances, one venue", () => {
   it("A primary, B standby; A goes down; B promoted+restarted; the device cookie follows and the venue's tab is inherited", async () => {
-    const [portA, portB] = await freePorts(2);
-    const serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A));
-    // B's boot is inside the try so a rejection there still closes A in the finally (no leaked listener).
+    const heldA = await retainHttpListener();
+    const heldB = await retainHttpListener();
+    const portA = heldA.port,
+      portB = heldB.port;
+    const adoption = adoptRetainedListeners([heldA, heldB]);
+    let serverA: StartedServer | undefined;
     let serverB: StartedServer | undefined;
     try {
+      serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A));
       serverB = await startServer(mirrorEnv(venueDirB, portB));
+      await adoption.bound;
+      adoption.restore();
       // 1. The probes the router routes on, from the REAL boot posture — pinned to the shared contract
       // fixture. FAILING CASE: a wire-shape drift (a renamed field, a missing one) fails this `toEqual`
       // before the router contract test ever runs.
@@ -436,8 +443,11 @@ describe("till reroute — two instances, one venue", () => {
         await venueTls.close();
       }
     } finally {
+      adoption.restore();
       if (serverB !== undefined) await serverB.close().catch(() => undefined);
-      await serverA.close().catch(() => undefined);
+      await serverA?.close().catch(() => undefined);
+      if (heldA.server.listening) await heldA.close();
+      if (heldB.server.listening) await heldB.close();
     }
   }, 120_000);
 });

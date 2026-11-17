@@ -1,9 +1,8 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { chromium, type BrowserServer, type Browser } from "playwright";
-import { freePorts } from "./testing/free-ports.js";
 import { IncomingMessage, ServerResponse } from "node:http";
-import { Socket } from "node:net";
+import { Socket, type AddressInfo } from "node:net";
 import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { serve } from "@hono/node-server";
@@ -475,25 +474,25 @@ it("serves a native same-origin browser GET with the dashboard no-referrer polic
   realApp.get("/manage", (c) =>
     c.html('<!doctype html><meta name="referrer" content="no-referrer"><title>Manager</title>'),
   );
-  const [port] = await freePorts(1);
-  const origin = `http://127.0.0.1:${port}`;
-  mountVenueZoneRepairApi(
-    realApp,
-    {
-      db: suite.db,
-      scope,
-      admission,
-      managementOrigin: origin,
-      requestRestart: restart,
-      now: () => AT,
-    },
-    () => {},
-  );
-  const server = serve({ fetch: realApp.fetch, hostname: "127.0.0.1", port });
+  const server = serve({ fetch: realApp.fetch, hostname: "127.0.0.1", port: 0 });
   let browserServer: BrowserServer | undefined;
   let browser: Browser | undefined;
   try {
     await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const origin = `http://127.0.0.1:${port}`;
+    mountVenueZoneRepairApi(
+      realApp,
+      {
+        db: suite.db,
+        scope,
+        admission,
+        managementOrigin: origin,
+        requestRestart: restart,
+        now: () => AT,
+      },
+      () => {},
+    );
     browserServer = await chromium.launchServer({ headless: true });
     browser = await chromium.connect(browserServer.wsEndpoint());
     const context = await browser.newContext();

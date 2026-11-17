@@ -40,7 +40,6 @@ import { mountJoinApi } from "./join-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { TradingContext } from "./trading-context.js";
-import { freePorts } from "./testing/free-ports.js";
 import "./errors.js";
 
 // The whole print-agent path in one process with no real hardware: the real routes driven by the real
@@ -945,9 +944,7 @@ describe("a printer deleted while its agent is sending", () => {
   );
 });
 
-/** A network printer on a fixed loopback port that keeps every connection's bytes; a discovery
- * probe connects and sends nothing. */
-async function startRecordingPrinter(port: number) {
+async function startRecordingPrinter() {
   const printed: Buffer[] = [];
   const waiting: Array<{ count: number; resolve: () => void }> = [];
   const sockets = new Set<net.Socket>();
@@ -965,9 +962,10 @@ async function startRecordingPrinter(port: number) {
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => resolve());
+    server.listen(0, "127.0.0.1", () => resolve());
   });
   return {
+    port: (server.address() as net.AddressInfo).port,
     printed,
     /** Resolves once `count` payloads have arrived in all. */
     received: (count: number) =>
@@ -1003,22 +1001,26 @@ function listen(app: Hono, port: number): Promise<ServerType> {
   });
 }
 
-/** This file's tests share one database, and once its slice wraps a later draw can return an earlier
- * test's printer port; discovery matches by address, so a printer still registered there would read
- * as this one. */
-async function portsNoPrinterNames(): Promise<number[]> {
+/** A saved printer row can still name a port after its earlier listener closed. */
+async function portsNoPrinterNames() {
   const attempts = 20;
   let lastPort = 0;
   let lastIds: string[] = [];
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const ports = await freePorts(2);
-    const named = await suite.db
-      .select({ id: printers.id })
-      .from(printers)
-      .where(and(eq(printers.host, "127.0.0.1"), eq(printers.port, ports[1]!)));
-    if (named.length === 0) return ports;
-    lastPort = ports[1]!;
-    lastIds = named.map((row) => row.id);
+    const sink = await startRecordingPrinter();
+    try {
+      const named = await suite.db
+        .select({ id: printers.id })
+        .from(printers)
+        .where(and(eq(printers.host, "127.0.0.1"), eq(printers.port, sink.port)));
+      if (named.length === 0) return sink;
+      lastPort = sink.port;
+      lastIds = named.map((row) => row.id);
+    } catch (error) {
+      await sink.close();
+      throw error;
+    }
+    await sink.close();
   }
   throw new Error(
     `no free printer port after ${attempts} draws: port ${lastPort} is still named by printer rows ${lastIds.join(", ")}`,
@@ -1027,8 +1029,7 @@ async function portsNoPrinterNames(): Promise<number[]> {
 
 describe("a printer deleted over real HTTP", () => {
   it("serves create, impact, delete, the late result, history, discovery and Add to a real agent and client", async () => {
-    const [httpPort, printerPort] = await portsNoPrinterNames();
-    const base = `http://127.0.0.1:${httpPort}`;
+    let base: string;
     const app = new Hono();
     const pairingMode = createPairingMode();
     pairingMode.open();
@@ -1086,8 +1087,11 @@ describe("a printer deleted over real HTTP", () => {
     let sink: Awaited<ReturnType<typeof startRecordingPrinter>> | undefined;
     let agent: ReturnType<typeof createAgent> | undefined;
     try {
-      sink = await startRecordingPrinter(printerPort!);
-      servers.push(await listen(app, httpPort!));
+      sink = await portsNoPrinterNames();
+      const printerPort = sink.port;
+      const server = await listen(app, 0);
+      servers.push(server);
+      base = `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`;
 
       const tcp = new NetworkTcpTransport();
       let holdPrinter: string | null = null;

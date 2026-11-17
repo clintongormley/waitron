@@ -69,7 +69,8 @@ import { startClockState } from "./start-clock-check.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 
 const external = vi.hoisted(() => ({
   internet: vi.fn(),
@@ -1010,7 +1011,9 @@ describe("the handover's preparation route", () => {
     await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
     await seedModuleSettings(suite.db, { [MODULE]: true, "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const [port] = await freePorts(1);
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
     let server: StartedServer | undefined;
     let agent: Agent | undefined;
     // This test's requests are loopback; the last one stands in for a phone's.
@@ -1050,6 +1053,7 @@ describe("the handover's preparation route", () => {
           },
         },
       );
+      await adoption.bound;
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const send = async (proposal: unknown) => {
         const response = await fetch(
@@ -1103,8 +1107,10 @@ describe("the handover's preparation route", () => {
       ).toEqual({ status: "set" });
       expect(await corrected()).toEqual([{ code: "clock.corrected" }]);
     } finally {
+      adoption.restore();
       await agent?.close();
       await server?.close();
+      if (held.server.listening) await held.close();
     }
   }, 120_000);
 });

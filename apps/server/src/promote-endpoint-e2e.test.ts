@@ -48,7 +48,8 @@ import {
 } from "@waitron/membership";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -72,6 +73,12 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+const { startServer, httpPort } = ephemeralServerFixture();
 
 useTestProducer();
 
@@ -385,7 +392,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
 
     const mirrorPort = await freePort();
-    const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
 
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
@@ -413,6 +419,8 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
+
+    const mirrorBase = `http://127.0.0.1:${httpPort()}`;
 
     let primary: StartedServer | undefined;
     try {
@@ -472,7 +480,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       // `trading.env` names no venue directory, so it is supplied here.
       await mirror.close();
       const primaryPort = await freePort();
-      const primaryBase = `http://127.0.0.1:${primaryPort}`;
       primary = await startServer(
         {
           ...KEY_ENV,
@@ -485,6 +492,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
         {},
         { timings: TIMINGS, boxHost: synchronisedBoxHost() },
       );
+      const primaryBase = `http://127.0.0.1:${httpPort()}`;
       await poll(async () => primary!.health.lastPassAt ?? undefined);
 
       const node = await (await fetch(`${primaryBase}/api/node`)).json();
@@ -589,7 +597,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     });
 
     const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
 
     const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
@@ -606,6 +613,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
@@ -732,7 +740,7 @@ describe("a real offer beside a real promotion on a real start", () => {
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
       await body({
-        base: `http://127.0.0.1:${port}`,
+        base: `http://127.0.0.1:${httpPort()}`,
         seed,
         offer: await mainBoxOffer(venue, seed),
       });

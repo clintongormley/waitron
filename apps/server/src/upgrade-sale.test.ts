@@ -13,7 +13,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { provisionOrderVenue, billlessSale, type OrderVenue } from "./testing/order-venue.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePort } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { TEST_PRODUCER } from "./testing/test-producer.js";
 import { loadConfig } from "./config.js";
 import { checkUpgradeSale } from "./upgrade-sale.js";
@@ -64,13 +65,15 @@ async function fixture(synchronised = true) {
     ),
   );
   await new Promise<void>((done) => clock.listen(socketPath, done));
+  const held = await retainHttpListener();
+  const adoption = adoptRetainedListeners([held]);
   const env = {
     ...TEST_PRODUCER,
     WAITRON_ENV: "preproduction",
     WAITRON_STATE_DIR: state,
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: join(state, "migrations"),
-    WAITRON_HTTP_PORT: String(await freePort()),
+    WAITRON_HTTP_PORT: String(held.port),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_TLS_CERT_FILE: join(state, "cert.pem"),
     WAITRON_TLS_KEY_FILE: join(state, "key.pem"),
@@ -81,7 +84,11 @@ async function fixture(synchronised = true) {
     env,
     socketPath,
     config: loadConfig(env, env.WAITRON_MIGRATIONS_DIR, state),
-    close: () => new Promise<void>((done) => clock.close(() => done())),
+    close: async () => {
+      adoption.restore();
+      await new Promise<void>((done) => clock.close(() => done()));
+      if (held.server.listening) await held.close();
+    },
   };
 }
 

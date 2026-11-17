@@ -33,6 +33,8 @@ import {
   type PendingAdoption,
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { writeTlsSet } from "./testing/box-tls.js";
@@ -319,7 +321,9 @@ async function joiningStartEnv(
   const versitygw = join(scratch, "versitygw");
   await writeFile(versitygw, "#!/bin/sh\nexec sleep 60\n", { mode: 0o700 });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-  const [port, loopbackPort, storePort] = await freePorts(3);
+  const [port, loopbackPort] = await freePorts(2);
+  const held = await retainHttpListener();
+  const storePort = held.port;
   const env = {
     ...keyEnv,
     WAITRON_VERSITYGW_BIN: versitygw,
@@ -334,17 +338,24 @@ async function joiningStartEnv(
     WAITRON_NODE_ID: STANDBY,
     WAITRON_ENV: "dev",
   };
-  return { env, tls };
+  return { env, tls, held };
 }
 
 it("joining finishes when the copy holds this box's row, and the next start is a mirror", async () => {
   const spare = await seedJoiningSpare();
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-finishes-"));
   let server: StartedServer | undefined;
+  let held: RetainedHttpListener | undefined;
+  let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
   try {
-    const { env, tls } = await joiningStartEnv(scratch, spare);
+    const prepared = await joiningStartEnv(scratch, spare);
+    const { env, tls } = prepared;
+    held = prepared.held;
+    adoption = adoptRetainedListeners([held]);
     let restarts = 0;
     server = await startServer(env, {}, { restart: () => (restarts += 1) });
+    await adoption.bound;
+    adoption.restore();
     await vi.waitFor(() => expect(restarts).toBe(1));
     expect(await readPendingAdoption(scratch)).toBeNull();
     await server.close();
@@ -360,7 +371,9 @@ it("joining finishes when the copy holds this box's row, and the next start is a
       await close();
     }
   } finally {
+    adoption?.restore();
     await server?.close();
+    if (held?.server.listening) await held.close();
     await rm(scratch, { recursive: true, force: true });
   }
 }, 60_000);

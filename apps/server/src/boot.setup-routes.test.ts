@@ -50,6 +50,8 @@ import {
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { lookupBoxName, type MdnsQuerySocket } from "./box-lookup.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -289,7 +291,11 @@ afterAll(async () => {
 
 describe("startServer — background listeners and sinks that fail or close", () => {
   it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
-    const [port, landingPort] = await freePorts(2);
+    const main = await retainHttpListener();
+    const landing = await retainHttpListener();
+    const port = main.port,
+      landingPort = landing.port;
+    const adoption = adoptRetainedListeners([main, landing]);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));
 
     await ensureBoxSecrets({
@@ -306,8 +312,14 @@ describe("startServer — background listeners and sinks that fail or close", ()
       WAITRON_HTTP_LANDING_PORT: String(landingPort),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
+    }).catch(async (error: unknown) => {
+      adoption.restore();
+      if (main.server.listening) await main.close();
+      if (landing.server.listening) await landing.close();
+      throw error;
     });
     try {
+      await adoption.bound;
       await awaitListening(landingPort);
       const page = await fetch(`http://127.0.0.1:${landingPort}/`);
       expect(page.status).toBe(200);
@@ -318,10 +330,16 @@ describe("startServer — background listeners and sinks that fail or close", ()
       expect(ca.status).toBe(200);
       expect(await ca.text()).toBe(await readFile(join(stateDir, "tls", "ca.crt"), "utf8"));
     } finally {
+      adoption.restore();
       await server.close();
-      await rm(stateDir, { recursive: true, force: true });
+      try {
+        await expect(fetch(`http://127.0.0.1:${landingPort}/`)).rejects.toThrow();
+      } finally {
+        if (main.server.listening) await main.close();
+        if (landing.server.listening) await landing.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
     }
-    await expect(fetch(`http://127.0.0.1:${landingPort}/`)).rejects.toThrow();
   }, 60_000);
 
   it("warns once on stdout when the log directory cannot be written, and keeps serving", async () => {
@@ -459,7 +477,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       base?: NodeJS.ProcessEnv;
     } = {},
   ): Promise<void> {
-    const [port, ...drawn] = await freePorts(1 + extraPortCount);
+    const [configuredPort, ...drawn] = await freePorts(1 + extraPortCount);
+    const held = extraPortCount > 0 ? await retainHttpListener() : undefined;
+    const port = held?.port ?? configuredPort;
+    let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
     vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-10-16T11:40:00Z") });
     const clockStart = performance.now();
@@ -491,6 +512,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     try {
       await beforeStart?.(stateDir);
       await withMockedKill(async (kills) => {
+        if (held !== undefined) adoption = adoptRetainedListeners([held]);
         const start = extraPortCount > 0 ? startConfiguredServer : startServer;
         const server = await start(
           {
@@ -508,6 +530,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         onStarted?.(server);
         let closeTls: (() => Promise<void>) | undefined;
         try {
+          await adoption?.bound;
           if (extraPortCount > 0) await awaitListening(port!);
           const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
           closeTls = close;
@@ -562,6 +585,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         }
       });
     } finally {
+      adoption?.restore();
+      if (held?.server.listening) await held.close();
       internetSpy.mockRestore();
       releaseSpy.mockRestore();
       vi.useRealTimers();

@@ -37,7 +37,7 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture();
+const { startServer, httpPort } = ephemeralServerFixture();
 
 // A box that returns after being fenced still names itself serving-primary; if it sold, two nodes
 // would file under one NIF. Pinned at boot: a reachable peer holding a higher-term chart that fences
@@ -495,13 +495,13 @@ describe("returned-box membership reconciliation at boot", () => {
       originNodeId: PEER_NODE,
     });
 
-    const server = await startConfiguredServer({
+    const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: proceedsVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
-    const base = `http://127.0.0.1:${port}`;
+    const base = `http://127.0.0.1:${httpPort()}`;
     try {
       const node = await fetch(`${base}/api/node`);
       expect(node.status).toBe(200);
