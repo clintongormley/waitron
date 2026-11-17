@@ -12,7 +12,8 @@ const amountsOf = (row: TaxTableRow): string[] => [row.base, row.tax, row.total]
 /**
  * The rate column on the left, each amount right-aligned under its heading, spread across
  * `columns`. Where a row does not fit, every rate goes on its own line above its amounts; where
- * the amounts alone do not fit, each goes on its own line beside its heading. No figure is cut.
+ * the amounts alone do not fit, the rate and each amount go on a line of their own beside their
+ * heading, or under it when the two do not fit side by side. No figure is cut.
  */
 export function taxTableLines(
   header: TaxTableRow,
@@ -52,11 +53,15 @@ export function taxTableLines(
       { text: amounts(row), header: at === 0 },
     ]);
   }
+  const beside = (heading: string, value: string): TableLine[] =>
+    heading.length + 1 + value.length <= columns
+      ? [{ text: heading.padEnd(columns - value.length) + value, header: false }]
+      : [
+          { text: heading, header: false },
+          { text: value.padStart(columns), header: false },
+        ];
   return rows.flatMap((row) => [
-    { text: row.rate, header: false },
-    ...amountsOf(row).map((amount, at) => ({
-      text: amountsOf(header)[at]!.padEnd(columns - amount.length) + amount,
-      header: false,
-    })),
+    ...beside(header.rate, row.rate),
+    ...amountsOf(row).flatMap((amount, at) => beside(amountsOf(header)[at]!, amount)),
   ]);
 }

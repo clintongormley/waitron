@@ -74,10 +74,26 @@ describe("taxTableLines", () => {
       30,
     );
     expect(lines).toEqual([
-      { text: "A 10%", header: false },
+      { text: `${"Tipo".padEnd(25)}A 10%`, header: false },
       { text: `${"Base".padEnd(20)}-12.345,67`, header: false },
       { text: `${"IVA".padEnd(21)}-1.234,57`, header: false },
       { text: `${"Total".padEnd(20)}-13.580,24`, header: false },
+    ]);
+  });
+
+  it("puts a figure under its heading when the two do not fit side by side", () => {
+    const lines = taxTableLines(
+      HEADER,
+      [{ rate: "A 10%", base: "-12.345,67", tax: "-1.234,57", total: "-13.580,24" }],
+      14,
+    );
+    expect(lines.map(({ text }) => text)).toEqual([
+      "Tipo     A 10%",
+      "Base",
+      "    -12.345,67",
+      "IVA  -1.234,57",
+      "Total",
+      "    -13.580,24",
     ]);
   });
 
@@ -118,16 +134,26 @@ describe("taxTableLines", () => {
       row("B", "21", "-2479.34", "-520.66", "-3000.00"),
     ];
 
-    it.each(ROLL_COLUMNS)(
-      "keeps a mixed-rate refund of 3,000 a rate inside %i columns, every cell whole",
-      (columns) => {
-        const lines = taxTableLines(header, refund, columns);
-        for (const { text } of lines) expect(text.length).toBeLessThanOrEqual(columns);
-        for (const cell of [header, ...refund].flatMap((each) => Object.values(each))) {
-          expect(
-            lines.some(({ text }) => ` ${text} `.includes(` ${cell} `)),
-            cell,
-          ).toBe(true);
+    const bigRefund = [
+      row("A", "10", "-27272.73", "-2727.27", "-30000.00"),
+      row("B", "21", "-24793.39", "-5206.61", "-30000.00"),
+    ];
+
+    it.each([
+      ["3,000", refund],
+      ["30,000", bigRefund],
+    ])(
+      "keeps a mixed-rate refund of %s a rate inside every roll's columns, every heading and cell whole",
+      (_, rows) => {
+        for (const columns of ROLL_COLUMNS) {
+          const lines = taxTableLines(header, rows, columns);
+          for (const { text } of lines) expect(text.length, text).toBeLessThanOrEqual(columns);
+          for (const cell of [header, ...rows].flatMap((each) => Object.values(each))) {
+            expect(
+              lines.some(({ text }) => ` ${text} `.includes(` ${cell} `)),
+              `${cell} at ${columns}`,
+            ).toBe(true);
+          }
         }
       },
     );
