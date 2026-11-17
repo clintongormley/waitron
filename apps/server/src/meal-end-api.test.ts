@@ -241,6 +241,17 @@ describe("POST /api/parties/:id/end-meal", () => {
     await nothingIssued(party, revision);
   });
 
+  it("refuses a till with no printer before warning of an unserved dish", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    const revision = revisionOf(party.partyId);
+
+    expect(await printBill(noPrinterCookie, party, { printAnyway: false })).toEqual({
+      status: 409,
+      json: { code: "meal_end.no_printer", params: { workingOrderId: party.tabId } },
+    });
+    await nothingIssued(party, revision);
+  });
+
   it("refuses a till whose profile may not print receipts, issuing nothing, when the bill needs paper", async () => {
     const party = await served("Red wine bottle");
     const revision = revisionOf(party.partyId);
@@ -304,6 +315,7 @@ describe("POST /api/parties/:id/end-meal", () => {
     ["billId", { billId: "not-a-uuid" }],
     ["expectedPartyRevision", { expectedPartyRevision: "1" }],
     ["submissionId", { submissionId: 7 }],
+    ["expectedEdits", { expectedEdits: "x" }],
   ])("refuses a body whose %s is malformed, issuing nothing", async (field, extra) => {
     const party = await served("Red wine bottle");
     const revision = revisionOf(party.partyId);

@@ -177,7 +177,8 @@ may still be eating. For that bill, in one transaction, it:
    flight (`checkAndBumpParty`, `requireBillEditors`, `assertBillHasNoUnsent`,
    `refusePaymentInFlight`, `refusePlacedPaymentInFlight`: `unpaid-departure.ts:94-117`), and
    refuses `meal_end.already_issued` when the bill already has a ticket;
-2. unless the request says `printAnyway: true`, refuses `meal_end.unserved_dishes`, listing them,
+2. after step 3's paper checks (so a till that cannot print is refused before staff are asked to
+   print anyway), unless the request says `printAnyway: true`, refuses `meal_end.unserved_dishes`, listing them,
    while any line on the bill is not fully served and not cancelled (the same reckoning as Finish:
    `serviceDishCondition` and `serviceQuantities(...).remaining`, `finish-party-service.ts:255-306`).
    Each listed dish says whether the kitchen has it (`isReleased`, `working-order.ts:3999-4011`): one

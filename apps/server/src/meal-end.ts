@@ -103,16 +103,16 @@ export async function endMeal(
         req.billId,
         bill.status === "open" ? "open" : "placed",
       );
-      if (!req.printAnyway) {
-        const dishes = await unservedDishes(tx, req.billId);
-        if (dishes.length > 0)
-          throw new AppError("meal_end.unserved_dishes", { workingOrderId: req.billId, dishes });
-      }
       const printers = printerLookup(tx, cfg.origin);
       const paper = await needsPaper(tx, req.billId);
       if (paper) assertProfileAction(device, "print-receipt", "receipt");
       if (paper && (await printers("receipt")) === undefined)
         throw new AppError("meal_end.no_printer", { workingOrderId: req.billId });
+      if (!req.printAnyway) {
+        const dishes = await unservedDishes(tx, req.billId);
+        if (dishes.length > 0)
+          throw new AppError("meal_end.unserved_dishes", { workingOrderId: req.billId, dishes });
+      }
 
       const invoice = await priceForIssuance(
         tx,
