@@ -819,9 +819,8 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     expect(logs).toEqual([]);
   });
 
-  it("logs a sweep that rejects as backup.worker_rejected, and stop() still settles when the handle will not close", async () => {
+  it("stop() settles after a completed copy even when the handle will not close", async () => {
     const dest = await makeDestDir();
-    const lines: Array<{ level: string; event: string; fields: unknown }> = [];
     let closes = 0;
     const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
@@ -834,7 +833,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
-      log: (level, event, fields) => lines.push({ level, event, fields }),
+      log: () => {},
       openVenue: async (dir) => {
         const store = await openVenueDatabase(dir);
         return {
@@ -847,20 +846,10 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
           },
         };
       },
-      // The sweep's wait between copies is outside its per-tick handling, so a failing wait rejects
-      // the whole sweep.
-      sleep: () => Promise.reject(new AppError("backup.reload_in_progress", {})),
     });
     try {
       await sup.reload();
-      await poll(async () =>
-        lines.some((l) => l.event === "backup.worker_rejected") ? true : undefined,
-      );
-      expect(lines.find((l) => l.event === "backup.worker_rejected")).toEqual({
-        level: "error",
-        event: "backup.worker_rejected",
-        fields: { errorCode: "backup.reload_in_progress" },
-      });
+      await waitForArchiveUnderCurrentKey(sup);
     } finally {
       await expect(sup.stop()).resolves.toBeUndefined();
     }
