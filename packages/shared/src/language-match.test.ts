@@ -10,6 +10,7 @@ it.each([
   [["en-GB"], ["es", "en-US", "en"], "en"],
   [["ca-Latn-ES-valencia"], ["es", "ca-Latn-ES"], "ca-Latn-ES"],
   [["ca-ES-valencia"], ["es", "ca"], "ca"],
+  [["ca-valencia"], ["es", "ca", "ca-ES-valencia"], "ca"],
   [["fr"], ["es", "en"], undefined],
   [["", "invalid_tag", "*", "EN-us-u-nu-latn"], ["es", "en-US"], "en-US"],
   [["de", "en"], ["en", "de"], "de"],

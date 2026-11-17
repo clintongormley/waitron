@@ -1033,7 +1033,10 @@ positive-weight order, preserving header order on ties. For each preference it t
 then removes trailing tag parts one at a time, then takes a venue language with the same base.
 Matching ties try the main language first, then saved order; visible links keep saved order.
 For example, `ca,es` matches offered `ca-ES-valencia` before `es`. No match uses the main language.
-`?lang=en-US` supplies the sole preference, even when empty or invalid; `?language=` is ignored.
+For `ca-valencia` with both `ca` and `ca-ES-valencia` offered, shortening reaches `ca` first.
+The guest sees Catalan where the previous named exception chose Valencian; saved language tags
+and display names are unchanged by this matching rule.
+An explicit `?lang=` supplies the sole preference, even when empty or invalid; `?language=` is ignored.
 Success and unavailable responses carry `Vary: Accept-Language` and `Cache-Control: no-store`.
 The page's fixed wording uses the shown language's registered bundle, then the main language's,
 then English, through the same matcher. Authored dish text resolves separately.

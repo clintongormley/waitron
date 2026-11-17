@@ -243,7 +243,7 @@ export function mountPublicGuestMenu(
     const preferences =
       explicit === undefined
         ? parseAcceptLanguage(c.req.header("Accept-Language"))
-            .filter(({ range, weight }) => weight > 0 && range !== "*")
+            .filter(({ weight }) => weight > 0)
             .map(({ range }) => range)
         : [explicit];
     const response = await run(c, log, async () => {
