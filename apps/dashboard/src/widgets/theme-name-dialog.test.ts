@@ -99,6 +99,8 @@ it.each([390, 1280])("shows an ordinary copy name whole at %ipx", async (width) 
   );
   expect(window.innerWidth).toBe(width);
   const box = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+  const body = dialog.shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+  expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
   expect(box.left).toBeGreaterThanOrEqual(0);
   expect(box.right).toBeLessThanOrEqual(width);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);

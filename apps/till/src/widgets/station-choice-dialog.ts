@@ -48,6 +48,7 @@ export class TillStationChoiceDialog extends LitElement {
           var(--wt-form-max-width),
           calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
         );
+        max-width: 100%;
         display: grid;
         gap: var(--wt-space-3);
       }

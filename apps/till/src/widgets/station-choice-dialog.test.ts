@@ -111,6 +111,8 @@ describe("till-station-choice-dialog", () => {
               `${node.tagName} ${key}`,
             ).toBeLessThanOrEqual(1);
         });
+        const body = dialog.shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
         expect(document.body.scrollWidth).toBeLessThanOrEqual(width);
       }
     },
