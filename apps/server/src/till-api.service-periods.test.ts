@@ -43,7 +43,9 @@ import {
   routingCellPeriods,
   routingCells,
   saveMenuPeriod,
+  saveSpecialDay,
   setRoutingCell,
+  stationServiceTimes,
   updateDepartment,
   updateMenuPeriod,
   VENUE_SERVICE_PERMISSIONS,
@@ -3044,7 +3046,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         .insert(routingCellPeriods)
         .values({ cellId: cell!.id, periodId: lunch.id, stationId: downstairs.stationId });
       const table = await createTable(tx, v.cfg, { label: "Cocktail table", zoneId: v.diningZone });
-      return { offer, upstairs, downstairs, tableId: table.id };
+      return { offer, mojito: mojito.id, upstairs, downstairs, tableId: table.id };
     });
     const seated = await sendAsTill(v, "POST", `/api/tables/${setup.tableId}/seat`, {
       guestCount: 2,
@@ -3159,6 +3161,69 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     ]);
     expect(await printed(c.upstairs.printerId)).toEqual([
       expect.stringMatching(/^Upstairs bar\n[^]*\n1 x Mojito\n/),
+    ]);
+    expect(await printed(c.downstairs.printerId)).toEqual([]);
+  });
+
+  it("on a special day whose own hours run Dinner over Lunch's time, with no zone hours of its own, the stations' week and a sent cocktail both name the Upstairs bar", async () => {
+    const date = "2026-10-12";
+    at(new Date(`${date}T13:00:00+02:00`));
+    const c = await cocktailVenue();
+    const dinnerOffer = await withTransaction(suite.db, async (tx) => {
+      const dinner = (
+        await tx.select().from(menuPeriods).where(eq(menuPeriods.departmentId, c.v.restaurant))
+      ).find((period) => period.name === "Dinner")!;
+      const offer = (await addProductToMenu(tx, { menuId: dinner.menuId, productId: c.mojito })).id;
+      await publishWorkingMenu(tx, dinner.menuId);
+      await saveSpecialDay(
+        tx,
+        null,
+        {
+          name: "Early dinner",
+          repeatsYearly: false,
+          dates: [{ date, closedAllDay: false }],
+          paint: [
+            {
+              departmentId: c.v.restaurant,
+              date,
+              ranges: [{ periodId: dinner.id, startsAt: "12:00", endsAt: "16:00" }],
+            },
+          ],
+        },
+        MONDAY_10_00,
+        1,
+      );
+      const week = async (stationId: string) =>
+        (await stationServiceTimes(tx, stationId, date, date)).days[0]!.departments;
+      expect(await week(c.upstairs.stationId)).toEqual([
+        {
+          departmentId: c.v.restaurant,
+          ranges: [
+            { periodId: dinner.id, startsAt: "12:00", endsAt: "16:00" },
+            { periodId: dinner.id, startsAt: "19:00", endsAt: "23:00" },
+          ],
+        },
+      ]);
+      expect(await week(c.downstairs.stationId)).toEqual([]);
+      return offer;
+    });
+
+    const answer = await sendAsTill(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(c.partyId),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [{ lines: [{ menuItemId: dinnerOffer, quantity: "1" }], release: "fire" }],
+    });
+    expect(answer.status).toBe(200);
+    const fired = (answer.body as { groups: { lineIds: string[] }[] }).groups[0]!;
+    expect(await stationOf(fired.lineIds[0]!)).toMatchObject({ stationId: c.upstairs.stationId });
+    expect(await printed(c.upstairs.printerId)).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `^Upstairs bar\\n[^]*\\n13:00\\n${kitchenTicketWords("es").group} 1\\n1 x Mojito\\n$`,
+        ),
+      ),
     ]);
     expect(await printed(c.downstairs.printerId)).toEqual([]);
   });
