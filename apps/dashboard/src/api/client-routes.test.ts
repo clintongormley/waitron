@@ -314,6 +314,15 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads the count of dishes carrying extras without sending a body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ dishCount: 2 }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getUnitAttachedExtrasCount("u1")).toEqual({ dishCount: 2 });
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/units/u1/attached-extras-count", "GET", undefined],
+    ]);
+  });
+
   it("lists a unit's products and reassigns them, sending a null target for Each", async () => {
     const using = [{ id: "prod-1", name: "Olives" }];
     const fetchImpl = vi

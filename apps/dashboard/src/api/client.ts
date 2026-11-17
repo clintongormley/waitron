@@ -3624,6 +3624,10 @@ export class DashboardApi {
     return this.#request<ProductUsingUnit[]>(`/management-api/units/${id}/products`, "GET");
   }
 
+  getUnitAttachedExtrasCount(id: string): Promise<{ dishCount: number }> {
+    return this.#request(`/management-api/units/${id}/attached-extras-count`, "GET");
+  }
+
   getUnitExtraUsage(id: string): Promise<ExtraOfferUsage[]> {
     return this.#request<ExtraOfferUsage[]>(`/management-api/units/${id}/extra-usage`, "GET");
   }

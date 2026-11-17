@@ -7,7 +7,7 @@ import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createExtraList } from "@waitron/menu";
+import { createExtraList, createUnit, writeProductModifiers } from "@waitron/menu";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -71,6 +71,34 @@ async function send(method: string, path: string, body?: unknown) {
 }
 
 describe("unit management routes", () => {
+  it("reads the attached-extras dish count and refuses an unknown unit", async () => {
+    const unit = await withTransaction(suite.db, async (tx) => {
+      const made = await createUnit(
+        tx,
+        { staffName: "Portion", staffAbbreviation: "pt", name: {}, abbreviation: {}, precision: 0 },
+        "en",
+      );
+      const dishId = await seedProduct(tx, "Burger", made.id);
+      const sauceId = await seedProduct(tx, "Sauce", made.id);
+      const list = await createExtraList(
+        tx,
+        { name: "Sauces", items: [{ productId: sauceId, portion: "1" }] },
+        "en",
+      );
+      await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
+      return made;
+    });
+    const answer = await send("GET", `/management-api/units/${unit.id}/attached-extras-count`);
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ dishCount: 1 });
+    const missing = await send(
+      "GET",
+      "/management-api/units/00000000-0000-4000-8000-000000000000/attached-extras-count",
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "unit.not_found" } });
+  });
+
   it("returns canonical objects from create and update and lists the collection", async () => {
     const created = await send("POST", "/management-api/units", {
       staffName: "Staff unit",

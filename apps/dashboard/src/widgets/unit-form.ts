@@ -21,6 +21,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
 import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
+import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -81,7 +82,10 @@ export class UnitForm extends LitElement {
   @property({ attribute: false }) value: Unit | null = null;
   @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) fieldErrors: UnitFormErrors = {};
-  @property({ attribute: false }) api?: Pick<DashboardApi, "getUnitExtraUsage">;
+  @property({ attribute: false }) api?: Pick<
+    DashboardApi,
+    "getUnitExtraUsage" | "getUnitAttachedExtrasCount"
+  >;
 
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};
@@ -93,6 +97,10 @@ export class UnitForm extends LitElement {
   @state() private precisionUsage: ExtraOfferUsage[] = [];
   @state() private precisionUsageUnavailable = false;
   #usageGeneration = 0;
+  @state() private measureUsage = 0;
+  @state() private measureUsageUnavailable = false;
+  #measureGeneration = 0;
+  #measureRead?: Promise<void>;
   #scope?: DraftScope<UnitDraft>;
   #baseline?: UnitDraft;
   #leave?: LeaveCoordinator;
@@ -106,6 +114,7 @@ export class UnitForm extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#clearMeasureUsage();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -115,6 +124,7 @@ export class UnitForm extends LitElement {
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     const needsDraft = changed.has("open") || changed.has("value");
     if (this.open && needsDraft) {
+      this.#clearMeasureUsage();
       this.#usageGeneration++;
       this.precisionUsage = [];
       this.precisionUsageUnavailable = false;
@@ -135,6 +145,7 @@ export class UnitForm extends LitElement {
     }
     if (changed.has("fieldErrors") || (this.open && needsDraft)) this.#feedback.newRefusal();
     if (!this.open) {
+      this.#clearMeasureUsage();
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
@@ -242,6 +253,34 @@ export class UnitForm extends LitElement {
     event.stopPropagation();
     this.measure = event.detail.checked;
     this.#scope?.changed();
+    this.#measureRead = this.#readMeasureUsage();
+  }
+
+  #clearMeasureUsage(): void {
+    this.#measureGeneration++;
+    this.#measureRead = undefined;
+    this.measureUsage = 0;
+    this.measureUsageUnavailable = false;
+  }
+
+  async #readMeasureUsage(): Promise<void> {
+    this.#clearMeasureUsage();
+    const unit = this.value;
+    if (
+      !this.open ||
+      !this.measure ||
+      !unit ||
+      !this.api ||
+      !takesExtras({ ...unit, hardwareUnit: unit.hardwareUnit ?? null })
+    )
+      return;
+    const generation = this.#measureGeneration;
+    try {
+      const { dishCount } = await this.api.getUnitAttachedExtrasCount(unit.id);
+      if (generation === this.#measureGeneration) this.measureUsage = dishCount;
+    } catch {
+      if (generation === this.#measureGeneration) this.measureUsageUnavailable = true;
+    }
   }
 
   async #readPrecisionUsage(): Promise<void> {
@@ -260,7 +299,7 @@ export class UnitForm extends LitElement {
     }
   }
 
-  #submit(event: Event): void {
+  async #submit(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
@@ -268,6 +307,13 @@ export class UnitForm extends LitElement {
     if (Object.keys(this.#validate()).length > 0) {
       void this.#feedback.focus(this.shadowRoot!);
       return;
+    }
+    if (this.#measureRead) {
+      const warned = this.measureUsage > 0 || this.measureUsageUnavailable;
+      const generation = this.#measureGeneration;
+      await this.#measureRead;
+      if (generation !== this.#measureGeneration) return;
+      if (!warned && (this.measureUsage > 0 || this.measureUsageUnavailable)) return;
     }
     const value = this.#submissionValue();
     this.dispatchEvent(
@@ -449,6 +495,8 @@ export class UnitForm extends LitElement {
           ?disabled=${this.busy}
           @wt-change=${this.#changeMeasure}
         ></wt-switch>
+        ${this.measureUsage > 0 ? html`<p role="status" data-test="measure-usage-warning">${t(this.measureUsage === 1 ? "units.measure_usage_warning_one" : "units.measure_usage_warning").replace("{count}", String(this.measureUsage))}</p>` : nothing}
+        ${this.measureUsageUnavailable ? html`<p role="status" data-test="measure-usage-unavailable">${t("units.measure_usage_unavailable")}</p>` : nothing}
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

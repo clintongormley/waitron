@@ -74,7 +74,7 @@ describe("unit-form", () => {
         abbreviation: { en: "kg" },
         precision: 3,
       },
-      api: { getUnitExtraUsage },
+      api: { getUnitExtraUsage, getUnitAttachedExtrasCount: vi.fn() },
     });
 
     await chooseOption(precisionBox(el), "2");
@@ -816,6 +816,125 @@ describe("unit-form measure switch", () => {
     el.shadowRoot!.querySelector<MeasureSwitch>('wt-switch[name="measure"]');
   const locale = currentLocale();
   afterEach(() => setLocale(locale));
+
+  const storedUnit = {
+    id: "u1",
+    staffName: "Portion",
+    staffAbbreviation: "pt",
+    name: {},
+    abbreviation: {},
+    precision: 0,
+  };
+  async function switchMeasure(el: UnitForm): Promise<void> {
+    const toggle = measureSwitch(el)!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    await el.updateComplete;
+  }
+
+  it.each([2, 0])("waits for a pending count of %i before a fast Save", async (dishCount) => {
+    let resolve!: (value: { dishCount: number }) => void;
+    const pending = new Promise<{ dishCount: number }>((done) => {
+      resolve = done;
+    });
+    const getUnitAttachedExtrasCount = vi.fn(() => pending);
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      value: storedUnit,
+      api: { getUnitExtraUsage: vi.fn(), getUnitAttachedExtrasCount },
+    });
+    let submits = 0;
+    el.addEventListener("wt-submit", () => submits++);
+    await switchMeasure(el);
+    saveOf(el).click();
+    await el.updateComplete;
+    expect(submits).toBe(0);
+    expect(getUnitAttachedExtrasCount).toHaveBeenCalledExactlyOnceWith("u1");
+    resolve({ dishCount });
+    await pending;
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(submits).toBe(dishCount === 0 ? 1 : 0);
+    expect(Boolean(el.shadowRoot!.querySelector("[data-test=measure-usage-warning]"))).toBe(
+      dishCount > 0,
+    );
+    if (dishCount > 0) {
+      saveOf(el).click();
+      await el.updateComplete;
+      expect(submits).toBe(1);
+    }
+    await switchMeasure(el);
+    expect(el.shadowRoot!.querySelector("[data-test=measure-usage-warning]")).toBeNull();
+  });
+
+  it("shows a failed-count warning and permits the next Save", async () => {
+    let reject!: (reason: Error) => void;
+    const pending = new Promise<{ dishCount: number }>((_, fail) => {
+      reject = fail;
+    });
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      value: storedUnit,
+      api: {
+        getUnitExtraUsage: vi.fn(),
+        getUnitAttachedExtrasCount: vi.fn(() => pending),
+      },
+    });
+    let submits = 0;
+    el.addEventListener("wt-submit", () => submits++);
+    await switchMeasure(el);
+    saveOf(el).click();
+    expect(submits).toBe(0);
+    reject(new Error("offline"));
+    await pending.catch(() => {});
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=measure-usage-unavailable]")).not.toBeNull();
+    expect(submits).toBe(0);
+    saveOf(el).click();
+    await el.updateComplete;
+    expect(submits).toBe(1);
+  });
+
+  it("discards a pending count when the switch is turned back off", async () => {
+    let resolve!: (value: { dishCount: number }) => void;
+    const pending = new Promise<{ dishCount: number }>((done) => {
+      resolve = done;
+    });
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      value: storedUnit,
+      api: { getUnitExtraUsage: vi.fn(), getUnitAttachedExtrasCount: vi.fn(() => pending) },
+    });
+    await switchMeasure(el);
+    await switchMeasure(el);
+    resolve({ dishCount: 2 });
+    await pending;
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=measure-usage-warning]")).toBeNull();
+    expect(saveOf(el).disabled).toBe(true);
+  });
+
+  it.each([{ precision: 2 }, { hardwareUnit: "g" as const }])(
+    "does not warn when the stored unit already disallows extras (%j)",
+    async (value) => {
+      const getUnitAttachedExtrasCount = vi.fn().mockResolvedValue({ dishCount: 2 });
+      const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+        open: true,
+        value: { ...storedUnit, ...value },
+        api: { getUnitExtraUsage: vi.fn(), getUnitAttachedExtrasCount },
+      });
+      await switchMeasure(el);
+      let submits = 0;
+      el.addEventListener("wt-submit", () => submits++);
+      saveOf(el).click();
+      await el.updateComplete;
+      expect(submits).toBe(1);
+      expect(getUnitAttachedExtrasCount).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[data-test=measure-usage-warning]")).toBeNull();
+    },
+  );
 
   it("opens unchecked on a new unit and checked on a stored measure unit", async () => {
     const { el: fresh } = await mountWidget<UnitForm>("dashboard-unit-form", {

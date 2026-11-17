@@ -2,10 +2,20 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
-import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  extraLists,
+  extraListItems,
+  optionLists,
+  productModifiers,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
+  countProductsWithAttachedExtras,
   assignProductUnit,
   createUnit,
   deleteUnit,
@@ -48,6 +58,44 @@ async function refusalOf(write: Promise<unknown>): Promise<{ code: unknown; para
 }
 
 describe("unit operations", () => {
+  it("counts dishes carrying extras once, including archived dishes and inactive lists", async () => {
+    await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { staffName: "Portion", staffAbbreviation: "pt", name: {}, abbreviation: {}, precision: 0 },
+        "en",
+      );
+      const empty = await createUnit(
+        tx,
+        { staffName: "Empty", staffAbbreviation: "e", name: {}, abbreviation: {}, precision: 0 },
+        "en",
+      );
+      const [list, inactive] = await tx
+        .insert(extraLists)
+        .values([{ name: "Sauces" }, { name: "Idle", active: false }])
+        .returning();
+      const [options] = await tx.insert(optionLists).values({ name: "Doneness" }).returning();
+      const dish = await product(tx, "Burger");
+      const archived = await product(tx, "Archived fish");
+      const optionsOnly = await product(tx, "Steak");
+      const inverse = await product(tx, "Sauce");
+      const other = await product(tx, "Other unit");
+      for (const id of [dish, archived, optionsOnly, inverse])
+        await assignProductUnit(tx, id, unit.id);
+      await tx.run(sql`update products set active = 0 where id = ${archived}`);
+      await tx.insert(productModifiers).values([
+        { productId: dish, extraListId: list!.id },
+        { productId: dish, extraListId: inactive!.id, sort: 1 },
+        { productId: archived, extraListId: inactive!.id },
+        { productId: optionsOnly, optionListId: options!.id },
+        { productId: other, extraListId: list!.id },
+      ]);
+      await tx.insert(extraListItems).values({ listId: list!.id, productId: inverse });
+      expect(await countProductsWithAttachedExtras(tx, unit.id)).toBe(2);
+      expect(await countProductsWithAttachedExtras(tx, empty.id)).toBe(0);
+    });
+  });
+
   it("returns scale metadata on unit reads even after the measure switch is off", async () => {
     const made = await run((tx) =>
       createUnit(
