@@ -8,6 +8,7 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { stillOwedOnIssuedBill } from "./bill-payments.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
+import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { pinnedAt } from "./issue-moment.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import type { Logger } from "./logger.js";
@@ -51,7 +52,9 @@ export interface EndedMeal {
 
 /**
  * Print the bill: issue one bill's ticket for its whole total now, paid or not, and leave its party
- * seated. A bill already holding a ticket is refused, so a bill is never issued twice.
+ * seated. A bill already holding a ticket is refused, so a bill is never issued twice. A bill that
+ * needs paper is refused, as `POST /api/sales/:id/receipt` is, when `device`'s profile may not print
+ * receipts; `null` (no device) passes.
  */
 export async function endMeal(
   tx: Transaction,
@@ -67,6 +70,7 @@ export async function endMeal(
   partyId: string,
   req: EndMealRequest,
   operatorId: string,
+  device: DeviceBinding | null,
 ): Promise<EndedMeal> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const reading = deps.clock.now();
@@ -106,6 +110,7 @@ export async function endMeal(
       }
       const printers = printerLookup(tx, cfg.origin);
       const paper = await needsPaper(tx, req.billId);
+      if (paper) assertProfileAction(device, "print-receipt", "receipt");
       if (paper && (await printers("receipt")) === undefined)
         throw new AppError("meal_end.no_printer", { workingOrderId: req.billId });
 

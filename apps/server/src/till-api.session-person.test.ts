@@ -109,6 +109,7 @@ const NAMED_REFUSED = [
   "POST /api/working-orders/:id/payments/:paymentId/slip-copy",
   "POST /api/parties/:id/drafts/:did/discard",
   "POST /api/parties/:id/drafts/:did/submit",
+  "POST /api/parties/:id/end-meal",
   "PUT /api/parties/:id/drafts",
   "POST /api/working-orders/:id/adjustments",
   "POST /api/working-orders/:id/adjustments/preview",

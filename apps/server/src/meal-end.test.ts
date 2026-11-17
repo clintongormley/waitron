@@ -117,6 +117,7 @@ async function end(
         ...overrides,
       },
       venue.operatorId,
+      null,
     ),
   );
 }

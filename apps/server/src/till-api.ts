@@ -249,6 +249,7 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountPartyAllergyApi } from "./party-allergy-api.js";
 import type { AllergyCommand } from "@waitron/module";
 import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
+import { mountMealEndApi } from "./meal-end-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
@@ -621,6 +622,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "party.unserved_dishes": 409,
   "unpaid_departure.nothing_outstanding": 409,
   "unpaid_departure.unfired_dishes": 409,
+  "meal_end.already_issued": 409,
+  "meal_end.no_printer": 409,
+  "meal_end.unserved_dishes": 409,
   "submission.id_reused": 409,
   "deferred_close.ineligible": 409,
   "deferred_close.conflict": 409,
@@ -1351,6 +1355,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountLineCancelApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
+  mountMealEndApi(app, deps, log, run);
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountOrderKitchenNoteApi(app, deps, log, run);
   mountPartyAllergyApi(app, deps, log, run);
