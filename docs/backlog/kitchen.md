@@ -26,14 +26,6 @@ Left open:
   every station it covered, even where that station's own printer printed; it stops showing at
   a station once a Reprint of the bill would not link that pass printer to that station.
   (`apps/server/src/print-problems.test.ts`).
-- Finish table drops the problem of a bill that transfers emptied (read, not run; not
-  re-checked by B6a).
-- After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
-  nothing when it prints, so its warning stays until the merged bill is reprinted once more
-  (`moveKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`). The same holds when dishes move
-  by transfer, split or a line move: a copied ticket never counts as a reprint. Not tested as a
-  rule: move a dish from bill A to bill B, reprint B so it prints, move the dish back, and A
-  shows its old failure again.
 - Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
   (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
   a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
