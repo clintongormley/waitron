@@ -485,6 +485,15 @@ export const QUERY_DEPENDENCIES = {
   listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status", "settings.backup"],
   getStreamSettings: ["backup_status", "settings.backup"],
+  // Its answer ages with time and reads the box's key files, the running backups' key, node.db's
+  // server key name and Cloud's emergency state, none of which send an event, so its timer stays.
+  getRecoveryPackStatus: [
+    "recovery_packs",
+    "persons",
+    "backup_status",
+    "settings.backup",
+    "settings.business_day",
+  ],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
   // Read from Cloud, which no table change reports; the server lets one read a minute through.

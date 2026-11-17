@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
+import { LiveData } from "@waitron/dashboard-kit";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import type { RecoveryPackDialog } from "../widgets/recovery-pack-dialog.js";
@@ -140,6 +141,7 @@ function stubApi(at: RecoveryPackStatus = status()) {
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
       .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt: MADE_AT }),
     markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
+    liveData: new LiveData(),
   };
 }
 
@@ -530,13 +532,14 @@ describe("reading the status", () => {
     expect(show).toHaveBeenCalledWith(null);
   });
 
-  it("re-reads when asked, keeping only the newest answer", async () => {
+  it("re-reads when asked again while a read is out, ending on the later answer", async () => {
     const api = stubApi(STATES.none);
     const el = await mount(api);
     const slow = deferred<RecoveryPackStatus>();
     api.getRecoveryPackStatus.mockReturnValueOnce(slow.promise);
     api.getRecoveryPackStatus.mockResolvedValueOnce(STATES["out of date"]);
     el.reload();
+    await vi.waitFor(() => expect(api.getRecoveryPackStatus).toHaveBeenCalledTimes(2));
     el.reload();
     await settle(el);
     slow.resolve(STATES.none);
@@ -546,7 +549,74 @@ describe("reading the status", () => {
     );
   });
 
-  it("takes the status the dialog read again, without reading it itself", async () => {
+  it("shows a pack marked received elsewhere once the live feed says the packs changed", async () => {
+    const api = stubApi(STATES.unreceived);
+    const el = await mount(api);
+    expect(line(el)).toContain(
+      fill("recovery_pack_dialog.unreceived", {
+        number: "4",
+        date: "12 October",
+        option: option(),
+      }),
+    );
+    api.getRecoveryPackStatus.mockResolvedValue(
+      status({ latest: latest({ number: 4 }), upToDate: true }),
+    );
+    api.liveData.invalidate([{ type: "recovery_packs" }]);
+    await settle(el);
+    expect(line(el)).toContain(
+      fill("recovery_pack.up_to_date", { number: "4", date: "12 October", name: "Marta Puig" }),
+    );
+  });
+
+  it.each([
+    [
+      "answers",
+      (older: ReturnType<typeof deferred<RecoveryPackStatus>>) => older.resolve(STATES.none),
+    ],
+    [
+      "fails",
+      (older: ReturnType<typeof deferred<RecoveryPackStatus>>) =>
+        older.reject({ code: "connection.failed" }),
+    ],
+  ])(
+    "keeps the status the dialog read when a live read started before it %s later",
+    async (_, finish) => {
+      const api = stubApi(STATES.none);
+      const el = await mount(api);
+      const older = deferred<RecoveryPackStatus>();
+      api.getRecoveryPackStatus.mockReturnValueOnce(older.promise);
+      api.liveData.invalidate([{ type: "recovery_packs" }]);
+      await vi.waitFor(() => expect(api.getRecoveryPackStatus).toHaveBeenCalledTimes(2));
+      dialogOf(el).dispatchEvent(
+        new CustomEvent("recovery-pack-status", {
+          detail: STATES.unreceived,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await settle(el);
+      finish(older);
+      await settle(el);
+      expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).toBeNull();
+      expect(line(el)).toBe(
+        fill("recovery_pack_dialog.unreceived", {
+          number: "4",
+          date: "12 October",
+          option: option(),
+        }),
+      );
+      // A read started after the dialog's status is shown.
+      api.getRecoveryPackStatus.mockResolvedValue(STATES["up to date"]);
+      api.liveData.invalidate([{ type: "recovery_packs" }]);
+      await settle(el);
+      expect(line(el)).toContain(
+        fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" }),
+      );
+    },
+  );
+
+  it("takes the status the dialog read, and reads nothing itself", async () => {
     const api = stubApi(STATES.none);
     const el = await mount(api);
     dialogOf(el).dispatchEvent(
@@ -1168,7 +1238,7 @@ it.each([true, false])(
       }),
     );
     const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
-      api,
+      api: api as unknown as DashboardApi,
       canManage: true,
       openRequested: true,
     });
@@ -1197,7 +1267,7 @@ it("opens the linked maker after the initial status read fails", async () => {
   const api = stubApi(STATES.none);
   api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
   const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
-    api,
+    api: api as unknown as DashboardApi,
     canManage: true,
     openRequested: true,
   });

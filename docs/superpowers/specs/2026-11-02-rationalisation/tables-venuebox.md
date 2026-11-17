@@ -622,7 +622,7 @@ carries no key, as nothing in `node.db` does (§1.18).
 | compare-and-set on `node_membership.term` | kept, on `json_extract(document, '$.body.term')` |
 | append-only triggers on `membership_removals`, `membership_clearances` (`scripts/append-only-triggers.test.ts:51-52`) | `activity_log` is append-only |
 | `incidents`: `incidents_open_dedup` (partial unique), three indexes, `severity`/`code`/`source`/`source_device` CHECKs, FK `device_id` (restrict), FK `sale_id` | all kept |
-| `change_log` excluded from the change feed (`packages/db/src/classification.ts:286`) | kept; `node_sealed_state` and `recovery_packs` stay excluded too |
+| `change_log` excluded from the change feed (`packages/db/src/classification.ts:286`) | kept; `node_sealed_state` and `recovery_packs` stay excluded too (pointer, 2026-11-17: `recovery_packs` became a change source so the Backups card can watch it; `fix/pack-card-live-reads`) |
 | `recovery_packs_node_number_uq`; the part allow-list in `insertRecoveryPack` | kept until A1323 removes the table |
 | `location_business_day_settings` revision CHECK (integer ≥ 0) and its FK | the `settings` row's `revision` (central definition) |
 | `location_day_cutover_changes` PK, date and time CHECKs | kept on `day_cutover_changes`, key without location |

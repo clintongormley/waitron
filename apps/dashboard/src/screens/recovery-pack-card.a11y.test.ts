@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -79,6 +80,7 @@ describe.each(["light", "dark"] as const)("recovery pack card accessibility (%s)
     setLocale(locale);
     const api = {
       getRecoveryPackStatus: vi.fn().mockResolvedValue(STATES[state]),
+      liveData: new LiveData(),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<RecoveryPackCard>(
       "dashboard-recovery-pack-card",
@@ -93,6 +95,7 @@ describe.each(["light", "dark"] as const)("recovery pack card accessibility (%s)
   it("draws a read failure and a made pack's links", async () => {
     const api = {
       getRecoveryPackStatus: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      liveData: new LiveData(),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<RecoveryPackCard>(
       "dashboard-recovery-pack-card",

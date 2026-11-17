@@ -1225,7 +1225,6 @@ export class BackupScreen extends LitElement {
       <div class="card">
         <dashboard-stream-settings
           .api=${this.api}
-          @stream-settings-written=${() => this.#packSettingsChanged()}
           @recovery-key-needed=${() => void this.#focusKeyStep()}
           @stream-permission-refused=${(event: CustomEvent<{ refused: boolean }>) => (this.streamPermissionRefused = event.detail.refused)}
           .archivesEnabled=${s?.enabled}

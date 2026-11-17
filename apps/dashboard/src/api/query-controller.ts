@@ -72,8 +72,9 @@ export class DashboardQueries {
     args: Parameters<DashboardApi[N]>,
     send: (read: () => Promise<Awaited<ReturnType<DashboardApi[N]>>>) => Promise<T>,
     apply: (value: T) => void,
+    options: { passive?: boolean } = {},
   ): Promise<void> {
-    const query = dashboardQuery(this.#client(name), name, args);
+    const query = dashboardQuery(this.#client(name, options.passive), name, args);
     return this.#queries.watch(
       name,
       { ...query, key: `sent:${query.key}`, read: () => send(query.read) },

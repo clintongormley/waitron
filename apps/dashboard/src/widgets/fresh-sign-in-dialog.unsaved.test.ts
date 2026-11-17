@@ -1,4 +1,5 @@
 import { LitElement, html } from "lit";
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LeaveController, type WtDialog } from "@waitron/ui";
@@ -37,6 +38,7 @@ it("a typed proof can be kept on Escape, then discarded without carrying out the
         passkeys: [],
       }),
       confirmFreshSignIn,
+      liveData: new LiveData(),
     } as unknown as DashboardApi,
   });
   const host = app.shadowRoot!.querySelector<FreshSignInDialog>("dashboard-fresh-sign-in-dialog")!;

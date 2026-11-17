@@ -34,7 +34,7 @@ export class FreshSignInDialog extends LitElement {
   ];
   @property({ attribute: false }) api!: Pick<
     DashboardApi,
-    "getProfile" | "freshSignInPasskeyOptions" | "confirmFreshSignIn"
+    "getProfile" | "freshSignInPasskeyOptions" | "confirmFreshSignIn" | "liveData"
   >;
   @state() private opened = false;
   @state() private allowRecoveryCode = true;

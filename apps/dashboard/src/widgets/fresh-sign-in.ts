@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   startAuthentication,
@@ -9,6 +9,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DashboardApi, FreshSignInBody, OwnProfile } from "../api/client.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { classifyPasskeySignInError } from "../passkey-errors.js";
@@ -53,10 +54,7 @@ export class FreshSignIn extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) api!: Pick<
-    DashboardApi,
-    "getProfile" | "freshSignInPasskeyOptions"
-  >;
+  @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) allowRecoveryCode = true;
 
@@ -70,7 +68,13 @@ export class FreshSignIn extends LitElement {
 
   #attempt = 0;
   #prompting = false;
-  #reads = 0;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.profileFailed = true;
+    },
+  );
   /** The way the last press checked, so later edits re-check the fields that way needs. */
   #checked: "password" | "passkey" | null = null;
 
@@ -118,7 +122,11 @@ export class FreshSignIn extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.profile === null) void this.#readProfile();
+    if (this.hasUpdated) this.#watchProfile();
+  }
+
+  override willUpdate(changes: PropertyValues): void {
+    if (changes.has("api") && this.api && this.isConnected) this.#watchProfile();
   }
 
   override disconnectedCallback(): void {
@@ -133,27 +141,30 @@ export class FreshSignIn extends LitElement {
     this.#prompting = false;
   }
 
-  async #readProfile(): Promise<void> {
-    const read = ++this.#reads;
+  /** The shared cache reads again after any read in flight. */
+  #readProfile(): void {
     this.profileFailed = false;
-    try {
-      const own = await this.api.getProfile();
-      if (read !== this.#reads) return;
-      this.profile = own;
-      if (this.errors.code !== undefined && !own.hasTotp) {
-        this.errors = {};
-        this.message = t("fresh_sign_in.code_no_longer_needed");
-      }
-      this.dispatchEvent(
-        new CustomEvent<SignInWays>("sign-in-ways", {
-          detail: this.ways!,
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    } catch {
-      if (read === this.#reads) this.profileFailed = true;
-    }
+    this.api.liveData.invalidate([{ type: "persons" }]);
+  }
+
+  #watchProfile(): void {
+    this.#queries
+      .watch("getProfile", [], (own) => {
+        this.profile = own;
+        this.profileFailed = false;
+        if (this.errors.code !== undefined && !own.hasTotp) {
+          this.errors = {};
+          this.message = t("fresh_sign_in.code_no_longer_needed");
+        }
+        this.dispatchEvent(
+          new CustomEvent<SignInWays>("sign-in-ways", {
+            detail: this.ways!,
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      })
+      .catch(() => {});
   }
 
   /**
@@ -217,7 +228,7 @@ export class FreshSignIn extends LitElement {
       // A profile read before an authenticator was added draws no code field to type into.
       const stale = !this.profile?.hasTotp;
       this.errors = { code: codeMessage(stale ? "totp.required" : code) };
-      if (stale) void this.#readProfile();
+      if (stale) this.#readProfile();
       return "";
     }
     if (code === "passkey.not_registered")
@@ -254,7 +265,7 @@ export class FreshSignIn extends LitElement {
           ${t("fresh_sign_in.profile_failed")}
         </p>
         <div>
-          <wt-button data-test="profile-retry" @click=${() => void this.#readProfile()}
+          <wt-button data-test="profile-retry" @click=${() => this.#readProfile()}
             >${t("fresh_sign_in.retry")}</wt-button
           >
         </div>`;

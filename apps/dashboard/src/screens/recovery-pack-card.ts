@@ -4,6 +4,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../api/client.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -157,10 +158,7 @@ export class RecoveryPackCard extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) api!: Pick<
-    DashboardApi,
-    "makeRecoveryPack" | "markRecoveryPackReceived" | "getRecoveryPackStatus"
-  >;
+  @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) canManage = false;
 
   @property({ type: Boolean }) openRequested = false;
@@ -173,7 +171,15 @@ export class RecoveryPackCard extends LitElement {
   } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
 
-  #generation = 0;
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.failed = true;
+    },
+  );
+  /** How many statuses the dialog has handed over; a read started before the latest is dropped. */
+  #taken = 0;
   /** The newest pack this card was handed that made a new server key. */
   #keyPack = 0;
 
@@ -184,13 +190,13 @@ export class RecoveryPackCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated && this.canManage) this.reload();
+    if (this.hasUpdated && this.canManage) this.#watch();
   }
 
   override willUpdate(changes: PropertyValues): void {
     if (changes.has("canManage") || changes.has("api")) {
       this.#forget();
-      if (this.canManage && this.api && this.isConnected) this.reload();
+      if (this.canManage && this.api && this.isConnected) this.#watch();
     }
     if (this.openRequested && this.canManage && this.api && (this.status !== null || this.failed)) {
       this.openRequested = false;
@@ -209,7 +215,7 @@ export class RecoveryPackCard extends LitElement {
   }
 
   #forget(): void {
-    this.#generation++;
+    this.#release();
     this.#keyPack = 0;
     this.#dropMade();
     this.status = null;
@@ -221,27 +227,42 @@ export class RecoveryPackCard extends LitElement {
     this.made = null;
   }
 
-  /** Reads the status again; an answer to an earlier read is dropped. */
+  /** Reads the status again, after any read in flight; the Backups screen calls it after its writes. */
   reload(): void {
-    void this.#read();
+    this.api.liveData.invalidate([{ type: "recovery_packs" }]);
   }
 
-  async #read(): Promise<void> {
+  #watch(): void {
     if (!this.canManage) return;
-    const generation = ++this.#generation;
-    const api = this.api;
-    try {
-      const status = await api.getRecoveryPackStatus();
-      if (generation !== this.#generation) return;
-      this.status = status;
-      this.failed = false;
-    } catch {
-      if (generation === this.#generation) this.failed = true;
-    }
+    this.#queries
+      .watchSent(
+        "getRecoveryPackStatus",
+        [],
+        async (read) => {
+          const taken = this.#taken;
+          try {
+            return { taken, status: await read() };
+          } catch (error) {
+            if (taken === this.#taken) throw error;
+            return { taken, status: null };
+          }
+        },
+        ({ taken, status }) => {
+          if (taken !== this.#taken || status === null) return;
+          this.status = status;
+          this.failed = false;
+        },
+        { passive: true },
+      )
+      .catch(() => {});
+  }
+
+  #release(): void {
+    this.#queries.release("getRecoveryPackStatus");
   }
 
   #take(status: Status): void {
-    this.#generation++;
+    this.#taken++;
     this.status = status;
     this.failed = false;
   }
