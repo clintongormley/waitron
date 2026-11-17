@@ -24,7 +24,7 @@ Vitest 4.1.11 reads it.
 
 A configured or mixed caller needs a known address; it still has a gap if it releases that address before its first real listener binds, whoever owns that listener. Keep configured addresses, advertised origins and listener-release assertions when choosing a fixture. An unused endpoint is a separate risk: another process can take it even though the test expects no listener.
 
-The source audit at `213d0ec3bc` covered 229 allocation expressions in 85 operational caller files, including aliases: 160 already used bind-time fixtures. The configured and mixed rows were checked separately for first-bind ownership. This is a source classification, not a runtime verification of every caller. The following table keeps the remaining contracts and gaps. Line numbers refer to the current source; fiscal rows below remain with Lane L.
+The source audit at `213d0ec3bc` covered 229 allocation expressions in 85 operational caller files, including aliases: 160 already used bind-time fixtures. The configured and mixed rows were checked separately for first-bind ownership. This is a source classification, not a runtime verification of every caller. The following table keeps the remaining contracts and gaps. Allocation line numbers refer to the reviewed candidate `4fb4d32d6b`; fiscal rows below remain with Lane L.
 
 | Caller under `apps/server/src/` | Allocation line(s) | Remaining contract or ownership gap |
 | --- | --- | --- |
