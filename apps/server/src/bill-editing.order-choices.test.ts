@@ -52,7 +52,6 @@ async function sibling(p: Fixture) {
   return inTx(venue, async (tx) => {
     const order = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: p.partyId,
     });
     await VENUE_SERVICE.recordOrderContext(tx, order!.id, venue.zoneId);

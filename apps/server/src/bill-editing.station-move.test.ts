@@ -217,7 +217,6 @@ describe("station movement checks bill editing authority", () => {
       const row = await seedWorkingOrder(tx, {
         partyId: p.partyId,
         source: "dashboard",
-        orderNumber: 2,
       });
       await VENUE_SERVICE.recordOrderContext(tx, row!.id, venue.zoneId);
       return { ...p, tabId: row!.id };

@@ -132,11 +132,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
-  classify(
-    "working_order_counters",
-    "state",
-    "each row is one box's high-water mark of the venue-wide order-number sequence; copied to a standby, never drained back",
-  ),
   classify("taxpayer", "state", STATE),
   classify("day_cutover_changes", "state", STATE),
   classify("nodes", "state", STATE),

@@ -287,7 +287,7 @@ export async function seedSales(
         source: origin.source,
         deviceId: origin.deviceId,
         nodeId,
-        orderNumber: await allocateOrderNumber(tx, nodeId),
+        orderNumber: await allocateOrderNumber(tx),
         status: "open",
         invoiceType: "F2",
         openedAt: instant.toISOString(),

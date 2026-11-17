@@ -26,7 +26,7 @@ async function owner(kind: "order" | "party") {
       .returning();
     return { partyId: row!.id };
   }
-  const row = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
+  const row = await seedWorkingOrder(suite.db, { source: "dashboard" });
   return { workingOrderId: row.id };
 }
 const tx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, fn);

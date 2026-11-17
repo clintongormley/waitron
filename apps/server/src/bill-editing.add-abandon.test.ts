@@ -241,7 +241,6 @@ it("adding to the current editor's bill preserves both independently owned outbo
   const other = await inTx(venue, async (tx) => {
     const bill = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: p.partyId,
     });
     await VENUE_SERVICE.recordOrderContext(tx, bill!.id, venue.zoneId);

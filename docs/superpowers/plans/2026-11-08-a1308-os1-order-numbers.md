@@ -15,7 +15,7 @@ already carries on above every number given out; the handover test
 `"M2's next order number is above every number given out, and none repeats"`
 (`apps/server/src/handover-controlled.e2e.test.ts:2157`) holds it. This PR changes **where** the
 number is read from (the bills, not a second table) and adds the database guard; it does not change
-which number a bill gets. **Owner, 2026-11-09:** keep #2570's behaviour (including that a restore
+which number a bill gets. **Owner, 2026-11-09, A1308 approval page (recorded in 2337f7a193):** keep #2570's behaviour (including that a restore
 which lost the latest bills can give their numbers out again, as today).
 
 **Architecture:** One starting-migration change to core's set (slice rules §2), made through the
@@ -172,6 +172,8 @@ The venue-wide numbering itself is not a change here: #2570 already replaced
 - Any other changed assertion is a stop.
 
 ## Needs
+
+**2026-11-17:** The owner set A446 aside for the foreseeable future (watcher, 15:12); its historical prerequisite below no longer gates os1.
 
 - **In this area:** nothing. **Outside:** batch 1 landed (1a's rebuild command; slice 5 removed
   `working_orders.location_id` and `venueLocationId`). A446 (the pre-bill) landed first (build

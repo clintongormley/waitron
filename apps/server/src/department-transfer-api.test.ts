@@ -82,7 +82,6 @@ const logged: string[] = [];
 let personId: string;
 /** `personId`'s open session on `v.cfg`'s device, which a bill payment is taken under. */
 let operator: { personId: string; sessionId: string };
-let nextOrderNumber = 0;
 
 async function login(profileId: string) {
   const d = await enrolDeviceForTest(suite.db, v.cfg, { name: randomUUID(), profileId });
@@ -144,7 +143,6 @@ async function ready() {
     });
     const tab = await seedWorkingOrder(tx, {
       source: "operator_script",
-      orderNumber: ++nextOrderNumber,
     });
     await recordOrderServiceContext(tx, tab!.id, az.id);
     return {
@@ -1260,7 +1258,6 @@ describe("department-wide sent transfer discovery", () => {
     const first = await pending(f);
     const secondTab = await seedWorkingOrder(suite.db, {
       source: "operator_script",
-      orderNumber: ++nextOrderNumber,
     });
     await withTransaction(suite.db, (tx) => recordOrderServiceContext(tx, secondTab!.id, f.az));
     const second = await pending({ ...f, tab: secondTab!.id });

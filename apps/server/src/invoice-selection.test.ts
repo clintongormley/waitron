@@ -1,4 +1,4 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -37,22 +37,18 @@ async function bill(full = false) {
         { nodeId: node!.id, code: "FR", purpose: "rectificative", nextNumber: 19 },
       ])
       .returning();
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "operator_script",
-        nodeId: node!.id,
-        orderNumber: 1,
-        dining: "eat_in",
-        invoiceType: full ? "F1" : "F2",
-        recipientTaxId: full ? recipient.taxId : null,
-        recipientLegalName: full ? recipient.legalName : null,
-        recipientAddress: full ? recipient.address : null,
-        recipientCountryCode: full ? recipient.countryCode : null,
-      })
-      .returning();
+    const order = await seedWorkingOrder(tx, {
+      source: "operator_script",
+      nodeId: node!.id,
+      dining: "eat_in",
+      invoiceType: full ? "F1" : "F2",
+      recipientTaxId: full ? recipient.taxId : null,
+      recipientLegalName: full ? recipient.legalName : null,
+      recipientAddress: full ? recipient.address : null,
+      recipientCountryCode: full ? recipient.countryCode : null,
+    });
     return {
-      id: order!.id,
+      id: order.id,
       seriesId: seriesId(standard!.id),
       fullSeriesId: fullSeries!.id,
       cfg: {

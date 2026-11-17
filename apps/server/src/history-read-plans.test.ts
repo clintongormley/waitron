@@ -167,6 +167,20 @@ async function fixture() {
 }
 
 describe("current service reads with collected history", () => {
+  it("finds uncollected, non-abandoned bills through their own index", () => {
+    const plan = suite.db.all<{ detail: string }>(sql`
+      explain query plan select id from working_orders
+      where collected_at is null and status <> ${"abandoned"}
+    `);
+    expect(plan.map((row) => row.detail).join("\n")).toContain("working_orders_uncollected_idx");
+    const control = suite.db.all<{ detail: string }>(sql`
+      explain query plan select id from working_orders where status <> ${"abandoned"}
+    `);
+    expect(control.map((row) => row.detail).join("\n")).not.toContain(
+      "working_orders_uncollected_idx",
+    );
+  });
+
   it("looks up the requested parties and groups before their dishes", async () => {
     const { venue, heldId } = await fixture();
     await withTransaction(suite.db, async (tx) => {
@@ -226,6 +240,7 @@ describe("current service reads with collected history", () => {
       expect(items).toHaveLength(3);
       for (const plan of items) {
         expect(plan.lookupBills).toEqual([venue.party.tabId]);
+        expect(plan.details.join("\n")).toContain("working_orders_uncollected_idx");
         expect(plan.details.join("\n")).toContain("ticket_items_working_order_line_id_key");
         expect(plan.details.join("\n")).toMatch(
           /SEARCH working_order_lines USING (?:COVERING )?INDEX working_order_lines_(?:order_idx|line_no_key) \(working_order_id=\?\)/,

@@ -228,10 +228,10 @@ describe("printersInTrouble", () => {
     });
     const others = Array.from({ length: many }, () => job(minsAgo(5)));
     const tickets = Array.from({ length: many }, () => job(minsAgo(10)));
-    const orders = tickets.map(() => ({
+    const orders = tickets.map((_, i) => ({
       id: randomUUID(),
       source: "dashboard" as const,
-      orderNumber: 1,
+      orderNumber: i + 1,
       dining: "eat_in" as const,
     }));
     await withTransaction(suite.db, async (tx) => {

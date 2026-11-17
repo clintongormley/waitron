@@ -39,7 +39,6 @@ export * from "./device-profiles.js";
 export * from "./device-profile-printers.js";
 export * from "./printer-holders.js";
 export * from "./custom-themes.js";
-export * from "./working-order-counters.js";
 export * from "./bill-payments.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";

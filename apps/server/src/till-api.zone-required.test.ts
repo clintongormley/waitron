@@ -260,14 +260,16 @@ describe("an order requires a resolvable service zone", () => {
   it("createOpenOrder with no lines, zone or counter default refuses before creating an empty order", async () => {
     const venue = await seedVenueWithMenuAndTill(suite.db);
     const id = randomUUID();
-    const before = suite.db.all(sql`select * from working_order_counters order by node_id`);
+    const before = suite.db.all(
+      sql`select count(*) as count, max(order_number) as maximum from working_orders`,
+    );
     await expect(
       withTransaction(suite.db, (tx) => createOpenOrder(tx, venue.cfg, id, [], null)),
     ).rejects.toMatchObject({ code: "service_zone.default_missing", params: {} });
     expect(await recorded()).toEqual({ orders: 0, lines: 0 });
-    expect(suite.db.all(sql`select * from working_order_counters order by node_id`)).toEqual(
-      before,
-    );
+    expect(
+      suite.db.all(sql`select count(*) as count, max(order_number) as maximum from working_orders`),
+    ).toEqual(before);
   });
 });
 

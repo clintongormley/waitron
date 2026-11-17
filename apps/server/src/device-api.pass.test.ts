@@ -396,7 +396,7 @@ describe("the pass screen's device routes", () => {
         source: "dashboard",
         deviceId: null,
         nodeId: foreignNode,
-        orderNumber: 1,
+        orderNumber: 2,
         dining: "eat_in",
         status: "open",
       })

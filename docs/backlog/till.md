@@ -2142,10 +2142,11 @@ Away/Done. The kitchen capture, lifecycle, reads and atomic suites give the inte
 
 ### An order's number is never reset (owner, 2026-10-16)
 
-Order numbers are one venue-wide sequence that starts at 1 and only climbs; each box stores its own
-high-water mark, and a box's next number is one above the highest any box holds
-(`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). It does not restart each
-business day: staff search for orders by number, so a number must stay unique.
+Order numbers are one venue-wide sequence, starting at 1 and continuing above the highest bill in
+this copy of the venue (`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). The
+unique index refuses a repeat while a bill holds that number. It does not restart each business
+day: staff search for orders by number. A restore that loses the latest bills can give their
+numbers out again (owner, 2026-11-09, A1308 approval page (recorded in 2337f7a193)).
 
 ### Fixed screens instead of a screen designer (A182)
 

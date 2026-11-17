@@ -55,7 +55,6 @@ async function fixture() {
     });
     const other = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: party.partyId,
     });
     return { ...party, otherId: other!.id };

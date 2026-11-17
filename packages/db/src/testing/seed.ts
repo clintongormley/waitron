@@ -234,19 +234,25 @@ export async function seedDevice(
   return { deviceId: brandDeviceId(row!.id), profileId };
 }
 
-/** Seeds one working order at the venue and returns the row. Defaults to source "dashboard" (which
- * needs no device) and order number 1. */
+/** Seeds one working order; calls with omitted numbers must run in turn. */
 export async function seedWorkingOrder(
   db: Database | Transaction,
   values: Partial<typeof workingOrders.$inferInsert> = {},
 ): Promise<typeof workingOrders.$inferSelect> {
+  const orderNumber =
+    values.orderNumber ??
+    (
+      await db
+        .select({ next: sql<number>`coalesce(max(${workingOrders.orderNumber}), 0) + 1` })
+        .from(workingOrders)
+    )[0]!.next;
   const [row] = await db
     .insert(workingOrders)
     .values({
       source: "dashboard",
-      orderNumber: 1,
       dining: "eat_in",
       ...values,
+      orderNumber,
     })
     .returning();
   return row!;

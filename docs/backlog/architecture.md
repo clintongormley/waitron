@@ -117,7 +117,7 @@ That fiscal protection decision remains outside A646's optional-module repair.
 
 A1308 leaves these names with the slices that own their tables:
 
-- `working_orders_tenant_status_idx`: orders slice os1; `sales_tenant_issued_idx`: os8.
+- `sales_tenant_issued_idx`: os8.
 - `registros_tenant_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
 - `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
   menu areas; no slice plan names their rename yet.
@@ -978,7 +978,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
@@ -997,14 +996,11 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
   [Detail](till.md#index-the-dishes-not-yet-fired-so-the-passs-reads-stop-scanning-every-ticket-item-ever-kept-left-open-by-a773-2-pr-cs-review)
-- **Index the uncollected, non-abandoned bill lookup in A1308's orders slice (A1370 follow-up).** The station
-  queue now reads tickets by uncollected, non-abandoned bill, but finding those bills still scans
-  `working_orders`. Add the partial index once the table-change hold ends.
 - **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.

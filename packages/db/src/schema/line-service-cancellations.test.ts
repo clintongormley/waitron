@@ -26,7 +26,7 @@ describe("charged service cancellations", () => {
 
   async function fixture() {
     return withTransaction(suite.db, async (tx) => {
-      const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 });
+      const bill = await seedWorkingOrder(tx, { source: "dashboard" });
       const [line] = await tx
         .insert(workingOrderLines)
         .values({

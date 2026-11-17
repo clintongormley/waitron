@@ -90,7 +90,7 @@ async function seedSecondTill(): Promise<Seeded> {
   const { deviceId } = await seedDevice(suite.db, {});
   const wo2 = await suite.db.execute<{ id: string }>(sql`
     insert into working_orders (id, source, device_id, order_number, opened_at, dining)
-    values (${randomUUID()}, 'device', ${deviceId}, 1, ${stamp}, 'eat_in') returning id`);
+    values (${randomUUID()}, 'device', ${deviceId}, (select coalesce(max(order_number), 0) + 1 from working_orders), ${stamp}, 'eat_in') returning id`);
   return {
     deviceId,
     nodeId: brandNodeId(node2.rows[0].id),

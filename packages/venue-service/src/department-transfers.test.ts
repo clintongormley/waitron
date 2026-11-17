@@ -85,7 +85,7 @@ async function venue() {
       allowedZoneIds: null,
       startingZoneId: bz.id,
     });
-    const tab = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 1 });
+    const tab = await seedWorkingOrder(tx, { source: "operator_script" });
     await recordOrderServiceContext(tx, tab.id, az.id);
     return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab.id };
   });

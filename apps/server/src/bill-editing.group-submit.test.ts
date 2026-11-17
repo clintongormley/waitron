@@ -43,7 +43,6 @@ async function fixture() {
     );
     const other = await seedWorkingOrder(tx, {
       source: "dashboard",
-      orderNumber: 2,
       partyId: p.partyId,
     });
     await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);

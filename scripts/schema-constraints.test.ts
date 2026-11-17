@@ -300,7 +300,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["working_line_contexts", ["menu_item_id"], "menu_items"],
   ["working_line_contexts", ["menu_version_id"], "menu_versions"],
   ["working_line_contexts", ["working_order_line_id"], "working_order_lines"],
-  ["working_order_counters", ["node_id"], "nodes"],
   ["working_order_lines", ["course_id"], "kitchen_courses"],
   ["working_order_lines", ["group_id"], "order_groups"],
   ["working_order_lines", ["make_at_station_id"], "kitchen_stations"],

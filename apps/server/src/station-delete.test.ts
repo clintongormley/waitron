@@ -76,7 +76,6 @@ async function food(
     const order = await seedWorkingOrder(tx, {
       ...v.cfg.origin,
       nodeId: v.cfg.nodeId,
-      orderNumber: 42,
       label: "Table 8",
       status: "open",
       settledAt: null,

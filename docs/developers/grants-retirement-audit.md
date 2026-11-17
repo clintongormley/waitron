@@ -150,6 +150,8 @@ changing enforcement, keeping each legitimate mutation path.
 | `workforce_chains`       | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
 | `working_order_counters` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 
+**2026-11-17:** A1308 os1 deletes `working_order_counters`; the next number comes from the bills.
+
 **2026-11-16:** A1308 pp6 deletes `workforce_chains`; appends read the newest `time_entries` row.
 
 **2026-10-19:** `table_service_statuses` was dropped by A757 slice 2; its row needs no decision.

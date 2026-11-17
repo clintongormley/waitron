@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2131da0f-15a9-41aa-8409-8f67cc224d79",
+  "id": "459654f6-ca16-4a67-b354-b20a29c9a647",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1012,8 +1012,23 @@
         }
       },
       "indexes": {
-        "working_orders_tenant_status_idx": {
-          "name": "working_orders_tenant_status_idx",
+        "working_orders_order_number_key": {
+          "name": "working_orders_order_number_key",
+          "columns": [
+            "order_number"
+          ],
+          "isUnique": true
+        },
+        "working_orders_uncollected_idx": {
+          "name": "working_orders_uncollected_idx",
+          "columns": [
+            "id"
+          ],
+          "isUnique": false,
+          "where": "\"working_orders\".\"collected_at\" is null and \"working_orders\".\"status\" <> 'abandoned'"
+        },
+        "working_orders_status_idx": {
+          "name": "working_orders_status_idx",
           "columns": [
             "status"
           ],
@@ -7575,45 +7590,6 @@
           "value": "\"custom_themes\".\"in_use\" = 1"
         }
       }
-    },
-    "working_order_counters": {
-      "name": "working_order_counters",
-      "columns": {
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "next_number": {
-          "name": "next_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "working_order_counters_node_fk": {
-          "name": "working_order_counters_node_fk",
-          "tableFrom": "working_order_counters",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "bill_payment_lines": {
       "name": "bill_payment_lines",

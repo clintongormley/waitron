@@ -1392,7 +1392,8 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const otherNode = await seedNode(db);
   await db.execute(sql`
     insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, dining)
-    values (${id}, 'device', ${cfg.origin.deviceId}, ${otherNode}, 1, 'open', ${nowIso()}, 'eat_in')`);
+    values (${id}, 'device', ${cfg.origin.deviceId}, ${otherNode},
+      (select coalesce(max(order_number), 0) + 1 from working_orders), 'open', ${nowIso()}, 'eat_in')`);
   return id;
 }
 

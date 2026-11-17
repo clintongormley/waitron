@@ -279,14 +279,14 @@ describe("GET /api/parties/:id/drafts", () => {
         id: emptyId,
         source: "dashboard",
         partyId: party.partyId,
-        orderNumber: main!.orderNumber + 2,
+        orderNumber: main!.orderNumber + 3,
         openedAt: main!.openedAt,
       });
       await seedWorkingOrder(tx, {
         id: secondId,
         source: "dashboard",
         partyId: party.partyId,
-        orderNumber: main!.orderNumber + 1,
+        orderNumber: main!.orderNumber + 2,
         openedAt: main!.openedAt,
       });
     });
