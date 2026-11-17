@@ -4561,6 +4561,10 @@ everything else, built from `wt-card`, `wt-input`, and `wt-button`.
 
 ### Group related fields into cards
 
+`cardFrameStyles` from `@waitron/ui` holds the card frame's declarations. Interpolate it inside a
+selector when a screen needs that frame with its own phone override; it is a declaration fragment,
+not a complete stylesheet for a Lit styles array.
+
 One `wt-card` per logical group. Give the group a small label above the card — not inside it —
 `--wt-font-size-sm`, bold, uppercase, `--wt-color-text-muted`. Inside the card, each field is a
 row: label on top, value below, both left-aligned:

@@ -2,6 +2,15 @@ import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
+/** Frame declarations to interpolate inside a component's selector. */
+export const cardFrameStyles = css`
+  background: var(--wt-color-surface);
+  --wt-form-actions-surface: var(--wt-color-surface);
+  border: 1px solid var(--wt-color-border);
+  border-radius: var(--wt-radius-lg);
+  padding: var(--wt-space-4);
+`;
+
 @customElement("wt-card")
 export class WtCard extends LitElement {
   static override styles = [
@@ -12,11 +21,7 @@ export class WtCard extends LitElement {
       }
 
       .card {
-        background: var(--wt-color-surface);
-        --wt-form-actions-surface: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-lg);
-        padding: var(--wt-space-4);
+        ${cardFrameStyles}
       }
 
       :host([raised]) .card {

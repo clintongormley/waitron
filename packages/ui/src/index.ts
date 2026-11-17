@@ -36,7 +36,7 @@ export { WtIconButton } from "./components/wt-icon-button.js";
 export type { WtIconSize } from "./components/wt-icon.js";
 export { WtSpinner } from "./components/wt-spinner.js";
 export type { WtSpinnerSize } from "./components/wt-spinner.js";
-export { WtCard } from "./components/wt-card.js";
+export { WtCard, cardFrameStyles } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
 export { WtSegmentedControl } from "./components/wt-segmented-control.js";
 export type { SegmentedOption } from "./components/wt-segmented-control.js";

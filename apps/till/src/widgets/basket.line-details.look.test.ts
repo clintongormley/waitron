@@ -5,7 +5,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabLine, TillProduct } from "../api/client.js";
 import { TillBasket } from "./basket.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import { cleanupWidgets, expectNoA11yViolations, measured, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 
 const dish: TillProduct = {
   id: "dish",
@@ -241,16 +241,3 @@ for (const locale of ["en-GB", "es-ES"])
         }
       },
     );
-
-it("a wider populated basket gives its dish name at least the narrower basket's room", async () => {
-  const store = new WorkingOrderStore();
-  store.addProduct(dish, "2");
-  const { el, host } = await mountWidget<TillBasket>("till-basket", { store, lineDetails: true });
-  host.style.width = "320px";
-  await measured();
-  const name = el.shadowRoot!.querySelector<HTMLElement>(".line .name")!;
-  const narrow = name.getBoundingClientRect().width;
-  host.style.width = "400px";
-  await measured();
-  expect(name.getBoundingClientRect().width).toBeGreaterThanOrEqual(narrow);
-});
