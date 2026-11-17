@@ -14,4 +14,8 @@ describe("resolveLoginLocale", () => {
   it("takes a language's earliest entry when the browser lists it twice at the same weight", () => {
     expect(resolveLoginLocale("en-US;q=0.5,es;q=0.5,en-GB;q=0.5", "es-ES")).toBe("en-GB");
   });
+
+  it("takes a language's highest-weight entry when the browser lists it twice", () => {
+    expect(resolveLoginLocale("en;q=0, en, es;q=0.5", "es-ES")).toBe("en-GB");
+  });
 });
