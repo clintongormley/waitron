@@ -1365,8 +1365,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   rules (with A1437 and Cloud's D608), then the message list and texts (with Cloud's D610 and the
   email relay). Roles, storage, sessions and
   screens stay apart. [Plan](superpowers/plans/2026-11-09-a1438-code-shared-with-cloud.md).
-  Paired-box owner recovery still needs guarded server calls, its dashboard panel and Cloud
-  adoption/qualification of the [recovery actions](superpowers/plans/2026-11-17-box-owner-recovery.md).
 
 - **Everything needing a third box or a Cloud peer** (bundle of 8, 1 important, size L, waits for another entry). Holds A1205, A1275, A1276. [Detail](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 
@@ -1512,6 +1510,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Loose ends left by the Cloud connection integration.** Customer remote setup UI and production
   deployment remain open. Continuous complete-server recovery, planned final-write handover and
   production recovery remain open.
+  Paired-box owner recovery still needs guarded server calls, its dashboard panel and Cloud
+  adoption/qualification of the [recovery actions](superpowers/plans/2026-11-17-box-owner-recovery.md).
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 
 

@@ -93,7 +93,9 @@ for (const action of [
       signature: sign(null, bytes, keys.privateKey).toString("base64url"),
     };
   assert.deepEqual(verifyMachine(signed, publicKey, origin, action, now), recoveryClaims);
-  assert.throws(() => verifyMachine(signed, publicKey, origin, "configuration", now));
+  assert.throws(() => verifyMachine(signed, publicKey, origin, "configuration", now), {
+    code: "invalid_proof",
+  });
 }
 const issuer = createLeaseIssuer(
   keys.privateKey.export({ type: "pkcs8", format: "der" }).toString("base64url"),
