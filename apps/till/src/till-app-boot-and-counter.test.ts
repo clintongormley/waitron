@@ -3281,21 +3281,20 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("does not start the waiting-list read when a hand-over's station read outlives sign-out", async () => {
-    const { el } = await mountApp({ markCollected: vi.fn().mockResolvedValue(undefined) });
+  it("does not start the waiting-list read when a hand-over's answer outlives sign-out", async () => {
+    let answerHandOver!: () => void;
+    const { el } = await mountApp({
+      markCollected: vi.fn(() => new Promise<void>((resolve) => (answerHandOver = resolve))),
+    });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
     emit(c, "hand-over-order", { id: "wo-1" });
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(api.markCollected).toHaveBeenCalledOnce();
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerHandOver();
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
@@ -3377,7 +3376,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not read waiting orders when a cash sale's station read outlives sign-out", async () => {
+  it("does not read waiting orders when a cash sale's held-orders read outlives sign-out", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
         ...zoneOffers(
@@ -3389,25 +3388,25 @@ describe("till-app logout while a request is waiting for the server", () => {
       }),
     });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
+    let answerHeld!: (rows: []) => void;
+    vi.mocked(api.listWorkingOrders).mockImplementationOnce(
+      () => new Promise((resolve) => (answerHeld = resolve)),
     );
     c.store.addProduct(c.products[0]!, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(answerHeld).toBeTypeOf("function");
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerHeld([]);
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not read waiting orders when a card capture's station read outlives sign-out", async () => {
+  it("does not read waiting orders when a card capture's held-orders read outlives sign-out", async () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
         ...zoneOffers(
@@ -3419,87 +3418,84 @@ describe("till-app logout while a request is waiting for the server", () => {
       }),
     });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
+    let answerHeld!: (rows: []) => void;
+    vi.mocked(api.listWorkingOrders).mockImplementationOnce(
+      () => new Promise((resolve) => (answerHeld = resolve)),
     );
     c.store.addProduct(c.products[0]!, "1");
     emit(c, "collect-card", {});
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(answerHeld).toBeTypeOf("function");
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerHeld([]);
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not read waiting orders when a place's station read outlives sign-out", async () => {
+  it("does not read waiting orders when a place's answer outlives sign-out", async () => {
+    let answerPlace!: () => void;
     const { el } = await mountApp({
       parkOrder: vi.fn().mockResolvedValue(undefined),
-      placeOrder: vi.fn().mockResolvedValue(undefined),
+      placeOrder: vi.fn(() => new Promise<void>((resolve) => (answerPlace = resolve))),
     });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
     c.store.addProduct(c.products[0]!, "1");
     emit(c, "place-order");
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(api.placeOrder).toHaveBeenCalledOnce();
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerPlace();
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not read waiting orders when a found-bill payment's station read outlives sign-out", async () => {
-    const { el } = await mountApp({ collectOrder: vi.fn().mockResolvedValue(saleResult) });
+  it("does not read waiting orders when a found-bill payment's answer outlives sign-out", async () => {
+    let answerPayment!: (result: TillSaleResult) => void;
+    const { el } = await mountApp({
+      collectOrder: vi.fn(
+        () => new Promise<TillSaleResult>((resolve) => (answerPayment = resolve)),
+      ),
+    });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
     emit(c, "find-bill-pay", {
       workingOrderId: "wo-1",
       tender: { method: "cash", amount: "5" },
       invoiced: true,
     });
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(api.collectOrder).toHaveBeenCalledOnce();
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerPayment(saleResult);
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not read waiting orders when a collection's station read outlives sign-out", async () => {
-    const { el } = await mountApp({ markCollected: vi.fn().mockResolvedValue(undefined) });
+  it("does not read waiting orders when a collection's answer outlives sign-out", async () => {
+    let answerCollection!: () => void;
+    const { el } = await mountApp({
+      markCollected: vi.fn(() => new Promise<void>((resolve) => (answerCollection = resolve))),
+    });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
     emit(c, "mark-collected", { orderId: "wo-1" });
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(api.markCollected).toHaveBeenCalledOnce();
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    answerCollection();
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
@@ -4115,23 +4111,20 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not start the waiting read after a refused collection's station read outlives sign-out", async () => {
+  it("does not start the waiting read after a collection's refusal outlives sign-out", async () => {
+    let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
-      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      markCollected: vi.fn(() => new Promise<void>((_, reject) => (refuse = reject))),
     });
     const c = await toCounter(el);
-    let answerStations!: (rows: []) => void;
-    vi.mocked(api.listStations).mockImplementationOnce(
-      () => new Promise((resolve) => (answerStations = resolve)),
-    );
     emit(c, "mark-collected", { orderId: "wo-1" });
     await flush(el);
-    expect(answerStations).toBeTypeOf("function");
+    expect(api.markCollected).toHaveBeenCalledOnce();
 
     emit(shell(el)!, "logout");
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerStations([]);
+    refuse({ code: "server.internal" });
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);

@@ -35,7 +35,6 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   Station,
-  StationQueueGroup,
   TableState,
   TillActiveReader,
   TillApi,
@@ -251,7 +250,6 @@ export class TillCounterScreen extends LitElement {
   /** The floor, which a held order's Move to table lists. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
-  @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   /** Absent when the venue has no default station configured. */
   @property({ attribute: false }) defaultStationId?: string;
   @property() orderFlow: OrderFlow = "prepay";

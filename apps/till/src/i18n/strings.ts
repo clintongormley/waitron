@@ -1670,12 +1670,6 @@ export const en = {
   "refresh.held_after_sale":
     "The sale was recorded, but the list of parked orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of parked orders could not refresh.",
-  "refresh.station": "The station queue could not refresh.",
-  "refresh.station_after_place": "The order was sent, but the station queue could not refresh.",
-  "refresh.station_after_hand_over":
-    "The order was handed over, but the station queue could not refresh.",
-  "refresh.station_after_move": "The dishes were moved, but the station queue could not refresh.",
-  "refresh.station_after_sale": "The sale was recorded, but the station queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
   "refresh.waiting_after_sale":
     "The sale was recorded, but the list of waiting orders could not refresh.",
@@ -3768,15 +3762,6 @@ export const es: Record<StringKey, string> = {
     "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_move":
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
-  "refresh.station": "La cola de estación no se pudo actualizar.",
-  "refresh.station_after_place":
-    "El pedido se envió, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_hand_over":
-    "El pedido se entregó, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_move":
-    "Los platos se pasaron, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_sale":
-    "La venta se registró, pero la cola de estación no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_sale":
     "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",
