@@ -10,7 +10,7 @@ import type {
   ManagerHours,
   PersonHours,
 } from "./attendance-contract.js";
-import { readAttendanceInbox } from "./attendance-reads.js";
+import { readAttendanceInboxWork } from "./attendance-reads.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { readClosures } from "./pay-period-reads.js";
 import { readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
@@ -101,7 +101,7 @@ async function personInWindow(
   const { period, businessDay } = window;
   const entries = await readRecordedEntries(tx, { personId });
   const record = await readTimeRecord(tx, { personId, period }, policy);
-  const inbox = await readAttendanceInbox(tx, personId);
+  const inbox = await readAttendanceInboxWork(tx, personId, entries);
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
   const pending = {

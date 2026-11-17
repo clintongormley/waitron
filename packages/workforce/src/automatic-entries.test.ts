@@ -153,6 +153,7 @@ describe("automatic closes and worker confirmation", () => {
       (await suite.db.select().from(timeEntries).where(eq(timeEntries.id, answer)))[0],
     ).toMatchObject({
       entryKind: "confirmation",
+      eventAt: original[0]!.eventAt,
       respondsToEntryId: end,
       authorKind: "worker",
       recordedByPersonId: personId,

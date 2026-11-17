@@ -32,9 +32,14 @@ export async function readTimeRecord(
     query.period.start >= query.period.end
   )
     throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-  const entries = await readRecordedEntries(tx, { personId: query.personId });
   const closures = await readClosures(tx, { period: query.period });
   const personId = query.personId;
+  const period = { ...query.period };
+  for (const closure of closures) {
+    if (closure.period.start < period.start) period.start = closure.period.start;
+    if (closure.period.end > period.end) period.end = closure.period.end;
+  }
+  const entries = await readPeriodEntries(tx, { period, personId });
   return recordInPeriod(
     projectTimeRecord(
       entries,
@@ -73,6 +78,76 @@ export async function readRecordedEntries(
         scope.personId === undefined ? undefined : eq(timeEntries.personId, scope.personId),
       ),
     );
+  return rows.map(recordFromRow);
+}
+
+const OFFSET_MARGIN_MS = 14 * 60 * 60 * 1000;
+const FIRST_EVENT_AT = "0000-01-01T00:00:00.000Z";
+const LAST_EVENT_AT = "9999-12-31T23:59:59.000Z";
+
+/** Filter projected sessions by the requested work dates. Rows outside the period supply context. */
+export async function readPeriodEntries(
+  tx: Database | Transaction,
+  { period, personId }: TimeRecordQuery,
+): Promise<TimeEntryRecord[]> {
+  if (!isRecordDate(period.start) || !isRecordDate(period.end))
+    return readRecordedEntries(tx, { personId });
+  const from = new Date(
+    Math.max(Date.parse(FIRST_EVENT_AT), Date.parse(period.start) - OFFSET_MARGIN_MS),
+  ).toISOString();
+  const until = new Date(Date.parse(period.end) + OFFSET_MARGIN_MS).toISOString();
+  const people = personId === undefined ? sql`select id from persons` : sql`select ${personId}`;
+
+  // A shift belongs to its start's local date, so it cannot start before the offset margin.
+  // A later unretimed clock-in resets the projection. Keep every event at that instant.
+  const later = sql`(
+    select anchor.event_at from time_entries anchor indexed by time_entries_person_event_idx
+    where anchor.person_id = people.person_id and anchor.entry_kind = 'in' and anchor.event_at >= ${until}
+      and not exists (
+        select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
+        where corrected.corrects_entry_id = anchor.id and corrected.person_id = anchor.person_id
+          and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
+      )
+    order by anchor.event_at limit 1
+  )`;
+
+  // A retime may move either endpoint out of the seed window. Decisions and confirmations
+  // copy the entry they answer's event time, so their inverse lookup can use person and time.
+  const selected = sql`
+    with recursive
+    people(person_id) as (${people}),
+    bounds as materialized (
+      select person_id, coalesce(${later}, ${LAST_EVENT_AT}) as last_at
+      from people
+    ),
+    family(id, person_id, event_at, corrects_entry_id, responds_to_entry_id) as (
+      select seed.id, seed.person_id, seed.event_at, seed.corrects_entry_id, seed.responds_to_entry_id
+      from bounds cross join time_entries seed indexed by time_entries_person_event_idx
+      where seed.person_id = bounds.person_id and seed.event_at between ${from} and bounds.last_at
+      union
+      select parent.id, parent.person_id, parent.event_at, parent.corrects_entry_id, parent.responds_to_entry_id
+      from family join time_entries parent
+        on parent.id in (family.corrects_entry_id, family.responds_to_entry_id)
+        and parent.person_id = family.person_id
+      union
+      select correction.id, correction.person_id, correction.event_at,
+        correction.corrects_entry_id, correction.responds_to_entry_id
+      from family join time_entries correction indexed by time_entries_corrects_entry_idx
+        on correction.corrects_entry_id = family.id and correction.person_id = family.person_id
+      union
+      select response.id, response.person_id, response.event_at,
+        response.corrects_entry_id, response.responds_to_entry_id
+      from family join time_entries response indexed by time_entries_person_event_idx
+        on response.person_id = family.person_id and response.event_at = family.event_at
+        and response.responds_to_entry_id = family.id
+    )
+    select id from family
+  `;
+  const rows = await tx
+    .select()
+    .from(timeEntries)
+    .where(sql`${timeEntries.id} in (${selected})`)
+    .orderBy(sql`time_entries.rowid`);
   return rows.map(recordFromRow);
 }
 

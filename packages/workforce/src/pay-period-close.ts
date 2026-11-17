@@ -16,7 +16,7 @@ import { invalidPeriod, readPayPeriodSettings, resolvePayPeriod } from "./pay-pe
 import { isRecordDate } from "./record-dates.js";
 import { recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
-import { readRecordedEntries } from "./record-reads.js";
+import { readPeriodEntries } from "./record-reads.js";
 import { automaticEntryIdsWithoutMarker } from "./effective-entries.js";
 import {
   dailyContractedTargetMinutes,
@@ -109,7 +109,7 @@ export async function closePayPeriod(
   const scheduledCloseAt = businessDayBoundaryAt(input.clock, input.period.end);
   if (closedAt < scheduledCloseAt)
     throw new AppError("pay_period.not_due", { closeAt: scheduledCloseAt });
-  const entries = await readRecordedEntries(tx, {});
+  const entries = await readPeriodEntries(tx, { period: input.period });
   const closureId = newId();
   const unmarked = automaticEntryIdsWithoutMarker(entries);
   const candidates = entries.filter((e) => unmarked.has(e.entryId));

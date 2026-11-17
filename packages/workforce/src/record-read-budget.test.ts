@@ -7,12 +7,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { jobOrigin } from "@waitron/shared";
-import { seedFixtureVenue, seedPerson } from "../test/fixtures.js";
+import { seedEmployment, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { appendToChain, readChain } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 import { recordEntryById } from "./corrections.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { readPersonHours } from "./hours-reads.js";
 const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard");
 let personId: string, other: string, nodeId: string, target: string;
@@ -52,7 +53,7 @@ async function timeRows<T>(body: () => Promise<T>) {
     ...args
   ) {
     const rows = Reflect.apply(all, this, args) as ReturnType<typeof all>;
-    if (/^\s*select\b/i.test(this.sourceSQL) && /\btime_entries\b/i.test(this.sourceSQL))
+    if (/^\s*(?:with|select)\b/i.test(this.sourceSQL) && /\btime_entries\b/i.test(this.sourceSQL))
       counts.push(rows.length);
     return rows;
   });
@@ -206,4 +207,77 @@ it("uses an approved missing start as live state while ignoring its pending requ
   });
   expect(result.rows).toBe(1);
   expect(verifyChain(await readChain(suite.db, { nodeId }))).toEqual({ ok: true });
+});
+
+it("keeps a week's reads bounded on a year of clock history", async () => {
+  const worker = await seedPerson(suite.db, "Year of shifts");
+  const manager = await seedPerson(suite.db, "Year of shifts approver");
+  await setBuiltInRoleForTest(suite.db, manager, "manager");
+  await seedEmployment(suite.db, { personId: worker });
+  const period = { start: "2025-06-16", end: "2025-06-23" };
+  await withTransaction(suite.db, async (tx) => {
+    const day = new Date("2025-01-01T00:00:00Z");
+    for (let index = 0; index < 365; index++) {
+      const date = day.toISOString().slice(0, 10);
+      await backend.clockIn(tx, event(worker, `${date}T09:00:00Z`));
+      await backend.clockOut(tx, event(worker, `${date}T17:00:00Z`));
+      day.setUTCDate(day.getUTCDate() + 1);
+    }
+    const { rows } = tx.execute<{ id: string }>(
+      sql`select id from time_entries where person_id = ${worker}
+        and event_at = '2025-06-16T17:00:00.000Z'`,
+    );
+    const request = await backend.requestCorrection(tx, {
+      nodeId,
+      correctsEntryId: rows[0]!.id,
+      at: "2025-06-16T18:00:00Z",
+      offsetMinutes: 0,
+      reason: "Later departure",
+      actorPersonId: worker,
+      origin,
+    });
+    await backend.approveCorrection(tx, {
+      nodeId,
+      correctionId: request,
+      approverPersonId: manager,
+    });
+  });
+
+  const summary = await timeRows(() =>
+    withTransaction(suite.db, (tx) =>
+      backend.workSummary(
+        tx,
+        { personId: worker, period },
+        {
+          workingDaysPerWeek: 5,
+          overtimeModel: "daily-accrual",
+          dailyTargetMinutes: null,
+        },
+      ),
+    ),
+  );
+  const comparison = await timeRows(() =>
+    withTransaction(suite.db, (tx) => backend.getPlannedVsActual(tx, { period })),
+  );
+  const hours = await timeRows(() =>
+    withTransaction(suite.db, (tx) =>
+      readPersonHours(tx, {
+        personId: worker,
+        selection: { kind: "week", date: period.start },
+        clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
+        now: new Date("2026-01-05T12:00:00Z"),
+      }),
+    ),
+  );
+
+  expect(summary.result.workedMinutes).toBe(3420);
+  expect(
+    comparison.result
+      .filter((row) => row.personId === worker)
+      .reduce((minutes, row) => minutes + row.workedMinutes, 0),
+  ).toBe(3420);
+  expect(hours.result.workedMinutes).toBe(3420);
+  expect.soft(summary.rows).toBeLessThanOrEqual(48);
+  expect.soft(comparison.rows).toBeLessThanOrEqual(48);
+  expect.soft(hours.rows).toBeLessThanOrEqual(780);
 });

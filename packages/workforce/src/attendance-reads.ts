@@ -12,6 +12,7 @@ import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
 import { compareRecording } from "./effective-entries.js";
 import { recordRoot } from "./record-projection.js";
 import { isRecordDate } from "./record-dates.js";
+import type { TimeEntryRecord } from "./projection.js";
 import { readAttendanceRevision, projectCorrectionItems } from "./attendance-responses.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
@@ -28,6 +29,15 @@ export async function readAttendanceInbox(
 ): Promise<AttendanceInbox> {
   requireId(personId);
   const entries = await readRecordedEntries(tx, { personId });
+  const work = await readAttendanceInboxWork(tx, personId, entries);
+  return { ...work, revision: await readAttendanceRevision(tx, personId) };
+}
+
+export async function readAttendanceInboxWork(
+  tx: Transaction,
+  personId: string,
+  entries: TimeEntryRecord[],
+): Promise<Omit<AttendanceInbox, "revision">> {
   const commands = await tx
     .select()
     .from(attendanceAnswers)
@@ -114,7 +124,6 @@ export async function readAttendanceInbox(
   prompts.sort((a, b) => a.at.localeCompare(b.at) || a.prompt.id.localeCompare(b.prompt.id));
   return {
     personId,
-    revision: await readAttendanceRevision(tx, personId),
     prompts: prompts.map((p) => p.prompt),
     items,
     timeZone,
