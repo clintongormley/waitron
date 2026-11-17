@@ -148,8 +148,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ha terminado el periodo de un plato. Revisa el pedido y quita los platos de periodos terminados antes de volver a enviarlo.",
   },
   "department_transfer.desk_unavailable": {
-    en: "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
-    es: "Ese departamento no tiene un mostrador receptor disponible. Pide a un responsable que revise los ajustes de traspaso.",
+    en: "That department has no usable receiving desk. It can be chosen in the dashboard, under Departments and zones, in the department's Transfers.",
+    es: "Ese departamento no tiene un mostrador receptor disponible. Se puede elegir en el panel, en Departamentos y zonas, en los Traslados del departamento.",
   },
   "working_order.out_of_date": {
     en: "Someone else changed this order. Reload it and make your change again",
@@ -618,12 +618,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe",
   },
   "reader.not_found": {
-    en: "This device has no card reader it can use. Ask a manager to check its card reader on the Card payments screen",
-    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Pide a un responsable que revise su lector en la pantalla Pagos con tarjeta",
+    en: "This device has no card reader it can use. A device's card readers are chosen in the dashboard, under Device profiles; new readers are added under Card payments",
+    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Los lectores de tarjetas de un dispositivo se eligen en el panel, en Perfiles de dispositivo; los lectores nuevos se añaden en Pagos con tarjeta",
   },
   "reader.provider_disconnected": {
-    en: "The card reader's payment provider is not connected. Ask a manager to connect it in Modules on the dashboard, or take cash",
-    es: "El proveedor de pagos del lector no está conectado. Pide a un responsable que lo conecte en Módulos del panel, o cobra en efectivo",
+    en: "The card reader's payment provider is not connected. Take cash; the provider can be connected in the dashboard, under Modules",
+    es: "El proveedor de pagos del lector no está conectado. Cobra en efectivo; el proveedor se puede conectar en el panel, en Módulos",
   },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
@@ -775,8 +775,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // The two card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
   "device.forbidden_station": {
-    en: "This device cannot use that station. Ask a manager to check its settings.",
-    es: "Este dispositivo no puede usar esa estación. Pide a un responsable que revise sus ajustes.",
+    en: "This device cannot use that station: the dish may have moved to another station, or this device's stations have changed. Reload to see what it can use now; which stations it shows can be changed in the dashboard, under Device profiles.",
+    es: "Este dispositivo no puede usar esa estación: puede que el plato haya pasado a otra estación o que hayan cambiado las estaciones de este dispositivo. Vuelve a cargar para ver lo que puede usar ahora; las estaciones que muestra se pueden cambiar en el panel, en Perfiles de dispositivo.",
   },
   "device.forbidden_action": {
     en: "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
@@ -791,8 +791,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo ya no muestra esa pantalla. Elige la pantalla de su perfil en el panel, en Perfiles de dispositivo.",
   },
   "device.pairing_closed": {
-    en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
-    es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
+    en: "New devices aren't being accepted right now. Open “Add a device” in the dashboard, under Devices, then try again.",
+    es: "Ahora mismo no se aceptan dispositivos nuevos. Abre «Añadir un dispositivo» en el panel, en Dispositivos, y vuelve a intentarlo.",
   },
   "till.origin_refused": {
     en: "This page cannot change the till. Open the till from the venue's address and try again.",
@@ -823,8 +823,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo ya no tiene ese lector de tarjetas. Elige un lector en Equipo e inténtalo de nuevo. No se ha cobrado ninguna tarjeta.",
   },
   "reader.payment_in_progress": {
-    en: "Another device is taking a card payment on that reader. Try again when it finishes; if it is stuck, a manager can resolve it in the dashboard.",
-    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine; si se ha quedado atascado, un responsable puede resolverlo en el panel.",
+    en: "Another device is taking a card payment on that reader. Try again when it finishes. A stuck payment can be resolved in the dashboard, under Card payments.",
+    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine. Un cobro atascado se puede resolver en el panel, en Pagos con tarjeta.",
   },
   "device_profile.not_approved": {
     en: "This device can no longer switch to that profile. Choose another",
@@ -842,9 +842,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device switched to another profile while the payment was starting. No card was charged. Try again.",
     es: "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
   },
+  // A fault in Waitron: thrown only when an order has no service record, or a sale has no receipt
+  // header naming a department; a zone without a live department is refused as
+  // `service_zone.not_found` instead.
   "sale.department_missing": {
-    en: "No department was found for this sale. Ask a manager.",
-    es: "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
+    en: "No department was found for this sale. This is a fault in Waitron; no setting changes it.",
+    es: "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
   },
   "department.operation_description_required": {
     en: "This department has no tax-agency description yet, so it cannot sell. A manager can add it in the dashboard, under Departments and zones.",
@@ -881,8 +884,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Cobrado con tarjeta, pero la venta no se ha registrado. No vuelvas a cobrar; avisa al encargado.",
   },
   "clock.unusable": {
-    en: "Can't be recorded: the server's clock is wrong. Tell a manager.",
-    es: "No se puede registrar: la hora del servidor es incorrecta. Avisa al encargado.",
+    en: "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+    es: "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
   },
   "clock.unconfirmed": {
     en: "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",

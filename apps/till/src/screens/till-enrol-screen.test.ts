@@ -294,7 +294,7 @@ it("shows 'not approved' with a Try again that knocks afresh", async () => {
   }
 });
 
-it("tells the operator to ask a manager to open Add a device when the server says pairing_closed", async () => {
+it("tells the operator to open Add a device in the dashboard when the server says pairing_closed", async () => {
   // The one refusal with a real next step, so it must not fold into the generic sentence.
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }),
@@ -310,7 +310,7 @@ it("tells the operator to ask a manager to open Add a device when the server say
   await (actions as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
   expect(query(el, "[data-error]")).toBeNull();
-  // Still on the name form, with the name retained, so Ask to join is one tap once a manager opens Add a device.
+  // Still on the name form, with the name retained, so Ask to join is one tap once Add a device is open.
   expect(query(el, "[data-name]")).not.toBeNull();
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });

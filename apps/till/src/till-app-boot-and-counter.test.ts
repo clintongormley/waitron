@@ -2253,8 +2253,14 @@ describe("till-app simplified-invoice limit", () => {
   });
 
   it.each([
-    ["en-GB", "No department was found for this sale. Ask a manager."],
-    ["es-ES", "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable."],
+    [
+      "en-GB",
+      "No department was found for this sale. This is a fault in Waitron; no setting changes it.",
+    ],
+    [
+      "es-ES",
+      "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
+    ],
   ])("explains a sale's missing department in %s and keeps its basket", async (locale, message) => {
     try {
       const { el } = await mountApp({

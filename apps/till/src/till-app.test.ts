@@ -13794,7 +13794,7 @@ describe("till-app", () => {
 
     it("tells the operator a Find a bill collection has no department", async () => {
       expect(await findBillPayRefused({ code: "sale.department_missing", status: 400 })).toBe(
-        "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
+        "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
       );
     });
 
