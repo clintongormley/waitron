@@ -733,7 +733,7 @@ Configuration-transfer verification is recorded under
 
 **2026-11-17, off-quarter changeovers:** Opening-hours endpoints may also equal the
 business-day changeover. Interior endpoints and separately authored staffing blocks remain on
-clock quarter hours; the quarter-only descriptions below record the earlier rule. The
+clock quarter hours. The
 [changeover plan](../superpowers/plans/2026-11-17-d-paint-changeover-edge.md) names the saved-range consumers.
 
 You set a department's opening hours by placing its periods on the normal week. Each period has
@@ -863,7 +863,7 @@ named below. The season painter saves through `PUT …/seasons/:seasonId/weeks`;
 department hours. `zoneClosureDays` intersects the layered zone closures with the department's
 resolved hours for the actual business day, sharing one day plan and batched department read.
 A department without hours, including an inactive one, contributes no effective zone closure.
-Saved keep-open extensions are subtracted after that intersection. Time shape, quarter-hour,
+Saved keep-open extensions are subtracted after that intersection. Time shape, permitted endpoints,
 overlap, skipped-time, ownership and business-day-change checks remain at their existing writers.
 The reader cases are in `zone-closed-times.test.ts` and `keep-open.test.ts`; route and import
 acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.test.ts` and
@@ -964,7 +964,7 @@ export, finds the target holding the exported four, and asks `resolveDepartmentS
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season name that is blank, held by another season, or has spaces around it
 (`setup.request_invalid`, field `seasons.name`); a season start that is not a common year's date or is `02-29`; a range off the
-quarter-hour or overlapping another on the same day; on a season day, a department range with no
+quarter-hour (an endpoint exactly at the changeover excepted) or overlapping another on the same day; on a season day, a department range with no
 period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
 seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.
 A day row naming a special-day date the bundle does not hold is refused; special days themselves
@@ -1026,7 +1026,7 @@ delete dialog sends it back as `expectedClockRevision`.
 
 A configuration transfer carries both tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
-special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
+special-day day row with a season or a weekday; paint off the quarter-hour (an endpoint exactly at the changeover excepted) or overlapping; paint at a time the clocks skip, a repeating date checked at its
 next occurrence from the venue's date of the bundle's `createdAt`. Zone closure tails outside
 department hours are accepted and become effective only where the resolved hours overlap them. The cases are under "special days in a configuration bundle" in
 `packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
