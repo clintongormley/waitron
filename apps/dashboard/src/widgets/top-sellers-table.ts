@@ -11,7 +11,7 @@ import type { TopSellerRow } from "../api/client.js";
  */
 export interface TopSellersLabels {
   /** The product-name column header. */
-  title: string;
+  product: string;
   quantity: string;
   total: string;
   empty: string;
@@ -31,7 +31,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
   return html`<table data-test="top-sellers-table">
     <thead>
       <tr>
-        <th scope="col">${labels.title}</th>
+        <th scope="col">${labels.product}</th>
         <th scope="col" class="num">${labels.quantity}</th>
         <th scope="col" class="num">${labels.total}</th>
       </tr>

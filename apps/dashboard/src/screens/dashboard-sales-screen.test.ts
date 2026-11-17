@@ -370,6 +370,9 @@ describe("dashboard-sales-screen", () => {
     // Top sellers, rendered through the shared table widget (stable `top-sellers-table` hook), with
     // the row's plain staff name — no locale lookup.
     expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
+    expect(root.querySelector("[data-test=top-sellers-table] thead th")!.textContent).toBe(
+      "Producto",
+    );
     expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Coffee");
     // Its variants follow as their own rows, each under its own name and figures.
     const variant0 = root.querySelector('[data-test="seller-row-0-variant-0"]')!;

@@ -954,6 +954,8 @@ describe("login-screen", () => {
       "[data-test=continue]",
     )!;
     expect(go.disabled).toBe(false);
+    expect(field.error).toBe("");
+    expect(await bottomOf(el)).toBe("");
     go.click();
     await el.updateComplete;
     expect(field.error).toBe(t("form.email_required"));

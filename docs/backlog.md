@@ -493,8 +493,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 4, size M). [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
-- **Smaller things #379 surfaced and did not take.** The price input, modifier rules and three
-  interface faults.
+- **Smaller things #379 surfaced and did not take.** The price input and modifier rules.
   [Detail](backlog/menu.md#smaller-things-379-surfaced-and-did-not-take)
 
 - **Translation report excludes image names (C122, #1006).** The media module's

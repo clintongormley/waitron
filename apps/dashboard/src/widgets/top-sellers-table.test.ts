@@ -22,7 +22,7 @@ it("renders a row's plain staff name verbatim, regardless of the active locale o
   try {
     render(
       renderTopSellers([{ name: "Oven bread", quantity: "2", total: "4.00", variants: [] }], {
-        title: "Product",
+        product: "Product",
         quantity: "Quantity",
         total: "Total",
         empty: "No sales",
@@ -41,7 +41,7 @@ it("renders a row's plain staff name verbatim, regardless of the active locale o
 });
 
 const labels = {
-  title: "Product",
+  product: "Product",
   quantity: "Quantity",
   total: "Total",
   empty: "No sales",
@@ -67,6 +67,11 @@ it("draws each product's variants as rows beneath it, in the order the server se
     ),
     host,
   );
+  expect([...host.querySelectorAll("thead th")].map((th) => th.textContent!.trim())).toEqual([
+    "Product",
+    "Quantity",
+    "Total",
+  ]);
   const rows = [...host.querySelectorAll("tbody tr")].map((tr) => tr.getAttribute("data-test"));
   expect(rows).toEqual([
     "seller-row-0",
