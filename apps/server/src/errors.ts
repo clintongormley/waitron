@@ -131,6 +131,10 @@ declare module "@waitron/shared" {
     "emergency_copy.vault_key_in_environment": { variables: string[] };
     /** An existing `trading.env` names a node other than the copy. */
     "emergency_copy.trading_node_differs": Record<string, never>;
+    /** An existing `trading.env` names an environment other than the binding's. */
+    "emergency_copy.trading_environment_differs": Record<string, never>;
+    /** Vault key variables an existing `trading.env` sets, which would replace the copy's ring. */
+    "emergency_copy.vault_key_in_trading_env": { variables: string[] };
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };

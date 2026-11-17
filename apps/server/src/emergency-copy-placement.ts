@@ -1,8 +1,14 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { encodeKeyRing, loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import {
+  encodeKeyRing,
+  KEY_RING_VARIABLES,
+  loadKeyRing,
+  sealNodeSigningKeyTx,
+} from "@waitron/credentials";
+import {
+  deploymentEnvironmentFor,
   lockVenueDatabase,
   openVenueDatabase,
   withNodeTransaction,
@@ -28,8 +34,8 @@ import { reachDisk } from "./sync-path.js";
 import { writeTradingEnv } from "./trading-config.js";
 import "./errors.js";
 
-/** The node id an existing `trading.env` names, `""` when it names none, or `null` with no file. */
-async function configuredNodeId(stateDir: string): Promise<string | null> {
+/** An existing `trading.env`'s variables, or `null` with no file. */
+async function keptTradingEnv(stateDir: string): Promise<Record<string, string> | null> {
   let text: string;
   try {
     text = await readFile(join(stateDir, TRADING_ENV_FILE), "utf8");
@@ -37,7 +43,19 @@ async function configuredNodeId(stateDir: string): Promise<string | null> {
     if (errnoOf(error) === "ENOENT") return null;
     throw error;
   }
-  return parseEnvFile(text).WAITRON_NODE_ID ?? "";
+  return parseEnvFile(text);
+}
+
+/** Refuses a kept `trading.env` that names another node or environment, or sets a vault key variable. */
+function assertKeptTradingEnv(trading: Record<string, string>, binding: EmergencyCopyBinding) {
+  if (trading.WAITRON_NODE_ID !== binding.copyNodeId)
+    throw new AppError("emergency_copy.trading_node_differs", {});
+  if (deploymentEnvironmentFor(trading.WAITRON_ENV) !== binding.environment)
+    throw new AppError("emergency_copy.trading_environment_differs", {});
+  // Present, not non-empty: `loadBoxEnv` copies an empty file value over `secrets.env`'s too.
+  const variables = KEY_RING_VARIABLES.filter((name) => Object.hasOwn(trading, name));
+  if (variables.length > 0)
+    throw new AppError("emergency_copy.vault_key_in_trading_env", { variables });
 }
 
 /**
@@ -61,14 +79,14 @@ export async function placeEmergencyCopy(deps: {
   const { binding } = deps;
   const hold = await lockVenueDatabase(deps.venueDir);
   try {
-    // `loadBoxEnv`, which every start reads the ring through, lets each of these win over
-    // `secrets.env`, so the next start would not read the ring saved below as it was written.
+    // `loadBoxEnv`, which every start reads the ring through, lets a vault key variable set in this
+    // process's environment, or present in `trading.env`, win over `secrets.env`: either way the
+    // next start would not read the copy's ring as `secrets.env` holds it.
     const inEnvironment = Object.keys(keyRingVariables(deps.processEnv));
     if (inEnvironment.length > 0)
       throw new AppError("emergency_copy.vault_key_in_environment", { variables: inEnvironment });
-    const configured = await configuredNodeId(deps.stateDir);
-    if (configured !== null && configured !== binding.copyNodeId)
-      throw new AppError("emergency_copy.trading_node_differs", {});
+    const trading = await keptTradingEnv(deps.stateDir);
+    if (trading !== null) assertKeptTradingEnv(trading, binding);
     await checkPlacedEmergencyCopy({
       binding,
       venuePath: join(deps.venueDir, VENUE_FILE),
@@ -120,7 +138,7 @@ export async function placeEmergencyCopy(deps: {
         await store.close();
       }
       await writeCredentialsRing(deps.stateDir, encodeKeyRing(ring));
-      if (configured === null)
+      if (trading === null)
         await writeTradingEnv(deps.stateDir, {
           nodeId: binding.copyNodeId,
           environment: binding.environment,

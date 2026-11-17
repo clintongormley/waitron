@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import {
+  KEY_RING_VARIABLES,
   loadKeyRing,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
@@ -229,6 +230,65 @@ it("keeps a trading.env that already names the copy as it is", async () => {
   expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
   expect(existsSync(join(venueDir, "node.db"))).toBe(true);
 });
+
+const keptTrading = (lines: string) => `WAITRON_NODE_ID=${copyId}\n${lines}`;
+
+it.each(["WAITRON_ENV=production\n", "WAITRON_ENV=staging\n"])(
+  "refuses a kept trading.env naming another environment (%j), writing nothing",
+  async (line) => {
+    const binding = await placedBinding();
+    await writeFile(join(stateDir, "trading.env"), keptTrading(line));
+    await expect(place(binding)).rejects.toMatchObject({
+      code: "emergency_copy.trading_environment_differs",
+    });
+    expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+    expect(await listing(stateDir)).toEqual(["trading.env"]);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(keptTrading(line));
+  },
+);
+
+it.each(["WAITRON_ENV=preproduction\n", "WAITRON_ENV=\n", "WAITRON_ENV=dev\n"])(
+  "keeps a trading.env whose environment (%j) is the binding's",
+  async (line) => {
+    const binding = await placedBinding();
+    await writeFile(join(stateDir, "trading.env"), keptTrading(line));
+    await place(binding);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(keptTrading(line));
+    await expectPlacedLayout();
+  },
+);
+
+it("reads a kept trading.env with no WAITRON_ENV as preproduction, so a production binding refuses it", async () => {
+  const binding = { ...(await placedBinding()), environment: "production" as const };
+  await writeFile(join(stateDir, "trading.env"), keptTrading(""));
+  await expect(place(binding, {}, { environment: "production" })).rejects.toMatchObject({
+    code: "emergency_copy.trading_environment_differs",
+  });
+  // Control: naming production, the same trading.env passes, and the check refuses the
+  // preproduction venue file instead.
+  await writeFile(join(stateDir, "trading.env"), keptTrading("WAITRON_ENV=production\n"));
+  await expect(place(binding, {}, { environment: "production" })).rejects.toMatchObject({
+    code: "emergency_copy.environment_mismatch",
+  });
+});
+
+it.each([
+  ...KEY_RING_VARIABLES.map((name) => [name, `${name}=1\n`] as const),
+  ["WAITRON_CREDENTIALS_KEY", "WAITRON_CREDENTIALS_KEY=\n"] as const,
+])(
+  "refuses a kept trading.env setting %s, which the next start reads after secrets.env (%j)",
+  async (name, line) => {
+    const binding = await placedBinding();
+    await writeFile(join(stateDir, "trading.env"), keptTrading(line));
+    await expect(place(binding)).rejects.toMatchObject({
+      code: "emergency_copy.vault_key_in_trading_env",
+      params: { variables: [name] },
+    });
+    expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+    expect(await listing(stateDir)).toEqual(["trading.env"]);
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(keptTrading(line));
+  },
+);
 
 it("refuses when this process's environment sets the vault key, which would win over the copy's ring", async () => {
   const binding = await placedBinding();
