@@ -472,18 +472,12 @@ reset and operator gates; this entry does not start that job.
   deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
   shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
   detiene"), and one dialog line per inherited default.
-- `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the
-  printer functions and `printer.not_found`'s registry.
-- `deletePrinter` writes the device choices, profile lists and holders that layouts owns; one
-  layouts function could clear them.
 - Several printer queries that already require an active printer or a live job also filter
   `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
   the copies.
 - The devices and payments screens copy the printers screen's delete-dialog logic
   (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
-  Pull it into one shared piece, with the `names` helper that `printer-delete-copy.ts`,
-  `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the `line` helper the
-  first two share. Left open by A435 step 4 (#1519) and step 3.
+  Pull it into one shared piece. Left open by A435 step 4 (#1519) and step 3.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
