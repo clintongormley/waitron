@@ -13,7 +13,7 @@ applies today; behaviour is kept site by site. Raised by #2331's review.
 
 **Still open:** apply the shared elapsed-time source to the remaining sites below, after deciding
 which rules measure an elapsed wait and which compare persisted dates, ordering or calendar time.
-The sign-in/account limiter and printing families are outside this open inventory; the persisted PIN helper
+The sign-in/account limiter families are outside this open inventory; the persisted PIN helper
 exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ### Inventory scope
