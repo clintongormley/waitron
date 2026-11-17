@@ -70,7 +70,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                       "till-counter-screen",
                       {
                         ...shared,
-                        embedded: true,
                         store,
                       },
                       theme,
@@ -127,7 +126,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                       "till-counter-screen",
                       {
                         ...shared,
-                        embedded: true,
                         store,
                       },
                       theme,
@@ -186,7 +184,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 kind === "counter"
                   ? await mountWidget<TillCounterScreen>(
                       "till-counter-screen",
-                      { ...shared, embedded: true, store },
+                      { ...shared, store },
                       theme,
                     )
                   : await mountWidget<TillTableOrderScreen>(
@@ -241,7 +239,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                         "till-counter-screen",
                         {
                           ...shared,
-                          embedded: true,
                           store,
                         },
                         theme,

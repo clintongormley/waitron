@@ -398,14 +398,12 @@ import type {
   PrintProblem,
   SaleLine,
   Station,
-  StationQueueGroup,
   StaffMember,
   SubmittedDraft,
   OrderLinePatch,
   TabLine,
   TableState,
   TableParty,
-  TicketState,
   TillActiveReader,
   TillCourse,
   TillInfo,
@@ -550,7 +548,7 @@ function localBill(
   };
 }
 
-type RefreshList = "held" | "station" | "waiting";
+type RefreshList = "held" | "waiting";
 
 interface SplitRefusalReads {
   partyId: string;
@@ -3880,8 +3878,6 @@ export class TillApp extends LitElement {
     orderId: string;
     session: number;
   } | null = null;
-  /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
-  @state() private stationQueue: StationQueueGroup[] = [];
   @state() private courses: TillCourse[] = [];
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
@@ -4267,7 +4263,6 @@ export class TillApp extends LitElement {
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
   #refreshGeneration: Record<RefreshList, number> = {
     held: 0,
-    station: 0,
     waiting: 0,
   };
 
@@ -6279,10 +6274,10 @@ export class TillApp extends LitElement {
     if (showsCounterLists) {
       const lists = [
         ["held", "refresh.held"],
-        ["station", "refresh.station"],
         ["waiting", "refresh.waiting"],
       ] as const;
       for (const [list, messageKey] of lists) reads.push(this.#refreshList(list, messageKey));
+      reads.push(this.#loadStations());
     }
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       reads.push(
@@ -6334,7 +6329,7 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Only the newest refresh of a list may install the list's rows (`heldOrders`, `stationQueue`,
+   * Only the newest refresh of a list may install the list's rows (`heldOrders`,
    * `counterWaiting`) or start, change or end its retry, and
    * {@link TillApp.#abandonListRefreshes} makes every earlier request stale. Without a `messageKey`
    * a failure is also thrown to the caller. A read still out after `limitMs` is cancelled and fails
@@ -6366,24 +6361,12 @@ export class TillApp extends LitElement {
   }
 
   async #loadList(list: RefreshList, ...options: [] | [ReadOptions]): Promise<() => void> {
-    if (list === "station") return this.#loadStationQueue(...options);
     if (list === "waiting") {
       const waiting = await this.api.listCounterWaiting(...options);
       return () => (this.counterWaiting = waiting);
     }
     const rows = await this.api.listWorkingOrders(...options);
     return () => (this.heldOrders = rows);
-  }
-
-  async #loadStationQueue(...options: [] | [ReadOptions]): Promise<() => void> {
-    await this.#loadStations(true, ...options);
-    if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
-    const defaultStation = this.stations.find((station) => station.isDefault);
-    const queue =
-      defaultStation === undefined
-        ? []
-        : (await this.api.getStationQueue(defaultStation.id, ...options)).items;
-    return () => (this.stationQueue = queue);
   }
 
   async #loadStations(throwOnFailure = false, ...options: [] | [ReadOptions]): Promise<void> {
@@ -6494,7 +6477,6 @@ export class TillApp extends LitElement {
 
   #abandonListRefreshes(): void {
     this.#refreshGeneration.held++;
-    this.#refreshGeneration.station++;
     this.#refreshGeneration.waiting++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
@@ -6532,10 +6514,6 @@ export class TillApp extends LitElement {
               >`
       }
     </div>`;
-  }
-
-  #defaultStationId(): string | undefined {
-    return this.stations.find((station) => station.isDefault)?.id;
   }
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
@@ -6644,8 +6622,6 @@ export class TillApp extends LitElement {
       this.stage = "order";
       this.collectFlow = undefined;
       this.#onTabSelect("counter");
-      await this.#refreshList("station", "refresh.station");
-      if (session !== this.#operatorSession) return;
       this.#followDefault();
       this.errorKey = undefined;
     } catch (error) {
@@ -7360,7 +7336,6 @@ export class TillApp extends LitElement {
     const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
-    const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
     let reachedFiscal = false;
     let paidMeanwhile = false;
@@ -7449,7 +7424,7 @@ export class TillApp extends LitElement {
       this.sendingTender = null;
     }
     if (session !== this.#operatorSession) return;
-    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
+    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads());
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
@@ -7490,11 +7465,10 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders().catch(() => undefined);
   }
 
-  #afterSaleReads(sendsToKitchen: boolean): (readonly [RefreshList, StringKey])[] {
+  #afterSaleReads(): (readonly [RefreshList, StringKey])[] {
     return [
       // A just-paid retrieved order must drop off the held list.
       ["held", "refresh.held_after_sale"],
-      ...(sendsToKitchen ? [["station", "refresh.station_after_sale"] as const] : []),
       ["waiting", "refresh.waiting_after_sale"],
     ];
   }
@@ -7531,7 +7505,6 @@ export class TillApp extends LitElement {
     const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
-    const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
     this.#clearCardOutcome();
     let reachedFiscal = false;
@@ -7661,7 +7634,7 @@ export class TillApp extends LitElement {
       this.sendingTender = null;
     }
     if (session !== this.#operatorSession) return;
-    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
+    if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads());
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
@@ -8620,10 +8593,7 @@ export class TillApp extends LitElement {
     }
     if (!current()) return;
     if (placed)
-      void this.#refreshListsAfterWrite(session, [
-        ["station", "refresh.station_after_place"],
-        ["waiting", "refresh.waiting_after_place"],
-      ]);
+      void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_place"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onPlaceOrder(true, false, false, lateSend),
@@ -8649,7 +8619,6 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const { guestCount, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
-    const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
     let collected = false;
     try {
@@ -8683,10 +8652,7 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (!collected || session !== this.#operatorSession) return;
-    void this.#refreshListsAfterWrite(session, [
-      ...(fromWaitingList ? [["station", "refresh.station_after_sale"] as const] : []),
-      ["waiting", "refresh.waiting_after_sale"],
-    ]);
+    void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_sale"]]);
   }
 
   #cancelFindBillRead(): void {
@@ -9683,72 +9649,7 @@ export class TillApp extends LitElement {
       if (current()) this.findBillBusy = false;
     }
     if (!collected || !current()) return;
-    void this.#refreshListsAfterWrite(session, [
-      ["station", "refresh.station_after_sale"],
-      ["waiting", "refresh.waiting_after_sale"],
-    ]);
-  }
-
-  /** Refreshes on both paths, so a rejected advance (a race with another till) still corrects the queue. */
-  async #onAdvanceTicketItem(event: Event): Promise<void> {
-    const { itemId, stationId, to } = (
-      event as CustomEvent<{
-        itemId: string;
-        stationId: string;
-        to: Exclude<TicketState, "queued">;
-      }>
-    ).detail;
-    const session = this.#operatorSession;
-    this.errorKey = undefined;
-    try {
-      await this.api.advanceTicketItem(itemId, stationId, to);
-    } catch (error) {
-      if (session !== this.#operatorSession) return;
-      this.errorKey =
-        (error as { code?: string } | undefined)?.code === "storage.disk_full"
-          ? { code: "storage.disk_full" }
-          : "station.advance_error";
-    }
-    if (session !== this.#operatorSession) return;
-    await this.#refreshAfterWrite("station", "refresh.station");
-  }
-
-  async #onMarkCollected(event: Event): Promise<void> {
-    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
-    if (this.#handingOver.has(orderId)) return;
-    this.#handingOver.add(orderId);
-    const session = this.#operatorSession;
-    const submissionId = crypto.randomUUID();
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    this.errorKey = undefined;
-    let collected = false;
-    try {
-      await this.#resend(
-        (signal) => this.api.markCollected(orderId, submissionId, { signal }),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      collected = true;
-    } catch (error) {
-      if (session !== this.#operatorSession) return;
-      this.errorKey =
-        (error as { code?: string } | undefined)?.code === "storage.disk_full"
-          ? { code: "storage.disk_full" }
-          : "station.collect_error";
-    } finally {
-      limit.done();
-      this.#handingOver.delete(orderId);
-    }
-    if (session !== this.#operatorSession) return;
-    if (collected) {
-      await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
-      if (session !== this.#operatorSession) return;
-      await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
-      return;
-    }
-    await this.#refreshAfterWrite("station", "refresh.station");
-    if (session === this.#operatorSession)
-      await this.#refreshAfterWrite("waiting", "refresh.waiting");
+    void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_sale"]]);
   }
 
   /**
@@ -9783,9 +9684,6 @@ export class TillApp extends LitElement {
     }
     if (!live()) return;
     if (!handedOver) return this.#refreshAfterWrite("waiting", "refresh.waiting");
-    // The counter's prep-queue card offers its own Collect, which would now be refused.
-    await this.#refreshAfterWrite("station", "refresh.station_after_hand_over");
-    if (!live()) return;
     await this.#refreshAfterWrite("waiting", "refresh.waiting_after_hand_over");
   }
 
@@ -9836,11 +9734,6 @@ export class TillApp extends LitElement {
   /** The mode the basket's pay controls and receipt follow. */
   #basketFlow(): OrderFlow {
     return this.collectFlow ?? this.orderFlow;
-  }
-
-  /** Paying an open order in a zone that sends to the kitchen without payment sends its dishes. */
-  #paySendsToKitchen(): boolean {
-    return this.stage === "order" && this.#basketFlow() !== "prepay";
   }
 
   /** The floor's station summary names the station to open; the station screen reads it from the
@@ -16015,15 +15908,11 @@ export class TillApp extends LitElement {
     if (!live()) return;
     if (refusal === null) {
       if (this.movingStation === busy) this.movingStation = null;
-      await this.#refreshAfterWrite("station", "refresh.station_after_move");
-      if (!live()) return;
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_move");
       return;
     }
     const refused = { ...open, refusal };
     if (this.movingStation === busy) this.movingStation = refused;
-    await this.#refreshAfterWrite("station", "refresh.station");
-    if (!live()) return;
     await this.#refreshAfterWrite("waiting", "refresh.waiting");
     if (
       !live() ||
@@ -22600,11 +22489,9 @@ export class TillApp extends LitElement {
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
-      // `embedded`: the shell owns the header.
       return html`<till-counter-screen
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
         .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
-        embedded
         .api=${this.api}
         .store=${this.#store}
         .products=${this.products}
@@ -22630,9 +22517,6 @@ export class TillApp extends LitElement {
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
         .zones=${this.zones}
-        .stationQueue=${this.stationQueue}
-        .defaultStationId=${this.#defaultStationId()}
-        .operatorName=${this.operatorName}
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
@@ -23237,8 +23121,6 @@ export class TillApp extends LitElement {
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
-        @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
-        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @edit-waiting-kitchen-note=${(event: CustomEvent<{ id: string }>) => void this.#openWaitingKitchenNote(event)}
         @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
@@ -23605,8 +23487,7 @@ export class TillApp extends LitElement {
               ></till-find-bill-dialog>`
             : nothing
         }
-        ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
-        ${this.#renderRefreshNotice("waiting")}
+        ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("waiting")}
         ${this.#inShell() ? this.#renderServerNotice() : nothing}
         ${
           this.cloudEmergencyOpen && this.cloudEmergency !== undefined

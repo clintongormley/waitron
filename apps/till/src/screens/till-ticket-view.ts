@@ -466,7 +466,7 @@ export class TillTicketView extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Non-fiscal receipt trim (design §8), rendered AROUND the immutable core — never inside it. */
+      /* Non-fiscal receipt trim, rendered AROUND the immutable core — never inside it. */
       .header-subtitle,
       .contact,
       .footer-message {

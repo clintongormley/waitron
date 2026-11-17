@@ -1087,7 +1087,6 @@ export const en = {
   "schedule.status.approved": "Approved",
   "schedule.status.rejected": "Rejected",
   // Live floor. The count labels are suffix words, rendered as `${n} ${t(key)}`.
-  "floor.open": "Floor",
   "floor.closed": "Closed",
   "floor.title": "Floor",
   "floor.back": "Back to counter",
@@ -1661,7 +1660,6 @@ export const en = {
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this server up.",
-  "station.advance_error": "Could not update the ticket, try again",
   // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
   // key after a write that SUCCEEDED, when only the list refresh behind it failed.
   "refresh.held": "The list of parked orders could not refresh.",
@@ -1670,12 +1668,6 @@ export const en = {
   "refresh.held_after_sale":
     "The sale was recorded, but the list of parked orders could not refresh.",
   "refresh.held_after_move": "The bill was moved, but the list of parked orders could not refresh.",
-  "refresh.station": "The station queue could not refresh.",
-  "refresh.station_after_place": "The order was sent, but the station queue could not refresh.",
-  "refresh.station_after_hand_over":
-    "The order was handed over, but the station queue could not refresh.",
-  "refresh.station_after_move": "The dishes were moved, but the station queue could not refresh.",
-  "refresh.station_after_sale": "The sale was recorded, but the station queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
   "refresh.waiting_after_sale":
     "The sale was recorded, but the list of waiting orders could not refresh.",
@@ -1691,7 +1683,6 @@ export const en = {
   "refresh.retrying": "Trying again…",
   "refresh.try_now": "Try now",
   "locale.save_failed": "Could not save your language, try again",
-  "station.collect_error": "Could not mark the order collected, try again",
   "table.error": "Could not update the table, try again",
   "table.bills_title": "Bills",
   // `{party}` is the party's display name; `{n}` the number the bill holds at its table; `{name}`
@@ -3199,7 +3190,6 @@ export const es: Record<StringKey, string> = {
   "schedule.status.accepted": "Aceptado",
   "schedule.status.approved": "Aprobado",
   "schedule.status.rejected": "Rechazado",
-  "floor.open": "Sala",
   "floor.closed": "Cerrada",
   "floor.title": "Sala",
   "floor.back": "Volver a la caja",
@@ -3760,7 +3750,6 @@ export const es: Record<StringKey, string> = {
     "El servidor no respondió. Vuelve a enviarlo: la estación no recibirá el pedido dos veces.",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor.",
-  "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
   "refresh.held": "La lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_park":
     "El pedido se aparcó, pero la lista de pedidos aparcados no se pudo actualizar.",
@@ -3768,15 +3757,6 @@ export const es: Record<StringKey, string> = {
     "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_move":
     "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
-  "refresh.station": "La cola de estación no se pudo actualizar.",
-  "refresh.station_after_place":
-    "El pedido se envió, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_hand_over":
-    "El pedido se entregó, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_move":
-    "Los platos se pasaron, pero la cola de estación no se pudo actualizar.",
-  "refresh.station_after_sale":
-    "La venta se registró, pero la cola de estación no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_sale":
     "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",
@@ -3791,7 +3771,6 @@ export const es: Record<StringKey, string> = {
   "refresh.retrying": "Reintentando…",
   "refresh.try_now": "Reintentar ahora",
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
-  "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "table.bills_title": "Cuentas",
   "table.bill_of": "{party} · Cuenta {n}",

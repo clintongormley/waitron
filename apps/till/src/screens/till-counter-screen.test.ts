@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { TillShell } from "../widgets/till-shell.js";
 import {
-  expectChooserFaces,
   cleanupWidgets,
   mountWidget,
   measured,
@@ -12,8 +11,8 @@ import {
 } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import type { ServiceZoneSummary, TillProduct, TillZoneMenu } from "../api/client.js";
 
 const coffee: TillProduct = {
   id: "p1",
@@ -55,7 +54,6 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
     ),
-    operatorName: "Ana",
     ...over,
   });
 
@@ -284,12 +282,6 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector(".grid-body")).not.toBeNull();
   });
 
-  it("keeps the non-default prep-queue rail out of fixed Counter", async () => {
-    const { el } = await mount({ defaultStationId: "st-1" });
-    expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
-  });
-
   it("passes held orders to the rendered list", async () => {
     const heldOrders = [
       {
@@ -440,167 +432,12 @@ describe("till-counter-screen", () => {
     expect(menuBrowser(el).handheld).toBe(true);
   });
 
-  it("shows the logged-in operator name in the header", async () => {
-    const { el } = await mount({ operatorName: "Bruno" });
-    expect(el.shadowRoot!.querySelector(".operator")!.textContent).toContain("Bruno");
-  });
-
-  it("labels the Log out control with the localised action", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.logout")!.textContent).toContain(
-      t("action.logout"),
-    );
-  });
-
-  it("emits a composed logout event when Log out is tapped", async () => {
-    const { el } = await mount();
-    let captured: Event | undefined;
-    el.addEventListener("logout", (event) => (captured = event));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.logout")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-  });
-
-  it("labels and emits a composed, bubbling show-schedule event when My schedule is tapped", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.schedule")!.textContent).toContain(
-      t("schedule.open"),
-    );
-    let captured: Event | undefined;
-    el.addEventListener("show-schedule", (event) => (captured = event));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.schedule")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-  });
-
-  it("labels and emits a composed, bubbling show-floor event when Floor is tapped (FP-1)", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.floor")!.textContent).toContain(t("floor.open"));
-    let captured: Event | undefined;
-    el.addEventListener("show-floor", (event) => (captured = event));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.floor")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-  });
-
-  it("labels and emits a composed, bubbling show-expo event when Pass is tapped (KDS-3)", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.expo")!.textContent).toContain(t("expo.open"));
-    let captured: Event | undefined;
-    el.addEventListener("show-expo", (event) => (captured = event));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.expo")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-  });
-
-  it("labels and emits a composed, bubbling show-station event when the station control is tapped", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.station")!.textContent).toContain(
-      t("station.open"),
-    );
-    let captured: CustomEvent | undefined;
-    el.addEventListener("show-station", (event) => (captured = event as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.station")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.detail).toBeNull();
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-  });
-
-  it("feeds the header's language chooser from the venue's locale list", async () => {
-    const getLocales = vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: "es-ES",
-    });
-    const { el } = await mount({ api: { getLocales } as unknown as TillApi });
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
-    await vi.waitFor(() => {
-      const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
-      expect(menu?.textContent).toContain("English");
-    });
-    expect(getLocales).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps the sale body without a retired Allergens control", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("wt-button.allergens")).toBeNull();
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
     expect(el.shadowRoot!.querySelector(".sale-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
-  });
-
-  it("offers Equipment in its own header, emitting open-equipment", async () => {
-    const { el } = await mount();
-    const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
-    expect(equipment.textContent).toContain(t("equipment.open"));
-    let fired = 0;
-    el.addEventListener("open-equipment", () => (fired += 1));
-    equipment.click();
-    expect(fired).toBe(1);
-  });
-
-  it("puts the language chooser in its own header, just before the operator's name", async () => {
-    const { el } = await mount();
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    expect(chooser).not.toBeNull();
-    expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector(".header .session"));
-    expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
-  });
-
-  it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
-    setLocale("es-ES");
-    const { el } = await mount();
-    await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
-      wide: { shown: ["Español"], name: "Español" },
-      phone: { shown: ["ES"], name: "ES Español" },
-    });
-  });
-
-  it("draws no language chooser when embedded (the shell owns it)", async () => {
-    const { el } = await mount({ embedded: true });
-    expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
-  });
-
-  it("updates the standalone counter's chooser when the till locale changes", async () => {
-    setLocale("es-ES");
-    try {
-      const { el } = await mount();
-      setLocale("en-GB");
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("wt-language-chooser")!.getAttribute("active")).toBe(
-        "en-GB",
-      );
-    } finally {
-      setLocale("es-ES");
-    }
-  });
-
-  it("lets the chooser's wt-locale-selected bubble out composed (the screen does NOT handle it)", async () => {
-    const { el } = await mount();
-    const spy = vi.fn();
-    el.addEventListener("wt-locale-selected", (e) => spy((e as CustomEvent).detail));
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    chooser.dispatchEvent(
-      new CustomEvent("wt-locale-selected", {
-        detail: { code: "en-GB" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(spy).toHaveBeenCalledWith({ code: "en-GB" });
-  });
-
-  it("suppresses its own header when embedded (chrome lives in the shell)", async () => {
-    const { el } = await mount({ embedded: true });
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 });
 

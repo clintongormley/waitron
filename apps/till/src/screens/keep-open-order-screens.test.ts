@@ -41,7 +41,6 @@ for (const kind of ["counter", "table"] as const) {
           ? await mountWidget<TillCounterScreen>("till-counter-screen", {
               ...shared,
               selectedServiceZoneId: "counter /1",
-              embedded: true,
               store: new WorkingOrderStore(),
             })
           : await mountWidget<TillTableOrderScreen>("till-table-order-screen", {

@@ -6171,8 +6171,7 @@ after the logo; in the dashboard's banner only while nobody is signed in, just a
 chooser with nothing following it (signed in, the languages are a `layout="group"` row in the
 account menu; see "Dashboard banner"); inside More on a signed-in till; on a signed-in handheld,
 inside More at every width, in its Settings group after Equipment and before Theme, as the same
-`layout="group"` row a till's More holds, and never on the bar. The counter screen's own header
-draws one only when not embedded in the shell, and the app always embeds it. A till screen with no
+`layout="group"` row a till's More holds, and never on the bar. A till screen with no
 top bar — the sign-in and join screens, the prep station display and kiosk mode, whose shell draws no bar
 — holds it at the top right, above the content. The prep station display's and kiosk mode's corner
 holds an ⓘ after the Help switch and before Theme, a ghost `wt-button` named "About Waitron"
@@ -6186,8 +6185,7 @@ drawn outside the shell. Setup's card header starts its controls with the same �
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
 the till's sign-in and join screens and the prep station display's and kiosk mode's corner, and in the
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
-"Dashboard banner"). The counter screen's own header has none, because the till never shows that
-header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
+"Dashboard banner"). On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
 menu under their name, Log out is in More, and the clock actions stay under the name. On a signed-in
 handheld, Theme and Log out are both in More, never in the name's menu: Theme last in the Settings
 group, and Log out last of all but for the "Powered by" line, which follows it under a rule while a

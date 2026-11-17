@@ -79,7 +79,6 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
     ),
-    operatorName: "Ana",
     ...over,
   });
 

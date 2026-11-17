@@ -747,7 +747,7 @@ export class TillFloorScreen extends LitElement {
         color: inherit;
       }
 
-      /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
+      /* "N listos" -- kitchen-done, waiting to be carried out. Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
          neutral chip (the a11y-safe pattern wt-table-token's status chip uses). */
       .badge.ready {

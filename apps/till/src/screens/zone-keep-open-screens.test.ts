@@ -38,7 +38,6 @@ for (const kind of ["counter", "table"] as const) {
             ? await mountWidget<TillCounterScreen>("till-counter-screen", {
                 ...props,
                 selectedServiceZoneId: "terrace",
-                embedded: true,
                 store: new WorkingOrderStore(),
               })
             : await mountWidget<TillTableOrderScreen>("till-table-order-screen", {

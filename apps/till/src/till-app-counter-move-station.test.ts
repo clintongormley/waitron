@@ -20,7 +20,6 @@ import type {
   TabLine,
   TabLines,
   Station,
-  StationQueue,
   TillApi,
   ZoneOffers,
 } from "./api/client.js";
@@ -766,43 +765,31 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(dialog(el)).toBeNull();
   });
 
-  it("reads the kitchen queue and then the waiting list again after the move", async () => {
+  it("reads the waiting list again after the move, never the kitchen queue", async () => {
     const server = waitingServer();
     server.moveDishStation.mockImplementation(async (_id, body) => {
       server.waiting = [{ ...paid, movableDishes: [] }];
       return { revision: 2, stationId: body.stationId, moved: [] };
     });
     const el = await openMove(server);
-    const queueReads = vi.mocked(api.getStationQueue).mock.calls.length;
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
 
     await choose(el);
 
-    expect(api.getStationQueue).toHaveBeenCalledTimes(queueReads + 1);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
-    expect(vi.mocked(api.getStationQueue).mock.invocationCallOrder.at(-1)!).toBeLessThan(
-      vi.mocked(api.listCounterWaiting).mock.invocationCallOrder.at(-1)!,
-    );
     expect(moveButton(el)).toBeNull();
   });
 
-  it.each([
-    ["kitchen queue", "station", "refresh.station_after_move"],
-    ["waiting list", "waiting", "refresh.waiting_after_move"],
-  ] as const)(
-    "says the dishes moved when the %s cannot be read after the move",
-    async (_list, list, key) => {
-      const el = await openMove();
-      if (list === "station")
-        vi.mocked(api.getStationQueue).mockRejectedValue(new TypeError("Failed to fetch"));
-      else vi.mocked(api.listCounterWaiting).mockRejectedValue(new TypeError("Failed to fetch"));
+  it("says the dishes moved when the waiting list cannot be read after the move", async () => {
+    const el = await openMove();
+    vi.mocked(api.listCounterWaiting).mockRejectedValue(new TypeError("Failed to fetch"));
 
-      await choose(el);
+    await choose(el);
 
-      const notice = el.shadowRoot!.querySelector<HTMLElement>(`[data-refresh-notice="${list}"]`)!;
-      expect(notice.textContent).toContain(t(key));
-    },
-  );
+    const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
+    expect(notice.textContent).toContain(t("refresh.waiting_after_move"));
+  });
 
   it("a refusal whose order still has dishes to move keeps the dialog open, in the order's words", async () => {
     const el = await openMove({
@@ -987,36 +974,36 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(dialog(el)).toBeNull();
   });
 
-  it("does not read the waiting list when the operator changes while the kitchen queue is read after a move", async () => {
-    const queueRead = held<StationQueue>();
-    const el = await openMove();
-    vi.mocked(api.getStationQueue).mockImplementationOnce(() => queueRead.promise);
+  it("does not read the waiting list when the operator changes while a move that succeeds is out", async () => {
+    const move = held<{ revision: number; stationId: string; moved: never[] }>();
+    const el = await openMove({ moveDishStation: vi.fn(() => move.promise) });
     await choose(el);
     expect(api.moveDishStation).toHaveBeenCalledOnce();
 
     await changeOperator(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    queueRead.answer({ printersDown: [], items: [], notices: [] });
+    move.answer({ revision: 2, stationId: "grill", moved: [] });
     await flush(el, 6);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
-  it("does not read the waiting list when the operator changes while the kitchen queue is read after a refusal", async () => {
-    const queueRead = held<StationQueue>();
+  it("does not read the waiting list when the operator changes while a move that is refused is out", async () => {
+    let refuse!: (error: unknown) => void;
     const el = await openMove({
-      moveDishStation: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+      moveDishStation: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
     });
-    vi.mocked(api.getStationQueue).mockImplementationOnce(() => queueRead.promise);
     await choose(el);
     expect(api.moveDishStation).toHaveBeenCalledOnce();
 
     await changeOperator(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    queueRead.answer({ printersDown: [], items: [], notices: [] });
+    refuse({ code: "ticket.already_started" });
     await flush(el, 6);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
     expect(alert(el)).toBeNull();
   });

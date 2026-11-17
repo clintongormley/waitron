@@ -98,7 +98,6 @@ it("A738 adding and merging reveal the exact Counter row while unrelated edits p
   }));
   const { el, host } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
-    embedded: true,
     products,
     menus: servedMenus(
       [{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }],
