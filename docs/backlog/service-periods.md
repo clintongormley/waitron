@@ -133,10 +133,6 @@ code, not run again here.
   editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
   under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
   stops scrolling, no number is selected, and no click or menu follows the lift.
-- Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
-  `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
-  themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
-  uses the commands.
 
 ## Loose ends left by A506-4 (#1597).
 

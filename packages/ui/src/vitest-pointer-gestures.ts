@@ -1,4 +1,14 @@
 import type { BrowserCommand } from "vitest/node";
+import type {
+  MouseDragOptions,
+  MouseMoveOptions,
+  TouchGesture,
+} from "./vitest-pointer-gesture-types.js";
+export type {
+  MouseDragOptions,
+  MouseMoveOptions,
+  TouchGesture,
+} from "./vitest-pointer-gesture-types.js";
 
 interface Box {
   x: number;
@@ -70,11 +80,6 @@ async function centreOf(
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-export interface MouseDragOptions {
-  /** Turns the mouse wheel, button still held, once the pointer reaches `selectors[after]`. */
-  wheel?: { after: number; deltaY: number };
-}
-
 /** Presses the real mouse on the first element's centre, scrolled into view if it is not wholly
  * on screen, moves through each next centre in several steps, and releases on the last. Later
  * elements are not scrolled to: their positions are read as the pointer reaches each. */
@@ -109,12 +114,6 @@ export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDrag
   }
 };
 
-export interface MouseMoveOptions {
-  steps?: number;
-  /** Keeps the first centre's x for every later point, so the path runs straight up or down. */
-  keepX?: boolean;
-}
-
 /** Moves the real mouse, no button held, to the first element's centre (scrolled into view if it is
  * not wholly on screen), then through each next centre in `steps` steps. Positions are read as the
  * pointer reaches each. */
@@ -133,13 +132,6 @@ export const mouseMove: BrowserCommand<[selectors: string[], options?: MouseMove
     await ctx.page.mouse.move(keepX ? start.x : next.x, next.y, { steps });
   }
 };
-
-export interface TouchGesture {
-  at: string;
-  holdMs?: number;
-  moveTo?: string;
-  moveBy?: { x: number; y: number };
-}
 
 /** Browser sessions that have touched since their last `parkTouch`. */
 const touchedSessions = new Set<string>();

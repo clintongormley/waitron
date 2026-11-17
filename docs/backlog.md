@@ -594,7 +594,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **After A760: A877's one helper first** (bundle of 4, 1 important, size L, waits for another entry). [Detail](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 
-- **Loose ends left by A720.**
+- **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
 
