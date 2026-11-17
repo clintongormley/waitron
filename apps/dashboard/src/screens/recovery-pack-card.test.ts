@@ -25,6 +25,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
+    serverKey: "set",
     timeZone: "Europe/Madrid",
     ...overrides,
   };
@@ -270,6 +271,70 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
       )}`,
     );
   });
+
+  const noKeyParts: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
+    { part: "bucket", state: "included" },
+    { part: "archives", state: "included" },
+    { part: "server-key", state: "not-set-up" },
+  ];
+
+  it("says the box has no server key yet, not that the pack is incomplete", async () => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({ latest: latest({ parts: noKeyParts }), upToDate: true, serverKey: "not_yet" }),
+      ),
+    );
+    expect(row(el, "server-key")).toBe(t("recovery_pack.server_key_not_yet"));
+    expect(line(el)).toBe(
+      fill("recovery_pack.up_to_date", { number: "3", date: day.made, name: "Marta Puig" }),
+    );
+    expect(line(el)).not.toContain(
+      fill("recovery_pack.incomplete", { number: "3", date: day.made }),
+    );
+  });
+
+  it("says the server key is on no pack once one was made after a pack that had none", async () => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ parts: noKeyParts }),
+          reasons: [{ part: "server-key", kind: "set_up_after" }],
+        }),
+      ),
+    );
+    expect(row(el, "server-key")).toBe(t("recovery_pack.server_key_elsewhere"));
+    expect(line(el)).not.toContain(
+      fill("recovery_pack.incomplete", { number: "3", date: day.made }),
+    );
+  });
+
+  it.each([
+    ["none", "absent", "recovery_pack.server_key_none"],
+    ["not_yet", "not-set-up", "recovery_pack.server_key_not_yet"],
+    ["set", "included", "recovery_pack.server_key_elsewhere"],
+    ["set", "absent", "recovery_pack.server_key_elsewhere"],
+  ] as const)(
+    "words the server key row from the box's key now (%s), whatever the last pack's part was (%s), when no pack holds it",
+    async (serverKey, state, words) => {
+      setLocale(locale);
+      const parts = [...noKeyParts.slice(0, 2), { part: "server-key", state } as const];
+      const el = await mount(
+        stubApi(
+          status({
+            latest: latest({ parts }),
+            serverKey,
+            reasons:
+              state === "absent" && serverKey === "set"
+                ? [{ part: "server-key", kind: "set_up_after" }]
+                : [],
+          }),
+        ),
+      );
+      expect(row(el, "server-key")).toBe(t(words));
+    },
+  );
 
   it("names a pack holding the server key no browser confirmed receiving, in decision 10's words", async () => {
     setLocale(locale);
@@ -1092,6 +1157,7 @@ it.each([true, false])(
   async (present) => {
     const value = status({
       latest: latest({ parts: present ? PARTS : [{ part: "server-key", state: "absent" }] }),
+      serverKey: present ? "set" : "none",
       keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
     });
     const api = stubApi(value);

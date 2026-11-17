@@ -19,6 +19,7 @@ const BASE: RecoveryPackStatus = {
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
+  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 const LATEST: NonNullable<RecoveryPackStatus["latest"]> = {

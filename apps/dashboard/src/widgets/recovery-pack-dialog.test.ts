@@ -20,6 +20,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
+    serverKey: "set",
     timeZone: "Europe/Madrid",
     ...overrides,
   };
@@ -176,19 +177,24 @@ describe("the form", () => {
     );
   });
 
-  it("offers no new server key on a box whose last pack had no server-key part", async () => {
-    const at = status({
-      latest: {
-        number: 2,
-        madeAt: MADE_AT,
-        madeByName: "Marta",
-        received: true,
-        parts: [
-          { part: "bucket", state: "included" },
-          { part: "server-key", state: "absent" },
-        ],
-      },
-    });
+  const lastPack = (state: "absent" | "not-set-up") => ({
+    number: 2,
+    madeAt: MADE_AT,
+    madeByName: "Marta",
+    received: true,
+    parts: [
+      { part: "bucket", state: "included" },
+      { part: "server-key", state },
+    ] satisfies NonNullable<RecoveryPackStatus["latest"]>["parts"],
+  });
+
+  it.each([
+    ["a venue that keeps no server key, whose last pack had no server-key part", "none", "absent"],
+    ["a venue that keeps no server key, before any pack", "none", null],
+    ["a box with no server key yet, before any pack", "not_yet", null],
+    ["a box with no server key yet, after a pack made without one", "not_yet", "not-set-up"],
+  ] as const)("offers no new server key on %s", async (_label, serverKey, part) => {
+    const at = status({ serverKey, latest: part === null ? null : lastPack(part) });
     const { el, api } = await open({ at });
     expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=new-key-why]")).toBeNull();
@@ -198,8 +204,25 @@ describe("the form", () => {
     expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({ newServerKey: false });
   });
 
-  it("offers the new server key while no pack has been made, since nothing is known yet", async () => {
-    const { el } = await open({ at: status({ latest: null }) });
+  it.each([
+    ["before any pack", null],
+    ["after a pack made while the box had none", "not-set-up"],
+    ["after a pack made while the venue kept none", "absent"],
+  ] as const)("offers a new server key on a box that has one, %s", async (_label, part) => {
+    const at = status({
+      serverKey: "set",
+      latest: part === null ? null : lastPack(part),
+      reasons: part === null ? [] : [{ part: "server-key", kind: "set_up_after" }],
+    });
+    const { el } = await open({ at });
+    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
+    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toBe(
+      `${t("recovery_pack_dialog.new_key_unknown")} ${t("recovery_pack_dialog.new_key_effect")}`,
+    );
+  });
+
+  it("offers the new server key when the card could not read the status, since nothing is known", async () => {
+    const { el } = await open({ at: null });
     expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
   });
 

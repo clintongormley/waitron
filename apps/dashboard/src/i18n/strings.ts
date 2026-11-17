@@ -1606,6 +1606,7 @@ export const en = {
   "recovery_pack.server_key_on_unreceived":
     "On pack {number}, made on {date} (the box was never told it arrived)",
   "recovery_pack.server_key_none": "This venue keeps no server key",
+  "recovery_pack.server_key_not_yet": "This box has no server key yet",
   "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
@@ -6039,6 +6040,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.server_key_on_unreceived":
     "En el paquete {number}, hecho el {date} (el servidor nunca recibió la confirmación de que llegó)",
   "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
+  "recovery_pack.server_key_not_yet": "Este servidor aún no tiene clave del servidor",
   "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":

@@ -26,12 +26,9 @@ export interface RecoveryPackMade {
   received: boolean;
 }
 
-/** The last pack had no server-key part: the box has no module that keeps one. */
+/** The status says the box has no server key to replace; a status the card could not read says nothing. */
 function noServerKey(status: RecoveryPackStatus | null): boolean {
-  return (
-    status?.latest?.parts.some((part) => part.part === "server-key" && part.state === "absent") ??
-    false
-  );
+  return status !== null && status.serverKey !== "set";
 }
 
 /** A refusal envelope carries the status the box answered with; a lost answer has none. */

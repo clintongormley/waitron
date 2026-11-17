@@ -68,6 +68,8 @@ export type PackStatus = {
   reasons: Reason[];
   keep: Keep[];
   backupsUseOlderKey: boolean;
+  /** The box's server key now: `none` on a venue that files no invoices, `not_yet` when the box has no server key. */
+  serverKey: "none" | "not_yet" | "set";
 };
 
 const partOf = (record: RecoveryPackRecord, part: RecoveryPackPartRecord["part"]) =>
@@ -114,7 +116,7 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       reasons.push({ part: "server-key", kind: "key_replaced" });
     }
   } else if (serverKey !== undefined && serverKey.state !== "failed") {
-    if (current.serverKeyName !== undefined) {
+    if (typeof current.serverKeyName === "string") {
       reasons.push({ part: "server-key", kind: "set_up_after" });
     }
   }
@@ -264,5 +266,11 @@ export function packStatus(input: PackStatusInput): PackStatus {
     reasons,
     keep: keepList(input),
     backupsUseOlderKey: input.backupsUseOlderKey,
+    serverKey:
+      input.current.serverKeyName === undefined
+        ? "none"
+        : input.current.serverKeyName === null
+          ? "not_yet"
+          : "set",
   };
 }

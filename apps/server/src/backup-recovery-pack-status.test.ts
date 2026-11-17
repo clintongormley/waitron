@@ -167,6 +167,32 @@ describe("the latest pack", () => {
     expect(answer.reasons).toEqual([{ part, kind: "set_up_after" }]);
   });
 
+  describe("a pack made while the box had no server key", () => {
+    const parts = [
+      included.bucket,
+      included.archives,
+      { part: "server-key" as const, state: "not-set-up" as const },
+    ];
+    const made = pack(1, "2026-10-12T10:00:00.000Z", { parts });
+
+    it.each([
+      ["the box still has no key", null],
+      ["the venue no longer files invoices", undefined],
+    ])("is up to date and not incomplete while %s", (_label, serverKeyName) => {
+      const answer = status([made], { current: { ...current, serverKeyName } });
+      expect(answer.incomplete).toBe(false);
+      expect(answer.reasons).toEqual([]);
+      expect(answer.upToDate).toBe(true);
+    });
+
+    it("is out of date, not incomplete, once the box has a key", () => {
+      const answer = status([made]);
+      expect(answer.incomplete).toBe(false);
+      expect(answer.reasons).toEqual([{ part: "server-key", kind: "set_up_after" }]);
+      expect(answer.upToDate).toBe(false);
+    });
+  });
+
   it("stays up to date for a part absent then and absent now", () => {
     const parts = [
       { part: "bucket" as const, state: "absent" as const },
@@ -446,6 +472,18 @@ describe("the packs to keep", () => {
 describe("backups still on the older key", () => {
   it.each([true, false])("passes %s through", (value) => {
     expect(status([], { backupsUseOlderKey: value }).backupsUseOlderKey).toBe(value);
+  });
+});
+
+describe("the box's server key now", () => {
+  it.each([
+    ["none", undefined],
+    ["not_yet", null],
+    ["set", KEY_2],
+  ] as const)("is %s for a current key name of %s, with or without a pack", (word, name) => {
+    const now = { current: { ...current, serverKeyName: name } };
+    expect(status([], now).serverKey).toBe(word);
+    expect(status([pack(1, "2026-10-12T10:00:00.000Z")], now).serverKey).toBe(word);
   });
 });
 
