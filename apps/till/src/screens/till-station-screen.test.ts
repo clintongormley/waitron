@@ -1051,7 +1051,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(queueWidget(el)!.shadowRoot!.querySelector("[data-collect]")).toBeNull();
   });
 
-  it("device mode hides the kitchen-fire button on a held course (no device fire route, §3d)", async () => {
+  it("device mode draws no fire button on a held course", async () => {
     const heldCourseQueue: StationQueueGroup[] = [
       {
         dining: "eat_in",
