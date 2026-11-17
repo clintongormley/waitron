@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  billEditStates,
   deviceProfiles,
   devices,
   floorZones,
@@ -81,11 +80,13 @@ describe("Find a bill list routes", () => {
   it("returns retained edit versions for selected table and counter bills", async () => {
     const party = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
-      tx.insert(billEditStates).values({
-        billId: party.tabId,
-        editorId: null,
-        editorVersion: 7,
-      }),
+      tx
+        .update(workingOrders)
+        .set({
+          editorId: null,
+          editorVersion: 7,
+        })
+        .where(eq(workingOrders.id, party.tabId)),
     );
     const counter = await parked(venue, "Caña");
     expect(await get(`/api/bills/${party.tabId}`)).toMatchObject({
@@ -103,7 +104,10 @@ describe("Find a bill list routes", () => {
       },
     });
     await inTx(venue, (tx) =>
-      tx.insert(billEditStates).values({ billId: counter, editorId: null, editorVersion: 11 }),
+      tx
+        .update(workingOrders)
+        .set({ editorId: null, editorVersion: 11 })
+        .where(eq(workingOrders.id, counter)),
     );
     expect(await get(`/api/bills/${counter}`)).toMatchObject({
       status: 200,

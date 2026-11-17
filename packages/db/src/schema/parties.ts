@@ -21,10 +21,6 @@ export const partyState = enumType(["open", "closed"]);
 /**
  * One seated party, from seating until its table is finished: it holds the party's tab, every bill
  * split from it (`working_orders.party_id`) and the tables it sits at (`party_tables`).
- *
- * A party merged into another is closed and names the survivor in `merged_into_party_id`; its
- * bills that could no longer move stay here and count as the survivor's (`partyFamily`,
- * `apps/server/src/parties.ts`).
  */
 export const parties = table(
   "parties",
@@ -42,6 +38,7 @@ export const parties = table(
     billRequestedAt: tsString("bill_requested_at"),
     name: label("name"),
     revision: count("revision").notNull().default(0),
+    lastBillNumber: count("last_bill_number").notNull().default(0),
     tableNames: labelList("table_names"),
     allergyAnswer: enumType(["none", "allergies"])("allergy_answer"),
     allergyAnsweredBy: id("allergy_answered_by"),

@@ -1,10 +1,8 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNotNull, or } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  billIdentities,
-  billNumberAllocations,
   CORE_MIGRATIONS,
   parties,
   withTransaction,
@@ -57,21 +55,27 @@ const allocate = (billId: string, partyId: string) =>
 
 async function identitiesOf(partyId: string) {
   return suite.db
-    .select({ bill: billIdentities.workingOrderId, number: billIdentities.number })
-    .from(billIdentities)
-    .where(eq(billIdentities.partyId, partyId))
-    .orderBy(asc(billIdentities.number));
+    .select({ bill: workingOrders.id, number: workingOrders.billNumber })
+    .from(workingOrders)
+    .where(eq(workingOrders.partyId, partyId))
+    .orderBy(asc(workingOrders.billNumber));
 }
 
 async function bothTables() {
   const identities = await suite.db
-    .select()
-    .from(billIdentities)
-    .orderBy(asc(billIdentities.workingOrderId));
+    .select({
+      workingOrderId: workingOrders.id,
+      partyId: workingOrders.partyId,
+      number: workingOrders.billNumber,
+      name: workingOrders.billName,
+    })
+    .from(workingOrders)
+    .where(or(isNotNull(workingOrders.partyId), isNotNull(workingOrders.billName)))
+    .orderBy(asc(workingOrders.id));
   const history = await suite.db
-    .select()
-    .from(billNumberAllocations)
-    .orderBy(asc(billNumberAllocations.partyId), asc(billNumberAllocations.number));
+    .select({ partyId: parties.id, lastBillNumber: parties.lastBillNumber })
+    .from(parties)
+    .orderBy(parties.id);
   return { identities, history };
 }
 
@@ -117,7 +121,7 @@ describe("A803 bill numbers (seat)", () => {
       .set({ status: "abandoned" })
       .where(eq(workingOrders.id, gone));
 
-    await tx((t) => rescopeBillNumbers(t, from, into));
+    await tx((t) => rescopeBillNumbers(t, [one, two, four], into));
 
     expect(await identitiesOf(into)).toEqual([
       { bill: kept, number: 1 },
@@ -139,7 +143,13 @@ describe("A803 bill numbers (seat)", () => {
     await allocate(bill, party);
     await tx((t) => setBillName(t, bill, "Ana"));
 
-    await tx((t) => releaseBillNumber(t, bill));
+    await tx(async (t) => {
+      await t
+        .update(workingOrders)
+        .set({ partyId: null, billNumber: null })
+        .where(eq(workingOrders.id, bill));
+      await releaseBillNumber(t, bill);
+    });
     expect((await tx((t) => readBillIdentities(t, [bill]))).get(bill)).toEqual({
       partyId: null,
       number: null,
@@ -155,6 +165,26 @@ describe("A803 bill numbers (seat)", () => {
       number: 2,
       name: "Ana",
     });
+  });
+
+  it("a number freed by a bill that left is never given again", async () => {
+    const party = await newParty();
+    const first = await newBill(party),
+      second = await newBill(party);
+    await allocate(first, party);
+    await allocate(second, party);
+    await tx((t) =>
+      t
+        .update(workingOrders)
+        .set({ partyId: null, billNumber: null })
+        .where(eq(workingOrders.id, second)),
+    );
+    const third = await newBill(party);
+    expect(await allocate(third, party)).toBe(3);
+    expect(await identitiesOf(party)).toEqual([
+      { bill: first, number: 1 },
+      { bill: third, number: 3 },
+    ]);
   });
 
   it("A803 bill numbers (seat): releasing a bill with no row does nothing", async () => {
@@ -193,18 +223,19 @@ describe("A803 bill numbers (seat)", () => {
     expect(await bothTables()).toEqual({ identities: [], history: [] });
   });
 
-  it("A803 bill numbers (seat): two transactions started together, each allocating a number for one party, get n and n+1 and leave two history rows", async () => {
+  it("A803 bill numbers (seat): two transactions started together, each allocating a number for one party, get n and n+1 and keep both numbers and advance the party counter", async () => {
     const party = await newParty();
     const first = await newBill(party);
     const second = await newBill(party);
     const numbers = await Promise.all([allocate(first, party), allocate(second, party)]);
     expect([...numbers].sort()).toEqual([1, 2]);
     const { history } = await bothTables();
-    expect(history.map((row) => [row.workingOrderId, row.number]).sort()).toEqual(
+    expect(history).toEqual([{ partyId: party, lastBillNumber: 2 }]);
+    expect(await identitiesOf(party)).toEqual(
       [
-        [first, numbers[0]],
-        [second, numbers[1]],
-      ].sort(),
+        { bill: first, number: numbers[0] },
+        { bill: second, number: numbers[1] },
+      ].sort((a, b) => a.number! - b.number!),
     );
   });
 

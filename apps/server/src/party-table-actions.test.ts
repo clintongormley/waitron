@@ -20,6 +20,7 @@ import {
   sales,
   ticketItems,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
@@ -86,7 +87,7 @@ import {
   floorRow,
 } from "./testing/party-venue.js";
 import { mergeOf, needingMoving, plannedZone } from "./testing/floor-today-venue.js";
-import { allocationsOf, numbersOf } from "./testing/bill-identities.js";
+import { lastBillNumberOf, numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
 // Move guests, join tables and split a table (table actions plan, Task 8; spec §6, §8, §15).
@@ -388,6 +389,8 @@ describe("move guests", () => {
     expect(await zoneOf(v, anna.tabId)).toBe(terraceZone);
     expect(await zoneOf(v, second)).toBe(terraceZone);
     expect((await billRow(v, second)).status).toBe("placed");
+    expect((await billRow(v, anna.tabId)).billNumber).toBe(1);
+    expect((await billRow(v, second)).billNumber).toBe(2);
   });
 
   it("combines the party into the party at a held table, which keeps its name and its Bill 1, and every bill stays its own", async () => {
@@ -780,8 +783,65 @@ describe("the bills when parties combine", () => {
   }
 });
 
-describe("a paid bill stays on its original party", () => {
-  it("while the open one moves, and the combined party finishes only once that is paid", async () => {
+describe("os2 merging bill identities", () => {
+  it.each([false, true])(
+    "combining parties moves paid bills in number order and keeps collection (%s)",
+    async (collected) => {
+      const from = await seat(v, await v.table(`os2 from ${collected}`));
+      const into = await seat(v, await v.table(`os2 into ${collected}`));
+      await order(v, from.tabId, "Water", "Water");
+      await order(v, into.tabId, "Water");
+      const paid = await splitOff(from.partyId, from.tabId, [2]);
+      await placeByHand(v, from.tabId);
+      await pay(v, paid, "2.00");
+      const collectedAt = collected ? "2026-11-17T12:00:00.000Z" : null;
+      if (collected)
+        await act((tx) =>
+          tx.update(workingOrders).set({ collectedAt }).where(eq(workingOrders.id, paid)),
+        );
+      const before = await billRow(v, paid);
+      await act((tx) =>
+        combineParties(tx, v.cfg, {
+          from: from.partyId,
+          into: into.partyId,
+          tables: "join",
+          operatorId: OPERATOR,
+        }),
+      );
+      expect(await numbersOf(v, into.partyId)).toEqual([
+        [into.tabId, 1, null],
+        [from.tabId, 2, null],
+        [paid, 3, null],
+      ]);
+      expect(await numbersOf(v, from.partyId)).toEqual([]);
+      expect(await billRow(v, paid)).toEqual({ ...before, partyId: into.partyId, billNumber: 3 });
+    },
+  );
+
+  it("an abandoned bill stays on the merged-away party with its number", async () => {
+    const from = await seat(v, await v.table("os2 abandoned from"));
+    const into = await seat(v, await v.table("os2 abandoned into"));
+    await order(v, from.tabId, "Water", "Water");
+    const gone = await splitOff(from.partyId, from.tabId, [2]);
+    await act((tx) =>
+      tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, gone)),
+    );
+    const before = await billRow(v, gone);
+    await act((tx) =>
+      combineParties(tx, v.cfg, {
+        from: from.partyId,
+        into: into.partyId,
+        tables: "join",
+        operatorId: OPERATOR,
+      }),
+    );
+    expect(await billRow(v, gone)).toEqual(before);
+    expect(await numbersOf(v, from.partyId)).toEqual([[gone, 2, null]]);
+  });
+});
+
+describe("a paid bill moves to the combined party", () => {
+  it("alongside the open one, and the combined party finishes only once that is paid", async () => {
     const [m4, m7] = await tables("Paid", 4, 7);
     const anna = await seat(v, m4);
     const lewis = await seat(v, m7);
@@ -795,7 +855,7 @@ describe("a paid bill stays on its original party", () => {
 
     expect(await billRow(v, anna.tabId)).toMatchObject({
       status: "settled",
-      partyId: anna.partyId,
+      partyId: lewis.partyId,
     });
     expect(noticesOn([anna.tabId, second])).toEqual([
       ...before,
@@ -808,7 +868,7 @@ describe("a paid bill stays on its original party", () => {
       bills.map((bill) => [bill.workingOrderId, bill.partyId, bill.status, bill.billNumber]),
     ).toEqual([
       [lewis.tabId, lewis.partyId, "open", 1],
-      [anna.tabId, anna.partyId, "settled", 2],
+      [anna.tabId, lewis.partyId, "settled", 2],
       [second, lewis.partyId, "open", 3],
     ]);
 
@@ -828,7 +888,7 @@ describe("a paid bill stays on its original party", () => {
   });
 });
 
-describe("A803 a paid bill kept on a party combined away is one of the table's bills", () => {
+describe("A803 a moved paid bill is one of the table's bills", () => {
   /** The bills the party's bills read lists, abandoned ones left out, as the till shows them. */
   async function shownBills(partyId: string) {
     const bills = await act((tx) => readPartyBills(tx, partyId));
@@ -945,11 +1005,13 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
   });
 });
 
-describe("MOVED notices for a paid bill left on a party combined away", () => {
-  /** The paid bill's stored row, lines and payments, which combining its party must not change. */
+describe("MOVED notices for a paid bill moved to the combined party", () => {
   async function paidBill(billId: string) {
+    const row = { ...(await billRow(v, billId)) };
+    Reflect.deleteProperty(row, "editorId");
+    Reflect.deleteProperty(row, "editorVersion");
     return {
-      row: await billRow(v, billId),
+      row,
       lines: await lineRows(billId),
       payments: await paymentsOf(v, billId),
     };
@@ -979,7 +1041,10 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
       .flatMap((card) => card.orders)
       .find((entry) => entry.orderId === anna.tabId);
     expect(onPass?.tableLabel).toBe("PaymentM 7");
-    expect(await paidBill(anna.tabId)).toEqual(paid);
+    expect(await paidBill(anna.tabId)).toEqual({
+      ...paid,
+      row: { ...paid.row, partyId: lewis.partyId, billNumber: 2 },
+    });
   });
 
   it("tells the kitchen nothing of a paid bill's sent dish when its table joins another party: it keeps its table and the name", async () => {
@@ -996,7 +1061,10 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
 
     expect((await partyRow(v, anna.partyId)).mergedIntoPartyId).toBe(lewis.partyId);
     expect(noticesOn([anna.tabId])).toEqual([]);
-    expect(await paidBill(anna.tabId)).toEqual(paid);
+    expect(await paidBill(anna.tabId)).toEqual({
+      ...paid,
+      row: { ...paid.row, partyId: lewis.partyId, billNumber: 2 },
+    });
   });
 
   it("names the tables the guests went to, not the label the bill was paid under", async () => {
@@ -1019,7 +1087,10 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
       ...earlier,
       { working_order_id: anna.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentE 7" },
     ]);
-    expect(await paidBill(anna.tabId)).toEqual(paid);
+    expect(await paidBill(anna.tabId)).toEqual({
+      ...paid,
+      row: { ...paid.row, partyId: lewis.partyId, billNumber: 2 },
+    });
   });
 
   it("tells the kitchen again when the party that took the guests moves on", async () => {
@@ -1087,7 +1158,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
       ...earlier,
       { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentC 9" },
     ]);
-    expect((await paidBill(eva.tabId)).row.partyId).toBe(eva.partyId);
+    expect((await paidBill(eva.tabId)).row.partyId).toBe(lewis.partyId);
     expect(await paidBill(eva.tabId)).toEqual(paid);
   });
 });
@@ -2171,6 +2242,8 @@ describe("A803 split", () => {
         ...leaving[0]!.row,
         partyId: result.partyId,
         revision: leaving[0]!.row.revision + 1,
+        billNumber: 1,
+        editorVersion: leaving[0]!.row.editorVersion + 1,
       },
     });
     expect(await billFacts(b3)).toEqual({
@@ -2179,6 +2252,8 @@ describe("A803 split", () => {
         ...leaving[1]!.row,
         partyId: result.partyId,
         revision: leaving[1]!.row.revision + 1,
+        billNumber: 2,
+        editorVersion: leaving[1]!.row.editorVersion + 1,
       },
     });
   });
@@ -2782,9 +2857,6 @@ describe("A803 split", () => {
       "allergy_line_ticks",
       "kitchen_notices",
       "print_jobs",
-      "bill_number_allocations",
-      "bill_identities",
-      "bill_edit_states",
       "order_service_contexts",
     ];
 
@@ -2950,10 +3022,7 @@ describe("A803 split", () => {
         [b1, 1, null],
         [next, 2, null],
       ]);
-      expect(await allocationsOf(v, anna.partyId)).toEqual([
-        [1, b1],
-        [2, next],
-      ]);
+      expect(await lastBillNumberOf(v, anna.partyId)).toBe(2);
     });
 
     describe("a part-paid bill", () => {
@@ -3184,8 +3253,6 @@ describe("A803 split", () => {
         "order_groups",
         "order_group_events",
         "kitchen_notices",
-        "bill_number_allocations",
-        "bill_identities",
         "order_service_contexts",
       ]);
       const firedAt = async (billId: string, lineId: string) =>

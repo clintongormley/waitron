@@ -17,7 +17,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  billIdentities,
   configureZone,
   createServiceZone,
   orderServiceContexts,
@@ -542,7 +541,10 @@ describe("existing service in a closed zone", () => {
       const seated = await seat(v);
       await withTransaction(suite.db, async (tx) => {
         if (kind === "first order") {
-          await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId));
+          await tx
+            .update(workingOrders)
+            .set({ billNumber: null, billName: null })
+            .where(eq(workingOrders.id, seated.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, seated.tabId));
         }
       });
@@ -561,6 +563,9 @@ describe("existing service in a closed zone", () => {
         expect(saved.status).toBe(200);
         draft = (saved.json as unknown as { draft: typeof draft }).draft;
       }
+      const editorBeforeRefusal = await withTransaction(suite.db, (tx) =>
+        readBillEditState(tx, seated.tabId),
+      );
       const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
       at("23:45");
       const answer =
@@ -593,7 +598,17 @@ describe("existing service in a closed zone", () => {
           ? { status: 409, json: { code: "tab.not_open", params: { tabId: seated.tabId } } }
           : refused(v),
       );
-      expect(await orderRows()).toEqual(before);
+      expect(await orderRows()).toEqual(
+        before.map((row) =>
+          row.id === seated.tabId
+            ? {
+                ...row,
+                editorId: editorBeforeRefusal.editorId,
+                editorVersion: editorBeforeRefusal.editorVersion,
+              }
+            : row,
+        ),
+      );
       expect(
         await suite.db
           .select({ id: workingOrders.id })
@@ -684,7 +699,10 @@ describe("moving into closed zones", () => {
       const destination = holder ?? (await freeTable(v, v.zoneId));
       if (target === "no bill" || target === "held table without a bill")
         await withTransaction(suite.db, async (tx) => {
-          await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, source.tabId));
+          await tx
+            .update(workingOrders)
+            .set({ billNumber: null, billName: null })
+            .where(eq(workingOrders.id, source.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, source.tabId));
         });
       const before = await moveRows();

@@ -107,7 +107,7 @@ describe("readOrderPlaces", () => {
         expectedOtherPartyRevision: b.revision,
       }),
     );
-    expect((await billRow(v, b.tabId)).partyId).toBe(b.partyId);
+    expect((await billRow(v, b.tabId)).partyId).toBe(a.partyId);
     const places = await placesOf(b.tabId);
     expect(places.tables.map((table) => table.id)).toEqual([t1, t2]);
     expect(places.names).toEqual(["Table 31", "Table 32"]);

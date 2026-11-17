@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrders } from "@waitron/db";
-import { billIdentities } from "@waitron/venue-service";
 import { insertPartyBill } from "../parties.js";
 import { numbersOf } from "./bill-identities.js";
 import { firstOpenBillOf } from "./party-bill-of.js";
@@ -89,7 +88,10 @@ describe("A803 fixtures: firstOpenBillOf", () => {
     const { partyId, tabId: unnumbered } = await seat(v, await v.table("Table 65"));
     const bill2 = await newBill(partyId);
     await inTx(v, (tx) =>
-      tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, unnumbered)),
+      tx
+        .update(workingOrders)
+        .set({ billNumber: null, billName: null })
+        .where(eq(workingOrders.id, unnumbered)),
     );
     expect((await numbersOf(v, partyId)).map(([id, n]) => [id, n])).toEqual([[bill2, 2]]);
 

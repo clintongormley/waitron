@@ -1,12 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import {
-  billEditStates,
-  nowIso,
-  orderDraftLines,
-  orderDrafts,
-  workingOrders,
-  type Transaction,
-} from "@waitron/db";
+import { nowIso, orderDraftLines, orderDrafts, workingOrders, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, isUuid } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -92,12 +85,9 @@ async function comparedBillEdit(tx: Transaction, billId: string, expected: BillE
 
 async function writeEditor(tx: Transaction, edit: BillEditState, editorId: string | null) {
   await tx
-    .insert(billEditStates)
-    .values({ billId: edit.billId, editorId, editorVersion: edit.editorVersion + 1 })
-    .onConflictDoUpdate({
-      target: billEditStates.billId,
-      set: { editorId, editorVersion: edit.editorVersion + 1 },
-    });
+    .update(workingOrders)
+    .set({ editorId, editorVersion: edit.editorVersion + 1 })
+    .where(eq(workingOrders.id, edit.billId));
 }
 
 export async function readPartyBillIds(
@@ -286,13 +276,13 @@ function requireExpectedState(edit: BillEditState, wanted: BillEditExpected): vo
 export async function readBillEditState(tx: Transaction, billId: string): Promise<BillEditState> {
   const [state] = await tx
     .select({
-      editorId: billEditStates.editorId,
+      editorId: workingOrders.editorId,
       editorName: persons.displayName,
-      editorVersion: billEditStates.editorVersion,
+      editorVersion: workingOrders.editorVersion,
     })
-    .from(billEditStates)
-    .leftJoin(persons, eq(persons.id, billEditStates.editorId))
-    .where(eq(billEditStates.billId, billId));
+    .from(workingOrders)
+    .leftJoin(persons, eq(persons.id, workingOrders.editorId))
+    .where(eq(workingOrders.id, billId));
   const [draft] = await tx
     .select({ id: orderDrafts.id, revision: orderDrafts.revision })
     .from(orderDrafts)

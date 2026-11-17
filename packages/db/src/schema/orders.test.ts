@@ -13,8 +13,9 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedPerson, seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { products } from "./menus.js";
+import { parties } from "./parties.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -115,6 +116,118 @@ describe("working_orders", () => {
   beforeEach(async () => {
     db = suite.db;
     await seed(db);
+  });
+
+  describe("a bill's identity columns", () => {
+    async function party() {
+      const openedBy = await seedPerson(db, { id: "bill-identity-person" });
+      const [row] = await db.insert(parties).values({ openedBy }).returning();
+      return row!.id;
+    }
+
+    it("refuses a bill number without a party", async () => {
+      const id = await openOrder(db);
+      const error = await captureError(() =>
+        db.execute(sql`update working_orders set bill_number = 1 where id = ${id}`),
+      );
+      expect(engineErrorMessage(error)).toContain("working_orders_bill_number_ck");
+      const partyId = await party();
+      await db.execute(
+        sql`update working_orders set party_id = ${partyId}, bill_number = 1 where id = ${id}`,
+      );
+      expect(
+        (await db.execute(sql`select bill_number from working_orders where id = ${id}`)).rows,
+      ).toEqual([{ bill_number: 1 }]);
+    });
+
+    it("refuses a bill number of zero or a fraction", async () => {
+      const id = await openOrder(db),
+        partyId = await party();
+      await db.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, id));
+      for (const number of [0, 1.5]) {
+        const error = await captureError(() =>
+          db.execute(sql`update working_orders set bill_number = ${number} where id = ${id}`),
+        );
+        expect(engineErrorMessage(error)).toContain("working_orders_bill_number_ck");
+      }
+    });
+
+    it("refuses blank, untrimmed and overlong bill names and accepts forty characters", async () => {
+      const id = await openOrder(db);
+      for (const name of ["", " ", " Bill", "Bill ", "x".repeat(41)]) {
+        const error = await captureError(() =>
+          db.execute(sql`update working_orders set bill_name = ${name} where id = ${id}`),
+        );
+        expect(engineErrorMessage(error)).toContain("working_orders_bill_name_ck");
+      }
+      const name = "x".repeat(40);
+      await db.execute(sql`update working_orders set bill_name = ${name} where id = ${id}`);
+      expect(
+        (await db.execute(sql`select bill_name from working_orders where id = ${id}`)).rows,
+      ).toEqual([{ bill_name: name }]);
+    });
+
+    it("refuses a duplicate Bill 2 in one party and accepts it in another", async () => {
+      const one = await openOrder(db),
+        two = await openOrder(db),
+        partyId = await party();
+      await db.execute(
+        sql`update working_orders set party_id = ${partyId}, bill_number = 2 where id = ${one}`,
+      );
+      const error = await captureError(() =>
+        db.execute(
+          sql`update working_orders set party_id = ${partyId}, bill_number = 2 where id = ${two}`,
+        ),
+      );
+      expect(
+        refusalOn(error, UNIQUE_VIOLATION, {
+          table: "working_orders",
+          columns: ["party_id", "bill_number"],
+        }),
+      ).toBe(true);
+      const other = await party();
+      await db.execute(
+        sql`update working_orders set party_id = ${other}, bill_number = 2 where id = ${two}`,
+      );
+      expect(
+        (await db.execute(sql`select bill_number from working_orders where id in (${one}, ${two})`))
+          .rows,
+      ).toEqual([{ bill_number: 2 }, { bill_number: 2 }]);
+    });
+
+    it("defaults the editor to nobody at version zero and refuses negative versions", async () => {
+      const id = await openOrder(db);
+      expect(
+        (
+          await db.execute(
+            sql`select editor_id, editor_version from working_orders where id = ${id}`,
+          )
+        ).rows,
+      ).toEqual([{ editor_id: null, editor_version: 0 }]);
+      const error = await captureError(() =>
+        db.execute(sql`update working_orders set editor_version = -1 where id = ${id}`),
+      );
+      expect(engineErrorMessage(error)).toContain("working_orders_editor_version_ck");
+    });
+
+    it("refuses an editor who is not a person and accepts a real person", async () => {
+      const id = await openOrder(db);
+      const error = await captureError(() =>
+        db.execute(sql`update working_orders set editor_id = ${randomUUID()} where id = ${id}`),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+      const editor = await seedPerson(db);
+      await db.execute(
+        sql`update working_orders set editor_id = ${editor}, editor_version = 1 where id = ${id}`,
+      );
+      expect(
+        (
+          await db.execute(
+            sql`select editor_id, editor_version from working_orders where id = ${id}`,
+          )
+        ).rows,
+      ).toEqual([{ editor_id: editor, editor_version: 1 }]);
+    });
   });
 
   it("indexes the time an order was opened, which a report selects a range of bills by", async () => {

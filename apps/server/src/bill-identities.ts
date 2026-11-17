@@ -10,21 +10,12 @@ import { guardParty, partyRevision, refuseMovedParty } from "./parties.js";
 import type { ZoneSubject } from "./zone-access.js";
 import "./errors.js";
 
-/**
- * Where naming a bill is authorised: its numbering party (see {@link setBillName}), or the bill's
- * own order when it has none, which {@link setBillName} then refuses.
- */
 export async function billNameZoneSubject(tx: Transaction, billId: string): Promise<ZoneSubject> {
   const partyId = (await VENUE_SERVICE.readBillIdentities(tx, [billId])).get(billId)?.partyId;
   return partyId === null || partyId === undefined ? { orderId: billId } : { partyId };
 }
 
-/**
- * Name a bill, or clear its name. Guarded by the revision of its numbering party — the party
- * whose bill list shows it, which for a paid bill left on a party merged into another is not the
- * bill's own party — and by the bill's editor, as a split is: someone else's unsent dishes on the
- * bill need a take-over first.
- */
+/** Naming is guarded by the bill's current party revision and its editor. */
 export async function setBillName(
   tx: Transaction,
   billId: string,
@@ -39,8 +30,8 @@ export async function setBillName(
   if (bill === undefined || bill.status === "abandoned")
     throw new AppError("tab.not_open", { tabId: billId });
   const identity = (await VENUE_SERVICE.readBillIdentities(tx, [billId])).get(billId);
-  const numberingParty = identity?.partyId ?? null;
-  if (numberingParty === null) {
+  const numberingParty = bill.partyId;
+  if (numberingParty === null || identity?.number == null) {
     if (bill.partyId === null) throw invalid("billId");
     // A fault in Waitron: every writer that puts a bill on a party numbers it there.
     throw new Error(`bill ${billId} is on party ${bill.partyId} with no number`);

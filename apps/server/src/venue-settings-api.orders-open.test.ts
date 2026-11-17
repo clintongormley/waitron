@@ -296,7 +296,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(dishLines(party.tabId)[0]!.served_at).toBeNull();
   });
 
-  it("accepts a change while a paid bill sits on a party merged into one still seated", async () => {
+  it("accepts a change while paid bills from a merge sit on a party still seated", async () => {
     reset();
     const survivor = await seatedWith(venue, "Tarta");
     const merged = await paidPartyBill();
@@ -315,7 +315,7 @@ describe("a receipt-language change while orders are open", () => {
         sql`select p.state, wo.party_id from working_orders wo join parties p on p.id = wo.party_id
             where wo.id = ${merged.tabId}`,
       ),
-    ).toEqual([{ state: "closed", party_id: merged.partyId }]);
+    ).toEqual([{ state: "open", party_id: survivor.partyId }]);
     const paid = await till("POST", "/api/sales", {
       dining: "eat_in",
       workingOrderId: survivor.tabId,

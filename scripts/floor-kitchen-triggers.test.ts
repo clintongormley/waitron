@@ -21,7 +21,7 @@ const suite = useVenueDb({
   },
 });
 
-it("keeps only the named allergy guards on the floor and kitchen tables", () => {
+it("keeps only the named party and allergy guards on the floor and kitchen tables", () => {
   const tables = [
     "floor_zones",
     "floor_plan_tables",
@@ -58,6 +58,7 @@ it("keeps only the named allergy guards on the floor and kitchen tables", () => 
       .filter((trigger) => !trigger.name.startsWith("waitron_change_") && area.test(trigger.sql))
       .map((trigger) => trigger.name),
   ).toEqual([
+    "parties_last_bill_number_no_decrease",
     "party_allergy_guests_need_answer_insert",
     "party_allergy_guests_need_answer_update",
     "working_orders_dining_fixed",

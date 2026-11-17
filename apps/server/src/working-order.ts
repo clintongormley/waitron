@@ -9434,8 +9434,6 @@ export async function listTablesWithState(
     pending_deliveries: number;
     needs_clearing_since: string | null;
   }>(sql`
-    -- Each seated party and every party merged into it: a bill a merged-in party kept still has its
-    -- dishes carried to the table.
     with recursive family(root, id) as (
       select party_id, party_id from party_tables where left_at is null
       union

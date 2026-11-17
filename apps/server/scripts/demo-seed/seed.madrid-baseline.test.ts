@@ -1095,6 +1095,34 @@ for (const locale of ["en", "es"] as const) {
         { name: "dining", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
       );
       for (const row of Object.values(orders.rows)) row.dining = "eat_in";
+      orders.columns.splice(
+        orders.columns.findIndex((column) => column.name === "party_id") + 1,
+        0,
+        { name: "bill_number", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "bill_name", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "editor_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "editor_version", type: "INTEGER", notnull: 1, dflt_value: "0", pk: 0 },
+      );
+      for (const row of Object.values(orders.rows))
+        Object.assign(row, {
+          bill_number: null,
+          bill_name: null,
+          editor_id: null,
+          editor_version: 0,
+        });
+      orders.foreignKeys = [
+        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id >= 2 ? key.id + 1 : key.id })),
+        {
+          id: 2,
+          seq: 0,
+          table: "persons",
+          from: "editor_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+      ].sort((a, b) => a.id - b.id);
       const orderLines = expected[phase].tables.working_order_lines!;
       orderLines.columns.splice(
         orderLines.columns.findIndex((column) => column.name === "vat_class") + 1,
@@ -1153,6 +1181,12 @@ for (const locale of ["en", "es"] as const) {
 
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
+      parties.columns.splice(
+        parties.columns.findIndex((column) => column.name === "revision") + 1,
+        0,
+        { name: "last_bill_number", type: "INTEGER", notnull: 1, dflt_value: "0", pk: 0 },
+      );
+      for (const row of Object.values(parties.rows)) row.last_bill_number = 0;
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
       const answers = expected[phase].tables.party_allergy!;
       for (const [name, source] of [

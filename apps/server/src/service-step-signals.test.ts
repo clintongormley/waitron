@@ -37,6 +37,7 @@ import {
   stepSignal,
   type StepParty,
 } from "./service-step-signals.js";
+import { numberBill } from "./testing/bill-identities.js";
 import { cancelLine, cancelReasonId, ensureOperator } from "./testing/cancel-line.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -570,7 +571,6 @@ describe("readTableSteps", () => {
     const b = await seat(v, secondTable);
     const { tabId } = await orderForParty(v, b.partyId, ["Water"]);
     const servedAt = await serve(v, tabId, "Water");
-    // A paid bill stays with the party merged away.
     await pay(v, tabId, "2.00");
     const ordered = await lastOrderAt(v, b.partyId);
     expect((await liveAt(v, a.partyId, firstTable))!.map((step) => step.stepId)).toEqual([setUp]);
@@ -1100,9 +1100,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     await setOpenedAt(v, partyId, OPENED);
     // A dish on the party's bill, with no event of this party saying how it got there.
     const other = await partyWith(v, "Table 9", "fire");
-    await inTx(v, (tx) =>
-      tx.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, other.billId)),
-    );
+    await inTx(v, (tx) => numberBill(tx, other.billId, partyId));
     const movedLines = (detail: Record<string, unknown>) =>
       inTx(v, (tx) =>
         tx

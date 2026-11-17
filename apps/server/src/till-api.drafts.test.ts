@@ -7,7 +7,6 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   billPayments,
   devices,
   kitchenStations,
@@ -189,6 +188,10 @@ describe("draft metadata for closing a joined party", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
+        .set({ editorId: null, editorVersion: 6 })
+        .where(eq(workingOrders.id, historical.tabId));
+      await tx
+        .update(workingOrders)
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, historical.tabId));
       await tx
@@ -199,9 +202,6 @@ describe("draft metadata for closing a joined party", () => {
           mergedIntoPartyId: current.partyId,
         })
         .where(eq(parties.id, historical.partyId));
-      await tx
-        .insert(billEditStates)
-        .values({ billId: historical.tabId, editorId: null, editorVersion: 6 });
     });
     const before = await snapshot();
     const read = await anna("GET", `/api/parties/${current.partyId}/drafts`);
@@ -301,12 +301,12 @@ describe("GET /api/parties/:id/drafts", () => {
     const second = saved.json.draft as unknown as DraftAnswer;
     await newDraft(admin, foreign.partyId, [dish("Caña")]);
     await inTx(venue, async (tx) => {
-      for (const row of [
+      for (const { billId, ...row } of [
         { billId: secondId, editorId: venue.adminId, editorVersion: 8 },
         { billId: party.tabId, editorId: venue.operatorId, editorVersion: 3 },
         { billId: foreign.tabId, editorId: venue.adminId, editorVersion: 12 },
       ])
-        await tx.update(billEditStates).set(row).where(eq(billEditStates.billId, row.billId));
+        await tx.update(workingOrders).set(row).where(eq(workingOrders.id, billId));
     });
     const before = await snapshot();
     const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
@@ -350,7 +350,7 @@ describe("GET /api/parties/:id/drafts", () => {
   it("retains a released version without creating rows", async () => {
     const party = await seated();
     await inTx(venue, (tx) =>
-      tx.insert(billEditStates).values({ billId: party.tabId, editorVersion: 9 }),
+      tx.update(workingOrders).set({ editorVersion: 9 }).where(eq(workingOrders.id, party.tabId)),
     );
     const before = await snapshot();
     const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);

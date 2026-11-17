@@ -235,25 +235,25 @@ describe("kitchen notes when bills and parties move", () => {
     });
   });
 
-  it("combines multiple bills once and resolves retained paid bills through the survivor", async () => {
+  it("combines kitchen notes once for all bills moved to the receiving party", async () => {
     const fromTable = await freshTable("Combined source");
     const source = await seat(v, fromTable);
     const target = await seat(v, await freshTable("Combined target"));
     await order(v, source.tabId, "Burger", "Flan", "Red wine bottle");
     const second = await split(v, source.partyId, source.tabId, [2]);
-    const retained = await split(v, source.partyId, source.tabId, [3]);
-    await pay(v, retained, "30.00");
+    const paid = await split(v, source.partyId, source.tabId, [3]);
+    await pay(v, paid, "30.00");
     await save({ partyId: source.partyId }, "Source instruction");
     await save({ partyId: target.partyId }, "Target instruction");
     await combine(source.partyId, target.partyId, fromTable);
-    for (const id of [source.tabId, second, retained, target.tabId]) {
+    for (const id of [source.tabId, second, paid, target.tabId]) {
       expect(await effective(id)).toMatchObject({
         note: "Target instruction; Source instruction",
         scope: { partyId: target.partyId },
         revision: 2,
       });
     }
-    expect((await billRow(v, retained)).partyId).toBe(source.partyId);
+    expect((await billRow(v, paid)).partyId).toBe(target.partyId);
   });
 
   it.each([

@@ -1,5 +1,7 @@
 # A1543: keep the evidence, bound two kinds of working record
 
+> **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership now lives on working_orders; the bill_edit_states measurement below records the earlier layout. See [the os2 plan](../plans/2026-11-08-a1308-os2-bill-identity.md).
+
 ## Owner decision, 2026-11-15
 
 The owner chose “Keep everything” at 19:32, as recorded by the watcher in Lane J’s

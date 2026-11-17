@@ -38,9 +38,9 @@ function observed<T extends { expectedEdit?: BillEditExpected | null }>(
           editorVersion: number;
           draftId: string | null;
           draftRevision: number | null;
-        }>(sql`select o.party_id as partyId, s.editor_id as editorId,
-    coalesce(s.editor_version, 0) as editorVersion, d.id as draftId, d.revision as draftRevision
-    from working_orders o left join bill_edit_states s on s.bill_id = o.id
+        }>(sql`select o.party_id as partyId, o.editor_id as editorId,
+    o.editor_version as editorVersion, d.id as draftId, d.revision as draftRevision
+    from working_orders o
     left join order_drafts d on d.bill_id = o.id and d.state = 'open'
     where o.id = ${id}`);
   let expectedEdit: BillEditExpected | null = null;

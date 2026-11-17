@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { billEditStates } from "@waitron/db";
+import { workingOrders } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import type { HeldOrder } from "./working-order.js";
 import { describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -89,12 +90,9 @@ it.each(["missing", "stale"] as const)(
     const retrieved = (await read.json()) as HeldOrder;
     if (kind === "stale")
       await venue.db
-        .insert(billEditStates)
-        .values({ billId: id, editorVersion: retrieved.expectedEdit!.editorVersion + 1 })
-        .onConflictDoUpdate({
-          target: billEditStates.billId,
-          set: { editorVersion: retrieved.expectedEdit!.editorVersion + 1 },
-        });
+        .update(workingOrders)
+        .set({ editorVersion: retrieved.expectedEdit!.editorVersion + 1 })
+        .where(eq(workingOrders.id, id));
     const response = await venue.app.request("/api/sales", {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },

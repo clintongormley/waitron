@@ -1390,7 +1390,7 @@ describe("department transfer tab lifecycle", () => {
             })
             .where(eq(parties.id, party.partyId));
           // As combineParties does when it closes a party into another.
-          await VENUE_SERVICE.rescopeBillNumbers(tx, party.partyId, root.partyId);
+          await VENUE_SERVICE.rescopeBillNumbers(tx, [f.tab], root.partyId);
           return root.partyId;
         }
         return party.partyId;

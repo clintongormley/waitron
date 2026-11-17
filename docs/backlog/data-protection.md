@@ -67,8 +67,8 @@ answered all ten questions on 2026-10-22 (design §8). The open slices, by the d
 by the answers):
 
 - **Bill names, like party names (design §2.2 row c5).** Since A803 slice 2 a waiter can name a
-  bill: free text up to 40 characters, often a guest's name, kept in `bill_identities.name`
-  (`packages/db/src/schema/venue-service/bill-identities.ts`). The register names it (the
+  bill: free text up to 40 characters, often a guest's name, kept in `working_orders.bill_name`
+  (`packages/db/src/schema/orders.ts`). The register names it (the
   data-protection guide's "Table names and notes"); whatever the download or a deletion does with
   `parties.name` applies to it too. The slice puts it in no error's details and no log line, and
   the owner ruled it never goes on a kitchen ticket (2026-10-30).
@@ -88,7 +88,7 @@ by the answers):
     `order_amendments.actor_id`; `ticket_item_moves.moved_by_person_id`; `order_drafts.owner_id`;
     `order_draft_events` (`actor_id`, `from_person`, `to_person`); `order_group_events.actor_id`;
     `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
-    line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
+    line counts as; `working_orders.editor_id`, who is editing a bill; `parties` (`opened_by`,
     `closed_by`, `allergy_answered_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves and downloads of the file of deferred payments); and `recovery_packs.made_by`, who made a recovery pack. Core's
     `line_service_cancellations.actor_id` is also not yet in the download: automatic departure
     stops can name an actor without an adjustment. The guard knows a column by its name;

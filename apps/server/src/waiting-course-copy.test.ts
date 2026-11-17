@@ -45,6 +45,7 @@ import { readBillLines, readOrderRevision } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mergeBills, moveDishes, splitBill } from "./testing/bill-action-fixture.js";
+import { numberBill } from "./testing/bill-identities.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -204,11 +205,6 @@ async function addExtra(billId: string, dishId: string): Promise<string> {
   return id;
 }
 
-/** Puts the bill on `partyId` by hand, as a Move this bill or Split a table would before copying. */
-function reseatBill(tx: Transaction, billId: string, partyId: string) {
-  return tx.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, billId));
-}
-
 async function copy(
   billId: string,
   from: string,
@@ -217,7 +213,7 @@ async function copy(
   attendance?: { recorder: AttendanceRecorder; at: string },
 ) {
   return inTx(v, async (tx) => {
-    await reseatBill(tx, billId, to);
+    await numberBill(tx, billId, to);
     return copyHeldGroups(tx, from, to, lineIds, MOVER, attendance);
   });
 }
@@ -794,7 +790,7 @@ describe("A1327 waiting copy: copyWaitingGroups", () => {
 
   async function copyWaiting(billId: string, from: string, to: string, lineIds: string[]) {
     return inTx(v, async (tx) => {
-      await reseatBill(tx, billId, to);
+      await numberBill(tx, billId, to);
       return copyWaitingGroups(tx, from, to, lineIds, MOVER);
     });
   }

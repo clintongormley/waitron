@@ -46,6 +46,7 @@ import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.j
 import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import {
+  billRow,
   cashContribution,
   commandFor,
   floorRow,
@@ -935,7 +936,7 @@ describe("the floor's attention signals", () => {
     expect(statements).toBe(0);
   });
 
-  it("gives joined tables the party's signals, and reads the bills a merged-in party kept", async () => {
+  it("gives joined tables the same signals, including those from a moved paid bill", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     const table2 = await v.table("Mesa 2");
@@ -952,7 +953,10 @@ describe("the floor's attention signals", () => {
       expectedOtherPartyRevision: await revisionOf(v, from.partyId),
     };
     await inTx(v, (tx) => joinTables(tx, v.cfg, into.partyId, table8, joining));
-    expect((await billsOn(v, from.partyId)).map((bill) => bill.status)).toEqual(["settled"]);
+    expect(await billRow(v, from.tabId)).toMatchObject({
+      status: "settled",
+      partyId: into.partyId,
+    });
 
     const expected = [
       {

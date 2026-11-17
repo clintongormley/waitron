@@ -1,4 +1,4 @@
-import { asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, isNotNull, or } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   parties,
@@ -7,7 +7,6 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { billIdentities, billNumberAllocations } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "../modules.js";
 
 type HasDb = { db: Database };
@@ -20,40 +19,40 @@ export async function numbersOf(
   const rows = await withTransaction(v.db, (tx) =>
     tx
       .select({
-        billId: billIdentities.workingOrderId,
-        number: billIdentities.number,
-        name: billIdentities.name,
+        billId: workingOrders.id,
+        number: workingOrders.billNumber,
+        name: workingOrders.billName,
       })
-      .from(billIdentities)
-      .where(eq(billIdentities.partyId, partyId))
-      .orderBy(asc(billIdentities.number)),
+      .from(workingOrders)
+      .where(and(eq(workingOrders.partyId, partyId), isNotNull(workingOrders.billNumber)))
+      .orderBy(asc(workingOrders.billNumber)),
   );
   return rows.map((row) => [row.billId, row.number, row.name]);
 }
 
-/** Every number the party has ever given, as `[number, billId]`, in number order. */
-export async function allocationsOf(v: HasDb, partyId: string): Promise<[number, string][]> {
-  const rows = await withTransaction(v.db, (tx) =>
-    tx
-      .select({
-        number: billNumberAllocations.number,
-        billId: billNumberAllocations.workingOrderId,
-      })
-      .from(billNumberAllocations)
-      .where(eq(billNumberAllocations.partyId, partyId))
-      .orderBy(asc(billNumberAllocations.number)),
+export async function lastBillNumberOf(v: HasDb, partyId: string): Promise<number> {
+  const [row] = await withTransaction(v.db, (tx) =>
+    tx.select({ number: parties.lastBillNumber }).from(parties).where(eq(parties.id, partyId)),
   );
-  return rows.map((row) => [row.number, row.billId]);
+  return row!.number;
 }
 
-/** Both bill-number tables, whole, for a before-and-after comparison. */
 export async function billNumberTables(v: HasDb) {
   return withTransaction(v.db, async (tx) => ({
-    identities: await tx.select().from(billIdentities).orderBy(asc(billIdentities.workingOrderId)),
+    identities: await tx
+      .select({
+        workingOrderId: workingOrders.id,
+        partyId: workingOrders.partyId,
+        number: workingOrders.billNumber,
+        name: workingOrders.billName,
+      })
+      .from(workingOrders)
+      .where(or(isNotNull(workingOrders.partyId), isNotNull(workingOrders.billName)))
+      .orderBy(workingOrders.id),
     allocations: await tx
-      .select()
-      .from(billNumberAllocations)
-      .orderBy(asc(billNumberAllocations.partyId), asc(billNumberAllocations.number)),
+      .select({ partyId: parties.id, lastBillNumber: parties.lastBillNumber })
+      .from(parties)
+      .orderBy(parties.id),
   }));
 }
 
@@ -86,11 +85,11 @@ export async function expectEveryPartyBillNumbered(tx: Transaction): Promise<voi
     .where(ne(workingOrders.status, "abandoned"));
   const rows = await tx
     .select({
-      billId: billIdentities.workingOrderId,
-      partyId: billIdentities.partyId,
-      number: billIdentities.number,
+      billId: workingOrders.id,
+      partyId: workingOrders.partyId,
+      number: workingOrders.billNumber,
     })
-    .from(billIdentities);
+    .from(workingOrders);
   const scopes = new Map(rows.map((row) => [row.billId, row]));
   const unnumbered = bills
     .filter((bill) => bill.partyId !== null)

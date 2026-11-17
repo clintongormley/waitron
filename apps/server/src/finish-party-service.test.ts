@@ -420,7 +420,7 @@ describe("finishing paid food service", () => {
     p.body.expectedEdits.push(await inTx(venue, (tx) => readBillEditState(tx, other.billId)));
     p.body.expectedEdits.sort((a, b) => a.billId.localeCompare(b.billId));
     const one = await confirm(p);
-    const two = await confirm(other);
+    const two = await confirm({ ...other, partyId: p.partyId });
     const before = await snapshot(p);
     const answer = await post(p, {
       ...one,

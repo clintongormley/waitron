@@ -15,6 +15,7 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
 // `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
 // triggers against this file instead of against what the product reads.
 import {
+  BILL_NUMBER_DECREASE_REFUSAL,
   BILL_PAYMENT_CHANGE_REFUSAL,
   BILL_PAYMENT_DELETE_REFUSAL,
   BILL_REFUND_CHANGE_REFUSAL,
@@ -98,6 +99,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "parties_last_bill_number_no_decrease",
   "payments_guard_update",
   "payments_no_delete",
   "activity_log_refuse_update",
@@ -650,7 +652,6 @@ describe("working_orders_enforce_transition", () => {
     ).toBeUndefined();
   });
 
-  // The kitchen-handover stamp is the ONLY write a settled order takes.
   it("accepts the kitchen-handover stamp on a settled order", () => {
     expect(
       refusalFor(
@@ -680,8 +681,6 @@ describe("working_orders_enforce_transition", () => {
     ).toBe(TRANSITION_REFUSAL);
   });
 
-  // Changing `party_id` ALONE would be refused whether or not the column is in the list, because the
-  // settled exception also needs `collected_at` to go from null to set; so the stamp rides along.
   it("refuses the handover stamp when the order's party changes with it", () => {
     expect(
       refusalFor(
@@ -727,7 +726,16 @@ describe("working_orders_dining_fixed", () => {
  * The columns of `working_orders` the placed → placed exception's list does not name: `status`,
  * which it requires to stay `placed`, and the three a move may change.
  */
-const MOVABLE_ORDER_COLUMNS = new Set(["status", "party_id", "delivery_table_id", "revision"]);
+const MOVABLE_ORDER_COLUMNS = new Set([
+  "status",
+  "party_id",
+  "delivery_table_id",
+  "revision",
+  "bill_number",
+  "bill_name",
+  "editor_id",
+  "editor_version",
+]);
 /** Every column of `working_orders` a presented bill's move must leave as it is. */
 const FROZEN_PLACED_ORDER_COLUMNS = connection
   .prepare(`select name from pragma_table_info('working_orders') order by cid`)
@@ -1924,6 +1932,20 @@ describe("day-start history", () => {
     } finally {
       connection.exec("rollback to day_start_case; release day_start_case");
     }
+  });
+});
+
+describe("party bill counter", () => {
+  it("a party's last bill number never goes down", () => {
+    connection.exec(party("bill-counter"));
+    connection.exec("update parties set last_bill_number = 1 where id = 'bill-counter'");
+    connection.exec("update parties set last_bill_number = 2 where id = 'bill-counter'");
+    expect(
+      refusalFor(connection, "update parties set last_bill_number = 1 where id = 'bill-counter'"),
+    ).toBe(BILL_NUMBER_DECREASE_REFUSAL);
+    expect(
+      connection.prepare("select last_bill_number from parties where id = 'bill-counter'").get(),
+    ).toEqual({ last_bill_number: 2 });
   });
 });
 

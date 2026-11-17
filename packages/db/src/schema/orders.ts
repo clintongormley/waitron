@@ -23,6 +23,7 @@ import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { originChecks, sourceColumn } from "./origin.js";
+import { persons } from "./identity/persons.js";
 import { parties } from "./parties.js";
 import { dining } from "./sale-rule-types.js";
 
@@ -47,20 +48,9 @@ export type StagedInvoiceDelivery =
  * all. Two tables, one transition between them: conflating them means chaining
  * drafts and rectifying records that were never sales.
  *
- * What replaces immutability here is a state machine the database enforces
- * (`working_orders_enforce_transition`): an `open` order may change freely or
- * advance to any next state; a `placed` order may be settled or abandoned, or
- * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
- * or change its invoice choice, recipient and receipt language with a revision advance before a
- * sale exists, or only take its handover stamp; `settled` and `abandoned` are terminal,
- * save the handover stamp on a settled order and, before that stamp, a settled order
- * leaving its party. In any state, an order holding a
- * `delivery_table_id` and no `delivery_table_label` may let go of the id,
- * keeping the name in the label; the label is otherwise free only while the
- * order is open or as a placed order is settled or abandoned.
- *
- * Each exception names the columns it holds unchanged; a new column must enter
- * those lists, or the trigger will permit it to change on a placed order.
+ * The transition trigger pins every column except party, bill number, bill name and editor
+ * on a settled bill; its separate handover branch only adds the first collection stamp.
+ * Each exception names the columns it holds unchanged, including newly added columns.
  *
  * `dining` is fixed earlier still, while the order is open: once a line has been
  * sent or has a kitchen ticket item, a payment attempt has started, a payment is
@@ -110,10 +100,26 @@ export const workingOrders = table(
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
+    billNumber: count("bill_number"),
+    billName: label("bill_name"),
+    editorId: id("editor_id").references(() => persons.id),
+    editorVersion: count("editor_version").notNull().default(0),
     // Eaten here or taken away. No default: whoever opens an order decides it.
     dining: dining("dining").notNull(),
   },
   (t) => [
+    uniqueIndex("working_orders_party_bill_number_key")
+      .on(t.partyId, t.billNumber)
+      .where(sql`${t.billNumber} is not null`),
+    check(
+      "working_orders_bill_number_ck",
+      sql`${t.billNumber} is null or (${t.partyId} is not null and typeof(${t.billNumber}) = 'integer' and ${t.billNumber} >= 1)`,
+    ),
+    check(
+      "working_orders_bill_name_ck",
+      sql`${t.billName} is null or (length(${t.billName}) between 1 and 40 and ${t.billName} = trim(${t.billName}))`,
+    ),
+    check("working_orders_editor_version_ck", sql`${t.editorVersion} >= 0`),
     uniqueIndex("working_orders_order_number_key").on(t.orderNumber),
     index("working_orders_uncollected_idx")
       .on(t.id)

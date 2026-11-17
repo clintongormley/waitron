@@ -108,6 +108,8 @@ this cannot be restored or imported."
 About 920 counted lines (the `parties` column and trigger included); about 3 hours. Over about 1,200 is rules §5.6's stop: split Task 4 (the merge change)
 into its own PR before Task 5.
 
+Watcher clearance, 2026-11-17 20:54 (Lane H questions.md): finish Tasks 1–4 in the first PR without undoing built work; Task 5, its remaining fixture ports and explicit move assertions, and the final protection comparison follow on a new branch. The three old tables remain until that follow-up.
+
 ## Finish line
 
 ```bash
@@ -157,9 +159,17 @@ venue-service's backup check that treated `bill_number_allocations` as immutable
   only. Today nothing guards `bill_edit_states`, so such a write would have passed silently.
 - A suite shows a settled bill changing `revision`, `zone`, or any column other than the five.
 
+Watcher clearance, 2026-11-17 20:16 (Lane H questions.md): the free-table move keeps its full editor-authority comparison but relocates only non-abandoned bills, leaving abandoned editor facts unchanged. Repair split ordering so taking a bill into its new party precedes allocating its number.
+
 ## Assertions that change, by design (rules §4)
 
 Each is named here in advance; any other changed assertion is a stop.
+
+Watcher direction, 2026-11-17 19:00 (Lane H questions.md): default editor-row assertions become exact null/zero column assertions, retaining API, ownership, version and no-write checks. Settled no-op updates remain refused; the five-column branch requires a change to at least one of those columns.
+
+Watcher clearance, 2026-11-17 18:43 (Lane H questions.md): retire only `bill-editing.test.ts`’s orphan-editor acceptance case; the planned person-key refusal owns rejection, and other invented-editor fixtures seed real people (U11).
+
+Watcher clearance, 2026-11-17 22:44 (Lane H questions.md): full bill-row checks in `collect-at-counter.test.ts` and `parties.test.ts` include the number clear and editor increment that moved onto the bill. Retire the corresponding orphan-editor save acceptance in `order-drafts.db.test.ts`. Keep the real-editor name and conflict checks, historical previous-editor lookup, and the database's missing-person refusal.
 
 - `packages/db/src/schema/orders.transition.test.ts:696, :720, :740` (Task 2 Step 2): the owner's
   five-column exception (README §10).

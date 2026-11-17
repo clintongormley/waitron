@@ -247,11 +247,11 @@ async function moveBillOnce(
       .update(workingOrders)
       .set({
         partyId: null,
+        billNumber: null,
         revision: movedRevision,
         ...(open ? { label: await counterLabel(tx, source) } : {}),
       })
       .where(eq(workingOrders.id, billId));
-    await VENUE_SERVICE.releaseBillNumber(tx, billId);
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     await relocateBillEditor(tx, billId, expectedEdit);
     result = { partyId: null, billId };
@@ -316,8 +316,7 @@ async function moveBillOnce(
 
 /**
  * Move a paid bill not yet handed over from `from`, the party being finished, to the counter. The
- * bill keeps its label, revision and zone: the database lets a settled bill's own row leave its
- * party and change nothing else. Only the stations with something on it still to come are told.
+ * bill keeps its label, revision and zone. Only stations with food still to come are told.
  */
 export async function moveSettledBillToCounter(
   tx: Transaction,
@@ -339,8 +338,10 @@ export async function moveSettledBillToCounter(
   const before = await workStillToCome(tx, await readSentWork(tx, billId));
   await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
   await leaveParty(tx, billId, "refuse");
-  await tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, billId));
-  await VENUE_SERVICE.releaseBillNumber(tx, billId);
+  await tx
+    .update(workingOrders)
+    .set({ partyId: null, billNumber: null })
+    .where(eq(workingOrders.id, billId));
   await relocateBillEditor(tx, billId, expectedEdit);
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
   await enqueueMovedSlips(tx, cfg, before, billId);
@@ -508,7 +509,12 @@ export async function takeIntoParty(
 ): Promise<void> {
   const [bill] = await tx
     .update(workingOrders)
-    .set({ partyId, deliveryTableId: null, revision: movedRevision })
+    .set({
+      partyId,
+      billNumber: sql`case when ${workingOrders.partyId} is ${partyId} then ${workingOrders.billNumber} else null end`,
+      deliveryTableId: null,
+      revision: movedRevision,
+    })
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);

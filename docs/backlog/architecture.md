@@ -940,6 +940,10 @@ also qualifies the historical operation-description references in this section.
   A device keeps its chosen reader on its row, and a profile keeps its ordered readers and default
   in one list. Reader deletion clears both; configuration exports leave those assignments behind.
 
+  Bill numbers, names and editor ownership now use columns on each bill, with the next number
+  held by its party. A party merge also moves paid bills and preserves their collection facts;
+  abandoned bills stay behind. os2 still needs to remove the three unused tables and their registries.
+
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
 Size M.

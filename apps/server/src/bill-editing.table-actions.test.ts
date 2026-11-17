@@ -299,6 +299,10 @@ describe("table composition compares every affected bill before moving anything"
         .from(workingOrders)
         .where(eq(workingOrders.id, from.tabId));
       expect(merged).toEqual({ status: "abandoned" });
+      expect(await inTx(venue, (tx) => readBillEditState(tx, from.tabId))).toMatchObject({
+        editorId: null,
+        editorVersion: 3,
+      });
     },
   );
   it.each(actions)("%s rejects a stale version on an empty destination bill", async (action) => {
@@ -308,7 +312,7 @@ describe("table composition compares every affected bill before moving anything"
     const expected = await edits(from.partyId, into.partyId);
     await inTx(venue, async (tx) =>
       tx.run(
-        sql`insert into bill_edit_states (bill_id, editor_id, editor_version) values (${extra}, null, 2)`,
+        sql`update working_orders set editor_id = null, editor_version = 2 where id = ${extra}`,
       ),
     );
     const current = await inTx(venue, (tx) => readBillEditState(tx, extra));

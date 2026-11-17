@@ -110,7 +110,7 @@ describe("orderWatchZones", () => {
     );
 
     const actualPartyId = (await billRow(v, merged.tabId)).partyId;
-    expect(actualPartyId).toBe(merged.partyId);
+    expect(actualPartyId).toBe(survivor.partyId);
     expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, [merged.tabId]))).toEqual(
       new Map([[merged.tabId, terrace]]),
     );

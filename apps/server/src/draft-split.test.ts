@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   billPayments,
   billPaymentLines,
   ticketItems,
@@ -169,7 +168,14 @@ async function frozen() {
     numbers: venue.db.all(
       sql`select count(*) as count, max(order_number) as maximum from working_orders`,
     ),
-    states: await venue.db.select().from(billEditStates).orderBy(billEditStates.billId),
+    states: await venue.db
+      .select({
+        billId: workingOrders.id,
+        editorId: workingOrders.editorId,
+        editorVersion: workingOrders.editorVersion,
+      })
+      .from(workingOrders)
+      .orderBy(workingOrders.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),

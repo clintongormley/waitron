@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
@@ -125,7 +125,8 @@ export async function moveGuests(
       await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
     }
     await leaveMergeOf(tx, toTableId, held);
-    for (const expected of options.expectedEdits)
+    const relocating = await billsTaking(tx, partyId, ["open", "placed", "settled"]);
+    for (const expected of options.expectedEdits.filter((edit) => relocating.includes(edit.billId)))
       await relocateBillEditor(tx, expected.billId, expected);
     return { partyId, billIds: await shownBillIds(tx, cfg, partyId) };
   });
@@ -217,8 +218,8 @@ function combinedGuests(from: number | null, into: number | null): number | null
 
 /**
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
- * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
- * on it and count through the family. No bill merges (spec §3.4). `from`'s tables are left
+ * move, and its open, presented and paid bills move across whole (P13); its abandoned bills stay
+ * on it. No bill merges (spec §3.4). `from`'s tables are left
  * for clearing, or join `into`. The caller has checked and moved on both parties' revisions, and
  * tells the kitchen.
  */
@@ -258,13 +259,24 @@ export async function combineParties(
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
+  const numbered = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.partyId, from), ne(workingOrders.status, "abandoned")))
+    .orderBy(asc(workingOrders.billNumber), asc(workingOrders.id));
+  const billIds = numbered.map((bill) => bill.id);
+  if (billIds.length > 0)
+    await tx
+      .update(workingOrders)
+      .set({ billNumber: null })
+      .where(and(inArray(workingOrders.id, billIds), isNotNull(workingOrders.billNumber)));
   const movingBills = await billsTaking(tx, from, ["open", "placed"]);
   for (const billId of movingBills) {
     // Whole groups travel with the party, so no bill leaves its group here.
     await takeIntoParty(tx, cfg, billId, into, zoneId);
   }
 
-  await VENUE_SERVICE.rescopeBillNumbers(tx, from, into);
+  await VENUE_SERVICE.rescopeBillNumbers(tx, billIds, into);
   await moveDraftsToParty(
     tx,
     from,
@@ -396,7 +408,10 @@ export async function splitTable(
     tableId,
   });
   await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
-  for (const { billId } of leaving) await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
+  for (const { billId } of leaving) {
+    await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+    await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
+  }
   const arriving = [...leaving];
   let newBill: string | null = null;
   if (looseMoves.length > 0) {
@@ -428,7 +443,6 @@ export async function splitTable(
   );
   if (arriving.length === 0) await insertPartyBill(tx, cfg, newParty);
   for (const { billId } of leaving) {
-    await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
     await moveBillDraftsToParty(
       tx,
       billId,
@@ -535,7 +549,7 @@ async function addTable(tx: Transaction, partyId: string, tableId: string): Prom
 async function billsTaking(
   tx: Transaction,
   partyId: string,
-  statuses: ("open" | "placed")[],
+  statuses: ("open" | "placed" | "settled")[],
 ): Promise<string[]> {
   const rows = await tx
     .select({ id: workingOrders.id })
