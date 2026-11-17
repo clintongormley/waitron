@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { run } from "./pp8-attendance-renames.mjs";
