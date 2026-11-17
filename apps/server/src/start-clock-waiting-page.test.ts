@@ -33,7 +33,13 @@ const NOON_MS = Date.parse("2026-11-13T12:00:00.000Z");
 async function open(
   page: Page,
   aheadMs: number,
-  options: { fromBox?: boolean; setAnswer?: ModuleClockSetAnswer; setMovesClock?: boolean } = {},
+  options: {
+    fromBox?: boolean;
+    setAnswer?: ModuleClockSetAnswer;
+    setMovesClock?: boolean;
+    /** The page's clock moves only when the test moves it. */
+    paused?: boolean;
+  } = {},
 ) {
   const started = Date.now();
   const sets: ModuleClockSetRequest[] = [];
@@ -84,7 +90,27 @@ async function open(
     }),
   );
   await page.clock.install({ time: NOON_MS });
+  if (options.paused) await page.clock.pauseAt(NOON_MS);
+  // Counts the page's looks, set and started, so a test moves the clock only between looks.
+  await page.addInitScript(() => {
+    const looks = { armed: 0, ran: 0 };
+    Object.assign(window, { looks });
+    const set = window.setTimeout;
+    window.setTimeout = ((run: TimerHandler, ms?: number) => {
+      if (typeof run !== "function" || run.name !== "look") return set(run, ms);
+      looks.armed += 1;
+      return set(() => {
+        looks.ran += 1;
+        run();
+      }, ms);
+    }) as typeof setTimeout;
+  });
   await page.goto("http://waitron.local:8080/till/");
+  // The look counter must see the page's first look, or every wait on it passes at once.
+  if (options.paused)
+    expect(
+      await page.evaluate(() => (window as unknown as { looks: { armed: number } }).looks.armed),
+    ).toBe(1);
   return { ...subject, sets, control };
 }
 
@@ -98,6 +124,33 @@ const dateIn = (locale: string, ms: number) =>
   new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(ms);
 
 const words = START_CLOCK_WAITING_WORDS["en-GB"];
+
+/** Holds until no look is under way: the page sets its next look only when the last one ends. */
+async function lookEnded(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const { looks } = window as unknown as { looks: { armed: number; ran: number } };
+          // None set: the page has left for the server.
+          return looks.armed === 0 || looks.armed > looks.ran;
+        }),
+      // The clock is paused, so a longer real wait moves no page time.
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+}
+
+/** Moves the paused page clock on a second at a time, never while a look is under way, until
+ * `done` holds; fails once `maxMs` of page time has gone by. */
+async function runUntil(page: Page, maxMs: number, done: () => boolean | Promise<boolean>) {
+  for (let stepped = 0; ; stepped += 1_000) {
+    await lookEnded(page);
+    if (await done()) return;
+    if (stepped >= maxMs) throw new Error(`not done after ${maxMs} ms of the page's time`);
+    await page.clock.runFor(1_000);
+  }
+}
 
 async function withPage(locale: string, run: (page: Page) => Promise<void>) {
   const page = await browser!.newPage({ locale });
@@ -174,26 +227,23 @@ it("Confirm the time keeps an agreeing time and says so", () =>
 
 it("asks again once the server no longer holds the confirmation, as after a refused try", () =>
   withPage("en-GB", async (page) => {
-    const box = await open(page, 0);
+    const box = await open(page, 0, { paused: true });
     await enterKey(page, KEY);
     await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
     await page.getByRole("button", { name: words.confirm }).click();
     await expect.poll(() => page.locator("#clock-confirmed").isVisible()).toBe(true);
     const requests: string[] = [];
     page.on("request", (request) => requests.push(new URL(request.url()).pathname));
-    for (const look of [1, 2]) {
-      const reply = page.waitForResponse(
-        (response) => new URL(response.url()).pathname === "/till/",
+    for (const look of [1, 2])
+      await runUntil(
+        page,
+        5_000,
+        () => requests.filter((path) => path === "/till/").length === look,
       );
-      await page.clock.runFor(5_000);
-      await (await reply).finished();
-      await expect.poll(() => requests.filter((path) => path === "/till/").length).toBe(look);
-    }
     expect(await page.locator("#clock-confirmed").isVisible()).toBe(true);
     expect(requests.filter((path) => path.endsWith("/compare"))).toEqual([]);
     box.dropConfirmation(box.confirmation()!);
-    await page.clock.runFor(5_000);
-    await expect.poll(() => page.locator("#clock-confirmed").isVisible()).toBe(false);
+    await runUntil(page, 5_000, async () => !(await page.locator("#clock-confirmed").isVisible()));
     await expect.poll(() => requests.filter((path) => path.endsWith("/compare")).length).toBe(1);
     expect(await page.locator("#clock-step").isVisible()).toBe(true);
   }));
@@ -277,22 +327,21 @@ async function leftWithKeyCleared(page: Page) {
 
 it("leaves for the server once the wait ends without a confirmation, as when its time service synchronises", () =>
   withPage("en-GB", async (page) => {
-    const box = await open(page, 0);
+    const box = await open(page, 0, { paused: true });
     await enterKey(page, KEY);
     await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
     const looks: string[] = [];
     page.on("request", (request) => looks.push(new URL(request.url()).pathname));
-    await page.clock.runFor(5_000);
-    await expect.poll(() => looks.filter((path) => path === "/till/").length).toBe(1);
+    await runUntil(page, 5_000, () => looks.filter((path) => path === "/till/").length === 1);
     expect(await page.locator("#clock-step").isVisible()).toBe(true);
     box.control.finished = true;
-    await page.clock.runFor(5_000);
+    await runUntil(page, 5_000, async () => (await page.locator("h1").innerText()) === "Trading");
     await leftWithKeyCleared(page);
   }));
 
 it("leaves for the server once the wait ends after a confirmation", () =>
   withPage("en-GB", async (page) => {
-    const box = await open(page, 0);
+    const box = await open(page, 0, { paused: true });
     await enterKey(page, KEY);
     await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
     await page.getByRole("button", { name: words.confirm }).click();
@@ -304,7 +353,7 @@ it("leaves for the server once the wait ends after a confirmation", () =>
 
 it("gives up on a look that stalls and looks again, so a request hung across the restart ends nothing", () =>
   withPage("en-GB", async (page) => {
-    const box = await open(page, 0);
+    const box = await open(page, 0, { paused: true });
     box.control.stallLooks = true;
     await page.clock.runFor(5_000);
     await expect.poll(() => box.control.stalled).toBe(1);
@@ -312,6 +361,5 @@ it("gives up on a look that stalls and looks again, so a request hung across the
     box.control.finished = true;
     // The stalled look's deadline, then the next look.
     await page.clock.runFor(5_000);
-    await page.clock.runFor(5_000);
-    await expect.poll(() => page.locator("h1").innerText()).toBe("Trading");
+    await runUntil(page, 5_000, async () => (await page.locator("h1").innerText()) === "Trading");
   }));

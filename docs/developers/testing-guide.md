@@ -2117,6 +2117,22 @@ before its `interlock-open-error` reply, exceeding the case's 200 ms poll bound.
 passes with controlled timers and unchanged assertions. This reproduces main CI run
 `40102704543`'s symptom; that run recorded no request timeline, so its exact delay is unknown.
 
+## A page that sets its next timer after an answer cannot be moved on by one clock jump
+
+If a page sets its next timer only after a request has answered, a jump of Playwright's fake clock
+made before the page has set that timer fires nothing; the timer, set afterwards, falls due beyond
+the time the test moved the clock to, so the test waits for a look that never comes. Pause the clock, step it a second at a time, and step only once the page has set its
+next timer; bound the steps by page time, not by a real-time wait.
+
+Playwright 1.65's `page.clock.install` leaves the page's clock running at real speed until
+`page.clock.pauseAt` is called. A probe page (install, load, a 1-second `setTimeout`, then 2.5 real
+seconds) found the timer fired and `Date.now()` 2,502 ms on; after `pauseAt`, the timer had not
+fired and `Date.now()` had not moved. So a long real-time poll over a running clock can pass a
+test by itself.
+
+`apps/server/src/start-clock-waiting-page.test.ts` does this: it counts the page's looks through
+an init script that wraps `setTimeout`, and its `runUntil` steps only between looks.
+
 **Printing on real hardware**
 
 ## How long a job of pictures takes to print on the box is not measured
