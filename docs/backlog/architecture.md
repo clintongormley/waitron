@@ -935,7 +935,7 @@ also qualifies the historical operation-description references in this section.
 
   Bill numbers, names and editor ownership now use columns on each bill, with the next number
   held by its party. A party merge also moves paid bills and preserves their collection facts;
-  abandoned bills stay behind. os2 still needs to remove the three unused tables and their registries.
+  abandoned bills stay behind.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

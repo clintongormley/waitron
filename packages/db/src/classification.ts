@@ -230,11 +230,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who (a person or a kitchen display) submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
   ),
   classify(
-    "bill_edit_states",
-    "state",
-    "bill editing responsibility and retained ownership version; copied to a standby, never drained back",
-  ),
-  classify(
     "order_drafts",
     "state",
     "each operator's unsent order on a seated party; copied to a standby, never drained back",
@@ -357,12 +352,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("order_kitchen_notes", "state", SERVICE_STATE),
   classify("party_allergy_guests", "state", SERVICE_STATE),
   classify("allergy_line_ticks", "state", SERVICE_STATE),
-  classify("bill_identities", "state", SERVICE_STATE),
-  appendOnly(
-    "bill_number_allocations",
-    "ledger",
-    "each bill number a seated party has given, so none is given twice",
-  ),
   classify("seasons", "state", SERVICE_STATE),
   classify("special_days", "state", SERVICE_STATE),
   classify("special_day_dates", "state", SERVICE_STATE),

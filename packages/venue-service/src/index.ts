@@ -2,8 +2,6 @@ import "./errors.js";
 
 export {
   allergyLineTicks,
-  billIdentities,
-  billNumberAllocations,
   openingHours,
   departments,
   departmentTransferDestinations,

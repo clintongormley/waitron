@@ -7,7 +7,7 @@ import { VENUE_SERVICE_TABLES } from "./classification.js";
 import * as schema from "@waitron/db/schema/venue-service.js";
 
 const tables = [...VENUE_SERVICE_TABLES];
-const immutableTables = ["sale_receipt_headers", "bill_number_allocations"];
+const immutableTables = ["sale_receipt_headers"];
 export const VENUE_SERVICE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,

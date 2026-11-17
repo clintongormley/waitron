@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e83125c6-387a-43b1-b3b2-9c8cf2d5a497",
+  "id": "2ad652f4-d28a-476b-a865-db2878d5c3ce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -10860,57 +10860,6 @@
         }
       }
     },
-    "bill_edit_states": {
-      "name": "bill_edit_states",
-      "columns": {
-        "bill_id": {
-          "name": "bill_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "editor_id": {
-          "name": "editor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "editor_version": {
-          "name": "editor_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "bill_edit_states_bill_fk": {
-          "name": "bill_edit_states_bill_fk",
-          "tableFrom": "bill_edit_states",
-          "tableTo": "working_orders",
-          "columnsFrom": [
-            "bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "bill_edit_states_version_ck": {
-          "name": "bill_edit_states_version_ck",
-          "value": "\"bill_edit_states\".\"editor_version\" >= 0"
-        }
-      }
-    },
     "venue_credentials": {
       "name": "venue_credentials",
       "columns": {
@@ -17565,152 +17514,6 @@
         "service_steps_minutes_ck": {
           "name": "service_steps_minutes_ck",
           "value": "\"service_steps\".\"minutes\" between 0 and 120 and (\"service_steps\".\"start\" <> 'since_last_order' or \"service_steps\".\"minutes\" >= 1)"
-        }
-      }
-    },
-    "bill_identities": {
-      "name": "bill_identities",
-      "columns": {
-        "working_order_id": {
-          "name": "working_order_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "party_id": {
-          "name": "party_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "bill_identities_party_number_key": {
-          "name": "bill_identities_party_number_key",
-          "columns": [
-            "party_id",
-            "number"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "bill_identities_working_order_id_working_orders_id_fk": {
-          "name": "bill_identities_working_order_id_working_orders_id_fk",
-          "tableFrom": "bill_identities",
-          "tableTo": "working_orders",
-          "columnsFrom": [
-            "working_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bill_identities_party_id_parties_id_fk": {
-          "name": "bill_identities_party_id_parties_id_fk",
-          "tableFrom": "bill_identities",
-          "tableTo": "parties",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "bill_identities_scope_ck": {
-          "name": "bill_identities_scope_ck",
-          "value": "(\"bill_identities\".\"party_id\" is null) = (\"bill_identities\".\"number\" is null)"
-        },
-        "bill_identities_number_ck": {
-          "name": "bill_identities_number_ck",
-          "value": "\"bill_identities\".\"number\" is null or (typeof(\"bill_identities\".\"number\") = 'integer' and \"bill_identities\".\"number\" >= 1)"
-        },
-        "bill_identities_name_ck": {
-          "name": "bill_identities_name_ck",
-          "value": "\"bill_identities\".\"name\" is null or (length(\"bill_identities\".\"name\") between 1 and 40 and \"bill_identities\".\"name\" = trim(\"bill_identities\".\"name\"))"
-        }
-      }
-    },
-    "bill_number_allocations": {
-      "name": "bill_number_allocations",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "party_id": {
-          "name": "party_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "working_order_id": {
-          "name": "working_order_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "allocated_at": {
-          "name": "allocated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "bill_number_allocations_party_number_key": {
-          "name": "bill_number_allocations_party_number_key",
-          "columns": [
-            "party_id",
-            "number"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "bill_number_allocations_number_ck": {
-          "name": "bill_number_allocations_number_ck",
-          "value": "typeof(\"bill_number_allocations\".\"number\") = 'integer' and \"bill_number_allocations\".\"number\" >= 1"
         }
       }
     },

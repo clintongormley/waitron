@@ -1249,6 +1249,22 @@ describe("the move route", () => {
     expect(partyOfBill(billId)).toBe(secondParty.partyId);
   });
 
+  it("moving Bill 1 onto a party with a Bill 1 numbers the incoming bill 2", async () => {
+    const firstParty = await seatedWith(venue, "Tarta");
+    const secondParty = await seatedWith(venue, "Caña");
+    const numberOf = (billId: string) =>
+      venue.db.all(sql`select bill_number from working_orders where id = ${billId}`);
+    expect(numberOf(firstParty.tabId)).toEqual([{ bill_number: 1 }]);
+    expect(numberOf(secondParty.tabId)).toEqual([{ bill_number: 1 }]);
+
+    const answer = await moveTo(firstParty.tabId, secondParty.tableId);
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ partyId: secondParty.partyId, billId: firstParty.tabId });
+    expect(numberOf(firstParty.tabId)).toEqual([{ bill_number: 2 }]);
+    expect(numberOf(secondParty.tabId)).toEqual([{ bill_number: 1 }]);
+  });
+
   it("A803 no main bill (move): a bill moved onto a table held by another party stays its own open bill, beside the open bill already there", async () => {
     const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
@@ -1261,8 +1277,11 @@ describe("the move route", () => {
     expect(await statusOf(venue, secondParty.tabId)).toBe("open");
   });
 
-  it("moves a bill to the counter in the zone sent, answering no party", async () => {
+  it("moves a bill to the counter in the requested zone and clears its party and number", async () => {
     const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
+    const identity = () =>
+      venue.db.all(sql`select party_id, bill_number from working_orders where id = ${billId}`);
+    expect(identity()).toEqual([{ party_id: firstParty.partyId, bill_number: 2 }]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { counter: { zoneId: ticketThenPayZone.toUpperCase() } },
@@ -1272,6 +1291,7 @@ describe("the move route", () => {
 
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual({ partyId: null, billId });
+    expect(identity()).toEqual([{ party_id: null, bill_number: null }]);
     const [context] = venue.db.all<{ zone_id: string }>(
       sql`select zone_id from order_service_contexts where working_order_id = ${billId}`,
     );

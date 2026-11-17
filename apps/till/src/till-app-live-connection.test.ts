@@ -303,7 +303,7 @@ it("a bill change during a draft read queues a fresh read", async () => {
   const before = api.listDrafts!.mock.calls.length;
   stream.event("change", '[{"type":"working_orders"}]');
   await flush(el);
-  stream.event("change", '[{"type":"bill_edit_states"}]');
+  stream.event("change", '[{"type":"working_orders"}]');
   await flush(el);
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
   release(answer);

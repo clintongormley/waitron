@@ -141,7 +141,6 @@ export {
   orderDraftState,
   orderDrafts,
 } from "./schema/order-drafts.js";
-export { billEditStates } from "./schema/bill-edit-states.js";
 export { lineServiceCancellations } from "./schema/line-service-cancellations.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
@@ -416,8 +415,6 @@ export {
 export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";
 export {
   allergyLineTicks,
-  billIdentities,
-  billNumberAllocations,
   openingHours,
   departments,
   departmentTransferDestinations,
