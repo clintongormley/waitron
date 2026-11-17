@@ -9,6 +9,7 @@ import {
 import {
   billPaymentRefunds,
   billPayments,
+  deviceNotDeleted,
   devices,
   printerHolders,
   printers,
@@ -44,7 +45,7 @@ async function deviceDeleteRules(
       name: devices.label,
     })
     .from(devices)
-    .where(and(eq(devices.id, id), isNull(devices.deletedAt)));
+    .where(and(eq(devices.id, id), deviceNotDeleted()));
   if (device === undefined) throw new AppError("device.not_found", { deviceId: id });
 
   const orderColumns = {
@@ -117,7 +118,7 @@ export async function disableDevice(tx: Transaction, id: string): Promise<void> 
   const updated = await tx
     .update(devices)
     .set({ active: false })
-    .where(and(eq(devices.id, id), isNull(devices.deletedAt)))
+    .where(and(eq(devices.id, id), deviceNotDeleted()))
     .returning({ id: devices.id });
   if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
   await endDeviceSessions(tx, id);

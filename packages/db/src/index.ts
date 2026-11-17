@@ -147,7 +147,7 @@ export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
-export { devices } from "./schema/devices.js";
+export { deviceNotDeleted, devices } from "./schema/devices.js";
 export { deviceMadeHereStations } from "./schema/device-made-here-stations.js";
 export { deviceApprovedProfiles } from "./schema/device-approved-profiles.js";
 export { joinRequestKind, joinRequests } from "./schema/join-requests.js";

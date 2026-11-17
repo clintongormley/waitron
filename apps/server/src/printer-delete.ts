@@ -6,6 +6,7 @@ import {
   type DeleteTarget,
 } from "@waitron/shared";
 import {
+  deviceNotDeleted,
   deviceProfilePrinters,
   deviceProfiles,
   devices,
@@ -112,7 +113,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
         eq(deviceProfilePrinters.isDefault, true),
       ),
     )
-    .where(and(eq(devices.active, true), isNull(devices.deletedAt)));
+    .where(and(eq(devices.active, true), deviceNotDeleted()));
   const equipment = await readPrinterEquipment(
     tx,
     candidates.map((device) => device.id),

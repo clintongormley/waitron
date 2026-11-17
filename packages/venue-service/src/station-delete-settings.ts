@@ -1,5 +1,6 @@
-import { and, eq, inArray, isNull, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
+  deviceNotDeleted,
   deviceProfileKitchenScreenStations,
   deviceProfiles,
   devices,
@@ -65,13 +66,7 @@ async function settings(tx: Transaction, id: string) {
     .select({ id: devices.id, name: devices.label })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(
-      and(
-        eq(devices.active, true),
-        isNull(devices.deletedAt),
-        eq(deviceProfiles.formFactor, "kds"),
-      ),
-    );
+    .where(and(eq(devices.active, true), deviceNotDeleted(), eq(deviceProfiles.formFactor, "kds")));
   const bound: DeleteTarget[] = [];
   const resolved = await readDevicesKitchenScreens(
     tx,

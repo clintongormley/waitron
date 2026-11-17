@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { isNull, sql, type SQL } from "drizzle-orm";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
@@ -66,3 +66,5 @@ export const devices = table(
       .where(sql`${t.active} = 1`),
   ],
 );
+
+export const deviceNotDeleted = (): SQL => isNull(devices.deletedAt);

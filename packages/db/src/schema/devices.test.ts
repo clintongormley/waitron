@@ -11,7 +11,7 @@ import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 
-import { devices } from "./devices.js";
+import { deviceNotDeleted, devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 
@@ -44,6 +44,26 @@ describe("device labels without a venue", () => {
       { id: "active" },
       { id: "inactive" },
     ]);
+  });
+});
+
+describe("deviceNotDeleted", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("matches a device with no deletion time and not one with a deletion time", async () => {
+    await seedDeviceProfiles(suite.db, {
+      id: KDS_PROFILE_A,
+      name: "Till profile",
+      formFactor: "till",
+    });
+    const insert = (id: string, deletedAt: string | null) =>
+      suite.db.run(sql`insert into devices
+        (id, device_profile_id, label, token_hash, active, deleted_at, enrolled_at, created_at)
+        values (${id}, ${KDS_PROFILE_A}, ${id}, 'hash', 0, ${deletedAt}, '2026-11-11', '2026-11-11')`);
+    await insert("live", null);
+    await insert("deleted", "2026-11-12T10:00:00.000Z");
+    const rows = await suite.db.select({ id: devices.id }).from(devices).where(deviceNotDeleted());
+    expect(rows).toEqual([{ id: "live" }]);
   });
 });
 
