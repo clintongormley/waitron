@@ -293,6 +293,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-combobox.ts": 4,
         "src/components/wt-data-table.ts": 12,
         "src/components/wt-dialog.ts": 6,
+        "src/components/wt-floor-plan-canvas.ts": 2,
       },
       "ui-core": {},
       shared: {},
@@ -370,7 +371,7 @@ describe("shardFiles", () => {
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
     const ranges = heavy.sort().flatMap((path) => splitRanges(path, 120, HEAVY_FILES.ui[path]));
-    expect(ranges).toHaveLength(22);
+    expect(ranges).toHaveLength(24);
     const total = ranges.length + 3;
     const shards = Array.from({ length: total }, (_, i) => shardFilesOf("ui", i + 1, total, dir));
     expect(shards).toEqual([
@@ -423,13 +424,13 @@ describe("shardFiles", () => {
       join(dir, "packages/ui/stryker.config.json"),
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
-    expect(() => shardFilesOf("ui", 1, 22, dir)).toThrow(
-      /22 shards cannot hold the 22 heavy ranges plus the other files/,
+    expect(() => shardFilesOf("ui", 1, 24, dir)).toThrow(
+      /24 shards cannot hold the 24 heavy ranges plus the other files/,
     );
-    expect(() => shardFilesOf("ui", 1, 21, dir)).toThrow(
-      /21 shards cannot hold the 22 heavy ranges/,
+    expect(() => shardFilesOf("ui", 1, 23, dir)).toThrow(
+      /23 shards cannot hold the 24 heavy ranges/,
     );
-    expect(shardFilesOf("ui", 23, 23, dir)).toEqual(["src/a.ts"]);
+    expect(shardFilesOf("ui", 25, 25, dir)).toEqual(["src/a.ts"]);
   });
 });
 
@@ -489,7 +490,7 @@ for (const pkg of mutationCallers(
   });
 }
 
-describe.each(["db", "ui-core"])("%s's committed cost table", (pkg) => {
+describe.each(["db", "ui", "ui-core"])("%s's committed cost table", (pkg) => {
   const tablePath = join(packageDir(pkg), "mutation-costs.json");
 
   it("exists, so its shards are packed by estimated seconds rather than bytes", () => {

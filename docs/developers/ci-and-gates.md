@@ -1200,8 +1200,8 @@ list.
 
 `scripts/mutation-shard.mjs` packs every `packages/db` file into thirteen nightly shards by `packages/db/mutation-costs.json`, a table of
 estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
-table's own seconds per byte. `ui-core` uses its own recorded-duration table (below); `ui` and
-`shared` have no table and are still packed by bytes.
+table's own seconds per byte. `ui-core` and `ui` use their own recorded-duration tables (below);
+`shared` has no table and is still packed by bytes.
 
 **ui-core, 16 November 2026.** Run [43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319)
 packed `derive.ts` and `colour.ts` together by bytes; that shard reached its 25-minute limit.
@@ -1233,8 +1233,57 @@ writeFileSync("packages/ui-core/mutation-costs.json", JSON.stringify(
   Object.fromEntries(Object.entries(costs).sort(([a], [b]) => a.localeCompare(b))), null, 2) + "\n");
 ```
 
-The cost-table guards check both tables' existence, positive weights and current mutation paths,
-not freshness or the weight formula. A manual main run must still verify the new UI packing.
+**ui, 17 November 2026.** Scheduled run [44021607120](https://github.com/clintongormley/waitron/actions/runs/44021607120)
+cancelled `mutation-ui` shards 23 and 30 at their 50-minute limit. Packed by bytes, those two shards
+held about 8,600 and 7,200 recorded seconds against about 1,100 to 4,300 for the other six whole-file
+shards; `src/components/wt-floor-plan-canvas.ts` alone records about 5,500 s a night. The canvas is
+now a `HEAVY_FILES` entry in two line ranges (about 2,900 and 2,600 s), and the other whole files are
+packed by `packages/ui/mutation-costs.json`: per file, the MEDIAN over the shard reports of runs
+[43559793352](https://github.com/clintongormley/waitron/actions/runs/43559793352),
+[43679554218](https://github.com/clintongormley/waitron/actions/runs/43679554218),
+[43712380973](https://github.com/clintongormley/waitron/actions/runs/43712380973),
+[43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319) and 44021607120
+(which lacks shards 23 and 30) of the same per-file sum as ui-core's. These are ranking weights, not
+job predictions. Keep thirty shards and the 50-minute limit. Files no report holds (the re-exports
+of ui-core, `index.ts`, `vite-env.d.ts`: they have no mutants) are left out and take the byte
+fallback. Do not regenerate this table with the db-calibrated `scripts/mutation-costs.mjs`. Refresh
+from several runs' reports, each downloaded with
+`gh run download <run id> -p 'mutation-report-ui-shard-*' -D <scratch>/<run id>`, using this recipe
+from the repository root. Its folder-name check keeps ui-core's reports out (ui re-exports many of
+ui-core's paths), and it adds up a file's ranges within one run, so a run in which a file was split
+still gives that file one whole sample:
+
+```js
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { HEAVY_FILES, packageSelection } from "./scripts/mutation-shard.mjs";
+const selected = new Set(packageSelection("ui").paths);
+const skip = ["NoCoverage", "Ignored", "CompileError", "RuntimeError"];
+const samples = {};
+for (const run of readdirSync("<scratch>")) {
+  const seconds = {};
+  for (const shard of readdirSync(`<scratch>/${run}`)) {
+    const file = `<scratch>/${run}/${shard}/mutation.json`;
+    if (!shard.startsWith("mutation-report-ui-shard-") || !existsSync(file)) continue;
+    for (const [path, f] of Object.entries(JSON.parse(readFileSync(file)).files)) {
+      if (!selected.has(path) || Object.hasOwn(HEAVY_FILES.ui, path)) continue;
+      const tested = f.mutants.filter((m) => !skip.includes(m.status));
+      seconds[path] = (seconds[path] ?? 0) + tested.reduce((sum, m) => sum + m.duration, 0) / 1000;
+    }
+  }
+  for (const [path, s] of Object.entries(seconds)) (samples[path] ??= []).push(s);
+}
+const median = (values) => {
+  const s = [...values].sort((a, b) => a - b);
+  const n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+};
+const costs = Object.fromEntries(Object.keys(samples).sort()
+  .map((path) => [path, Math.max(0.1, Math.round(median(samples[path]) * 10) / 10)]));
+writeFileSync("packages/ui/mutation-costs.json", JSON.stringify(costs, null, 2) + "\n");
+```
+
+The cost-table guards check each table's existence, positive weights and current mutation paths,
+not freshness or the weight formula.
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
