@@ -28,3 +28,5 @@ Exclusions: layout, words, station screen, other language behaviour, dark-screen
 Estimate: production +15–30/−0–3 lines; tests +82–115/−1 including existing uncommitted tests; docs +30–35/−3–4. One slice. Normal hook and current-head CI own broader checks. Use finish-branch's two parallel Claude run-it reviews for response-ordering concurrency, then one fixes read. #3594 (`5115a01f22`) is already in the base; resolve later collisions under H13 and rerun focused checks.
 
 Claude plan read (206 s, 17 November): accepted the smaller direct non-bubbling event and corrected #3594’s base note. Its proposed new backlog line for already-lost stale/action state concerns excluded language behaviour; watcher disposition is pending before build. Existing guide wording stays.
+
+17 November, 01:25 update: the watcher cleared this plan in Lane F `questions.md`, including direct non-bubbling events, app `deviceMode` only and the stale/action-state finding staying as one PR-thread line. No owner design approval is claimed. Build proceeds under that clearance.
