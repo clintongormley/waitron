@@ -116,7 +116,7 @@ describe("Cloud recovery target", () => {
     expect(JSON.stringify(view)).not.toContain("store.example.test");
   });
 
-  it("refuses an approved point over 2 GiB before requesting a download grant", async () => {
+  it("refuses a version-1 point over 2 GiB before requesting a download grant", async () => {
     const f = await fixture({ ...point, size: 2_147_483_649 });
     const client = createCloudRecoveryClient(f.options);
     await expect(client.start()).rejects.toThrow();
