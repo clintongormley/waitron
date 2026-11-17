@@ -301,17 +301,42 @@ describe("sectionTrail", () => {
   });
 });
 
+const IMPORT_OR_RE_EXPORT =
+  /^(?:import\s+(type\s+)?[\s\S]*?|export\s*(type\s*)?(?:\*\s*(?:as\s+[\w$]+\s+)?|\{[^}]*\}\s*))from\s+["']([^"']+)["']/gm;
+const importedSpecifiers = (source: string) =>
+  [...source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "").matchAll(IMPORT_OR_RE_EXPORT)].map(
+    ([, importType, exportType, from]) => `${importType || exportType ? "type " : ""}${from}`,
+  );
+
+it.each<[string, string[]]>([
+  ['export { readFileSync } from "node:fs";', ["node:fs"]],
+  ['export * from "node:fs";', ["node:fs"]],
+  ['export * as fs from "node:fs";', ["node:fs"]],
+  ['export type { Stats } from "node:fs";', ["type node:fs"]],
+  ['import type { Stats } from "node:fs";', ["type node:fs"]],
+  ['import {\n  readFileSync,\n  statSync,\n} from "node:fs";', ["node:fs"]],
+  ['export {\n  // see {@link x}\n  readFileSync,\n} from "node:fs";', ["node:fs"]],
+  ['import {\n  // was: from "./ruleset.js"\n  readFileSync,\n} from "node:fs";', ["node:fs"]],
+  [
+    'import {\n  // File access; deliberately forbidden here.\n  readFileSync\n} from "node:fs";',
+    ["node:fs"],
+  ],
+  ['const x = 1;\nexport { x };\nimport type { Stats } from "node:fs";', ["type node:fs"]],
+])("reads the imports of %j as %j", (source, expected) => {
+  expect(importedSpecifiers(source)).toEqual(expected);
+});
+
 // Reads the file as TEXT: a dynamic `import()` or a `require` would pass it.
-it("imports nothing but the colour rule and the document types, so a browser app can import it", () => {
+it("imports and re-exports nothing but the colour rule and the document types, so a browser app can import it", () => {
   // `import.meta.glob` rather than `node:fs` because this package installs no `@types/node`.
   const source = import.meta.glob("./device-home.ts", {
     query: "?raw",
     import: "default",
     eager: true,
   })["./device-home.ts"]!;
-  const specifiers = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gms)].map(
-    ([, type, from]) => `${type ? "type " : ""}${from}`,
-  );
-  expect(specifiers).toEqual(["./color-inheritance.js", "type ./menu-document-types.js"]);
+  expect(importedSpecifiers(source)).toEqual([
+    "./color-inheritance.js",
+    "type ./menu-document-types.js",
+  ]);
   expect(source).not.toMatch(/^import\s+"/m);
 });
