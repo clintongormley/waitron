@@ -2311,9 +2311,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       });
       expect(res.status).toBe(204);
     });
-    // The second is clearUnlistedReaderChoice, which writes the row whenever the profile lists no
-    // card reader.
-    expect(writes).toBe(2);
+    expect(writes).toBe(1);
     expect(await deviceBindings(t.deviceId)).toEqual({
       deviceProfileId: other,
       receiptPrinterId: null,

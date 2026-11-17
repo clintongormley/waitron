@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { mayTakeOver } from "@waitron/shared";
@@ -363,7 +363,7 @@ export async function clearUnlistedReaderChoice(tx: Transaction, deviceId: strin
     .set({ cardReaderId: null })
     .where(
       list.length === 0
-        ? eq(devices.id, deviceId)
+        ? and(eq(devices.id, deviceId), isNotNull(devices.cardReaderId))
         : and(eq(devices.id, deviceId), notInArray(devices.cardReaderId, list)),
     );
 }
