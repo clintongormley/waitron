@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
@@ -35,6 +36,8 @@ import "./errors.js";
 
 let venue: BillVenue;
 let ticketThenPayZone: string;
+/** A Counter zone whose bills are presented with no ticket. */
+let prepayZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -42,6 +45,12 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    prepayZone = await inTx(venue, async (tx) => {
+      const zone = await seedZone(tx, { name: "Prepay counter" });
+      return (
+        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "counter" })
+      ).zoneId;
+    });
     ticketThenPayZone = (
       await inTx(venue, (tx) =>
         offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
@@ -422,34 +431,6 @@ describe("Print the bill", () => {
     });
   });
 
-  it("refuses a presented bill with a pending card part payment", async () => {
-    const party = await seatedWith(venue);
-    const other = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);
-    await serveAll(party, other);
-    await inTx(venue, (tx) =>
-      tx.insert(billPayments).values({
-        workingOrderId: other,
-        submissionId: randomUUID(),
-        fingerprint: "pending",
-        kind: "contribution",
-        method: "card",
-        applied: 1000,
-        tip: 0,
-        state: "pending",
-        requestedBy: venue.operatorId,
-        source: "device",
-        deviceId: venue.device2Id,
-      }),
-    );
-
-    await refused(
-      end(party, { billId: other }),
-      other,
-      { code: "order.payment_in_flight", params: { workingOrderId: other } },
-      "placed",
-    );
-  });
-
   it("a resend with the same submission id answers the same and issues nothing more", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     await serveAll(party);
@@ -475,5 +456,181 @@ describe("Print the bill", () => {
         params: { partyId: party.partyId },
       },
     );
+  });
+});
+
+describe("a Counter bill presented with no ticket, moved to the table", () => {
+  function contribution(
+    billId: string,
+    amount: string,
+    method: "cash" | "card",
+    extra: Record<string, unknown> = {},
+  ) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method,
+      ...(method === "cash" ? { tendered: amount } : { entry: "reader" }),
+      applied: amount,
+      tip: "0.00",
+      ...extra,
+    });
+  }
+
+  /** The Counter bill, part paid `paid` in cash at the counter when given, moved to the party. */
+  async function presented(party: Party, paid?: string): Promise<string> {
+    const id = await placedCounterBillMovedTo(venue, prepayZone, party, false, async (sent) => {
+      if (paid !== undefined)
+        expect((await contribution(sent, paid, "cash", { expectedEdit: null })).status).toBe(200);
+    });
+    await serveAll(party, id);
+    return id;
+  }
+
+  /** Runs `during` while `start`'s card, or card refund, is held at the provider. */
+  async function whileHeld<T>(
+    hold: () => () => void,
+    calls: () => number,
+    start: () => Promise<{ status: number }>,
+    during: () => Promise<T>,
+  ): Promise<{ during: PromiseSettledResult<T>; started: { status: number } }> {
+    const before = calls();
+    const release = hold();
+    let started: Promise<{ status: number }> | undefined;
+    let outcome: PromiseSettledResult<T>;
+    try {
+      started = start();
+      await expect.poll(calls).toBe(before + 1);
+      outcome = (await Promise.allSettled([during()]))[0]!;
+    } finally {
+      release();
+    }
+    return { during: outcome, started: await started };
+  }
+
+  it("issues a part-paid one for the whole bill, owing the rest", async () => {
+    const party = await seatedWith(venue);
+    const id = await presented(party, "5.00");
+
+    const answer = await end(party, { billId: id });
+
+    expect(answer).toMatchObject({ total: "18.00", owed: "13.00" });
+    expect(await salesOf(id)).toEqual([{ id: answer.saleId, total: 1800, settledAt: null }]);
+    expect(await statusOf(venue, id)).toBe("placed");
+  });
+
+  it("refuses one whose whole payment is at the card reader, and the card then pays it", async () => {
+    const party = await seatedWith(venue);
+    const id = await presented(party);
+
+    const { during, started } = await whileHeld(
+      () => venue.card.holdNextCollect(),
+      () => venue.card.collectCalls.length,
+      () => send(venue.app, venue.cookie, "POST", "/api/pay", { dining: "eat_in", id, lines: [] }),
+      () =>
+        refused(
+          end(party, { billId: id }),
+          id,
+          { code: "order.payment_in_flight", params: { workingOrderId: id } },
+          "placed",
+        ),
+    );
+
+    expect(during.status).toBe("fulfilled");
+    expect(started.status).toBe(200);
+    const sales = await salesOf(id);
+    expect(sales).toHaveLength(1);
+    expect(sales[0]!.settledAt).not.toBeNull();
+    expect(await statusOf(venue, id)).toBe("settled");
+  });
+
+  it("refuses one whose card part payment is at the reader", async () => {
+    const party = await seatedWith(venue);
+    const id = await presented(party, "5.00");
+
+    const { during, started } = await whileHeld(
+      () => venue.card.holdNextCollect(),
+      () => venue.card.collectCalls.length,
+      () => contribution(id, "5.00", "card"),
+      () =>
+        refused(
+          end(party, { billId: id }),
+          id,
+          { code: "order.payment_in_flight", params: { workingOrderId: id } },
+          "placed",
+        ),
+    );
+
+    expect(during.status).toBe("fulfilled");
+    expect(started.status).toBe(200);
+    expect(await salesOf(id)).toEqual([]);
+  });
+
+  it("refuses one whose card part payment is being refunded", async () => {
+    const party = await seatedWith(venue);
+    const id = await presented(party, "5.00");
+    const card = await contribution(id, "5.00", "card");
+    expect(card.status).toBe(200);
+    const paymentId = (card.json.payment as { id: string }).id;
+
+    const { during, started } = await whileHeld(
+      () => venue.card.holdNextRefund(),
+      () => venue.card.refundCalls.length,
+      () =>
+        send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${id}/payments/${paymentId}/refunds`,
+          {
+            submissionId: randomUUID(),
+            appliedAmount: "5.00",
+            tipAmount: "0.00",
+            reason: "Overcharged",
+            override: { personId: venue.adminId, pin: "1234" },
+          },
+        ),
+      () =>
+        refused(
+          end(party, { billId: id }),
+          id,
+          { code: "bill.refund_in_progress", params: { workingOrderId: id } },
+          "placed",
+        ),
+    );
+
+    expect(during.status).toBe("fulfilled");
+    expect(started.status).toBe(200);
+    expect(await salesOf(id)).toEqual([]);
+  });
+});
+
+// No payment route was found that leaves this state (a payment is refused while a refund is
+// pending), so the received money is written directly.
+it("refuses a bill already paid in full that has no ticket", async () => {
+  const party = await seatedWith(venue, "Red wine bottle");
+  await serveAll(party);
+  await inTx(venue, (tx) =>
+    tx.insert(billPayments).values({
+      workingOrderId: party.tabId,
+      submissionId: randomUUID(),
+      fingerprint: "paid",
+      kind: "contribution",
+      method: "cash",
+      applied: 3000,
+      tendered: 3000,
+      tip: 0,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+      requestedBy: venue.operatorId,
+      source: "device",
+      deviceId: venue.deviceId,
+    }),
+  );
+
+  await refused(end(party), party.tabId, {
+    code: "unpaid_departure.nothing_outstanding",
+    params: { partyId: party.partyId },
   });
 });

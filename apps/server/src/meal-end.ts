@@ -15,7 +15,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { checkAndBumpParty, readBillsOfParties, runServiceCommand } from "./parties.js";
 import { readIssuedSales } from "./sale-due.js";
 import { serviceDishCondition } from "./service-dishes.js";
-import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
+import { refuseBillPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
@@ -24,9 +24,6 @@ import {
   markOrderPlaced,
   priceForIssuance,
   readInvoiceNumbers,
-  refusePaymentInFlight,
-  refusePendingPartPayment,
-  refuseRefundInProgress,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -91,12 +88,12 @@ export async function endMeal(
       await assertBillHasNoUnsent(tx, req.billId);
       if ((await readIssuedSales(tx, [req.billId])).has(req.billId))
         throw new AppError("meal_end.already_issued", { workingOrderId: req.billId });
-      if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);
-      else {
-        await refuseRefundInProgress(tx, [req.billId]);
-        await refusePendingPartPayment(tx, [req.billId], "any");
-        await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
-      }
+      await refuseBillPaymentInFlight(
+        deps.db,
+        tx,
+        req.billId,
+        bill.status === "open" ? "open" : "placed",
+      );
       if (!req.printAnyway) {
         const dishes = await unservedDishes(tx, req.billId);
         if (dishes.length > 0)
@@ -110,6 +107,10 @@ export async function endMeal(
         cfg,
         req.billId,
       );
+      const total = invoice.priced.total;
+      const owed = await stillOwedOnIssuedBill(tx, req.billId, total);
+      if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
+        throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
       const { saleId } = await issueUnpaidInvoice(
         tx,
         deps.backend,
@@ -121,7 +122,6 @@ export async function endMeal(
       );
       if (bill.status === "open")
         await markOrderPlaced(tx, deps.clock, cfg, req.billId, operatorId, deps.attendance);
-      const total = invoice.priced.total;
       if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, req.billId, saleId);
       return {
         revision,
@@ -129,7 +129,7 @@ export async function endMeal(
         saleId,
         invoiceNumber: (await readInvoiceNumbers(tx, [saleId])).get(saleId)!,
         total,
-        owed: await stillOwedOnIssuedBill(tx, req.billId, total),
+        owed,
       };
     },
   );

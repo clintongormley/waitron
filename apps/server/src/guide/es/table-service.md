@@ -579,7 +579,7 @@ Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Regi
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
 elige un responsable o encargado y pídele que introduzca su PIN.
 
-Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la la
+Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
 estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
 pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. La
 mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por servir. Sirve lo que

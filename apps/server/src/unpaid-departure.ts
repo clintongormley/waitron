@@ -33,16 +33,13 @@ import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import { pinnedAt } from "./issue-moment.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
+import { refuseBillPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,
   markOrderPlaced,
   ordersWithUnfiredDish,
   priceForIssuance,
   readInvoiceNumbers,
-  refusePaymentInFlight,
-  refusePendingPartPayment,
-  refuseRefundInProgress,
 } from "./working-order.js";
 import "./errors.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
@@ -112,12 +109,12 @@ export async function recordUnpaidDeparture(
     if ((await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
       throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
   }
-  if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);
-  else {
-    await refuseRefundInProgress(tx, [req.billId]);
-    await refusePendingPartPayment(tx, [req.billId], "any");
-    await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
-  }
+  await refuseBillPaymentInFlight(
+    deps.db,
+    tx,
+    req.billId,
+    bill.status === "open" ? "open" : "placed",
+  );
 
   let saleId = issued?.saleId;
   let due = issued?.amountDue;
