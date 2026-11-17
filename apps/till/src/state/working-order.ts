@@ -210,6 +210,14 @@ function mergingWith(lines: readonly OrderLine[], kept: OrderLine): OrderLine | 
   });
 }
 
+/** The picker hands back a product for every line; only one naming another variant replaces the
+ * line's own. */
+function withVariantOf(line: OrderLine, product: TillProduct | undefined): TillProduct {
+  return product !== undefined && product.variantId !== line.product.variantId
+    ? product
+    : line.product;
+}
+
 /** An empty list is not an answer, so it leaves no key. */
 function applySelection(line: OrderLine, selection: LineSelection | undefined): void {
   if (selection?.extras?.length) line.extras = selection.extras;
@@ -547,26 +555,34 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Replaces the line's answers but not its note, which {@link setLineExtras} owns. */
-  setLineModifiers(index: number, selection: LineSelection): void {
-    if (this.#refusesEdits) return;
+  /** Replaces the line's answers, and its variant when `product` names another, but not its note,
+   * which {@link setLineExtras} owns. */
+  setLineModifiers(
+    index: number,
+    update: { selection: LineSelection; product?: TillProduct },
+  ): boolean {
+    if (this.#refusesEdits) return false;
     const line = this.#lines[index];
-    if (!line) return;
-    const candidate: OrderLine = { ...line };
+    if (!line) return false;
+    const product = withVariantOf(line, update.product);
+    if (product !== line.product && this.#refusesSelection(product)) return false;
+    const candidate: OrderLine = { ...line, product };
     delete candidate.extras;
     delete candidate.notOfferedExtras;
     delete candidate.options;
     delete candidate.optionSnapshots;
-    applySelection(candidate, selection);
-    if (this.#passesLimit(lineGross(line), lineGross(candidate))) return;
+    applySelection(candidate, update.selection);
+    if (this.#passesLimit(lineGross(line), lineGross(candidate))) return false;
     delete line.extras;
     delete line.notOfferedExtras;
     delete line.options;
     delete line.optionSnapshots;
-    applySelection(line, selection);
+    applySelection(line, update.selection);
+    line.product = product;
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+    return true;
   }
 
   /** Validate the whole line before changing it, so a refused total cannot save only its note. */
@@ -576,6 +592,7 @@ export class WorkingOrderStore {
       quantity: string;
       note: string;
       selection: LineSelection;
+      product?: TillProduct;
       course?: { id: string | undefined; value: TillCourse | undefined };
     },
   ): boolean {
@@ -585,9 +602,10 @@ export class WorkingOrderStore {
     assertQuantityPrecision(update.quantity, productUnit(line.product).precision, {
       positive: true,
     });
+    const product = withVariantOf(line, update.product);
     const change = compareDecimal(decimal(update.quantity), decimal(line.quantity));
-    if (change > 0 && this.#refusesSelection(line.product)) return false;
-    const candidate: OrderLine = { ...line, quantity: update.quantity };
+    if ((change > 0 || product !== line.product) && this.#refusesSelection(product)) return false;
+    const candidate: OrderLine = { ...line, product, quantity: update.quantity };
     delete candidate.extras;
     delete candidate.notOfferedExtras;
     delete candidate.options;

@@ -2,9 +2,11 @@ import { afterEach, expect, it, onTestFinished } from "vitest";
 import { userEvent } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { productAsVariant } from "../state/order-line.js";
+import { formatMoney } from "@waitron/shared";
 import type { WtInput, WtTextarea } from "@waitron/ui";
-import type { TillModifierPicker } from "./modifier-picker.js";
+import type { ModifierConfirmDetail, TillModifierPicker } from "./modifier-picker.js";
 import { dish as listedDish } from "../screens/till-table-order-screen.sent-prices.test-helpers.js";
 import { TillBasket } from "./basket.js";
 import { TillCounterScreen } from "../screens/till-counter-screen.js";
@@ -428,4 +430,102 @@ it("refreshes an open variant line's declaration while retaining staged edits", 
   expect(picker.shadowRoot!.querySelector<WtTextarea>("wt-textarea")!.value).toBe("Staged note");
   expect(line.note).toBe("No salt");
   expect(store.dirty).toBe(dirty);
+});
+
+const sizes: NonNullable<TillProduct["variants"]> = [
+  {
+    ...sellingValuesOf(dish),
+    id: "v-cup",
+    name: "Cup",
+    unitPrice: "5.00",
+    unitPriceDifference: null,
+    available: true,
+  },
+  {
+    ...sellingValuesOf(dish),
+    id: "v-bowl",
+    name: "Bowl",
+    unitPrice: "8.00",
+    unitPriceDifference: "3.00",
+    available: true,
+  },
+];
+const cupOfSoup = productAsVariant({ ...dish, menuItemId: "mi-soup", variants: sizes }, sizes[0]!);
+const sizeRadio = (picker: TillModifierPicker, id: string) =>
+  picker.shadowRoot!.querySelector<HTMLInputElement>(`[name="product-variant"][value="${id}"]`)!;
+
+it("reopens an unsent line on its variant and saves a changed one into the line", async () => {
+  const locale = currentLocale();
+  onTestFinished(() => setLocale(locale));
+  setLocale("en");
+  const store = new WorkingOrderStore();
+  store.addProduct(cupOfSoup, "1");
+  const { el } = await mountWidget<TillBasket>("till-basket", { store, lineDetails: true });
+  el.openLineDetails(store.lines[0]!);
+  await el.updateComplete;
+  const picker = pickerOf(el)!;
+  await picker.updateComplete;
+  expect(sizeRadio(picker, "v-cup").checked).toBe(true);
+  await userEvent.click(sizeRadio(picker, "v-bowl"));
+  await picker.updateComplete;
+  await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  await el.updateComplete;
+  expect(pickerOf(el)).toBeNull();
+  expect(store.lines[0]!.product.variantId).toBe("v-bowl");
+  const shown = el.shadowRoot!.textContent!;
+  expect(shown).toContain("Bowl");
+  expect(shown).not.toContain("Cup");
+  expect(shown).toContain(formatMoney("8.00", currentLocale()));
+});
+
+it("opens a sent line's window read-only, offering no other variant, and refuses a save of one", async () => {
+  const store = new WorkingOrderStore();
+  store.loadFrom(
+    "wo-9",
+    [{ product: cupOfSoup, quantity: "1", workingOrderLineId: "l-1" }],
+    undefined,
+    4,
+  );
+  const { el } = await mountWidget<TillBasket>("till-basket", {
+    store,
+    lineDetails: true,
+    storedLines: {
+      orderId: "wo-9",
+      revision: 4,
+      lines: [
+        {
+          ...listedDish,
+          id: "l-1",
+          productId: "v-cup",
+          quantity: "1.000",
+          unitPriceGross: "5.00",
+          sentAt: "2026-11-12T08:00:00Z",
+        },
+      ],
+    },
+  });
+  el.openLineDetails(store.lines[0]!);
+  await el.updateComplete;
+  const picker = pickerOf(el)!;
+  await picker.updateComplete;
+  expect(picker.readOnly).toBe(true);
+  expect(picker.shadowRoot!.querySelectorAll('[name="product-variant"]')).toHaveLength(0);
+  expect(picker.shadowRoot!.querySelector(".confirm")).toBeNull();
+  const save = new CustomEvent<ModifierConfirmDetail>("wt-modifier-confirm", {
+    detail: {
+      product: productAsVariant(cupOfSoup, sizes[1]!),
+      quantity: "1",
+      note: "",
+      extras: [],
+      options: [],
+    },
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  picker.dispatchEvent(save);
+  await el.updateComplete;
+  expect(save.defaultPrevented).toBe(true);
+  expect(store.lines[0]!.product).toBe(cupOfSoup);
+  expect(store.dirty).toBe(false);
 });

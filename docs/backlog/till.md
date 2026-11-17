@@ -625,14 +625,6 @@ per zone it polls (the counter's, and the open table's while its order shows), a
 reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token check is one SHA-256 of the token on every read, with nothing
 remembered between reads.
 
-## Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses the variant, and says it saved
-
-Measured with a throwaway browser test: no variant radio is
-selected, because `willUpdate` never seeds `variantId`, and when the operator picks one,
-`setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it. Needs a decision first
-about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
-on a reopened line; if yes, `setLineModifiers` has to carry the product.
-
 ## A893. Owner review of every table state and its look, after A757 lands
 
 **A893 (owner, 2026-10-18).** A757 is built (2026-10-22; it was to wait for the whole of A757:
@@ -1424,7 +1416,7 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 
 ## Bundle: Reopening a held order keeps its lines right
 
-2 entries, size S.
+1 entry, size S.
 
 - **A retrieved line's options answers are re-sent by matching their WORDING**
   (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
@@ -1432,11 +1424,6 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
   `held.options_changed`. A whole-order
   save after an options list is deleted removes its answer from a line not yet sent on a parked
   counter order. Preserve these recorded answers when reopening and saving the order.
-- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
-  the variant, and says it saved.** Needs a decision first about whether a basket edit may change a
-  variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
-  `setLineModifiers` has to carry the product.
-  [Detail](till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
 
 ## Bundle: One count of items everywhere
 

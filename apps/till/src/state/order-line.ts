@@ -50,10 +50,7 @@ export function extraGross(line: OrderLine, extra: PricedPick): Decimal {
 
 /**
  * Whether adding this product must ask something first: an offered list, or a variant, since a
- * product with variants is never sold as itself. The basket's Edit button does NOT use this: it
- * gates on the offered lists alone, because `setLineModifiers` never changes a line's product. A
- * dish with variants AND an offered list still loses a re-picked variant there; see
- * `docs/backlog.md`, the entry beginning "Reopening the picker".
+ * product with variants is never sold as itself.
  */
 export function needsModifierPicker(
   product: Pick<TillProduct, "variants" | "offeredModifiers" | "unit" | "pricingUnit">,

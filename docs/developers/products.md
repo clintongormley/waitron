@@ -721,7 +721,8 @@ Tapping a parent sold in whole units, and not tied to a scale, opens the picker 
 tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
 `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
-variants were sent in). The first available one is chosen to start with; an unavailable one stays
+variants were sent in). The first available one is chosen to start with, except on a reopened unsent
+line, which starts on its own variant even when that is no longer available; an unavailable one stays
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
@@ -748,7 +749,9 @@ including one whose product, or one of whose extras, has since gained an Active 
 prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 `apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
 it is refused `product.variant_required`, as a raise of a line whose product has become archived or
-Unavailable is refused. Paying a held order bills its stored lines at their stored prices and
+Unavailable is refused. An unsent line the edit names with a different variant is not kept: it
+becomes a new line, at that variant's price and name ("keeps a new variant sent for a saved,
+unsent line" in `apps/server/src/working-order.test.ts`). Paying a held order bills its stored lines at their stored prices and
 at the stored VAT class the order's way of selling picks, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;

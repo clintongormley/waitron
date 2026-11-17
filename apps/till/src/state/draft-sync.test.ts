@@ -2796,7 +2796,7 @@ describe("A773 drafts on a bill that is no longer open", () => {
       s.billStatus = status;
       s.store.addProduct(steak, "1");
       s.store.setLineQuantity(0, "2");
-      s.store.setLineModifiers(0, { note: "changed" });
+      s.store.setLineModifiers(0, { selection: { note: "changed" } });
       s.store.setLineCourse(0, "mains");
       s.store.setLineMakeAt(0, "grill");
       s.store.setLinePlaces([0], { kind: "new", slot: 2 });

@@ -2,6 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
+import { productAsVariant } from "../state/order-line.js";
 import { cleanupWidgets, measured, mountWidget } from "./test-helpers.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
@@ -895,6 +896,26 @@ describe("till-modifier-picker", () => {
     const radios = (picker: TillModifierPicker) => [
       ...picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="product-variant"]'),
     ];
+
+    it("reopens on a line's variant no longer available, and saves only once another is chosen", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: productAsVariant(wineProduct, wineProduct.variants![0]!),
+        quantity: "1",
+        lineDetails: true,
+        initialSelections: {},
+      });
+      const [gone, glass] = radios(el);
+      expect([gone!.checked, gone!.disabled]).toEqual([true, true]);
+      el.shadowRoot!.querySelector('[name="quantity"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "2" } }),
+      );
+      await el.updateComplete;
+      expect(gone!.checked).toBe(true);
+      expect(addButton(el).disabled).toBe(true);
+      glass!.click();
+      await el.updateComplete;
+      expect(addButton(el).disabled).toBe(false);
+    });
 
     it("lists the variants only, never the parent, by their STAFF names", async () => {
       const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
