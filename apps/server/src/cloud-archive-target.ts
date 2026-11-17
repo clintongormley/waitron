@@ -27,6 +27,7 @@ interface State {
   installationId: string;
   venueId: string;
   lastMonth: string;
+  storedAt?: number;
   pending?: Pending;
 }
 interface CloudArchiveInput {
@@ -42,6 +43,7 @@ type CloudArchiveOutcome = { stored: boolean; errorCode: string | null };
 
 export interface CloudArchiveTarget {
   readonly id: "cloud";
+  readCaptureState?(): Promise<{ storedAt: number | null; pending: boolean } | undefined>;
   roomNeeded(plaintextBytes: number): Promise<number>;
   store(input: CloudArchiveInput): Promise<CloudArchiveOutcome>;
 }
@@ -83,6 +85,8 @@ async function readState(dir: string): Promise<State | undefined> {
     !uuid(s.installationId) ||
     !uuid(s.venueId) ||
     (s.nextAt !== undefined && !Number.isFinite(s.nextAt)) ||
+    (s.storedAt !== undefined &&
+      (typeof s.storedAt !== "number" || !Number.isFinite(new Date(s.storedAt).getTime()))) ||
     typeof s.lastMonth !== "string"
   )
     unavailable();
@@ -149,6 +153,18 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
 
   return {
     id: "cloud",
+    async readCaptureState() {
+      const status = await deps.connection?.status();
+      const registration = status?.registration;
+      if (!registration || !cloudArchiveAvailable(status)) return;
+      const saved = await readState(dir);
+      if (
+        saved?.installationId !== registration.installationId ||
+        saved.venueId !== registration.venueId
+      )
+        return;
+      return { storedAt: saved.storedAt ?? null, pending: saved.pending !== undefined };
+    },
     async roomNeeded(plaintextBytes) {
       const ciphertextBytes = plaintextBytes + ARTIFACT_HEADER_BYTES;
       if (ciphertextBytes > MAX_BYTES) return 0;
@@ -209,6 +225,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
         };
         const complete = async (pending: Pending, metadata: CloudCaptureMetadata) => {
           if (metadata.retention === "monthly") state.lastMonth = pending.month!;
+          state.storedAt = Date.parse(metadata.capturedAt);
           await clearPending();
         };
         const deliver = async (pending: Pending) => {

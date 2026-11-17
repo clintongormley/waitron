@@ -518,6 +518,10 @@ export interface BackupSchedulePass {
 
 export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
   const clockNow = deps.now ?? (() => new Date());
+  const scheduleClock = () =>
+    deps.schedule.kind === "wall-clock"
+      ? deps.readClock()
+      : Promise.resolve({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] });
   let first = true;
   let fireAt: number | undefined;
   let computedAt = 0;
@@ -525,6 +529,25 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
     async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
       if (signal.aborted) return { nextDueAt: null };
       const nowMs = now.getTime();
+      if (first && deps.cloud?.target.readCaptureState) {
+        const saved = await deps.cloud.target.readCaptureState().catch(() => undefined);
+        if (saved?.storedAt != null && !saved.pending) {
+          const clock = await scheduleClock().catch(() => undefined);
+          const resumed =
+            clock && nextFireMs(deps.schedule, clock, new Date(saved.storedAt), deps.jitterSeed);
+          if (
+            resumed !== undefined &&
+            resumed > nowMs &&
+            resumed - nowMs <= longestFireAheadMs(deps.schedule)
+          ) {
+            first = false;
+            computedAt = nowMs;
+            fireAt = resumed;
+            deps.onScheduled?.(fireAt);
+          }
+        }
+        if (signal.aborted) return { nextDueAt: null };
+      }
       if (first || (fireAt !== undefined && nowMs >= fireAt)) {
         first = false;
         deps.onScheduled?.(null);
@@ -541,10 +564,7 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
         fireAt = undefined;
       if (fireAt === undefined) {
         try {
-          const clock =
-            deps.schedule.kind === "wall-clock"
-              ? await deps.readClock()
-              : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
+          const clock = await scheduleClock();
           computedAt = clockNow().getTime();
           fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
         } catch (err) {

@@ -214,8 +214,6 @@ export class BackupSupervisor {
   /** Shutdown is terminal, including a reload still opening its resources. */
   #stopped = false;
   #sweep: SweepRecords = new Map();
-  #cloudStoredAt: Date | null = null;
-  #cloudLastSuccessUptime = 0;
   readonly #statusClients: StatusClients;
   #noteTurns: Promise<void> = Promise.resolve();
 
@@ -268,7 +266,6 @@ export class BackupSupervisor {
       this.#config = cfg;
       this.#statusClients.keepOnly(cfg?.enabled === true ? cfg.destinations : []);
       this.#sweep = new Map();
-      this.#cloudStoredAt = null;
       this.#loadedAsPrimary = this.#deps.readSingletonRole() === "primary";
       if (
         cfg === undefined ||
@@ -505,7 +502,6 @@ export class BackupSupervisor {
     const cfg = this.#config;
     // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
     const sweep = this.#sweep;
-    const cloudStoredAt = this.#cloudStoredAt;
     const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
     if (cfg === undefined || !cfg.enabled || (!cfg.cloud && cfg.destinations.length === 0))
       return {
@@ -525,7 +521,7 @@ export class BackupSupervisor {
     );
     if (cfg.cloud) {
       destinations.push({
-        ...(await this.#readCloudDestination(cloudStoredAt, cfg.staleAfterMs, now)),
+        ...(await this.#readCloudDestination(cfg.staleAfterMs, now)),
         ...(sweep.get("cloud") ?? NO_RECORD),
       });
     }
@@ -536,23 +532,17 @@ export class BackupSupervisor {
     };
   }
 
-  async #readCloudDestination(
-    storedAt: Date | null,
-    staleAfterMs: number,
-    now: Date,
-  ): Promise<DestinationStatus> {
+  async #readCloudDestination(staleAfterMs: number, now: Date): Promise<DestinationStatus> {
     try {
       if (!cloudArchiveAvailable(await this.#deps.readCloudStatus?.())) {
         return unreadDestination("cloud", "cloud.unavailable");
       }
-      if (storedAt === null) {
-        const stale = (process.uptime() - this.#cloudLastSuccessUptime) * 1000 > staleAfterMs;
-        return { ...unreadDestination("cloud", null), stale };
-      }
-      const ageMs = now.getTime() - storedAt.getTime();
+      const storedAt = (await this.#deps.cloudTarget?.readCaptureState?.())?.storedAt;
+      if (storedAt == null) return unreadDestination("cloud", null);
+      const ageMs = now.getTime() - storedAt;
       return {
         id: "cloud",
-        lastBackupAt: storedAt.toISOString(),
+        lastBackupAt: new Date(storedAt).toISOString(),
         ageSeconds: Math.max(0, Math.floor(ageMs / 1000)),
         stale: ageMs > staleAfterMs || ageMs < -staleAfterMs,
         readErrorCode: null,
@@ -599,10 +589,6 @@ export class BackupSupervisor {
   #recordResult(result: DestinationResult): void {
     const prev = this.#sweep.get(result.id);
     const cloud = result.id === "cloud";
-    if (cloud && result.stored) {
-      this.#cloudStoredAt = this.#now();
-      this.#cloudLastSuccessUptime = process.uptime();
-    }
     this.#sweep.set(result.id, {
       storedUnderCurrentKey: !cloud && ((prev?.storedUnderCurrentKey ?? false) || result.stored),
       uploadErrorCode: result.uploadErrorCode,

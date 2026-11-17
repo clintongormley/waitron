@@ -228,7 +228,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
-  it("reports Cloud freshness only when the backup time or overdue window is known", async () => {
+  it("keeps Cloud freshness across reload and reports a failed recovery", async () => {
     const refs: Refs = {
       config: { ...localFsConfig([], STRONG_KEY_1), cloud: true },
       role: "primary",
@@ -237,7 +237,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     };
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
     vi.spyOn(cloudArchive, "cloudArchiveAvailable").mockReturnValue(true);
-    const uptime = vi.spyOn(process, "uptime").mockReturnValue(259_200);
+    let storedAt = Date.now() - 86_400_000;
     const resume = Promise.withResolvers<void>();
     const store = vi
       .fn(async () => {
@@ -249,6 +249,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       outcomes,
       cloudTarget: {
         id: "cloud",
+        readCaptureState: async () => ({ storedAt, pending: true }),
         roomNeeded: async (estimate) => estimate,
         store,
       },
@@ -260,8 +261,10 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await sup.reload();
       await vi.waitFor(() => expect(store).toHaveBeenCalledTimes(2), { timeout: 5_000 });
       const { backupStatus } = await sup.status();
-      expect(backupStatus).toMatchObject({ destinations: [{ lastBackupAt: null, stale: false }] });
-      uptime.mockReturnValue(process.uptime() + refs.config!.staleAfterMs / 1000 + 1);
+      expect(backupStatus).toMatchObject({
+        destinations: [{ lastBackupAt: new Date(storedAt).toISOString(), stale: false }],
+      });
+      storedAt -= refs.config!.staleAfterMs;
       expect((await sup.status()).backupStatus).toMatchObject({ destinations: [{ stale: true }] });
       resume.resolve();
       await waitForEvent(refs, "backup.destination_failed");

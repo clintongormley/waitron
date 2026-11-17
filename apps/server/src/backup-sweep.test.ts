@@ -20,6 +20,7 @@ import {
   type BackupSweepDeps,
   type ManifestBuilder,
   clockStepHold,
+  createBackupSchedule,
   pruneBackend,
   runOnce,
 } from "./backup-sweep.js";
@@ -509,6 +510,41 @@ describe("runOnce (fan-out)", () => {
       ]),
     );
     expect(outcomes.failed.has("cloud")).toBe(true);
+  });
+
+  it("keeps the original interval after restart with Cloud and a local destination", async () => {
+    const storedAt = Date.parse(FIXED_MANIFEST.createdAt);
+    const interval = 86_400_000;
+    const due = new Date(storedAt + interval);
+    let now = new Date(storedAt + 3_600_000);
+    const local = new FakeBackend("local");
+    const store = vi.fn(async () => ({ stored: true, errorCode: null }));
+    const schedule = createBackupSchedule({
+      ...deps([local]),
+      schedule: { kind: "interval", ms: interval },
+      jitterSeed: BACKUP_NODE_ID,
+      readClock: async () => cloudClock,
+      cloud: {
+        target: {
+          id: "cloud",
+          roomNeeded: async () => 0,
+          store,
+          readCaptureState: async () => ({ storedAt, pending: false }),
+        },
+        readClock: async () => cloudClock,
+      },
+      now: () => now,
+    });
+    const signal = new AbortController().signal;
+    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: due });
+    expect(local.objects.size).toBe(0);
+    expect(store).not.toHaveBeenCalled();
+    now = due;
+    expect(await schedule.pass(due, signal)).toEqual({
+      nextDueAt: new Date(due.getTime() + interval),
+    });
+    expect(local.objects.size).toBe(1);
+    expect(store).toHaveBeenCalledTimes(1);
   });
 
   it("stores a Cloud-only backup without encrypting under the box key", async () => {

@@ -139,6 +139,10 @@ jr8 (and so jr3, which moved `runCloudWorker` onto the runner). If env6 has land
   when the connection can take a capture and its estimated size fits the limit. The watcher cleared
   this condition on 2026-11-17 at 23:56 so a Cloud refusal does not stop the local backup.
 - Waitron works with no Cloud at all: with `cloud: false` nothing Cloud-related runs and nothing fails.
+- The shared schedule uses the last successful Cloud capture to recover its next due time after
+  restart. Both destinations wait for that due time. A pending capture still gets a recovery pass.
+  Backup status reads the same saved capture time. The watcher cleared this change on 2026-11-18
+  at 00:17 after the cross-repository proof reproduced a premature upload.
 
 ## Review Focus
 

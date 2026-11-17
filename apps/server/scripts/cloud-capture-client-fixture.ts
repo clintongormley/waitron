@@ -133,7 +133,7 @@ else if (request.command === "schedule") {
       now: () => now,
     });
     await schedule.pass(now, signal);
-    assert.equal(uploadErrorCode, null);
+    assert.equal(uploadErrorCode ?? null, null);
     const afterDue = created;
     await schedule.pass(now, signal);
     result = { created: afterDue, idleCreated: created - afterDue, points };
