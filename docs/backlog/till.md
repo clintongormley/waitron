@@ -58,9 +58,7 @@ their full text.
 - Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
   the till's one floor mount (`apps/till/src/till-app.ts`, the `<till-floor-screen>` in its
   render) passes `embedded` and `canExitToCounter=false`, so the floor screen's standalone header,
-  its Back button and that property are reached only by the screen's own tests. The floor
-  screen's `css` template still carries a spec number ("KDS-1 §3d"), and the ticket view's a
-  design section ("design §8"). Not restored because nothing confirms it: the table-order
+  its Back button and that property are reached only by the screen's own tests. Not restored because nothing confirms it: the table-order
   screen's `#lineGross` comment "same arithmetic the server files with".
 
 ## Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite `provider.ts:66-83`
