@@ -2740,6 +2740,91 @@ describe("a handheld's zones", () => {
     },
   );
 
+  it.each(handhelds)(
+    "accepts a transfer onto a table in a table-service zone (%s)",
+    async (formFactor) => {
+      const request = {
+        id: "incoming-1",
+        tabId: "tab-1",
+        sourceDepartmentId: "deli",
+        destinationDepartmentId: "department",
+        senderId: "ana",
+        resolvedBy: null,
+        destinationZoneId: null,
+        status: "pending" as const,
+        reason: null,
+        createdAt: "2026-10-07T09:00:00.000Z",
+        resolvedAt: null,
+        revision: 0,
+      };
+      const accept = vi.fn().mockResolvedValue({ ...request, status: "accepted" });
+      const { el } = await mountHandheld(
+        selection(["garden"], "garden"),
+        formFactor,
+        {
+          ...transferApi,
+          listIncomingDepartmentTransfers: vi.fn(async () => ({
+            receiving: true,
+            count: 1,
+            requests: [request],
+          })),
+          getDepartmentTransfer: vi.fn().mockResolvedValue({
+            request,
+            tab: { id: "tab-1", revision: 9, status: "placed", label: "Lunch", orderNumber: 12 },
+            lines: [],
+            outstandingWork: [],
+          }),
+          acceptDepartmentTransfer: accept,
+          getTablesState: vi.fn().mockResolvedValue([tableIn("table-garden", "garden")]),
+          listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()),
+        },
+        ["payment.take"],
+      );
+      shell(el).dispatchEvent(new CustomEvent("open-transfers", { bubbles: true, composed: true }));
+      const panel = () => el.shadowRoot!.querySelector("till-department-transfers")!.shadowRoot!;
+      await vi.waitFor(() => expect(panel().querySelector("[data-view]")).not.toBeNull());
+      panel().querySelector<HTMLElement>("[data-view]")!.click();
+      await vi.waitFor(() => expect(panel().querySelector("[data-accept]")).not.toBeNull());
+      panel().querySelector<HTMLElement>("[data-accept]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          panel().querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+            ?.disabled,
+        ).toBe(false),
+      );
+      const field = (name: string) =>
+        panel().querySelector<HTMLElement & { options: { value: string }[] }>(`[name=${name}]`)!;
+      const choose = async (name: string, value: string) => {
+        field(name).dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+        await el.updateComplete;
+      };
+      expect(field("zoneId").options.map((option) => option.value)).toEqual([
+        "bar",
+        "shop",
+        "room",
+        "garden",
+      ]);
+      await choose("zoneId", "garden");
+      await vi.waitFor(() =>
+        expect(field("tableId").options.map((option) => option.value)).toEqual([
+          "",
+          "table-garden",
+        ]),
+      );
+      await choose("tableId", "table-garden");
+      panel().querySelector<HTMLElement>("[data-save-transfer]")!.click();
+      await vi.waitFor(() =>
+        expect(accept).toHaveBeenCalledWith("incoming-1", {
+          revision: 9,
+          zoneId: "garden",
+          tableId: "table-garden",
+        }),
+      );
+    },
+  );
+
   it("the transfer accept list stays every profile zone after a saved choice", async () => {
     const { el, api } = await mountHandheld(
       selection(["bar", "shop", "room", "garden"], "bar", false),
