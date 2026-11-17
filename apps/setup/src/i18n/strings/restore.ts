@@ -90,9 +90,9 @@ export const restoreEn = {
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
   "restore_bucket.environment_help":
-    "Choose the environment the old server ran in. A preparation or demo copy cannot become a Live database.",
+    "Choose the environment the old server ran in. A preparation copy cannot become a Live database.",
   "restore_bucket.environment_live": "Live",
-  "restore_bucket.environment_preproduction": "Preparation or demo",
+  "restore_bucket.environment_preproduction": "Preparation",
   "restore_bucket.acknowledge": "I confirm no other running server has newer restaurant data.",
   "restore_bucket.acknowledge_missing": "Confirm that no other running server has newer data.",
   "restore_bucket.venue_owner": "The copy in the bucket belongs to",
@@ -287,9 +287,9 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.environment": "Entorno",
   "restore_bucket.environment_help_label": "Ayuda sobre el entorno",
   "restore_bucket.environment_help":
-    "Elige el entorno en el que funcionaba el servidor anterior. Una copia de preparación o de demostración no puede convertirse en una base de datos en vivo.",
+    "Elige el entorno en el que funcionaba el servidor anterior. Una copia de preparación no puede convertirse en una base de datos en vivo.",
   "restore_bucket.environment_live": "En vivo",
-  "restore_bucket.environment_preproduction": "Preparación o demostración",
+  "restore_bucket.environment_preproduction": "Preparación",
   "restore_bucket.acknowledge":
     "Confirmo que ningún otro servidor en funcionamiento tiene datos más recientes del restaurante.",
   "restore_bucket.acknowledge_missing":

@@ -281,7 +281,7 @@ describe("SetupRestoreBucketScreen", () => {
       value: "production",
       options: [
         { value: "production", label: "Live" },
-        { value: "preproduction", label: "Preparation or demo" },
+        { value: "preproduction", label: "Preparation" },
       ],
     });
     expect(
