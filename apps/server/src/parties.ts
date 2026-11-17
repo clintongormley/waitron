@@ -186,10 +186,6 @@ export async function insertPartyBill(
   return billId;
 }
 
-/**
- * Bills that are not abandoned on any party of the family: as the party's bills read lists them,
- * so a paid bill kept on a party combined into it counts.
- */
 export function notAbandonedInFamily(family: string[]) {
   return and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned"));
 }
