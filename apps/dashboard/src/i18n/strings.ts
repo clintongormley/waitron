@@ -1554,7 +1554,7 @@ export const en = {
   "recovery_pack_dialog.stop": "Stop",
   "cloud.emergency_print_pack": "Print recovery pack",
   "recovery_pack.row.emergency": "Emergency code issued",
-  "recovery_pack.emergency_absent": "Not in this pack.",
+  "recovery_pack.emergency_absent": "Not in this pack",
   "recovery_pack.reason.emergency_changed": "The emergency code changed on {date}.",
   "recovery_pack.reason.emergency_missing":
     "A person with permission to manage the box must make the pack to include the emergency code.",
@@ -5981,7 +5981,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.stop": "Parar",
   "cloud.emergency_print_pack": "Imprimir paquete de recuperación",
   "recovery_pack.row.emergency": "Código de emergencia emitido",
-  "recovery_pack.emergency_absent": "No está en este paquete.",
+  "recovery_pack.emergency_absent": "No está en este paquete",
   "recovery_pack.reason.emergency_changed": "El código de emergencia cambió el {date}.",
   "recovery_pack.reason.emergency_missing":
     "Una persona con permiso para gestionar el servidor debe hacer el paquete para incluir el código de emergencia.",
