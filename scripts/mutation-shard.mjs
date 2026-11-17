@@ -24,8 +24,9 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * ui, run 38233718266 (30-minute limit): wt-combobox.ts alone hit the limit at 716 of 780 mutants;
  * wt-data-table.ts in 4 ranges took 4.4, 28.7, 10.3 and 19.5min; wt-dialog.ts alone hit the
  * limit at 325 of 382, 21% of its mutants static and 42 timed out. Run 44021607120 (50-minute
- * limit) cancelled shards 23 and 30: wt-floor-plan-canvas.ts records about 5,500 s a night, about
- * 2,900 and 2,600 s per half.
+ * limit) cancelled shards 23 and 30; shard 23 held wt-floor-plan-canvas.ts, whose tested mutants'
+ * recorded durations sum to about 5,500 s a night (summed, not elapsed), about 2,900 and 2,600 s
+ * per half.
  * ui-core: no file split. At 4 shards, timed locally on 2026-10-20 at `--concurrency 2`, shard 1
  * (derive.ts and colour.ts among its 544 mutants) took 643 s and shard 4 (contrast-rules.ts among
  * its 448) 468 s.

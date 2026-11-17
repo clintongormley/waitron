@@ -730,9 +730,9 @@ historical wait cause remains unknown; these observations do not measure a
 - **Job-sharding levers:** server, dashboard and till use measured-duration packing
   ([tables and refresh](../developers/ci-and-gates.md#package-duration-tables)); bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
-  dominates. db and ui-core mutation shards use separate cost tables; follow the
+  dominates. db, ui-core and ui mutation shards use separate cost tables; follow the
   [refresh recipes](../developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost),
-  keeping ui-core's recorded-duration recipe separate from the db-calibrated generator.
+  keeping ui-core's and ui's recorded-duration recipes separate from the db-calibrated generator.
 - **The package suites' databases stay on the runner's disk, except in `test-venue-service` and
   `test-server-stream`.** With
   `TMPDIR=/dev/shm` on every database test job (A441, #1477: run 37945937673 against main run
