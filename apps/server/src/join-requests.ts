@@ -1,10 +1,11 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
   deviceProfiles,
+  deviceNotDeleted,
   devices,
   joinRequests,
   nowIso,
@@ -142,7 +143,7 @@ export async function createJoinRequest(
         and(
           eq(devices.id, input.returning.deviceId),
           eq(devices.active, false),
-          isNull(devices.deletedAt),
+          deviceNotDeleted(),
         ),
       );
     if (row?.tokenHash !== input.returning.tokenHash) throw new AppError("device.join_stale", {});
@@ -219,7 +220,7 @@ export async function createJoinRequest(
     await tx
       .update(devices)
       .set({ tokenHash })
-      .where(and(eq(devices.id, returningId), isNull(devices.deletedAt)));
+      .where(and(eq(devices.id, returningId), deviceNotDeleted()));
   return { joinId: row!.id, verificationNumber, token, createdAt };
 }
 
@@ -245,7 +246,7 @@ export async function provenDisabledDevice(
   const [row] = await db
     .select({ tokenHash: devices.tokenHash })
     .from(devices)
-    .where(and(eq(devices.id, parsed.id), eq(devices.active, false), isNull(devices.deletedAt)));
+    .where(and(eq(devices.id, parsed.id), eq(devices.active, false), deviceNotDeleted()));
   if (row === undefined) return null;
   if (!deviceTokenMatches(parsed.token, row.tokenHash)) return null;
   return { deviceId: parsed.id, tokenHash: row.tokenHash };
@@ -281,9 +282,7 @@ export async function returningDevicesOf(
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(
-      and(inArray(devices.id, [...ids]), eq(devices.active, false), isNull(devices.deletedAt)),
-    );
+    .where(and(inArray(devices.id, [...ids]), eq(devices.active, false), deviceNotDeleted()));
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
     rows.map((row) => row.id),

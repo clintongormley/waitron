@@ -8,6 +8,7 @@ import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { AppError, compareStationNames } from "@waitron/shared";
 import {
   deviceProfiles,
+  deviceNotDeleted,
   devices,
   kitchenStations,
   ticketItems,
@@ -531,7 +532,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         await tx
           .update(devices)
           .set({ batteryLevel: level, batteryCharging: charging, batteryReportedAt: at })
-          .where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)));
+          .where(and(ownDeviceById(device.deviceId), deviceNotDeleted()));
       });
       return c.body(null, 204);
     }),

@@ -7,6 +7,7 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   departments,
+  deviceNotDeleted,
   devices,
   isUniqueViolation,
   nowIso,
@@ -365,6 +366,6 @@ export async function listDevices(tx: Transaction): Promise<DeviceListRow[]> {
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(and(eq(devices.active, true), isNull(devices.deletedAt)))
+    .where(and(eq(devices.active, true), deviceNotDeleted()))
     .orderBy(desc(devices.enrolledAt));
 }

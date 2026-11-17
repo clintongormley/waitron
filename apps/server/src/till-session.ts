@@ -10,7 +10,7 @@ import {
   PERSON_HEADER,
 } from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
-import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
+import { deviceNotDeleted, deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -262,6 +262,6 @@ export async function assertStillSignedIn(
   const [device] = await tx
     .select({ id: devices.id })
     .from(devices)
-    .where(and(eq(devices.id, ids.deviceId), eq(devices.active, true), isNull(devices.deletedAt)));
+    .where(and(eq(devices.id, ids.deviceId), eq(devices.active, true), deviceNotDeleted()));
   if (device === undefined) throw new AppError("device.unauthorized", {});
 }
