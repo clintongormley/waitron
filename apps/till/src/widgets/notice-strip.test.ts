@@ -156,7 +156,7 @@ describe("till-notice-strip", () => {
     ]);
     expect(items.map(flat)).toEqual([
       `${en["staff_notice.storage.disk_full"]} · ${en["staff_notice.tell_manager"]}`,
-      `${en["staff_notice.storage.space_low"]} · ${en["staff_notice.tell_manager"]}`,
+      `${en["staff_notice.storage.space_low"]} · ${en["staff_notice.see_box_status"]}`,
       `${en["staff_notice.fiscal.records_unsent"].replace("{n}", "3")} · ${en["staff_notice.retried"]}`,
     ]);
     expect(list(el)!.getAttribute("aria-label")).toBe(en["staff_notice.list"]);
@@ -258,7 +258,7 @@ describe("till-notice-strip", () => {
       });
       const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
       expect(flat(line)).toBe(
-        `${es["staff_notice.clock.unusable"]} · ${es["staff_notice.tell_manager"]}`,
+        `${es["staff_notice.clock.unusable"]} · ${es["staff_notice.see_box_status"]}`,
       );
       const wide = line.getBoundingClientRect().height;
       await page.viewport(390, 844);
@@ -289,7 +289,7 @@ describe("till-notice-strip", () => {
           en[`staff_notice.${code}` as keyof typeof en],
         );
         expect(flat(checkButton(line))).toBe(en["staff_notice.check_time"]);
-        expect(flat(line)).not.toContain(en["staff_notice.tell_manager"]);
+        expect(flat(line)).not.toContain(en["staff_notice.see_box_status"]);
       },
     );
 
@@ -335,13 +335,13 @@ describe("till-notice-strip", () => {
       expect(list(el)!.querySelectorAll("li")).toHaveLength(2);
     });
 
-    it("draws no button without the offer, and Tell a manager as today", async () => {
+    it("draws no button without the offer, and the see-Box-status hint", async () => {
       const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
         notices: [CLOCK],
       });
       expect(checkButton(root(el))).toBeNull();
       expect(flat(root(el).querySelector("[data-notice-tone]"))).toBe(
-        `${en["staff_notice.clock.unusable"]} · ${en["staff_notice.tell_manager"]}`,
+        `${en["staff_notice.clock.unusable"]} · ${en["staff_notice.see_box_status"]}`,
       );
     });
 

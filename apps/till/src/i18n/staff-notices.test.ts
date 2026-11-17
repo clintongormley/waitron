@@ -18,13 +18,21 @@ const TICKET_FAILED = {
 } as const;
 
 describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
-  it.each(["storage.disk_full", "clock.unusable", "storage.space_low"])(
-    "words %s with its own words and the tell-a-manager hint",
+  it("words a full disk with its own words and the tell-a-manager hint", () => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "storage.disk_full", params: {} })).toEqual({
+      main: words["staff_notice.storage.disk_full"],
+      hint: words["staff_notice.tell_manager"],
+    });
+  });
+
+  it.each(["clock.unusable", "storage.space_low", "clock.check_time"])(
+    "words %s with its own words and the see-Box-status hint",
     (code) => {
       setLocale(locale);
       expect(staffNoticeText({ code, params: {} })).toEqual({
         main: words[`staff_notice.${code}` as keyof typeof words],
-        hint: words["staff_notice.tell_manager"],
+        hint: words["staff_notice.see_box_status"],
       });
     },
   );
@@ -72,7 +80,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } })).toEqual({
       main: words[key].replace("{agreed}", "1"),
-      hint: words["staff_notice.tell_manager"],
+      hint: words["staff_notice.see_box_status"],
     });
   });
 
@@ -150,7 +158,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "fiscal.records_unsent", params })).toEqual({
       main: words["staff_notice.unknown"],
-      hint: words["staff_notice.tell_manager"],
+      hint: words["staff_notice.see_box_status"],
     });
   });
 
@@ -178,7 +186,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "printer.jobs_waiting", params })).toEqual({
       main: words["staff_notice.unknown"],
-      hint: words["staff_notice.tell_manager"],
+      hint: words["staff_notice.see_box_status"],
     });
   });
 
@@ -211,7 +219,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
       setLocale(locale);
       expect(staffNoticeText({ code: "printer.ticket_failed", params })).toEqual({
         main: words["staff_notice.unknown"],
-        hint: words["staff_notice.tell_manager"],
+        hint: words["staff_notice.see_box_status"],
       });
     },
   );
@@ -220,7 +228,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "printer.offline", params: {} })).toEqual({
       main: words["staff_notice.unknown"],
-      hint: words["staff_notice.tell_manager"],
+      hint: words["staff_notice.see_box_status"],
     });
   });
 });

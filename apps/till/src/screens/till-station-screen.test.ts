@@ -4468,7 +4468,7 @@ describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) 
     const rows = warnings(el);
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent?.trim()).toBe(
-      "Printer Epson has printed nothing since something sent to it at 20:14 got stuck. Tickets are still shown here; tell a manager.",
+      "Printer Epson has printed nothing since something sent to it at 20:14 got stuck. Tickets are still shown here. What is stuck can be reprinted on another printer in the dashboard, under Printers.",
     );
     expect(rows[0].getAttribute("role")).toBe("status");
     // The widget draws its status slot above its board.
@@ -4514,7 +4514,7 @@ describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) 
     setLocale("es-ES");
     const el = await mount();
     expect(warnings(el)[0]?.textContent?.trim()).toBe(
-      "La impresora Epson no ha impreso nada desde que se atascó algo que se le envió a las 20:14. Las comandas siguen apareciendo aquí; avisa a un encargado.",
+      "La impresora Epson no ha impreso nada desde que se atascó algo que se le envió a las 20:14. Las comandas siguen apareciendo aquí. Lo atascado se puede reimprimir en otra impresora en el panel, en Impresoras.",
     );
   });
 });

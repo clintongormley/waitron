@@ -225,7 +225,8 @@ export const en = {
   "zone_repair.guide": "Time zone guide",
 
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
-  "venue.time_zone_confirm": "Trading is stopped. Ask a manager to confirm the venue time zone.",
+  "venue.time_zone_confirm":
+    "Trading is stopped until the venue's time zone is confirmed. Reload the dashboard to confirm it.",
   "venue.time_zone_restart": "The time zone was saved. Wait for restart, then reload.",
 
   "attendance_export.heading": "Export working-time record",
@@ -4624,7 +4625,7 @@ export const es: Record<StringKey, string> = {
 
   "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
   "venue.time_zone_confirm":
-    "El servicio está detenido. Pide a un responsable que confirme la zona horaria del local.",
+    "El servicio está detenido hasta que se confirme la zona horaria del local. Vuelve a cargar el panel para confirmarla.",
   "venue.time_zone_restart":
     "La zona horaria se ha guardado. Espera al reinicio y vuelve a cargar.",
 

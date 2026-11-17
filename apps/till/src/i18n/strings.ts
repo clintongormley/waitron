@@ -29,7 +29,8 @@ export const en = {
   "trust.open_setup": "Open the setup page for instructions",
 
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
-  "venue.time_zone_confirm": "Trading is stopped. Ask a manager to confirm the venue time zone.",
+  "venue.time_zone_confirm":
+    "Trading is stopped until the venue's time zone is confirmed. The dashboard asks for it on sign-in.",
   "venue.time_zone_restart": "The time zone was saved. Wait for restart, then reload.",
 
   "service.open": "Open",
@@ -151,7 +152,7 @@ export const en = {
   "tender_refund.retry": "Retry this refund",
   "tender_refund.pending_payment": "Check pending refund",
   "tender_refund.storage":
-    "The refund request could not be saved or read on this device. Ask a manager to check its outcome before starting another refund.",
+    "The refund request could not be saved or read on this device. Before starting another refund, open the receipt on another device that takes payments and choose Refund a payment: it lists what is left to refund and any refund still waiting.",
   "invoice_correction.title": "Correct invoice",
   "invoice_correction.explain": "Correct an overcharge and return the difference.",
   "invoice_correction.loading": "Reading the invoice…",
@@ -809,7 +810,7 @@ export const en = {
   "station.crossref_for_no_prep": "for {name}, no preparation",
   "station.print_problem": "Printing problem",
   "station.printer_down":
-    "Printer {name} has printed nothing since something sent to it at {time} got stuck. Tickets are still shown here; tell a manager.",
+    "Printer {name} has printed nothing since something sent to it at {time} got stuck. Tickets are still shown here. What is stuck can be reprinted on another printer in the dashboard, under Printers.",
   "station.table_changed_named": "{table} changed.",
   "station.table_changed_unnamed": "A table changed.",
   "station.table_changed": "The screen has been refreshed: check it and press again.",
@@ -855,7 +856,8 @@ export const en = {
   "device.join_waiting_hint": "In the dashboard, tap this number to start adding this device",
   "device.join_number_label": "Verification number {number}",
   "device.join_refused_title": "This device was not approved",
-  "device.join_refused_hint": "Ask a manager to approve it, then try again",
+  "device.join_refused_hint":
+    "Open “Add a device” in the dashboard, under Devices, then press Try again for a new verification number",
   "device.join_retry": "Try again",
   "device.type.till": "Counter till",
   "device.type.handheld": "Handheld",
@@ -899,7 +901,7 @@ export const en = {
   "card.declined": "Card declined",
   "card.no_answer": "The card reader did not answer",
   "card.pending_check":
-    "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, ask a manager to open Check card payments in Reporting.",
+    "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, it can be checked in the dashboard, under Check card payments.",
   "card.insufficient_funds": "Card declined: not enough funds",
   "card.expired": "Card declined: card expired",
   "card.wrong_pin": "Card declined: wrong PIN",
@@ -1322,7 +1324,7 @@ export const en = {
   "adjust.amount_invalid": "Enter an amount, such as 2.50",
   "adjust.amount_too_large": "Enter no more than {total}",
   "adjust.no_reasons":
-    "No reason allows this yet. A manager can add one in the dashboard, under Service › Voids and comps.",
+    "No reason allows this yet. One can be added in the dashboard, under Voids and comps.",
   "adjust.takes_off": "Takes {amount} off the bill",
   "adjust.nearest": "The prices allow {amount} off, not the {asked} asked for.",
   "adjust.quantity_shown": "How many: 1 of {n}",
@@ -1590,7 +1592,7 @@ export const en = {
   "sale.chain_handed_over_manual_card":
     "This server is no longer the main server, so it cannot record this payment. If you already charged a card on the terminal, refund it there. Wait for the till to move to the main server, then try again.",
   "sale.clock_unusable":
-    "Payment not recorded: the server's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
+    "Payment not recorded: the server's clock is wrong (it reads {date}). It can be checked in the dashboard, under Box status. If you already charged a card on the terminal, refund it there.",
   "sale.clock_unusable_check":
     "Payment not recorded: the server's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
   "sale.charged_clock_unusable":
@@ -1844,7 +1846,7 @@ export const en = {
   "bill_pay.card_unreachable":
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
-    "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, a manager can clear it on the dashboard's Check card payments page in Reporting.",
+    "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, it can be cleared in the dashboard, under Check card payments.",
   "bill_pay.uncertain_title": "We don't know yet whether it was charged",
   "bill_pay.uncertain":
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
@@ -1860,7 +1862,7 @@ export const en = {
   "bill_pay.state_failed": "Failed",
   "bill_pay.state_declined": "Declined",
   "bill_pay.pending_where":
-    "If it does not finish, a manager can clear it on the dashboard's Check card payments page in Reporting.",
+    "If it does not finish, it can be cleared in the dashboard, under Check card payments.",
   "bill_pay.refunded": "Refunded: {amount}",
   "bill_pay.refund_waiting": "Refund of {amount} waiting for the card provider",
   "bill_pay.refund_failed_row": "Refund of {amount} did not go through",
@@ -1936,7 +1938,7 @@ export const en = {
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
   "bill_refund.pending":
-    "The card refund of {amount} is waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed; sending and firing dishes still works. If it does not finish, a manager can follow it on the dashboard's Check card payments page in Reporting.",
+    "The card refund of {amount} is waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed; sending and firing dishes still works. If it does not finish, it can be followed in the dashboard, under Check card payments.",
   "bill_refund.failed": "The card refund of {amount} did not go through, so nothing was refunded.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
@@ -2057,6 +2059,7 @@ export const en = {
   "staff_notice.since": "since {time}",
   "staff_notice.unknown": "The server needs attention",
   "staff_notice.tell_manager": "Tell a manager",
+  "staff_notice.see_box_status": "See Box status in the dashboard",
   "staff_notice.check_time": "Check the time",
   "staff_notice.correct_device_time": "Correct it in this device's settings",
   "box_time.title": "Check the time",
@@ -2148,7 +2151,7 @@ export const es: Record<StringKey, string> = {
 
   "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
   "venue.time_zone_confirm":
-    "El servicio está detenido. Pide a un responsable que confirme la zona horaria del local.",
+    "El servicio está detenido hasta que se confirme la zona horaria del local. El panel la pide al iniciar sesión.",
   "venue.time_zone_restart":
     "La zona horaria se ha guardado. Espera al reinicio y vuelve a cargar.",
 
@@ -2274,7 +2277,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.retry": "Reintentar esta devolución",
   "tender_refund.pending_payment": "Consultar devolución pendiente",
   "tender_refund.storage":
-    "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Pide a un responsable que compruebe el resultado antes de iniciar otra devolución.",
+    "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Antes de iniciar otra devolución, abre el recibo en otro dispositivo que cobre y elige Devolver un pago: muestra lo que queda por devolver y cualquier devolución pendiente.",
   "invoice_correction.title": "Rectificar factura",
   "invoice_correction.explain": "Corrige un cobro de más y devuelve la diferencia.",
   "invoice_correction.loading": "Consultando la factura…",
@@ -2925,7 +2928,7 @@ export const es: Record<StringKey, string> = {
   "station.crossref_for_no_prep": "para {name}, sin preparación",
   "station.print_problem": "Problema de impresión",
   "station.printer_down":
-    "La impresora {name} no ha impreso nada desde que se atascó algo que se le envió a las {time}. Las comandas siguen apareciendo aquí; avisa a un encargado.",
+    "La impresora {name} no ha impreso nada desde que se atascó algo que se le envió a las {time}. Las comandas siguen apareciendo aquí. Lo atascado se puede reimprimir en otra impresora en el panel, en Impresoras.",
   "station.table_changed_named": "{table} ha cambiado.",
   "station.table_changed_unnamed": "Una mesa ha cambiado.",
   "station.table_changed": "La pantalla se ha actualizado: revísala y vuelve a pulsar.",
@@ -2966,7 +2969,8 @@ export const es: Record<StringKey, string> = {
     "En el panel, pulsa este número para empezar a añadir este dispositivo",
   "device.join_number_label": "Número de verificación {number}",
   "device.join_refused_title": "Este dispositivo no fue aprobado",
-  "device.join_refused_hint": "Pide a un responsable que lo apruebe e inténtalo de nuevo",
+  "device.join_refused_hint":
+    "Abre «Añadir un dispositivo» en el panel, en Dispositivos, y después pulsa Intentar de nuevo para obtener un nuevo número de verificación",
   "device.join_retry": "Intentar de nuevo",
   "device.type.till": "Caja registradora",
   "device.type.handheld": "Terminal de camarero",
@@ -3007,7 +3011,7 @@ export const es: Record<StringKey, string> = {
   "card.declined": "Tarjeta rechazada",
   "card.no_answer": "El lector de tarjetas no ha respondido",
   "card.pending_check":
-    "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, pide a un encargado que abra Comprobar pagos con tarjeta en Informes.",
+    "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, se puede comprobar en el panel, en Comprobar pagos con tarjeta.",
   "card.insufficient_funds": "Tarjeta rechazada: fondos insuficientes",
   "card.expired": "Tarjeta rechazada: tarjeta caducada",
   "card.wrong_pin": "Tarjeta rechazada: PIN incorrecto",
@@ -3421,7 +3425,7 @@ export const es: Record<StringKey, string> = {
   "adjust.amount_invalid": "Introduce un importe, por ejemplo 2,50",
   "adjust.amount_too_large": "Introduce como máximo {total}",
   "adjust.no_reasons":
-    "Todavía no hay ningún motivo que lo permita. Un encargado puede añadir uno en el panel, en Servicio › Cancelaciones y descuentos.",
+    "Todavía no hay ningún motivo que lo permita. Se puede añadir uno en el panel, en Cancelaciones y descuentos.",
   "adjust.takes_off": "Quita {amount} de la cuenta",
   "adjust.nearest": "Los precios permiten quitar {amount}, no los {asked} pedidos.",
   "adjust.quantity_shown": "Cuántos: 1 de {n}",
@@ -3684,7 +3688,7 @@ export const es: Record<StringKey, string> = {
   "sale.chain_handed_over_manual_card":
     "Este servidor ya no es el servidor principal, así que no puede registrar este pago. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí. Espera a que la caja pase al servidor principal y vuelve a intentarlo.",
   "sale.clock_unusable":
-    "Pago no registrado: la hora del servidor es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Pago no registrado: la hora del servidor es incorrecta (marca {date}). Se puede comprobar en el panel, en Estado del servidor. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_unusable_check":
     "Pago no registrado: la hora del servidor es incorrecta (marca {date}). Usa «Comprobar la hora» arriba. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.charged_clock_unusable":
@@ -3936,7 +3940,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.card_unreachable":
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
-    "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, un responsable puede anularlo en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
+    "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
   "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
   "bill_pay.uncertain":
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
@@ -3953,7 +3957,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.state_failed": "Fallido",
   "bill_pay.state_declined": "Rechazado",
   "bill_pay.pending_where":
-    "Si no termina, un responsable puede anularlo en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
+    "Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
   "bill_pay.refunded": "Devuelto: {amount}",
   "bill_pay.refund_waiting": "Devolución de {amount} esperando al proveedor de pagos",
   "bill_pay.refund_failed_row": "La devolución de {amount} no se completó",
@@ -4028,7 +4032,7 @@ export const es: Record<StringKey, string> = {
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",
   "bill_refund.pending":
-    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe; enviar y marchar platos sigue funcionando. Si no termina, un responsable puede seguirla en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
+    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe; enviar y marchar platos sigue funcionando. Si no termina, se puede seguir en el panel, en Comprobar pagos con tarjeta.",
   "bill_refund.failed":
     "La devolución de {amount} con tarjeta no se completó, así que no se ha devuelto nada.",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",
@@ -4147,6 +4151,7 @@ export const es: Record<StringKey, string> = {
   "staff_notice.since": "desde {time}",
   "staff_notice.unknown": "El servidor necesita atención",
   "staff_notice.tell_manager": "Avisa al encargado",
+  "staff_notice.see_box_status": "Consulta Estado del servidor en el panel",
   "staff_notice.check_time": "Comprobar la hora",
   "staff_notice.correct_device_time": "Corrígela en los ajustes del dispositivo",
   "box_time.title": "Comprobar la hora",

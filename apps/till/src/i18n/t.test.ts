@@ -167,15 +167,15 @@ it("registers en-GB as a first-class catalogue entry", () => {
 });
 
 it.each([
-  ["en-GB", "Use “Check the time” at the top of the screen.", "Tell a manager"],
-  ["es-ES", "Usa «Comprobar la hora» arriba.", "Avisa al encargado"],
+  ["en-GB", "Use “Check the time” at the top of the screen.", "Box status"],
+  ["es-ES", "Usa «Comprobar la hora» arriba.", "Estado del servidor"],
 ])(
   "points a clock refusal at Check the time while the box offers it, and nowhere else (%s)",
-  (locale, check, tell) => {
+  (locale, check, boxStatus) => {
     setLocale(locale);
     const unusable = clockUnusableText("2001-01-01T10:00:00.000Z", 60, true);
     expect(unusable).toContain(check);
-    expect(unusable).not.toContain(tell);
+    expect(unusable).not.toContain(boxStatus);
     expect(clockUnusableText("2001-01-01T10:00:00.000Z", 60)).not.toContain(check);
   },
 );

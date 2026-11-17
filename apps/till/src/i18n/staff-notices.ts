@@ -2,13 +2,11 @@ import type { StaffNotice } from "../api/client.js";
 import { clockTime, countText, t } from "./t.js";
 
 const TELL_MANAGER = "staff_notice.tell_manager";
+const SEE_BOX_STATUS = "staff_notice.see_box_status";
 
-const UNKNOWN = { main: "staff_notice.unknown", hint: TELL_MANAGER } as const;
+const UNKNOWN = { main: "staff_notice.unknown", hint: SEE_BOX_STATUS } as const;
 
 const FIXED = {
-  // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
-  // waiter at a stopped till has no step of their own (2026-10-28, A1127 Q4).
-  "storage.disk_full": "staff_notice.storage.disk_full",
   "clock.unusable": "staff_notice.clock.unusable",
   "storage.space_low": "staff_notice.storage.space_low",
   "clock.check_time": "staff_notice.clock.check_time",
@@ -51,10 +49,15 @@ export function staffNoticeText(
       hint: t("staff_notice.correct_device_time"),
     };
   }
+  if (notice.code === "storage.disk_full") {
+    // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
+    // waiter at a stopped till has no step of their own (2026-10-28, A1127 Q4).
+    return { main: t("staff_notice.storage.disk_full"), hint: t(TELL_MANAGER) };
+  }
   if (Object.hasOwn(FIXED, notice.code)) {
     return {
       main: t(FIXED[notice.code as keyof typeof FIXED]),
-      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
+      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : SEE_BOX_STATUS),
     };
   }
   if (notice.code === "clock.unconfirmed") {
@@ -63,7 +66,7 @@ export function staffNoticeText(
     if (typeof cause !== "string" || !Object.hasOwn(WAIT_CAUSES, cause)) return unknownText();
     return {
       main: t(WAIT_CAUSES[cause as keyof typeof WAIT_CAUSES]).replace("{agreed}", String(agreed)),
-      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
+      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : SEE_BOX_STATUS),
     };
   }
   if (notice.code === "printer.jobs_waiting") {

@@ -882,7 +882,7 @@ describe("till-lock-screen", () => {
     const line = lines[0]!.textContent!.trim();
     expect(line).toBe(t("staff_notice.clock.unconfirmed").replace("{agreed}", "1"));
     expect(line).toContain("1");
-    expect(line).not.toContain(t("staff_notice.tell_manager"));
+    expect(line).not.toContain(t("staff_notice.see_box_status"));
     expect(line).not.toContain(t("staff_notice.check_time"));
     el.clockNotice = undefined;
     await el.updateComplete;

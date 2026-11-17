@@ -1404,21 +1404,18 @@ line was not touched or an id on the answer, change what the till and the box ag
 
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
-Left open by A1382, which changed only `device.forbidden_action`. By code:
+Left open by A1382 (`device.forbidden_action`), #3605 (eight `codes.ts` refusals) and #3604 (the
+till's own sentences and notice hints). What is left is fiscal and invoice wording. By code:
 
 - `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_rectificative_for_node`,
   `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
   `invoice_delivery.email_unavailable`, `sale.correction_unsupported`,
   `department.operation_description_required`, `sale.charged_not_recorded`.
-- `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
-  `station.printer_down`,
-  `device.join_refused_hint`, `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`,
-  `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`,
-  `bill_pay.pending_where`, `bill_refund.pending`, `sale.refused`, `place.refused`.
-- `apps/till/src/i18n/staff-notices.ts`, whose hint `staff_notice.tell_manager` also shows on these
-  notices: `clock.unusable`, `storage.space_low`, `clock.check_time`,
-  `fiscal.records_unsent` with a held record, and a notice the till has no words for.
+- `apps/till/src/i18n/strings.ts`: `sale.refused` and `place.refused`, which word the fiscal refusals
+  `fiscal.record_invalid`, `fiscal.foreign_recipient_unsupported` and `sale.number_reused`.
+- `apps/till/src/i18n/staff-notices.ts`: the `staff_notice.tell_manager` hint on
+  `fiscal.records_unsent` with a held record.
 
 Not listed: the owner's full-disk strip (`storage.disk_full` in `staff-notices.ts`) and the till's
 other full-disk words (`storage.disk_full` in `codes.ts`, the `sale.disk_full` group in

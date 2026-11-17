@@ -376,3 +376,34 @@ it("says why a till that cannot give cash back stops after opening a correction,
     "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
   );
 });
+
+describe("till texts say where a problem is put right", () => {
+  const sendsElsewhere = /manager|whoever|encargado|responsable/i;
+  it.each([
+    ["venue.time_zone_confirm", "dashboard", "panel"],
+    ["tender_refund.storage", "Refund a payment", "Devolver un pago"],
+    ["station.printer_down", "the dashboard, under Printers.", "el panel, en Impresoras."],
+    [
+      "device.join_refused_hint",
+      "“Add a device” in the dashboard, under Devices",
+      "«Añadir un dispositivo» en el panel, en Dispositivos",
+    ],
+    ["card.pending_check", "under Check card payments", "en Comprobar pagos con tarjeta"],
+    ["adjust.no_reasons", "under Voids and comps", "en Cancelaciones y descuentos"],
+    ["sale.clock_unusable", "under Box status", "en Estado del servidor"],
+    ["bill_pay.card_pending", "under Check card payments", "en Comprobar pagos con tarjeta"],
+    ["bill_pay.pending_where", "under Check card payments", "en Comprobar pagos con tarjeta"],
+    ["bill_refund.pending", "under Check card payments", "en Comprobar pagos con tarjeta"],
+    ["staff_notice.see_box_status", "Box status", "Estado del servidor"],
+  ] as const)(
+    "%s says where it is put right and sends nobody elsewhere",
+    (key, enPlace, esPlace) => {
+      const english = catalogues["en-GB"]?.[key as StringKey];
+      const spanish = catalogues["es-ES"]?.[key as StringKey];
+      expect(english).toContain(enPlace);
+      expect(spanish).toContain(esPlace);
+      expect(english).not.toMatch(sendsElsewhere);
+      expect(spanish).not.toMatch(sendsElsewhere);
+    },
+  );
+});
