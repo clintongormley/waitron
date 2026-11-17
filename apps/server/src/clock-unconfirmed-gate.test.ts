@@ -639,7 +639,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       invoiceType: "F1",
       recipient: {
         taxId: "B12345674",
-        legalName: "Cliente SL",
+        legalName: "Harbour Foods",
         address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },

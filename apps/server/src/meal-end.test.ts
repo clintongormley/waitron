@@ -220,7 +220,7 @@ async function choose(billId: string, invoiceType: "F1" | "F2") {
       invoiceType === "F1"
         ? {
             taxId: "B12345674",
-            legalName: "Cliente SL",
+            legalName: "Harbour Foods",
             address: "2 Main Street, 28013 Madrid, Madrid",
             countryCode: "ES",
           }
@@ -292,7 +292,7 @@ describe("Print the bill", () => {
   });
 
   it("a €0.00 bill is issued and settled", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Red wine bottle");
     await giveAway(venue, party.tabId, 1);
     await serveAll(party);
     venue.db.run(
