@@ -2570,13 +2570,13 @@ async function bootServer(
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
-  const accountMailMode = async () => {
+  const accountMailMode = async (tx: Transaction) => {
     try {
-      if (await cloudConnection?.emailRelay()) return "cloud" as const;
+      if (await cloudConnection?.emailRelayEnabled()) return "cloud" as const;
     } catch {
       return "cloud" as const;
     }
-    return (await resolveAccountEmail()).mode;
+    return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
   };
   const cloudMail = {
     resolveAccountRelay: (signal: AbortSignal) =>

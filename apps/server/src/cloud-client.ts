@@ -487,6 +487,10 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async emailRelayEnabled() {
+      const state = await read();
+      return state?.environment === "test" && state.emailRelayEnabled === true;
+    },
     async emailRelay(signal?: AbortSignal) {
       const before = await read();
       if (!before?.view?.registration || before.environment !== "test") return null;
@@ -494,7 +498,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       let used: SavedCloudState;
       try {
         used = await leaseState(signal);
-        grant = await fetchCloudEmailGrant(used, signal, options.managementOrigin);
+        grant = await fetchCloudEmailGrant(used, signal, options.managementOrigin, recordRefusal);
       } catch (error) {
         if ((await read())?.emailRelayEnabled) throw error;
         return null;

@@ -115,6 +115,33 @@ it("keeps unpaired installations on SMTP and refuses a revoked paired relay", as
   }
 });
 
+it.each(["invalid_proof", "revoked", "revoked_reply"] as const)(
+  "retains shared configuration handling for %s",
+  async (failure) => {
+    const f = await installationFixture(undefined, { emailConfiguration: true });
+    try {
+      f.patch({ emailRelay: { version: 1, grant: grant() } });
+      await f.client.emailRelay();
+      if (failure === "revoked_reply")
+        f.patch({
+          revokedAt: new Date().toISOString(),
+          emailRelay: { version: 1, grant: grant() },
+        });
+      else f.fail(failure, failure === "invalid_proof" ? 401 : 403);
+      await expect(f.client.emailRelay()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
+      if (failure === "invalid_proof") {
+        expect(saved.lifecycle).not.toHaveProperty("lease");
+        f.fail("");
+        await f.client.emailRelay();
+        expect(f.requests.slice(-2).map((v) => v[2])).toEqual(["renew", "configuration"]);
+      } else expect(saved.lifecycle.revoked).toBe(true);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 it("does not hold the shared Cloud turn during the grant network read", async () => {
   const f = await installationFixture(undefined, { emailConfiguration: true });
   let release = () => {},

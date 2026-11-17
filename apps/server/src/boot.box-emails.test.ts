@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  type Transaction,
   enqueueMail,
   incidents,
   outgoingMail,
@@ -21,7 +22,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import type { EmailDelivery } from "./email-delivery.js";
-type AccountMode = () => Promise<EmailDelivery["mode"] | "cloud">;
+type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
 import { runMailLoop, runMailPass } from "./mail-sender.js";
 import { AppError } from "@waitron/shared";
 import type { startMailSender } from "./mail-sender.js";
@@ -307,8 +308,19 @@ describe("the running server's notice and email checks", () => {
           {},
           { origin: f.options.origin, stateDir: f.stateDir },
         );
-        expect(await holder.managementMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
-        expect(await holder.profileMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
+        const requestsBeforeAdmission = f.requests.length;
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe("local_capture");
+        expect(await withTransaction(suite.db, holder.profileMode!)).toBe("local_capture");
+        expect(f.requests).toHaveLength(requestsBeforeAdmission);
+        await runMailPass(holder.mail!);
+        const requestsAfterSend = f.requests.length;
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe(
+          relay === "on" ? "cloud" : "local_capture",
+        );
+        expect(await withTransaction(suite.db, holder.profileMode!)).toBe(
+          relay === "on" ? "cloud" : "local_capture",
+        );
+        expect(f.requests).toHaveLength(requestsAfterSend);
         expect(
           f.requests.some(
             (v) =>
@@ -316,7 +328,6 @@ describe("the running server's notice and email checks", () => {
               v[7] === '{"servicesVersion":2,"managementOrigin":"http://localhost:5191"}',
           ),
         ).toBe(true);
-        await runMailPass(holder.mail!);
         if (relay === "on") {
           expect(submitted).toMatchObject({ class: "password_reset", locale: "en-GB" });
           expect(holder.smtp).toEqual([]);
@@ -446,8 +457,10 @@ describe("the running server's notice and email checks", () => {
         await bootServer(booted, venue, { intent: "prepare", development: false });
         expect(holder.managementMode).toBeTypeOf("function");
         expect(holder.profileMode).toBeTypeOf("function");
-        await expect(holder.managementMode!()).resolves.toBe("unconfigured");
-        await expect(holder.profileMode!()).resolves.toBe("unconfigured");
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+          "unconfigured",
+        );
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("unconfigured");
         if (!repair) {
           const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
             headers: { cookie: venue.managerCookie },
@@ -473,8 +486,10 @@ describe("the running server's notice and email checks", () => {
       const booted: Booted = {};
       try {
         await bootServer(booted, venue, { intent: "demo", development });
-        await expect(holder.managementMode!()).resolves.toBe("local_capture");
-        await expect(holder.profileMode!()).resolves.toBe("local_capture");
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+          "local_capture",
+        );
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("local_capture");
       } finally {
         await shutDown(booted);
       }
@@ -505,8 +520,8 @@ describe("the running server's notice and email checks", () => {
       expect(holder.mail!.owners).toContainEqual(
         expect.objectContaining({ kind: "role_membership_changed", deliveryRule: "notice" }),
       );
-      await expect(holder.managementMode!()).resolves.toBe("smtp");
-      await expect(holder.profileMode!()).resolves.toBe("smtp");
+      await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
+      await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
       expect(
         (await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice"))).mode,
       ).toBe("smtp");
@@ -562,10 +577,10 @@ describe("the running server's notice and email checks", () => {
           await response.body?.cancel();
         }
         await expect.poll(() => holder.smtp.length, { timeout: 10000 }).toBe(2);
-        await expect(holder.managementMode!()).resolves.toBe(
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
           outcome === "captured" ? "local_capture" : "smtp",
         );
-        await expect(holder.profileMode!()).resolves.toBe(
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe(
           outcome === "captured" ? "local_capture" : "smtp",
         );
         const delivery =

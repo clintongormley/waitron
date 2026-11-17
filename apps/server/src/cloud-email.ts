@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { OnRefusal } from "./cloud-translation.js";
 import type { SavedCloudState } from "./cloud-client.js";
-import { machinePayload } from "./cloud-installation.js";
+import { machinePayload, readCloudInstallationView } from "./cloud-installation.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 
 import { AppError } from "@waitron/shared";
@@ -76,6 +77,7 @@ export async function fetchCloudEmailGrant(
   state: SavedCloudState,
   signal?: AbortSignal,
   managementOrigin?: string,
+  onRefusal?: OnRefusal,
 ) {
   const { response, value } = await emailExchange(
     state,
@@ -84,15 +86,24 @@ export async function fetchCloudEmailGrant(
     JSON.stringify({ servicesVersion: 2, ...(managementOrigin ? { managementOrigin } : {}) }),
     signal,
   );
-  const registration = state.view!.registration!;
-  if (
-    !response.ok ||
-    !record(value) ||
-    value.environment !== state.environment ||
-    Object.entries(registration).some(([key, expected]) => value[key] !== expected)
-  )
+  const used = JSON.stringify(state.lifecycle!.lease);
+  if (!response.ok) {
+    const code = record(value) ? value.error : undefined;
+    if (response.status === 403 && code === "revoked")
+      await onRefusal?.("revoked", used, state.publicKey);
+    if (
+      (response.status === 401 && code === "invalid_proof") ||
+      (response.status === 400 && code === "conflict")
+    )
+      await onRefusal?.("invalid_proof", used, state.publicKey);
     throw new AppError("cloud.unavailable", {});
-  return readCloudEmailGrant(value.emailRelay);
+  }
+  const view = readCloudInstallationView(value, state);
+  if (view.revokedAt !== null) {
+    await onRefusal?.("revoked", used, state.publicKey);
+    throw new AppError("cloud.unavailable", {});
+  }
+  return readCloudEmailGrant((value as Record<string, unknown>).emailRelay);
 }
 
 export interface CloudAccountEmail {
