@@ -18,9 +18,11 @@ import type { RecordSaleInput } from "@waitron/core";
 import { prepareIssueClock, type FiscalBackend, type TrustedClock } from "@waitron/fiscal";
 import {
   allocateOrderNumber,
+  insertInChunks,
   readVenue,
   nodes,
   withTransaction,
+  workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -37,6 +39,8 @@ import type { GrossLine, VatClass } from "@waitron/menu";
 import {
   AppError,
   decimal,
+  decimalToCents,
+  stringToThousandths,
   sumDecimals,
   toScale,
   MONEY_SCALE,
@@ -274,8 +278,9 @@ export async function seedSales(
       );
 
       const origin = jobOrigin("demo_seed");
-      // A bill of its own, settled at the sale's instant, because Bills closed counts settled
-      // working orders. Inserted directly: `createOpenOrder` re-prices from the live menu.
+      // Bills closed counts a sale on the day its bill was settled, and the Orders screen shows a
+      // bill's dishes from its lines, so each sale gets a bill with its lines, settled at its
+      // instant. Written directly: `createOpenOrder` re-prices from the live menu.
       const workingOrderId = randomUUID();
       await tx.insert(workingOrders).values({
         id: workingOrderId,
@@ -288,6 +293,21 @@ export async function seedSales(
         openedAt: instant.toISOString(),
         dining: takeaway ? "takeaway" : "eat_in",
       });
+      await insertInChunks(
+        tx,
+        workingOrderLines,
+        grossLines.map((line, i) => ({
+          workingOrderId,
+          lineNo: line.lineNo,
+          name: line.name,
+          descriptions: line.descriptions,
+          quantity: stringToThousandths(line.quantity),
+          unitPriceGross: decimalToCents(line.grossUnitPrice),
+          vatClass: chosen[i]!.vatClass,
+          takeawayVatClass: chosen[i]!.takeawayVatClass ?? chosen[i]!.vatClass,
+          lineTotal: decimalToCents(line.lineGross),
+        })),
+      );
 
       const input: RecordSaleInput = {
         operationDescription: venue.operationDescription,

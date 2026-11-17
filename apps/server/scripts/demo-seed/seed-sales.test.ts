@@ -21,7 +21,9 @@ import {
   nodeId as brandNodeId,
   rawCentsToDecimal,
   saleId as brandSaleId,
+  thousandthsToDecimal,
 } from "@waitron/shared";
+import { listOrders, readOrderDetail } from "../../src/orders-list.js";
 import { nodeBackend, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
@@ -85,6 +87,25 @@ const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
     customerName: { [LOCALE]: "Refresco" },
     unitPrice: "2.10",
     vatClass: "general",
+  },
+];
+
+// One deli dish with a takeaway class of its own and one without.
+const DELI_PRODUCTS: SeedSalesProduct[] = [
+  {
+    id: "p-deli-cola",
+    name: "Cola",
+    customerName: { [LOCALE]: "Cola" },
+    unitPrice: "2.50",
+    vatClass: "reduced",
+    takeawayVatClass: "general",
+  },
+  {
+    id: "p-deli-ham",
+    name: "Jamón",
+    customerName: { [LOCALE]: "Jamón" },
+    unitPrice: "12.00",
+    vatClass: "reduced",
   },
 ];
 
@@ -251,6 +272,87 @@ describe("seedSales", () => {
     expect(compareDecimal(billed, sold)).toBe(0);
   });
 
+  it("shows each demo order's dishes on the Orders screen as its invoice lists them", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 84_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: "es-ES",
+    })();
+    const { count } = await seedSales(suite.db, {
+      venue: venueFor(venue),
+      invoiceLocale: "es-ES",
+      days: 3,
+      products: PRODUCTS,
+      deliProducts: DELI_PRODUCTS,
+    });
+
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { rows } = await listOrders(tx, {
+        status: "all",
+        dates: "any",
+        credited: false,
+        limit: count + 1,
+        scope: "all",
+      });
+      const orders = [];
+      for (const row of rows) {
+        const detail = await readOrderDetail(tx, row.id, "all", false);
+        const filed = await tx
+          .select({
+            name: saleLines.name,
+            quantity: saleLines.quantity,
+            gross: saleLines.lineGross,
+          })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, row.saleId!))
+          .orderBy(saleLines.lineNo);
+        orders.push({ row, detail, filed });
+      }
+      return orders;
+    });
+
+    expect(read.length).toBe(count);
+    for (const { row, detail, filed } of read) {
+      expect({ kind: row.kind, status: row.status }).toEqual({ kind: "bill", status: "paid" });
+      expect(filed.length).toBeGreaterThan(0);
+      expect(
+        detail.lines.map((line) => ({
+          name: line.name,
+          quantity: String(line.quantity),
+          total: String(line.total),
+        })),
+      ).toEqual(
+        filed.map((line) => ({
+          name: line.name,
+          quantity: String(thousandthsToDecimal(line.quantity)),
+          total: String(centsToDecimal(line.gross!)),
+        })),
+      );
+    }
+
+    // The classes a till stores: a dish with no takeaway class keeps its served one for takeaway.
+    const stored = suite.db.all<{
+      dining: string;
+      name: string;
+      vat_class: string;
+      takeaway_vat_class: string;
+      unit_price_gross: number;
+    }>(sql`select o.dining, l.name, l.vat_class, l.takeaway_vat_class, l.unit_price_gross
+           from working_order_lines l join working_orders o on o.id = l.working_order_id`);
+    expect(new Set(stored.map((line) => line.dining))).toEqual(new Set(["eat_in", "takeaway"]));
+    const byName = new Map([...PRODUCTS, ...DELI_PRODUCTS].map((p) => [p.name, p]));
+    for (const line of stored) {
+      const product = byName.get(line.name)!;
+      expect([line.vat_class, line.takeaway_vat_class]).toEqual([
+        product.vatClass,
+        product.takeawayVatClass ?? product.vatClass,
+      ]);
+      expect(
+        compareDecimal(centsToDecimal(line.unit_price_gross), decimal(product.unitPrice)),
+      ).toBe(0);
+    }
+  });
+
   it("rates a deli sale's lines at their takeaway class, or their served class when they have none", async () => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 82_000_000,
@@ -298,7 +400,7 @@ describe("seedSales", () => {
     );
   });
 
-  it("records every demo sale and its fiscal record as the demo seed's, with no device", async () => {
+  it("records every demo sale, its fiscal record and its bill as the demo seed's, with no device", async () => {
     // Its own provisioner: the shared one's fixed `K` letter is a valid NIF for its first venue only.
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 81_000_000,
@@ -325,6 +427,7 @@ describe("seedSales", () => {
     }));
     expect(pairs("sales")).toEqual(expected);
     expect(pairs("registros_facturacion")).toEqual(expected);
+    expect(pairs("working_orders")).toEqual(expected);
   });
 
   it("files demo sales whose every line can be corrected: the preview takes back each whole sale", async () => {
