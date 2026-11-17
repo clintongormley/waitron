@@ -171,7 +171,6 @@ export class TillPassScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
-  @property({ attribute: false }) operatorSession = 0;
   /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;
   @property({ attribute: false }) reducedMotion?: boolean;

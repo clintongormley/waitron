@@ -975,12 +975,6 @@ element with a cursor rule of its own keeps it unless that rule reads `--reorder
 [Decision](till.md#decisions-and-deliberate-limits)
 
 
-## Pass screen unused values
-
-The server still works out each pass dish's age colour, which no screen reads (D68 keeps it); the
-pass screen's `operatorSession` property is never read.
-
-
 ## Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept (left open by A773-2 PR C's review).
 
 The coverage warning's read of dishes waiting for the pass
@@ -1669,14 +1663,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
   per dish count the part carved off comes back as a row of its own.
 
-## Bundle: Pass screen unused values
-
-1 entry, size S.
-
-- **Pass screen unused values.** `operatorSession` is unread, and the server still works out the
-  unread age colour D68 keeps.
-  [Detail](till.md#pass-screen-unused-values)
-
 ## Bundle: Take over offered where it is needed
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1728,6 +1714,10 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
 ## Decisions and deliberate limits
+
+- **The server still works out each pass dish's age colour, which the till does not read (A773-2
+  B4 plan, D68, 2026-11-02, not the owner).** "The server's `band` stays correct for any other
+  reader and is not read by the till." [Plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)
 
 - **Saving a device on Devices (Edit or Pair) reads the device list twice while the live connection
   is up (watcher, 2026-11-17, lane B, not the owner; the owner may overrule).** "Follow
