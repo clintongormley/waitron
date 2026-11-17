@@ -394,8 +394,6 @@ it("on a 390 px phone, puts the basket under the menu at its width, with each li
   expect(await placement(el)).toEqual(allWhole);
 });
 
-// A line's remove button already reaches the basket's edge at this width (the backlog's open 1280 px
-// item), so only the cards outside the basket are held whole.
 it("on a 1280 px till, keeps the basket beside the menu, with the total and the pay buttons whole", async () => {
   const el = await mountCounter(1280, 800, "2");
   const browser = box(el, "till-menu-browser");

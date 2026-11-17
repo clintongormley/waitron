@@ -165,9 +165,13 @@ for (const locale of ["en-GB", "es-ES"])
     );
 for (const locale of ["en-GB", "es-ES"])
   for (const theme of ["light", "dark"] as const)
-    it.each([390, 1280])(
-      `A738 amount columns and line window fit ${locale} ${theme} %s`,
-      async (width) => {
+    it.each([
+      { width: 390, stacked: true },
+      { width: 1280, stacked: false },
+      { width: 1280, stacked: true },
+    ])(
+      `A738 amount columns and line window fit ${locale} ${theme} $width stacked=$stacked`,
+      async ({ width, stacked }) => {
         const priorLocale = currentLocale(),
           priorWidth = window.innerWidth,
           priorHeight = window.innerHeight;
@@ -197,7 +201,7 @@ for (const locale of ["en-GB", "es-ES"])
               store,
               lineDetails: true,
               allowPickRemoval: true,
-              stacked: width === 390,
+              stacked,
             },
             theme,
           );
