@@ -1329,8 +1329,9 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   the key's change time (a stated departure from design §4) and Make offered wherever the old
   Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
 - **A1187: the Backups card's receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
-- **A1187: the Backups card after a real Live setup has not been looked at.** No dev stack can
-  finish one ([why](setup.md#a-dev-stack-cannot-finish-a-live-setup)).
+- **A1187: the Backups card after a real Live setup has been looked at in light theme at desktop
+  width only.** On a `wa-wt onboarding` stack's Live setup (2026-11-17) it read "Recovery pack 1,
+  made on 17 November, is up to date." Dark theme and phone width are still to look at.
 
 ## Bundle: Remaining bucket-copy limits
 

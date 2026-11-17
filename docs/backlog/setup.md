@@ -161,20 +161,6 @@ browser test page cannot be served over HTTPS. **Next action:** during the on-de
 above, click past the certificate warning on one device and confirm the page appears in the
 browser's preferred supported language, falling back to English when none is supported.
 
-## A dev stack cannot finish a Live setup
-
-A `wa-wt onboarding` stack's wizard, opened at the setup app's own page, now goes Live → Start
-empty → owner → shop details → the readiness step
-([how](../developers/workflow-guide.md#the-development-stack-from-a-worktree)), and stops there:
-**Proceed** waits for a second clock, and nothing on a dev stack can be one. A screen on the box
-itself does not count (`apps/server/src/request-from-box.ts`; the dev page reaches the server
-through a loopback proxy), the dev server listens on loopback only, so no phone can reach it, and
-a Mac has no internet time service the server can read. So the Backups card has still never been
-seen showing a Live setup's pack 1. The owner chose the fix on 2026-11-17 ("Accept own clock"):
-with development mode on (`WAITRON_ENV=dev`), the first setup's readiness takes the box's own clock
-alone; preproduction without development mode and production keep the second-clock rule. Not
-built yet; once built, walk a `wa-wt onboarding` stack to a Live venue.
-
 ## Loose ends left by A496 (moving to a new tax ID).
 
 - How long, and in what form, an old taxpayer's database must be kept. Not checked;

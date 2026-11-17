@@ -392,9 +392,9 @@ can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 **A Live setup on a dev stack goes through the setup app's own page**, the stack's wizard address
 (`http://localhost:5192/setup/` on slot 0, `http://localhost:5392/setup/` on slot 2). The
 server's own HTTPS address serves only a "needs setup" placeholder from a source run, which names
-no built wizard (`WAITRON_SETUP_APP_DIR` unset). Two things in the dev scripts take a Live setup
-as far as its readiness step, where it stops: that step needs a second clock (see the owned flow
-below), and nothing on a dev stack can be one. The development
+no built wizard (`WAITRON_SETUP_APP_DIR` unset). Two things in the dev scripts let a Live setup
+through to its readiness step, which on a development box takes the box's own clock (see the owned
+flow below). The development
 servers' proxy (`scripts/dev-server-proxy.ts`) checks for the box's certificate on every request,
 so it switches to HTTPS once an onboarding box makes one during start-up; and when it forwards to
 that HTTPS box it presents the page's `Origin` as `https://` when it names the page's own host,
@@ -481,7 +481,12 @@ readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints
 why it waits and until when, and keeps the wait"), and neither does the setup page, which has no
 such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
-Signed allocation files do not replace that flow.
+Signed allocation files do not replace that flow. On a development box (`WAITRON_ENV=dev`) the
+first setup's readiness takes the box's own clock as the second clock, and the person still
+confirms the time with **Proceed** (owner, 2026-11-17;
+`packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "in development the box's clock
+alone, confirmed, passes the first setup's clock check" and "with WAITRON_ENV %s the box's clock
+alone is refused second_clock_missing").
 
 Production and preproduction remain separate databases. A disposable preproduction allocation
 is not production authority. Follow the [first Live procedure](../operations/first-live-fiscal-setup.md)
