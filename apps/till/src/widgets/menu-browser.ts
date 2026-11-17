@@ -453,6 +453,8 @@ export class TillMenuBrowser extends LitElement {
 
   #sectionSearchName = foldCache<SectionNode>();
 
+  #customerSearchName = foldCache<TillProduct>();
+
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
     if (cached?.menu === menu && cached.products === this.products) return cached.index;
@@ -628,6 +630,7 @@ export class TillMenuBrowser extends LitElement {
       const list = shownMembers(members);
       const paths = tilePaths(list, path);
       const named: [SearchResult, string][] = [];
+      const customerNamed: [SearchResult, string][] = [];
       let populated = false;
       let enabled = false;
       list.forEach((member, position) => {
@@ -638,7 +641,11 @@ export class TillMenuBrowser extends LitElement {
           enabled = true;
           if (seen.has(member.productId)) return;
           seen.add(member.productId);
-          named.push([{ kind: "product", product }, productNames.get(product)!]);
+          const result: SearchResult = { kind: "product", product };
+          named.push([result, productNames.get(product)!]);
+          const customerName = descriptionFor(product.customerName ?? {}, "");
+          if (customerName !== "")
+            customerNamed.push([result, this.#customerSearchName(product, customerName)]);
         } else {
           const opens = paths[position]!;
           const children = walk(member.members, opens);
@@ -652,11 +659,15 @@ export class TillMenuBrowser extends LitElement {
             ],
             ...children.named,
           );
+          customerNamed.push(...children.customerNamed);
         }
       });
-      return { named, populated, enabled };
+      return { named, customerNamed, populated, enabled };
     };
-    return search(walk(unfiltered.home, []).named);
+    const { named, customerNamed } = walk(unfiltered.home, []);
+    const found = search(named);
+    const shown = new Set(found);
+    return [...found, ...search(customerNamed).filter((result) => !shown.has(result))];
   }
 
   #resultTile(result: SearchResult, mode: HomeTileMode, menuId: string): TemplateResult {

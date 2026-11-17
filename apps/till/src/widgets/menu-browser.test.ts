@@ -1070,6 +1070,44 @@ describe("till-menu-browser", () => {
       }
     });
 
+    describe("a product's customer name", () => {
+      const original = currentContentLanguages();
+      afterEach(() => setContentLanguages(original));
+      // Staff and customer names share no word, so a match proves which name was read.
+      const special = product("special", "Special seven", {
+        customerName: { en: "Cod fritters", es: "Buñuelos de bacalao" },
+      });
+      const quail = product("codorniz", "Codorniz");
+      const mountSpecial = () => {
+        setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+        return mount({
+          menu: lunch({ structure: { members: [member("special"), member("codorniz")] } }),
+          products: [special, quail],
+        });
+      };
+
+      it("finds a product by its customer name in the till's language, showing its staff name", async () => {
+        const { el } = await mountSpecial();
+        await search(el, "fritters");
+        expect(names(entries(el, "results"))).toEqual(["Special seven"]);
+        await search(el, "bunuelos");
+        expect(entries(el, "results")).toEqual([]);
+        setLocale("es-ES");
+        await search(el, "bunuelos");
+        expect(names(entries(el, "results"))).toEqual(["Special seven"]);
+        await search(el, "fritters");
+        expect(entries(el, "results")).toEqual([]);
+      });
+
+      it("lists staff-name matches first, and a product matching both names once", async () => {
+        const { el } = await mountSpecial();
+        // The special's whole-word customer match would outrank the quail's staff-name prefix, and
+        // the quail's customer name ("Codorniz carta") matches too.
+        await search(el, "cod");
+        expect(names(entries(el, "results"))).toEqual(["Codorniz", "Special seven"]);
+      });
+    });
+
     it("says so when nothing matches", async () => {
       const { el } = await mount();
       await search(el, "zzz");
