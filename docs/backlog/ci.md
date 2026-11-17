@@ -159,6 +159,23 @@ had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 
 was this case. Earlier sightings were not searched further. The log is kept at
 `~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
 
+
+**Native Chromium startup exceeded its test budget once (PR #3686, 2026-11-17).**
+Run [44177182245](https://github.com/clintongormley/waitron/actions/runs/44177182245),
+`test-dashboard (6)`, job `134372042174`: the native reload case at
+`apps/dashboard/test/live-connection-native.test.ts:127` reached its 20-second timeout before
+`page.goto`. The retained Playwright trace shows launch beginning at 21:16:22.127Z, browser
+startup completing at 21:16:43.151Z and navigation beginning at 21:16:43.603Z. Later launches
+in that file completed under a second. The changed SumUp branch leaves the isolated test and
+its two dashboard-kit source inputs unchanged; the named case passed locally in 979 ms.
+The dashboard failures found in the first 24 recent failed runs were different assertions;
+no earlier occurrence of this startup timeout was found in that search. Resource contention
+has not been established. Logs, trace and history are retained in
+`~/waitron-campaign-f/receipts/sumup-real-card-followups-20261117/` (`bd2-ci-dashboard-6.log`,
+`native-failure-history-matches.json`, `native-reload-local.log`). Watcher 22:31 cleared one
+failed-job rerun on the same head; a pass is not a repair. A second occurrence needs a priority
+root-cause fix with its trace retained before retrying.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
