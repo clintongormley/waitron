@@ -429,6 +429,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
+- **A dev stack cannot finish a Live setup**: the wizard skips the owner flow in development
+  mode and the server refuses the plain provision with `setup.owner_required`.
+  [Detail](backlog/setup.md#a-dev-stack-cannot-finish-a-live-setup)
+
+- **Start empty asks to discard changes nobody made** on the untouched Import a configuration
+  screen. [Detail](backlog/setup.md#start-empty-asks-to-discard-changes-nobody-made)
+
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
@@ -1186,7 +1193,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
 
-- **Recovery pack defaults and remaining card checks** (unconfirmed defaults, card reads/receipts, card inspection). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
+- **Recovery pack defaults and the Backups card's reads and receipts** (bundle of 3, size S, needs the owner). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
 - **Backups screen leftovers** (bundle of 1, size S, needs the owner). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 

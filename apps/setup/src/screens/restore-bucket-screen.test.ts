@@ -346,7 +346,7 @@ describe("SetupRestoreBucketScreen", () => {
     [
       "a pack made with no bucket copy",
       () => recoveryPackPdf(null),
-      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
+      "This recovery pack holds no bucket copy code: the server had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
       "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
     ],
     [

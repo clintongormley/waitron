@@ -104,6 +104,7 @@ describe.each(["light", "dark"] as const)("recovery pack card accessibility (%s)
           pdf: new Blob(["%PDF"], { type: "application/pdf" }),
           number: 4,
           key: "unchanged",
+          madeAt: MADE_AT,
           received: true,
         },
         bubbles: true,

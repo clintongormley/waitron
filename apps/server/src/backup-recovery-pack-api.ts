@@ -277,6 +277,7 @@ async function makePack(
   input: MakeInput,
 ): Promise<{
   number: number;
+  madeAt: string;
   pdf: Uint8Array<ArrayBuffer>;
   key: "failed" | "replaced" | "unchanged";
   parts: BuiltPart[];
@@ -375,6 +376,7 @@ async function makePack(
   const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
   return {
     number,
+    madeAt,
     pdf,
     key,
     parts,
@@ -454,6 +456,7 @@ export function mountBackupRecoveryPackMakeApi(
         "Content-Disposition": `attachment; filename="waitron-recovery-pack-${made.number}.pdf"`,
         "X-Waitron-Recovery-Pack": String(made.number),
         "X-Waitron-Recovery-Pack-Key": made.key,
+        "X-Waitron-Recovery-Pack-Made-At": made.madeAt,
       });
     });
   });

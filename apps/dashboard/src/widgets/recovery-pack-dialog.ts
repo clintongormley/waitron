@@ -22,6 +22,7 @@ export interface RecoveryPackMade {
   pdf: Blob;
   number: number;
   key: RecoveryPackKeyState;
+  madeAt: string;
   received: boolean;
 }
 
@@ -233,7 +234,13 @@ export class RecoveryPackDialog extends LitElement {
     if (api !== this.api) return;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackMade>("recovery-pack-made", {
-        detail: { pdf: made.pdf, number: made.number, key: made.key, received },
+        detail: {
+          pdf: made.pdf,
+          number: made.number,
+          key: made.key,
+          madeAt: made.madeAt,
+          received,
+        },
         bubbles: true,
         composed: true,
       }),

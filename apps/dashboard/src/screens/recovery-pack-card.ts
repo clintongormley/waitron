@@ -166,11 +166,10 @@ export class RecoveryPackCard extends LitElement {
   @property({ type: Boolean }) openRequested = false;
   @state() private status: Status | null = null;
   @state() private failed = false;
-  /** `arrivedAt` is the browser's time, used only until a status names the pack's own time. */
   @state() private made: {
     url: string;
     number: number;
-    arrivedAt: string;
+    madeAt: string;
   } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
 
@@ -265,7 +264,7 @@ export class RecoveryPackCard extends LitElement {
     this.made = {
       url: URL.createObjectURL(made.pdf),
       number: made.number,
-      arrivedAt: new Date().toISOString(),
+      madeAt: made.madeAt,
     };
     if (older || !this.dialog?.isOpen) this.reload();
   }
@@ -273,14 +272,6 @@ export class RecoveryPackCard extends LitElement {
   #make(): void {
     this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
     this.dialog?.show(this.failed ? null : this.status);
-  }
-
-  /** The box's own time for pack `number`, as the status names it. */
-  #madeAt(number: number): string | undefined {
-    const status = this.status;
-    return [status?.latest, status?.unreceived, ...(status?.keep ?? [])].find(
-      (pack) => pack?.number === number,
-    )?.madeAt;
   }
 
   #date(iso: string): string {
@@ -474,7 +465,7 @@ export class RecoveryPackCard extends LitElement {
       <p data-test="pack-ready">
         ${fill("recovery_pack.ready", {
           number: String(made.number),
-          date: this.#date(this.#madeAt(made.number) ?? made.arrivedAt),
+          date: this.#date(made.madeAt),
         })}
       </p>
       <div class="actions">

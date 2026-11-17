@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
@@ -137,7 +137,7 @@ function stubApi(at: RecoveryPackStatus = status()) {
     freshSignInPasskeyOptions: vi.fn(),
     makeRecoveryPack: vi
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
-      .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged" }),
+      .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt: MADE_AT }),
     markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
   };
 }
@@ -566,7 +566,7 @@ describe("making a pack", () => {
     const made = (number: number) =>
       dialogOf(el).dispatchEvent(
         new CustomEvent("recovery-pack-made", {
-          detail: { pdf: pdf(), number, key: "unchanged", received: true },
+          detail: { pdf: pdf(), number, key: "unchanged", received: true, madeAt: MADE_AT },
           bubbles: true,
           composed: true,
         }),
@@ -603,7 +603,7 @@ describe("making a pack", () => {
     const el = await mount(stubApi());
     dialogOf(el).dispatchEvent(
       new CustomEvent("recovery-pack-made", {
-        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true },
+        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true, madeAt: MADE_AT },
         bubbles: true,
         composed: true,
       }),
@@ -632,7 +632,7 @@ describe("making a pack", () => {
     cancel();
     await closed;
     await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
-    answer.resolve({ pdf: pdf(), number: 4, key: "replaced" });
+    answer.resolve({ pdf: pdf(), number: 4, key: "replaced", madeAt: MADE_AT });
     await settle(el);
     expect(el.shadowRoot!.querySelector("[data-test=download-pack]")).toBeNull();
     expect(line(el)).toContain(
@@ -699,6 +699,7 @@ describe("making a pack", () => {
     "dates the ready line from the box's own time for the pack, in the venue's zone (%s)",
     async (timeZone, madeAt, day) => {
       const api = stubApi(status({ timeZone }));
+      api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt });
       const el = await mount(api);
       api.getRecoveryPackStatus.mockResolvedValue(
         status({
@@ -717,6 +718,34 @@ describe("making a pack", () => {
         .toBe(fill("recovery_pack.ready", { number: "4", date: day }));
     },
   );
+
+  it("dates the ready line from the box's time for the pack, not the browser's", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    // Kiritimati is UTC+14: the box made the pack at 23:00 on 28 February there, while the
+    // browser's clock already reads 01:00 on 29 February.
+    vi.setSystemTime(new Date("2024-02-28T11:00:00.000Z"));
+    const timeZone = "Pacific/Kiritimati";
+    const api = stubApi(status({ timeZone }));
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      key: "unchanged",
+      madeAt: "2024-02-28T09:00:00.000Z",
+    });
+    const el = await mount(api);
+    const { make } = await openDialog(el);
+    make();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=download-pack]"))
+      .not.toBeNull();
+    await settle(el);
+    expect(words(el.shadowRoot!.querySelector("[data-test=pack-ready]"))).toBe(
+      fill("recovery_pack.ready", { number: "4", date: "28 February" }),
+    );
+  });
 
   it.each([
     ["the make's answer", "make"],
@@ -738,7 +767,7 @@ describe("making a pack", () => {
       const next = stubApi(STATES.none);
       el.api = next as unknown as DashboardApi;
       await settle(el);
-      answer.resolve({ pdf: pdf(), number: 4, key: "unchanged" });
+      answer.resolve({ pdf: pdf(), number: 4, key: "unchanged", madeAt: MADE_AT });
       marked.resolve();
       await settle(el);
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -864,8 +893,8 @@ describe("making a pack", () => {
     it("never swaps a newer pack's link for an older one's, but still re-reads the status the older one's receipt changed", async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced" })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced" });
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced", madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced", madeAt: MADE_AT });
       const first = deferred<void>();
       const second = deferred<void>();
       api.markRecoveryPackReceived
@@ -900,8 +929,8 @@ describe("making a pack", () => {
     ) => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: firstKey })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: secondKey });
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: firstKey, madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: secondKey, madeAt: MADE_AT });
       const first = deferred<void>();
       api.markRecoveryPackReceived
         .mockReturnValueOnce(first.promise)
@@ -933,9 +962,9 @@ describe("making a pack", () => {
     it("never offers an older pack whose new server key a later pack has replaced", async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced" })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced" })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 3, key: "unchanged" });
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced", madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced", madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 3, key: "unchanged", madeAt: MADE_AT });
       const first = deferred<void>();
       api.markRecoveryPackReceived.mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
       const el = await mount(api);
@@ -983,7 +1012,7 @@ describe("making a pack", () => {
     api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
     dialogOf(el).dispatchEvent(
       new CustomEvent("recovery-pack-made", {
-        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true },
+        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true, madeAt: MADE_AT },
         bubbles: true,
         composed: true,
       }),
