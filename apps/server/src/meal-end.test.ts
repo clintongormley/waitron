@@ -346,6 +346,29 @@ describe("Print the bill", () => {
     });
   });
 
+  it("issues a merged-in party's bill through the surviving party, refusing it through the merged-away one", async () => {
+    const survivor = await seatedWith(venue, "Red wine bottle");
+    const merged = await seatedWith(venue, "Tarta");
+    await serveAll(merged);
+    venue.db.run(
+      sql`update parties set state = 'closed', closed_at = ${new Date().toISOString()}, merged_into_party_id = ${survivor.partyId} where id = ${merged.partyId}`,
+    );
+
+    await refused(end(merged), merged.tabId, {
+      code: "party.not_open",
+      params: { partyId: merged.partyId },
+    });
+    expect(fiscalRecordCount(venue, merged.tabId)).toBe(0);
+
+    const answer = await end(survivor, { billId: merged.tabId });
+
+    expect(await salesOf(merged.tabId)).toEqual([
+      { id: answer.saleId, total: 1800, settledAt: null },
+    ]);
+    expect(fiscalRecordCount(venue, merged.tabId)).toBe(1);
+    expect(await statusOf(venue, merged.tabId)).toBe("placed");
+  });
+
   it("refuses a bill that was cancelled, filing no record", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const cancelled = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);
