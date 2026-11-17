@@ -27,6 +27,7 @@ import {
   type DevicePrinterChoices,
   type ProfilePrinterRole,
 } from "@waitron/layouts";
+import { readProfileReaderList } from "@waitron/payments";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -232,6 +233,14 @@ export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
   ...STATUS,
   "kitchen_screen.zone_not_allowed": 403,
 };
+
+const CHOICE_COLUMN_NAMES = [
+  "receiptPrinterId",
+  "paymentSlipPrinterId",
+  "cashDrawerPrinterId",
+  "invoicePrinterId",
+  "invoicePagePrinterId",
+] as const satisfies readonly (keyof DevicePrinterChoices)[];
 
 const run = createErrorBoundary(STATUS, "device.failed");
 /** A device's edit names its profiles and made-here stations only in the body
@@ -847,6 +856,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             cashDrawerPrinterId: devices.cashDrawerPrinterId,
             invoicePrinterId: devices.invoicePrinterId,
             invoicePagePrinterId: devices.invoicePagePrinterId,
+            cardReaderId: devices.cardReaderId,
           })
           .from(devices)
           .where(ownDeviceById(id));
@@ -896,7 +906,20 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         // Only a choice that differs from what the device would keep is checked: a new choice must
         // be switched on, and a device may still hold a listed one since switched off.
         const kept = switching ? await choicesKeptOnProfile(tx, device, profileId) : device;
-        let columns: Partial<DevicePrinterChoices> = {};
+        let columns: Partial<DevicePrinterChoices & { cardReaderId: null }> = {};
+        if (switching) {
+          // Cleared here, the switch's clean-up (`settleDevice`) has nothing left to write.
+          for (const column of CHOICE_COLUMN_NAMES) {
+            if (kept[column] !== device[column]) columns = { ...columns, [column]: kept[column] };
+          }
+          const readerId = device.cardReaderId;
+          if (
+            readerId !== null &&
+            !(await readProfileReaderList(tx, profileId)).readerIds.includes(readerId)
+          ) {
+            columns = { ...columns, cardReaderId: null };
+          }
+        }
         let refused:
           | {
               role: ProfilePrinterRole;
