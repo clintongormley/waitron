@@ -141,20 +141,12 @@ The demo venue has no card provider connected
   with test data instead; "Add a card reader" now shows a blue Add on every row, as the printers'
   discovered rows do. Not looked at, left to their tests: the Bluetooth Pair dialog (the laptop's
   print agent has no `bluetoothctl`) and the bill attestation (the demo venue showed no payment to
-  attest). Seen and not changed, because this batch does not touch them: the canvas Create and
-  Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
-  canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
-  Enable.
+  attest).
 
 ### Retained preparation screens
 
 The review left detached `readOnly` changes and a retained table's scroll/sort unverified;
   no defect was reproduced for either. Before changing screen caching, exercise those transitions.
-
-### Station dialog width
-
-The station dialog widens or narrows with the chosen station's name, so its
-  buttons shift a little as a station is picked (it did so before this batch).
 
 ### Menu ResizeObserver warning
 

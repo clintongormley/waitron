@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from "vitest";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
@@ -65,6 +65,59 @@ const submit = (el: TillStationChoiceDialog) =>
   root(el).querySelector<HTMLButtonElement>("[data-submit]")!;
 
 describe("till-station-choice-dialog", () => {
+  it.each([
+    ["make-at", 390, "en"],
+    ["make-at", 1280, "en"],
+    ["move", 390, "en"],
+    ["move", 1280, "en"],
+    ["make-at", 390, "es"],
+  ] as const)(
+    "keeps station dialog width and footer positions stable: %s at %ipx in %s",
+    async (mode, width, locale) => {
+      onTestFinished(async () => {
+        setLocale("en");
+        await resetPage();
+      });
+      await pageAt(width, 900);
+      setLocale(locale);
+      const el = await mount({ mode });
+      const dialog = root(el).querySelector("wt-dialog")!;
+      await dialog.updateComplete;
+      await select(el).updateComplete;
+      const native = dialog.shadowRoot!.querySelector("dialog")!;
+      const buttons = [...root(el).querySelectorAll("wt-button")];
+      await Promise.all(buttons.map((button) => button.updateComplete));
+      const drawn = [
+        native,
+        ...buttons.map((button) => button.shadowRoot!.querySelector("button")!),
+      ];
+      const before = drawn.map((node) => node.getBoundingClientRect());
+      expect(native.open).toBe(true);
+      expect(window.innerWidth).toBe(width);
+      for (const index of [1, 2]) {
+        await choose(el, index);
+        await select(el).updateComplete;
+        await dialog.updateComplete;
+        expect(select(el).value).toBe(index === 1 ? "grill" : "bar");
+        drawn.forEach((node, i) => {
+          const box = node.getBoundingClientRect();
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(width);
+          expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+          for (const key of ["width", "x", "y"] as const)
+            expect(
+              Math.abs(box[key] - before[i]![key]),
+              `${node.tagName} ${key}`,
+            ).toBeLessThanOrEqual(1);
+        });
+        const body = dialog.shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+        expect(document.body.scrollWidth).toBeLessThanOrEqual(width);
+      }
+    },
+  );
+
   it("starts Make at on the line's chosen station and can return to routing rules", async () => {
     const el = await mount({ mode: "make-at", currentStationId: "bar" });
     expect(displayed(el)).toBe("Upstairs bar (closed)");
