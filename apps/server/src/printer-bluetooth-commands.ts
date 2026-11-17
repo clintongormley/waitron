@@ -8,7 +8,7 @@ import {
   type BluetoothCommandOutcome,
   type BluetoothFailureReason,
 } from "@waitron/print-agent";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 import "./errors.js";
 
 export interface BluetoothCommandStatus {
@@ -47,9 +47,14 @@ const RESULT_TTL_MS = 60_000;
  * after the interval. */
 const SWEEP_INTERVAL_MS = 60_000;
 
+/** Capped because floating-point subtraction can overshoot the command's own lifetime. */
+function msLeft(expiresAt: number, instant: number): number {
+  return Math.min(COMMAND_TTL_MS, Math.ceil(expiresAt - instant));
+}
+
 function statusOf({ command, expiresAt }: Pending, instant: number): BluetoothCommandStatus {
   const { id, kind, address } = command;
-  return { id, kind, address, state: "pending", expiresInMs: expiresAt - instant };
+  return { id, kind, address, state: "pending", expiresInMs: msLeft(expiresAt, instant) };
 }
 
 /** A pending pair holds the operator's PIN in memory only, so each pull can resend it until the
@@ -71,19 +76,15 @@ export function createPrinterBluetoothCommands(
   /** How many agents hold entries. */
   agentsHeld(): number;
 } {
-  const now = options.now ?? (() => Date.now());
+  const now = options.now ?? steadyNow;
   const newId = options.id ?? randomUUID;
   const agents = new Map<string, AgentCommands>();
   const expiredUnpairs = new Map<string, { agentId: string; address: string }>();
   let nextSweepAt = 0;
 
-  /** An end further ahead than its own limit was set before a backward step of the clock. */
-  const ended = (expiresAt: number, ttl: number, instant: number): boolean =>
-    expiresAt <= instant || expiresAt - instant > ttl;
-
   function pruneAgent(agentId: string, agent: AgentCommands, instant: number): void {
     for (const [address, entry] of agent.pending) {
-      if (!ended(entry.expiresAt, COMMAND_TTL_MS, instant)) continue;
+      if (entry.expiresAt > instant) continue;
       if (entry.command.kind === "forget") {
         expiredUnpairs.set(entry.command.id, { agentId, address });
         if (expiredUnpairs.size > BLUETOOTH_COMMAND_LIMIT)
@@ -92,14 +93,14 @@ export function createPrinterBluetoothCommands(
       agent.pending.delete(address);
     }
     for (const [address, entry] of agent.results)
-      if (ended(entry.expiresAt, RESULT_TTL_MS, instant)) agent.results.delete(address);
+      if (entry.expiresAt <= instant) agent.results.delete(address);
     if (agent.pending.size === 0 && agent.results.size === 0) agents.delete(agentId);
   }
 
   /** Prunes the named agent, or every agent when a sweep is due, and returns the instant used. */
   function prune(agentId: string): { instant: number; agent: AgentCommands | undefined } {
     const instant = now();
-    if (ended(nextSweepAt, SWEEP_INTERVAL_MS, instant)) {
+    if (instant >= nextSweepAt) {
       for (const [id, agent] of agents) pruneAgent(id, agent, instant);
       nextSweepAt = instant + SWEEP_INTERVAL_MS;
     } else {
@@ -120,7 +121,7 @@ export function createPrinterBluetoothCommands(
       if (running)
         throw new AppError("printer.bluetooth_command_busy", {
           kind: running.command.kind,
-          seconds: Math.ceil((running.expiresAt - instant) / 1000),
+          seconds: Math.ceil(msLeft(running.expiresAt, instant) / 1000),
         });
       const command: BluetoothCommand = { id: newId(), kind, address };
       if (heldPin !== undefined) command.pin = heldPin;

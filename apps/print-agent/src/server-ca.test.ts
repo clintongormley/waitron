@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import forge from "node-forge";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServerTrustingFetch } from "./server-ca.js";
 
 /** A 2048-bit RSA key pair from Node's native generator; forge's own takes seconds on a busy runner. */
@@ -113,6 +113,7 @@ describe("createServerTrustingFetch", () => {
     stateDir = await makeStateDir();
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const s of servers) s?.close();
     servers.length = 0;
     for (const dir of stateDirs) await rm(dir, { recursive: true, force: true });
@@ -212,31 +213,31 @@ describe("createServerTrustingFetch", () => {
     expect(responder.calls.length).toBe(2);
   });
 
-  // Fetched at 0; a clock read earlier than an hour before that leaves the last fetch further
-  // ahead than the interval.
-  it.each([
-    ["400 days back", -400 * 86_400_000, 2],
-    ["an hour back exactly", -60 * 60 * 1000, 1],
-    ["a millisecond past an hour back", -60 * 60 * 1000 - 1, 2],
-  ])(
-    "refetches when the last fetch lies further ahead than the hour (%s)",
-    async (_case, steppedTo, fetches) => {
-      const material = mintCa("localhost");
-      const { server, origin } = await startHttps(material);
-      servers.push(server);
-      let clock = 0;
-      const responder = caResponder(mintCa("localhost").caPem);
-      const trusting = await createServerTrustingFetch({
-        serverUrl: origin,
-        stateDir,
-        caEndpointFetch: responder.fetch,
-        now: () => clock,
-      });
-      clock = steppedTo;
+  it("throttles the refetch on elapsed time by default, whatever the wall clock does", async () => {
+    const material = mintCa("localhost");
+    const { server, origin } = await startHttps(material);
+    servers.push(server);
+    const responder = caResponder(mintCa("localhost").caPem);
+    const hour = 60 * 60 * 1000;
+    let steady = 0;
+    let wall = 400 * 86_400_000;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    const trusting = await createServerTrustingFetch({
+      serverUrl: origin,
+      stateDir,
+      caEndpointFetch: responder.fetch,
+    });
+    steady = hour - 1;
+    for (const stepped of [0, 800 * 86_400_000]) {
+      wall = stepped;
       await expect(trusting(`${origin}/x`)).rejects.toThrow();
-      expect(responder.calls.length).toBe(fetches);
-    },
-  );
+      expect(responder.calls.length).toBe(1);
+    }
+    steady = hour;
+    await expect(trusting(`${origin}/x`)).rejects.toThrow();
+    expect(responder.calls.length).toBe(2);
+  });
 
   it("is a pass-through for an http server URL (no CA to fetch)", async () => {
     const base = (async () => new Response("plain", { status: 200 })) as typeof fetch;

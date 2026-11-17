@@ -49,7 +49,8 @@ function caUrlFor(serverUrl: string): string | undefined {
 export async function createServerTrustingFetch(opts: ServerTrustOptions): Promise<typeof fetch> {
   const baseFetch = opts.fetch ?? fetch;
   const caFetch = opts.caEndpointFetch ?? fetch;
-  const now = opts.now ?? Date.now;
+  // This app does not depend on `@waitron/shared`, so it reads the steady clock itself.
+  const now = opts.now ?? ((): number => performance.now());
   const caFetchTimeoutMs = opts.caFetchTimeoutMs ?? DEFAULT_CA_FETCH_TIMEOUT_MS;
   const log = opts.log ?? ((): void => {});
   const caPath = join(opts.stateDir, CA_FILE);
@@ -82,8 +83,7 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
   const refresh = async (): Promise<boolean> => {
     const interval = caPem === undefined ? INITIAL_RETRY_INTERVAL_MS : REFRESH_INTERVAL_MS;
     const at = now();
-    // A last fetch further ahead than the interval predates a backward step, so it counts as due.
-    if (at - lastFetchAt < interval && lastFetchAt - at <= interval) return false;
+    if (at - lastFetchAt < interval) return false;
     lastFetchAt = at;
     let pem: string;
     try {

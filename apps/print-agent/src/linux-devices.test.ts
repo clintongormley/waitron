@@ -57,6 +57,7 @@ beforeEach(async () => {
   root = await writeUsbFixture();
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -433,13 +434,11 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     });
   });
 
-  // The listing and the wait for kinds share one deadline; after a clock that stepped back the
-  // listing's time is unknown, so the kinds get no wait.
+  // The listing and the wait for kinds share one deadline.
   it.each([
     ["a listing that took 2 seconds", 2_000, 1_000],
     ["a listing that took the whole deadline", 3_000, 0],
     ["a listing that outran it", 3_500, 0],
-    ["a clock that stepped back", -60_000, 0],
   ])(
     "waits for kinds only for what the listing left of the deadline (%s)",
     async (_case, listingTook, waited) => {
@@ -447,7 +446,7 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
       const waits: number[] = [];
       const devices = createLinuxDevices({
         sysfsRoot: root,
-        now: () => clock,
+        steady: () => clock,
         bluetoothListTimeoutMs: 3_000,
         bluetooth: fakeBluetooth({
           paired: async () => {
@@ -464,6 +463,31 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
       expect(waits).toStrictEqual([waited]);
     },
   );
+
+  it("leaves the kinds what the listing left of the deadline on the default steady clock, whatever the wall clock does", async () => {
+    let steady = 0;
+    let wall = 400 * 86_400_000;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    const waits: number[] = [];
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      now: () => wall,
+      bluetoothListTimeoutMs: 3_000,
+      bluetooth: fakeBluetooth({
+        paired: async () => {
+          steady += 2_000;
+          wall = 0;
+          return [{ mac: "5A:4A:45:D4:FB:BB" }];
+        },
+        printerKinds: async (_macs, waitMs) => {
+          waits.push(waitMs);
+          return new Map();
+        },
+      }),
+    });
+    await devices.pairedBluetooth();
+    expect(waits).toStrictEqual([1_000]);
+  });
 
   it("answers within one listing deadline when `info` hangs, and carries its late answer in the next report", async () => {
     vi.useFakeTimers();
@@ -533,7 +557,7 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     });
     const devices = createLinuxDevices({
       sysfsRoot: root,
-      now: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired }),
     });
     await devices.checkBluetooth();
@@ -542,30 +566,30 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(paired).toHaveBeenCalledTimes(1);
   });
 
-  // Listed at 0; a clock read earlier than one recheck interval before that leaves the listing's
-  // start further ahead than the interval.
-  it.each([
-    ["400 days back", -400 * 86_400_000, 2],
-    ["the interval back exactly", -BLUETOOTH_RECHECK_MS, 1],
-    ["a millisecond past the interval back", -BLUETOOTH_RECHECK_MS - 1, 2],
-  ])(
-    "rechecks an unavailable side whose last listing started further ahead than the interval (%s)",
-    async (_case, steppedTo, listings) => {
-      let clock = 0;
-      const paired = vi.fn(async () => {
-        throw new Error("No default controller available");
-      });
-      const devices = createLinuxDevices({
-        sysfsRoot: root,
-        now: () => clock,
-        bluetooth: fakeBluetooth({ paired }),
-      });
+  it("rechecks an unavailable side only after 30 seconds on the default steady clock, whatever the wall clock does", async () => {
+    let steady = 0;
+    let wall = 400 * 86_400_000;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    const paired = vi.fn(async () => {
+      throw new Error("No default controller available");
+    });
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      now: () => wall,
+      bluetooth: fakeBluetooth({ paired }),
+    });
+    await devices.checkBluetooth();
+    for (const stepped of [0, 800 * 86_400_000]) {
+      wall = stepped;
       await devices.checkBluetooth();
-      clock = steppedTo;
-      await devices.checkBluetooth();
-      expect(paired).toHaveBeenCalledTimes(listings);
-    },
-  );
+    }
+    steady = BLUETOOTH_RECHECK_MS - 1;
+    await devices.checkBluetooth();
+    expect(paired).toHaveBeenCalledTimes(1);
+    steady = BLUETOOTH_RECHECK_MS;
+    await devices.checkBluetooth();
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
 
   it("joins a listing already running rather than starting a second", async () => {
     let release!: (v: { mac: string }[]) => void;
@@ -795,7 +819,7 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     const devices = createLinuxDevices({
       sysfsRoot: root,
       devRoot: "/dev",
-      now: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired, forget }),
     });
     // The agent's poll: the paired listing and the visible read share one listing.
@@ -842,39 +866,27 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     expect(paired).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    ["400 days back", -400 * 86_400_000],
-    ["a millisecond back", -1],
-  ])(
-    "lists again when the poll's listing started ahead of the clock (%s)",
-    async (_case, steppedTo) => {
-      const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
-      await poll();
-      advance(steppedTo);
-      await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
-      expect(paired).toHaveBeenCalledTimes(2);
-    },
-  );
-
-  it("lists again after a forget made behind the poll's listing, once the clock has caught up", async () => {
-    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
-    advance(5_000);
-    await poll();
-    advance(-3_000);
-    await devices.forgetBluetooth(PRINTER);
-    advance(3_001);
-    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
-    expect(paired).toHaveBeenCalledTimes(2);
-  });
-
-  it("lists again after a forget made once the clock stepped back behind the poll's listing", async () => {
-    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
-    advance(5_000);
-    await poll();
-    advance(-3_000);
-    await devices.forgetBluetooth(PRINTER);
-    advance(1);
-    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+  it("reuses the poll's listing for 10 seconds on the default steady clock, whatever the wall clock does", async () => {
+    let steady = 0;
+    let wall = 400 * 86_400_000;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    const paired = vi.fn(async () => [{ mac: PRINTER }]);
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      now: () => wall,
+      bluetooth: fakeBluetooth({ paired }),
+    });
+    await devices.pairedBluetooth();
+    for (const stepped of [0, 800 * 86_400_000]) {
+      wall = stepped;
+      expect((await devices.resolve(job(PRINTER))).devicePath).toBe(PRINTER);
+    }
+    steady = PAIRED_REUSE_MS - 1;
+    expect((await devices.resolve(job(PRINTER))).devicePath).toBe(PRINTER);
+    expect(paired).toHaveBeenCalledTimes(1);
+    steady = PAIRED_REUSE_MS;
+    await devices.resolve(job(PRINTER));
     expect(paired).toHaveBeenCalledTimes(2);
   });
 
@@ -892,7 +904,7 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
       .mockResolvedValueOnce([]);
     const devices = createLinuxDevices({
       sysfsRoot: root,
-      now: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired, forget: async () => ({ ok: true }) }),
     });
     const listed = devices.pairedBluetooth();

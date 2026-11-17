@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPrinterProbes } from "./printer-probes.js";
 
 describe("printer address requests", () => {
+  afterEach(() => vi.restoreAllMocks());
   it("normalizes addresses, defaults the port and expires requests independently", () => {
     let now = 1000;
-    const probes = createPrinterProbes(() => now);
+    const probes = createPrinterProbes(
+      () => now,
+      () => now,
+    );
     const first = probes.add({ host: " 192.168.20.247 " });
     expect(first).toEqual({
       host: "192.168.20.247",
@@ -22,7 +26,10 @@ describe("printer address requests", () => {
   });
   it("bounds concurrent targets, allows retry of the same address, and reclaims expired slots", () => {
     let now = 0;
-    const probes = createPrinterProbes(() => now);
+    const probes = createPrinterProbes(
+      () => now,
+      () => now,
+    );
     for (let i = 1; i <= 8; i++) probes.add({ host: `10.0.0.${i}` });
     expect(() => probes.add({ host: "10.0.0.9" })).toThrowError(
       expect.objectContaining({ code: "printer.probe_busy" }),
@@ -34,20 +41,53 @@ describe("printer address requests", () => {
     probes.add({ host: "10.0.0.9" });
     expect(probes.current()).toHaveLength(2);
   });
-  it("drops a request ending further ahead than its 30 seconds, as after a step back, and frees its slot", () => {
-    let now = 400 * 86_400_000;
-    const probes = createPrinterProbes(() => now);
-    for (let i = 1; i <= 8; i++) probes.add({ host: `10.0.0.${i}` });
-    now = 400 * 86_400_000 - 1;
+  it("answers with wall-clock times but holds each request for 30 seconds of elapsed time on the default clocks", () => {
+    const day = 86_400_000;
+    let steady = 1_000;
+    let wall = 400 * day;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    const probes = createPrinterProbes();
+    expect(probes.add({ host: "10.0.0.1" })).toEqual({
+      host: "10.0.0.1",
+      port: 9100,
+      requestedAt: 400 * day,
+      expiresAt: 400 * day + 30_000,
+    });
+    for (let i = 2; i <= 8; i++) probes.add({ host: `10.0.0.${i}` });
+    for (const stepped of [0, 800 * day]) {
+      wall = stepped;
+      expect(probes.current()).toHaveLength(8);
+      expect(probes.current()[0]).toEqual({ host: "10.0.0.1", port: 9100, expiresInMs: 30_000 });
+      expect(() => probes.add({ host: "10.0.0.9" })).toThrowError(
+        expect.objectContaining({ code: "printer.probe_busy" }),
+      );
+    }
+    steady += 29_999;
+    wall = 0;
+    expect(probes.current()[0]).toEqual({ host: "10.0.0.1", port: 9100, expiresInMs: 1 });
+    steady += 1;
     expect(probes.current()).toEqual([]);
-    expect(probes.add({ host: "10.0.0.9" }).host).toBe("10.0.0.9");
+    expect(probes.add({ host: "10.0.0.9" })).toMatchObject({ requestedAt: 0, expiresAt: 30_000 });
   });
-  it("keeps a request ending exactly 30 seconds ahead", () => {
-    let now = 1000;
-    const probes = createPrinterProbes(() => now);
+  it("hands out whole milliseconds left, rounded up, from a fractional steady clock", () => {
+    let steady = 0.25;
+    const probes = createPrinterProbes(
+      () => 1000,
+      () => steady,
+    );
     probes.add({ host: "10.0.0.1" });
-    now = 1000;
-    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }]);
+    steady = 1000.5;
+    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 29_000 }]);
+  });
+  it("never hands out more than 30 seconds when a fractional steady clock reads the same twice", () => {
+    // 2768.05 + 30000 - 2768.05 is 30000.000000000004 in floating point.
+    const probes = createPrinterProbes(
+      () => 1000,
+      () => 2768.05,
+    );
+    probes.add({ host: "10.0.0.1" });
+    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 30_000 }]);
   });
   it.each([null, undefined, [], "bad"])("refuses malformed request %s", (input) => {
     expect(() => createPrinterProbes().add(input)).toThrowError(

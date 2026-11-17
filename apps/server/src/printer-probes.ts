@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 import "./errors.js";
 
 interface PrinterAddressProbe {
@@ -11,21 +11,25 @@ interface PrinterAddressProbe {
 
 const PROBE_MS = 30_000;
 
-/** Requests are transient and bounded independently of the broader discovery window. */
-export function createPrinterProbes(now: () => number = Date.now): {
+/** Requests are transient and bounded independently of the broader discovery window. An answer's
+ * times are wall-clock, for the dashboard; the requests' own expiry runs on `steady`. */
+export function createPrinterProbes(
+  now: () => number = Date.now,
+  steady: () => number = steadyNow,
+): {
   add(input: unknown): PrinterAddressProbe;
   current(): { host: string; port: number; expiresInMs: number }[];
 } {
-  const targets = new Map<string, PrinterAddressProbe>();
+  const targets = new Map<string, { host: string; port: number; endsAt: number }>();
   const current = (): { host: string; port: number; expiresInMs: number }[] => {
-    const instant = now();
-    // One ending further ahead than its window was added before the clock stepped back.
-    for (const [key, target] of targets)
-      if (target.expiresAt <= instant || target.expiresAt - instant > PROBE_MS) targets.delete(key);
-    return [...targets.values()].map(({ host, port, expiresAt }) => ({
+    const instant = steady();
+    for (const [key, target] of targets) if (target.endsAt <= instant) targets.delete(key);
+    return [...targets.values()].map(({ host, port, endsAt }) => ({
       host,
       port,
-      expiresInMs: expiresAt - instant,
+      // Whole milliseconds, so the agent's own deadline arithmetic stays exact; capped because
+      // floating-point subtraction can overshoot the 30-second bound the agent accepts.
+      expiresInMs: Math.min(PROBE_MS, Math.ceil(endsAt - instant)),
     }));
   };
   return {
@@ -54,10 +58,9 @@ export function createPrinterProbes(now: () => number = Date.now): {
       current();
       const key = `${host}:${port}`;
       if (!targets.has(key) && targets.size >= 8) throw new AppError("printer.probe_busy", {});
+      targets.set(key, { host, port, endsAt: steady() + PROBE_MS });
       const requestedAt = now();
-      const target = { host, port, requestedAt, expiresAt: requestedAt + PROBE_MS };
-      targets.set(key, target);
-      return target;
+      return { host, port, requestedAt, expiresAt: requestedAt + PROBE_MS };
     },
   };
 }
