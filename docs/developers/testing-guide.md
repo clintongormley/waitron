@@ -2579,14 +2579,14 @@ repeats the root list. The touch test's `iconButton()` fixture lives in
 files that import a mutated file, and nearly every ui test imports `test-helpers.ts`, so an import
 of `icon-button.js` there would make most of the package's test files run for `icon-button.ts`.
 
-`chromium-scaled` is split off by file in the same way: it runs
-`packages/ui/src/components/wt-data-table.scaled.test.ts` at a `deviceScaleFactor` of 1.5, which
-applies to the whole browser context.
-
 When tracing a failure, preserve test ordering: enlarging this file moved it earlier in Vitest’s
 size ordering and hid the failure in three diagnostic runs. Restoring its original sorting rank
 reproduced it with tracing in
 [43280418238](https://github.com/clintongormley/waitron/actions/runs/43280418238).
+
+`chromium-scaled`, like `chromium-touch`, is split off by file: it runs
+`packages/ui/src/components/wt-data-table.scaled.test.ts` at a `deviceScaleFactor` of 1.5, which
+applies to the whole browser context.
 
 ## Dispatch events when testing a `composedPath()` guard.
 

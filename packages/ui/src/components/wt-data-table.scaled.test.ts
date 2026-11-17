@@ -12,8 +12,6 @@ const rows: Row[] = ["Bar", "Terrace", "Dining room", "Kitchen", "Patio", "Cella
   (name, i) => ({ id: String(i), name }),
 );
 
-// A fixed-height block makes every row the same height whatever fonts the machine has, so the row
-// edges land where the test expects them.
 const block = (text: string) => html`<span style="display:block;height:23px">${text}</span>`;
 
 const columns: DataTableColumn<Row>[] = [
