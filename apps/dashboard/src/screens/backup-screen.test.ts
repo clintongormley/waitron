@@ -2279,6 +2279,24 @@ describe("A1089 unreadable archive settings choices", () => {
       }
     });
 
+    it(`names the button that replaces invalid saved settings (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({}, { ...OFF, loadErrorCode: "backup.archive_settings_invalid" });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const message = codeMessage("backup.archive_settings_invalid");
+        const apply = q(el, "[data-test=apply]")!.textContent!.trim();
+        expect(apply).not.toBe("");
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(message);
+        expect(message).toContain(apply);
+        expect(message).not.toMatch(/Save them again|Vuelve a guardarlos/);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it(`a load failure with no words of its own says what happened and what each choice does (${locale})`, async () => {
       const previous = currentLocale();
       setLocale(locale);

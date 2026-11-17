@@ -1554,6 +1554,30 @@ describe("switching off", () => {
     await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledTimes(2));
   });
 
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`a refused Turn off for unreadable settings names the buttons that replace them (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mount(LOCAL_ONLY, {
+          disableBackup: vi.fn().mockRejectedValue({ code: "backup.archive_settings_unreadable" }),
+        });
+        await press(el, "turn-off");
+        await press(el, "turn-off");
+        const message = codeMessage("backup.archive_settings_unreadable");
+        await vi.waitFor(() => expect(text(banner(el)!)).toContain(message));
+        const edit = q(el, "[data-test=edit-settings]")!.textContent!.trim();
+        expect(edit).not.toBe("");
+        expect(text(banner(el)!)).toContain(edit);
+        expect(message).toContain(t("backup.apply"));
+        expect(message).toContain(t("backup.edit.save"));
+        expect(message).not.toMatch(/Save them again|Vuelve a guardarlos/);
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }
+
   it("is not offered on a node that is not the primary", async () => {
     const { el } = await mount({ ...TWO, isPrimary: false });
     expect(q(el, "[data-test=not-primary]")).not.toBeNull();
