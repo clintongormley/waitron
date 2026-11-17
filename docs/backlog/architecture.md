@@ -1045,26 +1045,15 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-18 entries, size M.
+15 entries, size M.
 
-- **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
-  now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/menu/src/extras.ts`)
-  and `writeLabels` (`src/options.ts`); duplicate and foreign ids are refused earlier and one write
-  runs at a time.
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
   [Detail](menu.md#max_modifier_integer-and-the-extras-contracts-whole-bound-have-no-stated-reason-on-this-engine)
-- **`assertRefsExist` still reads lists in sorted key order** — OPEN (found by #603). Read only, not
-  run: that order (`packages/menu/src/product-modifiers.ts`) served PostgreSQL's lock ordering
-  only.
 - **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
   may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
   `packages/menu`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
   whether to keep pinning it is the owner's call.
-- **Test titles from `packages/menu` a comments-only change cannot touch** — OPEN (found by
-  #603). Three titles, in `packages/shared`'s `dietary.test.ts` and `packages/menu`'s
-  `product-modifiers.test.ts`.
-  [Detail](menu.md#test-titles-from-packagesmenu-a-comments-only-change-cannot-touch)
 - **A test comment still names the old savepoint error.**
   `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:308` says its control "fails with
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword

@@ -247,12 +247,7 @@ async function writeLabels(
         .where(and(eq(optionLabels.listId, optionListId), eq(optionLabels.id, label.id)));
       continue;
     }
-    const inserted = await tx
-      .insert(optionLabels)
-      .values({ id: label.id, listId: optionListId, ...values })
-      .onConflictDoNothing({ target: optionLabels.id })
-      .returning({ id: optionLabels.id });
-    if (!inserted.length) throw new AppError("options.invalid", { field: `labels.${sort}.id` });
+    await tx.insert(optionLabels).values({ id: label.id, listId: optionListId, ...values });
   }
 }
 

@@ -97,13 +97,9 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
   }
 
   const held = new Set<string>();
-  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3). Duplicates are
-  // already refused, so the comparator never has to say two refs are equal.
-  const ordered = [...refs].sort((left, right) => (refKey(left) < refKey(right) ? -1 : 1));
-  for (const ref of ordered) if (await listExists(tx, ref)) held.add(refKey(ref));
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
+  for (const ref of refs) if (await listExists(tx, ref)) held.add(refKey(ref));
 
-  // Reported in the BODY's order, not the read order: the field a refusal names is the first entry
-  // the editor sent that names nothing, whichever of them was read first.
   const at = refs.findIndex((ref) => !held.has(refKey(ref)));
   if (at !== -1) throw new AppError("product.invalid", { field: `modifiers.${at}.id` });
 }

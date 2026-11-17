@@ -66,7 +66,7 @@ describe("assertDietOverrideDisjoint", () => {
   });
 });
 
-describe("validateContainsTag (Task 4)", () => {
+describe("validateContainsTag", () => {
   it("accepts meat/fish only — an otherwise-valid origin is rejected", () => {
     expect(validateContainsTag("meat")).toBe("meat");
     expect(validateContainsTag("fish")).toBe("fish");
@@ -76,7 +76,7 @@ describe("validateContainsTag (Task 4)", () => {
   });
 });
 
-describe("validateDietOverride (Task 4)", () => {
+describe("validateDietOverride", () => {
   it("returns null for a null override", () => {
     expect(validateDietOverride(null)).toBeNull();
   });
