@@ -258,7 +258,7 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     },
     app,
     (...args) => lines.push(args),
-    [(c, next) => (stopped ? c.text("stopped", 503) : next())],
+    [async (c, next) => (stopped ? c.text("stopped", 503) : next())],
   );
   const ask = (path: string) =>
     new Promise<{ status: number; text: string }>((resolve, reject) => {
