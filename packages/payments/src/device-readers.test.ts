@@ -624,6 +624,30 @@ describe("a device's card reader", () => {
     expect(await chosen(s.deviceC)).toBeNull();
   });
 
+  it("a profile with no readers leaves the row of a device with no reader chosen unwritten", async () => {
+    const s = await seed();
+    expect(await chosen(s.deviceC)).toBeNull();
+    suite.db.run(sql`create table probe_device_updates (id text)`);
+    try {
+      suite.db.run(
+        sql`create trigger probe_device_updated after update on devices
+          begin insert into probe_device_updates values (new.id); end`,
+      );
+      try {
+        await inTx((tx) => clearUnlistedReaderChoice(tx, s.deviceC));
+        const [row] = suite.db.all<{ n: number }>(
+          sql`select count(*) as n from probe_device_updates where id = ${s.deviceC}`,
+        );
+        expect(row!.n).toBe(0);
+      } finally {
+        suite.db.run(sql`drop trigger probe_device_updated`);
+      }
+    } finally {
+      suite.db.run(sql`drop table probe_device_updates`);
+    }
+    expect(await chosen(s.deviceC)).toBeNull();
+  });
+
   it("choosing another reader lets go of the one it held", async () => {
     const s = await seed();
     await list(s, [s.r1, s.r2]);

@@ -17,6 +17,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
+  checkDevicePrinterChoice,
+  choicesKeptOnProfile,
   clearDeletedPagePrinter,
   clearDeletedPrinter,
   clearUnlistedPrinterChoices,
@@ -1433,5 +1435,120 @@ describe("clearDeletedPagePrinter", () => {
       { printerId: null, pagePrinterId: kept },
       { printerId: receipt, pagePrinterId: null },
     ]);
+  });
+});
+
+describe("checkDevicePrinterChoice", () => {
+  async function deviceOnProfileListing(receiptPrinterIds: string[]) {
+    await seedFixtureVenue("Here");
+    const seeded = await seedDevice(suite.db, { label: "Till A" });
+    await inTx((tx) => setProfilePrinterLists(tx, seeded.profileId, lists({ receiptPrinterIds })));
+    const other = (await seedDevice(suite.db, { label: "Till B" })).profileId;
+    return { deviceId: seeded.deviceId, other };
+  }
+
+  it("accepts a printer the given profile lists though the device's own does not, writing nothing", async () => {
+    const listedThere = await seedPrinter("Terrace");
+    const page = await seedPagePrinter("Office");
+    const { deviceId, other } = await deviceOnProfileListing([]);
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        other,
+        lists({ receiptPrinterIds: [listedThere], invoicePrinterIds: [page] }),
+      ),
+    );
+
+    const receipt = await inTx((tx) =>
+      checkDevicePrinterChoice(tx, {
+        deviceId,
+        profileId: other,
+        role: "receipt",
+        selection: { id: listedThere },
+        via: "manage",
+      }),
+    );
+    expect(receipt).toEqual({
+      ok: true,
+      columns: { receiptPrinterId: listedThere },
+      heldPrinterId: null,
+      previousHolderDeviceId: null,
+    });
+    const invoice = await inTx((tx) =>
+      checkDevicePrinterChoice(tx, {
+        deviceId,
+        profileId: other,
+        role: "invoice",
+        selection: { id: page },
+        via: "manage",
+      }),
+    );
+    expect(invoice).toEqual({
+      ok: true,
+      columns: { invoicePrinterId: null, invoicePagePrinterId: page },
+      heldPrinterId: null,
+      previousHolderDeviceId: null,
+    });
+    expect(await columns(deviceId)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await invoiceColumns(deviceId)).toEqual({ printer: null, page: null });
+  });
+
+  it("refuses a printer the device's own profile lists but the given profile does not", async () => {
+    const listedHere = await seedPrinter("Bar");
+    const { deviceId, other } = await deviceOnProfileListing([listedHere]);
+
+    const check = await inTx((tx) =>
+      checkDevicePrinterChoice(tx, {
+        deviceId,
+        profileId: other,
+        role: "receipt",
+        selection: { id: listedHere },
+        via: "manage",
+      }),
+    );
+    expect(check).toEqual({ ok: false, refusal: "not_permitted" });
+    expect(await columns(deviceId)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+});
+
+describe("choicesKeptOnProfile", () => {
+  it("keeps each choice the profile lists, puts the rest on Use default, and writes nothing", async () => {
+    await seedFixtureVenue("Here");
+    const { deviceId } = await seedDevice(suite.db, { label: "Till A" });
+    const bar = await seedPrinter("Bar");
+    const counter = await seedPrinter("Counter");
+    const drawer = await seedPrinter("Drawer", { hasCashDrawer: true });
+    const page = await seedPagePrinter("Office");
+    const stored = {
+      receiptPrinterId: bar,
+      paymentSlipPrinterId: counter,
+      cashDrawerPrinterId: drawer,
+      invoicePrinterId: null,
+      invoicePagePrinterId: page,
+    };
+    await suite.db.update(devices).set(stored).where(eq(devices.id, deviceId));
+    const other = (await seedDevice(suite.db, { label: "Till B" })).profileId;
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        other,
+        lists({
+          receiptPrinterIds: [bar],
+          paymentSlipPrinterIds: [bar],
+          invoicePrinterIds: [page],
+        }),
+      ),
+    );
+
+    const kept = await inTx((tx) => choicesKeptOnProfile(tx, stored, other));
+    expect(kept).toEqual({
+      receiptPrinterId: bar,
+      paymentSlipPrinterId: null,
+      cashDrawerPrinterId: null,
+      invoicePrinterId: null,
+      invoicePagePrinterId: page,
+    });
+    expect(await columns(deviceId)).toEqual({ receipt: bar, slip: counter, drawer });
+    expect(await invoiceColumns(deviceId)).toEqual({ printer: null, page });
   });
 });
