@@ -351,6 +351,7 @@ describe("purchases-screen", () => {
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
     await createThroughForm(el);
+    expect(createPurchaseInvoice).toHaveBeenCalledTimes(1);
     emitFromChild(form(el), "create-purchase", createDetail());
     await el.updateComplete;
     expect(createPurchaseInvoice).toHaveBeenCalledTimes(1);
@@ -415,6 +416,7 @@ describe("purchases-screen — single-flight and dismissal", () => {
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
     await updateThroughForm(el, "corrected");
+    expect(api.updatePurchaseInvoice).toHaveBeenCalledTimes(1);
     emitFromChild(form(el), "update-purchase", {
       id: "pi-1",
       patch: { ...createDetail(), header: { ...createDetail().header, note: "corrected" } },

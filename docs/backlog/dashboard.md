@@ -9,8 +9,8 @@ their full text.
 reading unless marked run:
 
 - Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null`
-  fallbacks in the printers, payments, backup and device files (including device profiles). **Next action:** delete them
-  with a receipt each, or leave them as defensive code by decision.
+  fallbacks in the printers, payments, backup and device files (including device profiles).
+  **Next action:** delete them with a receipt each, or leave them as defensive code by decision.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
