@@ -549,7 +549,6 @@ export class TillStationScreen extends LitElement {
    * tearing the kiosk down for a blip.
    */
   async #loadDevice(signal?: AbortSignal): Promise<void> {
-    // A one-shot, so a later re-connect fetches and never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
       this.#adoptDeviceStation(this.initialDeviceStation, this.#queueRequest);
@@ -576,7 +575,8 @@ export class TillStationScreen extends LitElement {
       : this.api.getDeviceStationScreen({ signal });
   }
 
-  #adoptDeviceStation({ stations }: DeviceStationScreen, request: number): void {
+  #adoptDeviceStation(answer: DeviceStationScreen, request: number): void {
+    const { stations } = answer;
     // A refused bump's own reload lands here too, so the line clears only when the stations change.
     const ids = (list: readonly { id: string }[]) => list.map((station) => station.id).join("\n");
     if (ids(stations) !== ids(this.deviceStations)) this.bumpErrorCode = undefined;
@@ -591,6 +591,17 @@ export class TillStationScreen extends LitElement {
         : station,
     );
     this.#readSucceeded(request);
+    this.#publishDeviceStation();
+  }
+
+  #publishDeviceStation(): void {
+    this.dispatchEvent(
+      new CustomEvent<DeviceStationScreen>("station-screen-snapshot", {
+        detail: { stations: this.deviceStations },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   async #reload(signal?: AbortSignal, refreshStations = false): Promise<void> {
@@ -781,6 +792,7 @@ export class TillStationScreen extends LitElement {
     this.deviceStations = this.deviceStations.map((station) =>
       worked(station) ? { ...station, notices: this.#unacknowledged(station.notices) } : station,
     );
+    if (this.deviceMode) this.#publishDeviceStation();
   }
 
   #canMove(): boolean {

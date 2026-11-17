@@ -2408,6 +2408,110 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("es-ES");
   });
 
+  it.each([false, true])(
+    "keeps the latest station queue across Spanish and English switches (old notice reply: %s)",
+    async (refresh) => {
+      const { allergyQueue, allergyNotice } = await import("../test/kitchen-allergy-fixtures.js");
+      const previousLocale = currentLocale();
+      const previousSize = { width: innerWidth, height: innerHeight };
+      await page.viewport(1280, 900);
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      let releaseRead: (() => void) | undefined;
+      try {
+        const template = allergyQueue();
+        const queue = [1, 2, 4, 7].map((number) => ({
+          ...template,
+          orderId: `order-${number}`,
+          orderNumber: number,
+          kitchenNote: null,
+          items: [
+            {
+              ...template.items[0]!,
+              id: `item-${number}`,
+              workingOrderLineId: `line-${number}`,
+              allergy: null,
+            },
+          ],
+        }));
+        const notice = { ...allergyNotice("removed"), stationId: "kitchen" };
+        const answer = (numbers: number[], notices: ReturnType<typeof allergyNotice>[] = []) => ({
+          stations: [
+            {
+              id: "kitchen",
+              name: "Kitchen",
+              available: true,
+              today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "open" },
+              queue: queue.filter((group) => numbers.includes(group.orderNumber)),
+              notices,
+            },
+          ],
+        });
+        const read = vi.fn().mockResolvedValue(answer([2, 4]));
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            locale: "en-GB",
+            formFactor: kdsFormFactor,
+            capabilities: ["act-as-kds"],
+          }),
+          getDeviceIdentity: vi.fn().mockResolvedValue({
+            deviceId: "display",
+            formFactor: "kds",
+            kitchenScreens: [stationScreen],
+          }),
+          getDeviceStationScreen: read,
+          deviceAcknowledgeKitchenNotice: vi.fn().mockResolvedValue(undefined),
+        });
+        const board = () =>
+          station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+        const shown = () =>
+          [...board().shadowRoot!.querySelectorAll<HTMLElement>("[data-order]")]
+            .map((card) => Number(card.dataset.order))
+            .sort((a, b) => a - b);
+        const noticeNode = () => board().shadowRoot!.querySelector(`[data-notice="${notice.id}"]`);
+        await flush(el);
+        emit(shell(el)!, "wt-locale-selected", { code: "en-GB" });
+        await flush(el);
+        expect(shown()).toEqual([2, 4]);
+        read.mockResolvedValue(answer([1, 2, 7], [notice]));
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        expect(shown()).toEqual([1, 2, 7]);
+        expect(noticeNode()).not.toBeNull();
+        if (refresh) {
+          read.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => (releaseRead = () => resolve(answer([1, 2, 7], [notice])))),
+          );
+          vi.advanceTimersByTime(15_000);
+          await flush(el);
+          expect(releaseRead).toBeDefined();
+        }
+        const acknowledge = board().shadowRoot!.querySelector<HTMLElement>("[data-acknowledge]")!;
+        acknowledge.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+        await flush(el);
+        expect(noticeNode()).toBeNull();
+        releaseRead?.();
+        await flush(el);
+        expect(noticeNode()).toBeNull();
+        for (const code of ["es-ES", "en-GB"]) {
+          const reads = read.mock.calls.length;
+          emit(shell(el)!, "wt-locale-selected", { code });
+          await flush(el);
+          expect(currentLocale()).toBe(code);
+          expect(shown()).toEqual([1, 2, 7]);
+          expect(noticeNode()).toBeNull();
+          expect(read).toHaveBeenCalledTimes(reads);
+        }
+      } finally {
+        releaseRead?.();
+        vi.useRealTimers();
+        setLocale(previousLocale);
+        await page.viewport(previousSize.width, previousSize.height);
+      }
+    },
+  );
+
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),

@@ -635,11 +635,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
 
-- **A1092. The kitchen screen once showed only some orders after a switch to Spanish.** Seen,
-  2026-10-25 (A789 slice 4's look, `60` and `61` in `~/waitron-campaign-c/a789-4-shots/`): it showed
-  orders #2 and #4 while the station's queue also held #1 and #7; a reload brought them back and a
-  second switch did not lose them. Cause not found; that slice did not change the kitchen screen.
-
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)

@@ -23190,6 +23190,10 @@ export class TillApp extends LitElement {
             event.detail.opener,
           );
         }}
+        @station-screen-snapshot=${(event: CustomEvent<DeviceStationScreen>) => {
+          event.stopPropagation();
+          this.initialDeviceStation = event.detail;
+        }}
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @my-hours=${(event: Event) => {
           event.stopPropagation();
