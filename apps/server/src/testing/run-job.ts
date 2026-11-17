@@ -5,13 +5,14 @@ export function runTestJob(
   job: JobDefinition,
   signal: AbortSignal,
   options: {
+    now?: () => Date;
     sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
     log?: Logger;
   } = {},
 ) {
   let at = Date.now();
   const runner = createJobRunner({
-    now: () => (options.sleep ? new Date(at) : new Date()),
+    now: options.now ?? (() => (options.sleep ? new Date(at) : new Date())),
     log: options.log ?? (() => {}),
     subscribe: () => () => {},
     ...(options.sleep

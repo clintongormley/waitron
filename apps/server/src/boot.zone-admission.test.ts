@@ -42,8 +42,8 @@ import { enrolAuthenticator } from "./testing/authenticator.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
-import { runAttendanceLoop } from "./attendance-loop.js";
-import { startMailSender } from "./mail-sender.js";
+import { attendanceJob } from "./attendance-loop.js";
+import { mailSendJob } from "./mail-sender.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
@@ -97,11 +97,17 @@ vi.mock("./venue-details.js", async (load) => {
 });
 vi.mock("./attendance-loop.js", async (load) => {
   const a = await load<typeof import("./attendance-loop.js")>();
-  return { ...a, runAttendanceLoop: vi.fn(a.runAttendanceLoop) };
+  return { ...a, attendanceJob: vi.fn(a.attendanceJob) };
 });
 vi.mock("./mail-sender.js", async (load) => {
   const a = await load<typeof import("./mail-sender.js")>();
-  return { ...a, startMailSender: vi.fn(a.startMailSender) };
+  return {
+    ...a,
+    mailSendJob: vi.fn((deps) => {
+      const job = a.mailSendJob(deps);
+      return { ...job, pass: vi.fn(job.pass) };
+    }),
+  };
 });
 vi.mock("./invoice-email-worker.js", async (load) => {
   const a = await load<typeof import("./invoice-email-worker.js")>();
@@ -127,9 +133,9 @@ const ORIGIN = "http://127.0.0.1:32123";
 const PATH = "/management-api/venue-details/time-zone-repair";
 const PASSWORD = "syntheticPassword123";
 const duties = [
-  runAttendanceLoop,
+  attendanceJob,
   runInvoiceEmailLoop,
-  startMailSender,
+  mailSendJob,
   runPendingCardLoop,
   runTenderRefundRecoveryLoop,
   menuActivationJob,
@@ -251,10 +257,10 @@ async function refusal(response: Response, status: number, code: string) {
   expect(await response.json()).toMatchObject({ error: { code } });
 }
 function noDuties(accountMail = 1) {
-  for (const duty of duties) if (duty !== startMailSender) expect(duty).not.toHaveBeenCalled();
-  expect(startMailSender).toHaveBeenCalledTimes(accountMail);
+  for (const duty of duties) if (duty !== mailSendJob) expect(duty).not.toHaveBeenCalled();
+  expect(mailSendJob).toHaveBeenCalledTimes(accountMail);
   if (accountMail)
-    expect(vi.mocked(startMailSender).mock.calls[0]![0].owners.map((owner) => owner.kind)).toEqual([
+    expect(vi.mocked(mailSendJob).mock.calls[0]![0].owners.map((owner) => owner.kind)).toEqual([
       "account_action",
       "security_change",
     ]);
@@ -279,7 +285,10 @@ describe("startup zone admission", () => {
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
       noDuties();
       await server!.close();
-      expect(vi.mocked(startMailSender).mock.calls[0]![0].signal.aborted).toBe(true);
+      expect(
+        vi.mocked(vi.mocked(mailSendJob).mock.results[0]!.value.pass).mock.calls[0]![0].signal
+          .aborted,
+      ).toBe(true);
       server = undefined;
     });
     const repaired = await suite.db
@@ -357,9 +366,9 @@ describe("startup zone admission", () => {
       await starting;
     }
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
-    expect(runAttendanceLoop).toHaveBeenCalledOnce();
+    expect(attendanceJob).toHaveBeenCalledOnce();
     expect(runInvoiceEmailLoop).toHaveBeenCalledOnce();
-    expect(startMailSender).toHaveBeenCalledOnce();
+    expect(mailSendJob).toHaveBeenCalledOnce();
   });
   it.each(["", "Invalid/Zone?secret=must-not-escape", " Europe/Madrid", "Europe/Madrid "])(
     "boots %j into narrow authentication without ordinary loaders or duties",

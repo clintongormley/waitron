@@ -2,6 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Execution scope, 2026-11-17:** the watcher cleared shape B at 14:35: DB-GROWTH retired
+> the discovery scan while retaining `attendance-discovery.ts` for reconciliation and day selection.
+> No scan is recreated. The build order's 11 November promotion deferral still applies.
+> The watcher cleared the loop-only assertion ports at 15:34 after checking the real delay:
+> `loop.ts:42–51` resolves when aborted, including an already-aborted signal (both probe calls ran).
+> Only the synthetic sleep-failure portions retire; pass failures, backoff, abort/join and processing
+> assertions stay, and the mail sleep-log check becomes an observed runner waiting-state check.
+> At 15:57 the watcher cleared one additional read-only pending condition: unprocessed future
+> days whose saved bounds differ from `businessDayBounds` run the existing refresh/process pass.
+> `day_cutover_changes` wakes that check, preserving scheduled changes to an earlier day end.
+> At 16:10 the watcher also cleared `settings.business_day` as a wake source for the same check;
+> the Canary-to-Madrid settings case covers that existing venue-clock input.
+> A1308's design was approved on 4 November (backlog); this slice was reviewed by Claude and
+> cleared by the watcher. No owner approval of this slice's design is claimed.
+
 **Owner lands:** no (rules §6). The certificate reminder job only changes when an existing decision
 runs; nothing reaches AEAT.
 

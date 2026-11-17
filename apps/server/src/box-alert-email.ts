@@ -32,7 +32,7 @@ import {
 } from "./manager-email-recipients.js";
 import type { StaffNoticesRead } from "./staff-notices.js";
 import type { TextEmailOutcome, TextEmailSender } from "./text-email.js";
-import { unrefTimer, type Timer } from "./unref-timer.js";
+import type { JobDefinition } from "./job-runner.js";
 
 export type BoxEmailCode = keyof typeof BOX_EMAIL_WORDS;
 
@@ -44,7 +44,7 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
 }
 
 /** The alerts the duty emails while they stay open, read from the incidents table; a
- * `clock.corrected` one is emailed even once handled, see `startBoxEmailDuty`'s `remember`. */
+ * `clock.corrected` one is emailed even once handled, see `createBoxEmailDuty`'s `remember`. */
 export const INCIDENT_EMAIL_CODES = ["backup.archives_deleted", "clock.corrected"] as const;
 
 export type IncidentEmailCode = (typeof INCIDENT_EMAIL_CODES)[number];
@@ -216,12 +216,9 @@ function recipientKey(recipient: ManagerEmailRecipient): string {
   return recipient.email.trim().toLowerCase();
 }
 
-/** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
- * last finished. `stop` resolves once a database read in flight has finished; nothing is read or
- * queued after it. `remember` begins an alert's episode with no read, for an alert that may be
- * handled before the next check reads it: the box's own clock step, whose next step marks it
- * handled. A restart before the next check queues it loses its email; the alert stays in the bell. */
-export function startBoxEmailDuty(deps: {
+/** `remember` retains a clock-step episode until a check queues it, even if already handled.
+ * A restart before that check loses its email; the alert remains in the bell. */
+export function createBoxEmailDuty(deps: {
   db: Database;
   now: () => Date;
   disk: Pick<DiskFullState, "since">;
@@ -234,29 +231,13 @@ export function startBoxEmailDuty(deps: {
   context: () => Promise<BoxEmailContext>;
   send: TextEmailSender;
   isPrimary: () => boolean;
-  intervalMs: number;
   log: Logger;
-  timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => Promise<void>; remember: (incident: EmailedIncident) => void } {
-  const timer = deps.timer ?? unrefTimer;
+}): { check(): Promise<void>; halt(): void; remember: (incident: EmailedIncident) => void } {
   let episodes = new Map<string, Episode>();
   let cleanedUp = false;
   /** The refusal episode's `runStopped.since`; a different one is a new refusal. */
   let refusedSince: string | undefined;
   let stopped = false;
-  let reading: Promise<unknown> | null = null;
-
-  /** Every read goes through here, so `stop` can wait for the one in flight. */
-  async function read<T>(start: () => Promise<T>): Promise<T> {
-    const pending = start();
-    reading = pending;
-    try {
-      return await pending;
-    } finally {
-      reading = null;
-    }
-  }
-
   function begin(
     key: string,
     code: EmailCode,
@@ -343,7 +324,7 @@ export function startBoxEmailDuty(deps: {
       const low = deps.space.current().lowSince !== null;
       if (full) {
         const episode = begin("storage.disk_full", "storage.disk_full");
-        const ctx = await read(deps.context);
+        const ctx = await deps.context();
         if (!stopped) await deliver(episode, ctx);
         return;
       }
@@ -370,7 +351,7 @@ export function startBoxEmailDuty(deps: {
           }),
         });
       }
-      const notices = await read(deps.moduleNotices);
+      const notices = await deps.moduleNotices();
       if (stopped) return;
       const moduleSeen = new Set<string>();
       for (const notice of notices.notices) {
@@ -380,7 +361,7 @@ export function startBoxEmailDuty(deps: {
         begin(key, notice.code, notice.owner, notice.params);
         moduleSeen.add(key);
       }
-      const open = await read(deps.emailedIncidents);
+      const open = await deps.emailedIncidents();
       if (stopped) return;
       const incidentSeen = new Set<string>();
       for (const incident of open) {
@@ -412,7 +393,7 @@ export function startBoxEmailDuty(deps: {
             episodes.get(key) !== episode,
         )
         .map(([, episode]) => episode);
-      const ctx = due.length === 0 ? undefined : await read(deps.context);
+      const ctx = due.length === 0 ? undefined : await deps.context();
       if (stopped) {
         episodes = previous;
         return;
@@ -446,47 +427,45 @@ export function startBoxEmailDuty(deps: {
         additions.length !== 0 ||
         suppressed.length !== 0
       ) {
-        await read(() =>
-          withTransaction(deps.db, async (tx) => {
-            if (stopped || !deps.isPrimary()) return;
-            const now = deps.now();
-            if (!cleanedUp) {
-              const leftovers = await tx
-                .select({ key: outgoingMail.dedupeKey })
-                .from(outgoingMail)
-                .where(
-                  and(
-                    eq(outgoingMail.kind, "box_alert"),
-                    isNull(outgoingMail.subjectId),
-                    inArray(outgoingMail.status, ["pending", "rejected"]),
-                    isNull(outgoingMail.finishedAt),
-                  ),
-                );
-              for (const row of leftovers) await cancelMail(tx, row.key, now);
-            }
-            for (const episode of ended)
-              for (const personId of episode.queuedFor)
-                await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
-            for (const { episode, personId } of suppressed)
+        await withTransaction(deps.db, async (tx) => {
+          if (stopped || !deps.isPrimary()) return;
+          const now = deps.now();
+          if (!cleanedUp) {
+            const leftovers = await tx
+              .select({ key: outgoingMail.dedupeKey })
+              .from(outgoingMail)
+              .where(
+                and(
+                  eq(outgoingMail.kind, "box_alert"),
+                  isNull(outgoingMail.subjectId),
+                  inArray(outgoingMail.status, ["pending", "rejected"]),
+                  isNull(outgoingMail.finishedAt),
+                ),
+              );
+            for (const row of leftovers) await cancelMail(tx, row.key, now);
+          }
+          for (const episode of ended)
+            for (const personId of episode.queuedFor)
               await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
-            for (const pair of additions) {
-              const { episode, personId } = pair;
-              await enqueueMail(tx, {
-                kind: "box_alert",
-                dedupeKey: boxAlertMailKey(episode.id, personId),
-                subjectId: episode.incidentId ?? null,
-                personId,
-                params: {
-                  code: episode.code,
-                  wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
-                },
-                now,
-                notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
-              });
-              queued.push(pair);
-            }
-          }),
-        );
+          for (const { episode, personId } of suppressed)
+            await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
+          for (const pair of additions) {
+            const { episode, personId } = pair;
+            await enqueueMail(tx, {
+              kind: "box_alert",
+              dedupeKey: boxAlertMailKey(episode.id, personId),
+              subjectId: episode.incidentId ?? null,
+              personId,
+              params: {
+                code: episode.code,
+                wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
+              },
+              now,
+              notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
+            });
+            queued.push(pair);
+          }
+        });
         if (stopped || !deps.isPrimary()) {
           episodes = previous;
           return;
@@ -500,22 +479,43 @@ export function startBoxEmailDuty(deps: {
       episodes = beforeCheck;
       refusedSince = beforeRefusal;
       deps.log("warn", "box_email.check_failed", { errorCode: codeOf(error) });
-    } finally {
-      if (!stopped) armed = timer(deps.intervalMs, () => void check());
     }
   }
 
-  let armed = timer(deps.intervalMs, () => void check());
-
   return {
-    stop: async () => {
+    check,
+    halt: () => {
       stopped = true;
-      armed.cancel();
-      await reading?.catch(() => undefined);
     },
     remember: (incident) => {
       if (incident.code !== "clock.corrected") return;
       begin(`incident:${incident.id}`, incident.code, undefined, incident.params, true);
+    },
+  };
+}
+
+export function boxAlertMailJob(
+  duty: ReturnType<typeof createBoxEmailDuty>,
+  intervalMs: number,
+): JobDefinition {
+  let listening = false;
+  return {
+    name: "box.alert_mail",
+    applies: () => true,
+    firstPassAfterMs: intervalMs,
+    minSleepMs: intervalMs,
+    maxSleepMs: intervalMs,
+    backoff: { firstMs: intervalMs, maxMs: intervalMs },
+    async pass({ signal }) {
+      if (!listening) {
+        signal.addEventListener("abort", () => duty.halt(), { once: true });
+        listening = true;
+      }
+      await duty.check();
+      return { nextDueAt: null };
+    },
+    async onStop() {
+      duty.halt();
     },
   };
 }

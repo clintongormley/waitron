@@ -1,3 +1,4 @@
+import { runBoxEmailDuty } from "./testing/box-email-duty.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { mkdtemp, rm, mkdir, writeFile, stat } from "node:fs/promises";
@@ -29,11 +30,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-corrected-incident.js";
-import {
-  BOX_EMAIL_CHECK_MS,
-  readOpenEmailedIncidents,
-  startBoxEmailDuty,
-} from "./box-alert-email.js";
+import { BOX_EMAIL_CHECK_MS, readOpenEmailedIncidents } from "./box-alert-email.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mountHandoverActivationApi, type HandoverActivationDeps } from "./handover-activation.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
@@ -1481,7 +1478,7 @@ describe("a clock step made while the handover page is open", () => {
   async function queuedEmails(store: PlacedSpare, incidentId: string) {
     const primaryNow = (await readNodeMode(store.node, standby.nodeId)).mode === "primary";
     const armed: (() => void)[] = [];
-    const duty = startBoxEmailDuty({
+    const duty = runBoxEmailDuty({
       db: store.venue,
       now: () => new Date(),
       disk: { since: () => null },

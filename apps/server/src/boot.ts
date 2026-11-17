@@ -230,7 +230,7 @@ import {
   recordPass,
   type HealthState,
 } from "./health.js";
-import { abandonMailClaims, startMailSender } from "./mail-sender.js";
+import { abandonMailClaims, mailSendJob } from "./mail-sender.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
 import { roleMembershipMail } from "./role-membership-mail.js";
@@ -289,7 +289,8 @@ import {
   BOX_EMAIL_CHECK_MS,
   readBoxEmailContext,
   readOpenEmailedIncidents,
-  startBoxEmailDuty,
+  createBoxEmailDuty,
+  boxAlertMailJob,
 } from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -310,7 +311,7 @@ import { layOutSaleReceipt } from "./receipt-print.js";
 import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { runAttendanceLoop } from "./attendance-loop.js";
+import { attendanceJob } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
 import { boxAlertMail } from "./box-alert-mail.js";
@@ -393,7 +394,7 @@ import {
   fiscalDrainEnabled,
   runFiscalDrain,
 } from "./onboarding-policy.js";
-import { runCertificateReminderLoop } from "./certificate-reminder-worker.js";
+import { certificateReminderJob } from "./certificate-reminder-worker.js";
 import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { startFiscalReconciliation } from "./fiscal-reconciliation.js";
@@ -2676,12 +2677,9 @@ async function bootServer(
         { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
         log,
       );
-    const repairMailController = new AbortController();
-    let repairMail: Promise<void> | undefined;
-    const stopRepairMail = async () => {
-      repairMailController.abort();
-      await repairMail;
-    };
+    const repairMailRunner = createJobRunner({ now, log });
+    const stopRepairMail = () => repairMailRunner.stopJobs();
+    undoOnFailure.push(stopRepairMail);
     if (!fencedOrMirror && holders.singletonRole.current === "primary") {
       const owner = accountActionMail({
         keyRing: ring,
@@ -2696,18 +2694,18 @@ async function bootServer(
         securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
       ];
       await withTransaction(db, (tx) => abandonMailClaims(tx, owners, now()));
-      repairMail = startMailSender({
-        db,
-        owners,
-        now,
-        isPrimary: () => holders.singletonRole.current === "primary",
-        signal: repairMailController.signal,
-        resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
-        ...cloudMail,
-        log,
-        maxTickMs: 5000,
-      });
-      undoOnFailure.push(stopRepairMail);
+      repairMailRunner.add(
+        mailSendJob({
+          db,
+          owners,
+          now,
+          isPrimary: () => holders.singletonRole.current === "primary",
+          resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
+          ...cloudMail,
+          log,
+          maxSleepMs: 5000,
+        }),
+      );
     }
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
@@ -3030,50 +3028,32 @@ async function bootServer(
   );
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages();
-  const mailController = new AbortController();
-  let mailLoop: Promise<void> | undefined;
   const invoiceEmailController = new AbortController();
   let invoiceEmailLoop: Promise<void> | undefined;
-  const attendanceController = new AbortController();
-  let attendanceLoop: Promise<void> | undefined;
-  if (workforceEnabled && isSingletonPrimary) {
-    attendanceLoop = runAttendanceLoop({
-      db,
-      nodeId: tradingContext.nodeId,
-      now,
-      isPrimary: () => holders.singletonRole.current === "primary",
-      signal: attendanceController.signal,
-      onError: (error) =>
-        log("error", "attendance.processing_failed", { errorCode: codeOf(error) }),
-    });
-    undoOnFailure.push(async () => {
-      attendanceController.abort();
-      await attendanceLoop;
-    });
+  if (workforceEnabled) {
+    jobRunner.add(
+      attendanceJob({
+        db,
+        nodeId: tradingContext.nodeId,
+        now,
+        isPrimary: () => holders.singletonRole.current === "primary",
+        maxSleepMs: timings.maxTickMs,
+      }),
+    );
   }
-  let certificateReminderController: AbortController | undefined;
-  let certificateReminderLoop: Promise<void> | undefined;
   if (certificateDutiesEnabled(enabledFiscal, config)) {
-    const reminderController = new AbortController();
-    certificateReminderController = reminderController;
-    const reminderLoop = runCertificateReminderLoop({
-      db,
-      seat: enabledFiscal.certificate,
-      nodeId: tradingContext.nodeId,
-      venueLanguage: venueLocale === "es-ES" ? "es" : "en",
-      now,
-      isPrimary: () => holders.singletonRole.current === "primary",
-      signal: reminderController.signal,
-      resolveDelivery: resolveAccountEmail,
-      send: createCertificateReminderSender(),
-      onError: (error) =>
-        log("error", "fiscal.certificate_reminder_failed", { errorCode: codeOf(error) }),
-    });
-    certificateReminderLoop = reminderLoop;
-    undoOnFailure.push(async () => {
-      reminderController.abort();
-      await reminderLoop;
-    });
+    jobRunner.add(
+      certificateReminderJob({
+        db,
+        seat: enabledFiscal.certificate,
+        nodeId: tradingContext.nodeId,
+        venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+        now,
+        isPrimary: () => holders.singletonRole.current === "primary",
+        resolveDelivery: resolveAccountEmail,
+        send: createCertificateReminderSender(),
+      }),
+    );
   }
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
@@ -3097,35 +3077,35 @@ async function bootServer(
       invoiceEmailController.abort();
       await invoiceEmailLoop;
     });
+    // A clock step can date new mail before start, so identify prior episodes by their row ids.
+    const previousEpisodeMailIds = new Set<string>();
+    const owners = [
+      securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
+      emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
+      roleMembershipMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
+      boxAlertMail({
+        previousEpisodeMailIds,
+        venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+        log,
+      }),
+      ...(workforceEnabled
+        ? [
+            attendanceReminderMail({
+              nodeId: tradingContext.nodeId,
+              venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+            }),
+          ]
+        : []),
+      accountActionMail({
+        keyRing: ring,
+        emailChangeUrl: `${config.managementOrigin}/`,
+        venueLocale,
+        readTimeZone: () => readVenueTimeZone(db),
+        readPrivacyNoticeUrl: async () =>
+          (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
+      }),
+    ];
     if (isSingletonPrimary) {
-      // A clock step can date new mail before start, so identify prior episodes by their row ids.
-      const previousEpisodeMailIds = new Set<string>();
-      const owners = [
-        securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
-        emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
-        roleMembershipMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
-        boxAlertMail({
-          previousEpisodeMailIds,
-          venueLanguage: venueLocale === "es-ES" ? "es" : "en",
-          log,
-        }),
-        ...(workforceEnabled
-          ? [
-              attendanceReminderMail({
-                nodeId: tradingContext.nodeId,
-                venueLanguage: venueLocale === "es-ES" ? "es" : "en",
-              }),
-            ]
-          : []),
-        accountActionMail({
-          keyRing: ring,
-          emailChangeUrl: `${config.managementOrigin}/`,
-          venueLocale,
-          readTimeZone: () => readVenueTimeZone(db),
-          readPrivacyNoticeUrl: async () =>
-            (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
-        }),
-      ];
       await withTransaction(db, async (tx) => {
         const rows = await tx
           .select({ id: outgoingMail.id })
@@ -3141,22 +3121,20 @@ async function bootServer(
         for (const row of rows) previousEpisodeMailIds.add(row.id);
         await abandonMailClaims(tx, owners, now());
       });
-      mailLoop = startMailSender({
+    }
+    jobRunner.add(
+      mailSendJob({
         db,
         owners,
         now,
         isPrimary: () => holders.singletonRole.current === "primary" && diskFull.since() === null,
-        signal: mailController.signal,
         resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
         ...cloudMail,
         log,
         bus: liveEvents,
-      });
-      undoOnFailure.push(async () => {
-        mailController.abort();
-        await mailLoop;
-      });
-    }
+        maxSleepMs: 60_000,
+      }),
+    );
     const demoPrinter = await configureDemoPrinter(db, tradingContext.practiceMode === true);
     if (demoPrinter !== null) {
       jobRunner.add(demoPrinterJob(db, demoPrinter, log));
@@ -3801,7 +3779,7 @@ async function bootServer(
     reading.settle(read.unavailable);
     return read;
   };
-  const boxEmails = startBoxEmailDuty({
+  const boxEmails = createBoxEmailDuty({
     db,
     now,
     disk: diskFull,
@@ -3818,10 +3796,9 @@ async function bootServer(
       }),
     send: createTextEmailSender(),
     isPrimary: () => holders.singletonRole.current === "primary",
-    intervalMs: BOX_EMAIL_CHECK_MS,
     log,
   });
-  undoOnFailure.push(() => boxEmails.stop());
+  jobRunner.add(boxAlertMailJob(boxEmails, BOX_EMAIL_CHECK_MS));
   // A mirror or fenced box writes no alert here; the note waits for a start that trades.
   if (!fencedOrMirror)
     await raiseSetupClockSteps({
@@ -4767,22 +4744,15 @@ async function bootServer(
     pendingCardController,
     cloudController,
     invoiceEmailController,
-    mailController,
-    attendanceController,
-    certificateReminderController,
     tenderRefundController,
     pendingCardLoop,
     tenderRefundLoop,
-    attendanceLoop,
-    certificateReminderLoop,
     certificateDiagnosis,
     fiscalReconciliation,
     invoiceEmailLoop,
-    mailLoop,
     cloudSnapshots,
     unsubscribeFromChanges,
     jobRunner,
-    boxEmails,
     liveEvents,
     loop,
     backupSupervisor,

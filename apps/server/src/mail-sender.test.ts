@@ -1,3 +1,6 @@
+import { createJobRunner } from "./job-runner.js";
+import { runTestJob } from "./testing/run-job.js";
+import { realSleep } from "./loop.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -11,7 +14,6 @@ import {
   outgoingMail,
   persons,
   readMail,
-  subscribeToChanges,
   withTransaction,
   withFoldedPersonChanges,
 } from "@waitron/db";
@@ -19,12 +21,11 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { resolveMailDeliveryIn } from "./email-delivery.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { changeSubscriber, LiveEvents } from "./live-api.js";
+import { LiveEvents } from "./live-api.js";
 import {
   abandonMailClaims,
   runMailPass,
-  runMailLoop,
-  startMailSender,
+  mailSendJob,
   type MailKindOwner,
   type MailSenderDeps,
 } from "./mail-sender.js";
@@ -77,6 +78,32 @@ describe("one mail sender", () => {
   const update = async (patch: Partial<typeof outgoingMail.$inferInsert>, key = "one") => {
     await suite.db.update(outgoingMail).set(patch).where(eq(outgoingMail.dedupeKey, key));
   };
+  const runSender = (
+    options: MailSenderDeps & {
+      sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+      waiting?: (state: string) => void;
+    },
+  ) => {
+    const work = runTestJob(mailSendJob({ ...options, maxSleepMs: 60_000 }), options.signal, {
+      now: options.now,
+      log: options.log,
+      sleep: async (ms, signal) => {
+        options.waiting?.(work.runner.views()["mail.send"]!.state);
+        await options.sleep?.(ms, signal);
+      },
+    });
+    return work.done;
+  };
+  it("an idle job pass joins no write turn", async () => {
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      const job = mailSendJob({ ...deps, maxSleepMs: 60_000 });
+      expect(await job.pass({ now: time, signal: controller.signal })).toEqual({ nextDueAt: null });
+      expect(lock).not.toHaveBeenCalled();
+    } finally {
+      lock.mockRestore();
+    }
+  });
   it.each([
     ["local_capture", "sent", 1],
     ["smtp", "sent", 0],
@@ -571,7 +598,7 @@ describe("one mail sender", () => {
       resolveMailDeliveryIn(tx, ring, { devMode: false, onboardingIntent: undefined }, rule);
     const sleeps: number[] = [];
     let expiredAtFirstSleep: string | undefined;
-    await runMailLoop({
+    await runSender({
       ...deps,
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -604,8 +631,10 @@ describe("one mail sender", () => {
     deps.resolveDelivery = async () => ({ mode: "unconfigured" });
     let passes = 0;
     const sleeps: number[] = [];
-    await runMailLoop({
+    const states: string[] = [];
+    await runSender({
       ...deps,
+      waiting: (state) => states.push(state),
       sleep: async (ms) => {
         sleeps.push(ms);
         if (++passes === 1) {
@@ -618,8 +647,7 @@ describe("one mail sender", () => {
       },
     });
     expect(sleeps).toEqual([60000, 500, 60000]);
-    expect(vi.mocked(deps.log).mock.calls.map((c) => c[1])).toContain("mail.loop.sleeping");
-    expect(vi.mocked(deps.log).mock.calls.map((c) => c[1])).not.toContain("loop.sleeping");
+    expect(states).toEqual(["waiting", "waiting", "waiting"]);
     expect(
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
@@ -631,7 +659,7 @@ describe("one mail sender", () => {
       throw new Error("offline");
     };
     let turns = 0;
-    await runMailLoop({
+    await runSender({
       ...deps,
       sleep: async () => {
         if (++turns === 3) controller.abort();
@@ -645,7 +673,7 @@ describe("one mail sender", () => {
   it("sleeps until a scheduled row or an active claim is due", async () => {
     await queue("scheduled", { nextAttemptAt: new Date(time.getTime() + 10000) });
     const sleeps: number[] = [];
-    await runMailLoop({
+    await runSender({
       ...deps,
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -697,42 +725,41 @@ describe("one mail sender", () => {
     async (connected) => {
       await installChangeFeed(
         suite.db,
-        CORE_CHANGE_SOURCES.filter((s) => s.table === "outgoing_mail"),
+        CORE_CHANGE_SOURCES.filter((source) => source.table === "outgoing_mail"),
       );
-      const bus = new LiveEvents();
-      const unsubscribe = connected
-        ? subscribeToChanges(changeSubscriber(bus, deps.log))
-        : () => {};
       const sent = vi.fn(async () => ({ status: "sent" as const }));
       let sleeping!: () => void;
-      const asleep = new Promise<void>((r) => {
-        sleeping = r;
+      const asleep = new Promise<void>((resolve) => {
+        sleeping = resolve;
       });
-      deps.log = (_level, event) => {
-        if (event === "mail.loop.sleeping") sleeping();
-      };
-      const loop = startMailSender({ ...deps, bus, send: sent });
+      const runner = createJobRunner({
+        now: deps.now,
+        log: deps.log,
+        ...(connected ? {} : { subscribe: () => () => {} }),
+        delay: async (ms, signal) => {
+          sleeping();
+          await realSleep(ms, signal);
+        },
+      });
+      runner.add(mailSendJob({ ...deps, send: sent, maxSleepMs: 60_000 }));
       try {
         await asleep;
         await queue();
         if (connected)
           await vi.waitFor(() => expect(sent).toHaveBeenCalledTimes(1), { timeout: 2000 });
-        else {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          expect(sent).not.toHaveBeenCalled();
-        }
+        else await realSleep(2000, controller.signal);
       } finally {
-        controller.abort();
-        await loop;
-        unsubscribe();
+        await runner.stopJobs();
       }
-      expect(bus.subscriberCount).toBe(0);
+      expect(sent).toHaveBeenCalledTimes(connected ? 1 : 0);
     },
   );
   it("refuses duplicate owners and a longest wait shorter than retry delays", async () => {
-    await expect(startMailSender({ ...deps, owners: [owner, owner] })).rejects.toThrow(/owner/i);
-    await expect(
-      startMailSender({ ...deps, owners: [{ ...owner, longestWaitMs: 1 }] }),
-    ).rejects.toThrow(/wait/i);
+    expect(() => mailSendJob({ ...deps, maxSleepMs: 60_000, owners: [owner, owner] })).toThrow(
+      /owner/i,
+    );
+    expect(() =>
+      mailSendJob({ ...deps, maxSleepMs: 60_000, owners: [{ ...owner, longestWaitMs: 1 }] }),
+    ).toThrow(/wait/i);
   });
 });

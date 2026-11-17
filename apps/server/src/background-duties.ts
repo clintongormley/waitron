@@ -32,22 +32,15 @@ export interface BackgroundDutyHandles {
   pendingCardController: Aborter;
   cloudController: Aborter;
   invoiceEmailController: Aborter;
-  mailController: Aborter;
-  attendanceController: Aborter;
-  certificateReminderController: Aborter | undefined;
   tenderRefundController: Aborter;
   pendingCardLoop: unknown;
   tenderRefundLoop: unknown;
-  attendanceLoop: unknown;
-  certificateReminderLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
   fiscalReconciliation?: Stopper;
   invoiceEmailLoop: unknown;
-  mailLoop: unknown;
   cloudSnapshots: unknown;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
-  boxEmails: Stopper;
   liveEvents: { close(): unknown };
   loop: unknown;
   backupSupervisor: Stopper;
@@ -100,25 +93,10 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: () => h.tenderRefundLoop,
       reason: SIGNALLED_LOOP_WAIT,
     },
-    {
-      name: "attendanceLoop",
-      close: () => h.attendanceLoop,
-      reason: LOOP_WAIT,
-    },
-    {
-      name: "certificateReminderLoop",
-      close: () => h.certificateReminderLoop,
-      reason: LOOP_WAIT,
-    },
     { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop(), atStepdown: true },
     {
       name: "invoiceEmailLoop",
       close: () => h.invoiceEmailLoop,
-      reason: LOOP_WAIT,
-    },
-    {
-      name: "mailLoop",
-      close: () => h.mailLoop,
       reason: LOOP_WAIT,
     },
     {
@@ -135,7 +113,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
             atStepdown: true as const,
           },
         ]),
-    { name: "boxEmails", close: () => h.boxEmails.stop(), atStepdown: true },
     ...(h.spareJoin === undefined
       ? []
       : [{ name: "spareJoin", close: () => h.spareJoin!.stop(), atStepdown: true as const }]),
@@ -202,12 +179,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
       { name: "cloudController", abort: () => h.cloudController.abort() },
       { name: "invoiceEmailController", abort: () => h.invoiceEmailController.abort() },
-      { name: "mailController", abort: () => h.mailController.abort() },
-      { name: "attendanceController", abort: () => h.attendanceController.abort() },
-      {
-        name: "certificateReminderController",
-        abort: () => h.certificateReminderController?.abort(),
-      },
       { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
       { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },
     ],

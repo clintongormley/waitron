@@ -1,3 +1,5 @@
+import * as liveApi from "./live-api.js";
+import { runTestJob } from "./testing/run-job.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -23,9 +25,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import type { EmailDelivery } from "./email-delivery.js";
 type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
-import { runMailLoop, runMailPass } from "./mail-sender.js";
+import { mailSendJob, runMailPass } from "./mail-sender.js";
 import { AppError } from "@waitron/shared";
-import type { startMailSender } from "./mail-sender.js";
+import type { MailSenderDeps } from "./mail-sender.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -34,7 +36,7 @@ import type { StartedServer, StartServerSeams } from "./boot.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { boxEmailMessage, type startBoxEmailDuty } from "./box-alert-email.js";
+import { boxEmailMessage, type createBoxEmailDuty } from "./box-alert-email.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { TextEmailSender } from "./text-email.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -54,13 +56,13 @@ const { startServer, httpPort } = ephemeralServerFixture();
 
 const holder = vi.hoisted(() => ({
   pauseMail: false,
-  deps: undefined as Parameters<typeof startBoxEmailDuty>[0] | undefined,
+  deps: undefined as Parameters<typeof createBoxEmailDuty>[0] | undefined,
   armed: [] as (() => void)[],
   sent: [] as Parameters<TextEmailSender>[0][],
   outcomes: undefined as BackupOutcomeHolder | undefined,
   managementMode: undefined as AccountMode | undefined,
   profileMode: undefined as AccountMode | undefined,
-  mail: undefined as Parameters<typeof startMailSender>[0] | undefined,
+  mail: undefined as MailSenderDeps | undefined,
   smtp: [] as Parameters<typeof import("./smtp-send.js").sendSmtpMessage>[0][],
   cloudPass: undefined as Promise<void> | undefined,
 }));
@@ -89,9 +91,17 @@ vi.mock("./mail-sender.js", async (load) => {
   const actual = await load<typeof import("./mail-sender.js")>();
   return {
     ...actual,
-    startMailSender: (deps: Parameters<typeof actual.startMailSender>[0]) => {
-      holder.mail = deps;
-      return holder.pauseMail ? Promise.resolve() : actual.startMailSender(deps);
+    mailSendJob: (deps: Parameters<typeof actual.mailSendJob>[0]) => {
+      const controller = new AbortController();
+      holder.mail = { ...deps, signal: controller.signal };
+      const job = actual.mailSendJob(deps);
+      return {
+        ...job,
+        applies: () => !holder.pauseMail && job.applies(),
+        onStop: async () => {
+          controller.abort();
+        },
+      };
     },
   };
 });
@@ -168,9 +178,9 @@ vi.mock("./box-alert-email.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./box-alert-email.js")>();
   return {
     ...actual,
-    startBoxEmailDuty: (deps: Parameters<typeof actual.startBoxEmailDuty>[0]) => {
+    createBoxEmailDuty: (deps: Parameters<typeof actual.createBoxEmailDuty>[0]) => {
       holder.deps = deps;
-      return actual.startBoxEmailDuty({
+      return actual.createBoxEmailDuty({
         ...deps,
         context: async () => ({
           ...(await deps.context()),
@@ -183,11 +193,24 @@ vi.mock("./box-alert-email.js", async (importOriginal) => {
           holder.sent.push(message);
           return "sent";
         },
-        timer: (_ms, fn) => {
-          holder.armed.push(fn);
-          return { cancel: () => {} };
-        },
       });
+    },
+    boxAlertMailJob: (duty: ReturnType<typeof actual.createBoxEmailDuty>, interval: number) => {
+      const job = actual.boxAlertMailJob(duty, interval);
+      const controller = new AbortController();
+      const arm = () =>
+        holder.armed.push(() => {
+          void job.pass({ now: new Date(), signal: controller.signal }).finally(arm);
+        });
+      arm();
+      return {
+        ...job,
+        applies: () => false,
+        onStop: async () => {
+          controller.abort();
+          await job.onStop?.();
+        },
+      };
     },
   };
 });
@@ -274,6 +297,36 @@ async function venueName(): Promise<string> {
 }
 
 describe("the running server's notice and email checks", () => {
+  it("publishes captured mail to the running dashboard's email inbox", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    const live = vi.spyOn(liveApi, "mountLiveApi");
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Capture recipient",
+        email: "capture@example.test",
+        locale: "en-GB",
+      });
+      await withTransaction(suite.db, (tx) =>
+        queueAccountMail(tx, { personId: person!.id, purpose: "password_reset" }),
+      );
+      holder.pauseMail = true;
+      await bootServer(booted, venue, { intent: "demo", development: true });
+      const changes: unknown[] = [];
+      unsubscribe = live.mock.calls[0]![1].bus.subscribe((event) => changes.push(event));
+      await runMailPass(holder.mail!);
+      expect(changes).toContainEqual({
+        kind: "change",
+        change: { resources: [{ type: "email_inbox" }] },
+      });
+    } finally {
+      unsubscribe?.();
+      live.mockRestore();
+      await shutDown(booted);
+    }
+  });
+
   it.each(["on", "off", "never_enabled"] as const)(
     "wires paired account mail with relay %s while other notice delivery stays local",
     async (relay) => {
@@ -822,14 +875,14 @@ describe("the running server's notice and email checks", () => {
       const controller = new AbortController();
       let sleeps = 0;
       try {
-        await runMailLoop({
-          ...deps,
-          signal: controller.signal,
+        await runTestJob(mailSendJob({ ...deps, maxSleepMs: 60_000 }), controller.signal, {
+          log,
+          now: deps.now,
           sleep: async () => {
             if (++sleeps === 3) controller.abort();
           },
-        });
-        expect(log.mock.calls.filter(([, event]) => event === "mail.pass.threw")).toEqual([]);
+        }).done;
+        expect(log.mock.calls.filter(([, event]) => event === "job.failed")).toEqual([]);
         expect(lock).not.toHaveBeenCalled();
         expect(send).not.toHaveBeenCalled();
         expect(

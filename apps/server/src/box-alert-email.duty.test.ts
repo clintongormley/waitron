@@ -1,3 +1,4 @@
+import { runBoxEmailDuty } from "./testing/box-email-duty.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, incidents, outgoingMail } from "@waitron/db";
@@ -9,7 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOX_EMAIL_CHECK_MS,
   boxEmailMessage,
-  startBoxEmailDuty,
+  createBoxEmailDuty,
+  boxAlertMailJob,
   type BoxEmailCode,
   type BoxEmailContext,
   type EmailedIncident,
@@ -137,7 +139,7 @@ function duty({ startedAt = at(0) } = {}) {
       message: Parameters<TextEmailSender>[0],
     ) => Promise<"sent" | "rejected" | "unknown" | "uncertain">
   >(async () => "sent");
-  const handle = startBoxEmailDuty({
+  const handle = runBoxEmailDuty({
     db: suite.db,
     now: () => now,
     disk: { since: () => state.diskSince },
@@ -309,7 +311,7 @@ function expected(code: BoxEmailCode, recipient: ManagerEmailRecipient) {
   };
 }
 
-describe("startBoxEmailDuty for the box setting its clock", () => {
+describe("runBoxEmailDuty for the box setting its clock", () => {
   it("emails an open clock.corrected alert to each manager once", async () => {
     const d = duty();
     d.state.incidents = [FIRST_STEP];
@@ -449,7 +451,41 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
   });
 });
 
-describe("startBoxEmailDuty", () => {
+describe("box alert runner job", () => {
+  it("halts before a stepdown waits for an in-flight alert read", async () => {
+    const d = duty();
+    const read = held<readonly EmailedIncident[]>();
+    d.emailedIncidents.mockImplementationOnce(() => read.promise);
+    const decision = createBoxEmailDuty({
+      db: suite.db,
+      now: () => at(0),
+      disk: { since: () => null },
+      space: { current: () => ({ freeBytes: null, readAt: null, lowSince: null }) },
+      moduleNotices: d.moduleNotices,
+      emailedIncidents: d.emailedIncidents,
+      backupStopped: () => undefined,
+      context: d.context,
+      send: async (message) => {
+        const outcome = await d.send(message);
+        return outcome === "uncertain" ? "unknown" : outcome;
+      },
+      isPrimary: () => true,
+      log: () => {},
+    });
+    const job = boxAlertMailJob(decision, 60_000);
+    const controller = new AbortController();
+    const pending = job.pass({ now: at(1), signal: controller.signal });
+    await vi.waitFor(() => expect(d.emailedIncidents).toHaveBeenCalled());
+    controller.abort();
+    read.release([OLD_BACKUPS]);
+    await pending;
+    expect(d.context).not.toHaveBeenCalled();
+    expect(await d.rows()).toEqual([]);
+    await d.handle.stop();
+  });
+});
+
+describe("runBoxEmailDuty", () => {
   it("emails each manager once when the low-space warning comes on, in their own language", async () => {
     const d = duty();
     d.state.lowSince = at(1);
@@ -910,8 +946,9 @@ describe("startBoxEmailDuty", () => {
     d.state.diskSince = at(1);
     d.armed[0]!.fn();
     await vi.waitFor(() => expect(d.send).toHaveBeenCalled());
-    await d.handle.stop();
+    const stopping = d.handle.stop();
     first.release("sent");
+    await stopping;
     await turn();
     await turn();
     expect(d.send).toHaveBeenCalledTimes(1);
@@ -968,7 +1005,7 @@ function refusedEmail(recipient: ManagerEmailRecipient, sizes = REFUSED.sizes) {
   };
 }
 
-describe("startBoxEmailDuty for backups", () => {
+describe("runBoxEmailDuty for backups", () => {
   it("emails each manager once while old backups deleted stays open, in their own language", async () => {
     const d = duty();
     d.state.incidents = [DELETED];

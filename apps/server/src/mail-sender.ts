@@ -18,8 +18,7 @@ import { sendSmtpMessage, type SmtpConnection, type SmtpSendOutcome } from "./sm
 import type { SmtpTestCode } from "./smtp-failure.js";
 import type { Logger } from "./logger.js";
 import type { LiveEvents } from "./live-api.js";
-import { realSleep, runLoop } from "./loop.js";
-import { createLoopWaker } from "./loop-wake.js";
+import type { JobDefinition } from "./job-runner.js";
 
 export interface ClaimedMail {
   id: string;
@@ -441,13 +440,28 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     });
   return result;
 }
-export async function runMailLoop(
-  deps: MailSenderDeps & {
-    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-    minTickMs?: number;
-    maxTickMs?: number;
-  },
-): Promise<void> {
+export async function nextMailDueAt(
+  deps: Pick<MailSenderDeps, "db" | "owners">,
+): Promise<Date | null> {
+  const rows = await liveRows(deps.db, deps.owners);
+  const times = rows.flatMap((row) =>
+    row.status === "sending"
+      ? [Date.parse(row.claimedAt!) + MAIL_CLAIM_LEASE_MS]
+      : [Date.parse(row.nextAttemptAt), Date.parse(row.notAfter)],
+  );
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+export function mailSendJob(
+  deps: Omit<MailSenderDeps, "signal"> & { maxSleepMs: number },
+): JobDefinition {
+  const kinds = new Set<OutgoingMailKind>();
+  for (const owner of deps.owners) {
+    if (kinds.has(owner.kind)) throw new Error("Duplicate mail owner");
+    kinds.add(owner.kind);
+    if (owner.retryDelaysMs.some((ms) => ms > owner.longestWaitMs))
+      throw new Error("Mail longest wait is below a retry delay");
+  }
   let waitingForSetup = false;
   const unavailable = new Set<MailDeliveryRule | "account_action">();
   const resolveDelivery: MailSenderDeps["resolveDelivery"] = async (tx, rule) => {
@@ -479,49 +493,23 @@ export async function runMailLoop(
         throw error;
       }
     });
-  await runLoop({
-    ...deps,
-    minTickMs: deps.minTickMs ?? 500,
-    maxTickMs: deps.maxTickMs ?? 60000,
-    sleep: deps.sleep ?? realSleep,
-    log: (level, event, fields) => deps.log(level, `mail.${event}`, fields),
-    pass: async () => {
-      const result = await runMailPass({ ...deps, resolveDelivery, resolveAccountRelay });
+  return {
+    name: "mail.send",
+    applies: deps.isPrimary,
+    wakeOn: ["outgoing_mail"],
+    minSleepMs: 500,
+    maxSleepMs: deps.maxSleepMs,
+    backoff: { firstMs: 5_000, maxMs: 60_000 },
+    pass: async ({ signal }) => {
+      const result = await runMailPass({ ...deps, signal, resolveDelivery, resolveAccountRelay });
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;
-        return { duties: [], nextDueAt: null };
+        return { nextDueAt: null };
       }
       if (result.processed && result.mailId !== null) waitingForSetup = false;
-      if (result.processed) return { duties: [], nextDueAt: deps.now() };
-      const rows = await liveRows(deps.db, deps.owners);
-      const times = rows.flatMap((r) =>
-        r.status === "sending"
-          ? [Date.parse(r.claimedAt!) + MAIL_CLAIM_LEASE_MS]
-          : [Date.parse(r.nextAttemptAt), Date.parse(r.notAfter)],
-      );
-      return { duties: [], nextDueAt: times.length ? new Date(Math.min(...times)) : null };
+      if (result.processed) return { nextDueAt: deps.now() };
+      return { nextDueAt: await nextMailDueAt(deps) };
     },
-  });
-}
-export async function startMailSender(
-  deps: MailSenderDeps & { bus?: LiveEvents; maxTickMs?: number },
-): Promise<void> {
-  const kinds = new Set<OutgoingMailKind>();
-  for (const owner of deps.owners) {
-    if (kinds.has(owner.kind)) throw new Error("Duplicate mail owner");
-    kinds.add(owner.kind);
-    if (owner.retryDelaysMs.some((ms) => ms > owner.longestWaitMs))
-      throw new Error("Mail longest wait is below a retry delay");
-  }
-  const waker = createLoopWaker({ minTickMs: 500 });
-  const unsubscribe = deps.bus?.subscribe((event) => {
-    if (event.kind === "change" && event.change.resources.some((r) => r.type === "outgoing_mail"))
-      waker.wake();
-  });
-  try {
-    await runMailLoop({ ...deps, sleep: waker.sleep });
-  } finally {
-    unsubscribe?.();
-  }
+  };
 }

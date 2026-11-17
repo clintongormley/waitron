@@ -5126,6 +5126,9 @@ Those in-memory families now measure elapsed time on a steady clock: wall-clock 
 change their waits or windows. The persisted PIN helpers keep their wall-clock meaning.
 See the [steady-clock plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
 
+**2026-11-17, jr4:** attendance day processing now runs through `attendanceJob` and
+`runAttendancePass`; the row below retains the earlier loop name from the clock-step experiment.
+
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
 | Dashboard sessions (`packages/identity/src/management-session.ts:79`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |
