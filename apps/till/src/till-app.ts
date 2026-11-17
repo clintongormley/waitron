@@ -11465,7 +11465,7 @@ export class TillApp extends LitElement {
     this.profileKitchenScreen = identity.kitchenScreens?.[0]?.kind ?? null;
   }
 
-  /** Reads the device again first, so approvals changed since boot are what is offered. */
+  /** Reads the device again first, so the dialog offers the approvals as they stand now. */
   async #onOpenProfile(): Promise<void> {
     const session = this.#operatorSession;
     await this.#readIdentity();

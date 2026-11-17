@@ -22902,7 +22902,7 @@ describe("switching the device's profile from the header", () => {
 
   describe("the Profile button follows the profiles the device is read to offer", () => {
     let offered: (typeof COUNTER)[];
-    const getDeviceIdentity = () => vi.fn(async () => ({ ...identity, approvedProfiles: offered }));
+    const identityReader = () => vi.fn(async () => ({ ...identity, approvedProfiles: offered }));
 
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
@@ -22920,7 +22920,7 @@ describe("switching the device's profile from the header", () => {
 
     it("appears and goes as a poll reads approvals added and taken away", async () => {
       offered = [COUNTER];
-      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      const { el } = await mountApp({ getDeviceIdentity: identityReader() });
       await toCounter(el);
       expect(profileButton(el)).toBeNull();
 
@@ -22935,7 +22935,7 @@ describe("switching the device's profile from the header", () => {
 
     it("is gone as soon as a person admitted to no other profile signs in", async () => {
       offered = [COUNTER, BAR];
-      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      const { el } = await mountApp({ getDeviceIdentity: identityReader() });
       await flush(el);
       offered = [COUNTER];
       await toCounter(el);
@@ -22945,7 +22945,7 @@ describe("switching the device's profile from the header", () => {
 
     it("shows as soon as a person admitted to another profile signs in after one who was not", async () => {
       offered = [COUNTER, BAR];
-      const { el } = await mountApp({ getDeviceIdentity: getDeviceIdentity() });
+      const { el } = await mountApp({ getDeviceIdentity: identityReader() });
       await flush(el);
       offered = [COUNTER];
       await toCounter(el);

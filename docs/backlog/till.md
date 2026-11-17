@@ -660,13 +660,6 @@ paragraphs rather than beside a field; and the supervisor override dialog
 (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
 empty, before any press.
 
-## A disabled device's profile approvals come back when it is enabled again
-
-Left open by W97 (#1311), found in its review and not fixed on the branch:
-
-- Approvals stored on a disabled device come back when it is enabled again through a join
-  (unchecked whether that is wanted).
-
 ## The profile editor reads people and the venue's departments and zones
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
