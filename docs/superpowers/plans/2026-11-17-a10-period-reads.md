@@ -5,7 +5,8 @@ pay-period closure. Hours loads the full history once for outstanding work, down
 reads. Totals, open work, corrections and frozen records keep their current meaning. The
 backlog ask (the former "A10 period read cost" entry) requires late answers and
 corrections across period boundaries. Keep event order, storage and write paths. Claude reviewed
-the plan and the watcher cleared it with the refinements below (Lane I questions.md, 23:42).
+the plan. The Lane I watcher cleared the build on 17 November at 23:42 and cleared dropping the
+earlier start search and keeping the later fallback on 18 November at 00:14 (questions.md).
 
 1. **Read the period and its pairing context.** Add `readPeriodEntries(tx, { period, personId? })`
    in `packages/workforce/src/record-reads.ts`. Use `(person_id, event_at)` and the stored ±14-hour

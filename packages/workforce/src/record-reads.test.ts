@@ -323,6 +323,18 @@ it("pairs a January start past a later clock-in retimed after its end", async ()
   expect(record.sessions.map((session) => session.workedMinutes)).toEqual([2640]);
 });
 
+it("follows the only earlier clock-in when its approved time moves into January", async () => {
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2025-12-29T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-01-01T08:00:00Z"));
+  });
+  const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
+  await correct(start!.id, "2026-01-01T01:00:00Z");
+  const record = await expectFullJanuaryRecord();
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([420]);
+  expect(record.entries.map((row) => row.entry.entryId)).toContain(start!.id);
+});
+
 it("compares the full frozen month when reading one of its weeks", async () => {
   await day();
   await run(async (tx) => {
