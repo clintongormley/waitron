@@ -1734,7 +1734,7 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   is up (watcher, 2026-11-17, lane B, not the owner; the owner may overrule).** "Follow
   docs/developers/dashboard-live-updates.md:123-128 — call this.api.liveData?.invalidate([{ type:
   "devices" }]) after the Edit save and the Pair accept, so a person always sees their own save
-  through the screen's watch." The screen asks for the list again itself after the write, and the
+  through the screen's watch." After the write the screen marks the list out of date, so its own watch reads it again, and the
   server's change notice asks once more, so a person sees their own save even when the event stream
   has gone silent ([why](../developers/dashboard-live-updates.md)). Measured in a browser test with
   the notice stood in for after the screen's own read: one read from the save, a second from the

@@ -1660,7 +1660,7 @@ describe("the Edit dialog", () => {
     });
   });
 
-  it("Save sends exactly the edit, then closes, with no list read of its own", async () => {
+  it("Save sends exactly the edit, then closes, without calling listDevices itself", async () => {
     const api = editApi();
     const el = await openEdit(api);
     wtChange(el, "[data-test=edit-name]", "  Cash till 2 ");
@@ -1783,13 +1783,15 @@ describe("the Edit dialog", () => {
   });
 
   it("a failed reader save keeps the dialog open with its error under the reader, the device's changes saved", async () => {
-    const api = editApi({
-      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
-    });
+    const api = Object.assign(
+      editApi({ setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }) }),
+      { liveData: new LiveData() },
+    );
     const el = await openEdit(api);
     wtChange(el, "[data-test=edit-name]", "Cash till 2");
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
     await flush(el);
+    const reads = vi.mocked(api.listDevices).mock.calls.length;
     await save(el);
 
     await vi.waitFor(() =>
@@ -1800,7 +1802,8 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-name").error).toBe("");
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
-    expect(api.listDevices).toHaveBeenCalledTimes(1);
+    // The device's changes were written, so the list is read again.
+    await vi.waitFor(() => expect(api.listDevices).toHaveBeenCalledTimes(reads + 1));
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r2");
     await flush(el);
     expect(field(el, "edit-reader").error).toBe("");
