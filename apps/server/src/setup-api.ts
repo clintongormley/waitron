@@ -1409,8 +1409,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           headerEnvironment !== "preproduction"
         )
           invalidRequest("environment");
-        // A raw upload carries no recovery details, so this refuses it before its body is received.
-        if (!multipart) recoveryCredentials(deps.recoveryOperationPath, undefined, undefined);
+        if (!multipart && isUnset(deps.recoveryOperationPath)) invalidRequest("recoveryOperation");
         upload = await deps.receiveArchive!(c.req.raw, {
           fields: [
             "recoveryKey",
