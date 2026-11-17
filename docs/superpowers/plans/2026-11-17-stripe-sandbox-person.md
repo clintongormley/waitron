@@ -1,29 +1,29 @@
 # Stripe sandbox: seed the resolving person
 
 Request: Lane F queue, STRIPE-SANDBOX-FK (watcher, 17 November 2026 05:09): “The nightly Stripe sandbox test fails with a foreign-key refusal: find what broke it and fix it.”
-Usable outcome: the abandoned-attempt sandbox case resolves its payment with a real person row and passes its existing assertions against Stripe.
+Usable outcome: restore the existing abandoned-attempt sandbox check against real Stripe, preserving every assertion.
 
-## Evidence and scope
+## Cause and smallest correction
 
-Nightly `44014908481` at `77bc77e31b` failed this case while seven others passed; five preceding nightlies passed.
-Commit `4f5b758700` (#3465) added `payments_resolved_by_fk` referencing `persons.id`; the sandbox's `MANAGER` is not seeded.
-Reuse `seedPerson` and the manager-fixture pattern in `packages/payments-stripe/src/provider.test.ts`.
-Change only `packages/payments-stripe/src/collect.sandbox.test.ts`: import `seedPerson` and seed `MANAGER` in the abandoned-attempt case before resolution.
-Keep every existing assertion and real Stripe call. Add no shipped tests, helpers, product behavior or schema changes.
+Nightly `44014908481` at `77bc77e31b` failed this case while seven passed; the four scheduled runs on 13–16 November passed.
+`4f5b758700` (#3465) added `payments_resolved_by_fk` referencing `persons.id`; the sandbox's `MANAGER` is not seeded.
+`git log -1 --format=%cI 4f5b758700` prints `2026-11-16T07:29:44+01:00`; GitHub records merge at `2026-11-16T06:29:45Z`, inside the failure window.
+`git merge-base --is-ancestor` exits 1 for the last passing head `630c676e2b` and 0 for the failing head `77bc77e31b`. The cause is landed, not an in-flight change.
+Reuse `seedPerson` from `@waitron/db/testing/seed.js`, as `packages/payments-stripe/src/provider.test.ts` already does.
+Change only `packages/payments-stripe/src/collect.sandbox.test.ts`: import that helper and call `seedPerson(suite.db, { id: MANAGER, displayName: "Manager" })` inside the abandoned-attempt case.
+The seed belongs in the case because `useVenueDb` resets tables before each case; a Stripe `beforeAll` seed would be erased.
+Keep every existing assertion and real Stripe call. Add no permanent tests, helpers, product behavior or schema changes.
 
-## One task: reproduce red, seed, verify green
+## One task and its verification
 
-1. Retain the driver's observed red/green reproduction using real migrations/database and existing `FakeStripe` in temporary `f-sandbox-person.probe.test.ts`; the unseeded case failed with error 787 and the seeded control passed (one case each).
-2. Seed that person in the diagnostic and run it again: resolution must succeed. Apply the same minimal fixture correction to the existing sandbox case, then delete the diagnostic.
-3. Run `pnpm --filter @waitron/payments-stripe exec vitest run src/provider.test.ts` and `pnpm --filter @waitron/payments-stripe typecheck`.
-4. Complete Claude run-it branch review, address findings, use the normal hooked push, and require current-head PR CI before declaring readiness to land.
-5. After merge, run `gh workflow run stripe-sandbox.yml --ref main`; inspect that run's actual eight-test result, including abandoned-attempt resolution.
+1. Local cause isolation is complete: the temporary real-migration/database diagnostic failed with error 787 without the person and passed with the person (one case each). Logs/source remain in Lane F's `receipts/stripe-sandbox-fk-20261117/`; the diagnostic is removed, not rebuilt.
+2. Apply the two-line fixture correction. Run package `typecheck` (includes sandbox sources); the normal push hook checks changed-file formatting and lint.
+3. Run `pnpm --filter @waitron/payments-stripe test:sandbox`. With no local `STRIPE_SECRET_KEY`, this proves loading only and skips the real cases; never call that a sandbox pass.
+4. Complete Claude run-it branch review, normal hooked push and current-head PR CI, then land.
+5. Run `gh workflow run stripe-sandbox.yml --ref main` and read that run's eight-test result. If it fails, investigate under `~/waitron-campaign-shared/ci-failure-rule.md`; do not mark the item complete or call a repeat a fix.
 
-## Verification ownership and completion
-
-The temporary diagnostic owns local red/green proof of the missing-person cause; it does not ship.
-Existing `collect.sandbox.test.ts` owns real Stripe abandoned-attempt resolution and its retained assertions; `provider.test.ts` checks existing provider behavior, and typecheck checks types.
-`STRIPE_SECRET_KEY` is absent locally: local checks cannot establish real sandbox success; the secret-backed main workflow supplies that proof.
-Existing Stripe upkeep entries remain. No matching completed backlog entry was identified by the driver; change no backlog text unless later investigation finds matching stale wording.
-Forecast: production 0 lines; shipped tests +2–5/-0; support 0; plan 20–30 lines.
-Claude reviews this plan before building; watcher clearance follows that review. Neither constitutes owner approval.
+The temporary diagnostic owns local cause isolation; the existing sandbox owns real cancellation/resolution assertions, and the secret-backed main workflow supplies completion evidence.
+No matching completed backlog entry was found in the payments index or detail. Existing Stripe qualification entries remain open and need no text change for this fixture correction.
+Forecast: production 0 lines; shipped tests +2–5/-0; support 0; plan about 30 lines.
+Separate Sol-high draft; Claude plan review, 17 November (80 seconds), followed by driver corrections. Watcher clearance is required before build.
+The owner's current campaign instruction says “The owner authorises finish-branch and land-branch.” That authorises those actions; no owner approval of this design is claimed.
