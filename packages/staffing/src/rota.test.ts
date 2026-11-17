@@ -1,7 +1,7 @@
 import { dayCutoverChanges, personStaffRoles, staffRoles } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   menus,
@@ -685,6 +685,56 @@ describe("changing a published rota week", () => {
     expect((await own()).map((s) => s.id)).toEqual([shiftId]);
     await tx((t) => backend.publishRoster(t, { versionId: result.versionId }));
     expect((await own()).map((s) => s.id)).toEqual([copyId]);
+  });
+  it("moves every shift's assignment to its copy with one read, whatever the week's size", async () => {
+    const v = await venue();
+    const cook = await tx(async (t) => {
+      const [r] = await t.insert(staffRoles).values({ name: "Cook" }).returning();
+      return r!.id;
+    });
+    const station: AreaRef = { kind: "station", id: v.stationId };
+    const originals = [
+      await add(v, { businessDay: "2026-12-01" }),
+      await add(v, { businessDay: "2026-12-02", area: station, staffRoleId: cook }),
+      await add(v, { businessDay: "2026-12-03", area: station }),
+    ];
+    const draft = (await read()).version!.id;
+    const unassigned = await rawShift(v, draft, "2026-12-04T08:00:00Z", "2026-12-04T12:00:00Z");
+    await tx((t) => backend.publishRoster(t, { versionId: draft }));
+    await add(v, { week: "2026-12-07", businessDay: "2026-12-08" });
+    const single = (await read("2026-12-07")).version!.id;
+    await tx((t) => backend.publishRoster(t, { versionId: single }));
+    const assignments = () =>
+      tx((t) =>
+        t
+          .select()
+          .from(shiftAssignments)
+          .innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId))
+          .then((rows) => Object.fromEntries(rows.map((r) => [r.shifts.id, r.shift_assignments]))),
+      );
+    const before = await assignments();
+    const selectsFor = (week: string) =>
+      tx(async (t) => {
+        const spy = vi.spyOn(t, "select");
+        await api.changeRotaWeek(t, week);
+        const calls = spy.mock.calls.length;
+        spy.mockRestore();
+        return calls;
+      });
+    expect(await selectsFor("2026-11-30")).toBe(await selectsFor("2026-12-07"));
+    const copied = (await read()).shifts;
+    expect(copied).toHaveLength(4);
+    const byDay = Object.fromEntries(copied.map((s) => [s.businessDay, s]));
+    expect(byDay["2026-12-01"]).toMatchObject({ area: v.area, staffRoleId: v.staffRoleId });
+    expect(byDay["2026-12-02"]).toMatchObject({ area: station, staffRoleId: cook });
+    expect(byDay["2026-12-03"]).toMatchObject({ area: station, staffRoleId: v.staffRoleId });
+    expect(byDay["2026-12-04"]).toMatchObject({ area: null, staffRoleId: null });
+    for (const s of copied) expect([...originals, unassigned]).not.toContain(s.shiftId);
+    const after = await assignments();
+    for (const id of [...originals, unassigned]) expect(after[id]).toEqual(before[id]);
+    expect(after[unassigned]).toBeUndefined();
+    for (const s of copied.filter((c) => c.businessDay !== "2026-12-04"))
+      expect(after[s.shiftId]).toMatchObject({ shiftId: s.shiftId });
   });
   it("does not create a draft for an invalid week, a missing published week or an existing draft", async () => {
     const v = await venue();

@@ -1,5 +1,16 @@
-import { staffRoles } from "@waitron/db";
-import { and, asc, eq, gte, lte, inArray, or, isNull, isNotNull } from "drizzle-orm";
+import { insertInChunks, staffRoles } from "@waitron/db";
+import {
+  and,
+  asc,
+  eq,
+  getTableColumns,
+  gte,
+  lte,
+  inArray,
+  or,
+  isNull,
+  isNotNull,
+} from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, cutoverForBusinessDay } from "@waitron/shared";
@@ -368,12 +379,16 @@ export async function changeRotaWeek(tx: Transaction, week: string) {
   if (!version) throw invalid("week");
   if (version.status === "draft") throw new AppError("roster.draft_exists", {});
   const copied = await backend.copyPublishedToDraft(tx, { versionId: version.id });
-  for (const [original, shiftId] of copied.shiftIds) {
-    const [row] = await tx
-      .select()
-      .from(shiftAssignments)
-      .where(eq(shiftAssignments.shiftId, original));
-    if (row) await tx.insert(shiftAssignments).values({ ...row, shiftId });
-  }
+  const rows = await tx
+    .select(getTableColumns(shiftAssignments))
+    .from(shiftAssignments)
+    .innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId))
+    .where(eq(shifts.rosterVersionId, version.id));
+  // copyPublishedToDraft maps every shift of `version`, so every row's shift has a copy.
+  await insertInChunks(
+    tx,
+    shiftAssignments,
+    rows.map((row) => ({ ...row, shiftId: copied.shiftIds.get(row.shiftId)! })),
+  );
   return { versionId: copied.versionId, openSwaps: copied.openSwaps };
 }
