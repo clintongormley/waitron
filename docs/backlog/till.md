@@ -2907,12 +2907,6 @@ A1250's colour question.
   floor join that needs seats asks for them before its first request and sends once.
   The request log is in #1699.
 
-## Loose ends left by A718
-
-- **The pinned Actions column's left divider showed a gap between two zone rows** in a 1280 px
-  light-theme screenshot of Departments and zones (`~/waitron-campaign-c/a718-shots/list-en-light-1280.png`,
-  between Bar and Same). Not known whether it predates A718. Left open by A718.
-
 ## A550. Making a booked table part of a joined table is not refused
 
 The floor

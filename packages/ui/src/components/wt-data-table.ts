@@ -325,11 +325,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       /* A collapsed border is drawn where the cell sits unscrolled, so the edge that must travel with
-         it is drawn by the cell itself. */
+         it is drawn by the cell itself. It starts above the cell: at 125% or 150% screen scaling a row's
+         edge can fall between screen pixels, and the cell's background would leave a lighter one. */
       [data-pinned="end"]::before {
         content: "";
         position: absolute;
-        inset-block: 0;
+        inset-block: calc(var(--wt-space-1) / -2) 0;
         inset-inline-start: 0;
         border-inline-start: 1px solid var(--wt-color-border);
       }

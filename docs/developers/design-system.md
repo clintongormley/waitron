@@ -1697,7 +1697,10 @@ focus; a row that joins its parent paints `--wt-color-bg` while it is not hovere
 something, nothing in it has focus), sit above a clickable row's lifted controls, and draw a
 `--wt-color-border` line on their leading side from the cell's own `::before`: the table collapses
 its borders, and in the 2026-09-30 screenshots a border set on the pinned cell itself showed only
-once the table was scrolled to its end, never while the cell was held at the edge. A table with no
+once the table was scrolled to its end, never while the cell was held at the edge. That line starts
+2px above the cell, so it stays unbroken where a row's edge falls between screen pixels (at
+fractional screen scaling); guard: `packages/ui/src/components/wt-data-table.scaled.test.ts`, at 150%
+only. A table with no
 pinned column puts no `data-pinned` attribute on any cell. Guards: the pinned cases in
 `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, a phone-width
 case per dashboard table in its own suite, most built on `expectRowMenusOnScreen`

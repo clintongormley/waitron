@@ -2584,6 +2584,10 @@ size ordering and hid the failure in three diagnostic runs. Restoring its origin
 reproduced it with tracing in
 [43280418238](https://github.com/clintongormley/waitron/actions/runs/43280418238).
 
+`chromium-scaled`, like `chromium-touch`, is split off by file: it runs
+`packages/ui/src/components/wt-data-table.scaled.test.ts` at a `deviceScaleFactor` of 1.5, which
+applies to the whole browser context.
+
 ## Dispatch events when testing a `composedPath()` guard.
 
 An undispatched `KeyboardEvent` has an empty path, so a missing-action test can pass at the
