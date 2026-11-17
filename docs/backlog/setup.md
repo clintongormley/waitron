@@ -170,10 +170,10 @@ empty → owner → shop details → the readiness step
 itself does not count (`apps/server/src/request-from-box.ts`; the dev page reaches the server
 through a loopback proxy), the dev server listens on loopback only, so no phone can reach it, and
 a Mac has no internet time service the server can read. So the Backups card has still never been
-seen showing a Live setup's pack 1. Which way to close it, if at all, is the owner's (asked
-2026-11-17): let a development first setup take the box's clock alone, give a source run a
-stand-in time service that reports synchronised from the dev scripts, or serve a built wizard on
-the LAN so a real phone can be the second clock.
+seen showing a Live setup's pack 1. The owner chose the fix on 2026-11-17 ("Accept own clock"):
+with development mode on (`WAITRON_ENV=dev`), the first setup's readiness takes the box's own clock
+alone; preproduction without development mode and production keep the second-clock rule. Not
+built yet; once built, walk a `wa-wt onboarding` stack to a Live venue.
 
 ## Loose ends left by A496 (moving to a new tax ID).
 
