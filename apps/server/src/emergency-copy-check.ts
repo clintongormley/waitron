@@ -53,24 +53,29 @@ export async function readPlacedEmergencyCopy(
   return (row?.detail.binding as EmergencyCopyBinding | undefined) ?? null;
 }
 
-/** The binding the `node.db` at `path` recorded, or `null` when it holds none or is no database. */
-async function bindingPlacedAt(path: string): Promise<EmergencyCopyBinding | null> {
-  let connection;
+/** `read` over the `node.db` at `path`, opened immutably, so nothing it reads is changed. */
+export async function readImmutableNodeDb<T>(
+  path: string,
+  read: (node: NodeDatabase) => Promise<T>,
+): Promise<T> {
+  const connection = openImmutable(path);
   try {
-    connection = openImmutable(path);
-  } catch {
-    return null;
-  }
-  try {
-    return await readPlacedEmergencyCopy(
+    return await read(
       drizzleNodeSqlite(connectionPair(connection, connection), {
         schema: {},
       }) as unknown as NodeDatabase,
     );
-  } catch {
-    return null;
   } finally {
     connection.close();
+  }
+}
+
+/** The binding the `node.db` at `path` recorded, or `null` when it holds none or is no database. */
+async function bindingPlacedAt(path: string): Promise<EmergencyCopyBinding | null> {
+  try {
+    return await readImmutableNodeDb(path, readPlacedEmergencyCopy);
+  } catch {
+    return null;
   }
 }
 
@@ -85,8 +90,9 @@ async function fileSha256(path: string, signal: AbortSignal | undefined): Promis
 }
 
 /**
- * Whether the venue database Cloud placed at `venuePath` is the copy `binding` names and can become
- * a machine of its own. Every read is through read-only connections, so the file is never changed.
+ * Refuses unless the venue database Cloud placed at `venuePath` is the copy `binding` names and can
+ * become a machine of its own, answering whether a `node.db` beside it already records this very
+ * binding. Every read is through read-only connections, so the file is never changed.
  */
 export async function checkPlacedEmergencyCopy(deps: {
   binding: EmergencyCopyBinding;
@@ -96,19 +102,20 @@ export async function checkPlacedEmergencyCopy(deps: {
   migrationsRoot: string | null;
   modules: readonly WaitronModule[];
   signal?: AbortSignal;
-}): Promise<void> {
+}): Promise<boolean> {
   const { binding, venuePath } = deps;
   // Every open below is immutable, so a WAL-mode file gains no `-wal` or `-shm`: safe only because
   // a `-wal` or `-journal` beside the file is refused first, and an immutable open would ignore it.
   if ([WAL_SUFFIX, JOURNAL_SUFFIX].some((suffix) => existsSync(`${venuePath}${suffix}`)))
     throw new AppError("emergency_copy.journal_present", {});
   const nodePath = join(dirname(venuePath), NODE_FILE);
-  if (existsSync(nodePath)) {
+  const placed = existsSync(nodePath);
+  if (placed) {
     // Only this binding's own placement is admitted, so a repeat can pass; anything else, the
     // source's `node.dump` among them, is never adopted.
-    const placed = await bindingPlacedAt(nodePath);
-    if (placed === null) throw new AppError("emergency_copy.node_db_present", {});
-    if (!isDeepStrictEqual(placed, binding))
+    const recorded = await bindingPlacedAt(nodePath);
+    if (recorded === null) throw new AppError("emergency_copy.node_db_present", {});
+    if (!isDeepStrictEqual(recorded, binding))
       throw new AppError("emergency_copy.other_binding_placed", {});
   }
   if ((await fileSha256(venuePath, deps.signal)) !== binding.selectedStream.databaseSha256)
@@ -179,4 +186,5 @@ export async function checkPlacedEmergencyCopy(deps: {
   } finally {
     await opened.close();
   }
+  return placed;
 }

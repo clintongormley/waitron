@@ -15,11 +15,11 @@ import { CORE_MIGRATIONS, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { box, NODE_MIGRATIONS, nodeHandoverEvents, readNodeMode } from "@waitron/node-db";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
-import { generateKeyRing, openImmutable } from "@waitron/provisioning";
-import { connectionPair, drizzleNodeSqlite } from "@waitron/store";
+import { generateKeyRing } from "@waitron/provisioning";
+import { NODE_FILE } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { writeCredentialsRing } from "./box-secrets.js";
-import { readPlacedEmergencyCopy } from "./emergency-copy-check.js";
+import { PLACED, readImmutableNodeDb, readPlacedEmergencyCopy } from "./emergency-copy-check.js";
 import { placeEmergencyCopy } from "./emergency-copy-placement.js";
 import { parseEnvFile } from "./env-file.js";
 import { writeTradingEnv } from "./trading-config.js";
@@ -57,18 +57,8 @@ async function placedBinding(): Promise<EmergencyCopyBinding> {
 }
 
 /** Immutable, so the probe sees only what reached node.db itself, never a `-wal` beside it. */
-async function readPlacedNode<T>(read: (node: NodeDatabase) => Promise<T>): Promise<T> {
-  const connection = openImmutable(join(venueDir, "node.db"));
-  try {
-    return await read(
-      drizzleNodeSqlite(connectionPair(connection, connection), {
-        schema: {},
-      }) as unknown as NodeDatabase,
-    );
-  } finally {
-    connection.close();
-  }
-}
+const readPlacedNode = <T>(read: (node: NodeDatabase) => Promise<T>) =>
+  readImmutableNodeDb(join(venueDir, NODE_FILE), read);
 
 const listing = async (dir: string) => (await readdir(dir)).sort();
 
@@ -184,7 +174,7 @@ it("reads back the binding it recorded, with no operation id", async () => {
     node
       .select({ operationId: nodeHandoverEvents.operationId })
       .from(nodeHandoverEvents)
-      .where(eq(nodeHandoverEvents.kind, "emergency_copy.placed")),
+      .where(eq(nodeHandoverEvents.kind, PLACED)),
   );
   expect(placed).toEqual({ operationId: null });
 });
@@ -207,7 +197,7 @@ it("leaves no node.db beside the venue file when a write before the move fails",
   const binding = await placedBinding();
   await mkdir(join(stateDir, "secrets.env", "in-the-way"), { recursive: true });
   await expect(place(binding)).rejects.toThrow();
-  expect(existsSync(join(venueDir, "node.db"))).toBe(false);
+  expect(existsSync(join(venueDir, NODE_FILE))).toBe(false);
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
@@ -230,7 +220,7 @@ it("keeps a trading.env that already names the copy as it is", async () => {
   await writeFile(join(stateDir, "trading.env"), own);
   await place(binding);
   expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
-  expect(existsSync(join(venueDir, "node.db"))).toBe(true);
+  expect(existsSync(join(venueDir, NODE_FILE))).toBe(true);
 });
 
 const keptTrading = (lines: string) => `WAITRON_NODE_ID=${copyId}\n${lines}`;
@@ -307,7 +297,7 @@ it("refuses when this process's environment sets the vault key, which would win 
 const placedFiles = async () => ({
   secrets: await readFile(join(stateDir, "secrets.env")),
   trading: await readFile(join(stateDir, "trading.env")),
-  node: await readFile(join(venueDir, "node.db")),
+  node: await readFile(join(venueDir, NODE_FILE)),
 });
 
 it("a repeat with the same binding makes no new key and rewrites nothing", async () => {
@@ -392,7 +382,7 @@ it("a retry after a stop between writing the env files and the move places the c
   await writeTradingEnv(stateDir, { nodeId: copyId, environment: "preproduction" });
   const stale = join(stateDir, "scratch", "emergency-copy-stale");
   await mkdir(stale, { recursive: true });
-  await writeFile(join(stale, "node.db"), "half made");
+  await writeFile(join(stale, NODE_FILE), "half made");
   const trading = await readFile(join(stateDir, "trading.env"));
 
   await place(binding);
@@ -445,5 +435,5 @@ it("refuses a binding that expires while the checks run, writing nothing", async
 it("places a binding the checks finish a moment before it expires", async () => {
   const binding = await placedBinding();
   await place(binding, {}, clockMovedByTheCheck("2026-11-17T10:29:59.999Z"));
-  expect(existsSync(join(venueDir, "node.db"))).toBe(true);
+  expect(existsSync(join(venueDir, NODE_FILE))).toBe(true);
 });

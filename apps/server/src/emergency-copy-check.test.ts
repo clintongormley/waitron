@@ -76,7 +76,7 @@ function check(
 
 it("accepts a copy whose binding matches", async () => {
   const hash = await place();
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(sha(venuePath)).toBe(hash);
 });
 
@@ -88,9 +88,9 @@ it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second chec
     check(bindingFor(hash, { venueId: "e7000000-0000-4000-8000-0000000000ff" })),
   ).rejects.toMatchObject({ code: "emergency_copy.venue_mismatch" });
   expect(await readdir(root)).toEqual(["venue.db"]);
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(await readdir(root)).toEqual(["venue.db"]);
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(sha(venuePath)).toBe(hash);
 });
 
@@ -124,7 +124,7 @@ it("admits a node.db holding this binding's placed record, keys in any order, so
   const binding = bindingFor(hash);
   await writePlacedRecord(join(root, "node.db"), reordered(binding));
   const before = await readFile(join(root, "node.db"));
-  await expect(check(binding)).resolves.toBeUndefined();
+  await expect(check(binding)).resolves.toBe(true);
   expect(await readFile(join(root, "node.db"))).toEqual(before);
   expect((await readdir(root)).sort()).toEqual(["node.db", "venue.db"]);
 });
@@ -288,7 +288,7 @@ it("accepts a chart whose signer has a keyless machine row and an endorsement gi
     endorsements: [endorseKey(signerId, signer.publicKey, sourceId, source.privateKey)],
   });
   const hash = await place();
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
 });
 
 it("refuses a copy that already knows the new machine", async () => {
@@ -352,6 +352,6 @@ it.each([true, false])(
     if (stopped) stop.abort(new Error("stopping"));
     release();
     if (stopped) await expect(checking).rejects.toThrow("stopping");
-    else await expect(checking).resolves.toBeUndefined();
+    else await expect(checking).resolves.toBe(false);
   },
 );

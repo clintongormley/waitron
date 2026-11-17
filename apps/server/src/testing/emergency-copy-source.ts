@@ -17,8 +17,10 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { appendHandoverEventTx } from "@waitron/node-db";
+import { NODE_FILE } from "@waitron/store";
 import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "../emergency-copy-binding.js";
+import { PLACED } from "../emergency-copy-check.js";
 
 export const source = generateNodeKeyPair();
 export const sourceId = "e7000000-0000-4000-8000-000000000001";
@@ -94,7 +96,7 @@ export async function writePlacedRecord(nodePath: string, detail: unknown): Prom
         appendHandoverEventTx(tx, {
           nodeId: copyId,
           operationId: null,
-          kind: "emergency_copy.placed",
+          kind: PLACED,
           detail: { binding: detail },
           envelope: null,
         }),
@@ -102,7 +104,7 @@ export async function writePlacedRecord(nodePath: string, detail: unknown): Prom
     } finally {
       await store.close();
     }
-    await copyFile(join(dir, "node.db"), nodePath);
+    await copyFile(join(dir, NODE_FILE), nodePath);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

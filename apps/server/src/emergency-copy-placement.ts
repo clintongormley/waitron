@@ -1,9 +1,8 @@
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  encodeKeyRing,
   KEY_RING_VARIABLES,
+  keyRingEnv,
   loadKeyRing,
   readNodeSigningKey,
   sealNodeSigningKeyTx,
@@ -14,17 +13,14 @@ import {
   openVenueDatabase,
   withNodeTransaction,
   type DeploymentEnvironment,
-  type NodeDatabase,
 } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { appendHandoverEventTx, setNodeModeTx } from "@waitron/node-db";
-import { generateKeyRing, openImmutable } from "@waitron/provisioning";
+import { generateKeyRing } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
 import {
-  connectionPair,
-  drizzleNodeSqlite,
   NODE_FILE,
   SCRATCH_DIR,
   SECRETS_ENV_FILE,
@@ -37,7 +33,7 @@ import {
   assertEmergencyCopyBindingUnexpired,
   type EmergencyCopyBinding,
 } from "./emergency-copy-binding.js";
-import { checkPlacedEmergencyCopy, PLACED } from "./emergency-copy-check.js";
+import { checkPlacedEmergencyCopy, PLACED, readImmutableNodeDb } from "./emergency-copy-check.js";
 import { parseEnvFile } from "./env-file.js";
 import { errnoOf } from "./errno.js";
 import { reachDisk } from "./sync-path.js";
@@ -77,19 +73,15 @@ async function assertSavedRingOpensKey(stateDir: string, nodePath: string, nodeI
     if (errnoOf(error) === "ENOENT") throw new AppError("emergency_copy.placed_key_unopenable", {});
     throw error;
   }
-  const connection = openImmutable(nodePath);
   try {
-    const node = drizzleNodeSqlite(connectionPair(connection, connection), {
-      schema: {},
-    }) as unknown as NodeDatabase;
-    if ((await readNodeSigningKey(node, loadKeyRing(parseEnvFile(text)), nodeId)) === null)
-      throw new AppError("emergency_copy.placed_key_unopenable", {});
+    const key = await readImmutableNodeDb(nodePath, (node) =>
+      readNodeSigningKey(node, loadKeyRing(parseEnvFile(text)), nodeId),
+    );
+    if (key === null) throw new AppError("emergency_copy.placed_key_unopenable", {});
   } catch (error) {
     if (isAppError(error) && error.code.startsWith("credentials."))
       throw new AppError("emergency_copy.placed_key_unopenable", {});
     throw error;
-  } finally {
-    connection.close();
   }
 }
 
@@ -122,7 +114,7 @@ export async function placeEmergencyCopy(deps: {
       throw new AppError("emergency_copy.vault_key_in_environment", { variables: inEnvironment });
     const trading = await keptTradingEnv(deps.stateDir);
     if (trading !== null) assertKeptTradingEnv(trading, binding);
-    await checkPlacedEmergencyCopy({
+    const placed = await checkPlacedEmergencyCopy({
       binding,
       venuePath: join(deps.venueDir, VENUE_FILE),
       environment: deps.environment,
@@ -132,12 +124,15 @@ export async function placeEmergencyCopy(deps: {
     });
     // The binding was in date when it was read, but the checks can take many minutes.
     assertEmergencyCopyBindingUnexpired(binding, deps.now());
-    // The check admits a `node.db` here only when it records this very binding: a repeat. It
-    // passes only when the files beside it already make the copy start as placed.
-    const placedNode = join(deps.venueDir, NODE_FILE);
-    if (existsSync(placedNode)) {
+    // A repeat passes only when the files beside the placed `node.db` already make the copy start
+    // as placed.
+    if (placed) {
       if (trading === null) throw new AppError("emergency_copy.trading_env_missing", {});
-      await assertSavedRingOpensKey(deps.stateDir, placedNode, binding.copyNodeId);
+      await assertSavedRingOpensKey(
+        deps.stateDir,
+        join(deps.venueDir, NODE_FILE),
+        binding.copyNodeId,
+      );
       return;
     }
 
@@ -145,11 +140,8 @@ export async function placeEmergencyCopy(deps: {
     await mkdir(parent, { recursive: true, mode: 0o700 });
     const scratch = await mkdtemp(join(parent, "emergency-copy-"));
     try {
-      const generated = generateKeyRing();
-      const ring = loadKeyRing({
-        WAITRON_CREDENTIALS_KEY: generated.key,
-        WAITRON_CREDENTIALS_KEY_VERSION: String(generated.version),
-      });
+      const encoded = generateKeyRing();
+      const ring = loadKeyRing(keyRingEnv(encoded));
       await applyMigrations(
         scratch,
         migrationOptionsFor(
@@ -178,7 +170,7 @@ export async function placeEmergencyCopy(deps: {
       } finally {
         await store.close();
       }
-      await writeCredentialsRing(deps.stateDir, encodeKeyRing(ring));
+      await writeCredentialsRing(deps.stateDir, encoded);
       if (trading === null)
         await writeTradingEnv(deps.stateDir, {
           nodeId: binding.copyNodeId,
