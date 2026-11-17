@@ -108,6 +108,8 @@ this cannot be restored or imported."
 About 920 counted lines (the `parties` column and trigger included); about 3 hours. Over about 1,200 is rules §5.6's stop: split Task 4 (the merge change)
 into its own PR before Task 5.
 
+Watcher clearance, 2026-11-17 20:54 (Lane H questions.md): finish Tasks 1–4 in the first PR without undoing built work; Task 5, its remaining fixture ports and explicit move assertions, and the final protection comparison follow on a new branch. The three old tables remain until that follow-up.
+
 ## Finish line
 
 ```bash
