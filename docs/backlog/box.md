@@ -1277,14 +1277,6 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
-## A1187: looks nobody has taken.
-
-- **A1187: looks nobody has taken.** The Backups card after a real setup (pack 1 recorded, then a
-  bucket copy set up) has not been looked at on a running box: Docker Desktop was unresponsive for
-  PR D and PR E. Nobody has looked at the card since #2276 lengthened its unreceived sentences. The
-  look images for #2250 were taken before its review changed the "not a pack" refusal and added the
-  space mark.
-
 ## The full-disk bar waits for the owner's answers.
 
 - **The full-disk bar waits for the owner's answers.** Its words; naming a deletion only from an
@@ -1332,9 +1324,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   the key's change time (a stated departure from design §4) and Make offered wherever the old
   Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
 - **A1187: the Backups card's reads and receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
-- **A1187: looks nobody has taken.**
-  Nobody has looked at the card since #2276 lengthened its unreceived sentences.
-  [Detail](box.md#a1187-looks-nobody-has-taken).
 
 ## Bundle: Remaining bucket-copy limits
 
@@ -1959,9 +1948,7 @@ landed in pull requests from #2250 to setup's first pack (PR E). What their revi
 pull request that left it:
 
 - **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-- **#2274 (the Backups card).** The card's "ready" line dates a just-made pack from the browser's
-  clock until the next status read names it; it is wrong only when the browser's clock and the
-  box's fall on different days in the venue's zone. The card and the fresh sign-in widget read the
+- **#2274 (the Backups card).** The card and the fresh sign-in widget read the
   pack status and the person's profile with their own read counters, and the Backups screen pokes
   the card after each write, where the dashboard's live queries (`DashboardQueries`,
   `apps/dashboard/src/api/live-queries.ts`) could keep both current. A pack whose receipt the box confirmed after the card left the page, or after the
