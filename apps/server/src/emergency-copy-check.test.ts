@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +19,7 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { checkPlacedEmergencyCopy } from "./emergency-copy-check.js";
+import { sha } from "./testing/place-copy-box.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const source = generateNodeKeyPair();
@@ -61,7 +61,7 @@ afterEach(async () => {
 
 async function place(): Promise<string> {
   await suite.db.archiveTo(venuePath);
-  return sha256(venuePath);
+  return sha(venuePath);
 }
 
 /** A file in WAL mode (header bytes 18 and 19 are 2), closed cleanly so nothing sits beside it. */
@@ -73,13 +73,12 @@ async function placeInWalMode(): Promise<string> {
   } finally {
     db.close();
   }
-  return sha256(venuePath);
+  return sha(venuePath);
 }
 
-async function sha256(path: string): Promise<string> {
-  return createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");
+async function placedCopyRefuses(code: string): Promise<void> {
+  const hash = await place();
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({ code });
 }
 
 function bindingFor(
@@ -124,7 +123,7 @@ function check(
 it("accepts a copy whose binding matches", async () => {
   const hash = await place();
   await expect(check(bindingFor(hash))).resolves.toBeUndefined();
-  expect(await sha256(venuePath)).toBe(hash);
+  expect(sha(venuePath)).toBe(hash);
 });
 
 it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second check still passes", async () => {
@@ -138,7 +137,7 @@ it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second chec
   await expect(check(bindingFor(hash))).resolves.toBeUndefined();
   expect(await readdir(root)).toEqual(["venue.db"]);
   await expect(check(bindingFor(hash))).resolves.toBeUndefined();
-  expect(await sha256(venuePath)).toBe(hash);
+  expect(sha(venuePath)).toBe(hash);
 });
 
 it.each(["-wal", "-journal"])(
@@ -166,7 +165,7 @@ it("refuses a file whose hash is not the one Cloud chose", async () => {
   await expect(check(bindingFor(other))).rejects.toMatchObject({
     code: "emergency_copy.hash_mismatch",
   });
-  expect(await sha256(venuePath)).toBe(hash);
+  expect(sha(venuePath)).toBe(hash);
 });
 
 it("stops at an aborted signal before hashing finishes, rather than answering a mismatch", async () => {
@@ -183,7 +182,7 @@ it("passes a failure to read the file on as its own error, not a stop", async ()
 
 it("refuses a file that fails the integrity check", async () => {
   await writeFile(venuePath, "damaged");
-  await expect(check(bindingFor(await sha256(venuePath)))).rejects.toMatchObject({
+  await expect(check(bindingFor(sha(venuePath)))).rejects.toMatchObject({
     code: "emergency_copy.integrity_failed",
   });
 });
@@ -238,10 +237,7 @@ it("refuses a copy of another Cloud venue", async () => {
 
 it("refuses a copy holding no venue settings", async () => {
   await suite.db.run(sql`delete from settings where module = 'venue'`);
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.venue_mismatch",
-  });
+  await placedCopyRefuses("emergency_copy.venue_mismatch");
 });
 
 it("refuses a copy of another stream", async () => {
@@ -253,10 +249,7 @@ it("refuses a copy of another stream", async () => {
 
 it("refuses a source the copy holds no machine row for", async () => {
   await suite.db.delete(nodes).where(sql`id = ${sourceId}`);
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.source_not_primary",
-  });
+  await placedCopyRefuses("emergency_copy.source_not_primary");
 });
 
 it("refuses a source the copy's chart does not name its main box", async () => {
@@ -266,44 +259,29 @@ it("refuses a source the copy's chart does not name its main box", async () => {
     publicKey: generateNodeKeyPair().publicKey,
   });
   await writeChart("e7000000-0000-4000-8000-000000000005");
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.source_not_primary",
-  });
+  await placedCopyRefuses("emergency_copy.source_not_primary");
 });
 
 it("refuses a copy holding no chart", async () => {
   await suite.db.run(sql`delete from node_membership`);
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.source_not_primary",
-  });
+  await placedCopyRefuses("emergency_copy.source_not_primary");
 });
 
 it("refuses a copy whose chart cannot be read", async () => {
   await suite.db.run(sql`update node_membership set document = 'null' where id = 1`);
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.source_not_primary",
-  });
+  await placedCopyRefuses("emergency_copy.source_not_primary");
 });
 
 it("refuses a chart signed with a key no machine row in the copy holds", async () => {
   await writeChart(sourceId, generateNodeKeyPair().privateKey);
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.chart_unverified",
-  });
+  await placedCopyRefuses("emergency_copy.chart_unverified");
 });
 
 it("refuses a chart altered after it was signed", async () => {
   await suite.db.run(
     sql`update node_membership set document = json_set(document, '$.body.nodes[0].contactUrl', 'https://elsewhere.example') where id = 1`,
   );
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.chart_unverified",
-  });
+  await placedCopyRefuses("emergency_copy.chart_unverified");
 });
 
 it("accepts a chart whose signer has a keyless machine row and an endorsement giving its key", async () => {
@@ -324,10 +302,7 @@ it("refuses a copy that already knows the new machine", async () => {
   await suite.db
     .insert(nodes)
     .values({ id: copyId, name: "Copy", publicKey: generateNodeKeyPair().publicKey });
-  const hash = await place();
-  await expect(check(bindingFor(hash))).rejects.toMatchObject({
-    code: "emergency_copy.copy_node_known",
-  });
+  await placedCopyRefuses("emergency_copy.copy_node_known");
 });
 
 it("refuses a module's broken chain, naming the module", async () => {
@@ -340,10 +315,10 @@ it("refuses a module's broken chain, naming the module", async () => {
     code: "emergency_copy.chain_broken",
     params: { module: "test-chain" },
   });
-  expect(await sha256(venuePath)).toBe(hash);
+  expect(sha(venuePath)).toBe(hash);
 });
 
-it("keeps today's code for a chain check that fails to run", async () => {
+it("keeps handover.copy_check_failed for a chain check that fails to run", async () => {
   const hash = await place();
   const module = {
     ...fakeSetlessModule("test-chain", "core"),
