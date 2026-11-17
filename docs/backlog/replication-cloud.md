@@ -842,6 +842,13 @@ The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linke
 artifacts are historical references for the dropped implementation. They do not add work or
 gates to A951-S.
 
+Next for A951-S, queued 2026-11-17: the box takes its staff name from Cloud instead of
+`WAITRON_STAFF_ORIGIN`, and follows a name change by itself
+([plan](../superpowers/plans/2026-11-17-box-staff-name-from-cloud.md)). It is built after Cloud's
+plan PR 1 lands (waitron-cloud `docs/superpowers/plans/2026-11-17-custom-domain-one-record.md`).
+Staff passkeys enrolled at an old staff name stop working after a name change, so staff sign in
+with their password and enrol again.
+
 ## A947. Go-live on two local boxes
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
