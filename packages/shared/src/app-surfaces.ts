@@ -21,7 +21,12 @@ const RESERVED_PREFIXES = new Set([
 
 /** Classifies local dashboard pages; it grants no API access. */
 export function isDashboardPath(path: string): boolean {
-  if (!path.startsWith("/") || path.startsWith("//") || /[\\\u0000-\u0020]/.test(path))
+  if (
+    !path.startsWith("/") ||
+    path.startsWith("//") ||
+    path.includes("\\") ||
+    [...path].some((character) => character.charCodeAt(0) <= 0x20)
+  )
     return false;
   const pathname = new URL(path, "https://waitron.invalid").pathname;
   if (/%2f|%5c|%00/i.test(pathname)) return false;
