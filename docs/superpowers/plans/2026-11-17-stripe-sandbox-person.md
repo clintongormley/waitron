@@ -11,7 +11,7 @@ Nightly `44014908481` at `77bc77e31b` failed this case while seven passed; the f
 `git merge-base --is-ancestor` exits 1 for the last passing head `630c676e2b` and 0 for the failing head `77bc77e31b`. The cause is landed, not an in-flight change.
 Reuse `seedPerson` from `@waitron/db/testing/seed.js`, as `packages/payments-stripe/src/provider.test.ts` already does.
 Change only `packages/payments-stripe/src/collect.sandbox.test.ts`: import that helper and call `seedPerson(suite.db, { id: MANAGER, displayName: "Manager" })` inside the abandoned-attempt case.
-The seed belongs in the case because `useVenueDb` resets tables before each case; a Stripe `beforeAll` seed would be erased.
+The seed belongs in the case because `useVenueDb` empties its tables after each case, so a `beforeAll` seed is gone by the time this third case runs.
 Keep every existing assertion and real Stripe call. Add no permanent tests, helpers, product behavior or schema changes.
 
 ## One task and its verification
