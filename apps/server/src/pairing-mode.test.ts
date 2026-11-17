@@ -160,7 +160,7 @@ describe("createPairingMode", () => {
     expect(mode.openUntil()).toBeNull();
   });
 
-  it("times holds on the steady clock and answers wall-clock times on the default clocks", () => {
+  it("times holds on the steady clock, answers wall-clock times, and moves openSince back but never forward with the wall clock", () => {
     const day = 86_400_000;
     let steady = 1_000;
     let wall = 400 * day;
@@ -174,7 +174,7 @@ describe("createPairingMode", () => {
       for (const stepped of [0, 800 * day]) {
         wall = stepped;
         expect(mode.isOpen()).toBe(true);
-        expect(mode.openSince()).toBe(new Date(400 * day).toISOString());
+        expect(mode.openSince()).toBe(new Date(0).toISOString());
         expect(mode.openUntil()).toBe(new Date(stepped + PAIRING_HOLD_MS).toISOString());
         expect(mode.orphanedClaims()).toEqual([]);
       }

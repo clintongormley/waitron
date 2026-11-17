@@ -7,6 +7,9 @@ import { steadyNow } from "@waitron/shared";
  * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: a restart or a promotion forgets every hold
  * and claim, so the window starts shut. `boot.ts` builds ONE holder for the device, join and print
  * mounts. Holds lapse on the `steady` clock; the times answered, and `openSince`, are wall-clock.
+ * `openSince` follows a backward wall step, never a forward one: `discardLapsedDeviceRequests`
+ * deletes a device request stamped before it, and the knock route reads it before stamping, so a
+ * request made after the step is kept.
  */
 export const PAIRING_HOLD_MS = 3 * 60 * 1000;
 
@@ -71,6 +74,7 @@ export function createPairingMode(
     const before = holds.size;
     for (const [id, until] of holds) if (until <= t) holds.delete(id);
     if (holds.size === 0) openSinceMs = null;
+    else if (openSinceMs !== null) openSinceMs = Math.min(openSinceMs, now());
     if (holds.size !== before) {
       arm();
       changed?.();
