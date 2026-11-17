@@ -4,7 +4,7 @@
 
 **Requested result:** before os2, put [os1’s listed area files and tests](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move) into one `@waitron/orders-sales` package, with independent CI selection. Keep functions, signatures, assertions, tables, transactions and behaviour unchanged; add no framework. [Build order, Batch 2](2026-11-08-a1308-build-order.md#batch-2--area-slices) models ~860 seconds saved per PR, not a measured result. [Slice rules](2026-11-08-a1308-slice-rules.md) apply.
 
-## Measured source boundary and choice
+## Static source boundary and choice
 
 The driver’s static TypeScript import inventory finds **77 host modules imported by area production, 157 including tests/support**. The per-module importer counts, type-only/value distinction, direct back-edges and source lists are retained in Lane H’s `receipts/orders-sales-package-plan/boundary-inventory.{md,json}` and supplied to Claude. This is source evidence, not an executed module graph.
 
@@ -14,9 +14,9 @@ The driver’s static TypeScript import inventory finds **77 host modules import
 
 | Route | What it buys and costs |
 | --- | --- |
-| Leaf-only move | The closed set of relative imports is just **13 production files / 932 lines and five sibling tests / 610 lines**, before asset/coverage qualification. Most requested files stay in the server. |
+| Leaf-only move | The closed import set is 13 production files / 932 lines, but four have tests needing host fixtures and four have no sibling test. Only **five sources / 332 lines with five tests / 610 lines** remain together before asset/coverage qualification. Most requested files stay in the server. |
 | Support extraction, then full move | Requires concrete shared-helper/registry/fixture designs and separately sized slices; neither is provided or authorised here. Previous effort ranges were unmeasured guesses and are withdrawn. |
-| **Defer the move until after os11, before os12** | os1:211–213 provides this later position conditionally. No package CI saving during os2–os11; their changes remain in the existing server package. **Recommended**, given the small leaf set. Watcher must clear changing the sequence. |
+| **Defer the move until after os11, before os12** | os1:211–213 allows this only if the build order places the move later; today it does not. **Recommended sequence change**, given the small leaf set, subject to the watcher deciding who can clear it. Record clearance in build-order Batch 2. Forgo its ~860-second modelled saving during os2–os11; those slices stay in the server. |
 
 ## Full-move inventory and later acceptance
 
@@ -36,4 +36,4 @@ Before any full move is cleared, its executable plan must settle:
 - [ ] Name retained host checks for later slices: `till-api.{drafts,groups,move-bill,receipt,reprint,bill-actions,fiscal-sale-paths,presented-bill-zone}` and affected bill-venue cases. Package-only PR CI omits host dependents; run affected host checks locally under slice rules §4. Some modelled saving is removed test execution, not faster tests. Deferral avoids this split during os2–os11.
 - [ ] Keep behavioural assertions and the queue’s unedited fiscal/menu gates. **Expected protection-list difference: none**, both compositions, all phases/databases. No sale-path read changes. Two contract-trigger Claude run-it reads, one fixes read, normal push hook and current-head CI precede landing.
 
-**Later areas can reuse:** inventory back-edges first; keep HTTP glue at the host as adjustments does; account for host suites leaving package-only PR CI, per-package coverage and registry ownership. No move tooling or measured saving exists yet. This decision page does not replace the executable move plan once the watcher settles its scope and timing.
+**Later areas can reuse:** inventory back-edges first; keep HTTP glue at the host as adjustments does; account for host suites leaving package-only PR CI, per-package coverage and registry ownership. No move tooling or measured saving exists yet. Deferral meets the same unresolved boundary after os11: support extraction or dropping this area’s move still needs a decision then. This page does not replace its executable plan.
