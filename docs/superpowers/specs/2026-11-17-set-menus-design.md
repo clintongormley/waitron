@@ -255,13 +255,15 @@ bill, on the till's hardware, fast enough to feel instant (**my call** on the fi
 outcomes cost the same, it prefers the one closest to the bill's current outcome, so dishes do not
 shuffle between set menus for nothing, and otherwise breaks ties the same way every time.
 
-One exact method, for the builder to take or replace: the set menus of one type are
-interchangeable, and each set menu's lines are independent of each other, so for a chosen number
-of each type the dish placement is a transport problem (dishes to "type, line" pairs, each pair
-holding "set menus of that type × N", each edge costing that dish's surcharge in that type). Trying
-every split of the unfixed set menus between the types (for 40 set menus and 4 types, 12,341
-splits) and solving each placement gives the exact lowest total. Placing dishes into individual
-set menus for the unfolded summary is then a matter of dealing them out.
+The set menus of one type are interchangeable, and each set menu's lines are independent of each
+other, so for a chosen number of each type the dish placement is a transport problem (dishes to
+"type, line" pairs, each pair holding "set menus of that type × N", each edge costing that dish's
+surcharge in that type). Placing dishes into individual set menus for the unfolded summary is then
+a matter of dealing them out. Trying every split of the set menus between the types and solving
+each placement, which this section first suggested, is exact but took 8–12 seconds on random tables
+at the bound in a prototype measured on 17 November 2026; the build plan
+([2026-11-17-a1515-set-menu-fit.md](../plans/2026-11-17-a1515-set-menu-fit.md)) uses a method that
+took 43 ms at worst on the same tables, with the measurements.
 
 **One function, two callers.** The fit is a pure function in a package both the till and the
 server use (browser-safe). The till runs it to show the summary and to ask about an uncovered dish
