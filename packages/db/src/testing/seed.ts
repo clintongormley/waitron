@@ -1,4 +1,4 @@
-import { withFoldedPersonKeys } from "@waitron/db";
+import { withFoldedPersonKeys } from "../schema/identity/fold.js";
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { mediaImages, mediaBlobs } from "../schema/media/images.js";
 import { withPrinter } from "../station-printer-list.js";

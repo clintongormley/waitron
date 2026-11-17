@@ -36,8 +36,10 @@ script's parsing.
 ("CHECK `(email is null) = (email_folded is null)` and the same for display name and pending email,
 so the unique indexes can read the folded column directly"), §5 (`persons` rows), §6 item 7.
 
-**First line of the pull request:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported." (rules §2)
+**First line of the pull request:** "Every venue is reset: core; backups from before this cannot
+be restored." Configuration format 45 is unchanged; an older export with null or missing folded
+keys cannot be imported into the tightened schema. This applies the watcher's 2026-11-16 18:28
+standing wording exception for slices whose exported shape is unchanged.
 
 **Who lands:** the lane (rules §6). The script and the raw-SQL edits touch test files under
 `packages/fiscal-verifactu/src/` only to add the folded name to a person insert; no fiscal code or

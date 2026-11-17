@@ -24,7 +24,7 @@ export function foldForUniqueness(value: string): string {
 
 type PersonInsertish = {
   displayName: string;
-  displayNameFolded?: string | null;
+  displayNameFolded?: string;
   email?: string | null;
   emailFolded?: string | null;
   pendingEmail?: string | null;

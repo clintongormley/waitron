@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-17, A1308 pp4: the comparison fold moved to `packages/db/src/schema/identity/fold.ts`; identity re-exports it. The person schema no longer carries the accented fallback example. Bucket A below records the audited tree._
+
 _2026-11-15, A1526: fresh venues and new departments now get course-linked Dessert? and Coffee or bill? visits (¿Postre? and ¿Café o la cuenta?) instead of Anything else?. The Bucket D row below records the audited defaults; current names are in `packages/venue-service/src/starter-content.ts`._
 
 _2026-11-15, HOLIDAYS-2027: the row builders moved from `data/es-2026.ts` to `data/rows.ts`, and `data/es-2027.ts` holds 2027's holiday names from BOE-A-2026-21254; the line numbers below record the audited tree._

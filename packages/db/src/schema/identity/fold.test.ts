@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import * as helpers from "../../index.js";
-const { foldForUniqueness, withFoldedPersonChanges, withFoldedPersonKeys } = helpers;
+const { withFoldedPersonChanges, withFoldedPersonKeys } = helpers;
 
 describe("person comparison keys", () => {
   it("fills all three folded keys without changing the raw values", () => {
     const input = {
-      displayName: " JOSÉ GARCÍA ",
+      displayName: " JOS\u00c9 GARC\u00cdA ",
       email: " ADA@X.COM ",
       pendingEmail: " NEXT@X.COM ",
     };
     expect(withFoldedPersonKeys(input)).toEqual({
       ...input,
-      displayNameFolded: "josé garcía",
+      displayNameFolded: "jos\u00e9 garc\u00eda",
       emailFolded: "ada@x.com",
       pendingEmailFolded: "next@x.com",
     });
@@ -43,17 +43,17 @@ describe("person comparison keys", () => {
     });
   });
   it("folds each row of an array", () => {
-    expect(withFoldedPersonKeys([{ displayName: "ADA" }, { displayName: "BEGOÑA" }])).toEqual([
+    expect(withFoldedPersonKeys([{ displayName: "ADA" }, { displayName: "BEGO\u00d1A" }])).toEqual([
       { displayName: "ADA", displayNameFolded: "ada" },
-      { displayName: "BEGOÑA", displayNameFolded: "begoña" },
+      { displayName: "BEGO\u00d1A", displayNameFolded: "bego\u00f1a" },
     ]);
   });
   it("updates supplied raw fields and leaves unrelated changes alone", () => {
     expect(
-      withFoldedPersonChanges({ displayName: " JOSÉ ", email: null, status: "active" }),
+      withFoldedPersonChanges({ displayName: " JOSE\u0301 ", email: null, status: "active" }),
     ).toEqual({
-      displayName: " JOSÉ ",
-      displayNameFolded: "josé",
+      displayName: " JOSE\u0301 ",
+      displayNameFolded: "jos\u00e9",
       email: null,
       emailFolded: null,
       status: "active",
@@ -66,11 +66,5 @@ describe("person comparison keys", () => {
       status: "suspended",
       displayNameFolded: "given",
     });
-  });
-  it("keeps accents while making case and equivalent Unicode spellings agree", () => {
-    expect(foldForUniqueness(" JOSÉ GARCÍA ")).toBe("josé garcía");
-    expect(foldForUniqueness("José García")).toBe("josé garcía");
-    expect(foldForUniqueness("Lopez")).toBe("lopez");
-    expect(foldForUniqueness("López")).toBe("lópez");
   });
 });

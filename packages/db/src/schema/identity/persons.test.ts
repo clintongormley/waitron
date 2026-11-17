@@ -98,8 +98,14 @@ describe("required person comparison keys", () => {
     ]);
   });
   it("refuses matching accented live names and releases the name on suspension", async () => {
-    await insert({ displayName: "José García", displayNameFolded: "josé garcía" });
-    const duplicate = { displayName: "JOSÉ GARCÍA", displayNameFolded: "josé garcía" };
+    await insert({
+      displayName: "Jos\u00e9 Garc\u00eda",
+      displayNameFolded: "jos\u00e9 garc\u00eda",
+    });
+    const duplicate = {
+      displayName: "JOS\u00c9 GARC\u00cdA",
+      displayNameFolded: "jos\u00e9 garc\u00eda",
+    };
     const error = await captureError(() => insert(duplicate));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, { table: "persons", columns: ["display_name_folded"] }),
@@ -111,25 +117,25 @@ describe("required person comparison keys", () => {
       { status: "suspended" },
     ]);
   });
-  it("accepts Lopez beside López", async () => {
+  it("accepts Lopez beside L\u00f3pez", async () => {
     await insert({ displayName: "Lopez", displayNameFolded: "lopez" });
-    await insert({ displayName: "López", displayNameFolded: "lópez" });
+    await insert({ displayName: "L\u00f3pez", displayNameFolded: "l\u00f3pez" });
     expect(suite.db.all(sql`select display_name from persons order by display_name`)).toEqual([
       { display_name: "Lopez" },
-      { display_name: "López" },
+      { display_name: "L\u00f3pez" },
     ]);
   });
   it.each([
     [
       "email",
-      { email: "JOSÉ@X.COM", emailFolded: "josé@x.com" },
-      { email: "José@x.com", emailFolded: "josé@x.com" },
+      { email: "JOS\u00c9@X.COM", emailFolded: "jos\u00e9@x.com" },
+      { email: "Jos\u00e9@x.com", emailFolded: "jos\u00e9@x.com" },
       "email_folded",
     ],
     [
       "pending email",
-      { pendingEmail: "JOSÉ@X.COM", pendingEmailFolded: "josé@x.com" },
-      { pendingEmail: "José@x.com", pendingEmailFolded: "josé@x.com" },
+      { pendingEmail: "JOS\u00c9@X.COM", pendingEmailFolded: "jos\u00e9@x.com" },
+      { pendingEmail: "Jos\u00e9@x.com", pendingEmailFolded: "jos\u00e9@x.com" },
       "pending_email_folded",
     ],
   ])("refuses matching accented %s keys", async (_name, first, second, column) => {

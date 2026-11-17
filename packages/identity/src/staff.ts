@@ -63,7 +63,7 @@ const settleId = (value: string) => value.toLowerCase();
 
 /**
  * Translate a collision on the login-email index into `person.email_taken`, and re-throw anything
- * else untouched, a unique violation on another `persons` key included. Exported for staff.test.ts, not from the package barrel.
+ * else untouched, a unique violation on another `persons` key included.
  */
 export function asEmailTaken(err: unknown, email: string): never {
   if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
@@ -107,9 +107,7 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** The predicate reads `liveDisplayNameKey()`, the expression `persons_live_display_name_uq`
- * is declared over (`packages/db/src/schema/identity/persons.ts`), so this pre-check and the index
- * cannot disagree about which names collide. */
+/** The pre-check and unique index must compare the same folded key. */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -138,8 +136,6 @@ export async function assertEmailAvailable(
     .from(persons)
     .where(
       and(
-        // The expressions the two email indexes are declared over, as in
-        // {@link assertDisplayNameAvailable}.
         or(
           eq(loginEmailKey(), foldForUniqueness(email)),
           eq(pendingEmailKey(), foldForUniqueness(email)),

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { run, rewrite } from "./pp4-fold-person-inserts.mjs";
 
 const imports = 'import { persons } from "@waitron/db";\n';
@@ -87,4 +87,37 @@ it("refuses malformed source naming the file before any write", () => {
   const root = fixture(source);
   expect(() => run({ root, write: true })).toThrow(path);
   expect(readFileSync(join(root, path), "utf8")).toBe(source);
+});
+
+it.each(["db.insert(persons).values()", "db.update(persons).set(...changes)"])(
+  "refuses an unwrappable argument: %s",
+  (call) => {
+    expect(() => rewrite(imports + call, path)).toThrow(`${path}: cannot wrap person`);
+  },
+);
+it("prints rewritten tracked paths through the command entry point", async () => {
+  const root = fixture(imports + "db.insert(persons).values(row);");
+  const cwd = process.cwd(),
+    argv = process.argv,
+    output = [];
+  const stdout = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    output.push(String(chunk));
+    return true;
+  });
+  try {
+    process.chdir(root);
+    process.argv = [
+      process.execPath,
+      fileURLToPath(new URL("./pp4-fold-person-inserts.mjs", import.meta.url)),
+      "--write",
+    ];
+    vi.resetModules();
+    await import("./pp4-fold-person-inserts.mjs");
+  } finally {
+    process.chdir(cwd);
+    process.argv = argv;
+    stdout.mockRestore();
+  }
+  expect(output).toEqual([`${path}\n`]);
+  expect(readFileSync(join(root, path), "utf8")).toContain("values(withFoldedPersonKeys(row))");
 });

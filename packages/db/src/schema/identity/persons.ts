@@ -32,12 +32,10 @@ export const persons = table(
     /** Required at every human-account boundary; nullable for internal principals and low-level
      * fixtures. */
     email: label("email"),
-    /** As `displayNameFolded`, for `email`. */
     emailFolded: label("email_folded"),
     /** A requested replacement address; not a login identifier until the person proves they
      * control it. */
     pendingEmail: label("pending_email"),
-    /** As `displayNameFolded`, for `pending_email`. */
     pendingEmailFolded: label("pending_email_folded"),
     /** When the person completed a bearer link delivered to this address. Changing the address
      * clears it. */
