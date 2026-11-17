@@ -491,7 +491,7 @@ import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
-import { BackupSupervisor } from "./backup-supervisor.js";
+import { BackupSupervisor, backupsJob } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
@@ -3564,6 +3564,7 @@ async function bootServer(
   });
   const backupSupervisor = new BackupSupervisor({
     bus: liveEvents,
+    onReloaded: () => jobRunner.wake("backups.scheduled"),
     buildConfig: async () =>
       loadBackupSettings({
         env: await loadBoxEnv(base, config.stateDir),
@@ -3595,6 +3596,7 @@ async function bootServer(
   undoOnFailure.push(() => backupSupervisor.stop());
   correction.addAnchor({ reanchor: () => backupSupervisor.noteClockStep() });
   await backupSupervisor.reload();
+  jobRunner.add(backupsJob(backupSupervisor, () => holders.singletonRole.current === "primary"));
   const sealedStateStatus: SealedStateStatus = { failedSince: null, errorCode: null };
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
@@ -4747,7 +4749,6 @@ async function bootServer(
     jobRunner,
     liveEvents,
     loop,
-    backupSupervisor,
     handoverDestinationDuty,
     chartPost,
     spareStore,

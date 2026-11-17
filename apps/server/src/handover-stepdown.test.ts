@@ -1,3 +1,4 @@
+import { createJobRunner } from "./job-runner.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,7 +65,6 @@ const LOOPS = [
 const STOPPERS = [
   "certificateDiagnosis",
   "spareSettings",
-  "backupSupervisor",
   "handoverDestinationDuty",
   "chartPost",
   "spareStore",
@@ -261,11 +261,46 @@ describe("a stepdown", () => {
   it("backups and Litestream are not stopped before the answer", async () => {
     await begin();
     let before: string[] = [];
-    const r = rig(suite.node, { onAnswer: () => void (before = [...r.calls]) });
-    await r.app.request("/stepdown", { method: "POST" });
-    expect(before).not.toContain("backupSupervisor");
-    expect(before).not.toContain("jobRunnerServices");
-    await vi.waitFor(() => expect(r.calls).toContain("jobRunnerServices"));
+    const runner = createJobRunner({
+      now: () => new Date(),
+      log: () => {},
+      subscribe: () => () => {},
+    });
+    const duties = fakeDuties({ jobRunner: runner });
+    await runner.addService({
+      name: "stream",
+      applies: () => true,
+      start: async () => {},
+      suspend: async () => {},
+      describe: () => ({ running: true, reason: null }),
+      stop: async () => {
+        duties.calls.push("jobRunnerServices");
+      },
+    });
+    runner.add({
+      name: "backups.scheduled",
+      applies: () => true,
+      minSleepMs: 1000,
+      maxSleepMs: 3600000,
+      backoff: { firstMs: 60000, maxMs: 3600000 },
+      pass: async () => ({ nextDueAt: null }),
+      onStop: async () => {
+        duties.calls.push("backupSupervisor");
+      },
+    });
+    const r = rig(suite.node, { duties, onAnswer: () => void (before = [...r.calls]) });
+    try {
+      await vi.waitFor(() => expect(runner.views()["backups.scheduled"]?.state).toBe("waiting"));
+      await r.app.request("/stepdown", { method: "POST" });
+      expect(before).not.toContain("backupSupervisor");
+      expect(before).not.toContain("jobRunnerServices");
+      await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+      expect(r.calls).toContain("backupSupervisor");
+      expect(r.calls).toContain("jobRunnerServices");
+    } finally {
+      await runner.stopJobs();
+      await runner.stopServices();
+    }
   });
 
   it("after the answer the close runs in the table's order, Cloud snapshots last", async () => {

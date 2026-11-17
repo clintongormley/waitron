@@ -1,16 +1,7 @@
 import type { LiveEvents } from "./live-api.js";
 import { publishState } from "./live-publish.js";
-// The backup duty's lifecycle owner, so the duty can be reconfigured at runtime WITHOUT restarting
-// the process. `reload()` stops the running duty, closes its own database handle, re-reads the config
-// from disk, opens the venue again, and — only on a singleton primary with a valid config it could
-// open — starts a fresh sweep whose immediate first tick takes a copy under the new config.
-//
-// It opens its OWN handle on the venue directory rather than reusing boot's, because `reload()` closes
-// it, and boot's handle is the one the server answers requests on.
-//
-// `archiveUnderCurrentKey` is an IN-PROCESS signal, true once any destination's upload in the
-// current sweep has stored, never inferred from a stored object's mtime: a restored/copied
-// OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
+// The supervisor owns its venue handle so a settings reload cannot close boot's request handle.
+// A stored archive under the current key is recorded in process; its mtime cannot prove the key.
 
 import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
@@ -30,20 +21,25 @@ import {
   writeBackupRoomNote,
   type BackupRoomNoteClockStep,
 } from "./backup-room-note.js";
-import type { ScheduleClock } from "./backup-schedule.js";
+import { MAX_SLEEP_MS, type ScheduleClock } from "./backup-schedule.js";
 import {
   STATUS_READ_TIMEOUT_MS,
   readDestinationStatus,
   type DestinationStatus,
 } from "./backup-status.js";
 import { StatusClients } from "./backup-status-clients.js";
-import { runBackupSweep, type DestinationResult, type LatestClockStep } from "./backup-sweep.js";
+import {
+  createBackupSchedule,
+  type BackupSchedulePass,
+  type DestinationResult,
+  type LatestClockStep,
+} from "./backup-sweep.js";
+import type { JobDefinition } from "./job-runner.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
-import { realSleep } from "./loop.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
@@ -166,7 +162,7 @@ export interface BackupSupervisorDeps {
   /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
   statusReadTimeoutMs?: number;
   now?: () => Date;
-  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  onReloaded?: () => void;
   stagingTurn?: StagingTurn;
   /** Passed to each run as `installationStartedAt`; absent, a run deletes no old backup. */
   readInstallationStart?: () => Promise<Date | null>;
@@ -199,7 +195,9 @@ export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
   readonly #buildBackend: (dest: BackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
-  #worker: Promise<void> | undefined;
+  #running: Promise<BackupSchedulePass> | undefined;
+  #schedule: ReturnType<typeof createBackupSchedule> | undefined;
+  #loadedAsPrimary = false;
   #backends: StorageBackend[] = [];
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
@@ -207,8 +205,7 @@ export class BackupSupervisor {
   #loadFailures: LoadFailure[] = [];
   #lastCleanLoadAt: string | null = null;
   #reloading = false;
-  /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
-   * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
+  /** Shutdown is terminal, including a reload still opening its resources. */
   #stopped = false;
   #sweep: SweepRecords = new Map();
   readonly #statusClients: StatusClients;
@@ -233,7 +230,6 @@ export class BackupSupervisor {
       // unless the deletion itself fails, which is logged.
       await this.#inNoteTurn(() => this.#deleteNote());
       await this.#teardown();
-      // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
       const loaded = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
@@ -264,11 +260,12 @@ export class BackupSupervisor {
       this.#config = cfg;
       this.#statusClients.keepOnly(cfg?.enabled === true ? cfg.destinations : []);
       this.#sweep = new Map();
+      this.#loadedAsPrimary = this.#deps.readSingletonRole() === "primary";
       if (
         cfg === undefined ||
         !cfg.enabled ||
         cfg.recoveryKey === undefined ||
-        this.#deps.readSingletonRole() !== "primary"
+        !this.#loadedAsPrimary
       ) {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
         // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
@@ -287,8 +284,6 @@ export class BackupSupervisor {
         this.#statusClients.keepOnly([]);
         return;
       }
-      // A `stop()` landed while we opened the venue: bail WITHOUT assigning `#db` or starting a
-      // worker, or the sweep would outlive the `stop()` that already returned.
       if (this.#stopped) {
         await db?.close().catch(() => {});
         return;
@@ -307,7 +302,7 @@ export class BackupSupervisor {
       const controller = new AbortController();
       this.#controller = controller;
       this.#backends = backends;
-      this.#worker = runBackupSweep({
+      this.#schedule = createBackupSchedule({
         nodeId: this.#deps.nodeId,
         backends: this.#backends,
         db: venue.venue,
@@ -344,25 +339,43 @@ export class BackupSupervisor {
         onUploaded: (id) => {
           if (!controller.signal.aborted) this.#recordUpload(id);
         },
-        sleep: this.#deps.sleep ?? realSleep,
         now: this.#deps.now,
         log: this.#deps.log,
       });
-      // The worker swallows its own per-tick faults; a settle-by-rejection here is unforeseen.
-      this.#worker.catch((err) =>
-        this.#deps.log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
-      );
       await this.#inNoteTurn(() => this.#writeNote(backends));
     } finally {
       this.#reloading = false;
       this.#publish();
+      this.#deps.onReloaded?.();
+    }
+  }
+
+  async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
+    const retry = () => ({ nextDueAt: new Date(now.getTime() + 60_000) });
+    if (this.#reloading) return retry();
+    if (this.#stopped || signal.aborted) return { nextDueAt: null };
+    if (!this.#loadedAsPrimary) {
+      try {
+        await this.reload();
+      } catch (error) {
+        if (error instanceof AppError && error.code === "backup.reload_in_progress") return retry();
+        throw error;
+      }
+    }
+    if (this.#schedule === undefined) return { nextDueAt: null };
+    const running = this.#schedule.pass(now, AbortSignal.any([signal, this.#controller!.signal]));
+    this.#running = running;
+    try {
+      return await running;
+    } finally {
+      if (this.#running === running) this.#running = undefined;
     }
   }
 
   /** Rewrites the note with the box's latest clock step while backups run. Never throws. */
   async noteClockStep(): Promise<void> {
     await this.#inNoteTurn(async () => {
-      if (this.#worker === undefined || this.#stopped || this.#reloading) return;
+      if (this.#schedule === undefined || this.#stopped || this.#reloading) return;
       await this.#writeNote(this.#backends);
     });
   }
@@ -546,8 +559,6 @@ export class BackupSupervisor {
   }
 
   async stop(): Promise<void> {
-    // Terminal: set the flag FIRST, so a route-triggered `reload()` still in flight sees it at its
-    // next await-checkpoint and bails instead of starting (or leaving) a worker after this teardown.
     this.#stopped = true;
     this.#statusClients.closeAll();
     await this.#teardown();
@@ -557,11 +568,13 @@ export class BackupSupervisor {
    * a reconfigure never leaks the old connection nor leaves a tick running against a closing one. */
   async #teardown(): Promise<void> {
     this.#controller?.abort();
-    if (this.#worker !== undefined) await this.#worker.catch(() => {});
+    if (this.#running !== undefined) await this.#running.catch(() => {});
+    if (this.#schedule !== undefined) this.#deps.onScheduled?.(null);
     this.#closeBackends(this.#backends.splice(0));
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
     this.#controller = undefined;
-    this.#worker = undefined;
+    this.#running = undefined;
+    this.#schedule = undefined;
     this.#db = undefined;
   }
 
@@ -581,4 +594,16 @@ export class BackupSupervisor {
   #now(): Date {
     return (this.#deps.now ?? (() => new Date()))();
   }
+}
+
+export function backupsJob(supervisor: BackupSupervisor, isPrimary: () => boolean): JobDefinition {
+  return {
+    name: "backups.scheduled",
+    applies: isPrimary,
+    minSleepMs: 1_000,
+    maxSleepMs: MAX_SLEEP_MS,
+    backoff: { firstMs: 60_000, maxMs: MAX_SLEEP_MS },
+    pass: ({ now, signal }) => supervisor.pass(now, signal),
+    onStop: () => supervisor.stop(),
+  };
 }

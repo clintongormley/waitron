@@ -1,3 +1,4 @@
+import { supervisorWithJob } from "./testing/backup-supervisor.js";
 import { storeArchivePart } from "./testing/backup-settings.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -188,7 +189,7 @@ function buildBackend(dest: BackupDestination): StorageBackend {
 const readSealed = () => readArchiveSettings(suite.db, RING);
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
-  const sup = new BackupSupervisor({
+  const sup = supervisorWithJob({
     nodeId: BACKUP_NODE_ID,
     // As boot builds it.
     buildConfig: async () =>
