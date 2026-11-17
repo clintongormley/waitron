@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:emergency": "vite build --mode emergency && node -e \"require('node:fs').renameSync('emergency/dist/emergency.html','emergency/dist/index.html')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

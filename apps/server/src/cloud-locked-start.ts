@@ -35,6 +35,7 @@ import { createHealthState, healthApp } from "./health.js";
 import { mountNodeApi } from "./node-api.js";
 import type { Logger } from "./logger.js";
 import { closeListener } from "./close-listener.js";
+import { assertBuiltApp, mountSpa } from "./spa-api.js";
 
 /** Locked copies keep control state only in memory; a final lease needs no renewal. */
 export function createLockedCloudControl(
@@ -105,8 +106,10 @@ export async function startLockedCopy(
     port: number;
     log: Logger;
     totpPurposeKeys: readonly KeyEntry[];
+    emergencyAppDir?: string;
   },
 ) {
+  if (deps.emergencyAppDir) assertBuiltApp(deps.emergencyAppDir, "emergencyAppDir");
   const origin = new URL(deps.origin);
   if (origin.origin !== deps.origin || origin.protocol !== "https:")
     throw new AppError("node.operation_page_required", {});
@@ -178,6 +181,7 @@ export async function startLockedCopy(
       string,
       {
         personId: string;
+        displayName: string;
         copyOperationId: string;
         signedInAt: string;
         expiresAt: string;
@@ -233,7 +237,14 @@ export async function startLockedCopy(
             if (result.recoveryCodeId !== null && recoveryUsed.has(result.recoveryCodeId))
               throw new AppError("password.invalid", {});
             if (result.recoveryCodeId !== null) recoveryUsed.add(result.recoveryCodeId);
+            let displayName = "";
+            for await (const row of copy!.venue.rows(
+              "select display_name from persons where id = ?",
+              [result.personId],
+            ))
+              displayName = String(row.display_name);
             const session = {
+              displayName,
               personId: result.personId,
               copyOperationId: deps.binding.copyOperationId,
               signedInAt: new Date().toISOString(),
@@ -249,7 +260,10 @@ export async function startLockedCopy(
               path: "/",
             });
             outcome = "success";
-            return c.json(session);
+            return c.json({
+              ...session,
+              remainingMs: Math.max(0, Date.parse(session.expiresAt) - Date.now()),
+            });
           } catch (error) {
             if (isAppError(error) && error.code === "password.invalid") outcome = "invalid";
             throw error;
@@ -265,7 +279,11 @@ export async function startLockedCopy(
           sessions.delete(hash);
           throw new AppError("management_session.expired", {});
         }
-        if (c.req.method === "GET") return c.json(session);
+        if (c.req.method === "GET")
+          return c.json({
+            ...session,
+            remainingMs: Math.max(0, Date.parse(session.expiresAt) - Date.now()),
+          });
         if (c.req.method === "DELETE") {
           sessions.delete(hash);
           deleteCookie(c, cookieName, { path: "/", secure: true });
@@ -287,6 +305,14 @@ export async function startLockedCopy(
       },
       deps.log,
     );
+    app.get("/locked-api/context", (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({
+        accountUrl: new URL("/account", deps.cloud.origin).href,
+        copyExpiresAt: deps.binding.expiresAt,
+      });
+    });
+    if (deps.emergencyAppDir) mountSpa(app, { root: deps.emergencyAppDir, basePath: "" }, deps.log);
     server = await new Promise<ServerType>((resolve, reject) => {
       const listener = serve(
         buildServeOptions({ fetch: app.fetch, hostname: deps.hostname, port: deps.port }, deps.tls),

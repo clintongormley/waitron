@@ -991,8 +991,8 @@ when reconciling later Cloud publications.
 
 To qualify a restored copy before Cloud's launcher exists, build the server package and run
 `node apps/server/dist/cloud-locked-entry.js`. This separate entry places the fresh copy and
-serves only `/health`, `/api/node` and `/locked-api/session` over HTTPS. It does not call ordinary
-boot. Cloud hosting, the sign-in page, declaration and activation remain unfinished.
+serves the emergency page, `/health`, `/api/node` and `/locked-api/` endpoints over HTTPS. It does
+not call ordinary boot. Cloud hosting, declaration and activation remain unfinished.
 
 Supply `WAITRON_LOCKED_COPY` as a JSON launch object with `binding`, `venueDir`, `stateDir`,
 `environment`, `cloud`, `tls: {certFile, keyFile}`, `origin`, `hostname` and `port`.
@@ -1010,10 +1010,18 @@ an environment variable does not promise that the operating system cannot show i
 
 POST `/locked-api/session` from the emergency origin with `email`, `password` and either `totp`
 or `recoveryCode`. An active person needs an enrolled authenticator and `node.manage`.
-The response names `personId`, `copyOperationId`, `signedInAt`, `expiresAt` and `copyExpiresAt`,
+The response names `personId`, `displayName`, `copyOperationId`, `signedInAt`, `expiresAt`, `copyExpiresAt` and `remainingMs`,
 and sets a Secure, HttpOnly, SameSite=Strict cookie. GET reads it; DELETE ends it. Sessions expire
 after ten minutes, capped by the original copy deadline or TLS certificate expiry. Recovery-code use is
 remembered only in this process; it does not consume the stored row. Authentication, sessions and
 control renewals write neither database. Restarting keeps the original copy deadline and drops
 all sessions. The process closes its immutable readers and exits on shutdown, deadline or required
 control failure. A failed control check or expired control lease is logged and exits non-zero. Year-sized placement and start timing remain unqualified.
+
+Build the separate emergency page with `pnpm --filter @waitron/setup build:emergency` before
+starting the locked entry. Its default directory is `apps/setup/emergency/dist`; set
+`emergencyAppDir` in the launch object to use a packaged copy. The ordinary setup build is separate.
+Open the copy's HTTPS origin to sign in with your password and authenticator or recovery code.
+After sign-in, you see your name and the copy's latest stop time. The page offers no activation yet.
+Its owner-account link comes from `/locked-api/context`, using the server's configured Cloud origin.
+The page uses the server's remaining session time, so a fast device clock does not end sign-in early.

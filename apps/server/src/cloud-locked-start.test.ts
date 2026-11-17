@@ -59,6 +59,14 @@ async function placement() {
   };
 }
 
+async function emergencyUi() {
+  const dir = join(root, "emergency-ui");
+  await mkdir(join(dir, "assets"), { recursive: true });
+  await writeFile(join(dir, "index.html"), "<main>Locked emergency page</main>");
+  await writeFile(join(dir, "assets", "entry.js"), "// emergency entry");
+  return dir;
+}
+
 async function rows(query: BackupQuery, sql: string) {
   const result: BackupRow[] = [];
   for await (const row of query.rows(sql)) result.push(row);
@@ -427,6 +435,7 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
   try {
     running = await startLockedCopy({
       ...deps,
+      emergencyAppDir: await emergencyUi(),
       cloud: f.state,
       tls: { certFile, keyFile },
       origin,
@@ -437,6 +446,14 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     } as Parameters<typeof startLockedCopy>[0]);
     await adoption.bound;
     const before = await snapshot();
+    expect(await (await fetch(origin + "/")).text()).toBe("<main>Locked emergency page</main>");
+    expect(await (await fetch(origin + "/assets/entry.js")).text()).toBe("// emergency entry");
+    expect((await fetch(origin + "/setup/")).status).toBe(404);
+    expect((await fetch(origin + "/manage/")).status).toBe(404);
+    expect(await (await fetch(origin + "/locked-api/context")).json()).toEqual({
+      accountUrl: new URL("/account", f.state.origin).href,
+      copyExpiresAt: deps.binding.expiresAt,
+    });
     async function request(method: string, body?: unknown, cookie?: string, page = origin) {
       const response = await fetch(origin + "/locked-api/session", {
         method,
@@ -477,12 +494,16 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     const cookie = signed.cookie!.split(";")[0]!;
     expect(signed.body).toEqual({
       personId,
+      displayName: "Copy administrator",
+      remainingMs: 600000,
       copyOperationId: deps.binding.copyOperationId,
       signedInAt: deps.now().toISOString(),
       expiresAt: "2026-11-17T10:20:00.000Z",
       copyExpiresAt: deps.binding.expiresAt,
     });
     expect((await request("GET", undefined, cookie)).body).toEqual(signed.body);
+    vi.setSystemTime(new Date("2026-11-17T10:15:00.000Z"));
+    expect((await request("GET", undefined, cookie)).body.remainingMs).toBe(300000);
     vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));
     expect((await request("GET", undefined, cookie)).body).toMatchObject({
       error: { code: "management_session.expired" },
@@ -529,6 +550,7 @@ it.each(["signal", "expiry"])(
     const instant = stop === "expiry" ? "2026-11-17T10:29:57.000Z" : "2026-11-17T10:10:00.000Z";
     const launch = {
       ...deps,
+      emergencyAppDir: await emergencyUi(),
       cloud: f.state,
       tls: { certFile, keyFile },
       origin,

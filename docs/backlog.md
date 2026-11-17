@@ -1427,13 +1427,13 @@ Not in any track until the standalone primary is done.
   [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
-  2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. The hosted start still waits for Cloud's half, part 3's locked start (which calls A1425 part 3's placement of the copy under its own identity) and part 4's declaration and activation. Local selected-backup placement groundwork keeps the spare's own
+  2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. The hosted start still waits for Cloud's launcher, part 4's declaration and activation, and year-sized timing qualification. Local selected-backup placement groundwork keeps the spare's own
   identity; since A947 3b-F (#3172) a spare of a Veri*Factu venue can join as well:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
   The emergency-card adapter is built; its facts need Cloud’s display endpoint. The card can reveal a fresh code and list permission/authenticator readiness; Cloud’s code endpoint is still required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. Backups checks the printed emergency code and Cloud links to the existing pack maker. The hosted runtime remains open.
   [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
   [Part 2 plan](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
-  Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November and its purpose-key input on 17 November (Cloud #1276). Part 3a provides a separate locked HTTPS process with read-only sign-in and memory-only sessions; its [developer API](developers/cloud-connection.md#locked-emergency-copy-api) reuses A1425 placement. The sign-in page (3b), Cloud launcher, declaration/activation (part 4) and production qualification remain open. The watcher cleared this API cut on 17 November; no owner approval of the key amendment is claimed.
+  Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November and its purpose-key input on 17 November (Cloud #1276). Part 3a provides a separate locked HTTPS process with read-only sign-in and memory-only sessions; its [developer API](developers/cloud-connection.md#locked-emergency-copy-api) reuses A1425 placement. Part 3b adds the separate English/Spanish sign-in and actor/expiry page. Cloud launcher, declaration/activation (part 4) and production qualification remain open. The watcher cleared this API cut on 17 November; no owner approval of the key amendment is claimed.
   Qualify with a current-baseline year copy before go-live.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 

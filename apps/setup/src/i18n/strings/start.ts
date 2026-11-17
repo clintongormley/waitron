@@ -1,6 +1,36 @@
 // The connection, role, connect, mode and admin screens, the old-box question and server-fields.ts.
 
 export const startEn = {
+  "emergency.heading": "Start the venue in the cloud",
+  "emergency.authenticator":
+    "You need an authenticator app, set up in Waitron before the box failed. You cannot set one up here.",
+  "emergency.no_passkeys": "Passkeys are not offered here.",
+  "emergency.email": "Email",
+  "emergency.email_invalid": "Enter a valid email address.",
+  "emergency.password": "Password",
+  "emergency.code": "Authenticator code",
+  "emergency.recovery_code": "Recovery code",
+  "emergency.use_recovery": "Use a recovery code",
+  "emergency.use_authenticator": "Use an authenticator code",
+  "emergency.sign_in": "Sign in",
+  "emergency.invalid": "The email, password or code is incorrect.",
+  "emergency.permission":
+    "Your role does not allow you to start the venue on another machine. Sign in as someone else, or use the owner’s Cloud account.",
+  "emergency.expired": "Your sign-in has expired. Nothing was started. Sign in again.",
+  "emergency.throttled": "Too many sign-in attempts. Wait a minute, then try again.",
+  "emergency.unavailable":
+    "This copy could not be reached. Try again, or open the owner’s Cloud account.",
+  "emergency.account": "Sign in to the owner’s Cloud account",
+  "emergency.not_started":
+    "The venue has not been started here. Declaration and activation are not available yet.",
+  "emergency.actor": "Signed in as {name}.",
+  "emergency.stops": "This copy stops by",
+  "emergency.sign_out": "Sign out",
+  "emergency.fix_fields": "Correct the highlighted fields to sign in.",
+  "emergency.required": "Enter this value.",
+  "emergency.loading": "Reading this copy…",
+  "emergency.retry": "Try again",
+
   "connection.heading": "Is this page secure?",
   "connection.check_address_bar": "Look at your browser's address bar. If it says",
   "connection.warning_words": "Not secure",
@@ -127,6 +157,36 @@ export const startEn = {
 } as const;
 
 export const startEs: Record<keyof typeof startEn, string> = {
+  "emergency.heading": "Iniciar el local en la nube",
+  "emergency.authenticator":
+    "Necesitas una aplicación de autenticación configurada en Waitron antes de que fallara el servidor. No puedes configurarla aquí.",
+  "emergency.no_passkeys": "Aquí no se ofrecen claves de acceso.",
+  "emergency.email": "Correo electrónico",
+  "emergency.email_invalid": "Introduce un correo electrónico válido.",
+  "emergency.password": "Contraseña",
+  "emergency.code": "Código del autenticador",
+  "emergency.recovery_code": "Código de recuperación",
+  "emergency.use_recovery": "Usar un código de recuperación",
+  "emergency.use_authenticator": "Usar un código del autenticador",
+  "emergency.sign_in": "Iniciar sesión",
+  "emergency.invalid": "El correo, la contraseña o el código son incorrectos.",
+  "emergency.permission":
+    "Tu rol no permite iniciar el local en otro servidor. Entra con otra cuenta o usa la cuenta del propietario en Cloud.",
+  "emergency.expired": "Tu sesión ha caducado. No se ha iniciado nada. Vuelve a iniciar sesión.",
+  "emergency.throttled": "Demasiados intentos de acceso. Espera un minuto y vuelve a intentarlo.",
+  "emergency.unavailable":
+    "No se ha podido contactar con esta copia. Inténtalo de nuevo o abre la cuenta del propietario en Cloud.",
+  "emergency.account": "Entrar en la cuenta del propietario en Cloud",
+  "emergency.not_started":
+    "El local no se ha iniciado aquí. La declaración y la activación aún no están disponibles.",
+  "emergency.actor": "Sesión iniciada como {name}.",
+  "emergency.stops": "Esta copia se detiene como máximo a las",
+  "emergency.sign_out": "Cerrar sesión",
+  "emergency.fix_fields": "Corrige los campos marcados para iniciar sesión.",
+  "emergency.required": "Introduce este valor.",
+  "emergency.loading": "Leyendo esta copia…",
+  "emergency.retry": "Volver a intentar",
+
   "connection.heading": "¿Es segura esta página?",
   "connection.check_address_bar": "Mira la barra de direcciones de tu navegador. Si pone",
   "connection.warning_words": "No es seguro",
