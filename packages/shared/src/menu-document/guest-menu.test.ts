@@ -274,7 +274,10 @@ it("matches phone preferences before resolving authored text and keeps saved lin
       .language,
   ).toBe("en");
   expect(
-    publicGuestMenu(doc, { defaultLanguage: "en-US", languages: ["en-GB", "en-US", "es"] }, "en-AU")
-      .language,
-  ).toBe("en-US");
+    publicGuestMenu(
+      doc,
+      { defaultLanguage: "en-US", languages: ["en-GB", "en-US", "es"] },
+      "en-AU",
+    ),
+  ).toMatchObject({ language: "en-US", languages: ["en-GB", "en-US", "es"] });
 });
