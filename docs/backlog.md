@@ -758,15 +758,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
-- **Loose ends left by the comments sweep (#604–#623).** Found while pruning comments.
+- **Loose ends left by the comments sweep (#613–#623).** Found while pruning comments.
   - Split-off checks may reach the same path as a held-order edit that changes sent lines (#623).
     Nothing tests two `openTab` calls racing on one table or concurrent rounds landing on
     consecutive line numbers (the sequential versions are in `tabs.test.ts`).
     [Detail](backlog/till.md#split-off-checks-may-reach-the-same-path-as-a-held-order-edit-that-changes-sent-lines)
-  - "resets any leftover drill/active tab on login" still passes with login's own clearing line
-    deleted (#621). Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still
-    pending review, as `vegan`/`vegetarian` do?
-    [Detail](backlog/till.md#resets-any-leftover-drillactive-tab-on-login-still-passes-with-logins-own-clearing-line-deleted)
+  - Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still pending review, as
+    `vegan`/`vegetarian` do? (#621)
+    [Detail](backlog/till.md#should-the-no-meatno-fish-lenses-also-hide-a-dish-whose-diet-is-still-pending-review)
   - Till widget points from #616 that were read but not run (`apps/till/src/widgets`).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
   - The till always mounts the counter screen `embedded` (#614).
@@ -776,9 +775,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not a
     comments-only change.
     [Detail](backlog/till.md#two-v8-ignore-start-comments-in-till-salets-finalizecapture-finalizesettle-cite-providerts66-83)
-  - UI package notes (#604): the remaining image-list and coverage-config observations need
-    checking against the current tree.
-    [Detail](backlog/till.md#ui-package-notes-left-by-the-comments-sweep)
 
 - **Cash handed back for a voided cash sale is recorded nowhere** — OPEN (found 2026-09-24 by #605).
   A void writes no payment or refund row, so if staff give a customer cash back, the void's day

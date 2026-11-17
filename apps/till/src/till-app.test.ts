@@ -757,6 +757,22 @@ async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light"
   return mountWidget<TillApp>("till-app", { api: currentApi }, theme);
 }
 
+/** The next menu load waits until the returned function lets it load or fail. */
+async function holdMenu(): Promise<(outcome?: "loads" | "fails") => void> {
+  const zoneOffers = await currentApi.listDefaultZoneOffers();
+  let finish!: (value: typeof zoneOffers) => void;
+  let fail!: (error: unknown) => void;
+  vi.mocked(currentApi.listDefaultZoneOffers).mockImplementationOnce(
+    () =>
+      new Promise((done, refuse) => {
+        finish = done;
+        fail = refuse;
+      }),
+  );
+  return (outcome = "loads") =>
+    outcome === "loads" ? finish(zoneOffers) : fail({ code: "server.internal" });
+}
+
 async function selectDebt(el: TillApp, id = "wo-debt") {
   const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
   emit(view, "find-bill-open", { row: billRow({ workingOrderId: id }) });
@@ -15318,9 +15334,9 @@ describe("till-app", () => {
       expect(app.activeTabKey).toBe("counter"); // back to the first tab
     });
 
-    it("resets any leftover drill/active tab on login (Finding 2 — defense in depth)", async () => {
-      // Defense in depth: even a login that somehow followed a NON-logout teardown must not inherit a
-      // prior operator's drill or tab. Simulate that stale state directly, then log a fresh operator in.
+    it("resets any leftover drill/active tab on login", async () => {
+      // A login after a teardown other than logout must not inherit a prior operator's drill or
+      // tab; the stale state is set directly after a logout to stand in for one.
       const el = await toShellCounter();
       emit(shell(el)!, "logout");
       await flush(el);
@@ -15328,9 +15344,20 @@ describe("till-app", () => {
       // A `schedule` drill (renders cleanly from the empty roster) standing in for any stale drill.
       app.drill = { kind: "schedule" };
       app.activeTabKey = "floor";
+      // Login ends by setting the drill from the address (`#restoreDestination`), which names
+      // none here, so only a check while login waits on its menu read sees whether login cleared
+      // it first.
+      const release = await holdMenu();
+      const offers = vi.mocked(currentApi.listDefaultZoneOffers);
+      const readsBefore = offers.mock.calls.length;
       emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
       await flush(el);
+      expect(offers).toHaveBeenCalledTimes(readsBefore + 1);
       expect(app.drill).toBeUndefined();
+      release();
+      await flush(el);
+      expect(app.drill).toBeUndefined();
+      expect(app.activeTabKey).toBe("counter");
       expect(shell(el)!.activeScreen).toBe("counter");
       expect(schedule(el)).toBeNull();
       expect(counter(el)).not.toBeNull();
@@ -17076,22 +17103,6 @@ describe("the device profile decides which screens a device offers", () => {
         operatorPersonId: string;
         permissions: string[];
       };
-
-    /** The next menu load waits until the returned function lets it load or fail. */
-    async function holdMenu(): Promise<(outcome?: "loads" | "fails") => void> {
-      const zoneOffers = await currentApi.listDefaultZoneOffers();
-      let finish!: (value: typeof zoneOffers) => void;
-      let fail!: (error: unknown) => void;
-      vi.mocked(currentApi.listDefaultZoneOffers).mockImplementationOnce(
-        () =>
-          new Promise((done, refuse) => {
-            finish = done;
-            fail = refuse;
-          }),
-      );
-      return (outcome = "loads") =>
-        outcome === "loads" ? finish(zoneOffers) : fail({ code: "server.internal" });
-    }
 
     it.each(["loads", "fails"] as const)(
       "leaves the newer person signed in when an older sign-in's menu %s last",
