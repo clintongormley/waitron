@@ -1634,7 +1634,7 @@ _Formerly parts of B9 and Track C._ Open work:
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
   [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
 
-- **What package manifests declare: floors, the root engines line, vite** (bundle of 3, size S). [Detail](backlog/dependencies.md#bundle-what-package-manifests-declare-floors-the-root-engines-line-vite)
+- **What package manifests declare: floors and the root engines line** (bundle of 2, size S). [Detail](backlog/dependencies.md#bundle-what-package-manifests-declare-floors-and-the-root-engines-line)
 
 - **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.**
   [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)

@@ -66,15 +66,6 @@ the new floor, and Web NFC's Chrome for Android 89
 BELOW the new chrome111. What is missing is anywhere that states a browser floor, so the next
 bump moves it again silently.
 
-## The browser-mode packages that declare no vite follow the others' by deduplication, not by a declaration
-
-Left open by #450.
-
-`packages/adjustments`, `bookings`, `media`, `payments-stripe`, `payments-sumup`
-and `venue-service` resolve vite because vitest declares it as a required peer spanning three
-majors and pnpm deduped onto the one the declaring manifests choose. If a future change puts a
-second vite in the tree, they could land on a different one silently.
-
 ## A dependency-optimizer receipt taken on vite 6 was not re-measured
 
 The `optimizeDeps.include` lists in `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui`
@@ -103,18 +94,15 @@ lives.
 same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
 packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
 
-## Bundle: What package manifests declare: floors, the root engines line, vite
+## Bundle: What package manifests declare: floors and the root engines line
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Whether a declared floor follows the installed version is undecided — one decision for every
   manifest.**
   [Detail](dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
 - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.**
   [Detail](dependencies.md#the-supported-node-version)
-- **The browser-mode packages that declare no vite follow the others' by deduplication, not by
-  a declaration.**
-  [Detail](dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
 
 ## Decisions and deliberate limits
 

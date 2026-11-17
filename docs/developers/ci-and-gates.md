@@ -4387,7 +4387,11 @@ What to wire, for an ordinary package with tests: a `vitest.config.ts` whose thr
 `98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), the shard lists
 in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
-`PACKAGES_WITHOUT_TESTS`.
+`PACKAGES_WITHOUT_TESTS`. A package that runs browser tests also declares `vite` in its
+devDependencies at `packages/ui`'s range (guard: the "browser-mode packages' vite" case in
+`scripts/ci-workflow.test.mjs`, weaker than its name: it finds browser packages by their
+`@vitest/browser-playwright` devDependency and compares the declared range, not the lockfile's
+resolved copy).
 
 ### A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides it
 
