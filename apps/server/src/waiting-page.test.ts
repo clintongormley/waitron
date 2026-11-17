@@ -187,7 +187,10 @@ describe("the waiting page", () => {
       await writeFile(join(root, "index.html"), "<html>till ready</html>");
       const ready = new Hono();
       mountBuiltApps(ready, { tillAppDir: root }, () => {});
-      const page = openPage(async (url, init) => ready.request(url, init), "/till/tabs/counter?view=all");
+      const page = openPage(
+        async (url, init) => ready.request(url, init),
+        "/till/tabs/counter?view=all",
+      );
       await page.advance(5_000);
       expect((await page.fetch.mock.results[0]!.value).status).toBe(200);
       await vi.waitFor(() =>
