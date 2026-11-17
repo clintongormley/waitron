@@ -1,13 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import {
-  BUSY_COUNTER,
-  cleanupWidgets,
-  distance,
-  mountWidget,
-  paintedAt,
-  rgb,
-} from "./test-helpers.js";
+import { BUSY_COUNTER, cleanupWidgets, distance, mountWidget, paintedAt } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -106,8 +99,11 @@ it.each(["light", "dark"] as const)(
       const waiting = el.shadowRoot!.querySelector<HTMLElement>('[data-counter-orders="waiting"]')!;
       waiting.style.animation = "none";
       await userEvent.keyboard("{Tab}");
+      expect(waiting.matches(":focus-visible")).toBe(false);
       const box = waiting.getBoundingClientRect();
       const border = await paintedAt(host, box.left + box.width / 2, box.top + 0.25);
+      const fill = await paintedAt(host, box.left + 6, box.top + box.height / 2);
+      expect(distance(border, fill)).toBeGreaterThan(20);
       waiting.focus();
       expectUnclippedOutline(waiting);
       expect(
