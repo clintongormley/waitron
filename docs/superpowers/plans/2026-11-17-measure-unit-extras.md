@@ -4,7 +4,7 @@
 **Status:** Separate Sol high-effort draft, shortened by the Codex driver; Claude review and
 watcher build clearance pending. Claude first read complete (266 s); watcher cleared its simpler
 inline route at 07:18 on 17 November (Lane H questions.md). No owner design approval is claimed.
-One correction read remains; build only after settled plan clearance.
+The one correction read is complete (246 s); all findings taken. Build only after settled plan clearance.
 
 ## Finish line and reuse
 
@@ -24,7 +24,8 @@ keep its meaning and consumers. The new read counts dishes CARRYING attachments.
 
 - [ ] **Reproduce:** `apps/dashboard/src/screens/units-screen.test.ts`, real switch then Save,
   count 2: inline warning appears before update, Cancel leaves the saved unit unchanged. Observe
-  the missing-warning failure before changing production; keep the zero-impact save assertion.
+  the missing-warning failure before changing production. Default the screen API stub count to 0,
+  override to 2 here, and retain the existing zero-impact save assertion and ordinary Cancel path.
 - [ ] **Menu count:** add `countProductsWithAttachedExtras(tx: Transaction, unitId: string):
   Promise<number>` in `packages/menu/src/units.ts` (already exported). Reuse `productsUsingUnit`
   and `readProductModifiers`; count each parent with an extras attachment once, including archived
@@ -41,12 +42,14 @@ keep its meaning and consumers. The new read counts dishes CARRYING attachments.
   case in `api/client-routes.test.ts`; leave the old precision read untouched.
 - [ ] **Form/screen:** `widgets/unit-form.ts` reads on an eligible measure switch and shows the
   count beside it; extend its API Pick with the new method. Await that same pending read on Save/
-  Enter before emitting submit. If it fails, show a generic no-count warning, emit no submit from
-  that waiting Save, and allow the next Save. Reuse the precision read's stale-response pattern;
-  no held submission or persistent acknowledgement. `units-screen.ts` keeps write/close/refresh.
+  Enter: zero submits; a positive count or failed read shows its warning without submitting, and
+  the next Save submits. Failed reads use a generic no-count warning. Reuse the precision read's
+  pattern with a separate generation counter; reset on open/value change, clear/cancel on switch-off.
+  No held submission or persistent acknowledgement; no API keeps ordinary standalone form behavior. `units-screen.ts` keeps write/close/refresh.
   Add EN/ES count and failed-count wording to `i18n/strings.ts` using the `_one` convention.
-  `widgets/unit-form.test.ts` owns positive/zero warnings, pending Save, failed-read next-Save and
-  a decimal/scale stored unit switched on with no count read/warning. Existing screen integration
+  `widgets/unit-form.test.ts` owns deferred pending Save (2 → none then one submit on next Save;
+  0 → one submit), switch-off clearing in that case, failed-read next-Save and a decimal/scale stored
+  unit switched on with no count read/warning. Do not repeat the screen's positive-warning test. Existing screen integration
   owns write and Cancel; no duplicate unsaved or separate-dialog a11y tests.
 - [ ] **Conditional draft fix:** in `apps/server/src/order-drafts.db.test.ts`, reuse venue/save
   helpers: publish Burger in a precision-0 measure unit, pick its sauce, assert `unavailable: true`
@@ -64,10 +67,10 @@ Menu: `src/units.operations.test.ts src/extra-usage.test.ts`; server: `src/units
 src/order-drafts.db.test.ts`; dashboard: `src/widgets/unit-form.test.ts`,
 `src/screens/units-screen.test.ts` and `src/api/client-routes.test.ts`.
 Look at the changed editor EN/ES × light/dark × 390/1280, including warning and Cancel; screenshots stay local.
-Add at most one staff-action clause in `apps/server/src/guide/{en,es}/products.md#selling-unit`;
-run server `src/guide-content.test.ts`
-and root `scripts/guide-links.test.ts`. Delete finished points in `docs/backlog/menu.md`, correct its
-bundle count and `docs/backlog.md` index; keep the decimal-quantity owner question.
+Keep both product guides unchanged: `products.md#selling-unit` already explains no extras and
+next-publish timing; the inline warning explains its count. Delete finished points in
+`docs/backlog/menu.md`, correct its bundle count and `docs/backlog.md` index; keep the
+decimal-quantity owner question.
 
 Queue gates, unedited: fiscal `src/write-path.e2e.test.ts src/inmutabilidad.test.ts`, server
 `src/till-api.sell-published.test.ts` (menus Task 7 Review Focus 1/2), till `src/till-app-menu-refresh.test.ts`.
