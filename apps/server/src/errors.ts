@@ -711,6 +711,16 @@ declare module "@waitron/shared" {
      * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
+    /** Print the bill found the bill already has its ticket. */
+    "meal_end.already_issued": { workingOrderId: string };
+    /**
+     * Print the bill found dishes on the bill neither served in full nor cancelled, and was not told
+     * to print anyway. `released` says whether the kitchen has the dish.
+     */
+    "meal_end.unserved_dishes": {
+      workingOrderId: string;
+      dishes: { lineId: string; name: string; quantity: string; released: boolean }[];
+    };
     /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.
