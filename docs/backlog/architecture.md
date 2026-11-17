@@ -74,9 +74,14 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 **OPEN (2026-09-26).**
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
-was fixed only for the last 28 documents, and in `apps/till` and `apps/dashboard`, whose remaining
-hits name kept designs or AEAT's QR specification. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps ':!apps/till' ':!apps/dashboard' packages scripts bench`.
+was fixed only for the last 28 documents; in `apps/till` and `apps/dashboard` for pointers spelled
+with a lower-case "spec", "design" or "plan" (#3700), so their capitalised ("Spec §10.7"), bare
+("(§9)", "§3d") and short-name ("(cash-drawer-authorization §5)", "KDS-1 §3d") shapes are still to
+check; and in `packages/adjustments`, `packages/bookings`, `packages/identity`, `packages/layouts`,
+`packages/payments`, `packages/reporting` and `packages/ui`, whose remaining hits name kept designs.
+Find the rest with
+`git grep -nIE -e "§[0-9]" --and --not -e "CLAUDE\.md.? §" -- apps packages ':!packages/adjustments' ':!packages/bookings' ':!packages/identity' ':!packages/layouts' ':!packages/payments' ':!packages/reporting' ':!packages/ui' scripts bench`;
+it also finds sections of outside standards (RFCs, AEAT's documents, GPL) and of kept files, which stay.
 Some hits point into specs that were kept (menus, service and billing, sales classification, the
 SQLite topology), so check which document each one names before cutting it. One was left on purpose:
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a

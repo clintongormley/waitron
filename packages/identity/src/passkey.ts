@@ -349,8 +349,8 @@ export async function finishPasskeyAuthentication(
 /**
  * Verifies a discoverable-login assertion against a challenge the caller holds, and returns whose
  * passkey made it. Reads only: no challenge row, counter, sign-in time or session is written, as
- * the caller's database may be a followed copy this box must not write (design §6.3 step 1); so
- * the counter is checked but not advanced (A947 4d plan D9).
+ * the caller's database may be a followed copy this box must not write (A947 design §6.3 step 1);
+ * so the counter is checked but not advanced (A947 4d plan D9).
  */
 export async function verifyPasskeyAssertion(
   tx: Transaction,

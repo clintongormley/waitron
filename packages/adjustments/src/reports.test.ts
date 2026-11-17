@@ -235,7 +235,7 @@ function personRow(report: AdjustmentReport, personId: string) {
   return row;
 }
 
-describe("the fixture day (spec §7)", () => {
+describe("the fixture day (service, ordering and billing plan Task 12)", () => {
   async function fixtureDay() {
     const alex = await person("Alex");
     const sam = await person("Sam");

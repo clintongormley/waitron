@@ -70,7 +70,7 @@ export class WtTableToken extends LitElement {
         border-left-width: var(--wt-space-3);
       }
 
-      /* The forgotten MARKER (design §7.3) — a non-colour tell shown UNCONDITIONALLY for a forgotten
+      /* The forgotten MARKER — a non-colour tell shown UNCONDITIONALLY for a forgotten
          table (not just under reduced motion, exactly like till-floor-screen's .badge.forgotten text
          chip: it never animates itself, so an operator who cannot distinguish the accent's colour still
          sees the escalation). A small CSS-only TRIANGLE — never text, since

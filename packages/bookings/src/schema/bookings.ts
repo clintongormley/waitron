@@ -25,10 +25,9 @@ import {
 export const bookingStatus = enumType(["booked", "seated", "completed", "no_show", "cancelled"]);
 
 /**
- * A booking is a future wall-clock intention (design §2b), so `booking_date` and `booking_time` are
- * venue-local, never a UTC instant. Both are plain text that refuses nothing: `storedTime` in
- * `../bookings.ts` picks the one stored spelling of a time, and `routes.ts`'s `TIME_HHMM` refuses a
- * malformed one.
+ * A booking is a future wall-clock intention, so `booking_date` and `booking_time` are venue-local,
+ * never a UTC instant. Both are plain text that refuses nothing: `storedTime` in `../bookings.ts`
+ * picks the one stored spelling of a time, and `routes.ts`'s `TIME_HHMM` refuses a malformed one.
  */
 export const bookings = table(
   "bookings",
