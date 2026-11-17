@@ -2,7 +2,7 @@ import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request
 import { encodeMachine } from "@waitron/contract";
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { CloudRegistration, SavedCloudState } from "./cloud-client.js";
+import type { CloudRegistration, CloudInstallationCredentials } from "./cloud-client.js";
 import "./errors.js";
 type Action = "renew" | "configuration" | "report" | "revoke";
 interface Envelope {
@@ -64,7 +64,7 @@ const date = (v: unknown) =>
 function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
 }
-function readView(value: unknown, state: SavedCloudState): View {
+function readView(value: unknown, state: CloudInstallationCredentials): View {
   const r = state.view?.registration;
   if (
     !r ||
@@ -122,7 +122,7 @@ function readView(value: unknown, state: SavedCloudState): View {
 export { readView as readCloudInstallationView };
 
 /** The pinned HTTPS origin authenticates this control response. It is not a gateway signature verifier. */
-function readLease(value: unknown, state: SavedCloudState): Envelope {
+function readLease(value: unknown, state: CloudInstallationCredentials): Envelope {
   if (
     !object(value) ||
     Object.keys(value).sort().join(",") !== "payload,signature" ||
@@ -159,19 +159,19 @@ function readLease(value: unknown, state: SavedCloudState): Envelope {
     unavailable();
   return { payload: value.payload, signature: value.signature };
 }
-function leaseExpiry(lease?: Envelope): number {
+export function leaseExpiry(lease?: Envelope): number {
   return lease
     ? (JSON.parse(Buffer.from(lease.payload, "base64url").toString()) as number[])[9]!
     : 0;
 }
 /** A lease a call outside this client may use as it is: more than ten minutes left, nothing pending. */
-export function hasLiveLease(state: SavedCloudState, now = Date.now()): boolean {
+export function hasLiveLease(state: CloudInstallationCredentials, now = Date.now()): boolean {
   const c = state.lifecycle;
   return !!c && !c.revoked && !c.pending && !!c.lease && leaseExpiry(c.lease) > now + 600000;
 }
 export function readCloudInstallation(
   value: unknown,
-  state: SavedCloudState,
+  state: CloudInstallationCredentials,
 ): CloudInstallationState {
   if (
     !object(value) ||
@@ -209,7 +209,7 @@ export function readCloudInstallation(
   return result;
 }
 export function projectCloudInstallation(
-  state: SavedCloudState,
+  state: CloudInstallationCredentials,
 ): CloudInstallationStatus | undefined {
   if (!state.view?.registration) return;
   const c = state.lifecycle,
@@ -237,7 +237,7 @@ export function projectCloudInstallation(
   };
 }
 export function machinePayload(
-  state: Pick<SavedCloudState, "origin" | "view">,
+  state: Pick<CloudInstallationCredentials, "origin" | "view">,
   pending: { action: string; operationId: string; lease: string; body: string },
   now = Date.now(),
 ): Buffer {
@@ -269,9 +269,9 @@ export function markRevoked(c: CloudInstallationState): void {
   delete c.pending;
   delete c.lease;
 }
-export function installationClient(
-  state: SavedCloudState,
-  save: (state: SavedCloudState) => Promise<void>,
+export function installationClient<T extends CloudInstallationCredentials>(
+  state: T,
+  save: (state: T) => Promise<void>,
 ) {
   const c = (state.lifecycle ??= { unavailable: false, revoked: false });
   async function exchange(

@@ -108,17 +108,20 @@ interface SavedEmergencyHints {
   open: boolean;
   asOf: string;
 }
-export interface SavedCloudState {
-  emailRelayEnabled?: boolean;
-  emergencyHints?: SavedEmergencyHints;
-  remoteAccessEnabled?: boolean;
-  lifecycle?: CloudInstallationState;
-  version: 2;
+export interface CloudInstallationCredentials {
   origin: string;
   privateKey: string;
   publicKey: string;
-  venueId: string;
   environment: "test" | "production";
+  lifecycle?: CloudInstallationState;
+  view?: { registration?: CloudRegistration };
+}
+export interface SavedCloudState extends CloudInstallationCredentials {
+  emailRelayEnabled?: boolean;
+  emergencyHints?: SavedEmergencyHints;
+  remoteAccessEnabled?: boolean;
+  version: 2;
+  venueId: string;
   requestId: string;
   code: string;
   view?: CloudPairingView;
