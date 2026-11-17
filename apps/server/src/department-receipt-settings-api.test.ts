@@ -498,7 +498,7 @@ describe("replacement department receipt HTTP contract", () => {
       {
         db: suite.db,
         cfg: { contentDefaultLanguage: "es" },
-        core: moduleCoreServices(f.cfg, []),
+        core: moduleCoreServices(f.cfg, [], () => new Date()),
         renderReceiptLogo: render,
       },
       () => {},

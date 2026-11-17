@@ -93,7 +93,7 @@ async function snapshot(tx: Transaction) {
     orders: await tx.select().from(workingOrders),
   };
 }
-const core = () => moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES));
+const core = () => moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES), () => NOW);
 
 async function target() {
   return run(async (tx) => {

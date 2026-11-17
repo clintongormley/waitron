@@ -589,6 +589,15 @@ it("says a booking's table needs moving on the till first, in both languages", (
   );
 });
 
+it("says a booking's table taken off today is put back from the till, in both languages", () => {
+  expect(codeMessage("table.taken_off", "en")).toBe(
+    "That table is off today's plan. Put it back from the till, then try again",
+  );
+  expect(codeMessage("table.taken_off", "es")).toBe(
+    "Esa mesa está quitada hoy. Vuelve a ponerla desde la caja e inténtalo de nuevo",
+  );
+});
+
 it("says a booking's table is in an area with no table service, in both languages", () => {
   expect(codeMessage("service_zone.mode_incompatible", "en")).toBe(
     "That table's area has no table service. Edit the booking and choose a table in an area with table service",

@@ -55,6 +55,7 @@ it("deletes through the real core seat when the optional bookings table was neve
   const floor = moduleCoreServices(
     cfg,
     enabledTableRemovals(ALL_MODULES.filter((module) => module.name !== "bookings")),
+    () => NOW,
   ).floorDeletion;
   const zone = await withTransaction(suite.db, (tx) =>
     readZoneDeleteImpact(tx, floor, f.zoneId, NOW),

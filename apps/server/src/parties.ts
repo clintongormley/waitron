@@ -43,6 +43,8 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { readPartyBillIds, requireBillEditors } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
+import { ensureToday } from "./floor-today-store.js";
+import { refuseTakenOff } from "./floor-today-table.js";
 import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
@@ -154,10 +156,17 @@ export async function seatTable(
 export function moduleCoreServices(
   cfg: TradingContext,
   removals: readonly TableRemoval[],
+  now: () => Date,
 ): CoreServices {
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
   return {
-    seatTable: (tx, req) => seatTable(tx, dashboard, req),
+    seatTable: async (tx, req) => {
+      await ensureToday(tx, removals, now());
+      const seated = await seatTable(tx, dashboard, req);
+      // After the seat, so its own refusals answer first, as on the till's seat route.
+      await refuseTakenOff(tx, [req.tableId]);
+      return seated;
+    },
     floorDeletion: floorDeletionFor(removals),
     floorPlanSets: floorPlanSetsFor(),
   };

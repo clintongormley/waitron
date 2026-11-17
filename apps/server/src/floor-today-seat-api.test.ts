@@ -11,7 +11,8 @@ import { diningTables, floorResetTables, parties, partyTables, workingOrders } f
 import { loginWithPin } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { moduleCoreServices } from "./parties.js";
+import { OPERATOR, inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import {
   expectRevision,
   mergeOf,
@@ -412,5 +413,42 @@ describe("seating a table that needs moving", () => {
     });
     expect(await heldRows(a)).toBe(0);
     expect(await heldRows(b)).toBe(0);
+  });
+});
+
+describe("seating from the dashboard at a table taken off", () => {
+  const dashboardSeat = (tableId: string, now: Date) =>
+    inTx(v, (tx) =>
+      moduleCoreServices(v.cfg, REMOVALS, () => now).seatTable(tx, {
+        tableId,
+        guestCount: 2,
+        operatorId: OPERATOR,
+      }),
+    );
+
+  it("refuses a table taken off today with table.taken_off, and seats nobody", async () => {
+    const { a } = await threeTables();
+    await takeOff(a);
+
+    await expect(dashboardSeat(a, NOW)).rejects.toMatchObject({
+      code: "table.taken_off",
+      params: { tableId: a },
+    });
+    expect(await heldRows(a)).toBe(0);
+  });
+
+  it("seats a free table", async () => {
+    const { a } = await threeTables();
+
+    await dashboardSeat(a, NOW);
+    expect(await heldRows(a)).toBe(1);
+  });
+
+  it("seats a table taken off on an earlier business day", async () => {
+    const { a } = await threeTables();
+    await takeOff(a);
+
+    await dashboardSeat(a, new Date(NOW.getTime() + 24 * 60 * 60 * 1000));
+    expect(await heldRows(a)).toBe(1);
   });
 });

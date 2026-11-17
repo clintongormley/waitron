@@ -4121,7 +4121,8 @@ if it is wrong.
     table held, and the list shows it. Cost: a waiter clears the table first. (Finish-branch review,
     2026-10-11: seating, joining, Move guests and moving a bill onto a taken-off table are now
     refused, `table.taken_off` through `refuseTakenOff`; the dashboard's bookings still seat through
-    `seatTable` without that check.)
+    `seatTable` without that check. 2026-11-18: the dashboard's seat refuses it too,
+    `moduleCoreServices` in `apps/server/src/parties.ts`.)
 13. **A470's second slice 4 note** (a merge's members in different zones, while the map reads one
     zone): the join route already refuses tables in two zones (`table-actions.ts:122-128`) and the
     merge route refuses them too (decision 3), so a merge's members always share its zone. Cost: none.
