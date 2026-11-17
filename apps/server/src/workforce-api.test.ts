@@ -831,7 +831,7 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("reads unattached shifts by their local calendar date", async () => {
+  it("keeps an unattached shift's warnings to the week of its local start", async () => {
     await warningVenue();
     const included = await planned("2026-03-01T23:30:00Z", "2026-03-02T07:30:00Z", null, 60);
     const excluded = await planned("2026-03-08T23:30:00Z", "2026-03-09T07:30:00Z", null, 60);
@@ -892,6 +892,33 @@ describe("roster warnings while planning", () => {
         personId,
         weekStart: "2026-03-02",
         longestRestMinutes: 960,
+        requiredMinutes: 2160,
+      },
+    ]);
+  });
+
+  it("reads next week's unattached shifts by local date, leaving out one that starts at 00:30 local on the Monday after", async () => {
+    await warningVenue();
+    const [control] = await seedPersons(suite.db, { displayName: crypto.randomUUID() });
+    for (const person of [personId, control!.id]) {
+      for (let day = 1; day <= 7; day++) {
+        const date = `2026-03-0${day}`;
+        await planned(`${date}T09:00:00Z`, `${date}T17:00:00Z`, null, 60, person);
+      }
+      // Ends after the asked week, so the rest that follows lies outside it.
+      await planned("2026-03-08T19:00:00Z", "2026-03-09T00:00:00Z", null, 60, person);
+      await planned("2026-03-15T23:30:00Z", "2026-03-16T03:00:00Z", null, 60, person);
+    }
+    await planned("2026-03-12T09:00:00Z", "2026-03-12T17:00:00Z", null, 60, control!.id);
+    const response = await read();
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches.filter((b) => b.kind === "weekly_rest_insufficient")).toEqual([
+      {
+        kind: "weekly_rest_insufficient",
+        personId: control!.id,
+        weekStart: "2026-03-02",
+        longestRestMinutes: 1560,
         requiredMinutes: 2160,
       },
     ]);

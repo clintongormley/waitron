@@ -64,19 +64,6 @@ Before adding cadence editing, decide how the first partial period follows a clo
 Keep saved periods and snapshots intact. The
 [owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
-## Rota warning query boundaries
-
-The warnings cases exercise the separate JavaScript filter's local dates. Add fixtures at
-the previous week's first local Monday and the next week's last local Sunday, where the SQL
-selection decides whether the neighboring week is represented for weekly rest. Retain the existing
-offset assertions; require the UTC-query mutation to fail. The route currently keeps
-the offset-aware query. This is a test gap, not an observed wrong answer from that query.
-
-## Roster browser-entry re-exports
-
-The browser-entry guard accepts runtime re-exports such as `export { readFileSync } from "node:fs"`.
-A direct Node import fails the source guard. Extend the guard to runtime re-exports and test that negative control. This follow-up concerns what the text guard would fail to catch in a later edit.
-
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
 **Owner, 2026-10-16.** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
@@ -153,12 +140,6 @@ files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`
 scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
 with the owner who closes a period and when (a manager's button, or automatically once it is
 due), then build it. Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
-
-## Loose ends left by A585-7 (#1766)
-
-- Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
-  week once per candidate on each redraw. Measure a large picker, then share that baseline across
-  its candidates without sharing candidate-specific warnings. Cost unmeasured.
 
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
