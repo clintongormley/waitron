@@ -18,9 +18,11 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateKeyRing, openImmutable } from "@waitron/provisioning";
 import { connectionPair, drizzleNodeSqlite } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
+import { writeCredentialsRing } from "./box-secrets.js";
 import { readPlacedEmergencyCopy } from "./emergency-copy-check.js";
 import { placeEmergencyCopy } from "./emergency-copy-placement.js";
 import { parseEnvFile } from "./env-file.js";
+import { writeTradingEnv } from "./trading-config.js";
 import {
   bindingFor,
   copyId,
@@ -380,6 +382,28 @@ it.each([
   const before = await bothFolders();
   await expect(place(binding)).rejects.toMatchObject({ code });
   expect(await bothFolders()).toEqual(before);
+});
+
+it("a retry after a stop between writing the env files and the move places the copy", async () => {
+  const binding = await placedBinding();
+  // As the stopped placement left them: its ring and trading.env saved, its node.db half made.
+  const stoppedRing = generateKeyRing();
+  await writeCredentialsRing(stateDir, { key: stoppedRing.key, version: stoppedRing.version });
+  await writeTradingEnv(stateDir, { nodeId: copyId, environment: "preproduction" });
+  const stale = join(stateDir, "scratch", "emergency-copy-stale");
+  await mkdir(stale, { recursive: true });
+  await writeFile(join(stale, "node.db"), "half made");
+  const trading = await readFile(join(stateDir, "trading.env"));
+
+  await place(binding);
+
+  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+  expect(key).toEqual(expect.any(String));
+  expect(await readFile(join(stateDir, "trading.env"))).toEqual(trading);
+  expect(await listing(venueDir)).toEqual(["node.db", "venue.db", "venue.lock"]);
+  expect(await listing(join(stateDir, "scratch"))).toEqual(["emergency-copy-stale"]);
+  expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
+  await expect(place(binding)).resolves.toBeUndefined();
 });
 
 it("refuses another binding once a copy is placed, writing nothing", async () => {
