@@ -556,7 +556,8 @@ Review suggestions #1235 did not take, listed in its description: the edit
 route checks permission before the device id where revoke checks the id first; its body is the
 whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
 `rowClickable` and `rowActivation` could be one option; Edit and
-Pair repeat some request-body building.
+Pair repeat some request-body building. A save reading the device list twice is a decision, not
+open: [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## What W104 left open (#1225)
 
@@ -1728,6 +1729,17 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
 ## Decisions and deliberate limits
+
+- **Saving a device on Devices (Edit or Pair) reads the device list twice while the live connection
+  is up (watcher, 2026-11-17, lane B, not the owner; the owner may overrule).** "Follow
+  docs/developers/dashboard-live-updates.md:123-128 — call this.api.liveData?.invalidate([{ type:
+  "devices" }]) after the Edit save and the Pair accept, so a person always sees their own save
+  through the screen's watch." The screen asks for the list again itself after the write, and the
+  server's change notice asks once more, so a person sees their own save even when the event stream
+  has gone silent ([why](../developers/dashboard-live-updates.md)). Measured in a browser test with
+  the notice stood in for after the screen's own read: one read from the save, a second from the
+  notice ("… with no live notice, read once, and once more on the notice" in
+  `apps/dashboard/src/screens/devices-screen.test.ts`).
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,

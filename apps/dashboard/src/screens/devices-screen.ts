@@ -1034,6 +1034,7 @@ export class DevicesScreen extends LitElement {
     } finally {
       if (this.#pairSave === save) this.#pairSave = undefined;
     }
+    this.api.liveData?.invalidate([{ type: "devices" }]);
     if (epoch !== this.#pairEpoch) return;
     scope?.commit(submitted);
     this.submitting = false;
@@ -1467,6 +1468,7 @@ export class DevicesScreen extends LitElement {
     if (epoch === this.#editEpoch) editScope?.commit(submittedDevice);
     if (epoch === this.#editEpoch && sent.invoicePrinterId !== undefined)
       this.#editInvoiceId = sent.invoicePrinterId;
+    this.api.liveData?.invalidate([{ type: "devices" }]);
     if (epoch !== this.#editEpoch) return;
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, approvedProfileIds } = sent;

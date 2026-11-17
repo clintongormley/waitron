@@ -359,7 +359,6 @@ it("successful writes clear drafts before a refused list refresh", async () => {
   q(screen, "[data-test=edit-save]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);
-  liveData.invalidate([{ type: "devices", id: "d1" }]);
   await expect.poll(() => q(screen, "[data-test=page-error]")).not.toBeNull();
 });
 it("newer delivered device input stays dirty against the captured successful write", async () => {
