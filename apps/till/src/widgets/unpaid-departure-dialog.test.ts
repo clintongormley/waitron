@@ -133,7 +133,7 @@ describe("till-unpaid-departure-dialog: the reason", () => {
 });
 
 describe("till-unpaid-departure-dialog: refusals", () => {
-  it.each(["unpaid_departure.unfired_dishes", "unpaid_departure.bill_holds_payment"])(
+  it.each(["unpaid_departure.unfired_dishes"])(
     "says %s in its own sentence above the action, beside no field",
     async (code) => {
       const el = await mount({ refusal: { code } });

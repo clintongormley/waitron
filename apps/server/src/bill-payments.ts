@@ -493,6 +493,20 @@ export async function refuseBillHoldingMoney(
   }
 }
 
+/** What an issued bill still owes: its amount due less the money its payments have kept. */
+export async function stillOwedOnIssuedBill(
+  tx: Transaction,
+  workingOrderId: string,
+  amountDue: Decimal,
+): Promise<Decimal> {
+  const { received } = fundsOf(
+    workingOrderId,
+    amountDue,
+    await readPaymentMoney(tx, [workingOrderId]),
+  );
+  return toScale(subtractDecimal(amountDue, received), MONEY_SCALE);
+}
+
 /** Those of these bills that hold money: a pending payment, or received money not given back. */
 export async function billsHoldingMoney(
   tx: Transaction,

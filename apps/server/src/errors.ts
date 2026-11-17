@@ -712,11 +712,6 @@ declare module "@waitron/shared" {
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
-     * Record unpaid departure found a bill it would invoice, open or presented, still holding money
-     * from a payment: one pending, or one received whose money or tip was not all given back.
-     */
-    "unpaid_departure.bill_holds_payment": { workingOrderId: string };
-    /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.
      */

@@ -8,6 +8,7 @@ import { insertCapturedPayment } from "@waitron/payments";
 import { centsToDecimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { printOrderForTest } from "./testing/issue-order.js";
+import { readBillsOfParties } from "./testing/party-close-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
   fiscalRecordCount,
@@ -87,6 +88,10 @@ describe("a printed bill", () => {
     expect(await salesOf(bill.tabId)).toEqual([{ id: bill.saleId, total: 3000, settledAt: null }]);
     expect(await statusOf(venue, bill.tabId)).toBe("placed");
     expect(fiscalRecordCount(venue, bill.tabId)).toBe(1);
+    const bills = (await readBillsOfParties(venue.db, [bill.partyId])).get(bill.partyId);
+    expect(bills).toEqual([
+      expect.objectContaining({ workingOrderId: bill.tabId, outstanding: "25.00" }),
+    ]);
   });
 
   it("the payment that completes a printed bill settles its ticket, with every payment as a tender", async () => {

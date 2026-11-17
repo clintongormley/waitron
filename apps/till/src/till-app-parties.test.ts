@@ -10828,7 +10828,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
-  it.each(["unpaid_departure.unfired_dishes", "unpaid_departure.bill_holds_payment"])(
+  it.each(["unpaid_departure.unfired_dishes"])(
     "keeps the dialog open with %s's own sentence, and reads the bills again",
     async (code) => {
       const { el } = await openDeparture({
