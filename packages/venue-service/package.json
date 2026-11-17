@@ -19,6 +19,7 @@
     "./dashboard/fixed-title": "./src/dashboard/fixed-title.ts",
     "./dashboard/live-queries": "./src/dashboard/live-queries.ts",
     "./painter": "./src/dashboard/painter.ts",
+    "./dashboard/painter-parts": "./src/dashboard/painter-parts.ts",
     "./testing/zone-menus.js": "./src/testing/zone-menus.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },

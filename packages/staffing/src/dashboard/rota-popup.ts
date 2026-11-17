@@ -2,26 +2,10 @@ import { LitElement, css, html } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { placePopover } from "@waitron/venue-service/painter";
+import { flatParent, scrollTargets } from "@waitron/venue-service/dashboard/painter-parts";
 
 /** `POPOVER_MARGIN` in venue-service's `paint-grid-parts.ts`, which its exports do not list. */
 const MARGIN = 8;
-
-// Copied from venue-service's `flat-tree.ts`, which its exports do not list.
-function flatParent(at: Element): Element | null {
-  const parent = at.parentNode;
-  return at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
-}
-
-// Copied from venue-service's `flat-tree.ts`. A scroll does not bubble or leave its shadow root,
-// so it is heard on the window and on the shadow root of every box `at` is drawn inside.
-function scrollTargets(at: Element): EventTarget[] {
-  const targets = new Set<EventTarget>([window]);
-  for (let box: Element | null = at; box !== null; box = flatParent(box)) {
-    const root = box.getRootNode();
-    if (root instanceof ShadowRoot) targets.add(root);
-  }
-  return [...targets];
-}
 
 /** A rota menu beside the button that opened it; its content is its default slot. Sends
  *  `rota-popup-close` when it closes for any reason. */

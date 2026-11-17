@@ -1,3 +1,4 @@
+import { DaySwipe, PHONE_WIDTH } from "@waitron/venue-service/dashboard/painter-parts";
 import { dateFormat } from "@waitron/venue-service/dashboard/hours-view";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import "./publish-dialog.js";
@@ -38,12 +39,6 @@ const step = (day: string, n: number) =>
 type PopupPick = { key: string; grid: string; selector: string; fallback: string };
 type Grid = LitElement & { focusTarget(target: Target): boolean };
 
-/** Below this many pixels of the rota's own width it draws one day: the Calendar Week's
- *  `PHONE_WIDTH` (`opening-hours-week.ts`), which venue-service does not export. */
-export const PHONE_WIDTH = 560;
-/** The least a finger moves across the day to step a day: the Calendar Week's `SWIPE_PX`
- *  (`opening-hours-week.ts`), which venue-service does not export. */
-const SWIPE_PX = 48;
 /** What, beside its key (which names its day and area), the slot picker and its fill read from a
  *  slot. */
 const sameSlotFields = ["staffRoleId", "startsAt", "endsAt", "start", "end"] as const;
@@ -369,10 +364,10 @@ export class RotaView extends LitElement {
     this.#generation++;
     this.#resizes.disconnect();
     cancelAnimationFrame(this.#narrowing);
-    this.#swipeStop();
+    this.#swipe.stop();
   }
   override willUpdate(changed: PropertyValues<this>) {
-    if (changed.has("narrow")) this.#swipeStop();
+    if (changed.has("narrow")) this.#swipe.stop();
     if ((this.params.area ?? "") !== this.#area) {
       this.#area = this.params.area ?? "";
       this.picked = undefined;
@@ -551,43 +546,15 @@ export class RotaView extends LitElement {
     if (this.day) this.#arriving = step(this.day, days);
     this.#go(step(this.week, days));
   }
-  #swipeFrom: { id: number; x: number; y: number } | undefined;
-  /** The touch and pen contacts down on the day. */
-  #contacts = new Set<number>();
-  #swipeStart(event: PointerEvent) {
-    if (event.pointerType === "mouse") return;
-    if (this.#contacts.size === 0) {
-      // Heard on the window, so a contact lifted where the day does not hear it still ends.
-      window.addEventListener("pointerup", this.#swipeEnd);
-      window.addEventListener("pointercancel", this.#swipeEnd);
-      this.#swipeFrom = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    } else {
-      // A second contact ends the swipe; none starts until every contact has ended.
-      this.#swipeFrom = undefined;
-    }
-    this.#contacts.add(event.pointerId);
-  }
-  #swipeEnd = (event: PointerEvent): void => {
-    if (!this.#contacts.delete(event.pointerId)) return;
-    const from = this.#swipeFrom;
-    if (this.#contacts.size === 0) this.#swipeStop();
-    if (event.type !== "pointerup" || from?.id !== event.pointerId) return;
-    const across = event.clientX - from.x;
-    const down = event.clientY - from.y;
-    if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
-    const next = step(this.day, across < 0 ? 1 : -1);
+  readonly #swipe = new DaySwipe((by) => {
+    const next = step(this.day, by);
     if (next >= this.week && next <= step(this.week, 6)) this.day = next;
     else {
       this.#arriving = next;
-      this.#go(step(this.week, across < 0 ? 7 : -7));
+      this.#go(step(this.week, by * 7));
     }
-  };
-  #swipeStop(): void {
-    this.#swipeFrom = undefined;
-    this.#contacts.clear();
-    window.removeEventListener("pointerup", this.#swipeEnd);
-    window.removeEventListener("pointercancel", this.#swipeEnd);
-  }
+  });
+
   async #fill(slot: Slot, personId: string) {
     const pick = this.#pick(),
       read = this.read,
@@ -885,7 +852,7 @@ export class RotaView extends LitElement {
         @edit-shift=${this.#editShift}
         @pick-slot=${this.#pickSlot}
         @open-day=${this.#openDay}
-        @pointerdown=${(e: PointerEvent) => this.#swipeStart(e)}
+        @pointerdown=${(e: PointerEvent) => this.#swipe.start(e)}
       ></rota-day>`;
     if (show.kind === "everyone")
       return html`<rota-by-person

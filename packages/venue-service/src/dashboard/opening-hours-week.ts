@@ -1,3 +1,4 @@
+import { DaySwipe, PHONE_WIDTH } from "./day-swipe.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -34,12 +35,6 @@ import {
 } from "./week-rows.js";
 
 type Day = OpeningHoursMonth["days"][number];
-
-/** Below this many pixels of the Week's own width it draws its date's day alone, the Month's
- *  breakpoint. */
-export const PHONE_WIDTH = 560;
-/** The least a finger moves across the day card to step a day. */
-const SWIPE_PX = 48;
 
 interface Drawn {
   model: OpeningHoursMonth;
@@ -378,7 +373,7 @@ export class OpeningHoursWeekView extends LitElement {
   #narrowing = 0;
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("narrow")) this.#swipeStop();
+    if (changed.has("narrow")) this.#swipe.stop();
   }
 
   #resizes = new ResizeObserver(([entry]) => {
@@ -433,7 +428,7 @@ export class OpeningHoursWeekView extends LitElement {
     super.disconnectedCallback();
     this.#resizes.disconnect();
     cancelAnimationFrame(this.#narrowing);
-    this.#swipeStop();
+    this.#swipe.stop();
   }
 
   #emit<T>(name: string, detail: T): void {
@@ -638,48 +633,16 @@ export class OpeningHoursWeekView extends LitElement {
       <div
         class="card"
         data-test="day-card"
-        @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
+        @pointerdown=${(event: PointerEvent) => this.#swipe.start(event)}
       >
         ${this.#noOrders(rows, orders, day!) ?? rows.map((row) => this.#phoneRow(row, day!, names, orders))}
       </div>`;
   }
 
-  #swipeFrom: { id: number; x: number; y: number } | undefined;
-  /** The touch and pen contacts down on the day card. */
-  #contacts = new Set<number>();
-
-  #swipeStart(event: PointerEvent) {
-    if (event.pointerType === "mouse") return;
-    if (this.#contacts.size === 0) {
-      // Heard on the window, so a contact lifted where the card does not hear it still ends.
-      window.addEventListener("pointerup", this.#swipeEnd);
-      window.addEventListener("pointercancel", this.#swipeEnd);
-      this.#swipeFrom = { id: event.pointerId, x: event.clientX, y: event.clientY };
-    } else {
-      // A second contact ends the swipe; none starts until every contact has ended.
-      this.#swipeFrom = undefined;
-    }
-    this.#contacts.add(event.pointerId);
-  }
-
-  #swipeEnd = (event: PointerEvent): void => {
-    if (!this.#contacts.delete(event.pointerId)) return;
-    const from = this.#swipeFrom;
-    if (this.#contacts.size === 0) this.#swipeStop();
-    if (event.type !== "pointerup" || from?.id !== event.pointerId) return;
-    const across = event.clientX - from.x;
-    const down = event.clientY - from.y;
-    if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
-    const target = addDays(this.date, across < 0 ? 1 : -1);
+  readonly #swipe = new DaySwipe((by) => {
+    const target = addDays(this.date, by);
     if (weekInRange(target)) this.#emit("week-change", { date: target });
-  };
-
-  #swipeStop(): void {
-    this.#swipeFrom = undefined;
-    this.#contacts.clear();
-    window.removeEventListener("pointerup", this.#swipeEnd);
-    window.removeEventListener("pointercancel", this.#swipeEnd);
-  }
+  });
 
   #openBarDay(date: LocalDate, event: MouseEvent, stationRow: boolean): void {
     const pointer = stationRow && event.detail > 0;

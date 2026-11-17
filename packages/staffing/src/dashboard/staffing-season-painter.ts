@@ -11,6 +11,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { paintRowStyles, periodColourStyles, seasonLastDay } from "@waitron/venue-service/painter";
+import { seasonStepper, seasonStepperStyles } from "@waitron/venue-service/dashboard/painter-parts";
 import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, blockSpan, type StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit } from "../staffing-types.js";
@@ -71,6 +72,7 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     seasonTintStyles,
     periodColourStyles,
     paintRowStyles,
+    seasonStepperStyles,
     painterStyles,
     css`
       staffing-grid::part(column-error) {
@@ -84,27 +86,6 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
         clip: auto;
         white-space: normal;
         font-weight: var(--wt-font-weight-normal);
-      }
-      .season {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-      .chip {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        padding: var(--wt-space-1) var(--wt-space-3);
-        white-space: nowrap;
-      }
-      .chip[data-tint] {
-        background: var(--season-tint);
-        color: var(--season-on-tint);
-        border-color: var(--season-tint-line);
-      }
-      .covers {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -230,35 +211,20 @@ export class StaffingSeasonPainter extends StaffingPainterBase<
     // The read refuses a season that is gone, so it always lists this one.
     const season = read.seasons.find(({ id }) => id === this.seasonId)!;
     const single = read.seasons.length < 2;
-    return html`<span slot="picker" class="season">
-      <wt-button
-        data-test="previous-season"
-        variant="ghost"
-        aria-label=${t("staffing.painter.previous_season")}
-        ?disabled=${single || this.saving}
-        @click=${() => {
-          if (!single) this.step(-1);
-        }}
-        >‹</wt-button
-      >
-      <span class="chip" data-test="season" data-tint=${seasonTints(read.seasons).get(season.id)!}
-        >${tf("staffing.month.season", {
-          name: season.name,
-          from: formatMonthDay(season.startsOn),
-          to: formatMonthDay(seasonLastDay(read.seasons, season.startsOn)),
-        })}</span
-      >
-      <wt-button
-        data-test="next-season"
-        variant="ghost"
-        aria-label=${t("staffing.painter.next_season")}
-        ?disabled=${single || this.saving}
-        @click=${() => {
-          if (!single) this.step(1);
-        }}
-        >›</wt-button
-      >
-    </span>`;
+    return seasonStepper({
+      label: tf("staffing.month.season", {
+        name: season.name,
+        from: formatMonthDay(season.startsOn),
+        to: formatMonthDay(seasonLastDay(read.seasons, season.startsOn)),
+      }),
+      tint: seasonTints(read.seasons).get(season.id)!,
+      previousLabel: t("staffing.painter.previous_season"),
+      nextLabel: t("staffing.painter.next_season"),
+      disabled: single || this.saving,
+      step: (by) => {
+        if (!single) this.step(by);
+      },
+    });
   }
 
   private invalidColumns(read: SeasonStaffing, area: string): ReadonlyMap<string, string> {

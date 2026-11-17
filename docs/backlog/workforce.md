@@ -45,15 +45,10 @@ slots it produces. Opening hours' special-day painter draws from the first date'
 says so when the dates' changeovers differ. Needs a
 decision on how one grid with one time ruler shows dates with different changeovers. Special-day saves also validate blocks against the first start (`packages/staffing/src/routes.ts`, `cutoverOf`).
 
-## A711. Shared staffing painter code
+## A711. Special-day staffing dates come from the first area
 
-- Copied from venue-service rather than exported from `@waitron/venue-service/painter`: the season
-  ‹ › stepper and its CSS; the staffing paint row's markup, which relies on `paintRowStyles`' class
-  names; and the `--paint-grid-fill` height (staffing's `painter-parts.ts`, and venue-service's
-  `season-painter.ts` and `special-day-painter.ts`), whose sum depends on the height of the grid's
-  heading row; the style of the "which weeks it edits" line (`.covers`).
-- The special-day painter takes its list of dates, and the dates in its heading, from the read's
-  first area, as no top-level list exists in `SpecialDayStaffing`.
+The special-day painter takes its list of dates, and the dates in its heading, from the read's
+first area, as no top-level list exists in `SpecialDayStaffing`.
 
 ## Pay-period changes after closure
 
@@ -93,13 +88,6 @@ A direct Node import fails the source guard. Extend the guard to runtime re-expo
 > rota stands. The Rota tab opens the week of the day last picked in the month, else the current
 > week.
 
-## A699. Shared staffing popup and navigation parts
-
-`rota-popup.ts` copies follow-and-close logic from `CalendarDayBox`, plus `flatParent` and
-`scrollTargets` from venue-service's unexported `flat-tree.ts`. The rota additionally places once
-per frame and when its own size changes. `rota-view.ts` also copies the swipe handling,
-`SWIPE_PX` and `PHONE_WIDTH` from `opening-hours-week.ts`. Share those browser-safe pieces without
-losing the rota's placement behaviour.
 
 ## A586. Each person's contract terms
 
@@ -250,15 +238,6 @@ exists unused. Shown in A585's picker and warnings. After A586.
 - **Staffing's day box: each area's staff roles and times.**
   [Detail](workforce.md#staffings-day-box-each-areas-staff-roles-and-times)
 
-## Bundle: Staffing painter shared parts
-
-2 entries, size M.
-
-- **A699. Shared staffing popup and navigation parts.**
-  [Detail](workforce.md#a699-shared-staffing-popup-and-navigation-parts)
-- **A711. Shared staffing painter chrome and date source.** The season stepper, paint-row markup,
-  grid height and covers line still copy venue-service; special-day dates come from its first area.
-  [Detail](workforce.md#a711-shared-staffing-painter-code)
 
 ## Decisions and deliberate limits
 
