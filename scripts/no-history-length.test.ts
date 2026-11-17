@@ -13,7 +13,15 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { decodeEscapes } from "./no-till-as-issuer.mjs";
+
+vi.mock("typescript", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("typescript")>();
+  return {
+    default: { ...actual.default, createSourceFile: vi.fn(actual.default.createSourceFile) },
+  };
+});
 
 const ROOT = join(import.meta.dirname, "..");
 const ROOTS = ["apps", "packages"];
@@ -34,7 +42,11 @@ function isBrowserHistory(node: ts.Expression): boolean {
 /** Lines of `source` that read the browser's global `history.length`. */
 export function historyLengthReads(source: string): number[] {
   // Escaped identifiers need the parser's decoded spelling.
-  if (!source.includes("\\u") && !POSSIBLE_READ.test(source)) return [];
+  if (!POSSIBLE_READ.test(source)) {
+    if (!source.includes("\\u")) return [];
+    const decoded = decodeEscapes(source);
+    if (!decoded.includes("history") || !decoded.includes("length")) return [];
+  }
   const file = ts.createSourceFile("x.ts", source, ts.ScriptTarget.Latest, true);
   const lines = new Set<number>();
   const visit = (node: ts.Node) => {
@@ -124,4 +136,17 @@ describe("the tree", () => {
     }
     expect(found).toEqual([]);
   });
+});
+
+test("skips parsing unrelated Unicode escapes", () => {
+  vi.mocked(ts.createSourceFile).mockClear();
+  expect(historyLengthReads(String.raw`const space = "\u00a0";`)).toEqual([]);
+  expect(ts.createSourceFile).not.toHaveBeenCalled();
+});
+
+test("keeps decoded identifier candidates independent of escaped comment delimiters", () => {
+  expect(historyLengthReads(String.raw`h\u0069story.l\u0065ngth;`)).toEqual([1]);
+  expect(historyLengthReads(String.raw`history /* \u002a/ */ .length;`)).toEqual([1]);
+  expect(historyLengthReads(String.raw`h\u0069story /* \u002a/ */ .length;`)).toEqual([1]);
+  expect(historyLengthReads(String.raw`const broken = "\u{110000}";`)).toEqual([]);
 });

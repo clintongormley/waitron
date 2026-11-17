@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { expect, it } from "vitest";
-import { sourceFilesIn } from "./no-till-as-issuer.mjs";
+import { expect, it, vi } from "vitest";
+
+vi.mock("typescript", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("typescript")>();
+  return {
+    default: { ...actual.default, createSourceFile: vi.fn(actual.default.createSourceFile) },
+  };
+});
+import { decodeEscapes, sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 const helpers: Record<string, string[]> = {
   "apps/dashboard/src/widgets/product-list.ts": ["#addItems"],
@@ -29,7 +36,15 @@ const helpers: Record<string, string[]> = {
 
 // Literal menu fragments and named helpers only; dynamic values/selectors, detached new helpers and
 // class-only CSS need review. Native choice content layout and rich panels are outside this guard.
+// Each rule needs a candidate marker in raw or decoded text, or a named helper above.
+const MENU_CANDIDATE = /row-actions|wt-menu-row|--wt-button-justify/;
 function violations(path: string, source: string): string[] {
+  if (
+    !helpers[path] &&
+    !MENU_CANDIDATE.test(source) &&
+    (!source.includes("\\") || !MENU_CANDIDATE.test(decodeEscapes(source)))
+  )
+    return [];
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
   const failures = new Set<string>();
   const menuPattern = /<(?:wt|dashboard)-row-actions\b[\s\S]*?<\/(?:wt|dashboard)-row-actions\s*>/g;
@@ -155,4 +170,22 @@ it("screens leave action item appearance to the shared components", () => {
     ),
   );
   expect(failures).toEqual([]);
+});
+
+it("skips parsing sources with no possible menu ownership match", () => {
+  vi.mocked(ts.createSourceFile).mockClear();
+  expect(violations("apps/server/src/example.ts", 'export const message = "ready";')).toEqual([]);
+  expect(ts.createSourceFile).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["css`:host { --wt-button-justif\\u0079: start; }`", ["reserved alignment"]],
+  [
+    'html`<wt-row-\\u0061ctions><wt-button size="sm">Edit</wt-button></wt-row-actions>`',
+    ["menu size"],
+  ],
+  ["css`wt-menu-row a { padding: 0; }`", ["menu CSS"]],
+  ["html`<wt-button>\\u00a0</wt-button>`", []],
+])("keeps escaped literals and CSS candidates in %s", (source, expected) => {
+  expect(violations("apps/dashboard/src/screens/sample.ts", source)).toEqual(expected);
 });
