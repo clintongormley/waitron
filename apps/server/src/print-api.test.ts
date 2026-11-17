@@ -1025,37 +1025,51 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
     expect(discoveryUntil).toBeGreaterThan(Date.now());
 
-    const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 1234);
-    try {
-      expect((await pull(app, token)).discoveryExpiresInMs).toBe(1234);
-    } finally {
-      now.mockRestore();
-    }
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    const at = holdClocks();
+    at(discoveryUntil - Date.now() - 1234);
+    expect((await pull(app, token)).discoveryExpiresInMs).toBe(1234);
   });
 
-  // Opened at T for three minutes; a clock read earlier than T leaves its end further ahead than
-  // its length.
-  it.each([
-    ["400 days back", 400 * 86_400_000, false],
-    ["its length ahead exactly", 0, true],
-    ["a millisecond past its length", 1, false],
-  ])(
-    "shuts a discovery window whose end lies further ahead than its length (%s)",
-    async (_case, stepBack, open) => {
-      const app = mountApp();
-      const { token } = await joinAndAccept(app);
-      const start = await send(app, "POST", "/management-api/printer-discovery/start", {
-        cookie: managerCookie,
-      });
-      const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
-      const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 3 * 60_000 - stepBack);
-      try {
-        expect((await pull(app, token)).discoveryExpiresInMs).toBe(open ? 180_000 : null);
-      } finally {
-        now.mockRestore();
-      }
-    },
-  );
+  it("times the discovery window on the steady clock while answering a wall-clock end", async () => {
+    const day = 86_400_000;
+    const base = Date.now();
+    let wall = base;
+    let steady = 1_000;
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(await start.json()).toEqual({ discoveryUntil: base + 180_000 });
+    for (const stepped of [base - 400 * day, base + 400 * day]) {
+      wall = stepped;
+      expect((await pull(app, token)).discoveryExpiresInMs).toBe(180_000);
+    }
+    steady += 179_999;
+    expect((await pull(app, token)).discoveryExpiresInMs).toBe(1);
+    steady += 1;
+    expect((await pull(app, token)).discoveryExpiresInMs).toBeNull();
+  });
+
+  it("never hands out more than three minutes when a fractional steady clock reads the same twice", async () => {
+    // 91037.4 + 180000 - 91037.4 is a hair over 180000 in floating point.
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    vi.spyOn(performance, "now").mockReturnValue(91_037.4);
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    await send(app, "POST", "/management-api/printer-discovery/start", { cookie: managerCookie });
+    expect((await pull(app, token)).discoveryExpiresInMs).toBe(180_000);
+  });
 
   /** A session of its own, so ageing it cannot expire the shared manager cookie. */
   async function ownManagerSession(
@@ -3159,25 +3173,6 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(res.status).toBe(200);
     return (await res.json()) as Record<string, unknown>[];
   }
-
-  it("lists a report by the shorter bound while the window lies further ahead than its length", async () => {
-    const app = mountApp();
-    const { token } = await joinAndAccept(app, "Stepped agent");
-    const start = await send(app, "POST", "/management-api/printer-discovery/start", {
-      cookie: managerCookie,
-    });
-    expect(start.status).toBe(200);
-    const serial = `SN-${randomUUID()}`;
-    // Ten minutes back: the window then ends further ahead than its three minutes, while the
-    // dashboard session stays inside its 30-minute idle limit.
-    const reportedAt = Date.now() - 10 * 60_000;
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
-    await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
-    expect((await discoveredRows(app)).map((r) => r.localKey)).toContain(serial);
-    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 30_000);
-    expect((await discoveredRows(app)).map((r) => r.localKey)).not.toContain(serial);
-  });
 
   it("drops malformed inventory entries and keeps the well-formed ones", async () => {
     const app = mountApp();
@@ -6445,6 +6440,7 @@ describe("held print pulls", () => {
     const r = await rig();
     let now = Date.now();
     const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const steady = vi.spyOn(performance, "now").mockImplementation(() => now);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const opened = await send(r.app, "POST", "/management-api/printer-discovery/start", {
@@ -6461,6 +6457,7 @@ describe("held print pulls", () => {
       });
     } finally {
       clock.mockRestore();
+      steady.mockRestore();
     }
   });
 

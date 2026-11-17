@@ -12,7 +12,7 @@ import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js"
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, steadyNow } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import {
@@ -531,7 +531,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const wakePulls = (agentId?: string): void => {
     for (const wake of pullWakes) wake(agentId);
   };
-  let discoveryUntil = 0; // epoch ms; 0 = closed
+  let discoveryEnd = -Infinity; // on the steady clock
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     withinTtl(at, now, DISCOVERED_TTL_MS);
@@ -549,13 +549,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     (printer.transport !== "usb" && printer.transport !== "bluetooth") ||
     printer.localKey === DEMO_PRINTER_KEY ||
     visible.has(`${printer.transport}:${printer.localKey}`);
-  /** 0 when closed; a window ending further ahead than its length was opened before a backward
-   * step of the clock, so it is closed. */
-  const openDiscoveryUntil = (now: number): number =>
-    discoveryUntil - now > DISCOVERY_WINDOW_MS ? 0 : discoveryUntil;
+  /** 0 when closed. Capped because floating-point subtraction can overshoot the window's length. */
+  const discoveryLeftMs = (): number =>
+    Math.max(0, Math.min(DISCOVERY_WINDOW_MS, Math.ceil(discoveryEnd - steadyNow())));
   /** The discovered list's own freshness, which also bounds the Pair and Forget it offers. */
   const isListed = (at: number | undefined, now: number): boolean =>
-    listedAt(at, now, openDiscoveryUntil(now));
+    listedAt(at, now, now + discoveryLeftMs());
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
   const queueKeyOf = (device: DiscoveredDeviceWire): string | undefined => {
@@ -696,7 +695,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           testPages.printingOn().length > 0 ||
           bluetoothCommands.current(agentId).length > 0 ||
           printerProbes.current().length > 0 ||
-          openDiscoveryUntil(Date.now()) > Date.now()
+          discoveryLeftMs() > 0
         )
           remaining = Math.min(remaining, 2_000);
         if (changed || ended || reply) continue;
@@ -978,8 +977,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const held = await deps.readMembership();
       const networkProbes = printerProbes.current();
       const commands = bluetoothCommands.current(agentId);
-      const repliedAt = Date.now();
-      const until = openDiscoveryUntil(repliedAt);
+      const discoveryLeft = discoveryLeftMs();
       return c.json({
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
@@ -993,7 +991,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           payload: Buffer.from(job.payload).toString("base64"),
           ...(job.invoiceClaim === undefined ? {} : { invoiceClaim: job.invoiceClaim }),
         })),
-        discoveryExpiresInMs: until > repliedAt ? until - repliedAt : null,
+        discoveryExpiresInMs: discoveryLeft > 0 ? discoveryLeft : null,
         ...(networkProbes.length ? { networkProbes } : {}),
         ...(commands.length ? { bluetoothCommands: commands } : {}),
       });
@@ -1157,9 +1155,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       await gated(sessionId, async () => {});
-      discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      discoveryEnd = steadyNow() + DISCOVERY_WINDOW_MS;
       wakePulls();
-      return c.json({ discoveryUntil });
+      return c.json({ discoveryUntil: Date.now() + DISCOVERY_WINDOW_MS });
     }),
   );
 
@@ -1169,9 +1167,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       await withPassiveManagementRead(() => gated(sessionId, async () => {}));
-      discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      discoveryEnd = steadyNow() + DISCOVERY_WINDOW_MS;
       wakePulls();
-      return c.json({ discoveryUntil });
+      return c.json({ discoveryUntil: Date.now() + DISCOVERY_WINDOW_MS });
     }),
   );
 
@@ -1325,7 +1323,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       findDiscovery: findPagePrinterDiscovery,
       discoveryWindow: () => {
         const now = Date.now();
-        return { now, discoveryUntil: openDiscoveryUntil(now) };
+        return { now, discoveryUntil: now + discoveryLeftMs() };
       },
       testPages,
       wakeAgent: wakePulls,

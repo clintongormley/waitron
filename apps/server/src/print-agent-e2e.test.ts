@@ -154,13 +154,14 @@ describe("print-agent end to end", () => {
   it("keeps scan discoveries listed during a held pass without renewing pairing or paired evidence", async () => {
     let now = Date.now();
     const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const steadyClock = vi.spyOn(performance, "now").mockImplementation(() => now);
     let finish!: (devices: DiscoveredDevice[]) => void;
     const held = new Promise<DiscoveredDevice[]>((resolve) => {
       finish = resolve;
     });
     try {
       const app = new Hono();
-      const pairingMode = createPairingMode({ holdMs: 1_000, steady: () => now });
+      const pairingMode = createPairingMode({ holdMs: 1_000 });
       pairingMode.open();
       mountPrintApi(
         app,
@@ -271,6 +272,7 @@ describe("print-agent end to end", () => {
       finish([]);
       await new Promise((resolve) => setTimeout(resolve, 0));
       clock.mockRestore();
+      steadyClock.mockRestore();
     }
   });
 
