@@ -286,7 +286,7 @@ const activations = (store: Store) => store.venue.select().from(handoverActivati
 const sifRows = (store: Store) => store.venue.select().from(registroSif);
 
 async function emergencySpare(gate = true) {
-  placed = await fixture.placeEmergencyCopy();
+  placed = await fixture.placeSpareEmergencyCopy();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
   const declarationApp = new Hono();
