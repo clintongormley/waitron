@@ -618,8 +618,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe",
   },
   "reader.not_found": {
-    en: "This device has no card reader it can use. Take cash, or set up a reader in the dashboard, under Card payments",
-    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Cobra en efectivo, o configura un lector en el panel, en Pagos con tarjeta",
+    en: "This device has no card reader it can use. A device's card readers are chosen in the dashboard, under Device profiles; new readers are added under Card payments",
+    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Los lectores de tarjetas de un dispositivo se eligen en el panel, en Perfiles de dispositivo; los lectores nuevos se añaden en Pagos con tarjeta",
   },
   "reader.provider_disconnected": {
     en: "The card reader's payment provider is not connected. Take cash; the provider can be connected in the dashboard, under Modules",
@@ -775,8 +775,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // The two card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` for the reader's own `device.forbidden_action` (action `pay`).
   "device.forbidden_station": {
-    en: "This device cannot use that station. Which stations it shows can be changed in the dashboard, under Device profiles.",
-    es: "Este dispositivo no puede usar esa estación. Las estaciones que muestra se pueden cambiar en el panel, en Perfiles de dispositivo.",
+    en: "This device cannot use that station: the dish may have moved to another station, or this device's stations have changed. Reload to see what it can use now; which stations it shows can be changed in the dashboard, under Device profiles.",
+    es: "Este dispositivo no puede usar esa estación: puede que el plato haya pasado a otra estación o que hayan cambiado las estaciones de este dispositivo. Vuelve a cargar para ver lo que puede usar ahora; las estaciones que muestra se pueden cambiar en el panel, en Perfiles de dispositivo.",
   },
   "device.forbidden_action": {
     en: "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
@@ -823,8 +823,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo ya no tiene ese lector de tarjetas. Elige un lector en Equipo e inténtalo de nuevo. No se ha cobrado ninguna tarjeta.",
   },
   "reader.payment_in_progress": {
-    en: "Another device is taking a card payment on that reader. Try again when it finishes, or take cash. A stuck payment can be resolved in the dashboard, under Card payments.",
-    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine, o cobra en efectivo. Un cobro atascado se puede resolver en el panel, en Pagos con tarjeta.",
+    en: "Another device is taking a card payment on that reader. Try again when it finishes. A stuck payment can be resolved in the dashboard, under Card payments.",
+    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine. Un cobro atascado se puede resolver en el panel, en Pagos con tarjeta.",
   },
   "device_profile.not_approved": {
     en: "This device can no longer switch to that profile. Choose another",
@@ -842,9 +842,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This device switched to another profile while the payment was starting. No card was charged. Try again.",
     es: "Este dispositivo ha cambiado a otro perfil mientras se iniciaba el pago. No se ha cobrado ninguna tarjeta. Inténtalo de nuevo.",
   },
+  // A fault in Waitron: thrown only when an order has no service record, or a sale has no receipt
+  // header naming a department; a zone without a live department is refused as
+  // `service_zone.not_found` instead.
   "sale.department_missing": {
-    en: "No department was found for this sale, so nothing was recorded. This is a fault in Waitron; no setting changes it.",
-    es: "No se ha encontrado un departamento para esta venta, así que no se ha registrado nada. Es un fallo de Waitron; ningún ajuste lo cambia.",
+    en: "No department was found for this sale. This is a fault in Waitron; no setting changes it.",
+    es: "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
   },
   "department.operation_description_required": {
     en: "This department has no tax-agency description yet, so it cannot sell. A manager can add it in the dashboard, under Departments and zones.",

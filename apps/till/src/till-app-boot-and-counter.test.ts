@@ -2255,11 +2255,11 @@ describe("till-app simplified-invoice limit", () => {
   it.each([
     [
       "en-GB",
-      "No department was found for this sale, so nothing was recorded. This is a fault in Waitron; no setting changes it.",
+      "No department was found for this sale. This is a fault in Waitron; no setting changes it.",
     ],
     [
       "es-ES",
-      "No se ha encontrado un departamento para esta venta, así que no se ha registrado nada. Es un fallo de Waitron; ningún ajuste lo cambia.",
+      "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
     ],
   ])("explains a sale's missing department in %s and keeps its basket", async (locale, message) => {
     try {

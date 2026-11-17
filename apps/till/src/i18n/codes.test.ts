@@ -693,10 +693,10 @@ it("tells staff a department without a tax-agency description cannot sell, and w
 
 it("calls a sale with no department a fault in Waitron, without directing staff to edit its description", () => {
   expect(codeMessage("sale.department_missing", "en")).toBe(
-    "No department was found for this sale, so nothing was recorded. This is a fault in Waitron; no setting changes it.",
+    "No department was found for this sale. This is a fault in Waitron; no setting changes it.",
   );
   expect(codeMessage("sale.department_missing", "es")).toBe(
-    "No se ha encontrado un departamento para esta venta, así que no se ha registrado nada. Es un fallo de Waitron; ningún ajuste lo cambia.",
+    "No se ha encontrado un departamento para esta venta. Es un fallo de Waitron; ningún ajuste lo cambia.",
   );
 });
 
