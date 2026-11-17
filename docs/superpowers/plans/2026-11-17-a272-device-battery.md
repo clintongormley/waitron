@@ -1,6 +1,6 @@
 # A272: device low-battery alerts
 
-**Status:** Corrections reread by Claude; watcher clearance pending. No owner approval of this design is claimed.
+**Status:** Corrections reread by Claude; watcher cleared at 2026-11-17 17:56 in Lane F `questions.md`. No owner approval of this design is claimed.
 **Authority:** Lane F `questions.md`, watcher 2026-11-17 17:33: “A272 (device low-battery alert) is eligible now: plan first.” Exact ask is A272 in that lane’s `queue.md`; it requests a battery alert, English/Spanish wording, one guide line per language, no database change, and backlog deletion.
 
 ## Usable result and reuse
@@ -19,7 +19,7 @@ A report is fresh through exactly 600,000 ms old, matching `devices-screen.ts:26
 
 3. **Dashboard owns wording/labels.** Add bilingual interpolation/charging-instruction cases in `apps/dashboard/src/i18n/alerts.test.ts` and area-label cases in `apps/dashboard/src/widgets/alert-format.test.ts`, restoring language afterwards. Run both to fail; add `device.battery_low` to `apps/dashboard/src/i18n/alert-messages.ts` and “Devices”/“Dispositivos” to `apps/dashboard/src/i18n/strings.ts`; rerun to pass. Wording names `{device}`, `{percent}` and says to charge it. Run `pnpm exec vitest run scripts/ongoing-alert-codes.test.ts scripts/alert-codes.test.ts` unchanged.
 
-4. **Guide and backlog.** No Devices guide exists on base `cac9f098`. Reuse the Devices-table paragraphs in `apps/server/src/guide/{en,es}/printers.md#printer-details`, as Claude recommends, after the existing Devices-table paragraph (EN line 53, ES line 58), with one actionable sentence: “If a device’s battery reading in **Devices** is grey, check its charge on the device itself.” Spanish: “Si la lectura de batería de un dispositivo en **Dispositivos** está en gris, comprueba su carga en el propio dispositivo.” Do not explain automatic threshold/charging decisions, per `conventions-ui.md:122–132`. Run existing server `src/guide-content.test.ts` and `src/guide-pages.test.ts`; inspect both rendered languages in both themes at phone width. Remove only A272’s backlog entry and adjoining spare blank line (three lines).
+4. **Guide and backlog.** No Devices guide exists on base `cac9f098`. Reuse the Devices-table paragraphs in `apps/server/src/guide/{en,es}/printers.md#printer-details`, as Claude recommends, after the existing Devices-table paragraph (EN line 53, ES line 58), with one actionable sentence: “Waitron alerts you when a device's battery is low; if its battery reading in **Devices** is grey, check its charge on the device itself.” Spanish: “Waitron te avisa cuando la batería de un dispositivo está baja; si su lectura de batería en **Dispositivos** está en gris, comprueba su carga en el propio dispositivo.” Do not explain automatic threshold/charging decisions, per `conventions-ui.md:122–132`. Run existing server `src/guide-content.test.ts` and `src/guide-pages.test.ts`; inspect both rendered languages in both themes at phone width. Remove only A272’s backlog entry and adjoining spare blank line (three lines).
 
 ## Bounds and size
 

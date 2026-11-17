@@ -522,6 +522,7 @@ declare module "@waitron/shared" {
      * thrown request error (`alert-sources.ts`). `reader` is the display name, `percent` a whole
      * percentage; neither is a secret.
      */
+    "device.battery_low": { device: string; percent: number };
     "reader.battery_low": { reader: string; percent: number };
     "reader.status_unavailable": { reader: string };
     "reader.offline": { reader: string };

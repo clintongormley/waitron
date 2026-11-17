@@ -212,6 +212,7 @@ import {
   firstStartAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  deviceBatteryAlertSource,
   invoiceDeliveryAlertSource,
   passScreenAlertSource,
   printingAlertSource,
@@ -3897,6 +3898,7 @@ async function bootServer(
       stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
     }),
     passScreenAlertSource(),
+    deviceBatteryAlertSource(),
   ];
   if (paymentsEnabled)
     serverAlertSources.push(

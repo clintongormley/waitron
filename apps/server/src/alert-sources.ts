@@ -24,6 +24,7 @@ import {
   sales,
   type Transaction,
 } from "@waitron/db";
+import { listDevices } from "@waitron/layouts";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
@@ -806,6 +807,38 @@ export const BATTERY_WARN = 20;
 export const BATTERY_ERROR = 10;
 /** Above SumUp's two sequential 20-second status calls; a stalled provider cannot hold alerts open. */
 const BATTERY_CHECK_LIMIT_MS = 45_000;
+
+const DEVICE_BATTERY_STALE_MS = 10 * 60_000;
+
+export function deviceBatteryAlertSource(): AlertSource {
+  return {
+    area: "devices",
+    permission: "hardware.manage",
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
+      const alerts: OngoingAlert[] = [];
+      for (const device of await listDevices(tx)) {
+        const percent = device.batteryLevel;
+        if (
+          percent === null ||
+          percent > BATTERY_WARN ||
+          device.batteryCharging !== false ||
+          device.batteryReportedAt === null ||
+          now.getTime() - Date.parse(device.batteryReportedAt) > DEVICE_BATTERY_STALE_MS
+        )
+          continue;
+        alerts.push({
+          key: `device.battery_low:${device.id}`,
+          code: "device.battery_low",
+          params: { device: device.label, percent },
+          severity: percent <= BATTERY_ERROR ? "error" : "warning",
+          since: null,
+          screen: "devices",
+        });
+      }
+      return alerts;
+    },
+  };
+}
 
 /**
  * The card-reader alert source: a reader its provider reports offline, and a low battery. A reader

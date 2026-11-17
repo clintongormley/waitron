@@ -49,6 +49,8 @@ In **Devices**, choose **Edit** from the device's row menu.
 Grey italic equipment names inherit the profile's default. Choose a named item to set it on this
 device; choose the grey entry again to inherit. The Devices table uses the same style.
 
+Waitron alerts you when a device's battery is low; if its battery reading in **Devices** is grey, check its charge on the device itself.
+
 In **Devices**, check **Invoice printer** to see where a device prints invoices. **· A4** after
 the printer's name identifies an A4 printer.
 

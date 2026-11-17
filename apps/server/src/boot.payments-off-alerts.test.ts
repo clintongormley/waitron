@@ -5,14 +5,15 @@ import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { withTransaction, saveSettings } from "@waitron/db";
+import { devices, withTransaction, saveSettings } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { workTimeRulesConfig, WORK_TIME_RULES_NOT_FOUND } from "@waitron/workforce-es";
 import { mountTillApi, resolveCardCollector } from "./till-api.js";
 import { failAttempting, PAYMENTS_SETTINGS } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -63,6 +64,18 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
   });
   it("keeps an absent set absent, or upgrades retained tables and recovers earlier payments", async () => {
     const venue = await setupVenue(suite.db);
+    const { deviceId } = await seedDevice(suite.db, {
+      label: "Terrace handheld",
+      formFactor: "phone-portrait",
+    });
+    await suite.db
+      .update(devices)
+      .set({
+        batteryLevel: 10,
+        batteryCharging: false,
+        batteryReportedAt: new Date().toISOString(),
+      })
+      .where(eq(devices.id, deviceId));
     const [admin] = await seedPersons(suite.db, {
       displayName: "Module Switch Administrator",
       role: "admin",
@@ -235,6 +248,18 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
       expect(response.status).toBe(200);
       const { alerts } = (await response.json()) as { alerts: Alert[] };
       expect(alerts.filter((alert) => alert.area === "card_reader")).toEqual([]);
+      expect(alerts.filter((alert) => alert.area === "devices")).toEqual([
+        {
+          kind: "ongoing",
+          area: "devices",
+          key: `device.battery_low:${deviceId}`,
+          code: "device.battery_low",
+          params: { device: "Terrace handheld", percent: 10 },
+          severity: "error",
+          since: null,
+          screen: "devices",
+        },
+      ]);
       const tables = suite.db.all<{
         name: string;
       }>(sql`select name from sqlite_master where name in

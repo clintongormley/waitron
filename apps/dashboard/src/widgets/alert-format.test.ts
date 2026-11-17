@@ -178,3 +178,10 @@ it("joins every written time with no-break characters and leaves the rest of the
     "From 2026\u201111\u201114\u00a008:05 to 2026\u201111\u201114\u00a009:40 - done 12-3",
   );
 });
+
+it("labels the devices area in both languages", () => {
+  setLocale("en-GB");
+  expect(areaLabel("devices")).toBe("Devices");
+  setLocale("es-ES");
+  expect(areaLabel("devices")).toBe(es["nav.devices"]);
+});

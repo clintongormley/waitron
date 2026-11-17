@@ -54,6 +54,8 @@ equipos en gris y cursiva heredan el valor del perfil. Elige un equipo para fija
 dispositivo; vuelve a elegir la opción en gris para heredarlo. La tabla de Dispositivos usa el
 mismo estilo.
 
+Waitron te avisa cuando la batería de un dispositivo está baja; si su lectura de batería en **Dispositivos** está en gris, comprueba su carga en el propio dispositivo.
+
 En **Dispositivos**, consulta **Impresora de facturas** para ver dónde imprime las facturas cada
 dispositivo. **· A4** tras el nombre identifica una impresora A4.
 

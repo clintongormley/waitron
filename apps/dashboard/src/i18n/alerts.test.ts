@@ -1122,3 +1122,12 @@ it("names the actual pending phase and the two clocks in both languages", () => 
     }
   }
 });
+
+it.each([
+  ["en-GB", "Device “Terrace handheld” battery is low (10%). Charge it."],
+  ["es-ES", "La batería del dispositivo «Terrace handheld» está baja (10 %). Cárgalo."],
+])("names the low-battery device, percent and action (%s)", (locale, expected) => {
+  expect(
+    alertMessage("device.battery_low", { device: "Terrace handheld", percent: 10 }, locale),
+  ).toBe(expected);
+});
