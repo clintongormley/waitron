@@ -312,7 +312,7 @@ export class UnitForm extends LitElement {
       const warned = this.measureUsage > 0 || this.measureUsageUnavailable;
       const generation = this.#measureGeneration;
       await this.#measureRead;
-      if (generation !== this.#measureGeneration || !this.open || this.busy) return;
+      if (generation !== this.#measureGeneration) return;
       if (!warned && (this.measureUsage > 0 || this.measureUsageUnavailable)) return;
     }
     const value = this.#submissionValue();

@@ -1216,6 +1216,35 @@ describe("units-screen", () => {
     expect(table.rows).toEqual(units);
   });
 
+  it("Cancel discards a Save waiting for the measure count without creating another unit", async () => {
+    const count = deferred<{ dishCount: number }>();
+    const api = stubApi({ getUnitAttachedExtrasCount: vi.fn(() => count.promise) });
+    const el = await mount(api);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-u1]")!.click();
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await form.updateComplete;
+    const toggle = form.shadowRoot!.querySelector("wt-switch")!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    const cancelled = new Promise<void>((resolve) =>
+      form.addEventListener("wt-cancel", () => resolve(), { once: true }),
+    );
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await cancelled;
+    await form.updateComplete;
+    count.resolve({ dishCount: 0 });
+    await count.promise;
+    await new Promise(requestAnimationFrame);
+    await form.updateComplete;
+    expect(api.updateUnit).not.toHaveBeenCalled();
+    expect(api.createUnit).not.toHaveBeenCalled();
+    expect(table.rows).toEqual(units);
+  });
+
   it("saves an edited unit with the measure switch turned on", async () => {
     const api = stubApi({ updateUnit: vi.fn().mockResolvedValue({ ...units[0]!, measure: true }) });
     const el = await mount(api);
