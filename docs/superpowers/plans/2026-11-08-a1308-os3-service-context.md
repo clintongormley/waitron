@@ -59,7 +59,9 @@ this cannot be restored or imported."
 - Modify: `packages/venue-service/src/operations.ts:1066-1180, :1363-1378`;
   `packages/venue-service/src/service-delete.ts:125-140`; `packages/venue-service/src/department-receipts.ts:316-320`;
   `packages/venue-service/src/department-transfers.ts:470-485`
-- Modify: `apps/server/src/department-transfer-api.ts:133`
+- Modify: `packages/venue-service/src/dining.ts` (read the bill's department for the dining choice).
+- Modify: `apps/till/src/api/live-connection.ts` and
+  `apps/till/src/state/department-transfer-monitor.test.ts` (shared transfer stream).
 - Modify: `apps/dashboard/src/api/live-queries.ts:46`, `packages/venue-service/src/dashboard/live-queries.ts:16`
   (drop the name; `working_orders` is already in both lists, `apps/dashboard/src/api/live-queries.ts:43`)
 - Modify (tests): the 15 test files naming `orderServiceContexts` and the 23 naming
@@ -147,10 +149,10 @@ went in slice 5. The all-or-none CHECK is new: one row held all three as `NOT NU
    exactly as when it had no row. Test: Task 2 Step 1, first case.
 2. **`orderInZones`' "or has no recorded zone" half** (`operations.ts:1137-1149`) keeps a bill with a
    null zone. Test: Task 2.
-3. **The transfer desk's live stream** (`apps/server/src/department-transfer-api.ts:126-139`) now
-   wakes on every `working_orders` change, not only context changes, because the context is a column
-   of the bill. It already re-reads on a 15-second timer and debounces with `pending`; the PR says so.
-   Test: the existing department-transfer API stream case, re-pointed.
+3. **The transfer desk uses the shared till stream.** A `working_orders` change prompts a fresh
+   transfer read, and the existing 15-second poll also prompts a read. Test both in
+   `apps/till/src/state/department-transfer-monitor.test.ts`. The watcher cleared this port and
+   the dining-choice read on 2026-11-18 at 00:26 after #2824 removed the dedicated stream.
 4. **A settled bill's zone is pinned.** Test: Task 1.
 5. **A split bill copies its source's context** (`copyOrderServiceContext`, `:1363-1378`) as one
    update of the new bill. Test: existing `draft-split.test.ts` and `transfer-lines.test.ts` cases.
@@ -182,7 +184,7 @@ went in slice 5. The all-or-none CHECK is new: one row held all three as `NOT NU
 ### Task 2: venue-service reads and writes the columns
 
 **Files:** `packages/venue-service/src/operations.ts`, `service-delete.ts`, `department-receipts.ts`,
-`department-transfers.ts`; `apps/server/src/department-transfer-api.ts:133`; the two live-query lists;
+`department-transfers.ts`, `dining.ts`; the two dashboard live-query lists and the shared till stream;
 tests.
 
 **Interfaces:** unchanged signatures, listed in Architecture. `recordOrderServiceContext` becomes
@@ -199,9 +201,9 @@ ${orderId})`; `orderInZones(orderId, zoneIds)` returns a condition true when tha
   `getOrderServiceContext` throws `order.service_context_missing`) and `"orderInZones keeps a bill with
   no zone"`.
 - [ ] **Step 2: Run; they fail to compile** after the schema export is removed.
-- [ ] **Step 3: Implement.** `department-transfer-api.ts:133`: `resource.type === "working_orders"`.
-  Drop `"order_service_contexts"` from both live-query lists (`working_orders` is already named by
-  each query that named it).
+- [ ] **Step 3: Implement.** Read the dining choice through the bill's department with the existing
+  department join and choice filter. Drop `"order_service_contexts"` from the two dashboard
+  live-query lists and the shared till interests that already include `working_orders`.
 - [ ] **Step 4: Run** the Finish line's venue-service, server and dashboard commands; PASS.
 - [ ] **Step 5: Commit** `refactor(venue-service): read a bill's service context from the bill`.
 
