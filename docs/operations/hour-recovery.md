@@ -264,7 +264,10 @@ screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/s
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
 node recovery key (the paper calls it the server key) from the backup's paper: the waiting page then shows the same step
 (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
-with both times and their dates"). Every clock route refuses a missing or wrong key
+with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
+secret the setup page sends (the same file's "takes the server key as printed on the recovery pack,
+typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves the staged key
+typed %s"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
 setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
 file's "/restore-clock/%s refuses the right key from another site's page (%o)"), and the box's own

@@ -1,3 +1,4 @@
+import type { ModuleBackupContribution } from "@waitron/module";
 import { normaliseTypedCode } from "./paper-register-compact.js";
 
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -53,3 +54,12 @@ export function decodeRecoveryKey(printed: string): string {
   if (buffer !== 0) refuse();
   return btoa(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
+export const FISCAL_SERVER_KEY_AS_TYPED: NonNullable<
+  ModuleBackupContribution["serverKeyAsTyped"]
+> = (typed) => {
+  try {
+    return decodeRecoveryKey(typed);
+  } catch {
+    return undefined;
+  }
+};

@@ -4506,13 +4506,16 @@ screen drops it once the server answers ready or the screen leaves the page
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "drops the node recovery key once its poll answers ready" and "drops the node recovery key once it
-leaves the page"). The waiting app's clock routes take that key in the body and compare it with the
-staged key file, refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
+leaves the page"). The waiting app's clock routes take the key in the body, and compare it with the staged key file,
+refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
-setting nothing"). The done screen shows both times with **Confirm the time** and **This device**;
-a browser that lost the key types it on the waiting page, which shows the same step
-(`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
-with both times and their dates"). A confirmation is kept only when the times agree within 30
+setting nothing"); a key typed as printed on the recovery pack is first turned into its secret by
+the fiscal module's `serverKeyAsTyped`. The done screen shows both times with **Confirm the time** and **This device**;
+a browser that lost the key types it on the waiting page, as printed or as the secret, which
+shows the same step (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the
+done screen's step with both times and their dates" and "takes the server key as printed on the
+recovery pack, typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves
+the staged key typed %s"). A confirmation is kept only when the times agree within 30
 seconds, with the box's boot reading, and has no time limit (`start-clock-waiting.test.ts`,
 "confirm within 5 seconds that agrees is kept with the box's boot reading" and "keeps the
 confirmation however long the start takes to ask for it"); **This device** sets the box's clock

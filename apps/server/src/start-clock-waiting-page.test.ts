@@ -4,11 +4,13 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
+import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import { createStartClockWaiting } from "./start-clock-waiting.js";
 
-const KEY = "node-recovery-key-from-the-paper";
+// The secret the printed key decodes to: what the restore page stages.
+const KEY = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 let browser: Browser | undefined;
 let stateDir: string;
 beforeAll(async () => {
@@ -135,6 +137,14 @@ it("with the key, shows the done screen's step with both times and their dates",
     );
     expect(await page.getByRole("button", { name: words.confirm }).isVisible()).toBe(true);
     expect(await page.getByRole("button", { name: words.thisDevice }).isVisible()).toBe(true);
+  }));
+
+it("takes the server key as printed on the recovery pack, typed in lower case", () =>
+  withPage("en-GB", async (page) => {
+    await open(page, 0);
+    await enterKey(page, encodeRecoveryKey(KEY).toLowerCase());
+    await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+    expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
   }));
 
 it("shows the dates with the times, so a box a day out shows a day apart, in Spanish", () =>

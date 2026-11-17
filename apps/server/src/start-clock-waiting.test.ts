@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
+import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { escapeHtml } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
@@ -10,7 +11,8 @@ import type { SetupClockPerson } from "./setup-clock-set.js";
 import { createStartClockWaiting, type StartClockWaitingOptions } from "./start-clock-waiting.js";
 
 const BOX_MS = Date.parse("2026-11-13T10:00:00.000Z");
-const KEY = "node-recovery-key-from-the-paper";
+// The secret the printed key decodes to: what the restore page stages.
+const KEY = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -247,6 +249,38 @@ describe("the restore's waiting app: the node recovery key", () => {
       expect(w.sets).toEqual([]);
     },
   );
+});
+
+describe("the restore's waiting app: the key as printed on the recovery pack", () => {
+  const PRINTED = encodeRecoveryKey(KEY);
+
+  it.each([
+    ["as printed", PRINTED],
+    ["in lower case", PRINTED.toLowerCase()],
+    ["without spaces", PRINTED.replaceAll(" ", "")],
+    ["with extra spaces", `  ${PRINTED.replaceAll(" ", "   ")} `],
+    ["as the decoded secret the done screen sends", KEY],
+  ])("/restore-clock/challenge serves the staged key typed %s", async (_name, key) => {
+    const w = await waiting();
+    const res = await w.post("challenge", { key });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: expect.any(String) });
+  });
+
+  it("refuses another venue's printed key and a mistyped one", async () => {
+    const w = await waiting();
+    const symbols = PRINTED.replaceAll(" ", "");
+    const swapped = symbols[0] === "Z" ? "Y" : "Z";
+    for (const key of [
+      encodeRecoveryKey("ZyXwVuTsRqPoNmLkJiHgFeDcBa987654"),
+      swapped + symbols.slice(1),
+      symbols.slice(0, -1),
+    ]) {
+      const res = await w.post("challenge", { key });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(refused);
+    }
+  });
 });
 
 describe("the restore's waiting app: with the key", () => {
