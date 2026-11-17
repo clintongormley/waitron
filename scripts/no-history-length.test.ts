@@ -18,9 +18,7 @@ import { decodeEscapes } from "./no-till-as-issuer.mjs";
 
 vi.mock("typescript", async (importOriginal) => {
   const actual = await importOriginal<typeof import("typescript")>();
-  return {
-    default: { ...actual.default, createSourceFile: vi.fn(actual.default.createSourceFile) },
-  };
+  return { default: { ...actual.default } };
 });
 
 const ROOT = join(import.meta.dirname, "..");
@@ -139,9 +137,13 @@ describe("the tree", () => {
 });
 
 test("skips parsing unrelated Unicode escapes", () => {
-  vi.mocked(ts.createSourceFile).mockClear();
-  expect(historyLengthReads(String.raw`const space = "\u00a0";`)).toEqual([]);
-  expect(ts.createSourceFile).not.toHaveBeenCalled();
+  const parse = vi.spyOn(ts, "createSourceFile");
+  try {
+    expect(historyLengthReads(String.raw`const space = "\u00a0";`)).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+  } finally {
+    parse.mockRestore();
+  }
 });
 
 test("keeps decoded identifier candidates independent of escaped comment delimiters", () => {

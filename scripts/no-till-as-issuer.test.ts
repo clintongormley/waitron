@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -6,7 +7,7 @@ import { expect, it, vi } from "vitest";
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
-  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+  return { ...actual };
 });
 import { useVenueDb } from "../packages/db/src/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "../packages/migrations/src/index.js";
@@ -305,6 +306,7 @@ it("does not read ignored histories or migrations beside a checked live document
     "packages/fiscal-verifactu/drizzle/0000_baseline.sql",
     "apps/server/drizzle/0000.sql",
   ];
+  const read = vi.spyOn(fs, "readFileSync");
   try {
     for (const path of [live, ...ignored]) {
       const full = join(dir, path);
@@ -312,12 +314,11 @@ it("does not read ignored histories or migrations beside a checked live document
       writeFileSync(full, command);
     }
     expect(sourceFilesIn(dir)).toEqual([live, ...ignored].sort());
-    vi.mocked(readFileSync).mockClear();
+    read.mockClear();
     expect(scanTree(dir)).toEqual([`${live}: retired ${command}`]);
-    expect(vi.mocked(readFileSync).mock.calls.map(([path]) => String(path))).toEqual([
-      join(dir, live),
-    ]);
+    expect(read.mock.calls.map(([path]) => String(path))).toEqual([join(dir, live)]);
   } finally {
+    read.mockRestore();
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -15,9 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("typescript", async (importOriginal) => {
   const actual = await importOriginal<typeof import("typescript")>();
-  return {
-    default: { ...actual.default, createSourceFile: vi.fn(actual.default.createSourceFile) },
-  };
+  return { default: { ...actual.default } };
 });
 
 // Static edges and literal dynamic imports are followed; computed imports and bundler plugins are outside this source check.
@@ -288,9 +286,13 @@ it("allows browser type-only demo imports without reaching their data", () => {
 });
 
 it("parses runtime imports without allocating unused parent links", () => {
-  vi.mocked(ts.createSourceFile).mockClear();
-  expect(runtimeImports("import './helper.ts';")).toEqual(["./helper.ts"]);
-  expect(ts.createSourceFile).toHaveBeenCalledOnce();
-  const parsed = vi.mocked(ts.createSourceFile).mock.results[0]!.value;
-  expect(parsed.statements[0]!.parent).toBeUndefined();
+  const parse = vi.spyOn(ts, "createSourceFile");
+  try {
+    expect(runtimeImports("import './helper.ts';")).toEqual(["./helper.ts"]);
+    expect(parse).toHaveBeenCalledOnce();
+    const parsed = parse.mock.results[0]!.value;
+    expect(parsed.statements[0]!.parent).toBeUndefined();
+  } finally {
+    parse.mockRestore();
+  }
 });

@@ -5,9 +5,7 @@ import { expect, it, vi } from "vitest";
 
 vi.mock("typescript", async (importOriginal) => {
   const actual = await importOriginal<typeof import("typescript")>();
-  return {
-    default: { ...actual.default, createSourceFile: vi.fn(actual.default.createSourceFile) },
-  };
+  return { default: { ...actual.default } };
 });
 import { decodeEscapes, sourceFilesIn } from "./no-till-as-issuer.mjs";
 
@@ -173,9 +171,13 @@ it("screens leave action item appearance to the shared components", () => {
 });
 
 it("skips parsing sources with no possible menu ownership match", () => {
-  vi.mocked(ts.createSourceFile).mockClear();
-  expect(violations("apps/server/src/example.ts", 'export const message = "ready";')).toEqual([]);
-  expect(ts.createSourceFile).not.toHaveBeenCalled();
+  const parse = vi.spyOn(ts, "createSourceFile");
+  try {
+    expect(violations("apps/server/src/example.ts", 'export const message = "ready";')).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+  } finally {
+    parse.mockRestore();
+  }
 });
 
 it.each([
