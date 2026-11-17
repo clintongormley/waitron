@@ -593,7 +593,7 @@ describe("core's set keeps no variant table of its own", () => {
 describe("the menu foreign keys refuse a missing or mismatched target", () => {
   const missing = "00000000-0000-4000-8000-00000000dead";
 
-  /** Rows seeded per test: the per-test reset empties every table after each case. */
+  /** Rows seeded per test: the per-test reset empties the data tables after each case. */
   async function menu() {
     await seedTaxpayer(db);
     const menuId = (

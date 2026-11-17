@@ -683,25 +683,26 @@ status code: the container's healthcheck reads it (`deploy/compose.yml`), and an
 waits for a healthy container (`deploy/waitron.sh`), so a bucket outage must not hold either. The
 dashboard's alerts report the bucket copy instead.
 
-**A `503` is the single most important signal this process can produce.** It means one of three
-things — two visible in the body above without needing the logs, one that needs them:
+**A `503` is the single most important signal this process can produce.** It means a duty has gone
+longer than its budget without a success, so it reads `stale: true` — one of two cases, one visible
+in the body above, one that needs the logs:
 
 - **`stale: true`, `consecutiveFailures` counting up** — a duty inside the pass is failing every
-  time it runs (a database blip, an unreachable AEAT endpoint). Check the logs (below) for the
-  `errorCode` on the most recent `duty.failed` line.
+  time it runs (a database blip, an unreachable AEAT endpoint), or skipping work (`skipped` > 0,
+  below). Otherwise check the logs (below) for the `errorCode` on the most recent `duty.failed`
+  line.
 - **`stale: true`, `consecutiveFailures` NOT counting up** — rarer, and the one that needs the logs
   to tell apart from the case above: `pass.threw` fired instead, meaning something escaped `runPass`
   itself rather than being contained per-duty. `onPass` (and therefore `recordPass`) never runs on
   that cycle, so `consecutiveFailures` does not increment even though the pass produced nothing —
   check `pass.threw`'s own `errorCode`, not `duty.failed`, which does not exist for this case.
-- **`skipped` > 0, but `stale` may still read `false` for a while** — this database's due fiscal
-  work (or, for `payments.reconcile.stripe`, one duty's sweep) could not be attempted THIS pass,
-  even though the pass itself completed and the other duty was served. This does not
-  clear on its own: `consecutiveFailures` increments and `lastOkAt` does not advance for as long as
-  anything is skipped — see `src/health.ts`'s own comment on
-  `recordPass` for why that is correct rather than an over-broad alarm. Find why
-  via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
-  common cause is a missing, unreadable, or stale-shaped credential.
+
+**`skipped` > 0 answers `200` until the duty's budget passes.** It means this database's due fiscal
+work (or, for `payments.reconcile.stripe`, one duty's sweep) could not be attempted THIS pass,
+even though the pass itself completed and the other duty was served. `consecutiveFailures`
+increments and `lastOkAt` does not advance for as long as anything is skipped. Find why
+via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
+common cause is a missing, unreadable, or stale-shaped credential.
 
 **`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself.** The pass that parks
 counts as a failure (`consecutiveFailures` goes up and `lastOkAt` does not advance), but the next
