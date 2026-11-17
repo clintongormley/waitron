@@ -123,7 +123,7 @@ export interface ShiftRow {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 /** The week's roster snapshot for the authoring grid — the current draft (or, if none, the published
@@ -467,7 +467,7 @@ export class WorkforceBackend {
   }
 
   private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
-    const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
+    const { rows } = await tx.execute<ShiftDbRow & { version_status: string }>(sql`
       select s.id, s.person_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
         s.ends_offset_minutes, s.roster_version_id, rv.status as version_status
       from shifts s
@@ -477,7 +477,7 @@ export class WorkforceBackend {
     const row = rows[0];
     if (row === undefined) throw new AppError("shift.not_found", { shiftId });
     if (row.version_status !== "draft") {
-      throw new AppError("roster.not_draft", { rosterVersionId: row.roster_version_id! });
+      throw new AppError("roster.not_draft", { rosterVersionId: row.roster_version_id });
     }
     return mapShift(row);
   }
@@ -687,7 +687,7 @@ type ShiftDbRow = {
   starts_offset_minutes: number;
   ends_at: string;
   ends_offset_minutes: number;
-  roster_version_id: string | null;
+  roster_version_id: string;
 };
 
 function mapRosterVersion(r: RosterVersionDbRow): RosterVersionRow {

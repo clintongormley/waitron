@@ -838,7 +838,7 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("keeps an unattached shift's warnings to the week of its local start", async () => {
+  it("keeps a draft shift's warnings within its authoring week", async () => {
     await warningVenue();
     const included = await planned("2026-03-01T23:30:00Z", "2026-03-02T07:30:00Z", null, 60);
     const excluded = await planned("2026-03-08T23:30:00Z", "2026-03-09T07:30:00Z", null, 60);
@@ -904,7 +904,7 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("reads next week's unattached shifts by local date, leaving out one that starts at 00:30 local on the Monday after", async () => {
+  it("reads the adjacent draft week and leaves out a shift in the following week", async () => {
     await warningVenue();
     const [control] = await seedPersons(suite.db, { displayName: crypto.randomUUID() });
     for (const person of [personId, control!.id]) {

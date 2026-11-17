@@ -2104,7 +2104,7 @@ export interface MyShift {
   endsAt: string;
   endsOffsetMinutes: number;
   description: string | null;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 /**

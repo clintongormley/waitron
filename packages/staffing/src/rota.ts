@@ -286,19 +286,18 @@ export async function updateRotaShift(
 ): Promise<void> {
   const row = await writableShift(tx, shiftId);
   if (Object.keys(patch).length === 0) return;
-  const prior = row;
   if (patch.area !== undefined || patch.staffRoleId !== undefined) {
     const area =
       patch.area ??
-      (prior?.departmentId
-        ? { kind: "department" as const, id: prior.departmentId }
-        : prior?.stationId
-          ? { kind: "station" as const, id: prior.stationId }
+      (row.departmentId
+        ? { kind: "department" as const, id: row.departmentId }
+        : row.stationId
+          ? { kind: "station" as const, id: row.stationId }
           : null);
-    const staffRoleId = patch.staffRoleId ?? prior?.staffRoleId;
+    const staffRoleId = patch.staffRoleId ?? row.staffRoleId;
     if (!area) throw invalid("area");
     if (!staffRoleId) throw invalid("staffRoleId");
-    await assignmentTargets(tx, area, staffRoleId, prior?.staffRoleId ?? undefined);
+    await assignmentTargets(tx, area, staffRoleId, row.staffRoleId ?? undefined);
     await tx.update(shifts).set(assignment(area, staffRoleId)).where(eq(shifts.id, shiftId));
   }
   if (patch.personId !== undefined || patch.startsAt !== undefined || patch.endsAt !== undefined) {

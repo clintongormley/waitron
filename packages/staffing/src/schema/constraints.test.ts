@@ -203,14 +203,14 @@ async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
   });
 }
 
-it("deleting a shift deletes its assignment", async () => {
+it("deleting a shift removes its slot", async () => {
   const v = await venue();
   const shiftId = await assignedShift(v);
   await withTransaction(suite.db, (tx) => tx.delete(shifts).where(eq(shifts.id, shiftId)));
   expect(await suite.db.select().from(shifts)).toEqual([]);
 });
 
-it("refuses to delete a staff role a shift assignment names", async () => {
+it("refuses to delete a staff role a shift uses", async () => {
   const v = await venue();
   await assignedShift(v);
   await expect(

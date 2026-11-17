@@ -1039,7 +1039,7 @@ export interface Shift {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 export interface RosterSnapshot {
@@ -1123,7 +1123,7 @@ export interface MyShift {
   endsAt: string;
   endsOffsetMinutes: number;
   description: string | null;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 export interface MySwap {

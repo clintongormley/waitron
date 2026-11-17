@@ -23,7 +23,7 @@ const shifts: MyShift[] = [
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
     description: "bar",
-    rosterVersionId: null,
+    rosterVersionId: "rota-week",
   },
 ];
 const offeredToMe: MySwap = {

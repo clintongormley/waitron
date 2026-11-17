@@ -70,7 +70,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         createdAt: shifts.createdAt,
       })
       .from(shifts)
-      .leftJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
+      .innerJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
       .where(eq(shifts.personId, personId))
       .orderBy(asc(shifts.startsAt), asc(shifts.createdAt), asc(shifts.id));
 

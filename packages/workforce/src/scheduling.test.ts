@@ -168,25 +168,6 @@ describe("publishRoster", () => {
     expect(await attachedVersion(outOfPeriod)).toBe(await seedRosterWeek(suite.db, "2026-04-01"));
   });
 
-  it("matches a shift by its LOCAL wall date, not its UTC instant", async () => {
-    // 23:30Z at +120 is local 03-02, inside the period, though the UTC date is 03-01.
-    const versionId = await insertRosterVersion(suite.db, {
-      periodStart: "2026-03-02",
-      periodEnd: "2026-03-08",
-    });
-    const shiftId = await insertDraftShift(suite.db, {
-      personId,
-      startsAt: "2026-03-01T23:30:00Z",
-      startsOffsetMinutes: 120,
-      endsAt: "2026-03-02T05:30:00Z",
-      endsOffsetMinutes: 120,
-    });
-
-    await run((tx) => backend.publishRoster(tx, { versionId }));
-
-    expect(await attachedVersion(shiftId)).toBe(versionId);
-  });
-
   it("throws roster.not_found for a version that does not exist", async () => {
     const code = await codeOfRejection(() =>
       run((tx) => backend.publishRoster(tx, { versionId: crypto.randomUUID() })),

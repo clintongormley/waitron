@@ -805,3 +805,27 @@ it("adding a shift to a slot writes its role and area on the shift", async () =>
     },
   ]);
 });
+
+it("moving a shift from a department to a station clears the department", async () => {
+  const v = await venue();
+  const shiftId = await add(v);
+  await tx((t) => api.updateRotaShift(t, shiftId, { area: { kind: "station", id: v.stationId } }));
+  expect(
+    await tx((t) =>
+      t
+        .select({
+          staffRoleId: shifts.staffRoleId,
+          departmentId: shifts.departmentId,
+          stationId: shifts.stationId,
+        })
+        .from(shifts)
+        .where(eq(shifts.id, shiftId)),
+    ),
+  ).toEqual([
+    {
+      staffRoleId: v.staffRoleId,
+      departmentId: null,
+      stationId: v.stationId,
+    },
+  ]);
+});
