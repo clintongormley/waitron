@@ -1,14 +1,17 @@
-import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, insertInChunks, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
-import { sql } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { beforeEach, describe, expect, it } from "vitest";
 import { listShiftsForPerson } from "./schedule-reads.js";
 import { acceptSwap, decideSwap } from "./shift-swaps.js";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { shiftSwaps } from "./schema/shift-swaps.js";
+import { shifts } from "./schema/shifts.js";
 import {
   insertDraftShift,
   insertRosterVersion,
@@ -1062,6 +1065,52 @@ describe("copyPublishedToDraft", () => {
       ).rows,
     ).toEqual([{ from_shift_id: outside, to_shift_id: copied.shiftIds.get(shiftId) }]);
     expect(copied.openSwaps).toEqual([{ swapId, fromShiftId: outside }]);
+  });
+
+  it("copies a week whose shifts and open swaps each fill more than one statement", async () => {
+    const beyondOneStatement = (table: Parameters<typeof getTableColumns>[0]) =>
+      Math.floor(SQL_VARIABLE_LIMIT / Object.keys(getTableColumns(table)).length) + 1;
+    const versionId = await insertRosterVersion(suite.db, {});
+    const other = await seedPerson(suite.db, "Bulk swap recipient");
+    const originals = Array.from({ length: beyondOneStatement(shifts) }, (_, i) => ({
+      id: `shift-${String(i).padStart(5, "0")}`,
+      personId,
+      startsAt: "2026-01-05T09:00:00Z",
+      startsOffsetMinutes: 60,
+      endsAt: "2026-01-05T17:00:00Z",
+      endsOffsetMinutes: 60,
+      rosterVersionId: versionId,
+    }));
+    const swaps = originals.slice(0, beyondOneStatement(shiftSwaps)).map((shift, i) => ({
+      id: `swap-${String(i).padStart(5, "0")}`,
+      requestedByPersonId: personId,
+      fromShiftId: shift.id,
+      toPersonId: other,
+    }));
+    await run(async (tx) => {
+      await insertInChunks(tx, shifts, originals);
+      await insertInChunks(tx, shiftSwaps, swaps);
+      await backend.publishRoster(tx, { versionId });
+    });
+    const copied = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    expect([...copied.shiftIds.keys()].sort()).toEqual(originals.map((shift) => shift.id));
+    expect(
+      await countRows(
+        sql`select count(*) as n from shifts where roster_version_id = ${copied.versionId}`,
+      ),
+    ).toBe(originals.length);
+    expect(copied.openSwaps).toEqual(
+      swaps.map((swap) => ({
+        swapId: swap.id,
+        fromShiftId: copied.shiftIds.get(swap.fromShiftId),
+      })),
+    );
+    const { rows } = await suite.db.execute<{ id: string; from_shift_id: string }>(
+      sql`select id, from_shift_id from shift_swaps order by id`,
+    );
+    expect(rows).toEqual(
+      swaps.map((swap) => ({ id: swap.id, from_shift_id: copied.shiftIds.get(swap.fromShiftId) })),
+    );
   });
 
   it("rolls back the copy and pending swap move when its caller's transaction fails", async () => {

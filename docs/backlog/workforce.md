@@ -156,9 +156,6 @@ due), then build it. Also decide how a later paid-break policy change affects th
 
 ## Loose ends left by A585-7 (#1766)
 
-- Copy rota assignments in one read: `changeRotaWeek` reads an assignment per copied shift.
-  Measure a large week under the venue write queue, then batch that read while preserving the
-  shift-id map and rollback checks. Query cost is unmeasured.
 - Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
   week once per candidate on each redraw. Measure a large picker, then share that baseline across
   its candidates without sharing candidate-specific warnings. Cost unmeasured.
