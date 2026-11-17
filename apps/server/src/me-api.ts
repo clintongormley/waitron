@@ -75,7 +75,7 @@ export interface MeApiDeps {
   rpId?: string;
   origin?: string;
   accountActionCodeKey?: Buffer;
-  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
   now?: () => Date;
 }
@@ -243,7 +243,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         });
       return c.json({
         emailVerificationSent: true,
-        delivery: mode === "smtp" ? "queued" : "captured",
+        delivery: mode === "local_capture" ? "captured" : "queued",
       });
     }),
   );

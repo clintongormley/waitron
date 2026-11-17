@@ -1358,12 +1358,15 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
 
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare now
-  requires SMTP outside development and uses it for account and invoice email. Settings lets admins
+  requires SMTP outside development for invoice and notice mail; selected account actions may use test Cloud. Settings lets admins
   save and remove the relay, with manager reads and actionable SMTP tests. Users and Account settings
   distinguish queued, captured and unconfigured account mail, and an immediate invitation
   retry says when nothing changed. Ordinary SMTP and Settings tests use the venue sender name.
-  Demo captures account mail, reminders and alerts outside development even with a stored relay.
-  Left: Cloud delivery, gated on D102.
+  Demo's normal route captures account mail, reminders and alerts outside development; an enabled
+  test Cloud relay takes its three selected account classes.
+  Left: qualify account email against the live test Cloud (BOX-EMAIL-RELAY, invitations, resets
+  and email changes); receipts and other notices retain SMTP. The published Cloud grant interface
+  is available, but real inbox delivery still needs the joint test.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987

@@ -384,10 +384,17 @@ tests SMTP outside development; ordinary Prepare uses the relay or reports unava
 inbox link is offered publicly and to signed-in admins. Users and Account settings distinguish queued, captured and unconfigured
 account mail; throttled invitation actions say nothing changed.
 Ordinary SMTP and the Settings test use the venue name with the configured mailbox; setup tests
-retain their own sender. Outside development, Demo captures account mail, reminders and alerts
-even with a saved relay; development keeps its saved-relay preference.
-Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
-joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
+retain their own sender. Outside development, Demo's normal route captures reminders, alerts and
+account mail even with a saved server; development keeps its saved-server preference. A paired test Cloud takes precedence for
+invitation, password_reset and email_change only when a fresh grant says enabled. Explicit off
+uses the normal SMTP/capture rule. One optional boolean in the existing private Cloud state
+remembers whether relay was enabled: null, unreadable or expired authority defers only after an
+enabled read; otherwise the normal route remains available. Confirmed local revoke remembers off. BOX-EMAIL-RELAY's
+local signed-client and worker checks are separate from live qualification: the joint test must
+still prove three real deliveries and link/code consumption, SMTP after off, a refusal while sales
+continue and linked Demo priority. Cloud's published interface is #1254 at
+`34a0731e39aa38e5922e3f7ed5167441cafe21a5`; D102's former release gate is replaced by this concrete
+joint test. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.
 
 ## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN

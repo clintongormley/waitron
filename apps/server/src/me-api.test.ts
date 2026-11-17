@@ -1258,7 +1258,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect((await personRow(personId)).firstNames).toBe("Alex");
   });
 
-  it.each(["smtp", "local_capture", "unconfigured"] as const)(
+  it.each(["smtp", "cloud", "local_capture", "unconfigured"] as const)(
     "queues a changed profile email according to %s delivery availability",
     async (mode) => {
       const personId = await personWithPassword({
@@ -1281,7 +1281,10 @@ describe("mountMeApi — own credentials and second factor", () => {
       expect(await response.json()).toEqual(
         mode === "unconfigured"
           ? { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false }
-          : { emailVerificationSent: true, delivery: mode === "smtp" ? "queued" : "captured" },
+          : {
+              emailVerificationSent: true,
+              delivery: mode === "local_capture" ? "captured" : "queued",
+            },
       );
       expect((await personRow(personId)).pendingEmail).toBe(email);
       expect(

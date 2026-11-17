@@ -1,3 +1,9 @@
+import {
+  fetchCloudEmailGrant,
+  sendCloudEmail,
+  type CloudEmailGrant,
+  type CloudAccountEmail,
+} from "./cloud-email.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
@@ -85,6 +91,7 @@ export interface CloudChoice {
   legalBusinessId: string;
 }
 export interface CloudConnectionOptions {
+  managementOrigin?: string;
   onEmergencyHintsError?: (error: unknown) => void;
   stateDir: string;
   tunnelDir?: string;
@@ -101,6 +108,7 @@ interface SavedEmergencyHints {
   asOf: string;
 }
 export interface SavedCloudState {
+  emailRelayEnabled?: boolean;
   emergencyHints?: SavedEmergencyHints;
   remoteAccessEnabled?: boolean;
   lifecycle?: CloudInstallationState;
@@ -264,6 +272,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         (value.venueId !== "" && !uuid(value.venueId)) ||
         (venueId !== null && value.venueId !== "" && value.venueId !== venueId) ||
         value.environment !== options.environment ||
+        (value.emailRelayEnabled !== undefined && typeof value.emailRelayEnabled !== "boolean") ||
         (value.remoteAccessEnabled !== undefined &&
           typeof value.remoteAccessEnabled !== "boolean") ||
         !uuid(value.requestId) ||
@@ -478,6 +487,55 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async emailRelayEnabled() {
+      const state = await read();
+      return state?.environment === "test" && state.emailRelayEnabled === true;
+    },
+    async emailRelay(signal?: AbortSignal) {
+      const before = await read();
+      if (!before?.view?.registration || before.environment !== "test") return null;
+      let grant: CloudEmailGrant | null;
+      let used: SavedCloudState;
+      try {
+        used = await leaseState(signal);
+        grant = await fetchCloudEmailGrant(used, signal, options.managementOrigin, recordRefusal);
+      } catch (error) {
+        if ((await read())?.emailRelayEnabled) throw error;
+        return null;
+      }
+      await run(
+        async () => {
+          const latest = await read();
+          if (!latest || registrationOf(latest) !== registrationOf(used))
+            throw new AppError("cloud.unavailable", {});
+          if (latest.emailRelayEnabled !== (grant !== null)) {
+            latest.emailRelayEnabled = grant !== null;
+            await save(latest);
+          }
+        },
+        true,
+        signal,
+      );
+      return grant;
+    },
+    async sendEmail(
+      grant: CloudEmailGrant,
+      id: string,
+      message: CloudAccountEmail,
+      signal?: AbortSignal,
+    ) {
+      let state: SavedCloudState;
+      try {
+        state = await leaseState(signal);
+      } catch {
+        return {
+          status: "rejected" as const,
+          failureCode: "mail.relay_refused" as const,
+          serverRefused: true as const,
+        };
+      }
+      return sendCloudEmail(state, grant, id, message, signal);
+    },
     emergencyHints(staffOrigin: string): { address: string } | null {
       const hints = heldEmergencyHints;
       return hints?.staffOrigin === staffOrigin && hints.open && hints.address !== null
@@ -880,6 +938,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         };
         if (state.lifecycle?.revoked) await authorizeStop();
         else await installationClient(state, save).revoke(authorizeStop, signal);
+        state.emailRelayEnabled = false;
+        await save(state);
         if (localFailure) throw localFailure;
         return project(state);
       }, true);

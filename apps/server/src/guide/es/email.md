@@ -21,13 +21,30 @@ elige **Cambiar servidor de correo** y corrige **Dirección del remitente** ante
 
 Antes de completar la configuración en Preparación o En vivo, introduce los ajustes del servidor
 y envía una prueba aceptada a la dirección del administrador. En desarrollo puedes omitir este paso.
-Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones
-reales. Revisa el estado del correo de cuentas en esta página y el de las facturas en **Servidor de
-correo**: las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
-el servidor guardado.
+Si usas tu propio servidor, al guardarlo las invitaciones y los enlaces para restablecer
+contraseñas llegan a buzones reales. Esta página muestra el estado del correo de facturas:
+las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
+un servidor guardado o Cloud.
 
 En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como encargado o administrador
 para abrir los mensajes guardados.
+
+## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
+
+Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invitaciones,
+los enlaces para restablecer contraseñas y los códigos de cambio de correo se envían por Cloud,
+también en Demostración. Revisa el buzón real del destinatario en lugar de la Bandeja de correo
+de Demostración. Mantén un servidor de correo para los recibos y otros avisos, y para completar
+la configuración en Preparación o En vivo.
+
+Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
+invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no
+llega un correo, solicita un enlace o código nuevo; un mensaje anterior aún puede llegar después.
+Al desactivar el envío por Cloud, los nuevos envíos vuelven al servidor de correo o al buzón
+de Demostración que corresponda. Vincular la caja conserva tu ruta anterior hasta que haya usado
+Cloud activado. Si Cloud deja de estar disponible después, el correo de cuentas espera; guardar
+ajustes SMTP no desvía esos mensajes. Restablece Cloud o desactiva explícitamente su correo
+antes de solicitar otro enlace o código.
 
 ## Comprueba el resultado de la prueba {#test-results}
 
@@ -57,7 +74,7 @@ Con el permiso de administración del equipo (Admin de forma predeterminada), el
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
-En Preparación o En vivo, los enlaces de acceso y las facturas no pueden enviarse hasta que
-configures otro servidor; las ventas continúan.
-En una caja de desarrollo, el correo vuelve al buzón de prueba. Si los ajustes no se cargan tras
+En Preparación o En vivo, los recibos y avisos necesitan un servidor configurado. El correo de
+cuentas sigue la [ruta de Cloud](email.md#cloud-account-email) si está activada, o tu servidor habitual.
+Las ventas continúan. En una caja de desarrollo, el correo por la ruta habitual vuelve al buzón de prueba. Si los ajustes no se cargan tras
 quitar el servidor, vuelve a cargarlos; el servidor ya se ha quitado.

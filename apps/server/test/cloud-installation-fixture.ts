@@ -8,6 +8,10 @@ export async function installationFixture(
   options: {
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
+    email?: MachineHandler;
+    emailConfiguration?: true;
+    managementOrigin?: string;
+    environment?: "test" | "production";
     billing?: MachineHandler;
     emergency?: MachineHandler;
     emergencyCode?: MachineHandler;
@@ -33,7 +37,13 @@ export async function installationFixture(
   // Contract, "Seeing the service": any other configuration body is an invalid proof.
   const configurationBodies = options.cloudBeforeVersion2
     ? ["{}"]
-    : ["{}", '{"servicesVersion":2}'];
+    : [
+        "{}",
+        '{"servicesVersion":2}',
+        ...(options.managementOrigin
+          ? [JSON.stringify({ servicesVersion: 2, managementOrigin: options.managementOrigin })]
+          : []),
+      ];
   const services = (four: boolean) => [
     ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
       service,
@@ -82,6 +92,10 @@ export async function installationFixture(
       await capture(values, saved, req, res, sent);
       return;
     }
+    if (String(values[2]).startsWith("email-") && options.email) {
+      await options.email(values, saved, req, res, sent);
+      return;
+    }
     if (String(values[2]).startsWith("translation-") && options.translation) {
       await options.translation(values, saved, req, res, sent);
       return;
@@ -110,7 +124,10 @@ export async function installationFixture(
     }
     expect(req.url).toBe(`/api/installations/${values[2]}`);
     const lifecycle = saved.lifecycle as { pending: { operationId: string } };
-    expect(lifecycle.pending.operationId).toBe(values[4]);
+    if (options.emailConfiguration && !lifecycle?.pending) {
+      expect(values[2]).toBe("configuration");
+      expect(configurationBodies).toContain(values[7]);
+    } else expect(lifecycle.pending.operationId).toBe(values[4]);
     await delay();
     if (offline) {
       res.writeHead(503);
@@ -172,8 +189,12 @@ export async function installationFixture(
     }
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ...(replies.get(operation) as object), ...patch }));
-  });
-  const client = createCloudConnection(f.options);
+  }, options.environment);
+  const connectionOptions = {
+    ...f.options,
+    ...(options.managementOrigin ? { managementOrigin: options.managementOrigin } : {}),
+  };
+  const client = createCloudConnection(connectionOptions);
   await client.start();
   f.approve();
   const approved = await client.check();
@@ -187,6 +208,7 @@ export async function installationFixture(
   );
   return {
     ...f,
+    options: connectionOptions,
     client,
     requests,
     replies,

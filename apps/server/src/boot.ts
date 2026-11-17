@@ -2550,12 +2550,39 @@ async function bootServer(
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
+  const cloudConnection = cloudOrigin
+    ? createCloudConnection({
+        stateDir: config.stateDir,
+        managementOrigin: config.managementOrigin,
+        onEmergencyHintsError: (error) =>
+          log("warn", "cloud.emergency_state_failed", {
+            errorCode: codeOf(error),
+            errno: errnoOf(error) ?? null,
+          }),
+        tunnelDir: config.tunnelControlDir,
+        origin: cloudOrigin,
+        readVenueId: () => readCloudVenueId(db),
+        recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
+        environment: config.environment === "production" ? "production" : "test",
+      })
+    : undefined;
   const captureAccountEmail = config.devMode || config.onboardingIntent === "demo";
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
-  const accountMailMode = (tx: Transaction) =>
-    resolveMailDeliveryIn(tx, ring, config, "notice").then((delivery) => delivery.mode);
+  const accountMailMode = async (tx: Transaction) => {
+    try {
+      if (await cloudConnection?.emailRelayEnabled()) return "cloud" as const;
+    } catch {
+      return "cloud" as const;
+    }
+    return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
+  };
+  const cloudMail = {
+    resolveAccountRelay: (signal: AbortSignal) =>
+      cloudConnection?.emailRelay(signal) ?? Promise.resolve(null),
+    sendCloudEmail: cloudConnection?.sendEmail,
+  };
   const assertAccountMailPrimary = async () => {
     if (holders.singletonRole.current !== "primary") throw new AppError("node.read_only", {});
   };
@@ -2680,6 +2707,7 @@ async function bootServer(
         isPrimary: () => holders.singletonRole.current === "primary",
         signal: repairMailController.signal,
         resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
+        ...cloudMail,
         log,
         maxTickMs: 5000,
       });
@@ -3124,6 +3152,7 @@ async function bootServer(
         isPrimary: () => holders.singletonRole.current === "primary" && diskFull.since() === null,
         signal: mailController.signal,
         resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
+        ...cloudMail,
         log,
         bus: liveEvents,
       });
@@ -4046,21 +4075,6 @@ async function bootServer(
     },
     log,
   );
-  const cloudConnection = cloudOrigin
-    ? createCloudConnection({
-        stateDir: config.stateDir,
-        onEmergencyHintsError: (error) =>
-          log("warn", "cloud.emergency_state_failed", {
-            errorCode: codeOf(error),
-            errno: errnoOf(error) ?? null,
-          }),
-        tunnelDir: config.tunnelControlDir,
-        origin: cloudOrigin,
-        readVenueId: () => readCloudVenueId(db),
-        recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
-        environment: config.environment === "production" ? "production" : "test",
-      })
-    : undefined;
   if (cloudConnection) {
     readCloudEmergency = () => cloudConnection.emergencyHints(config.managementOrigin);
     await cloudConnection

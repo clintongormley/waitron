@@ -2845,7 +2845,7 @@ CREATE TABLE `outgoing_mail` (
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "outgoing_mail_kind_ck" CHECK("outgoing_mail"."kind" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed', 'security_change')),
 	CONSTRAINT "outgoing_mail_status_ck" CHECK("outgoing_mail"."status" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'expired', 'cancelled')),
-	CONSTRAINT "outgoing_mail_failure_ck" CHECK("outgoing_mail"."failure_code" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned')),
+	CONSTRAINT "outgoing_mail_failure_ck" CHECK("outgoing_mail"."failure_code" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned', 'mail.relay_refused', 'mail.relay_unknown')),
 	CONSTRAINT "outgoing_mail_attempts_ck" CHECK("outgoing_mail"."attempts" >= 0),
 	CONSTRAINT "outgoing_mail_not_after_ck" CHECK("outgoing_mail"."not_after" > "outgoing_mail"."queued_at"),
 	CONSTRAINT "outgoing_mail_claim_ck" CHECK(("outgoing_mail"."claim_token" is null) = ("outgoing_mail"."claimed_at" is null)),

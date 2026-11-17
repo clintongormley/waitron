@@ -119,6 +119,8 @@ function readView(value: unknown, state: SavedCloudState): View {
     services,
   };
 }
+export { readView as readCloudInstallationView };
+
 /** The pinned HTTPS origin authenticates this control response. It is not a gateway signature verifier. */
 function readLease(value: unknown, state: SavedCloudState): Envelope {
   if (

@@ -624,6 +624,24 @@ describe("one mail sender", () => {
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
   });
+  it("logs a relay availability failure once until recovery", async () => {
+    await queue("account", { kind: "account_action" });
+    deps.owners = [{ ...owner, kind: "account_action" }];
+    deps.resolveAccountRelay = async () => {
+      throw new Error("offline");
+    };
+    let turns = 0;
+    await runMailLoop({
+      ...deps,
+      sleep: async () => {
+        if (++turns === 3) controller.abort();
+      },
+    });
+    expect(
+      vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.delivery_unavailable"),
+    ).toHaveLength(1);
+    expect((await row("account"))?.status).toBe("pending");
+  });
   it("sleeps until a scheduled row or an active claim is due", async () => {
     await queue("scheduled", { nextAttemptAt: new Date(time.getTime() + 10000) });
     const sleeps: number[] = [];

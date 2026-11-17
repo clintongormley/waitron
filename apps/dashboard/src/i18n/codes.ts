@@ -676,6 +676,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The mail server refused the test message. Check the settings and try again.",
     es: "El servidor de correo ha rechazado la prueba. Revisa la configuración y vuelve a intentarlo.",
   },
+  "mail.relay_refused": {
+    en: "Waitron Cloud could not accept this email. Check that Cloud email is enabled, then request a new email.",
+    es: "Waitron Cloud no ha podido aceptar este correo. Comprueba que el correo de Cloud esté activado y solicita un correo nuevo.",
+  },
+  "mail.relay_unknown": {
+    en: "Waitron Cloud could not confirm whether this email was sent. It may still arrive. Request a new email if you need another link or code.",
+    es: "Waitron Cloud no ha podido confirmar si se ha enviado este correo. Aún puede llegar. Solicita un correo nuevo si necesitas otro enlace o código.",
+  },
   "email.settings_invalid": {
     en: "Check the mail server settings and your account email address, then try again.",
     es: "Revisa la configuración de correo y la dirección de tu cuenta, y vuelve a intentarlo.",
