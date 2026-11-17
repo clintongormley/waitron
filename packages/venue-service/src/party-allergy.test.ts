@@ -94,7 +94,6 @@ async function draftLine(id = partyId) {
 async function workingLine(id = partyId, parentLineId?: string) {
   const order = await seedWorkingOrder(suite.db, {
     partyId: id,
-    orderNumber: 1,
     source: "dashboard",
   });
   const [line] = await suite.db
@@ -134,7 +133,7 @@ it("sets any number of ticks in as many queries as one", async () => {
     { guestId, workingLineId: await workingLine() },
     { guestId, draftLineId: await draftLine() },
   ]);
-  const working = await Promise.all([1, 2, 3].map(() => workingLine()));
+  const working = [await workingLine(), await workingLine(), await workingLine()];
   const drafts = [await draftLine(), await draftLine(), await draftLine()];
   const many = await queriesFor([
     ...working.map((workingLineId) => ({ guestId, workingLineId })),

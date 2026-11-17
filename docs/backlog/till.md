@@ -2151,7 +2151,8 @@ Order numbers are one venue-wide sequence, starting at 1 and continuing above th
 this copy of the venue (`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). The
 unique index refuses a repeat while a bill holds that number. It does not restart each business
 day: staff search for orders by number. A restore that loses the latest bills can give their
-numbers out again (owner, 2026-11-09, os1 plan).
+numbers out again ([os1 plan](../superpowers/plans/2026-11-08-a1308-os1-order-numbers.md),
+2026-11-09).
 
 ### Fixed screens instead of a screen designer (A182)
 

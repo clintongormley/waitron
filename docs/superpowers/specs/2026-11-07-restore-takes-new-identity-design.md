@@ -227,6 +227,9 @@ Planning: part 1 is planned in full now; part 3 gets an outline until Cloud has 
 old-key destruction, §5's no-re-pairing test, §6's two machines and §7's earlier-text changes wait for a
 later part that covers every restore.
 
+**2026-11-17:** [A1308 os1](../plans/2026-11-08-a1308-os1-order-numbers.md) replaces the
+order-number counters described here with the highest stored bill plus one.
+
 ## 9. Left to the builder
 
 - How a restore is written into the taken-over-from list: a handover activation row or a row of its

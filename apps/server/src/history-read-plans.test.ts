@@ -240,6 +240,7 @@ describe("current service reads with collected history", () => {
       expect(items).toHaveLength(3);
       for (const plan of items) {
         expect(plan.lookupBills).toEqual([venue.party.tabId]);
+        expect(plan.details.join("\n")).toContain("working_orders_uncollected_idx");
         expect(plan.details.join("\n")).toContain("ticket_items_working_order_line_id_key");
         expect(plan.details.join("\n")).toMatch(
           /SEARCH working_order_lines USING (?:COVERING )?INDEX working_order_lines_(?:order_idx|line_no_key) \(working_order_id=\?\)/,
