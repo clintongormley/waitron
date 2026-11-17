@@ -1,7 +1,10 @@
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { readVenue } from "@waitron/db";
+import { queueAccountMail } from "@waitron/identity";
+import { randomUUID } from "node:crypto";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { readVenue, saveCloudVenueId } from "@waitron/db";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import { dirname, join } from "node:path";
@@ -19,7 +22,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import type { Transaction } from "@waitron/db";
 import type { EmailDelivery } from "./email-delivery.js";
-type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
 import { runMailLoop, runMailPass } from "./mail-sender.js";
 import { AppError } from "@waitron/shared";
 import type { startMailSender } from "./mail-sender.js";
@@ -187,9 +190,10 @@ async function bootServer(
   email?: { intent: "demo" | "prepare" | "live"; development: boolean },
   setupNote?: unknown[],
   seams: StartServerSeams = {},
+  cloud?: { origin: string; stateDir: string },
 ): Promise<void> {
   const [port] = await freePorts(1);
-  booted.scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-"));
+  booted.scratch = cloud?.stateDir ?? (await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-")));
   if (setupNote !== undefined)
     await writeFile(join(booted.scratch, SETUP_CLOCK_STEP_FILE), JSON.stringify(setupNote));
   const migrationsRoot = join(booted.scratch, "migrations");
@@ -201,6 +205,7 @@ async function bootServer(
   await seedModuleSettings(suite.db, { "fiscal-none": false });
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env = {
+    ...(cloud ? { WAITRON_CLOUD_ORIGIN: cloud.origin } : {}),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_HTTP_PORT: String(port),
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -245,6 +250,75 @@ async function venueName(): Promise<string> {
 }
 
 describe("the running server's notice and email checks", () => {
+  it("wires paired account mail through Cloud while other notice delivery stays local", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    let submitted: Record<string, unknown> | undefined;
+    const f = await installationFixture(undefined, {
+      email: async (v, _saved, _req, res) => {
+        submitted = JSON.parse(String(v[7]));
+        res.end(
+          JSON.stringify({
+            version: 1,
+            messageId: v[4],
+            state: "accepted",
+            statusRevision: 2,
+            expiresAt: submitted!.expiresAt,
+            reason: null,
+          }),
+        );
+      },
+    });
+    try {
+      const recipientId = randomUUID();
+      await seedPersons(suite.db, {
+        id: recipientId,
+        displayName: "Relay recipient",
+        email: "relay@example.test",
+        locale: "en-GB",
+      });
+      await withTransaction(suite.db, (tx) => saveCloudVenueId(tx, f.venueId));
+      f.patch({
+        emailRelay: {
+          version: 1,
+          grant: {
+            id: randomUUID(),
+            revision: 1,
+            enabled: true,
+            expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          },
+        },
+      });
+      await withTransaction(suite.db, (tx) =>
+        queueAccountMail(tx, { personId: recipientId, purpose: "password_reset" }),
+      );
+      holder.pauseMail = true;
+      await bootServer(
+        booted,
+        venue,
+        { intent: "demo", development: true },
+        undefined,
+        {},
+        { origin: f.options.origin, stateDir: f.stateDir },
+      );
+      expect(await withTransaction(holder.mail!.db, (tx) => holder.managementMode!(tx))).toBe(
+        "cloud",
+      );
+      expect(await withTransaction(holder.mail!.db, (tx) => holder.profileMode!(tx))).toBe("cloud");
+      await runMailPass(holder.mail!);
+      expect(submitted).toMatchObject({ class: "password_reset", locale: "en-GB" });
+      expect(holder.smtp).toEqual([]);
+      expect(
+        suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
+      ).toMatchObject({ status: "sent" });
+      expect(
+        await withTransaction(holder.mail!.db, (tx) => holder.mail!.resolveDelivery(tx, "notice")),
+      ).toMatchObject({ mode: "local_capture" });
+    } finally {
+      await shutDown(booted);
+      await f.close();
+    }
+  });
   it("boot wires venue-space errors and retries failed notice checks through the bell", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};

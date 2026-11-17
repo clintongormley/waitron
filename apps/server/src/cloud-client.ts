@@ -1,3 +1,9 @@
+import {
+  readCloudEmailGrant,
+  sendCloudEmail,
+  type CloudEmailGrant,
+  type CloudAccountEmail,
+} from "./cloud-email.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
@@ -478,6 +484,30 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async accountEmailPaired(): Promise<boolean> {
+      const state = await read();
+      return !!state?.view?.registration && state.environment === "test";
+    },
+    async emailRelay(signal?: AbortSignal) {
+      return run(
+        async () => {
+          const state = await read();
+          if (!state?.view?.registration || state.environment !== "test") return null;
+          if (state.lifecycle?.revoked) throw new AppError("cloud.not_configured", {});
+          return readCloudEmailGrant(await installationClient(state, save).emailRelay(signal));
+        },
+        true,
+        signal,
+      );
+    },
+    async sendEmail(
+      grant: CloudEmailGrant,
+      id: string,
+      message: CloudAccountEmail,
+      signal?: AbortSignal,
+    ) {
+      return sendCloudEmail(await leaseState(signal), grant, id, message, signal);
+    },
     emergencyHints(staffOrigin: string): { address: string } | null {
       const hints = heldEmergencyHints;
       return hints?.staffOrigin === staffOrigin && hints.open && hints.address !== null

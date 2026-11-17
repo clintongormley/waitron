@@ -1,3 +1,4 @@
+import type { CloudAccountEmail, CloudEmailGrant, CloudEmailOutcome } from "./cloud-email.js";
 import { publishState } from "./live-publish.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -37,6 +38,7 @@ export interface MailMessage {
   text: string;
   html?: string;
   attachments?: SendMailOptions["attachments"];
+  accountEmail?: CloudAccountEmail;
 }
 export type MailSettlement =
   | { status: "sent" }
@@ -77,6 +79,13 @@ export interface MailSenderDeps {
   signal: AbortSignal;
   resolveDelivery: (tx: Transaction, rule: MailDeliveryRule) => Promise<EmailDelivery>;
   send?: MailTransport;
+  resolveAccountRelay?: () => Promise<CloudEmailGrant | null>;
+  sendCloudEmail?: (
+    grant: CloudEmailGrant,
+    id: string,
+    message: CloudAccountEmail,
+    signal: AbortSignal,
+  ) => Promise<CloudEmailOutcome>;
   beforeClaim?: () => Promise<void>;
   log: Logger;
 }
@@ -189,9 +198,33 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         mail: OutgoingMail;
         owner: MailKindOwner;
         prepared: unknown;
-        delivery: Exclude<EmailDelivery, { mode: "unconfigured" }>;
+        delivery:
+          | Exclude<EmailDelivery, { mode: "unconfigured" }>
+          | { mode: "cloud"; grant: CloudEmailGrant };
       }
     | undefined;
+  let accountDelivery:
+    { mode: "cloud"; grant: CloudEmailGrant } | { mode: "unconfigured" } | undefined;
+  if (
+    deps.resolveAccountRelay &&
+    first.some(
+      (r) =>
+        r.kind === "account_action" &&
+        due(r, owners.get(r.kind)!, firstNow) &&
+        Date.parse(r.notAfter) > firstNow,
+    )
+  ) {
+    try {
+      const grant = await deps.resolveAccountRelay();
+      if (grant) accountDelivery = { mode: "cloud", grant };
+    } catch (error) {
+      deps.log("error", "mail.delivery_unavailable", {
+        rule: "account_action",
+        errorCode: codeOf(error),
+      });
+      accountDelivery = { mode: "unconfigured" };
+    }
+  }
   let result: MailPassResult;
   try {
     // The claim commits before SMTP, so an external wait never holds the venue write lock.
@@ -225,13 +258,18 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       }
       const deliveries = new Map<MailDeliveryRule, EmailDelivery>();
       for (const owner of deps.owners)
-        if (!deliveries.has(owner.deliveryRule))
+        if (
+          !(owner.kind === "account_action" && accountDelivery) &&
+          !deliveries.has(owner.deliveryRule)
+        )
           deliveries.set(owner.deliveryRule, await deps.resolveDelivery(tx, owner.deliveryRule));
       let unconfigured = false;
       for (const row of rows) {
         const owner = owners.get(row.kind)!;
         if (!due(row, owner, now.getTime()) || Date.parse(row.notAfter) <= now.getTime()) continue;
-        const delivery = deliveries.get(owner.deliveryRule)!;
+        const delivery =
+          (row.kind === "account_action" ? accountDelivery : undefined) ??
+          deliveries.get(owner.deliveryRule)!;
         if (delivery.mode === "unconfigured") {
           unconfigured = true;
           continue;
@@ -340,11 +378,23 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     );
     return result;
   }
-  if (message !== undefined) {
+  if (message !== undefined && delivery.mode === "cloud") {
+    try {
+      outcome = await deps.sendCloudEmail!(
+        delivery.grant,
+        mail.claimToken!,
+        message.accountEmail!,
+        deps.signal,
+      );
+    } catch {
+      outcome = { status: "unknown", failureCode: "mail.relay_unknown" };
+    }
+  } else if (message !== undefined && delivery.mode !== "cloud") {
     let sent: SmtpSendOutcome;
     try {
+      const { accountEmail: _accountEmail, ...smtpMessage } = message;
       sent = await (deps.send ?? sendSmtpMessage)(delivery.smtp, {
-        ...message,
+        ...smtpMessage,
         to: mail.recipient!,
       });
     } catch {

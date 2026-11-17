@@ -1363,7 +1363,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   distinguish queued, captured and unconfigured account mail, and an immediate invitation
   retry says when nothing changed. Ordinary SMTP and Settings tests use the venue sender name.
   Demo captures account mail, reminders and alerts outside development even with a stored relay.
-  Left: Cloud delivery, gated on D102.
+  Left: qualify account email against the live test Cloud (BOX-EMAIL-RELAY, invitations, resets
+  and email changes); receipts and other notices retain SMTP. The published Cloud grant interface
+  is available, but real inbox delivery still needs the joint test.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987

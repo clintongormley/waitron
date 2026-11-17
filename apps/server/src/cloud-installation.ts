@@ -275,7 +275,7 @@ export function installationClient(
   async function exchange(
     signal?: AbortSignal,
     p: (Omit<Pending, "action"> & { action: Action | "tunnel-provision" }) | undefined = c.pending,
-  ): Promise<void> {
+  ): Promise<Record<string, unknown> | undefined> {
     if (!p) return;
     try {
       const bytes = machinePayload(state, p),
@@ -342,6 +342,7 @@ export function installationClient(
       delete c.pending;
       if (c.revoked) delete c.lease;
       await save(state);
+      return value as Record<string, unknown>;
     } catch (error) {
       if (p.action !== "tunnel-provision") c.unavailable = true;
       await save(state);
@@ -389,6 +390,11 @@ export function installationClient(
         await exchange(signal);
       }
       if (c.revoked || !c.lease) throw new AppError("cloud.not_configured", {});
+    },
+    async emailRelay(signal?: AbortSignal) {
+      await this.ensureLease(signal);
+      await prepare("configuration");
+      return (await exchange(signal))?.emailRelay;
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       if (c.revoked) return;

@@ -48,10 +48,24 @@ export function accountActionMail(deps: {
       }
       const timeZone = await deps.readTimeZone();
       const privacyNoticeUrl = await deps.readPrivacyNoticeUrl();
-      return composeAccountEmail(
+      const composed = composeAccountEmail(
         { ...issued, actionUrl, locale: issued.locale ?? deps.venueLocale, roles },
         { timeZone, ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }) },
       );
+      return {
+        ...composed,
+        accountEmail: {
+          class: issued.purpose,
+          recipient: issued.email,
+          displayName: issued.displayName,
+          locale: (issued.locale ?? deps.venueLocale).startsWith("es") ? "es-ES" : "en-GB",
+          timeZone,
+          expiresAt: issued.expiresAt,
+          ...(issued.purpose === "email_change"
+            ? { code: issued.code!, codeExpiresAt: issued.codeExpiresAt! }
+            : { token: issued.token }),
+        },
+      };
     },
     async settle() {},
   };

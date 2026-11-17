@@ -3389,7 +3389,7 @@ it("sends password-reset links back to the requesting staff origin", async () =>
 
 describe("queued invitation answers", () => {
   for (const action of ["create", "invitation", "reset-login", "reactivate"] as const) {
-    it.each(["smtp", "local_capture", "unconfigured"] as const)(
+    it.each(["smtp", "cloud", "local_capture", "unconfigured"] as const)(
       `${action} queues according to %s delivery availability`,
       async (mode) => {
         const { staffId } = await setupVenue();
@@ -3426,7 +3426,7 @@ describe("queued invitation answers", () => {
           ...(action === "create" ? { id: expect.any(String) } : {}),
           ...(mode === "unconfigured"
             ? { invitationSent: false, problem: "email.unconfigured", uncertain: false }
-            : { invitationSent: true, delivery: mode === "smtp" ? "queued" : "captured" }),
+            : { invitationSent: true, delivery: mode === "local_capture" ? "captured" : "queued" }),
         });
         const id = body.id ?? staffId;
         expect((await suite.db.select().from(persons).where(eq(persons.id, id)))[0]?.status).toBe(

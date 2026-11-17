@@ -162,7 +162,7 @@ export interface ManagementApiDeps {
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
-  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
   passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
@@ -186,7 +186,7 @@ async function queueInvitationAnswer(
   if (mode === "unconfigured")
     return { invitationSent: false, problem: "email.unconfigured", uncertain: false };
   await queueInvitation(tx, input);
-  return { invitationSent: true, delivery: mode === "smtp" ? "queued" : "captured" };
+  return { invitationSent: true, delivery: mode === "local_capture" ? "captured" : "queued" };
 }
 
 /**

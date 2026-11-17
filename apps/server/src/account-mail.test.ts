@@ -76,6 +76,144 @@ describe("account mail owner", () => {
         now: time,
       }),
     );
+  it.each(["invitation", "password_reset"] as const)(
+    "sends a usable %s through Cloud instead of capture",
+    async (purpose) => {
+      if (purpose === "invitation")
+        await suite.db.run(sql`update persons set status='pending' where id=${personId}`);
+      await queue(purpose);
+      const authority = {
+        id: randomUUID(),
+        revision: 1,
+        enabled: true,
+        expiresAt: new Date(time.getTime() + 3600000).toISOString(),
+      };
+      deps.resolveAccountRelay = async () => authority;
+      let submitted: import("./cloud-email.js").CloudAccountEmail | undefined;
+      let messageId: string | undefined;
+      deps.sendCloudEmail = async (g, id, payload) => {
+        expect(g).toEqual(authority);
+        expect(
+          suite.db.get<{ status: string }>(sql`select status from outgoing_mail`)?.status,
+        ).toBe("sending");
+        messageId = id;
+        submitted = payload;
+        return { status: "sent" };
+      };
+      deps.resolveDelivery = async () => ({
+        mode: "local_capture",
+        smtp: { url: "smtp://capture.test", from: "sender" },
+      });
+      await runMailPass(deps);
+      expect(connections).toEqual([]);
+      expect(messageId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(submitted).toMatchObject({
+        class: purpose,
+        recipient: "person@example.test",
+        displayName: "Recipient",
+        locale: "en-GB",
+        timeZone: "Europe/Madrid",
+      });
+      expect(suite.db.get<{ status: string }>(sql`select status from outgoing_mail`)?.status).toBe(
+        "sent",
+      );
+      expect(JSON.stringify(suite.db.all(sql`select * from outgoing_mail`))).not.toContain(
+        submitted!.token,
+      );
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          completeAccountAction(tx, {
+            token: submitted!.token!,
+            purpose,
+            password: "a new secure password",
+            pin: "123456",
+            now: time,
+          }),
+        ),
+      ).toMatchObject({ personId });
+    },
+  );
+  it("ends an ambiguous Cloud claim without retry or SMTP fallback", async () => {
+    await queue();
+    deps.resolveAccountRelay = async () => ({
+      id: randomUUID(),
+      revision: 1,
+      enabled: true,
+      expiresAt: new Date(time.getTime() + 3600000).toISOString(),
+    });
+    deps.sendCloudEmail = vi.fn(async () => ({
+      status: "unknown" as const,
+      failureCode: "mail.relay_unknown" as const,
+    }));
+    await runMailPass(deps);
+    time = new Date(time.getTime() + 3600000);
+    await runMailPass(deps);
+    expect(suite.db.get(sql`select status, failure_code from outgoing_mail`)).toMatchObject({
+      status: "unknown",
+      failure_code: "mail.relay_unknown",
+    });
+    expect(deps.sendCloudEmail).toHaveBeenCalledTimes(1);
+    expect(connections).toEqual([]);
+  });
+  it("retries a definitely refused relay with a fresh claim id and action", async () => {
+    await queue();
+    deps.resolveAccountRelay = async () => ({
+      id: randomUUID(),
+      revision: 1,
+      enabled: true,
+      expiresAt: new Date(time.getTime() + 3600000).toISOString(),
+    });
+    const ids: string[] = [],
+      tokens: string[] = [];
+    deps.sendCloudEmail = async (_g, id, payload) => {
+      ids.push(id);
+      tokens.push(payload.token!);
+      return ids.length === 1
+        ? { status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }
+        : { status: "sent" };
+    };
+    await runMailPass(deps);
+    expect(suite.db.get(sql`select status, failure_code from outgoing_mail`)).toMatchObject({
+      status: "rejected",
+      failure_code: "mail.relay_refused",
+    });
+    time = new Date(time.getTime() + 60000);
+    await runMailPass(deps);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(tokens[0]).not.toBe(tokens[1]);
+    expect(suite.db.get(sql`select status from outgoing_mail`)).toMatchObject({ status: "sent" });
+    expect(connections).toEqual([]);
+  });
+  it("uses the saved SMTP route when the relay is explicitly off", async () => {
+    await queue();
+    deps.resolveAccountRelay = async () => null;
+    await runMailPass(deps);
+    expect(connections).toEqual(["smtp://mail.test"]);
+    expect(suite.db.get(sql`select status from outgoing_mail`)).toMatchObject({ status: "sent" });
+  });
+  it("expires old account mail without asking Cloud for sending authority", async () => {
+    await queue();
+    time = new Date(time.getTime() + 1800001);
+    deps.resolveAccountRelay = vi.fn(async () => { throw new Error("offline"); });
+    await runMailPass(deps);
+    expect(suite.db.get(sql`select status from outgoing_mail`)).toMatchObject({ status: "expired" });
+    expect(deps.resolveAccountRelay).not.toHaveBeenCalled();
+    expect(connections).toEqual([]);
+  });
+  it("waits for unreadable Cloud authority without issuing a token or using SMTP", async () => {
+    await queue();
+    deps.resolveAccountRelay = async () => {
+      throw new Error("unavailable");
+    };
+    await runMailPass(deps);
+    expect(suite.db.get(sql`select status, attempts from outgoing_mail`)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+    });
+    expect(suite.db.all(sql`select * from account_actions`)).toEqual([]);
+    expect(connections).toEqual([]);
+  });
   it("makes a working reset link at send and never stores it in the queue", async () => {
     await queue();
     expect(suite.db.all(sql`select * from account_actions`)).toEqual([]);
@@ -103,61 +241,101 @@ describe("account mail owner", () => {
       link.searchParams.get("token"),
     );
   });
-  it("sends an email change to the newest pending address only", async () => {
-    const codeKey = Buffer.alloc(32, 7);
-    vi.mocked(randomInt)
-      .mockReturnValueOnce(111111 as never)
-      .mockReturnValueOnce(222222 as never);
-    await suite.db.run(
-      sql`update persons set password_hash=${hashPassword("correct horse")} where id=${personId}`,
-    );
-    const session = await withTransaction(suite.db, (tx) =>
-      startManagementSession(tx, { method: "password", personId }),
-    );
-    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
-    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
-    for (const email of ["first@example.test", "second@example.test"]) {
-      await withTransaction(suite.db, (tx) =>
-        saveOwnProfile(tx, {
-          managementSessionId: session.token,
-          displayName: "Recipient",
-          email,
-          locale: "en-GB",
-          keyRing,
-          queueEmailChange: true,
-        }),
+  it.each(["smtp", "cloud"] as const)(
+    "sends an email change to the newest pending address only over %s",
+    async (transport) => {
+      const relayCodes: string[] = [];
+      if (transport === "cloud") {
+        deps.resolveAccountRelay = async () => ({
+          id: randomUUID(),
+          revision: 1,
+          enabled: true,
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        });
+        deps.sendCloudEmail = async (_grant, _id, payload) => {
+          expect(payload).toMatchObject({
+            class: "email_change",
+            recipient: "second@example.test",
+            timeZone: "Europe/Madrid",
+            locale: "en-GB",
+          });
+          expect(payload).not.toHaveProperty("token");
+          expect(Date.parse(payload.codeExpiresAt!)).toBeLessThan(Date.parse(payload.expiresAt));
+          relayCodes.push(payload.code!);
+          return { status: "sent" };
+        };
+      }
+      const codeKey = Buffer.alloc(32, 7);
+      vi.mocked(randomInt)
+        .mockReturnValueOnce(111111 as never)
+        .mockReturnValueOnce(222222 as never);
+      await suite.db.run(
+        sql`update persons set password_hash=${hashPassword("correct horse")} where id=${personId}`,
       );
-    }
-    deps.owners = [
-      accountActionMail({
-        codeKey,
-        emailChangeUrl: "https://box.test/",
-        venueLocale: "en-GB",
-        readTimeZone: async () => "Europe/Madrid",
-        readPrivacyNoticeUrl: async () => null,
-      }),
-    ];
-    time = new Date();
-    await runMailPass(deps);
-    await runMailPass(deps);
-    expect(suite.db.all(sql`select recipient, status from outgoing_mail order by seq`)).toEqual([
-      { recipient: "second@example.test", status: "sent" },
-      { recipient: "second@example.test", status: "sent" },
-    ]);
-    expect(messages).toHaveLength(2);
-    expect(messages[0]).toContain("111111");
-    expect(messages[1]).toContain("222222");
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        confirmOwnEmailChange(tx, { managementSessionId: session.token, code: "111111", codeKey }),
-      ),
-    ).resolves.toBeNull();
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        confirmOwnEmailChange(tx, { managementSessionId: session.token, code: "222222", codeKey }),
-      ),
-    ).resolves.toBe("second@example.test");
-  });
+      const session = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { method: "password", personId }),
+      );
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
+      const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
+      for (const email of ["first@example.test", "second@example.test"]) {
+        await withTransaction(suite.db, (tx) =>
+          saveOwnProfile(tx, {
+            managementSessionId: session.token,
+            displayName: "Recipient",
+            email,
+            locale: "en-GB",
+            keyRing,
+            queueEmailChange: true,
+          }),
+        );
+      }
+      deps.owners = [
+        accountActionMail({
+          codeKey,
+          emailChangeUrl: "https://box.test/",
+          venueLocale: "en-GB",
+          readTimeZone: async () => "Europe/Madrid",
+          readPrivacyNoticeUrl: async () => null,
+        }),
+      ];
+      time = new Date();
+      await runMailPass(deps);
+      await runMailPass(deps);
+      expect(suite.db.all(sql`select recipient, status from outgoing_mail order by seq`)).toEqual([
+        { recipient: "second@example.test", status: "sent" },
+        { recipient: "second@example.test", status: "sent" },
+      ]);
+      if (transport === "smtp") {
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toContain("111111");
+        expect(messages[1]).toContain("222222");
+      } else {
+        expect(relayCodes).toEqual(["111111", "222222"]);
+        expect(connections).toEqual([]);
+        expect(JSON.stringify(suite.db.all(sql`select * from outgoing_mail`))).not.toMatch(
+          /111111|222222/,
+        );
+      }
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          confirmOwnEmailChange(tx, {
+            managementSessionId: session.token,
+            code: "111111",
+            codeKey,
+          }),
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          confirmOwnEmailChange(tx, {
+            managementSessionId: session.token,
+            code: "222222",
+            codeKey,
+          }),
+        ),
+      ).resolves.toBe("second@example.test");
+    },
+  );
 
   it("cancels a reset suspended after queuing", async () => {
     await queue();

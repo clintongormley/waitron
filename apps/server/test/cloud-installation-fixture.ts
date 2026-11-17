@@ -8,6 +8,7 @@ export async function installationFixture(
   options: {
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
+    email?: MachineHandler;
     billing?: MachineHandler;
     emergency?: MachineHandler;
     emergencyCode?: MachineHandler;
@@ -80,6 +81,10 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("backup-") && capture) {
       await capture(values, saved, req, res, sent);
+      return;
+    }
+    if (String(values[2]).startsWith("email-") && options.email) {
+      await options.email(values, saved, req, res, sent);
       return;
     }
     if (String(values[2]).startsWith("translation-") && options.translation) {

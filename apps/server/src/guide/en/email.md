@@ -19,12 +19,23 @@ the sender address. If the page says the saved sender address is not valid, choo
 **Change mail server** and correct **Sender address** before testing again.
 
 Before completing Prepare or Live setup, enter your mail server settings and send an accepted
-test to the administrator address. Development setup can skip this step. Saving a mail server
-sends invitations and password-reset links to real inboxes. Check the account delivery status on
-this page and the invoice status in **Mail server**: development boxes keep invoice email locally
-even when account email uses the saved server.
+test to the administrator address. Development setup can skip this step. If you use your own mail server, saving it
+sends invitations and password-reset links to real inboxes. This page shows invoice email status:
+development boxes keep invoice email locally even when account email uses a saved server or Cloud.
 
 In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Admin to open captured messages.
+
+## Account email through test Cloud {#cloud-account-email}
+
+When you pair your box with the test Cloud and enable its email relay, invitations,
+password-reset links and email-change codes use Cloud, including in Demo. Check the recipient's
+real inbox rather than Demo's Email inbox. Keep a mail server configured for receipts and other
+notices, and for completing Prepare or Live setup.
+
+Cloud account links lead back to your box. Open them on a network that can reach it. Cloud's
+invitation does not list your roles or include the venue's optional privacy link. If an email
+does not arrive, request a fresh link or code; an earlier message may still arrive later.
+Turning the relay off restores your normal mail-server or Demo-capture route for new sends.
 
 ## Check the test result {#test-results}
 
@@ -50,7 +61,7 @@ Continue becomes available after the server accepts a test of those settings for
 With box administration (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the server clears its saved login details too; enter them again if you set it up later.
 
-In Prepare or Live, account links and invoice email cannot be sent until you configure a server
-again; sales continue. On a development box, email
+In Prepare or Live, receipts and notices need a configured server. Account links can still use
+an enabled test Cloud relay; otherwise they also wait for a server. Sales continue. On a development box, email
 goes back to its test inbox. If the settings fail to reload after removal, retry loading them;
 the removal has already succeeded.

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3da36fc3-0e4f-41c4-a557-3529822c5bcc",
+  "id": "63ad6a40-1151-4a5e-b3c4-163d506bdfbe",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -18925,7 +18925,7 @@
         },
         "outgoing_mail_failure_ck": {
           "name": "outgoing_mail_failure_ck",
-          "value": "\"outgoing_mail\".\"failure_code\" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned')"
+          "value": "\"outgoing_mail\".\"failure_code\" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned', 'mail.relay_refused', 'mail.relay_unknown')"
         },
         "outgoing_mail_attempts_ck": {
           "name": "outgoing_mail_attempts_ck",

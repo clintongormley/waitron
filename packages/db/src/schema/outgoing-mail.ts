@@ -47,6 +47,8 @@ export const outgoingMailFailureCodes = [
   "mail.compose_failed",
   "mail.claim_failed",
   "mail.claim_abandoned",
+  "mail.relay_refused",
+  "mail.relay_unknown",
 ] as const;
 export type OutgoingMailKind = (typeof outgoingMailKinds)[number];
 export type OutgoingMailStatus = (typeof outgoingMailStatuses)[number];
