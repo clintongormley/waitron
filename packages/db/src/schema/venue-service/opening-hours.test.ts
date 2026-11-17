@@ -97,8 +97,6 @@ describe("opening hours constraints", () => {
     ["weekday without season", "one_day", () => ({ ...zoneDate(), weekday: 1 }), zoneDate],
     ["season and date", "one_day", () => ({ ...zoneWeek(), date: dateId }), zoneWeek],
     ["weekday outside week", "weekday", () => ({ ...zoneWeek(), weekday: 7 }), zoneWeek],
-    ["start off step", "step", () => ({ ...zoneWeek(), start: "10:10:00" }), zoneWeek],
-    ["end off step", "step", () => ({ ...zoneWeek(), end: "12:10:00" }), zoneWeek],
     ["unknown kind", "kind", () => ({ ...zoneWeek(), kind: "other" }), zoneWeek],
     ["zone period", "kind_by_owner", () => ({ ...zoneWeek(), period: periodId }), zoneWeek],
     [

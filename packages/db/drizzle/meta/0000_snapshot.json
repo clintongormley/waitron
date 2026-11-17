@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "63ad6a40-1151-4a5e-b3c4-163d506bdfbe",
+  "id": "2131da0f-15a9-41aa-8409-8f67cc224d79",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4038,7 +4038,7 @@
         },
         "floor_zones_kept_open_step_ck": {
           "name": "floor_zones_kept_open_step_ck",
-          "value": "substr(\"floor_zones\".\"kept_open_from\", 4, 2) in ('00', '15', '30', '45') and substr(\"floor_zones\".\"kept_open_until\", 4, 2) in ('00', '15', '30', '45')"
+          "value": "substr(\"floor_zones\".\"kept_open_until\", 4, 2) in ('00', '15', '30', '45')"
         },
         "floor_zones_order_start_ck": {
           "name": "floor_zones_order_start_ck",
@@ -17950,10 +17950,6 @@
         "opening_hours_weekday_ck": {
           "name": "opening_hours_weekday_ck",
           "value": "\"opening_hours\".\"weekday\" is null or \"opening_hours\".\"weekday\" between 0 and 6"
-        },
-        "opening_hours_step_ck": {
-          "name": "opening_hours_step_ck",
-          "value": "substr(\"opening_hours\".\"starts_at\", 4, 2) in ('00', '15', '30', '45') and substr(\"opening_hours\".\"ends_at\", 4, 2) in ('00', '15', '30', '45')"
         },
         "opening_hours_kind_ck": {
           "name": "opening_hours_kind_ck",

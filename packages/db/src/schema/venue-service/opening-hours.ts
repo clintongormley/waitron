@@ -52,10 +52,6 @@ export const openingHours = table(
       sql`(${t.seasonId} is null) <> (${t.specialDayDateId} is null) and (${t.seasonId} is null) = (${t.weekday} is null)`,
     ),
     check("opening_hours_weekday_ck", sql`${t.weekday} is null or ${t.weekday} between 0 and 6`),
-    check(
-      "opening_hours_step_ck",
-      sql`substr(${t.startsAt}, 4, 2) in ('00', '15', '30', '45') and substr(${t.endsAt}, 4, 2) in ('00', '15', '30', '45')`,
-    ),
     check("opening_hours_kind_ck", enumCheck(t.kind)),
     check(
       "opening_hours_kind_by_owner_ck",

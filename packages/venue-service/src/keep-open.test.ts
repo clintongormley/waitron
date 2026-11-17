@@ -272,6 +272,52 @@ describe("keeping a zone open today", () => {
       "00:00",
     ]);
   });
+  it("keeps a zone open when its saved closure starts at the off-quarter changeover", async () => {
+    const f = await fixture();
+    await run(async (tx) => {
+      await seedBusinessDay(tx, { dayCutover: "05:50:00" });
+      await replaceMenuWeek(
+        tx,
+        f.departmentId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [{ periodId: f.lunch, startsAt: "05:50", endsAt: "08:00" }],
+        })),
+        at("06:00"),
+        1,
+      );
+      await replaceZoneClosedWeek(
+        tx,
+        f.zoneId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "05:50", endsAt: "07:00" }],
+        })),
+        1,
+      );
+      await keep.keepZoneOpen(
+        tx,
+        f.zoneId,
+        { until: "06:30" },
+        at("06:00"),
+        await seedActivityActor(tx),
+      );
+    });
+    expect(await zoneRows(f)).toEqual([
+      {
+        id: f.zoneId,
+        zoneId: f.zoneId,
+        businessDay: "2026-10-09",
+        startsAt: "05:50:00",
+        endsAt: "06:30:00",
+      },
+    ]);
+    expect([...(await run((tx) => closedZoneIdsAt(tx, at("06:15"), [f.zoneId])))]).toEqual([]);
+    expect([...(await run((tx) => closedZoneIdsAt(tx, at("06:30"), [f.zoneId])))]).toEqual([
+      f.zoneId,
+    ]);
+  });
+
   it("can reopen a zone already closed", async () => {
     const f = await zoneFixture("02:00");
     await run(async (tx) =>

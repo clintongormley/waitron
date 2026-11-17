@@ -79,6 +79,32 @@ describe("service day", () => {
     expect(parseServiceDay([], "slots", "06:00")).toEqual([]);
   });
 
+  it("accepts the off-quarter changeover as either endpoint, but refuses other off-step times", () => {
+    const ranges = [
+      { periodId: P, startsAt: "05:50", endsAt: "06:00" },
+      { periodId: Q, startsAt: "05:45", endsAt: "05:50" },
+    ];
+    expect(parseServiceDay(ranges, "slots", "05:50")).toEqual(ranges);
+    expect(parseClosedRanges(ranges, "ranges", "05:50")).toEqual(
+      ranges.map(({ startsAt, endsAt }) => ({ startsAt, endsAt })),
+    );
+    for (const edge of ["startsAt", "endsAt"]) {
+      const invalid = [{ periodId: P, startsAt: "04:00", endsAt: "05:50", [edge]: "05:47" }];
+      expect(() => parseServiceDay(invalid, "slots", "05:50")).toThrowError(
+        expect.objectContaining({
+          code: "menu_timetable.invalid",
+          params: { field: "slots", reason: "step" },
+        }),
+      );
+      expect(() => parseClosedRanges(invalid, "ranges", "05:50")).toThrowError(
+        expect.objectContaining({
+          code: "zone_closed_time.invalid",
+          params: { field: "ranges", reason: "step" },
+        }),
+      );
+    }
+  });
+
   it("accepts a full business day", () => {
     expect(
       parseServiceDay([{ periodId: P, startsAt: "06:00", endsAt: "06:00" }], "slots", "06:00"),

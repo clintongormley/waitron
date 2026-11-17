@@ -96,6 +96,30 @@ test("draws 15-minute rows about 5px tall from the changeover with hour labels",
   expect(block(el, "thu").textContent).toContain("13:00–16:00");
 });
 
+test("paints and draws both edges of an off-quarter business day", async () => {
+  const el = await grid({ mon: [] });
+  el.cutover = "05:50";
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 0, 10);
+  const first = { periodId: "afternoon", startsAt: "05:50", endsAt: "06:00" };
+  expect(seen).toEqual([{ key: "mon", day: [first] }]);
+  el.days = new Map([["mon", seen[0]!.day]]);
+  await el.updateComplete;
+  await drag(el, "mon", 1435, 1440);
+  expect(seen[1]).toEqual({
+    key: "mon",
+    day: [first, { periodId: "afternoon", startsAt: "05:45", endsAt: "05:50" }],
+  });
+  el.days = new Map([["mon", seen[1]!.day]]);
+  await el.updateComplete;
+  const day = el
+    .shadowRoot!.querySelector<HTMLElement>('.day[data-column="mon"]')!
+    .getBoundingClientRect();
+  expect(block(el, "mon", 0).getBoundingClientRect().top).toBeCloseTo(day.top, 0);
+  expect(block(el, "mon", 1).getBoundingClientRect().bottom).toBeCloseTo(day.bottom, 0);
+});
+
 test("each column heading holds the day name and a slot for its menu on one line", async () => {
   const el = await grid();
   const heading = el.shadowRoot!.querySelector<HTMLElement>('.heading[data-column="thu"]')!;

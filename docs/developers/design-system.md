@@ -3057,7 +3057,7 @@ onto more lines rather than being cut. A line under the bar says what is edited:
 <first day> to <last day> opens these hours, except on special days." A paint row offers the
 department's periods (a pencil edits one, named and titled "Edit <period>"),
 Closed and + New period, which saves the period on its own and chooses it. Dragging down a day
-paints the chosen period in the business day's quarter hours; a drag over a block replaces what it
+paints the chosen period on clock quarter hours or exactly at the business-day changeover; a drag over a block replaces what it
 covers, touching blocks of one period join, and clicking a block offers another period or Delete.
 Each day's ⋮ offers Copy to…, with a tick per day, and Clear. The block's menu and the Copy to…
 chooser open below what they belong to, else above it, else beside it, and cover it only when

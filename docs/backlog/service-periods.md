@@ -50,14 +50,6 @@ read by separately written queries in `special-days.ts` and `business-day-schedu
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
 the browser-safe repeat rules. Each could collapse to one place.
 
-## Painting stops short of an off-quarter-hour changeover
-
-On a venue whose business day changes over off the quarter hour, painting starts at the first
-quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
-from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
-server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
-was read in the code, not run.
-
 ## Two date helpers read years 0 to 99 as 1900 to 1999
 
 `isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`

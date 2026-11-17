@@ -731,6 +731,11 @@ menus, a zone's period-menu choices and separately authored department hours are
 Configuration-transfer verification is recorded under
 [service-period configuration](#service-period-configuration) below.
 
+**2026-11-17, off-quarter changeovers:** Opening-hours endpoints may also equal the
+business-day changeover. Interior endpoints and separately authored staffing blocks remain on
+clock quarter hours; the quarter-only descriptions below record the earlier rule. The
+[changeover plan](../superpowers/plans/2026-11-17-d-paint-changeover-edge.md) names the saved-range consumers.
+
 You set a department's opening hours by placing its periods on the normal week. Each period has
 a name, a colour, one customer menu and zero or more staff-only menus. Its ranges run inside the
 venue's business day, from one changeover to the next. With a 06:00 changeover, Friday's

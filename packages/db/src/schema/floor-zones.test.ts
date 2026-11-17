@@ -198,7 +198,6 @@ describe("today's zone keep-open constraints", () => {
   it.each([
     ["2026-11-12", null, null, "floor_zones_kept_open_ck"],
     [null, "21:00", "22:00", "floor_zones_kept_open_ck"],
-    ["2026-11-12", "21:10", "22:00", "floor_zones_kept_open_step_ck"],
     ["2026-11-12", "21:00", "22:10", "floor_zones_kept_open_step_ck"],
   ])(
     "refuses incomplete or off-quarter-hour keep-open %s / %s / %s",

@@ -64,21 +64,31 @@ export function copyDay(
   return copied;
 }
 
-/** The clock quarter hour nearest `offsetPx` (row 0 is the changeover, a row is 15 minutes), held
- *  inside the business day, as the server's step rule (`parseRanges`, service-day.ts) requires of
- *  both ends of a range. On a quarter-hour changeover the day's end answers the changeover. A row
- *  with no height answers the first quarter hour. */
-export function stepAt(offsetPx: number, rowPx: number, cutover: string): string {
-  return clockAt(stepMinuteAt(offsetPx, rowPx, cutover), cutover);
+/** Staffing's quarter-only blocks opt out of the Opening hours boundary endpoints. */
+export function stepAt(
+  offsetPx: number,
+  rowPx: number,
+  cutover: string,
+  includeChangeover = true,
+): string {
+  return clockAt(stepMinuteAt(offsetPx, rowPx, cutover, includeChangeover), cutover);
 }
 
-/** `stepAt` as minutes from the changeover; on a quarter-hour changeover the day's end answers 1440. */
-export function stepMinuteAt(offsetPx: number, rowPx: number, cutover: string): number {
+export function stepMinuteAt(
+  offsetPx: number,
+  rowPx: number,
+  cutover: string,
+  includeChangeover = true,
+): number {
   const minutes = rowPx > 0 ? (offsetPx / rowPx) * STEP_MINUTES : 0;
   const first = (STEP_MINUTES - (Number(cutover.slice(3, 5)) % STEP_MINUTES)) % STEP_MINUTES;
   const last = Math.floor((DAY_MINUTES - first) / STEP_MINUTES);
   const row = Math.min(Math.max(Math.round((minutes - first) / STEP_MINUTES), 0), last);
-  return first + row * STEP_MINUTES;
+  const quarter = first + row * STEP_MINUTES;
+  if (includeChangeover && Math.abs(minutes) < Math.abs(minutes - quarter)) return 0;
+  if (includeChangeover && Math.abs(DAY_MINUTES - minutes) <= Math.abs(minutes - quarter))
+    return DAY_MINUTES;
+  return quarter;
 }
 
 export function samePaint(a: readonly Paint[], b: readonly Paint[]): boolean {

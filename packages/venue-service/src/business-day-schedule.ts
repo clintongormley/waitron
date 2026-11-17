@@ -208,8 +208,10 @@ export async function businessDayClockConflicts(
       let reason: BusinessDayClockConflict["reason"] | null = null;
       if (startsAt === endsAt) reason = "all_day";
       else if (overlapping || invalidBefore.has(p)) reason = "overlap";
-      else if (crossing.has(p)) reason = "range";
-      else if (
+      else if (crossing.has(p)) {
+        const span = rangeSpan({ startsAt, endsAt }, newCutover);
+        reason = span.start > span.end ? "range" : "transition_strip";
+      } else if (
         ownership(startsAt, oldCutover, false) !== ownership(startsAt, newCutover, false) ||
         ownership(endsAt, oldCutover, true) !== ownership(endsAt, newCutover, true)
       )
