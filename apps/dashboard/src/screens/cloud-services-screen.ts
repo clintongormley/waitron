@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { centsToDecimal, formatMoney } from "@waitron/shared";
 import type {
+  CloudOwnerRecoveryRequest,
   CloudBilling,
   CloudEmergency,
   CloudEmergencyCode,
@@ -133,6 +134,219 @@ export class CloudServicesScreen extends LitElement {
       if (generation === this.#codeGeneration) this.codeBusy = false;
     }
   }
+  @state() private recoveryRequests?: CloudOwnerRecoveryRequest[];
+  @state() private recoveryChoice?: {
+    action: "approve" | "refuse";
+    request: CloudOwnerRecoveryRequest;
+  };
+  @state() private recoveryBusy = false;
+  @state() private recoveryReadError?: string;
+  @state() private recoveryActionError?: string;
+  @state() private recoveryNotice?: "cloud.recovery_approved" | "cloud.recovery_refused";
+  #recoveryGeneration = 0;
+  #recoveryKey = "";
+  #recoveryBinding() {
+    const s = this.status,
+      r = s?.registration;
+    return this.isConnected && readsBilling(s) && !s?.isRemote && r
+      ? JSON.stringify([
+          s.requestId,
+          s.environment,
+          r.organisationId,
+          r.legalBusinessId,
+          r.venueId,
+          r.installationId,
+        ])
+      : "";
+  }
+  #clearRecovery() {
+    this.#recoveryGeneration++;
+    this.recoveryRequests = undefined;
+    this.recoveryChoice = undefined;
+    this.recoveryBusy = false;
+    this.recoveryReadError = this.recoveryActionError = this.recoveryNotice = undefined;
+  }
+  async #loadRecovery() {
+    const key = this.#recoveryBinding();
+    if (!key || this.recoveryBusy) return;
+    const generation = ++this.#recoveryGeneration;
+    this.recoveryBusy = true;
+    this.recoveryReadError = undefined;
+    this.recoveryRequests = undefined;
+    try {
+      const { requests } = await this.api.readCloudOwnerRecovery();
+      if (generation !== this.#recoveryGeneration || key !== this.#recoveryBinding()) return;
+      const r = this.status!.registration!;
+      if (
+        requests.some(
+          (v) =>
+            v.organisationId !== r.organisationId ||
+            v.legalBusinessId !== r.legalBusinessId ||
+            v.venueId !== r.venueId ||
+            v.installationId !== r.installationId ||
+            v.environment !== this.status!.environment,
+        )
+      ) {
+        this.recoveryReadError = "cloud.binding_conflict";
+        return;
+      }
+      this.recoveryRequests = requests;
+    } catch (error) {
+      if (generation === this.#recoveryGeneration) this.recoveryReadError = codeOf(error);
+    } finally {
+      if (generation === this.#recoveryGeneration) this.recoveryBusy = false;
+    }
+  }
+  async #decideRecovery() {
+    const choice = this.recoveryChoice,
+      key = this.#recoveryBinding();
+    if (!choice || !key || this.recoveryBusy) return;
+    const generation = ++this.#recoveryGeneration;
+    this.recoveryBusy = true;
+    this.recoveryActionError = this.recoveryNotice = undefined;
+    let saved = false;
+    try {
+      await this.api.decideCloudOwnerRecovery(choice.action, choice.request);
+      if (generation !== this.#recoveryGeneration || key !== this.#recoveryBinding()) return;
+      this.recoveryChoice = undefined;
+      this.recoveryNotice =
+        choice.action === "approve" ? "cloud.recovery_approved" : "cloud.recovery_refused";
+      saved = true;
+    } catch (error) {
+      if (generation === this.#recoveryGeneration) {
+        this.recoveryActionError = codeOf(error);
+        if (this.recoveryActionError === "cloud.request_unavailable") {
+          this.recoveryChoice = undefined;
+          this.recoveryRequests = this.recoveryRequests?.filter(
+            (r) => r.requestId !== choice.request.requestId,
+          );
+          if (!this.recoveryRequests?.length) this.recoveryRequests = undefined;
+        }
+      }
+    } finally {
+      if (generation === this.#recoveryGeneration) this.recoveryBusy = false;
+    }
+    if (saved) void this.#loadRecovery();
+  }
+  #recoveryIdentity(r: CloudOwnerRecoveryRequest) {
+    return html`<dl>
+      <dt>${t("cloud.recovery_account")}</dt>
+      <dd>${r.email}<br />${r.accountId}</dd>
+      <dt>${t("cloud.organisation")}</dt>
+      <dd>${this.status?.organisationName}<br />${r.organisationId}</dd>
+      <dt>${t("cloud.business")}</dt>
+      <dd>${this.status?.legalBusinessName}<br />${r.legalBusinessId}</dd>
+      <dt>${t("cloud.recovery_venue")}</dt>
+      <dd>${r.venueId}</dd>
+      <dt>${t("cloud.recovery_expires")}</dt>
+      <dd>
+        <time datetime=${r.expiresAt}
+          >${new Date(r.expiresAt).toLocaleString(currentLocale())}</time
+        >
+      </dd>
+    </dl>`;
+  }
+  #recoveryPanel(s: CloudConnectionStatus) {
+    const failures = [...new Set([this.recoveryActionError, this.recoveryReadError])].filter(
+      (v): v is string => v !== undefined,
+    );
+    const choice = this.recoveryChoice;
+    const error = html`${failures.map(
+      (failure) =>
+        html`<p class="error" role="alert">
+          ${failure === "cloud.request_unavailable" ? t("cloud.recovery_changed") : codeMessage(failure)}
+        </p>`,
+    )}
+    ${failures.includes("cloud.owner_recovery_admin_required") ? html`<wt-button id="recovery-sign-in" @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}>${t("cloud.recovery_sign_in")}</wt-button>` : nothing}`;
+    return html`<section>
+      <h2>${t("cloud.recovery_title")}</h2>
+      <p>${t(s.isRemote ? "cloud.recovery_local" : "cloud.recovery_help")}</p>
+      ${
+        s.isRemote
+          ? nothing
+          : html` <wt-button
+                id="recovery-load"
+                variant="primary"
+                .disabled=${this.recoveryBusy}
+                @click=${() => {
+                  this.recoveryNotice = undefined;
+                  void this.#loadRecovery();
+                }}
+                >${t("cloud.recovery_load")}</wt-button
+              >
+              ${this.recoveryNotice ? html`<p role="status">${t(this.recoveryNotice)}</p>` : nothing}
+              ${choice ? nothing : error}
+              ${this.recoveryRequests?.length === 0 ? html`<p>${t("cloud.recovery_empty")}</p>` : nothing}
+              ${this.recoveryRequests?.map(
+                (r) =>
+                  html`<div style="--wt-form-actions-in-place: true">
+                    ${this.#recoveryIdentity(r)}
+                    <wt-form-actions
+                      ><wt-button
+                        id=${`recovery-refuse-${r.requestId}`}
+                        aria-label=${`${t("cloud.recovery_refuse")}: ${r.email}`}
+                        variant="danger"
+                        .disabled=${this.recoveryBusy}
+                        @click=${() => {
+                          this.recoveryActionError = undefined;
+                          this.recoveryChoice = { action: "refuse", request: r };
+                        }}
+                        >${t("cloud.recovery_refuse")}</wt-button
+                      >
+                      <wt-button
+                        id=${`recovery-approve-${r.requestId}`}
+                        aria-label=${`${t("cloud.recovery_approve")}: ${r.email}`}
+                        variant="primary"
+                        .disabled=${this.recoveryBusy}
+                        @click=${() => {
+                          this.recoveryActionError = undefined;
+                          this.recoveryChoice = { action: "approve", request: r };
+                        }}
+                        >${t("cloud.recovery_approve")}</wt-button
+                      ></wt-form-actions
+                    >
+                  </div>`,
+              )}
+              <wt-dialog
+                id="recovery-dialog"
+                .open=${!!choice}
+                .dismissible=${!this.recoveryBusy}
+                heading=${t(choice?.action === "refuse" ? "cloud.recovery_refuse" : "cloud.recovery_approve")}
+                @wt-close=${(e: Event) => {
+                  e.stopPropagation();
+                  this.recoveryChoice = undefined;
+                }}
+              >
+                ${
+                  choice
+                    ? html`${this.#recoveryIdentity(choice.request)}
+                        <p>
+                          ${t(choice.action === "approve" ? "cloud.recovery_approve_help" : "cloud.recovery_refuse_help")}
+                        </p>
+                        ${error}`
+                    : nothing
+                }
+                <wt-button
+                  slot="footer"
+                  id="recovery-cancel"
+                  .disabled=${this.recoveryBusy}
+                  @click=${() => {
+                    this.recoveryChoice = undefined;
+                  }}
+                  >${t("cloud.recovery_cancel")}</wt-button
+                >
+                <wt-button
+                  slot="footer"
+                  id="recovery-confirm"
+                  variant=${choice?.action === "refuse" ? "danger" : "primary"}
+                  .disabled=${this.recoveryBusy}
+                  @click=${() => void this.#decideRecovery()}
+                  >${t(choice?.action === "refuse" ? "cloud.recovery_refuse" : "cloud.recovery_approve")}</wt-button
+                >
+              </wt-dialog>`
+      }
+    </section>`;
+  }
   @state() private status: CloudConnectionStatus | undefined;
   @state() private busy = false;
   @state() private error: string | undefined;
@@ -247,6 +461,8 @@ export class CloudServicesScreen extends LitElement {
       .catch(() => this.#focusError(generation));
   }
   override disconnectedCallback() {
+    this.#clearRecovery();
+    this.#recoveryKey = "";
     clearTimeout(this.#clock);
     this.#generation++;
     this.#stopBilling();
@@ -254,6 +470,11 @@ export class CloudServicesScreen extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate() {
+    const key = this.#recoveryBinding();
+    if (key !== this.#recoveryKey) {
+      this.#clearRecovery();
+      this.#recoveryKey = key;
+    }
     this.#watchEmergency();
     // Watched once while billing applies: `watch` would replace the slot and read again. A
     // detached screen's last update must not start a watch nobody releases.
@@ -755,7 +976,7 @@ export class CloudServicesScreen extends LitElement {
                       ? html`<p role="status">${t("cloud.connected")}</p>
                           <p>${s.legalBusinessName}</p>
                           ${this.#installation(s)}
-                          ${readsBilling(s) ? html`${this.#billing(s)}${this.#emergency(s)}` : nothing}`
+                          ${readsBilling(s) ? html`${this.#recoveryPanel(s)}${this.#billing(s)}${this.#emergency(s)}` : nothing}`
                       : html`
                           ${
                             s.state === "awaiting_cloud"

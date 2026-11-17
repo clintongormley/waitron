@@ -614,6 +614,30 @@ export const en = {
   "cloud.replacement_old": "Previous installation",
   "cloud.replacement_warning":
     "Keep the previous server out of service. Cloud access and backups need separate checks after approval.",
+  "cloud.recovery_title": "Recover a Cloud owner account",
+  "cloud.recovery_help":
+    "After proving your email in Cloud, load your recovery request here. Check the account and venue before deciding.",
+  "cloud.recovery_local":
+    "Open this dashboard at the venue’s own box address to approve or refuse recovery. Remote staff access cannot approve recovery.",
+  "cloud.recovery_load": "Load recovery requests",
+  "cloud.recovery_account": "Cloud account",
+  "cloud.recovery_venue": "Venue ID",
+  "cloud.recovery_expires": "Request expires",
+  "cloud.recovery_approve": "Approve recovery",
+  "cloud.recovery_refuse": "Refuse recovery",
+  "cloud.recovery_cancel": "Cancel",
+  "cloud.recovery_approve_help":
+    "Approve lets this account recover access to this organisation. Finish on the same recovery page in Cloud and set up sign-in again. Cancel sends no decision.",
+  "cloud.recovery_refuse_help":
+    "Refuse ends this recovery request permanently. Cancel sends no decision.",
+  "cloud.recovery_approved":
+    "Cloud recorded the approval. Return to the same recovery page in Cloud to finish and set up sign-in again.",
+  "cloud.recovery_refused": "Cloud recorded the refusal. This request cannot recover the account.",
+  "cloud.recovery_empty":
+    "There are no pending recovery requests for this box. If you just proved your email in Cloud, load again.",
+  "cloud.recovery_changed":
+    "This recovery request is no longer available. Load requests again to check the current requests.",
+  "cloud.recovery_sign_in": "Sign in as administrator",
   "cloud.connect": "Connect to Cloud",
   "cloud.open": "Open Cloud",
   "cloud.code": "Enter this code in Cloud",
@@ -5025,6 +5049,31 @@ export const es: Record<StringKey, string> = {
   "cloud.replacement_old": "Instalación anterior",
   "cloud.replacement_warning":
     "Mantén el servidor anterior fuera de servicio. Comprueba por separado el acceso a Cloud y las copias después de la aprobación.",
+  "cloud.recovery_title": "Recuperar una cuenta propietaria de Cloud",
+  "cloud.recovery_help":
+    "Después de verificar tu correo en Cloud, carga aquí tu solicitud de recuperación. Comprueba la cuenta y el local antes de decidir.",
+  "cloud.recovery_local":
+    "Abre este panel en la dirección del equipo del local para aprobar o rechazar la recuperación. El acceso remoto del personal no permite aprobarla.",
+  "cloud.recovery_load": "Cargar solicitudes de recuperación",
+  "cloud.recovery_account": "Cuenta de Cloud",
+  "cloud.recovery_venue": "ID del local",
+  "cloud.recovery_expires": "La solicitud caduca",
+  "cloud.recovery_approve": "Aprobar recuperación",
+  "cloud.recovery_refuse": "Rechazar recuperación",
+  "cloud.recovery_cancel": "Cancelar",
+  "cloud.recovery_approve_help":
+    "Aprobar permite a esta cuenta recuperar el acceso a esta organización. Termina en la misma página de recuperación de Cloud y configura de nuevo el inicio de sesión. Cancelar no envía ninguna decisión.",
+  "cloud.recovery_refuse_help":
+    "Rechazar termina esta solicitud de recuperación de forma permanente. Cancelar no envía ninguna decisión.",
+  "cloud.recovery_approved":
+    "Cloud ha registrado la aprobación. Vuelve a la misma página de recuperación de Cloud para terminar y configurar de nuevo el inicio de sesión.",
+  "cloud.recovery_refused":
+    "Cloud ha registrado el rechazo. Esta solicitud ya no permite recuperar la cuenta.",
+  "cloud.recovery_empty":
+    "No hay solicitudes de recuperación pendientes para este equipo. Si acabas de verificar tu correo en Cloud, vuelve a cargarlas.",
+  "cloud.recovery_changed":
+    "Esta solicitud de recuperación ya no está disponible. Vuelve a cargar las solicitudes para comprobar cuáles siguen pendientes.",
+  "cloud.recovery_sign_in": "Entrar como administrador",
   "cloud.connect": "Conectar con Cloud",
   "cloud.open": "Abrir Cloud",
   "cloud.code": "Introduce este código en Cloud",

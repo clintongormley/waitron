@@ -151,6 +151,7 @@ describe("the user guides", () => {
       "waiting",
       "carry-on",
       "remote-access",
+      "cloud-owner-recovery",
       "cloud-emergency",
     ]);
   });

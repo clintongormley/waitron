@@ -1821,6 +1821,20 @@ export interface CloudConnectionStatus {
   accountUrl?: string;
 }
 
+export interface CloudOwnerRecoveryRequest {
+  requestId: string;
+  accountId: string;
+  email: string;
+  organisationId: string;
+  legalBusinessId: string;
+  venueId: string;
+  installationId: string;
+  publicKey: string;
+  environment: "test" | "production";
+  countryCode: "ES";
+  expiresAt: string;
+}
+
 export interface CloudEmergency {
   asOf: string;
   stale: boolean;
@@ -4983,6 +4997,15 @@ export class DashboardApi {
   }
   revokeCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/revoke", "POST", {});
+  }
+  readCloudOwnerRecovery(): Promise<{ requests: CloudOwnerRecoveryRequest[] }> {
+    return this.#request("/management-api/cloud/owner-recovery/read", "POST", {});
+  }
+  decideCloudOwnerRecovery(
+    action: "approve" | "refuse",
+    request: CloudOwnerRecoveryRequest,
+  ): Promise<{ requestId: string; state: "approved" | "refused" }> {
+    return this.#request(`/management-api/cloud/owner-recovery/${action}`, "POST", { request });
   }
   getCloudStatus(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/status", "GET");

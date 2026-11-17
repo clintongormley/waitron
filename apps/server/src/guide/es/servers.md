@@ -305,6 +305,16 @@ El estado junto al botón es la opción que has guardado. Abre la dirección del
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
 que detiene permanentemente todos los servicios de Cloud.
 
+## Aprobar la recuperación del propietario de Cloud {#cloud-owner-recovery}
+
+Si estás recuperando una cuenta propietaria de Cloud, verifica primero tu correo en la página de recuperación de Cloud.
+En el local, abre **Sistema → Servicios Cloud** en el equipo principal vinculado y elige **Cargar solicitudes de recuperación**.
+Debe haber iniciado sesión un administrador del equipo; usa **Entrar como administrador** si se te pide.
+
+Comprueba el correo, la cuenta, la organización y el ID del local. **Aprobar recuperación** te permite terminar en la misma
+página de recuperación de Cloud y configurar de nuevo el inicio de sesión. **Rechazar recuperación** termina esa solicitud
+de forma permanente. **Cancelar** no envía ninguna decisión. Cuando se registre la aprobación, vuelve a la misma página de Cloud para terminar.
+
 ## Consultar el inicio de emergencia en Cloud {#cloud-emergency}
 
 Abre **Sistema → Servicios Cloud** en el servidor principal y consulta **Inicio de emergencia

@@ -1,3 +1,5 @@
+import { createFreshSignInGate } from "./fresh-sign-in.js";
+import { cloudOwnerRecoveryRequest } from "../testing/cloud-owner-recovery-request.js";
 import { describe, expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
@@ -2325,3 +2327,40 @@ it.each(["bookings", "payments", "workforce-es"])(
     ]);
   },
 );
+
+it("sends recovery discovery and both decisions as explicit POSTs with only their selected request", async () => {
+  const calls: { url: string; method: string | undefined; body: unknown }[] = [];
+  const prompt = vi.fn(async () => true);
+  const gate = createFreshSignInGate({ sessionGeneration: () => 0, prompt });
+  const api = new DashboardApi(
+    "",
+    async (url, init) => {
+      calls.push({ url: String(url), method: init?.method, body: JSON.parse(String(init?.body)) });
+      return calls.length === 1
+        ? refusal("management_session.proof_required", 400)
+        : jsonResponse({});
+    },
+    undefined,
+    undefined,
+    false,
+    { freshSignIn: gate },
+  );
+  await api.readCloudOwnerRecovery();
+  await api.decideCloudOwnerRecovery("approve", cloudOwnerRecoveryRequest);
+  await api.decideCloudOwnerRecovery("refuse", cloudOwnerRecoveryRequest);
+  expect(prompt).toHaveBeenCalledTimes(1);
+  expect(calls).toEqual([
+    { url: "/management-api/cloud/owner-recovery/read", method: "POST", body: {} },
+    { url: "/management-api/cloud/owner-recovery/read", method: "POST", body: {} },
+    {
+      url: "/management-api/cloud/owner-recovery/approve",
+      method: "POST",
+      body: { request: cloudOwnerRecoveryRequest },
+    },
+    {
+      url: "/management-api/cloud/owner-recovery/refuse",
+      method: "POST",
+      body: { request: cloudOwnerRecoveryRequest },
+    },
+  ]);
+});
