@@ -93,7 +93,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 - [One owner session with a real certificate against AEAT](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
-- [Restore paths run](backlog/setup.md#bundle-restore-paths-run)
 - Design with the owner: whether to do A798 slice 9c, since a clock that drifts ahead while the box runs dates sales in a way that cannot be repaired (a start's clock is confirmed first since A1420 PR 1a); and the
   A1323 master key, because A1187 parts 2 and 3 change the same restore steps.
 
@@ -434,8 +433,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
-
-- **Restore paths run** (bundle of 1, 1 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
 
 - **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
   decide whether they should place archives through `runStagedRestore`, then delete it.

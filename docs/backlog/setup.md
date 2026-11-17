@@ -194,14 +194,6 @@ built yet; once built, walk a `wa-wt onboarding` stack to a Live venue.
   does not show the card there, and step 2 of `deploy/README.md` → _Moving to a new tax ID_ cannot
   be followed on such a box.
 
-## Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
-
-- The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
-  confirmed attempt downloads it again; the HTTP request stays open for the whole download.
-- Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
-  on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
-  through setup.
-
 ## Loose ends left by #334.
 
 - The certificate export help has never been followed on a real machine. Nobody exported a
@@ -384,14 +376,6 @@ This inventory comes from following source reads, not large-file runtime qualifi
 remaining paths. Next: exercise each operation above its current buffer budget before replacing
 that operation's reader. Do not remove exact-content checks to make a large file fit.
 
-## Bundle: Restore paths run
-
-The remaining restore-path entry from the backlog review of 2026-11-06.
-
-- **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
-  wizard).**
-  [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
-
 ## Starter courses for Italy
 
 When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.
@@ -408,6 +392,18 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
 - **Demo and Preparation need no proof of who owns the box.** Whoever reaches an unconfigured box's
   setup page first can set up either; the owner accepted this when dropping the setup code
   (2026-10-26, B3 design §12.5). A production box offers neither (§12.1; A1384).
+
+- **"Restore from my bucket" was walked on the test box on 2026-11-17** (main 0e5ac3c178,
+  SeaweedFS 4.47 as the bucket; versitygw is refused by Backups because it ignores customer
+  encryption keys). A Live pre-production venue with three paid, printed sales, a renamed printer
+  and till, and its bucket copy on, was wiped and restored through setup with Review backup, pack
+  1's details and the time confirmation: the same three invoices and totals, the printer (name,
+  address, the till it serves), the till's name and the bucket copy came back; press to serving
+  6.1 s. A copy is downloaded again on every Review, Proceed and Restore (8 times in one restore),
+  each 0.8-1.1 s for copies of 0.4-2 MB, and nothing timed out; that is kept as it is (lane B
+  ledger `a1420-ledger.md`, "BUCKET-RESTORE-RUN" and "re-run"). Two defects it found are fixed:
+  the failed-start recovery page now answers on the box's network address (#3682), and a restore
+  can no longer be sent before Review backup (#3691).
 
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
   19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
