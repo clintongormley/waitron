@@ -427,18 +427,22 @@ describe("A773 pass board widget", () => {
   it.each(["light", "dark"] as const)(
     "draws a held card's and its held dishes' dashes in the field-line colour, 3:1 against the card (%s)",
     async (theme) => {
-      const el = await mountBoard({ board: passBoard({ held: [heldCard] }) });
+      const el = await mountBoard({ board: passBoard({ held: [heldCard], toFire: [toFireCard] }) });
       const host = el.parentElement!;
       host.setAttribute("data-theme", theme);
       const line = tokenColour(host, "--wt-color-field-line");
+      const border = tokenColour(host, "--wt-color-border");
+      expect(line).not.toBe(border);
       const style = getComputedStyle(cardOf(el, heldCard.key));
       expect(style.borderTopStyle).toBe("dashed");
-      for (const side of ["Top", "Right", "Bottom"] as const)
+      expect(style.borderLeftStyle).toBe("solid");
+      for (const side of ["Top", "Right", "Bottom", "Left"] as const)
         expect(style[`border${side}Color`]).toBe(line);
       expect(rgbContrast(line, style.backgroundColor)).toBeGreaterThanOrEqual(3);
-      // The solid left edge keeps its own colour.
-      expect(style.borderLeftStyle).toBe("solid");
-      expect(style.borderLeftColor).toBe(tokenColour(host, "--wt-color-border"));
+      const other = getComputedStyle(cardOf(el, toFireCard.key));
+      for (const side of ["Top", "Right", "Bottom"] as const)
+        expect(other[`border${side}Color`]).toBe(border);
+      expect(other.borderLeftColor).not.toBe(line);
       const heldDish = getComputedStyle(itemOf(el, "held-1"));
       expect(heldDish.borderTopStyle).toBe("dashed");
       expect(heldDish.borderTopColor).toBe(line);

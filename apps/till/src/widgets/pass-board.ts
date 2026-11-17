@@ -165,9 +165,7 @@ export class TillPassBoard extends LitElement {
       .ticket.held {
         border-style: dashed;
         border-left-style: solid;
-        border-top-color: var(--wt-color-field-line);
-        border-right-color: var(--wt-color-field-line);
-        border-bottom-color: var(--wt-color-field-line);
+        border-color: var(--wt-color-field-line);
       }
 
       .ticket.age-warm {

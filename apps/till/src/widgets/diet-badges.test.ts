@@ -4,7 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
-import { namedIcons } from "./test-helpers.js";
+import { namedIcons, tokenColour } from "./test-helpers.js";
 
 const hosts: HTMLElement[] = [];
 afterEach(() => hosts.splice(0).forEach((host) => host.remove()));
@@ -91,15 +91,6 @@ describe.each(["light", "dark"] as const)("diet colours (%s theme)", (theme) => 
     root.adoptedStyleSheets = [dietBadgeStyles.styleSheet!];
     render(template, root);
     return root;
-  }
-
-  function tokenColour(root: ShadowRoot, token: string): string {
-    const probe = document.createElement("span");
-    probe.style.color = `var(${token})`;
-    root.append(probe);
-    const colour = getComputedStyle(probe).color;
-    probe.remove();
-    return colour;
   }
 
   it("paints a diet badge in the success colour and the pending note in the warning colour", () => {

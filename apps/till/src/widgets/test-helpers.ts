@@ -980,7 +980,7 @@ export function notingPersonRefusals<T extends object>(api: T): T {
 }
 
 /** The computed colour a `--wt-*` colour token resolves to inside `host`, read through a probe. */
-export function tokenColour(host: HTMLElement, token: string): string {
+export function tokenColour(host: HTMLElement | ShadowRoot, token: string): string {
   const probe = document.createElement("span");
   probe.style.color = `var(${token})`;
   host.append(probe);
@@ -989,14 +989,12 @@ export function tokenColour(host: HTMLElement, token: string): string {
   return colour;
 }
 
-/** The WCAG contrast of two opaque computed `rgb()` colours. */
+/** The WCAG contrast of two opaque, whole-number computed `rgb()` colours. */
 export function rgbContrast(a: string, b: string): number {
-  const luminance = (rgb: string) => {
-    expect(rgb).toMatch(/^rgb\(/);
-    const [r, g, bl] = rgb
-      .match(/\d+(\.\d+)?/g)!
-      .slice(0, 3)
-      .map((part) => Number(part) / 255)
+  const luminance = (colour: string) => {
+    expect(colour).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+    const [r, g, bl] = rgb(colour)
+      .map((part) => part / 255)
       .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
   };
