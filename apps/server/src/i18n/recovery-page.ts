@@ -335,12 +335,12 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "en-GB": {
       title: "This box holds an emergency copy of the venue that this start cannot use",
       action:
-        "The copy has not been activated, or this start names a different box than the copy's. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until that changes.",
+        "The copy has not been activated yet, or this start does not use the copy's own identity. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until the copy is activated and started under its own identity.",
     },
     "es-ES": {
       title: "Este equipo guarda una copia de emergencia del local que este arranque no puede usar",
       action:
-        "La copia no se ha activado, o este arranque indica un equipo distinto del de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que eso cambie.",
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
     },
   },
   "sif.allocation_invalid": {

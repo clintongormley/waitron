@@ -325,6 +325,10 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  * 8. The connection check stands aside while a staged reset of a box that joined another is
  *    pending: that reset empties `tls/`, so one cut short leaves a part-emptied set that only the
  *    reset, further on, can finish.
+ * 9. The emergency-copy refusal (`refuseUnactivatedEmergencyCopy`) reads `node.db` alone, after
+ *    the box env is loaded and before the ahead check, whose store open switches a `venue.db` not
+ *    in WAL mode; Cloud's repeat placement of that copy would then refuse
+ *    `emergency_copy.hash_mismatch`.
  *
  * `startServer` resolving, and its `fullyStarted` settling where present, is the signal rather
  * than a healthy `/health`, because `/health` is 503 on a setup box by design, so a health-gated
@@ -861,8 +865,7 @@ async function runAdmittedEntry(
       await (deps.clearRestoreSecretFiles ?? clearRestoreSecretFiles)(deps.stateDir, deps.log);
 
       const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
-      // Before the ahead check, whose store open switches a venue.db not in WAL mode: Cloud could
-      // then no longer place the same copy again.
+      // Ordering 9 in the doc comment above.
       await refuseUnactivatedEmergencyCopy(
         deps.venueDir,
         isUnset(env.WAITRON_NODE_ID) ? undefined : env.WAITRON_NODE_ID,

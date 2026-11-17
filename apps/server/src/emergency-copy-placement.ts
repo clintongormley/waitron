@@ -238,7 +238,7 @@ export async function refuseUnactivatedEmergencyCopy(
   const path = join(venueDir, NODE_FILE);
   if (!existsSync(path)) return;
   // Not immutable: after a crash, an activated copy's role may sit only in the `-wal`.
-  const connection = new DatabaseSync(path, { readOnly: true });
+  const connection = new DatabaseSync(path, { readOnly: true, allowExtension: false });
   try {
     const node = drizzleNodeSqlite(connectionPair(connection, connection), {
       schema: {},

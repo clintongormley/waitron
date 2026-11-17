@@ -496,7 +496,7 @@ describe("a box holding an emergency copy that is not activated", () => {
     );
     expect(english).toContain(
       escapeHtml(
-        "The copy has not been activated, or this start names a different box than the copy's. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until that changes.",
+        "The copy has not been activated yet, or this start does not use the copy's own identity. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until the copy is activated and started under its own identity.",
       ),
     );
     expect(english).toContain('<button type="submit">Retry a normal boot</button>');
@@ -508,7 +508,7 @@ describe("a box holding an emergency copy that is not activated", () => {
     );
     expect(spanish).toContain(
       escapeHtml(
-        "La copia no se ha activado, o este arranque indica un equipo distinto del de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que eso cambie.",
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
       ),
     );
     expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
@@ -602,7 +602,9 @@ describe("curated operator text", () => {
   // generic line does not say what to change; `sif.allocation_invalid` because, though three of a
   // restore's clock refusals wait in `runEntry` (`CLOCK_WAIT_REASONS`), its other refusals reach the
   // page, and the generic line does not say what to do;
-  // `node.state_missing` because Retry refuses again while the record is missing.
+  // `node.state_missing` because Retry refuses again while the record is missing;
+  // `node.emergency_copy_unactivated` because Retry refuses again until the copy is activated and
+  // started under its own id.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
