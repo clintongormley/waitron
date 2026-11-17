@@ -21,6 +21,9 @@ describe("A964 venue language", () => {
     ["es", "es"],
     ["es-MX", "es"],
     ["ca-ES-valencia", "en"],
+    ["fr", "en"],
+    ["fr-FR", "en"],
+    ["ca", "en"],
   ])("uses saved %s as %s without rewriting it", async (defaultLanguage, expected) => {
     await withTransaction(suite.db, async (tx) => {
       await seedVenueSettings(tx, {

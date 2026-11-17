@@ -28,6 +28,7 @@ import {
 } from "./kitchen-print.js";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
+import type { KitchenLanguage } from "./i18n/kitchen-ticket.js";
 
 function canonicalAllergens(maps: readonly (AllergenMap | null | undefined)[]): AllergenMap {
   const byCode = new Map<string, Set<NonNullable<AllergenMap[string]["kinds"]>[number]>>();
@@ -144,7 +145,7 @@ export async function resolveKitchenAllergyBlocks(
     const clashes = Object.fromEntries(
       Object.entries(served).filter(([code]) => Object.hasOwn(allergens, code)),
     );
-    const labels = (language: "en" | "es") => ({
+    const labels = (language: KitchenLanguage) => ({
       avoids: Object.entries(allergens).map(([code, entry]) =>
         kitchenAllergenLabel(code, entry, language),
       ),
@@ -280,7 +281,7 @@ async function changedIngredientBlocks(
       );
       if (fingerprint({ clashes }) === fingerprint({ clashes: current.clashes }))
         return [row.id, current];
-      const labels = (language: "en" | "es") => ({
+      const labels = (language: KitchenLanguage) => ({
         ...current.labels[language],
         clashes: Object.entries(clashes).map(([code, entry]) =>
           kitchenAllergenLabel(code, entry, language),

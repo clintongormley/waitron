@@ -1,5 +1,3 @@
-export type KitchenLanguage = "en" | "es";
-
 const ENGLISH_KITCHEN_WORDS = {
   collectionOrder: "Order",
   forKitchen: "For the station: ",
@@ -39,7 +37,7 @@ const ENGLISH_KITCHEN_WORDS = {
 
 export type KitchenTicketWords = { readonly [Key in keyof typeof ENGLISH_KITCHEN_WORDS]: string };
 
-export const KITCHEN_TICKET_WORDS: Readonly<Record<KitchenLanguage, KitchenTicketWords>> = {
+export const KITCHEN_TICKET_WORDS = {
   en: ENGLISH_KITCHEN_WORDS,
   es: {
     collectionOrder: "Pedido",
@@ -77,10 +75,26 @@ export const KITCHEN_TICKET_WORDS: Readonly<Record<KitchenLanguage, KitchenTicke
     goesWith: "Sale con {stations}",
     takeAway: "PARA LLEVAR",
   },
-};
+} satisfies Readonly<Record<string, KitchenTicketWords>>;
+
+export type KitchenLanguage = keyof typeof KITCHEN_TICKET_WORDS;
+
+export function wordingLanguage<L extends string>(
+  available: readonly L[],
+  locale: string,
+  fallback: L,
+): L {
+  const parts = locale.toLowerCase().split("-");
+  for (let length = parts.length; length > 0; length--) {
+    const tag = parts.slice(0, length).join("-");
+    const match = available.find((key) => key.toLowerCase() === tag);
+    if (match !== undefined) return match;
+  }
+  return fallback;
+}
 
 export function kitchenLanguageFor(locale: string): KitchenLanguage {
-  return locale.split("-")[0]!.toLowerCase() === "es" ? "es" : "en";
+  return wordingLanguage(Object.keys(KITCHEN_TICKET_WORDS) as KitchenLanguage[], locale, "en");
 }
 
 export function kitchenTicketWords(locale: string): KitchenTicketWords {

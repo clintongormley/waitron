@@ -12,7 +12,7 @@ import {
   renderBoxPage,
 } from "./guide-pages.js";
 import type { Logger } from "./logger.js";
-import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
+import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
 
 const EN_PRODUCTS = [
@@ -120,7 +120,9 @@ describe("guide pages", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain(`<html lang="${lang}">`);
-    expect(html).toContain(`<title>${KITCHEN_ALLERGY_WORDS[lang].guideTitle} · Waitron</title>`);
+    expect(html).toContain(
+      `<title>${GUIDE_FRAME_WORDS[lang].names["kitchen-service"]} · Waitron</title>`,
+    );
     for (const id of ["allergy-copies", "corrections", "held-work", "reprints", "service-lifetime"])
       expect(html).toContain(`<section id="${id}"`);
   });

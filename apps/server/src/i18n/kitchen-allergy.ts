@@ -1,8 +1,8 @@
 import type { AllergenCode } from "@waitron/menu";
+import type { KitchenLanguage } from "./kitchen-ticket.js";
 
 export const KITCHEN_ALLERGY_WORDS = {
   en: {
-    guideTitle: "Station service",
     ticketHeading: "!!! ALLERGY ON THIS TICKET !!!",
     guestHeading: "*** ALLERGY: {who} ***",
     clash: "!! CONTAINS {allergens} — SENT ANYWAY",
@@ -12,7 +12,6 @@ export const KITCHEN_ALLERGY_WORDS = {
     extraContains: "{extra} - contains {allergens}",
   },
   es: {
-    guideTitle: "Servicio de estaciones",
     ticketHeading: "!!! ALERGIA EN ESTE TICKET !!!",
     guestHeading: "*** ALERGIA: {who} ***",
     clash: "!! CONTIENE {allergens} — ENVIADO IGUALMENTE",
@@ -21,19 +20,19 @@ export const KITCHEN_ALLERGY_WORDS = {
     contains: "Contiene: {allergens}",
     extraContains: "{extra} - contiene {allergens}",
   },
-} as const;
+} as const satisfies Record<KitchenLanguage, Record<string, string>>;
 
 export function extraWithAllergens(
   extra: string,
   labels: readonly string[],
-  language: "en" | "es",
+  language: KitchenLanguage,
 ): string {
   return KITCHEN_ALLERGY_WORDS[language].extraContains
     .replace("{extra}", () => extra)
     .replace("{allergens}", () => labels.join(", "));
 }
 
-export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = {
+export const ALLERGEN_NAMES: Record<AllergenCode, Record<KitchenLanguage, string>> = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },
   crustaceans: { en: "Crustaceans", es: "Crustáceos" },
   eggs: { en: "Eggs", es: "Huevos" },
@@ -50,7 +49,7 @@ export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = 
   molluscs: { en: "Molluscs", es: "Moluscos" },
 };
 
-export const ALLERGEN_KIND_NAMES: Record<string, { en: string; es: string }> = {
+export const ALLERGEN_KIND_NAMES: Record<string, Record<KitchenLanguage, string>> = {
   wheat: { en: "Wheat", es: "Trigo" },
   rye: { en: "Rye", es: "Centeno" },
   barley: { en: "Barley", es: "Cebada" },
@@ -70,7 +69,7 @@ export const ALLERGEN_KIND_NAMES: Record<string, { en: string; es: string }> = {
 export function kitchenAllergenLabel(
   code: string,
   entry: { kinds?: readonly string[] },
-  language: "en" | "es",
+  language: KitchenLanguage,
 ): string {
   const name = Object.hasOwn(ALLERGEN_NAMES, code)
     ? ALLERGEN_NAMES[code as AllergenCode][language]
