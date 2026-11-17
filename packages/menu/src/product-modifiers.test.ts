@@ -364,11 +364,6 @@ describe("reading and writing a product's attachment list", () => {
     );
   });
 
-  /**
-   * A product id may arrive in either case: the row a write in upper case leaves behind is found by
-   * a read in lower case, a second write in the other case REPLACES it rather than landing beside
-   * it, and the map comes back keyed lower-case either way.
-   */
   it("lower-cases a product id sent in upper case, so either case writes and reads one row keyed lower-case", async () => {
     await run((tx) =>
       writeProductModifiers(tx, dishes.burger.toUpperCase(), [
