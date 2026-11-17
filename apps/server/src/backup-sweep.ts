@@ -459,65 +459,54 @@ export async function pruneBackend(
     await backend.deleteMany(toDelete.slice(i, i + DELETE_BATCH), call);
 }
 
-/**
- * Takes a copy at once, then sleeps toward each next fire in chunks of at most `MAX_SLEEP_MS`, so a
- * step of the clock is noticed within the hour: a step forward past the fire fires then, and a step
- * back that leaves the fire further ahead than the schedule puts one works the fire out again. A
- * failed tick is logged with its code, never its message, which could carry a path; an abort
- * mid-tick is a cancellation, not a failure.
- */
-export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
-  const now = deps.now ?? (() => new Date());
-  if (deps.signal.aborted) return;
-  deps.onScheduled?.(null);
-  try {
-    await tick(deps);
-    while (!deps.signal.aborted) {
-      // Inside the try: a `readClock` rejection must not end the backup loop.
-      let fireAt: number;
-      let computedAt: number;
-      try {
-        const clock =
-          deps.schedule.kind === "wall-clock"
-            ? await deps.readClock()
-            : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
-        computedAt = now().getTime();
-        fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
-      } catch (err) {
-        if (deps.signal.aborted) break;
-        deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
-        await deps.sleep(MAX_SLEEP_MS, deps.signal);
-        continue;
-      }
-      deps.onScheduled?.(fireAt);
-      // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
-      // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
-      // would push it out again. The one exception is a `fireAt` the clock stepped back from: the
-      // clock reads earlier than when the fire was worked out, and the fire lies further ahead
-      // than the schedule puts one. Without the first, a fire past the bound with no step (a
-      // two-hour change of the clocks) would be worked out again at every turn, never sleeping.
-      const longestAhead = longestFireAheadMs(deps.schedule);
-      let steppedBack = false;
-      while (!deps.signal.aborted && now().getTime() < fireAt) {
-        const nowMs = now().getTime();
-        if (nowMs < computedAt && fireAt - nowMs > longestAhead) {
-          steppedBack = true;
-          break;
-        }
-        const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
-        await deps.sleep(chunk, deps.signal);
-      }
-      if (deps.signal.aborted) break;
-      if (steppedBack) continue;
-      deps.onScheduled?.(null);
-      await tick(deps);
-    }
-  } finally {
-    deps.onScheduled?.(null);
-  }
+export interface BackupSchedulePass {
+  nextDueAt: Date | null;
 }
 
-async function tick(deps: BackupSweepDeps): Promise<void> {
+export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
+  const clockNow = deps.now ?? (() => new Date());
+  let first = true;
+  let fireAt: number | undefined;
+  let computedAt = 0;
+  return {
+    async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
+      if (signal.aborted) return { nextDueAt: null };
+      const nowMs = now.getTime();
+      if (first || (fireAt !== undefined && nowMs >= fireAt)) {
+        first = false;
+        deps.onScheduled?.(null);
+        await tick({ ...deps, signal });
+        fireAt = undefined;
+      }
+      if (signal.aborted) return { nextDueAt: null };
+      // A deadline stays fixed between copies; only a backwards clock step can replace it.
+      if (
+        fireAt !== undefined &&
+        nowMs < computedAt &&
+        fireAt - nowMs > longestFireAheadMs(deps.schedule)
+      )
+        fireAt = undefined;
+      if (fireAt === undefined) {
+        try {
+          const clock =
+            deps.schedule.kind === "wall-clock"
+              ? await deps.readClock()
+              : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
+          computedAt = clockNow().getTime();
+          fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
+        } catch (err) {
+          if (signal.aborted) return { nextDueAt: null };
+          deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
+          return { nextDueAt: new Date(clockNow().getTime() + MAX_SLEEP_MS) };
+        }
+        deps.onScheduled?.(fireAt);
+      }
+      return { nextDueAt: new Date(fireAt) };
+    },
+  };
+}
+
+async function tick(deps: Omit<BackupSweepDeps, "sleep">): Promise<void> {
   try {
     if (deps.stagingTurn)
       await deps.stagingTurn.runBackup(async () => {
