@@ -2019,8 +2019,9 @@ src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed th
 ## Kitchen paper reads its language at render time
 
 Kitchen frames and collection-number captions use `readKitchenLanguage(tx)`, reading the saved
-content default in the rendering transaction. Spanish base languages select Spanish, and other
-defaults or no saved setting select English. The three common kitchen rendering roots read once
+content default in the rendering transaction. The saved default's whole tag, then each shorter
+form of it, selects the first language `KITCHEN_TICKET_WORDS` has wording for, ignoring case;
+anything else, or no saved setting, selects English. The three common kitchen rendering roots read once
 before their item and printer loops; whole-portion corrections share the language and items read
 for notice folding. The collection path reads after its policy and printer gates.
 They need no browser refresh or server restart. A language save enqueues nothing.

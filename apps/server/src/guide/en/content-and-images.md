@@ -134,9 +134,10 @@ it has completed, open **Print/Reprint**, choose a printer for **Receipt**, then
 **Print a copy on {printer}**. The copy carries the same invoice number and a duplicate mark.
 
 Station tickets and collection-number slips also use your default content language for their
-headings. Spanish prints Spanish; other defaults use English. New paper and station reprints
-follow a default change immediately, while a resend keeps its original headings. Recorded dish names,
-notes and allergy instructions keep their own text. See [station paper](kitchen-service.md#paper-language).
+headings. Spanish prints Spanish; other defaults use English until their station wording is
+available. New paper and station reprints follow a default change immediately, while a resend
+keeps its original headings. Recorded dish names, notes and allergy instructions keep their own
+text. See [station paper](kitchen-service.md#paper-language).
 
 ## Add a photograph once {#upload}
 

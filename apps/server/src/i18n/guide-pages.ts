@@ -4,7 +4,6 @@ import { BOX_STATUS_GUIDE_TITLE } from "./box-status-guide.js";
 import { DATA_PROTECTION_GUIDE_TITLE } from "./data-protection-guide.js";
 import { GUIDE_CERTIFICATE_TITLE } from "./guide-certificate.js";
 import { PURCHASES_GUIDE_TITLE } from "./guide-purchases.js";
-import { KITCHEN_ALLERGY_WORDS } from "./kitchen-allergy.js";
 import { STAFF_GUIDE_TITLE } from "./staff.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./table-service-guide.js";
 import { TILL_NOTICES_GUIDE_TITLE } from "./till-notices-guide.js";
@@ -30,7 +29,7 @@ export const GUIDE_FRAME_WORDS: { en: GuideWords; es: GuideWords & { missingTwin
       modules: "Modules",
       modifiers: "Modifiers",
       "content-and-images": "Languages and photos",
-      "kitchen-service": KITCHEN_ALLERGY_WORDS.en.guideTitle,
+      "kitchen-service": "Station service",
       appearance: "Appearance",
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.en,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.en,
@@ -62,7 +61,7 @@ export const GUIDE_FRAME_WORDS: { en: GuideWords; es: GuideWords & { missingTwin
       modules: "Módulos",
       modifiers: "Modificadores",
       "content-and-images": "Idiomas y fotos",
-      "kitchen-service": KITCHEN_ALLERGY_WORDS.es.guideTitle,
+      "kitchen-service": "Servicio de estaciones",
       appearance: "Apariencia",
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.es,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.es,
