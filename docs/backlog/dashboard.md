@@ -195,20 +195,11 @@ cloud-recovery code.
 - **Check field focus on a real iPhone and finish the remaining typography-role audit.**
   [Detail](dashboard.md#text-size-after-a179-988)
 
-## Repeated Escape checks for menu, modifier and media writes
-
-The menu/modifier delete flows and media save/delete flows still need a real Escape twice while
-saving, waiting for native close delivery after each key, as in `option-label-form.test.ts`;
-their earlier single-key probes do not settle it. This stays inside the existing bundle rather
-than becoming new items.
-
 ## Bundle: Wt dialog lifecycle
 
 - **Dashboard leftovers from the coverage branch**: the printer, payment, backup and device
   fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
-- **Repeated Escape checks for menu/modifier delete and media save/delete flows remain.**
-  [Detail](dashboard.md#repeated-escape-checks-for-menu-modifier-and-media-writes)
 - **Home/End caret behavior remains unresolved.** In macOS Chromium, End in an overflowing dialog
   left text selected and scrolled the body. Removing vertical containment let short-body tests
   pass but introduced underlying-page scrolling. In the 390×844 compact-modal control, End kept

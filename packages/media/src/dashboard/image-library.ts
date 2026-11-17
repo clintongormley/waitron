@@ -1408,6 +1408,7 @@ export class ImageLibrary extends LitElement {
           ? html`<wt-modal
               size="compact"
               open
+              .dismissible=${!this.busy}
               heading=${t("image.confirm")}
               @wt-close=${(event: Event) => {
                 event.stopPropagation();

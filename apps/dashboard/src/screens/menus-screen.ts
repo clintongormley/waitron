@@ -2453,6 +2453,7 @@ export class MenusScreen extends LitElement {
       size="compact"
       data-test=${options.test}
       .open=${options.open}
+      .dismissible=${!this.busy}
       heading=${options.heading}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {

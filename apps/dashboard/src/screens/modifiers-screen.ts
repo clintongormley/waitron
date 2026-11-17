@@ -686,6 +686,7 @@ export class ModifiersScreen extends LitElement {
         size="standard"
         data-test="delete-dialog"
         .open=${this.deleting !== null}
+        .dismissible=${!this.busy}
         heading=${fill("modifiers.delete_named", { name: this.deleting?.name ?? "" })}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+  streamsOver,
+} from "../widgets/test-helpers.js";
 import {
   chooseOption,
   expectFiltersFirst,
@@ -2476,3 +2482,68 @@ it("finds a list by an extra's new name after the product is renamed", async () 
   expect(extras.shadowRoot.querySelector("tbody")?.textContent ?? "").toContain("Breads");
   expect(await searchToNothing(extras, "White")).toBe(tableNoMatches());
 });
+
+it.each([
+  ["extras", "saved"],
+  ["extras", "refused"],
+  ["options", "saved"],
+  ["options", "refused"],
+] as const)(
+  "keeps %s delete open through two delivered Escapes, then %s",
+  async (kind, outcome) => {
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const write = vi.fn(
+      () =>
+        new Promise<void>((done, fail) => {
+          resolve = done;
+          reject = fail;
+        }),
+    );
+    const client = api(
+      kind === "extras" ? { deleteExtraList: write } : { deleteOptionList: write },
+    );
+    const el = await mount(client);
+    if (kind === "options") await selectTab(el, "options");
+    await clickInTable(
+      el,
+      kind === "extras" ? "extra-lists" : "option-lists",
+      kind === "extras" ? "delete-extra-e1" : "delete-option-o1",
+    );
+    const modal = deleteDialog(el);
+    await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+    const closed = vi.fn();
+    modal.addEventListener("wt-close", closed);
+    await userEvent.click(confirmDelete(el));
+    await el.updateComplete;
+    expect(write).toHaveBeenCalledExactlyOnceWith(kind === "extras" ? "e1" : "o1");
+    expect(document.activeElement).toBe(document.body);
+    const native = modal.shadowRoot!.querySelector("dialog")!;
+    for (let press = 0; press < 2; press++) {
+      await userEvent.keyboard("{Escape}");
+      await closeReportsDelivered();
+      expect(native.open).toBe(true);
+      expect(modal.heading).toContain(kind === "extras" ? extraList.name : optionList.name);
+      expect(closed).not.toHaveBeenCalled();
+    }
+    if (outcome === "saved") {
+      const delivered = dialogClosed(modal);
+      resolve();
+      await delivered;
+      expect(modal.open).toBe(false);
+    } else {
+      reject({ code: "server.internal" });
+      await vi.waitFor(async () =>
+        expect(
+          (await formMessageOf(modal.querySelector("wt-form-actions")!))?.textContent,
+        ).toContain(codeMessage("server.internal")),
+      );
+      expect(native.open).toBe(true);
+      expect(confirmDelete(el).disabled).toBe(false);
+      const delivered = dialogClosed(modal);
+      await userEvent.keyboard("{Escape}");
+      await delivered;
+      expect(modal.open).toBe(false);
+    }
+  },
+);
