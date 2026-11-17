@@ -493,7 +493,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: Dishes sold by measure and their extras
 
-1 entry, size M.
+1 entry, needs the owner.
 
 - **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
   tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
