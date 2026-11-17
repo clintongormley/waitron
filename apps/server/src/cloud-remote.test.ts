@@ -75,6 +75,24 @@ it("certificate installation verifies the venue key and hostname before replacin
     cert.sign(key, forge.md.sha256.create());
     const pem = forge.pki.certificateToPem(cert);
     await installStaffCertificate(root, "staff.sol.example.test", pem);
+    cert.setExtensions([
+      {
+        name: "subjectAltName",
+        altNames: [
+          { type: 2, value: "staff.sol.example.test" },
+          { type: 2, value: "staff.other.example.test" },
+        ],
+      },
+    ]);
+    cert.sign(key, forge.md.sha256.create());
+    await expect(
+      installStaffCertificate(root, "staff.sol.example.test", forge.pki.certificateToPem(cert)),
+    ).rejects.toThrow("Invalid staff certificate");
+    expect(await readFile(join(root, "cloud/staff.crt"), "utf8")).toBe(pem);
+    cert.setExtensions([
+      { name: "subjectAltName", altNames: [{ type: 2, value: "staff.sol.example.test" }] },
+    ]);
+    cert.sign(key, forge.md.sha256.create());
     await chmod(join(root, "cloud/staff.key"), 0o666);
     await expect(installStaffCertificate(root, "staff.sol.example.test", pem)).rejects.toThrow(
       "Invalid staff key file",
@@ -302,6 +320,24 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     expect((await ask("/setup")).status).toBe(404);
     stopped = true;
     expect(await ask("/")).toEqual({ status: 503, text: "stopped" });
+    for (const ownPort of [
+      "httpPort",
+      "landingPort",
+      "spareStorePort",
+      "spareStoreLoopbackPort",
+    ] as const) {
+      const conflict = startStaffListener(
+        { staff: { host: "127.0.0.1", port }, stateDir: root, [ownPort]: port },
+        app,
+        (...args) => lines.push(args),
+        async () => true,
+      );
+      try {
+        expect(conflict).toBeUndefined();
+      } finally {
+        await conflict?.close();
+      }
+    }
     const collision = startStaffListener(
       { staff: { host: "127.0.0.1", port }, stateDir: root },
       app,

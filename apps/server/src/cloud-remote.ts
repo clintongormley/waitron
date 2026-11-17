@@ -98,7 +98,7 @@ export async function installStaffCertificate(
   if (Buffer.byteLength(chain) > 16384) throw new Error("Invalid staff certificate");
   const cert = new X509Certificate(chain);
   if (
-    cert.checkHost(hostname) !== hostname ||
+    certificateHostname(Buffer.from(chain)) !== hostname ||
     Date.parse(cert.validFrom) > Date.now() ||
     Date.parse(cert.validTo) <= Date.now()
   )
@@ -189,7 +189,10 @@ export function createStaffApp(
 }
 
 export function startStaffListener(
-  config: Pick<ServerConfig, "staff" | "stateDir" | "dashboardAppDir">,
+  config: Pick<ServerConfig, "staff" | "stateDir" | "dashboardAppDir"> &
+    Partial<
+      Pick<ServerConfig, "httpPort" | "landingPort" | "spareStorePort" | "spareStoreLoopbackPort">
+    >,
   app: Hono,
   log: Logger,
   admitted: () => Promise<boolean>,
@@ -204,6 +207,17 @@ export function startStaffListener(
       code: (error as NodeJS.ErrnoException)?.code ?? "unknown",
     });
   try {
+    if (
+      [
+        config.httpPort,
+        config.landingPort,
+        config.spareStorePort,
+        config.spareStoreLoopbackPort,
+      ].includes(staff.port)
+    )
+      throw Object.assign(new Error("Staff port conflicts with another listener"), {
+        code: "EADDRINUSE",
+      });
     const tls = {
       keyFile: join(config.stateDir, CLOUD_STAFF_KEY_FILE),
       certFile: join(config.stateDir, CLOUD_STAFF_CERT_FILE),

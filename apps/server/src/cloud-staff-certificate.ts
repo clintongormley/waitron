@@ -7,6 +7,7 @@ import type { SavedCloudState } from "./cloud-client.js";
 import { createStaffCsr, installStaffCertificate } from "./cloud-remote.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
+import { certificateHostname } from "./tls.js";
 import { staffHostnameFrom } from "./cloud-tunnel.js";
 
 const uuid = (v: unknown): v is string =>
@@ -21,7 +22,7 @@ function fresh(chain: string | Buffer, key: string | Buffer, hostname: string): 
     from = Date.parse(cert.validFrom),
     until = Date.parse(cert.validTo);
   if (
-    cert.checkHost(hostname) !== hostname ||
+    certificateHostname(Buffer.from(chain)) !== hostname ||
     !cert.checkPrivateKey(createPrivateKey(key)) ||
     from > Date.now()
   )

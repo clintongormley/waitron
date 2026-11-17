@@ -1,5 +1,5 @@
 import { expect, it, vi, afterEach, onTestFinished } from "vitest";
-import { readFile, stat, unlink } from "node:fs/promises";
+import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, X509Certificate } from "node:crypto";
 import { createServer } from "node:https";
@@ -734,3 +734,25 @@ it.each(["switch off", "pending revoke", "unconfigured", "failed", "missing name
     await expect(f.readKey()).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
+
+it("replaces an installed chain with extra names instead of counting it as a fresh staff identity", async () => {
+  const f = await fixture();
+  f.ready();
+  await f.pass();
+  const accepted = await f.readChain();
+  const certificate = forge.pki.certificateFromPem(accepted);
+  certificate.setExtensions([
+    {
+      name: "subjectAltName",
+      altNames: [
+        { type: 2, value: hostname },
+        { type: 2, value: "other.example.test" },
+      ],
+    },
+  ]);
+  certificate.sign(forge.pki.privateKeyFromPem(await f.readKey()), forge.md.sha256.create());
+  await writeFile(join(f.stateDir, "cloud/staff.crt"), forge.pki.certificateToPem(certificate));
+  await f.pass();
+  expect(f.calls).toHaveLength(4);
+  expect(await f.readChain()).toBe(accepted);
+});
