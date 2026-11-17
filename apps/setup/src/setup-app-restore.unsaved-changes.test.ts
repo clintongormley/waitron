@@ -7,7 +7,12 @@ import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
@@ -193,9 +198,16 @@ describe("setup archive restore unsaved changes", () => {
     const { el, form, api } = await mount();
     await fill(form);
     expect(unload()).toBe(true);
+    await reviewBackup(form);
     q(form, "[data-test=restore]").click();
     await expect.poll(() => screen(el)).toBe("done");
-    expect(api.restore).toHaveBeenCalledExactlyOnceWith(backup, " secret ", "preproduction", false);
+    expect(api.restore).toHaveBeenCalledExactlyOnceWith(
+      backup,
+      " secret ",
+      "preproduction",
+      false,
+      REVIEWED_CREDENTIALS,
+    );
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
   });
@@ -206,6 +218,7 @@ describe("setup archive restore unsaved changes", () => {
       setLocale(locale);
       vi.mocked(api.restore).mockRejectedValue({ code: "restore.archive_resource_limit" });
       await fill(form);
+      await reviewBackup(form);
       q(form, "[data-test=restore]").click();
       await expect
         .poll(
@@ -227,6 +240,7 @@ describe("setup archive restore unsaved changes", () => {
       params: { reason },
     });
     await fill(form);
+    await reviewBackup(form);
     q(form, "[data-test=restore]").click();
     await expect
       .poll(
@@ -243,6 +257,7 @@ describe("setup archive restore unsaved changes", () => {
     const { el, form, api } = await mount();
     vi.mocked(api.restore).mockRejectedValue({ code: "restore.environment_mismatch" });
     await fill(form);
+    await reviewBackup(form);
     q(form, "[data-test=restore]").click();
     await expect.poll(() => screen(el)).toBe("restore");
     await expect
@@ -310,6 +325,7 @@ describe("setup archive restore unsaved changes", () => {
         }),
       );
       await fill(form);
+      await reviewBackup(form);
       q(form, "[data-test=restore]").click();
       await expect.poll(() => screen(el)).toBe("provisioning");
       Object.assign(el, { screen: "restore" });
@@ -343,6 +359,7 @@ describe("setup archive restore unsaved changes", () => {
         }),
       );
       await fill(form);
+      await reviewBackup(form);
       q(form, "[data-test=restore]").click();
       await expect.poll(() => screen(el)).toBe("provisioning");
       el.remove();
@@ -402,6 +419,7 @@ describe("setup archive restore unsaved changes", () => {
           }),
         );
       await fill(form);
+      await reviewBackup(form);
       q(form, "[data-test=restore]").click();
       await expect.poll(() => screen(el)).toBe("provisioning");
       Object.assign(el, { screen: "restore" });
@@ -409,6 +427,7 @@ describe("setup archive restore unsaved changes", () => {
       const second = el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")!;
       await second.updateComplete;
       await fill(second);
+      await reviewBackup(second);
       q(second, "[data-test=restore]").click();
       await expect.poll(() => screen(el)).toBe("provisioning");
       if (result === "success") resolveFirst();

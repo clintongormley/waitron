@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
 import type { AdoptBody, ProvisionBody } from "./client.js";
+import { REVIEWED_CREDENTIALS as CREDENTIALS } from "../widgets/test-helpers.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -294,37 +295,18 @@ describe("SetupApi", () => {
     });
   });
 
-  it("restore POSTs the encrypted artifact as binary with recovery metadata", async () => {
-    const result = { restoreStaged: true, restarting: true };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));
-    const api = new SetupApi("", fetchImpl);
-    const artifact = new Blob([Uint8Array.from([1, 2, 3])]);
-    expect(await api.restore(artifact, "recovery-key", "production")).toEqual(result);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/restore", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "recovery-key",
-        "x-waitron-restore-environment": "production",
-      },
-      body: artifact,
-    });
-  });
-
-  it("sends x-waitron-old-box-gone only when the owner confirmed", async () => {
+  it("sends the old-server answer with an archive restore as 1 or 0", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(jsonResponse({ restoreStaged: true, restarting: true }, true, 202));
     const api = new SetupApi("", fetchImpl);
-    await api.restore(new Blob([Uint8Array.from([1])]), "k", "production", true);
-    await api.restore(new Blob([Uint8Array.from([1])]), "k", "production");
-    await api.restore(new Blob([Uint8Array.from([1])]), "k", "production", false);
+    await api.restore(new Blob([Uint8Array.from([1])]), "k", "production", true, CREDENTIALS);
+    await api.restore(new Blob([Uint8Array.from([1])]), "k", "production", false, CREDENTIALS);
     expect(
       fetchImpl.mock.calls.map(([, init]) =>
-        new Headers((init as RequestInit).headers).get("x-waitron-old-box-gone"),
+        ((init as RequestInit).body as FormData).get("oldBoxGone"),
       ),
-    ).toEqual(["1", null, null]);
+    ).toEqual(["1", "0"]);
   });
 
   it("restoreFromBucket POSTs the kit as JSON and leaves out a venue not yet confirmed", async () => {
@@ -341,6 +323,7 @@ describe("SetupApi", () => {
         environment: "production",
         oldBoxGone: false,
         venueConfirmed: null,
+        ...CREDENTIALS,
       }),
     ).toEqual(staged);
     await api.restoreFromBucket({
@@ -348,6 +331,7 @@ describe("SetupApi", () => {
       environment: "preproduction",
       oldBoxGone: true,
       venueConfirmed: "89890001K",
+      ...CREDENTIALS,
     });
     const post = (body: unknown) => [
       "/setup-api/restore-bucket",
@@ -359,8 +343,14 @@ describe("SetupApi", () => {
       },
     ];
     expect(fetchImpl.mock.calls).toEqual([
-      post({ kit, environment: "production", oldBoxGone: false }),
-      post({ kit, environment: "preproduction", oldBoxGone: true, venueConfirmed: "89890001K" }),
+      post({ kit, environment: "production", oldBoxGone: false, ...CREDENTIALS }),
+      post({
+        kit,
+        environment: "preproduction",
+        oldBoxGone: true,
+        ...CREDENTIALS,
+        venueConfirmed: "89890001K",
+      }),
     ]);
   });
 
@@ -382,11 +372,12 @@ describe("SetupApi", () => {
         environment: "production",
         oldBoxGone: false,
         venueConfirmed: null,
+        ...CREDENTIALS,
       }),
     ).rejects.toEqual({ code: "restore.stream_venue_unconfirmed", params: venue, status: 409 });
   });
 
-  it("uses the local setup API for each Cloud recovery action and sends only the selected point for restore", async () => {
+  it("uses the local setup API for each Cloud recovery action and sends the selected point with its recovery details for restore", async () => {
     const view = {
       requestId: "be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
       code: "12345678",
@@ -406,7 +397,9 @@ describe("SetupApi", () => {
     expect(await api.startCloudRecovery()).toEqual(view);
     expect(await api.cloudRecoveryStatus()).toEqual(view);
     expect(await api.startCloudRecoveryAgain()).toEqual(view);
-    expect(await api.restoreFromCloud("e8722eb0-3f02-4f35-920b-9b5f6bfb05e8")).toEqual(staged);
+    expect(
+      await api.restoreFromCloud("e8722eb0-3f02-4f35-920b-9b5f6bfb05e8", false, CREDENTIALS),
+    ).toEqual(staged);
     expect(fetchImpl.mock.calls).toEqual([
       [
         "/setup-api/cloud-recovery/start",
@@ -433,7 +426,10 @@ describe("SetupApi", () => {
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pointId: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8" }),
+          body: JSON.stringify({
+            pointId: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8",
+            ...CREDENTIALS,
+          }),
         },
       ],
     ]);
@@ -444,11 +440,11 @@ describe("SetupApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(staged, true, 202));
     const api = new SetupApi("", fetchImpl);
     const pointId = "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8";
-    expect(await api.restoreFromCloud(pointId, true)).toEqual(staged);
-    await api.restoreFromCloud(pointId, false);
+    expect(await api.restoreFromCloud(pointId, true, CREDENTIALS)).toEqual(staged);
+    await api.restoreFromCloud(pointId, false, CREDENTIALS);
     expect(fetchImpl.mock.calls.map(([, init]) => (init as RequestInit).body)).toEqual([
-      JSON.stringify({ pointId, oldBoxGone: true }),
-      JSON.stringify({ pointId }),
+      JSON.stringify({ pointId, oldBoxGone: true, ...CREDENTIALS }),
+      JSON.stringify({ pointId, ...CREDENTIALS }),
     ]);
   });
 
@@ -460,7 +456,13 @@ describe("SetupApi", () => {
       );
     const api = new SetupApi("", fetchImpl);
     await expect(
-      api.restore(new Blob([Uint8Array.from([1])]), "recovery-key", "production"),
+      api.restore(
+        new Blob([Uint8Array.from([1])]),
+        "recovery-key",
+        "production",
+        false,
+        CREDENTIALS,
+      ),
     ).rejects.toEqual({ code: "restore.environment_mismatch", params: undefined, status: 409 });
   });
 
@@ -521,7 +523,7 @@ describe("SetupApi calls the fetch it was given as a free function", () => {
   const artifact = (): Blob => new Blob([Uint8Array.from([1])]);
   const calls: [string, (api: SetupApi) => Promise<unknown>][] = [
     ["getStatus", (api) => api.getStatus()],
-    ["restore", (api) => api.restore(artifact(), "recovery-key", "production")],
+    ["restore", (api) => api.restore(artifact(), "recovery-key", "production", false, CREDENTIALS)],
     [
       "restoreFromBucket",
       (api) =>
@@ -530,6 +532,7 @@ describe("SetupApi calls the fetch it was given as a free function", () => {
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: null,
+          ...CREDENTIALS,
         }),
     ],
     ["stageConfiguration", (api) => api.stageConfiguration(artifact(), "a strong passphrase")],

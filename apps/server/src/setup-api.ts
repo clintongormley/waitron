@@ -30,7 +30,13 @@ import {
   normalizeAndValidateEmail,
   verifySecretAsync,
 } from "@waitron/identity";
-import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  SUPPORTED_LOCALE_CODES,
+  isAppError,
+  isUnset,
+} from "@waitron/shared";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -82,6 +88,7 @@ export interface BucketRestoreInput {
 }
 
 function recoveryCredentials(
+  recoveryOperationPath: string | undefined,
   operation: unknown,
   secret: unknown,
   context?: unknown,
@@ -90,7 +97,10 @@ function recoveryCredentials(
   nodeRecoverySecret?: string;
   recoveryContext?: RecoveryEntryContext;
 } {
-  if (operation === undefined && secret === undefined && context === undefined) return {};
+  if (operation === undefined && secret === undefined && context === undefined) {
+    if (isUnset(recoveryOperationPath)) invalidRequest("recoveryOperation");
+    return {};
+  }
   const parsed = parseRecoveryOperationInput(operation);
   if (
     parsed === null ||
@@ -165,6 +175,9 @@ export interface SetupDeps {
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   receiveArchive?: ReceiveArchive;
   stageRestore?: (request: ArchiveRequest, options: { oldBoxGone: boolean }) => Promise<void>;
+  /** `WAITRON_RECOVERY_OPERATION_FILE` as the start reads it; a restore without recovery details
+   * is refused when it is unset. */
+  recoveryOperationPath?: string;
   prepareRecovery?: PrepareRecovery;
   stageRecovery?: StageRecovery;
   discardStagedRecovery?: DiscardStagedRecovery;
@@ -1223,6 +1236,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("oldBoxGone");
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           body.recoveryOperation,
           body.nodeRecoverySecret,
           body.recoveryContext,
@@ -1395,6 +1409,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           headerEnvironment !== "preproduction"
         )
           invalidRequest("environment");
+        if (!multipart && isUnset(deps.recoveryOperationPath)) invalidRequest("recoveryOperation");
         upload = await deps.receiveArchive!(c.req.raw, {
           fields: [
             "recoveryKey",
@@ -1430,6 +1445,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           }
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           suppliedOperation,
           form?.get("nodeRecoverySecret") ?? undefined,
           (() => {
@@ -1528,6 +1544,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("venueConfirmed");
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           body.recoveryOperation,
           body.nodeRecoverySecret,
           body.recoveryContext,

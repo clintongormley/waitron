@@ -19,10 +19,18 @@ export class FormFeedback {
     this.newRefusal();
   }
 
-  // The caller decides when a new refusal arrived, using its own property's change check.
-  newRefusal(): void {
-    this.#dismissed.clear();
+  /**
+   * The caller decides when a new refusal arrived, using its own property's change check. With no
+   * keys every dismissal ends; with keys only theirs do.
+   */
+  newRefusal(...keys: string[]): void {
+    if (keys.length === 0) this.#dismissed.clear();
+    for (const key of keys) this.#dismissed.delete(key);
     this.#host.requestUpdate();
+  }
+
+  shows(key: string): boolean {
+    return !this.#dismissed.has(key);
   }
 
   dismiss(...keys: string[]): void {
@@ -36,7 +44,7 @@ export class FormFeedback {
   }
 
   remaining<T>(errors: Record<string, T>): Record<string, T> {
-    return Object.fromEntries(Object.entries(errors).filter(([key]) => !this.#dismissed.has(key)));
+    return Object.fromEntries(Object.entries(errors).filter(([key]) => this.shows(key)));
   }
 
   message(

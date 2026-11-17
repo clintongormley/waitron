@@ -4,7 +4,12 @@ import { SetupApp, type Screen } from "./setup-app.js";
 import type { CloudRecoveryView, SetupApi } from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
@@ -62,7 +67,15 @@ function action(
 ) {
   form.dispatchEvent(
     new CustomEvent("cloud-restore-action", {
-      detail: { action: name, pointId: approved.point!.id, oldBoxGone: false },
+      detail:
+        name === "restore"
+          ? {
+              action: name,
+              pointId: approved.point!.id,
+              oldBoxGone: false,
+              ...REVIEWED_CREDENTIALS,
+            }
+          : { action: name, pointId: approved.point!.id, oldBoxGone: false },
       bubbles: true,
       composed: true,
     }),
@@ -126,11 +139,13 @@ describe("setup Cloud restore leave lifecycle", () => {
     ack.checked = true;
     ack.dispatchEvent(new Event("change"));
     await form.updateComplete;
+    await reviewBackup(form);
     q(form, "[data-test=restore]").click();
     await expect.poll(() => screen(el)).toBe("done");
     expect(api.restoreFromCloud).toHaveBeenCalledExactlyOnceWith(
       "f553b743-a56e-4c2d-9b15-11ae89130500",
       false,
+      REVIEWED_CREDENTIALS,
     );
     expect(unload()).toBe(false);
     expect(warning(el).open).toBe(false);

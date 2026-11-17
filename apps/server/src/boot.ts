@@ -1641,6 +1641,7 @@ async function bootServer(
         readPrimaryCertificate: (primaryUrl) =>
           fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
         prepareRecovery: recoveryPreparation,
+        recoveryOperationPath: base.WAITRON_RECOVERY_OPERATION_FILE,
         receiveArchive: (request, options) =>
           receiveSetupArchive(request, join(config.stateDir, RESTORE_STAGING_DIR), options),
         stageRecovery: recoveryPreparation.stage,

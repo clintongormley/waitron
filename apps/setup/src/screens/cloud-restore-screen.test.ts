@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./cloud-restore-screen.js";
 import { oldBoxProblem } from "./old-box-question.js";
@@ -100,14 +105,56 @@ describe("Cloud restore screen", () => {
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event("change"));
     await el.updateComplete;
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls[0]?.[0].detail).toEqual({
       action: "restore",
+      ...REVIEWED_CREDENTIALS,
       pointId: el.view.point!.id,
       oldBoxGone: false,
     });
     expect(q(el, "[data-test=live-warning]")).toBeNull();
     expect(q(el, "time[datetime='2026-09-24T10:00:00.000Z']")).not.toBeNull();
+  });
+  it("sends nothing and asks for Review backup first", async () => {
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
+      "setup-cloud-restore-screen",
+      {},
+    );
+    el.view = approvedView();
+    await el.updateComplete;
+    await tick(el, "[data-test=acknowledge]");
+    const listener = vi.fn();
+    host.addEventListener("cloud-restore-action", listener);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+  });
+  it.each([
+    ["another point is approved", false],
+    ["approval is lost, then another point is approved", true],
+  ])("drops the Review backup line when %s", async (_name, viaPending) => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {});
+    el.view = approvedView();
+    await el.updateComplete;
+    await tick(el, "[data-test=acknowledge]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+    if (viaPending) {
+      el.view = { ...el.view, state: "awaiting_owner", point: undefined };
+      await el.updateComplete;
+    }
+    el.view = approvedView("e8722eb0-3f02-4f35-920b-9b5f6bfb05e9");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    expect((q(el, "[data-test=restore]") as HTMLElement & { disabled: boolean }).disabled).toBe(
+      false,
+    );
   });
   it("offers a new request only when the displayed request has expired", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
@@ -291,9 +338,15 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
     await tick(el, "[data-test=old-box-gone]");
     expect(q(el, "#old-box-gone-error")).toBeNull();
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls.map(([event]) => event.detail)).toEqual([
-      { action: "restore", pointId: el.view!.point!.id, oldBoxGone: true },
+      {
+        action: "restore",
+        ...REVIEWED_CREDENTIALS,
+        pointId: el.view!.point!.id,
+        oldBoxGone: true,
+      },
     ]);
   });
 
@@ -311,6 +364,7 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     expect(listener).not.toHaveBeenCalled();
     expect(q(el, "#old-box-gone-error")).toBeNull();
     await tick(el, "[data-test=acknowledge]");
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls[0]?.[0].detail.oldBoxGone).toBe(true);
   });
@@ -470,6 +524,41 @@ describe("Cloud restore screen showing the server's refusal of a detail", () => 
     await el.updateComplete;
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(CHECK_OLD_BOX);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  });
+
+  it("keeps a field's refusal away once the owner edits the field, through a new message about it", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: CHECK_OLD_BOX,
+      invalidField: "oldBoxGone",
+    });
+    expect(fieldMessages(el)).toEqual([CHECK_OLD_BOX]);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(fieldMessages(el)).toEqual([]);
+    el.errorMessage = "Still check your answer about the old server.";
+    await el.updateComplete;
+    expect(fieldMessages(el)).toEqual([]);
+  });
+
+  // The old server is answered first: an unanswered box shows its own problem in place of a
+  // refusal, which would hide whether the refusal came back.
+  it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
+    const refusal = "Cloud recovery is unavailable. Try again.";
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: refusal,
+    });
+    await tick(el, "[data-test=old-box-gone]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    const pressed = fieldMessages(el);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    el.invalidField = "oldBoxGone";
+    await el.updateComplete;
+    expect(fieldMessages(el)).toEqual(pressed);
+    expect(fieldMessages(el)).not.toContain(refusal);
   });
 
   it("shows the old-server refusal above Restore while the server has not asked the question", async () => {

@@ -4,9 +4,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { mountSetup } from "./setup-api.js";
+import { mountSetup as mountSetupBase } from "./setup-api.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+
+function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {
+  mountSetupBase(app, { recoveryOperationPath: "/run/recovery-operation.json", ...deps }, log);
+}
 
 const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
 const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";

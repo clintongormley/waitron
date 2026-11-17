@@ -23,7 +23,10 @@ const operation = {
 };
 const credentials = { recoveryOperation: operation, nodeRecoverySecret: "node-paper-key" };
 
-function setup(operations?: SetupDeps["operations"]) {
+function setup(
+  operations?: SetupDeps["operations"],
+  recoveryOperationPath: string | null = "/run/recovery-operation.json",
+) {
   const stageRestore = vi.fn(async () => {});
   const stageBucketRestore = vi.fn(async () => {});
   const requestRestart = vi.fn();
@@ -61,6 +64,7 @@ function setup(operations?: SetupDeps["operations"]) {
       requestRestart,
       cloudRecovery,
       operations,
+      recoveryOperationPath: recoveryOperationPath ?? undefined,
     },
     log,
   );
@@ -133,6 +137,47 @@ it.each(["archive", "bucket", "cloud"])(
     }
     expect(JSON.stringify(log.mock.calls)).not.toContain("node-paper-key");
     expect(JSON.stringify(log.mock.calls)).not.toContain("archive-key");
+  },
+);
+
+it.each([
+  ["archive", null],
+  ["bucket", null],
+  ["cloud", null],
+  ["archive", ""],
+  ["bucket", ""],
+  ["cloud", ""],
+])(
+  "refuses a %s restore without recovery details when the box's operation file is %j, staging nothing",
+  async (kind, recoveryOperationPath) => {
+    const { app, stageRestore, stageBucketRestore, requestRestart } = setup(
+      undefined,
+      recoveryOperationPath,
+    );
+    const req = request(kind, {});
+    const response = await app.request(req.path, req.init);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "recoveryOperation" } },
+    });
+    expect(stageRestore).not.toHaveBeenCalled();
+    expect(stageBucketRestore).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requestRestart).not.toHaveBeenCalled();
+    const withDetails = request(kind);
+    expect((await app.request(withDetails.path, withDetails.init)).status).toBe(202);
+  },
+);
+
+it.each(["archive", "bucket", "cloud"])(
+  "stages a %s restore without recovery details when the box has an operation file",
+  async (kind) => {
+    const { app, stageRestore, stageBucketRestore } = setup();
+    const req = request(kind, {});
+    const response = await app.request(req.path, req.init);
+    expect(response.status).toBe(202);
+    expect((kind === "bucket" ? stageBucketRestore : stageRestore).mock.calls).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   },
 );
 
@@ -380,6 +425,39 @@ it.each(["recoveryKey", "environment"])(
   },
 );
 
+it("refuses a raw upload before receiving it when the box has no operation file", async () => {
+  const app = new Hono();
+  const receiveArchive = vi.fn(async () => {
+    throw new Error("body was read");
+  });
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      stageRestore: async () => {},
+      requestRestart: () => {},
+      receiveArchive,
+    },
+    () => {},
+  );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await app.request("/setup-api/restore", {
+      method: "POST",
+      body: new Uint8Array([1, 2]),
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "key",
+        "x-waitron-restore-environment": "preproduction",
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "recoveryOperation" } },
+    });
+  }
+  expect(receiveArchive).not.toHaveBeenCalled();
+});
+
 it.each([false, true])("removes received ciphertext after restore refusal=%s", async (refused) => {
   const app = new Hono();
   let path: string | undefined;
@@ -390,7 +468,13 @@ it.each([false, true])("removes received ciphertext after restore refusal=%s", a
   };
   mountSetup(
     app,
-    { environment: "preproduction", receiveArchive, stageRestore, requestRestart: () => {} },
+    {
+      environment: "preproduction",
+      receiveArchive,
+      stageRestore,
+      requestRestart: () => {},
+      recoveryOperationPath: "/run/recovery-operation.json",
+    },
     () => {},
   );
   const response = await app.request("/setup-api/restore", {

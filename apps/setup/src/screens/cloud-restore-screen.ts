@@ -1,13 +1,13 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { FormFeedback, baseStyles, bottomMessage, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import type { CloudRecoveryView } from "../api/client.js";
-import { dispatchSetupGoto } from "../events.js";
+import { dispatchSetupGoto, type CloudRestoreActionDetail } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
 import { localTime, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -57,11 +57,10 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ type: Boolean }) liveUnknown = false;
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  @state() private attempted = false;
+  /** As `setup-recovery-copy` last announced. */
+  @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
-  /** The owner pressed an action after `errorMessage` arrived, so it no longer applies. */
-  @state() private refusalDismissed = false;
-  @state() private fieldRefusalDismissed = false;
+  private readonly feedback = new FormFeedback(this);
   #approvalBinding?: string;
 
   constructor() {
@@ -84,8 +83,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("invalidField")) this.feedback.newRefusal("field");
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
       const confirmation =
@@ -96,27 +95,27 @@ export class SetupCloudRestoreScreen extends LitElement {
           : undefined;
       this.acknowledged = confirmation?.acknowledged ?? false;
       this.oldBoxGone = confirmation?.oldBoxGone ?? false;
-      this.attempted = false;
-      this.refusalDismissed = false;
-      this.fieldRefusalDismissed = false;
+      this.feedback.reset();
       this.#approvalBinding = binding;
     }
   }
 
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+    if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
   }
 
-  /** The field showing the server's refusal, if any. */
-  #refusalUnder(): CloudField | undefined {
-    return this.errorMessage === undefined ||
-      this.refusalDismissed ||
-      this.fieldRefusalDismissed ||
-      !this.#shows(this.invalidField)
-      ? undefined
-      : this.invalidField;
+  /** The server's refusal, unless the owner has dismissed it. */
+  get #shownRefusal(): string | undefined {
+    return this.feedback.shows("refusal") && this.feedback.shows("field")
+      ? this.errorMessage
+      : undefined;
+  }
+
+  /** The field showing `refusal`, if any. */
+  #refusalUnder(refusal: string | undefined): CloudField | undefined {
+    return refusal === undefined || !this.#shows(this.invalidField) ? undefined : this.invalidField;
   }
 
   /** Whether `field` is on the screen. */
@@ -150,50 +149,50 @@ export class SetupCloudRestoreScreen extends LitElement {
         this.#currentApprovalBinding() !== this.#approvalBinding
       )
         return;
-      this.attempted = true;
+      this.feedback.press();
       if (this.#incomplete) {
-        this.refusalDismissed = true;
-        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+        this.feedback.dismiss("refusal");
+        void this.feedback.focus(this.shadowRoot!);
         return;
       }
     }
-    const credentials =
-      action === "restore"
-        ? this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy")?.readCredentials(
-            { cloudPointId: this.view?.point?.id, selectionId: this.#currentApprovalBinding() },
-          )
-        : undefined;
-    if (credentials === null) return;
-    this.refusalDismissed = true;
+    const detail: CloudRestoreActionDetail | undefined =
+      action === "restore" ? this.#restoreDetail() : { action };
+    if (!detail) return;
+    this.feedback.dismiss("refusal");
     this.dispatchEvent(
-      new CustomEvent("cloud-restore-action", {
-        detail: {
-          action,
-          ...credentials,
-          ...(action === "restore"
-            ? { pointId: this.view!.point!.id, oldBoxGone: this.#askingOldBox && this.oldBoxGone }
-            : {}),
-        },
-        bubbles: true,
-        composed: true,
-      }),
+      new CustomEvent("cloud-restore-action", { detail, bubbles: true, composed: true }),
     );
+  }
+
+  #restoreDetail(): CloudRestoreActionDetail | undefined {
+    const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
+      "setup-recovery-copy",
+    )?.readCredentials({
+      cloudPointId: this.view?.point?.id,
+      selectionId: this.#currentApprovalBinding(),
+    });
+    return credentials
+      ? {
+          action: "restore",
+          ...credentials,
+          pointId: this.view!.point!.id,
+          oldBoxGone: this.#askingOldBox && this.oldBoxGone,
+        }
+      : undefined;
   }
 
   override render() {
     const approved = this.view?.state === "approved" && this.view.point;
-    const acknowledgeInvalid = this.attempted && !this.acknowledged;
-    const fieldsInvalid = Boolean(approved) && this.attempted && this.#incomplete;
-    const refused = this.#refusalUnder();
-    const bottom = [
-      ...(this.errorMessage &&
-      !this.refusalDismissed &&
-      !this.fieldRefusalDismissed &&
-      !this.#shows(this.invalidField)
-        ? [this.errorMessage]
-        : []),
-      ...(fieldsInvalid || refused !== undefined ? [t("cloud_restore.fix_fields")] : []),
-    ].join(" ");
+    const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
+    const fieldsInvalid = Boolean(approved) && this.feedback.attempted && this.#incomplete;
+    const shownRefusal = this.#shownRefusal;
+    const refused = this.#refusalUnder(shownRefusal);
+    const bottom = bottomMessage(
+      this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
+      fieldsInvalid || refused !== undefined ? t("cloud_restore.fix_fields") : null,
+      approved && this.reviewNeeded ? t("restore.review_first") : null,
+    );
     return html`
       <h1>${t("cloud_restore.heading")}</h1>
       <p>${t("cloud_restore.intro")}</p>
@@ -255,18 +254,22 @@ export class SetupCloudRestoreScreen extends LitElement {
                           >
                         </p>
                         <setup-recovery-copy
-                          .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+                          .errorMessage=${shownRefusal}
                           .refusedField=${this.invalidField}
                           @recovery-field-edited=${(
                             event: CustomEvent<{ field: RecoveryEntryField }>,
                           ) => {
                             event.stopPropagation();
                             if (event.detail.field === this.invalidField)
-                              this.fieldRefusalDismissed = true;
+                              this.feedback.dismiss("field");
                           }}
                           @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
                             event.stopPropagation();
                             this.recoveryInvalid = event.detail.invalid;
+                          }}
+                          @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
+                            event.stopPropagation();
+                            this.reviewNeeded = event.detail.needed;
                           }}
                           .api=${this.api}
                           .boxAddress=${this.boxAddress}
@@ -294,12 +297,11 @@ export class SetupCloudRestoreScreen extends LitElement {
                           liveSince: this.liveSince,
                           liveUnknown: this.liveUnknown,
                           checked: this.oldBoxGone,
-                          invalid: this.attempted && this.#oldBoxUnanswered,
+                          invalid: this.feedback.attempted && this.#oldBoxUnanswered,
                           refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
                           onChange: (checked) => {
                             this.oldBoxGone = checked;
-                            if (this.invalidField === "oldBoxGone")
-                              this.fieldRefusalDismissed = true;
+                            if (this.invalidField === "oldBoxGone") this.feedback.dismiss("field");
                           },
                         })}
                       `
@@ -315,7 +317,7 @@ export class SetupCloudRestoreScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="restore"
-                ?disabled=${this.busy || fieldsInvalid}
+                ?disabled=${this.busy || fieldsInvalid || this.reviewNeeded}
                 @click=${() => this.#action("restore")}
                 >${t("cloud_restore.restore")}</wt-button
               >`

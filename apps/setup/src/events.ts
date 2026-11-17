@@ -44,13 +44,16 @@ export function dispatchResetRequested(el: EventTarget, credential: ResetCredent
   );
 }
 
-export interface RestoreRequestDetail extends Partial<RecoveryRestoreCredentials> {
+export interface RestoreRequestDetail extends RecoveryRestoreCredentials {
   artifact: File;
   recoveryKey: string;
   environment: "production" | "preproduction";
   /** The owner answered the old-server question (#646). */
   oldBoxGone: boolean;
 }
+
+/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+export type KeptRestoreRequest = Omit<RestoreRequestDetail, keyof RecoveryRestoreCredentials>;
 
 export function dispatchRestoreRequested(el: EventTarget, request: RestoreRequestDetail): void {
   el.dispatchEvent(
@@ -62,13 +65,19 @@ export function dispatchRestoreRequested(el: EventTarget, request: RestoreReques
   );
 }
 
-export interface BucketRestoreRequestDetail extends Partial<RecoveryRestoreCredentials> {
+export interface BucketRestoreRequestDetail extends RecoveryRestoreCredentials {
   kit: string;
   environment: "production" | "preproduction";
   oldBoxGone: boolean;
   /** The tax id of the restored copy the owner confirmed; null until one has been shown. */
   venueConfirmed: string | null;
 }
+
+/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+export type KeptBucketRestoreRequest = Omit<
+  BucketRestoreRequestDetail,
+  keyof RecoveryRestoreCredentials
+>;
 
 export function dispatchBucketRestoreRequested(
   el: EventTarget,
@@ -82,6 +91,11 @@ export function dispatchBucketRestoreRequested(
     }),
   );
 }
+
+/** `cloud-restore-action`'s detail. */
+export type CloudRestoreActionDetail =
+  | { action: "start" | "status" | "start-again" }
+  | ({ action: "restore"; pointId: string; oldBoxGone: boolean } & RecoveryRestoreCredentials);
 
 export interface ConfigurationRequestDetail {
   artifact: File;

@@ -388,8 +388,11 @@ in place during failures and unrelated configuration changes.
 If a venue server has failed, open **Restore from backup** on a fresh replacement and choose
 **Restore from Waitron Cloud**. The replacement shows a code and a Cloud link. Sign in there,
 choose a verified snapshot, enter the code, and confirm that the old server and any surviving
-peers are stopped. Return to the replacement and choose **Check approval**. Review the snapshot
-capture time before you confirm the local restore; later changes are absent from that snapshot.
+peers are stopped. Return to the replacement and choose **Check approval**. Then choose **Review
+backup** and enter the recovery details it asks for (the user guide's
+[Prove access to the selected backup](../../apps/server/src/guide/en/backup-recovery.md#proof));
+the page sends no restore until you have. Review the snapshot capture time before you confirm the
+local restore; later changes are absent from that snapshot.
 
 If the snapshot's database holds bucket settings, choosing **Restore this snapshot** first checks
 the old server's bucket. If the old server wrote to it in the last ten minutes, or that could not

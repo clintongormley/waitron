@@ -409,6 +409,13 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   setup page first can set up either; the owner accepted this when dropping the setup code
   (2026-10-26, B3 design §12.5). A production box offers neither (§12.1; A1384).
 
+- **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
+  19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
+  refuse to send without them, and the setup server refuses a restore without them unless the box
+  names a `WAITRON_RECOVERY_OPERATION_FILE`. Seen on the test box on 2026-11-17: a bucket restore
+  sent without them was placed and the start failed with `sif.allocation_invalid`. A country pack
+  offered for venue setup without a fiscal module would need both refusals revisited.
+
 - **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
   validated as a whole millisecond and never used. The acceptance may be removed once a check of
   shipped backups, and of each box's retained

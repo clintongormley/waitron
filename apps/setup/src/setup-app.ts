@@ -60,7 +60,10 @@ import { PREVIEW_NULLABLE_VENUE_FIELDS } from "./api/client.js";
 import { dispatchSetupGoto } from "./events.js";
 import type {
   BucketRestoreRequestDetail,
+  CloudRestoreActionDetail,
   ConfigurationRequestDetail,
+  KeptBucketRestoreRequest,
+  KeptRestoreRequest,
   RestoreRequestDetail,
 } from "./events.js";
 import type { CloudField, CloudRestoreConfirmation } from "./screens/cloud-restore-screen.js";
@@ -461,12 +464,26 @@ const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
   "credential.totp": "totp",
 };
 
-function withoutRecoveryCredentials<T extends Partial<RecoveryRestoreCredentials>>(request: T): T {
-  const kept = { ...request };
+function withoutRecoveryCredentials<T extends RecoveryRestoreCredentials>(
+  request: T,
+): Omit<T, keyof RecoveryRestoreCredentials> {
+  const kept: Partial<T> = { ...request };
   delete kept.nodeRecoverySecret;
   delete kept.recoveryOperation;
   delete kept.recoveryContext;
-  return kept;
+  return kept as Omit<T, keyof RecoveryRestoreCredentials>;
+}
+
+function recoveryCredentials({
+  recoveryOperation,
+  nodeRecoverySecret,
+  recoveryContext,
+}: RecoveryRestoreCredentials): RecoveryRestoreCredentials {
+  return {
+    recoveryOperation,
+    nodeRecoverySecret,
+    ...(recoveryContext === undefined ? {} : { recoveryContext }),
+  };
 }
 
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
@@ -887,7 +904,7 @@ export class SetupApp extends LitElement {
   @state() private restoreLiveSince?: string;
   @state() private restoreLiveUnknown = false;
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
-  @state() private restoreRequest?: RestoreRequestDetail;
+  @state() private restoreRequest?: KeptRestoreRequest;
   #archiveRestoreAttempt = 0;
   #bucketRestoreAttempt = 0;
   @state() private bucketRestoreError?: Message;
@@ -896,7 +913,7 @@ export class SetupApp extends LitElement {
   @state() private bucketLiveUnknown = false;
   @state() private bucketVenue?: RestoredVenue;
   /** Held only in this tab's memory: the kit inside it is as sensitive as the recovery key. */
-  @state() private bucketRequest?: BucketRestoreRequestDetail;
+  @state() private bucketRequest?: KeptBucketRestoreRequest;
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private restored: "bucket" | "archive" | "cloud" | undefined;
   @state() private openingHours?: { departmentId: string };
@@ -1870,23 +1887,13 @@ export class SetupApp extends LitElement {
         request.recoveryKey,
         request.environment,
         request.oldBoxGone,
-        ...(request.recoveryOperation !== undefined && request.nodeRecoverySecret !== undefined
-          ? [
-              {
-                recoveryOperation: request.recoveryOperation,
-                nodeRecoverySecret: request.nodeRecoverySecret,
-                ...(request.recoveryContext === undefined
-                  ? {}
-                  : { recoveryContext: request.recoveryContext }),
-              },
-            ]
-          : []),
+        recoveryCredentials(request),
       );
       if (!current()) return;
       this.restoreRequest = undefined;
       this.restored = "archive";
       this.screen = "done";
-      void this.#handKeyToDone(request.recoveryOperation && request.nodeRecoverySecret);
+      void this.#handKeyToDone(request.nodeRecoverySecret);
     } catch (error) {
       if (!current()) return;
       const { code, params } = (error ?? {}) as {
@@ -2010,16 +2017,7 @@ export class SetupApp extends LitElement {
     }
   }
 
-  async #onCloudRestoreAction(
-    event: CustomEvent<{
-      action: "start" | "status" | "start-again" | "restore";
-      pointId?: string;
-      oldBoxGone?: boolean;
-      recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
-      nodeRecoverySecret?: string;
-      recoveryContext?: RecoveryRestoreCredentials["recoveryContext"];
-    }>,
-  ): Promise<void> {
+  async #onCloudRestoreAction(event: CustomEvent<CloudRestoreActionDetail>): Promise<void> {
     event.stopPropagation();
     if (this.cloudRecoveryBusy || !this.isConnected || this.screen !== "cloud-restore") return;
     const attempt = ++this.#cloudRecoveryAttempt;
@@ -2039,43 +2037,25 @@ export class SetupApp extends LitElement {
     this.cloudInvalidField = undefined;
     this.cloudRetryConfirmation = undefined;
     try {
-      const {
-        action,
-        pointId,
-        oldBoxGone,
-        recoveryOperation,
-        nodeRecoverySecret,
-        recoveryContext,
-      } = event.detail;
-      if (action === "restore") {
+      const detail = event.detail;
+      if (detail.action === "restore") {
+        const { pointId, oldBoxGone } = detail;
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
         this.#clearProvisionOutcome();
         phase = "provisioning";
         this.screen = phase;
-        await this.api.restoreFromCloud(
-          pointId,
-          oldBoxGone === true,
-          ...(recoveryOperation !== undefined && nodeRecoverySecret !== undefined
-            ? [
-                {
-                  recoveryOperation,
-                  nodeRecoverySecret,
-                  ...(recoveryContext === undefined ? {} : { recoveryContext }),
-                },
-              ]
-            : []),
-        );
+        await this.api.restoreFromCloud(pointId, oldBoxGone, recoveryCredentials(detail));
         if (current()) {
           this.restored = "cloud";
           this.screen = "done";
-          void this.#handKeyToDone(recoveryOperation && nodeRecoverySecret);
+          void this.#handKeyToDone(detail.nodeRecoverySecret);
         }
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
         const view =
-          action === "start"
+          detail.action === "start"
             ? await this.api.startCloudRecovery()
-            : action === "start-again"
+            : detail.action === "start-again"
               ? await this.api.startCloudRecoveryAgain()
               : await this.api.cloudRecoveryStatus();
         if (!current()) return;
@@ -2308,7 +2288,7 @@ export class SetupApp extends LitElement {
   }
 
   /** Set on the drawn done screen rather than kept here, so that screen's drop is the only copy's. */
-  async #handKeyToDone(key: string | undefined): Promise<void> {
+  async #handKeyToDone(key: string): Promise<void> {
     await this.updateComplete;
     const done = this.shadowRoot?.querySelector("setup-done-screen");
     if (done?.isConnected) done.nodeRecoveryKey = key;
@@ -2428,7 +2408,7 @@ export class SetupApp extends LitElement {
         @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
           void this.#onBucketRestoreRequested(e)}
         @setup-conflict=${() => this.#endAtReload(say("shell.setup_conflict"))}
-        @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
+        @cloud-restore-action=${(e: CustomEvent<CloudRestoreActionDetail>) => void this.#onCloudRestoreAction(e)}
         @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
           void this.#onConfigurationRequested(e)}
         @taxpayer-chosen=${(e: CustomEvent<{ newTaxpayer: boolean }>) => this.#onTaxpayerChosen(e)}

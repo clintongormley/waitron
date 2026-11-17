@@ -9,8 +9,14 @@ import {
 import { SetupApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { WtFileInput } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { BucketRestoreRequestDetail } from "../events.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  mountWithLeave,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "../widgets/test-helpers.js";
+import type { BucketRestoreRequestDetail, KeptBucketRestoreRequest } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import {
   BUCKET_CODE,
@@ -43,6 +49,12 @@ function requested(host: HTMLElement): Promise<BucketRestoreRequestDetail> {
       resolve((event as CustomEvent<{ request: BucketRestoreRequestDetail }>).detail.request),
     ),
   );
+}
+/** Presses Review backup, enters its recovery details and confirms the business it names. */
+async function reviewed(el: SetupRestoreBucketScreen): Promise<void> {
+  await reviewBackup(el);
+  tick(el, "[data-test=venue-confirmed]");
+  await el.updateComplete;
 }
 /** The one message `wt-form-actions` shows above Restore; "" when there is none. */
 async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
@@ -156,6 +168,44 @@ describe("SetupRestoreBucketScreen", () => {
     );
   });
 
+  it("sends nothing and asks for Review backup first", async () => {
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    const listener = vi.fn();
+    host.addEventListener("bucket-restore-requested", listener);
+    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    tick(el, "[data-test=acknowledge]");
+    await el.updateComplete;
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+  });
+
+  it("drops the Review backup line, and gives Restore back, when the kit it was for is discarded", async () => {
+    const { el, discard } = await mountWithLeave<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    tick(el, "[data-test=acknowledge]");
+    await el.updateComplete;
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    const restore = q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!;
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+    expect(restore.disabled).toBe(true);
+    await discard();
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    expect(restore.disabled).toBe(false);
+  });
+
   it("says the kit is as sensitive as the recovery key", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
     expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
@@ -174,12 +224,14 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toEqual({
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "production",
       oldBoxGone: false,
-      venueConfirmed: null,
+      venueConfirmed: "89890001K",
+      ...REVIEWED_CREDENTIALS,
     });
   });
 
@@ -250,7 +302,7 @@ describe("SetupRestoreBucketScreen", () => {
       value: "production",
       options: [
         { value: "production", label: "Live" },
-        { value: "preproduction", label: "Preparation or demo" },
+        { value: "preproduction", label: "Preparation" },
       ],
     });
     expect(
@@ -261,6 +313,7 @@ describe("SetupRestoreBucketScreen", () => {
     await chooseOption(environment!, "preproduction");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
   });
@@ -275,6 +328,7 @@ describe("SetupRestoreBucketScreen", () => {
     await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ environment: "preproduction" });
   });
@@ -292,6 +346,7 @@ describe("SetupRestoreBucketScreen", () => {
     await el.updateComplete;
     const listener = vi.fn();
     host.addEventListener("bucket-restore-requested", listener);
+    await reviewBackup(el);
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
@@ -337,6 +392,7 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ kit: BUCKET_CODE });
     expect(fieldMessages(el)).toEqual([]);
@@ -443,6 +499,7 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=old-box-gone]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toMatchObject({ oldBoxGone: true });
   });
@@ -489,7 +546,7 @@ describe("SetupRestoreBucketScreen", () => {
   // A refusal the owner answers (the old-server question, whose copy it is) is sent again with the
   // same kit; the shell hands the last request back so nothing has to be pasted twice.
   it("comes back from a refusal with the owner's entries kept", async () => {
-    const request: BucketRestoreRequestDetail = {
+    const request: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "preproduction",
       oldBoxGone: true,
@@ -507,8 +564,13 @@ describe("SetupRestoreBucketScreen", () => {
     tick(el, "[data-test=venue-confirmed]");
     await el.updateComplete;
     const outcome = requested(host);
+    await reviewed(el);
     q(el, "[data-test=restore]")!.click();
-    await expect(outcome).resolves.toEqual({ ...request, venueConfirmed: "89890001K" });
+    await expect(outcome).resolves.toEqual({
+      ...request,
+      ...REVIEWED_CREDENTIALS,
+      venueConfirmed: "89890001K",
+    });
   });
 
   // The server checked the old server and named the copy for the kit it was sent. A different kit is
@@ -516,7 +578,7 @@ describe("SetupRestoreBucketScreen", () => {
   it.each(["pasted", "read from a file"])(
     "drops the old-server and venue answers when a different kit is %s",
     async (how) => {
-      const request: BucketRestoreRequestDetail = {
+      const request: KeptBucketRestoreRequest = {
         kit: "WAITRON-RECOVERY-KIT-2:first",
         environment: "production",
         oldBoxGone: true,
@@ -542,18 +604,20 @@ describe("SetupRestoreBucketScreen", () => {
       expect(q(el, "[data-test=live-warning]")).toBeNull();
       expect(q(el, "[data-test=venue]")).toBeNull();
       const outcome = requested(host);
+      await reviewed(el);
       q(el, "[data-test=restore]")!.click();
       await expect(outcome).resolves.toEqual({
         kit: "WAITRON-RECOVERY-KIT-2:second",
         environment: "production",
         oldBoxGone: false,
-        venueConfirmed: null,
+        venueConfirmed: "89890001K",
+        ...REVIEWED_CREDENTIALS,
       });
     },
   );
 
   it("asks again when the kit is changed and then changed back", async () => {
-    const request: BucketRestoreRequestDetail = {
+    const request: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:first",
       environment: "production",
       oldBoxGone: true,
@@ -595,7 +659,7 @@ describe("SetupRestoreBucketScreen", () => {
   });
 
   describe("a refusal about one field", () => {
-    const REQUEST: BucketRestoreRequestDetail = {
+    const REQUEST: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "production",
       oldBoxGone: false,
@@ -661,12 +725,43 @@ describe("SetupRestoreBucketScreen", () => {
       expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
+    it("keeps a field's refusal away once the owner edits the field, through a new message about it", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        request: REQUEST,
+        errorMessage: "Check the environment.",
+        invalidField: "environment",
+      });
+      expect(fieldMessages(el)).toEqual(["Check the environment."]);
+      await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+      el.errorMessage = "Still the wrong environment.";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+    });
+
+    it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
+      const refusal = "The bucket in this kit holds no copy of this restaurant.";
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        errorMessage: refusal,
+      });
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      const pressed = fieldMessages(el);
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      el.invalidField = "environment";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual(pressed);
+      expect(fieldMessages(el)).not.toContain(refusal);
+    });
+
     it("drops it on the next press and sends the request again", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
         { request: REQUEST, errorMessage: REFUSAL, invalidField: "kit" },
       );
       const sent = requested(host);
+      await reviewed(el);
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
       expect((await sent).kit).toBe(REQUEST.kit);

@@ -51,7 +51,7 @@ it("keeps the node key while editing and clears the native field on Discard", as
   await entry.updateComplete;
   await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(native.value).toBe("");
-  expect(entry.readCredentials()).toBeUndefined();
+  expect(entry.readCredentials()).toBeNull();
   expect(el.leave.coordinator.isDirty([entry])).toBe(false);
 });
 

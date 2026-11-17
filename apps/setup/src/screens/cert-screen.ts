@@ -254,7 +254,7 @@ export class SetupCertScreen extends LitElement {
     }
     if (this.feedback.attempted && this.passphrase.trim() === "")
       errors.passphrase = t("cert.passphrase_required");
-    if (this.refusal && this.feedback.remaining({ refusal: this.refusal }).refusal !== undefined) {
+    if (this.refusal && this.feedback.shows("refusal")) {
       const field =
         this.refusal.field === "body"
           ? "request"

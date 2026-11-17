@@ -1,6 +1,13 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  FormFeedback,
+  baseStyles,
+  bottomMessage,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -9,7 +16,7 @@ import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
-  type BucketRestoreRequestDetail,
+  type KeptBucketRestoreRequest,
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
@@ -73,18 +80,16 @@ export class SetupRestoreBucketScreen extends LitElement {
   @property({ type: Boolean }) liveUnknown = false;
   @property({ attribute: false }) venue?: RestoredVenue;
   /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
-  @property({ attribute: false }) request?: BucketRestoreRequestDetail;
+  @property({ attribute: false }) request?: KeptBucketRestoreRequest;
   @state() private kit = "";
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
   @state() private previewVenue?: RestoredVenue;
-  @state() private attempted = false;
+  /** As `setup-recovery-copy` last announced. */
+  @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
-  /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
-  @state() private refusalDismissed = false;
-  @state() private fieldRefusalDismissed = false;
 
   @state() private previewField?: "kit" | "environment";
   @state() private previewOldKit = false;
@@ -92,6 +97,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
   @state() private kitFile?: File;
+  private readonly feedback = new FormFeedback(this);
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -127,8 +133,9 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.venueConfirmed = false;
-        this.attempted = false;
+        this.feedback.attempted = false;
         this.kitFile = undefined;
+        this.requestUpdate();
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -141,8 +148,8 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;
       this.environment = this.request.environment;
@@ -159,19 +166,21 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
-    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+    if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
   }
 
-  /** The field showing the server's refusal, if any. */
-  #refusalUnder(): BucketField | undefined {
-    return this.errorMessage === undefined ||
-      this.refusalDismissed ||
-      this.fieldRefusalDismissed ||
-      !this.#shows(this.invalidField)
-      ? undefined
-      : this.invalidField;
+  /** The server's refusal, unless the owner has dismissed it. */
+  get #shownRefusal(): string | undefined {
+    return this.feedback.shows("refusal") && this.feedback.shows("field")
+      ? this.errorMessage
+      : undefined;
+  }
+
+  /** The field showing `refusal`, if any. */
+  #refusalUnder(refusal: string | undefined): BucketField | undefined {
+    return refusal === undefined || !this.#shows(this.invalidField) ? undefined : this.invalidField;
   }
 
   /** Whether `field` is on the screen. */
@@ -190,7 +199,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       }
     }
     if (field === this.previewField) this.previewField = undefined;
-    if (field === this.invalidField) this.fieldRefusalDismissed = true;
+    if (field === this.invalidField) this.feedback.dismiss("field");
   }
 
   /**
@@ -254,10 +263,9 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #restore(): void {
-    this.attempted = true;
-    this.refusalDismissed = true;
+    this.feedback.press("refusal");
     if (this.#incomplete) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
@@ -267,7 +275,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });
-    if (credentials === null) return;
+    if (!credentials) return;
     dispatchBucketRestoreRequested(this, {
       ...credentials,
       kit: this.kit,
@@ -289,13 +297,13 @@ export class SetupRestoreBucketScreen extends LitElement {
     else this.#setKit(chosen.text);
   }
 
-  #renderVenue(): TemplateResult | typeof nothing {
+  #renderVenue(refused: BucketField | undefined): TemplateResult | typeof nothing {
     const venue = this.#venue;
     if (venue === undefined) return nothing;
     const error =
-      this.attempted && this.#venueUnconfirmed
+      this.feedback.attempted && this.#venueUnconfirmed
         ? t("restore_bucket.venue_missing")
-        : this.#refusalUnder() === "venueConfirmed"
+        : refused === "venueConfirmed"
           ? this.errorMessage
           : undefined;
     return html`<p data-test="venue">
@@ -322,9 +330,10 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const refused = this.#refusalUnder();
+    const shownRefusal = this.#shownRefusal;
+    const refused = this.#refusalUnder(shownRefusal);
     const kitError =
-      this.attempted && this.#kitMissing
+      this.feedback.attempted && this.#kitMissing
         ? t("restore_bucket.kit_missing")
         : this.previewField === "kit"
           ? t(this.previewOldKit ? "shell.bucket.kit_old_version" : "restore.preview_kit_error")
@@ -339,19 +348,15 @@ export class SetupRestoreBucketScreen extends LitElement {
         : refused === "environment"
           ? this.errorMessage
           : undefined;
-    const acknowledgeInvalid = this.attempted && !this.acknowledged;
-    const fieldsInvalid = this.attempted && this.#incomplete;
-    const bottom = [
-      ...(this.errorMessage !== undefined &&
-      !this.refusalDismissed &&
-      !this.fieldRefusalDismissed &&
-      !this.#shows(this.invalidField)
-        ? [this.errorMessage]
-        : []),
-      ...(fieldsInvalid || refused !== undefined || this.previewField !== undefined
-        ? [t("restore_bucket.fix_fields")]
-        : []),
-    ].join(" ");
+    const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
+    const fieldsInvalid = this.feedback.attempted && this.#incomplete;
+    const bottom = bottomMessage(
+      this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
+      fieldsInvalid || refused !== undefined || this.previewField !== undefined
+        ? t("restore_bucket.fix_fields")
+        : null,
+      this.reviewNeeded ? t("restore.review_first") : null,
+    );
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
       <p>${t("restore_bucket.intro")}</p>
@@ -432,7 +437,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         liveSince: this.#askingOldBox ? (this.liveSince ?? this.previewLiveSince) : undefined,
         liveUnknown: this.#askingOldBox && (this.liveUnknown || this.previewLiveUnknown),
         checked: this.oldBoxGone,
-        invalid: this.attempted && this.#oldBoxUnanswered,
+        invalid: this.feedback.attempted && this.#oldBoxUnanswered,
         refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
         onChange: (checked) => {
           this.oldBoxGone = checked;
@@ -440,6 +445,10 @@ export class SetupRestoreBucketScreen extends LitElement {
         },
       })}
       <setup-recovery-copy
+        @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
+          event.stopPropagation();
+          this.reviewNeeded = event.detail.needed;
+        }}
         @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
           event.stopPropagation();
           const preview = event.detail.preview;
@@ -454,11 +463,11 @@ export class SetupRestoreBucketScreen extends LitElement {
                 };
           this.venueConfirmed = false;
         }}
-        .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+        .errorMessage=${shownRefusal}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
           event.stopPropagation();
-          if (event.detail.field === this.invalidField) this.fieldRefusalDismissed = true;
+          if (event.detail.field === this.invalidField) this.feedback.dismiss("field");
         }}
         @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
           event.stopPropagation();
@@ -486,7 +495,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           if (error?.code === "restore.stream_source_unchecked") this.previewLiveUnknown = true;
         }}
       ></setup-recovery-copy>
-      ${this.#renderVenue()}
+      ${this.#renderVenue(refused)}
       <wt-form-actions .error=${bottom}>
         <wt-button
           variant="ghost"
@@ -498,7 +507,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="restore"
-          ?disabled=${fieldsInvalid}
+          ?disabled=${fieldsInvalid || this.reviewNeeded}
           @click=${() => this.#restore()}
           >${t("restore_bucket.submit")}</wt-button
         >

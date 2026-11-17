@@ -2,37 +2,24 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryRestoreCredentials } from "../api/client.js";
 import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  REVIEWED_CREDENTIALS,
+  REVIEWED_PREVIEW,
+  cleanupWidgets,
+  enterRecoveryDetails,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import { setLocale } from "../i18n/t.js";
 
-const nodeId = "00000000-0000-4000-8000-000000000001";
-const preview = {
-  sourceId: "selected-archive-digest",
-  createdAt: "2026-10-01T08:00:00.000Z",
-  environment: "production",
-  nodeId,
-  nodeRecoveryKeyName: "Amber Hill",
-  taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
-  venueName: "Saved venue",
-};
-const operation = {
-  binding: {
-    module: "fiscal-verifactu",
-    action: "restore",
-    eventId: "outside-event",
-    sourceId: preview.sourceId,
-    targetNodeId: nodeId,
-  },
-  input: {
-    allocation: { receipt: "public-signed-reservation" },
-    approval: { eventId: "outside-event" },
-  },
-};
+const preview = REVIEWED_PREVIEW;
+const operation: RecoveryRestoreCredentials["recoveryOperation"] =
+  REVIEWED_CREDENTIALS.recoveryOperation;
+const nodeKey = REVIEWED_CREDENTIALS.nodeRecoverySecret;
 type Entry = LitElement & {
-  readCredentials(): RecoveryRestoreCredentials | undefined | null;
+  readCredentials(): RecoveryRestoreCredentials | null;
 };
 afterEach(() => {
   cleanupWidgets();
@@ -67,29 +54,23 @@ function tick(entry: LitElement, field: string) {
   input.checked = true;
   input.dispatchEvent(new Event("change"));
 }
-async function fill(entry: Entry, record = operation) {
-  change(entry, "record", JSON.stringify(record));
-  change(entry, "node-key", "node-key-secret");
-  tick(entry, "isolated");
-  tick(entry, "retained");
-  await entry.updateComplete;
-}
+const fill = (entry: Entry, record: object = operation) => enterRecoveryDetails(entry, record);
 
 it("pairs the public recovery record with the selected copy's separate node key", async () => {
   const { entry } = await selected();
-  expect(entry.readCredentials()).toBeUndefined();
+  expect(entry.readCredentials()).toBeNull();
   await fill(entry);
   expect(entry.readCredentials()).toEqual({
     recoveryOperation: operation,
-    nodeRecoverySecret: "node-key-secret",
+    nodeRecoverySecret: nodeKey,
   });
-  expect(entry.shadowRoot!.textContent).not.toContain("node-key-secret");
-  expect(entry.outerHTML).not.toContain("node-key-secret");
+  expect(entry.shadowRoot!.textContent).not.toContain(nodeKey);
+  expect(entry.outerHTML).not.toContain(nodeKey);
   const native = entry
     .shadowRoot!.querySelector("[data-test=node-key]")!
     .shadowRoot!.querySelector<HTMLInputElement>("input")!;
   expect(native.type).toBe("password");
-  expect(native.value).toBe("node-key-secret");
+  expect(native.value).toBe(nodeKey);
 });
 it.each(["source", "node", "action", "extra", "malformed", "too-large"])(
   "refuses a %s recovery record rather than sending an unrelated activation",
@@ -136,13 +117,13 @@ it("requires the node key and both operator confirmations after entering a recor
   expect(
     entry.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=node-key]")!.error,
   ).not.toBe("");
-  change(entry, "node-key", "node-key-secret");
+  change(entry, "node-key", nodeKey);
   tick(entry, "isolated");
   expect(entry.readCredentials()).toBeNull();
   tick(entry, "retained");
   expect(entry.readCredentials()).toEqual({
     recoveryOperation: operation,
-    nodeRecoverySecret: "node-key-secret",
+    nodeRecoverySecret: nodeKey,
   });
 });
 it("forwards credentials from the archive screen after the operator's confirmations", async () => {
@@ -157,7 +138,7 @@ it("forwards credentials from the archive screen after the operator's confirmati
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
   expect((await delivered).detail.request).toMatchObject({
     recoveryOperation: operation,
-    nodeRecoverySecret: "node-key-secret",
+    nodeRecoverySecret: nodeKey,
     recoveryKey: "archive-key",
   });
 });
@@ -167,7 +148,7 @@ it("clears the key and public record when leaving or changing the selected copy"
   change(el, "recovery-key", "different-archive-key");
   await el.updateComplete;
   await vi.waitFor(() => expect(entry.isConnected).toBe(false));
-  expect(entry.readCredentials()).toBeUndefined();
+  expect(entry.readCredentials()).toBeNull();
   host.remove();
 });
 
@@ -278,6 +259,6 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
   const detail = listener.mock.calls[0]?.[0].detail;
   expect(kind === "bucket" ? detail?.request : detail).toMatchObject({
     recoveryOperation: operation,
-    nodeRecoverySecret: "node-key-secret",
+    nodeRecoverySecret: nodeKey,
   });
 });
