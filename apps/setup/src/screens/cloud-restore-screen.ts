@@ -6,8 +6,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
-import type { CloudRecoveryView, RecoveryBackupPreview } from "../api/client.js";
-import { dispatchSetupGoto } from "../events.js";
+import type { CloudRecoveryView } from "../api/client.js";
+import { dispatchSetupGoto, type CloudRestoreActionDetail } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
 import { localTime, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -57,7 +57,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ type: Boolean }) liveUnknown = false;
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  /** Restore was pressed with no Review backup matching the copy on screen. */
+  /** As `setup-recovery-copy` last announced. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   private readonly feedback = new FormFeedback(this);
@@ -95,7 +95,6 @@ export class SetupCloudRestoreScreen extends LitElement {
           : undefined;
       this.acknowledged = confirmation?.acknowledged ?? false;
       this.oldBoxGone = confirmation?.oldBoxGone ?? false;
-      this.reviewNeeded = false;
       this.feedback.reset();
       this.#approvalBinding = binding;
     }
@@ -157,27 +156,30 @@ export class SetupCloudRestoreScreen extends LitElement {
         return;
       }
     }
-    const credentials =
-      action === "restore"
-        ? this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy")?.readCredentials(
-            { cloudPointId: this.view?.point?.id, selectionId: this.#currentApprovalBinding() },
-          )
-        : undefined;
-    if (action === "restore" && !credentials) return;
+    const detail: CloudRestoreActionDetail | undefined =
+      action === "restore" ? this.#restoreDetail() : { action };
+    if (!detail) return;
     this.feedback.dismiss("refusal");
     this.dispatchEvent(
-      new CustomEvent("cloud-restore-action", {
-        detail: {
-          action,
-          ...credentials,
-          ...(action === "restore"
-            ? { pointId: this.view!.point!.id, oldBoxGone: this.#askingOldBox && this.oldBoxGone }
-            : {}),
-        },
-        bubbles: true,
-        composed: true,
-      }),
+      new CustomEvent("cloud-restore-action", { detail, bubbles: true, composed: true }),
     );
+  }
+
+  #restoreDetail(): CloudRestoreActionDetail | undefined {
+    const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
+      "setup-recovery-copy",
+    )?.readCredentials({
+      cloudPointId: this.view?.point?.id,
+      selectionId: this.#currentApprovalBinding(),
+    });
+    return credentials
+      ? {
+          action: "restore",
+          ...credentials,
+          pointId: this.view!.point!.id,
+          oldBoxGone: this.#askingOldBox && this.oldBoxGone,
+        }
+      : undefined;
   }
 
   override render() {
@@ -265,15 +267,9 @@ export class SetupCloudRestoreScreen extends LitElement {
                             event.stopPropagation();
                             this.recoveryInvalid = event.detail.invalid;
                           }}
-                          @recovery-preview=${(
-                            event: CustomEvent<{ preview?: RecoveryBackupPreview }>,
-                          ) => {
+                          @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
                             event.stopPropagation();
-                            if (event.detail.preview !== undefined) this.reviewNeeded = false;
-                          }}
-                          @recovery-review-needed=${(event: Event) => {
-                            event.stopPropagation();
-                            this.reviewNeeded = true;
+                            this.reviewNeeded = event.detail.needed;
                           }}
                           .api=${this.api}
                           .boxAddress=${this.boxAddress}

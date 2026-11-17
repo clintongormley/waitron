@@ -12,10 +12,11 @@ import type { WtFileInput } from "@waitron/ui";
 import {
   cleanupWidgets,
   mountWidget,
+  mountWithLeave,
   REVIEWED_CREDENTIALS,
   reviewBackup,
 } from "../widgets/test-helpers.js";
-import type { BucketRestoreRequestDetail } from "../events.js";
+import type { BucketRestoreRequestDetail, KeptBucketRestoreRequest } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import {
   BUCKET_CODE,
@@ -183,6 +184,26 @@ describe("SetupRestoreBucketScreen", () => {
     expect(await bottomOf(el)).toBe(
       "Press Review backup and enter the recovery details it asks for before you restore.",
     );
+  });
+
+  it("drops the Review backup line, and gives Restore back, when the kit it was for is discarded", async () => {
+    const { el, discard } = await mountWithLeave<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    tick(el, "[data-test=acknowledge]");
+    await el.updateComplete;
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    const restore = q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!;
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+    expect(restore.disabled).toBe(true);
+    await discard();
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    expect(restore.disabled).toBe(false);
   });
 
   it("says the kit is as sensitive as the recovery key", async () => {
@@ -525,7 +546,7 @@ describe("SetupRestoreBucketScreen", () => {
   // A refusal the owner answers (the old-server question, whose copy it is) is sent again with the
   // same kit; the shell hands the last request back so nothing has to be pasted twice.
   it("comes back from a refusal with the owner's entries kept", async () => {
-    const request: BucketRestoreRequestDetail = {
+    const request: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "preproduction",
       oldBoxGone: true,
@@ -557,7 +578,7 @@ describe("SetupRestoreBucketScreen", () => {
   it.each(["pasted", "read from a file"])(
     "drops the old-server and venue answers when a different kit is %s",
     async (how) => {
-      const request: BucketRestoreRequestDetail = {
+      const request: KeptBucketRestoreRequest = {
         kit: "WAITRON-RECOVERY-KIT-2:first",
         environment: "production",
         oldBoxGone: true,
@@ -596,7 +617,7 @@ describe("SetupRestoreBucketScreen", () => {
   );
 
   it("asks again when the kit is changed and then changed back", async () => {
-    const request: BucketRestoreRequestDetail = {
+    const request: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:first",
       environment: "production",
       oldBoxGone: true,
@@ -638,7 +659,7 @@ describe("SetupRestoreBucketScreen", () => {
   });
 
   describe("a refusal about one field", () => {
-    const REQUEST: BucketRestoreRequestDetail = {
+    const REQUEST: KeptBucketRestoreRequest = {
       kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "production",
       oldBoxGone: false,

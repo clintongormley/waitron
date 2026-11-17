@@ -133,6 +133,29 @@ describe("Cloud restore screen", () => {
       "Press Review backup and enter the recovery details it asks for before you restore.",
     );
   });
+  it.each([
+    ["another point is approved", false],
+    ["approval is lost, then another point is approved", true],
+  ])("drops the Review backup line when %s", async (_name, viaPending) => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {});
+    el.view = approvedView();
+    await el.updateComplete;
+    await tick(el, "[data-test=acknowledge]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(
+      "Press Review backup and enter the recovery details it asks for before you restore.",
+    );
+    if (viaPending) {
+      el.view = { ...el.view, state: "awaiting_owner", point: undefined };
+      await el.updateComplete;
+    }
+    el.view = approvedView("e8722eb0-3f02-4f35-920b-9b5f6bfb05e9");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    expect((q(el, "[data-test=restore]") as HTMLElement & { disabled: boolean }).disabled).toBe(
+      false,
+    );
+  });
   it("offers a new request only when the displayed request has expired", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
       "setup-cloud-restore-screen",

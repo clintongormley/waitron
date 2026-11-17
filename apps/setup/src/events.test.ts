@@ -12,6 +12,7 @@ import {
   dispatchSetupPatch,
   dispatchTaxpayerChosen,
 } from "./events.js";
+import { REVIEWED_CREDENTIALS } from "./widgets/test-helpers.js";
 
 function capture(type: string, fire: (el: EventTarget) => void): CustomEvent {
   const el = document.createElement("div");
@@ -95,6 +96,7 @@ test("dispatchRestoreRequested fires a composed, bubbling restore-requested wrap
     recoveryKey: "recovery key",
     environment: "production" as const,
     oldBoxGone: true,
+    ...REVIEWED_CREDENTIALS,
   };
   const e = capture("restore-requested", (el) => dispatchRestoreRequested(el, request));
   expect(e.detail).toEqual({ request });
@@ -108,6 +110,7 @@ test("dispatchBucketRestoreRequested fires a composed, bubbling bucket-restore-r
     environment: "preproduction" as const,
     oldBoxGone: false,
     venueConfirmed: null,
+    ...REVIEWED_CREDENTIALS,
   };
   const e = capture("bucket-restore-requested", (el) =>
     dispatchBucketRestoreRequested(el, request),

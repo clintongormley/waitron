@@ -7,7 +7,12 @@ import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.j
 import type { WtTextarea } from "@waitron/ui/src/components/wt-textarea.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  REVIEWED_CREDENTIALS,
+  reviewBackup,
+} from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -58,6 +63,14 @@ function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+/** Presses Review backup, enters its recovery details and confirms the business it names. */
+async function review(form: SetupRestoreBucketScreen) {
+  await reviewBackup(form);
+  const confirmed = q<HTMLInputElement>(form, "[data-test=venue-confirmed]");
+  confirmed.checked = true;
+  confirmed.dispatchEvent(new Event("change"));
+  await form.updateComplete;
 }
 async function fill(form: SetupRestoreBucketScreen) {
   await edit(form);
@@ -158,13 +171,15 @@ describe("setup bucket restore unsaved changes", () => {
     const { el, form, api } = await mount();
     await fill(form);
     expect(unload()).toBe(true);
+    await review(form);
     q(form, "[data-test=restore]").click();
     await expect.poll(() => screen(el)).toBe("done");
     expect(api.restoreFromBucket).toHaveBeenCalledExactlyOnceWith({
       kit: " kit bytes \n",
       environment: "preproduction",
       oldBoxGone: false,
-      venueConfirmed: null,
+      venueConfirmed: "89890001K",
+      ...REVIEWED_CREDENTIALS,
     });
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
@@ -173,6 +188,7 @@ describe("setup bucket restore unsaved changes", () => {
     const { el, form, api } = await mount();
     vi.mocked(api.restoreFromBucket).mockRejectedValue({ code: "restore.environment_mismatch" });
     await fill(form);
+    await review(form);
     q(form, "[data-test=restore]").click();
     await expect
       .poll(
@@ -240,6 +256,7 @@ describe("setup bucket restore unsaved changes", () => {
           }),
         );
         await fill(form);
+        await review(form);
         q(form, "[data-test=restore]").click();
         await expect.poll(() => screen(el)).toBe("provisioning");
         if (lifetime === "reconnected") {
@@ -260,6 +277,7 @@ describe("setup bucket restore unsaved changes", () => {
                 resolveSecond = () => yes({ restoreStaged: true, restarting: true });
               }),
             );
+            await review(replacement);
             q(replacement, "[data-test=restore]").click();
             await expect.poll(() => screen(el)).toBe("provisioning");
           }

@@ -1,6 +1,7 @@
 import axe from "axe-core";
+import { LitElement, html } from "lit";
 import { expect } from "vitest";
-import { applyTokens } from "@waitron/ui";
+import { LeaveController, applyTokens } from "@waitron/ui";
 
 export type Theme = "light" | "dark";
 
@@ -33,6 +34,55 @@ export async function mountWidget<T extends HTMLElement>(
   host.appendChild(el);
   await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
   return { el, host };
+}
+
+class LeaveShell extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<slot></slot>${this.leave.render({
+        heading: "Discard unsaved changes?",
+        message: "Your changes have not been saved.",
+        keepLabel: "Keep editing",
+        discardLabel: "Discard changes",
+      })}`;
+  }
+}
+customElements.define("setup-test-leave-shell", LeaveShell);
+
+/**
+ * Mounts `tag` inside an application that asks before leaving, as `mountWidget` does otherwise.
+ * `discard()` leaves with the screen's changes discarded, as the person choosing Discard changes.
+ */
+export async function mountWithLeave<T extends HTMLElement>(
+  tag: string,
+  props: Partial<T>,
+): Promise<Mounted<T> & { discard(): Promise<void> }> {
+  const { el: shell, host } = await mountWidget<LeaveShell>("setup-test-leave-shell", {});
+  const el = document.createElement(tag) as T;
+  Object.assign(el, props);
+  shell.appendChild(el);
+  await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
+  return {
+    el,
+    host,
+    async discard() {
+      const left = shell.leave.coordinator.request({
+        scopes: [el],
+        reason: "navigation",
+        proceed: () => {},
+      });
+      await shell.updateComplete;
+      shell.shadowRoot!.querySelector("wt-unsaved-changes")!.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      expect(await left).toBe("proceeded");
+      await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
+    },
+  };
 }
 
 /** Removes every host mounted since the last cleanup. Use as `afterEach(cleanupWidgets)`. */

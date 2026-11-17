@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
-  type BucketRestoreRequestDetail,
+  type KeptBucketRestoreRequest,
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
@@ -80,14 +80,14 @@ export class SetupRestoreBucketScreen extends LitElement {
   @property({ type: Boolean }) liveUnknown = false;
   @property({ attribute: false }) venue?: RestoredVenue;
   /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
-  @property({ attribute: false }) request?: BucketRestoreRequestDetail;
+  @property({ attribute: false }) request?: KeptBucketRestoreRequest;
   @state() private kit = "";
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
   @state() private previewVenue?: RestoredVenue;
-  /** Restore was pressed with no Review backup matching the copy on screen. */
+  /** As `setup-recovery-copy` last announced. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
 
@@ -445,14 +445,13 @@ export class SetupRestoreBucketScreen extends LitElement {
         },
       })}
       <setup-recovery-copy
-        @recovery-review-needed=${(event: Event) => {
+        @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
           event.stopPropagation();
-          this.reviewNeeded = true;
+          this.reviewNeeded = event.detail.needed;
         }}
         @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
           event.stopPropagation();
           const preview = event.detail.preview;
-          if (preview !== undefined) this.reviewNeeded = false;
           if (preview === undefined && this.previewVenue === undefined) return;
           this.previewVenue =
             preview === undefined

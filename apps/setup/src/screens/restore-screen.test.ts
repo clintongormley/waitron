@@ -12,11 +12,12 @@ import { SetupApi } from "../api/client.js";
 import {
   cleanupWidgets,
   mountWidget,
+  mountWithLeave,
   REVIEWED_CREDENTIALS,
   REVIEWED_PREVIEW,
   reviewBackup,
 } from "../widgets/test-helpers.js";
-import type { RestoreRequestDetail } from "../events.js";
+import type { KeptRestoreRequest, RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
 afterEach(cleanupWidgets);
@@ -83,6 +84,8 @@ function expectDangerRing(box: Element): void {
 }
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
+const REVIEW_FIRST =
+  "Press Review backup and enter the recovery details it asks for before you restore.";
 
 describe("SetupRestoreScreen", () => {
   it("opens guided Cloud recovery from backup file restore", async () => {
@@ -126,6 +129,49 @@ describe("SetupRestoreScreen", () => {
     } finally {
       setLocale("en-GB");
     }
+  });
+
+  it("drops the Review backup line, and gives Restore back, when the file it was for is discarded", async () => {
+    const { el, discard } = await mountWithLeave<SetupRestoreScreen>("setup-restore-screen", {});
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    const restore = q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!;
+    expect(await bottomOf(el)).toBe(REVIEW_FIRST);
+    expect(restore.disabled).toBe(true);
+    await discard();
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    expect(restore.disabled).toBe(false);
+  });
+
+  it("drops the Review backup line once Review backup answers, and then sends", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(REVIEW_FIRST);
+    await reviewBackup(el);
+    expect(await bottomOf(el)).toBe("");
+    q(el, "[data-test=restore]")!.click();
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("drops the Review backup line when another file is chosen, and shows it again on Restore", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(REVIEW_FIRST);
+    chooseBackup(el, new File(["other"], "other.backup"));
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(REVIEW_FIRST);
   });
 
   it("sends nothing after Review backup until its recovery details are entered", async () => {
@@ -347,7 +393,7 @@ describe("SetupRestoreScreen", () => {
   // The old-server question is answered by sending the same backup again; the shell hands the last
   // request back so the file does not have to be chosen and the key typed a second time.
   it("comes back from a refusal with the backup, the key and the answers kept", async () => {
-    const request: RestoreRequestDetail = {
+    const request: KeptRestoreRequest = {
       artifact: BACKUP,
       recoveryKey: "recovery-key",
       environment: "preproduction",
@@ -378,7 +424,7 @@ describe("SetupRestoreScreen", () => {
 
   // The old-server check was made on the backup that was sent; another file is another copy.
   it("drops the old-server answer when a different backup file is chosen", async () => {
-    const request: RestoreRequestDetail = {
+    const request: KeptRestoreRequest = {
       artifact: BACKUP,
       recoveryKey: "recovery-key",
       environment: "production",
@@ -525,7 +571,7 @@ describe("SetupRestoreScreen", () => {
   });
 
   describe("a refusal about one field", () => {
-    const REQUEST: RestoreRequestDetail = {
+    const REQUEST: KeptRestoreRequest = {
       artifact: BACKUP,
       recoveryKey: "recovery-key",
       environment: "production",

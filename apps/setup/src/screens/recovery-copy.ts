@@ -189,6 +189,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.error = undefined;
     this.busy = false;
     this.#notifyRefusal();
+    this.#notifyReviewNeeded(false);
     this.dispatchEvent(
       new CustomEvent("recovery-invalid", {
         detail: { invalid: false },
@@ -211,6 +212,19 @@ export class SetupRecoveryCopy extends LitElement {
     this.dispatchEvent(
       new CustomEvent("preview-refusal", {
         detail: { field, cause },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  /**
+   * `needed` is true once Restore asked for details no Review backup on screen answers, and false
+   * again when a review answers or the copy it would be for changes.
+   */
+  #notifyReviewNeeded(needed: boolean): void {
+    this.dispatchEvent(
+      new CustomEvent("recovery-review-needed", {
+        detail: { needed },
         bubbles: true,
         composed: true,
       }),
@@ -271,6 +285,7 @@ export class SetupRecoveryCopy extends LitElement {
         this.preview = preview;
         this.#previewCurrent = current;
         this.#notifyPreview();
+        this.#notifyReviewNeeded(false);
       }
     } catch (cause) {
       if (current() && !this.#endIfSetupConflict(cause)) {
@@ -303,7 +318,7 @@ export class SetupRecoveryCopy extends LitElement {
     }
   }
 
-  /** Null when refused; with no Review backup matching the copy on screen, also sends `recovery-review-needed`. */
+  /** Null when refused; with no Review backup matching the copy on screen, also announces that one is needed. */
   readCredentials(
     selection: Partial<
       Pick<
@@ -328,9 +343,7 @@ export class SetupRecoveryCopy extends LitElement {
         ([key, value]) => this[key as keyof typeof selection] !== value,
       )
     ) {
-      this.dispatchEvent(
-        new CustomEvent("recovery-review-needed", { bubbles: true, composed: true }),
-      );
+      this.#notifyReviewNeeded(true);
       return null;
     }
     return allocation.readCredentials();

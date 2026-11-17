@@ -104,7 +104,7 @@ it.each(["timeout", "disconnect"])(
     for (const run of [
       () => api.previewRestore(blob, "key", "preproduction"),
       () => api.stageRecovery(blob, "key", "preproduction", "event"),
-      () => api.restore(blob, "key", "preproduction"),
+      () => api.restore(blob, "key", "preproduction", false, credentials),
     ]) {
       await expect(run()).rejects.toMatchObject({ code: "restore.upload_interrupted" });
     }

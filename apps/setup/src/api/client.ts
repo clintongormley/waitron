@@ -198,7 +198,7 @@ export type RecoveryPreparationSource =
   | { kind: "cloud"; pointId: string }
   | { kind: "staged"; stagedId: string };
 
-export interface BucketRestoreBody {
+export interface BucketRestoreBody extends RecoveryRestoreCredentials {
   /**
    * The recovery kit as pasted, read from its file, or read from a recovery pack PDF's attached
    * file; as sensitive as the recovery key.
@@ -207,9 +207,6 @@ export interface BucketRestoreBody {
   environment: "production" | "preproduction";
   oldBoxGone: boolean;
   venueConfirmed: string | null;
-  recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
-  nodeRecoverySecret?: string;
-  recoveryContext?: RecoveryRestoreCredentials["recoveryContext"];
 }
 
 export interface CloudRecoveryView {
@@ -523,8 +520,8 @@ export class SetupApi {
   /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
   restoreFromCloud(
     pointId: string,
-    oldBoxGone = false,
-    recovery?: RecoveryRestoreCredentials,
+    oldBoxGone: boolean,
+    recovery: RecoveryRestoreCredentials,
   ): Promise<RestoreOutcome> {
     return this.#request("/setup-api/cloud-recovery/restore", "POST", {
       pointId,
@@ -538,37 +535,22 @@ export class SetupApi {
     artifact: Blob,
     recoveryKey: string,
     environment: "production" | "preproduction",
-    oldBoxGone = false,
-    recovery?: RecoveryRestoreCredentials,
+    oldBoxGone: boolean,
+    recovery: RecoveryRestoreCredentials,
   ): Promise<RestoreOutcome> {
-    const fetchImpl = this.#fetchImpl;
-    let body: Blob | FormData = artifact;
-    if (recovery !== undefined) {
-      const form = new FormData();
-      form.set("artifact", artifact, "backup.waitron");
-      form.set("recoveryKey", recoveryKey);
-      form.set("environment", environment);
-      form.set("oldBoxGone", oldBoxGone ? "1" : "0");
-      form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
-      form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
-      if (recovery.recoveryContext !== undefined)
-        form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
-      body = form;
-    }
-    const res = await upload(fetchImpl, this.#baseUrl + "/setup-api/restore", {
+    const form = new FormData();
+    form.set("artifact", artifact, "backup.waitron");
+    form.set("recoveryKey", recoveryKey);
+    form.set("environment", environment);
+    form.set("oldBoxGone", oldBoxGone ? "1" : "0");
+    form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
+    form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
+    if (recovery.recoveryContext !== undefined)
+      form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
+    const res = await upload(this.#fetchImpl, this.#baseUrl + "/setup-api/restore", {
       method: "POST",
       credentials: "include",
-      ...(recovery === undefined
-        ? {
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-waitron-recovery-key": recoveryKey,
-              "x-waitron-restore-environment": environment,
-              ...(oldBoxGone ? { "x-waitron-old-box-gone": "1" } : {}),
-            },
-          }
-        : {}),
-      body,
+      body: form,
     });
     if (!res.ok) throw await apiError(res);
     return JSON.parse(await res.text()) as RestoreOutcome;

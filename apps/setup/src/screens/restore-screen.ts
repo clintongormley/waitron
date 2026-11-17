@@ -16,16 +16,12 @@ import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
-import {
-  type RestoreRequestDetail,
-  dispatchRestoreRequested,
-  dispatchSetupGoto,
-} from "../events.js";
+import { type KeptRestoreRequest, dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
-import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
+import { SetupApi } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 
@@ -61,14 +57,14 @@ export class SetupRestoreScreen extends LitElement {
   /** Set by the shell from `restore.stream_source_unchecked`. */
   @property({ type: Boolean }) liveUnknown = false;
   /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
-  @property({ attribute: false }) request?: RestoreRequestDetail;
+  @property({ attribute: false }) request?: KeptRestoreRequest;
   @state() private artifact?: File;
   @state() private recoveryKey = "";
   @state() private recoveryKeyVisible = false;
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  /** Restore was pressed with no Review backup matching the copy on screen. */
+  /** As `setup-recovery-copy` last announced. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   @state() private previewRefusal?: RestoreField;
@@ -349,13 +345,9 @@ export class SetupRestoreScreen extends LitElement {
         >
       </wt-combobox>
       <setup-recovery-copy
-        @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
+        @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
           event.stopPropagation();
-          if (event.detail.preview !== undefined) this.reviewNeeded = false;
-        }}
-        @recovery-review-needed=${(event: Event) => {
-          event.stopPropagation();
-          this.reviewNeeded = true;
+          this.reviewNeeded = event.detail.needed;
         }}
         .errorMessage=${shownRefusal}
         .refusedField=${this.invalidField}

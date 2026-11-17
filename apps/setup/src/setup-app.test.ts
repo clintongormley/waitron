@@ -145,7 +145,7 @@ function restoreRequest(
 ): void {
   wizard(el).dispatchEvent(
     new CustomEvent("restore-requested", {
-      detail: { request: { oldBoxGone: false, ...request } },
+      detail: { request: { oldBoxGone: false, ...REVIEWED_CREDENTIALS, ...request } },
       bubbles: true,
       composed: true,
     }),
@@ -161,6 +161,7 @@ function bucketRequest(el: SetupApp, request: Partial<BucketRestoreRequestDetail
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: null,
+          ...REVIEWED_CREDENTIALS,
           ...request,
         },
       },
@@ -178,7 +179,10 @@ function cloudRecoveryAction(
 ): void {
   wizard(el).dispatchEvent(
     new CustomEvent("cloud-restore-action", {
-      detail: { action, pointId, oldBoxGone },
+      detail:
+        action === "restore"
+          ? { action, pointId, oldBoxGone: oldBoxGone ?? false, ...REVIEWED_CREDENTIALS }
+          : { action, pointId, oldBoxGone },
       bubbles: true,
       composed: true,
     }),
@@ -1113,6 +1117,7 @@ describe("setup-app", () => {
       request.recoveryKey,
       request.environment,
       false,
+      REVIEWED_CREDENTIALS,
     );
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
@@ -1170,7 +1175,7 @@ describe("setup-app", () => {
     ).not.toBeNull();
     cloudRecoveryAction(el, "restore", pointId);
     await flush(el);
-    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false, REVIEWED_CREDENTIALS);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     const done = (await screenHost(el, "done")) as SetupDoneScreen;
     expect(done.restored).toBe("cloud");
@@ -4300,6 +4305,7 @@ describe("restore from my bucket", () => {
       environment: "production",
       oldBoxGone: false,
       venueConfirmed: null,
+      ...REVIEWED_CREDENTIALS,
     });
     const done = (await screenHost(el, "done")) as SetupDoneScreen;
     expect(done.restored).toBe("bucket");
@@ -4875,11 +4881,17 @@ describe("restoring a backup file whose old server may still be running", () => 
       expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual(expected);
       expect(screen.errorMessage).toBeUndefined();
       expect(screen.request).toEqual({ ...backup, oldBoxGone: false });
-      // The owner confirms: the resend carries the answer, which the client turns into the header.
+      // The owner confirms: the resend carries the answer.
       restoreRequest(el, { ...backup, oldBoxGone: true });
       await flush(el);
       await flush(el);
-      expect(restore).toHaveBeenLastCalledWith(backup.artifact, "k", "production", true);
+      expect(restore).toHaveBeenLastCalledWith(
+        backup.artifact,
+        "k",
+        "production",
+        true,
+        REVIEWED_CREDENTIALS,
+      );
       expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     },
   );
@@ -5200,7 +5212,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
         expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull(),
       );
       expect(restoreFromCloud.mock.calls).toEqual([
-        [pointId, false],
+        [pointId, false, REVIEWED_CREDENTIALS],
         [pointId, true, REVIEWED_CREDENTIALS],
         [pointId, true, REVIEWED_CREDENTIALS],
       ]);
@@ -5328,8 +5340,8 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     cloudRecoveryAction(el, "restore", pointId, true);
     await flush(el);
     expect(restoreFromCloud.mock.calls).toEqual([
-      [pointId, false],
-      [pointId, true],
+      [pointId, false, REVIEWED_CREDENTIALS],
+      [pointId, true, REVIEWED_CREDENTIALS],
     ]);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
