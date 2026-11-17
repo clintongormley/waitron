@@ -2,7 +2,7 @@ import { css, html } from "lit";
 
 export { paintRow } from "./paint-row.js";
 export { flatParent, scrollTargets } from "./flat-tree.js";
-export { DaySwipe, PHONE_WIDTH, SWIPE_PX } from "./day-swipe.js";
+export { DaySwipe, PHONE_WIDTH } from "./day-swipe.js";
 
 export const seasonStepperStyles = css`
   .season {

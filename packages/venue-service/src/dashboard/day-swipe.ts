@@ -1,5 +1,5 @@
 export const PHONE_WIDTH = 560;
-export const SWIPE_PX = 48;
+const SWIPE_PX = 48;
 
 export class DaySwipe {
   #from: { id: number; x: number; y: number } | undefined;
@@ -10,11 +10,12 @@ export class DaySwipe {
   start(event: PointerEvent): void {
     if (event.pointerType === "mouse") return;
     if (this.#contacts.size === 0) {
+      // Heard on the window, so a contact lifted outside the day still ends.
       window.addEventListener("pointerup", this.#end);
       window.addEventListener("pointercancel", this.#end);
       this.#from = { id: event.pointerId, x: event.clientX, y: event.clientY };
     } else {
-      // A second contact ends the swipe until every contact has ended.
+      // A second contact ends the swipe; none starts until every contact has ended.
       this.#from = undefined;
     }
     this.#contacts.add(event.pointerId);

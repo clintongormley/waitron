@@ -1,5 +1,4 @@
 import { DaySwipe, PHONE_WIDTH } from "./day-swipe.js";
-export { PHONE_WIDTH } from "./day-swipe.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";

@@ -1,5 +1,4 @@
 import { DaySwipe, PHONE_WIDTH } from "@waitron/venue-service/dashboard/painter-parts";
-export { PHONE_WIDTH } from "@waitron/venue-service/dashboard/painter-parts";
 import { dateFormat } from "@waitron/venue-service/dashboard/hours-view";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import "./publish-dialog.js";
