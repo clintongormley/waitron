@@ -159,6 +159,7 @@ export function createHostedHourPreparation(
     ...(options.wall === undefined ? {} : { wall: options.wall }),
     monotonic: monotonicNow,
     timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
+    boxClockAlone: host.environment.WAITRON_ENV === "dev",
   });
   const kept = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({

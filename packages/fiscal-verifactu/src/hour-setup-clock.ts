@@ -25,6 +25,7 @@ interface ClockDependencies {
   monotonic?: () => number;
   timeService?: () => Promise<boolean>;
   release?: () => number | null;
+  boxClockAlone?: boolean;
 }
 export type { SetupBrowserClockSample } from "./hour-clock.js";
 import type { SetupBrowserClockSample } from "./hour-clock.js";
@@ -125,6 +126,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
   const monotonic = deps.monotonic ?? (() => performance.now());
   const timeService = deps.timeService ?? (async () => false);
   const release = deps.release ?? (() => readHourRelease()?.instantMs ?? null);
+  const options = { boxClockAlone: deps.boxClockAlone === true };
   const sessions = new Map<string, Session>();
   const session = (key: string) => {
     if (typeof key !== "string" || key.trim().length === 0 || key.length > 64 * 1024)
@@ -157,7 +159,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
     if (elapsed < 0 || elapsed > 30_000 || !Number.isFinite(elapsed)) return refuse("clock_stale");
     if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > STEP_MS)
       return refuse("clock_corrected");
-    return compareHourClocks([...held.observations, sample], release());
+    return compareHourClocks([...held.observations, sample], release(), options);
   };
   const take = (state: Session, browser: SetupBrowserClockSample, onBox: boolean) => {
     const challenge =
@@ -224,7 +226,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         internet,
       ];
       const sample = box();
-      const clock = compareHourClocks([...observations, sample], release());
+      const clock = compareHourClocks([...observations, sample], release(), options);
       const reading: Reading = {
         id: randomUUID(),
         observations,

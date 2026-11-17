@@ -104,6 +104,34 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     expect(clockRefusal(decision)).toBe("second_clock_missing");
   });
 
+  it("with boxClockAlone, the box's clock alone is selectable", () => {
+    const decision = compareHourClocks(
+      [sample("box", T), { source: "internet", result: "unavailable", reason: "tls" }],
+      RELEASE,
+      { boxClockAlone: true },
+    );
+    expect(decision.secondClock).toBe(true);
+    expect(canSelectHour(decision)).toBe(true);
+  });
+
+  it("with boxClockAlone, a box reading before the release is still refused clock_unconfirmed", () => {
+    const decision = compareHourClocks([sample("box", T)], T + 1, { boxClockAlone: true });
+    expect(decision.releaseBlocked).toBe(true);
+    expect(canSelectHour(decision)).toBe(false);
+    expect(clockRefusal(decision)).toBe("clock_unconfirmed");
+  });
+
+  it("with boxClockAlone, an unusable box reading gives no second clock", () => {
+    const decision = compareHourClocks(
+      [{ source: "box", result: "unavailable", reason: "tls" }],
+      RELEASE,
+      { boxClockAlone: true },
+    );
+    expect(decision.secondClock).toBe(false);
+    expect(canSelectHour(decision)).toBe(false);
+    expect(clockRefusal(decision)).toBe("clock_unconfirmed");
+  });
+
   it("a box four days slow beside a correct browser is refused clock_disagreement", () => {
     const decision = compareHourClocks(
       [sample("box", T - 4 * 86_400_000), sample("browser", T)],

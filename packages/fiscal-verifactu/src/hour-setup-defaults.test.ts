@@ -313,3 +313,41 @@ it("a confirmed choice after the time service goes renews a time it alone admitt
   await activate(f, selected.input);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
+
+it("in development the box's clock alone, confirmed, passes the first setup's clock check", async () => {
+  outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const f = fixture({ environment: { WAITRON_ENV: "dev" } });
+  const comparison = await f.preparation.compareClocks(binding, null, { onBox: true });
+  expect(comparison.clock.secondClock).toBe(true);
+  expect(comparison.clock.usable.map((row) => row.source)).toEqual(["box"]);
+  const waiting = await f.select(comparison.id, true);
+  expect(waiting).toMatchObject({ status: "waiting", targetMs: NOW });
+});
+
+it("in development the box's clock alone still needs the person to confirm the time", async () => {
+  outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const f = fixture({ environment: { WAITRON_ENV: "dev" } });
+  const comparison = await f.preparation.compareClocks(binding, null, { onBox: true });
+  await expect(f.select(comparison.id)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "confirmation_required" },
+  });
+});
+
+it.each(["preproduction", "production", undefined])(
+  "with WAITRON_ENV %s the box's clock alone is refused second_clock_missing",
+  async (env) => {
+    outside.internet.mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "tls",
+    });
+    const f = fixture({ environment: env === undefined ? {} : { WAITRON_ENV: env } });
+    const comparison = await f.preparation.compareClocks(binding, null, { onBox: true });
+    expect(comparison.clock.secondClock).toBe(false);
+    await expect(f.select(comparison.id, true)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "second_clock_missing" },
+    });
+  },
+);
