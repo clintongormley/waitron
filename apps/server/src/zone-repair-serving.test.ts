@@ -4,6 +4,7 @@ import { TradingAdmission } from "./trading-admission.js";
 import { zoneRepairGate } from "./zone-repair-serving.js";
 
 const allowed = [
+  ["GET", "/"],
   ["GET", "/management-api/locales"],
   ["GET", "/management-api/session/me"],
   ["GET", "/management-api/google/config"],
@@ -50,7 +51,7 @@ const denied = [
   ["DELETE", "/help/en/time-zone"],
   ["POST", "/webhooks/stripe/extra"],
   ["GET", "/webhooks/stripe"],
-  ["GET", "/"],
+  ["GET", "/till/"],
   ["GET", "/management-api/new-future-read"],
   ["POST", "/new-future-mutation"],
 ] as const;

@@ -182,10 +182,12 @@ it("asks again once the server no longer holds the confirmation, as after a refu
     const requests: string[] = [];
     page.on("request", (request) => requests.push(new URL(request.url()).pathname));
     for (const look of [1, 2]) {
-      const reply = page.waitForResponse((response) => new URL(response.url()).pathname === "/");
+      const reply = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/till/",
+      );
       await page.clock.runFor(5_000);
       await (await reply).finished();
-      await expect.poll(() => requests.filter((path) => path === "/").length).toBe(look);
+      await expect.poll(() => requests.filter((path) => path === "/till/").length).toBe(look);
     }
     expect(await page.locator("#clock-confirmed").isVisible()).toBe(true);
     expect(requests.filter((path) => path.endsWith("/compare"))).toEqual([]);
@@ -269,7 +271,7 @@ it("on the box's own screen says its time does not count", () =>
 /** The page has left for the server's `/`, its key field emptied first. */
 async function leftWithKeyCleared(page: Page) {
   await expect.poll(() => page.locator("h1").innerText()).toBe("Trading");
-  expect(new URL(page.url()).pathname).toBe("/");
+  expect(new URL(page.url()).pathname).toBe("/till/");
   expect(await page.evaluate(() => sessionStorage.getItem("key-at-leaving"))).toBe("");
 }
 
@@ -281,7 +283,7 @@ it("leaves for the server once the wait ends without a confirmation, as when its
     const looks: string[] = [];
     page.on("request", (request) => looks.push(new URL(request.url()).pathname));
     await page.clock.runFor(5_000);
-    await expect.poll(() => looks.filter((path) => path === "/").length).toBe(1);
+    await expect.poll(() => looks.filter((path) => path === "/till/").length).toBe(1);
     expect(await page.locator("#clock-step").isVisible()).toBe(true);
     box.control.finished = true;
     await page.clock.runFor(5_000);

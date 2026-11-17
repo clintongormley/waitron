@@ -86,10 +86,16 @@ itself:
    the filed invoice number, per-rate VAT desglose and change, then "new sale". Logging out keeps
    the basket for the next operator.
 
+## Open the till
+
+Open the box’s address with `/till/` at the end, such as `https://waitron.local/till/`.
+The bare box address opens the dashboard. Replace older till bookmarks and home-screen shortcuts
+with this address. An enrolled browser keeps its device sign-in.
+
 ## Running it in dev
 
 The till is a same-origin front end: the default stack runs the server's till API on `:8080` and
-Vite on `:5190`. `wa-wt ls` shows the ports when you run another worktree beside it. The proxy
+Vite at `http://localhost:5190/till/`. `wa-wt ls` shows the ports when you run another worktree beside it. The proxy
 inspects that stack's box state and sends `/api` and `/media` to HTTP for a leaf-less demo or HTTPS
 for a server using its persisted self-signed leaf (`vite.config.ts`).
 
@@ -126,7 +132,7 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 
    ```bash
    pnpm --filter @waitron/till dev
-   # → http://localhost:5190
+   # → http://localhost:5190/till/
    ```
 
 ### Box identity and till settings

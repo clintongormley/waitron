@@ -102,12 +102,12 @@ export interface ServerConfig {
    */
   venueDomain?: string;
   /**
-   * The built `till` SPA served at "/", mounted after every API route so it shadows none. From
+   * The built `till` SPA served at "/till/", mounted after every API route so it shadows none. From
    * `WAITRON_TILL_APP_DIR`; absent OR empty → undefined (not served), never `""`. Stored
    * verbatim.
    */
   tillAppDir?: string;
-  /** The built `dashboard` SPA served at "/manage"; `WAITRON_DASHBOARD_APP_DIR`, as
+  /** The built `dashboard` SPA served at "/" and "/manage"; `WAITRON_DASHBOARD_APP_DIR`, as
    * `tillAppDir`. */
   dashboardAppDir?: string;
   /**

@@ -21,8 +21,13 @@ async function page(names: readonly (string | null)[], language: string): Promis
 }
 
 /** Runs the page's script against a stand-in clock, `fetch` and `location`. */
-function openPage(answer: (url: string, init: RequestInit) => Promise<Response>) {
-  const script = /<script>([\s\S]*)<\/script>/.exec(renderWaitingPage("Spare", "en-GB"))?.[1];
+function openPage(
+  answer: (url: string, init: RequestInit) => Promise<Response>,
+  destination = "/",
+) {
+  const script = /<script>([\s\S]*)<\/script>/.exec(
+    renderWaitingPage("Spare", "en-GB", "", destination),
+  )?.[1];
   if (script === undefined) throw new Error("the waiting page has no script");
   let now = 0;
   let nextId = 1;
@@ -160,6 +165,24 @@ describe("the waiting page", () => {
     expect(page.fetch).toHaveBeenCalledTimes(1);
     expect(page.fetch).toHaveBeenCalledWith("/", expect.objectContaining({ cache: "no-store" }));
     expect(page.replace).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
+  it("serves a saved till page while waiting and returns there after the peer answers", async () => {
+    const app = new Hono();
+    waitingPageRoute(
+      () => Promise.resolve(["Spare"]),
+      () => {},
+    )(app);
+    const response = await app.request("/till/tabs/counter?view=all", {
+      headers: { accept: "text/html" },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-waitron-waiting")).toBe("1");
+    const page = openPage(() => Promise.resolve(new Response(null)), "/till/tabs/counter?view=all");
+    await page.advance(5_000);
+    expect(page.fetch).toHaveBeenCalledWith("/till/tabs/counter?view=all", expect.any(Object));
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/till/tabs/counter?view=all");
+    expect((await app.request("/api/working-orders")).status).toBe(404);
   });
 
   it("stays on the waiting page's own answer, a refusal or a failed fetch, and leaves at the next turn that answers otherwise", async () => {

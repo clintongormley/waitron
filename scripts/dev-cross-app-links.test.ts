@@ -77,8 +77,8 @@ it.each([false, true])(
     for (const [app, url, expected] of [
       ["till", "/manage/devices?view=all", `http://localhost:${dashboard}/manage/devices?view=all`],
       ["till", "/manage", `http://localhost:${dashboard}/manage`],
-      ["dashboard", "/?dev", `http://localhost:${till}/?dev`],
-      ["setup", "/", `http://localhost:${till}/`],
+      ["dashboard", "/till/?dev", `http://localhost:${till}/till/?dev`],
+      ["setup", "/till/", `http://localhost:${till}/till/`],
       ["setup", "/manage/email", `http://localhost:${dashboard}/manage/email`],
     ]) {
       const response = await fetch(origin(app!) + url, { redirect: "manual" });
@@ -90,7 +90,7 @@ it.each([false, true])(
 );
 
 it("keeps app paths local and preserves setup's handover entry", async () => {
-  const till = await fetch(origin("till") + "/", { redirect: "manual" });
+  const till = await fetch(origin("till") + "/till/", { redirect: "manual" });
   expect(till.status).toBe(200);
   expect(await till.text()).toContain("<title>Waitron Till</title>");
   for (const app of ["till", "setup"]) {

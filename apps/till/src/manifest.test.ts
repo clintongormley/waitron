@@ -7,10 +7,11 @@ describe("till web app manifest", () => {
     const m = buildManifest("#000000");
     expect(m.name).toContain("Waitron");
     expect(m.display).toBe("standalone");
-    expect(m.start_url).toBe("/");
-    expect(m.scope).toBe("/");
+    expect(m.start_url).toBe("/till/");
+    expect(m.scope).toBe("/till/");
     const sizes = (m.icons as Array<{ sizes: string; src: string }>).map((i) => i.sizes).sort();
     expect(sizes).toEqual(["192x192", "512x512"]);
-    for (const i of m.icons as Array<{ src: string }>) expect(i.src).toMatch(/^\/icon-\d+\.png$/);
+    for (const i of m.icons as Array<{ src: string }>)
+      expect(i.src).toMatch(/^\/till\/icon-\d+\.png$/);
   });
 });

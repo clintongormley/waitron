@@ -4,12 +4,10 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import type { Logger } from "./logger.js";
-import { mountSpa } from "./spa-api.js";
+import { mountBuiltApps } from "./spa-api.js";
 
 const noopLog: Logger = () => {};
 
-// The mount order `boot.ts` uses: APIs, then the dashboard at `/manage`, then the till's root
-// catch-all LAST, which must not shadow the APIs or `/manage`.
 describe("SPA mounting alongside API routes (boot order)", () => {
   let tillDir: string | undefined;
   let dashDir: string | undefined;
@@ -33,8 +31,7 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     app.get("/health", (c) => c.json({ ok: true }));
     app.get("/api/till", (c) => c.json({ api: "till" }));
     app.get("/management-api/staff-roster", (c) => c.json({ api: "management" }));
-    mountSpa(app, { root: dashDir!, basePath: "/manage", navigationPath: "/manage" }, noopLog);
-    mountSpa(app, { root: tillDir!, basePath: "", navigationPath: "/tabs" }, noopLog);
+    mountBuiltApps(app, { dashboardAppDir: dashDir!, tillAppDir: tillDir! }, noopLog);
     return app;
   };
 
@@ -52,8 +49,8 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     ["/manage/devices", "dashboard"],
     ["/manage/floor/view/plano/zone/z1", "dashboard"],
     ["/manage/canvas-editor/canvas/c1/tab/counter", "dashboard"],
-    ["/tabs/counter/menu/lunch", "till"],
-    ["/tabs/floor/zone/~", "till"],
+    ["/till/tabs/counter/menu/lunch", "till"],
+    ["/till/tabs/floor/zone/~", "till"],
   ])("serves the app when loading a saved navigation path %s", async (path, marker) => {
     const res = await build().request(path, { headers: { Accept: "text/html" } });
     expect(res.status).toBe(200);
@@ -67,7 +64,7 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     "/assets/missing.js",
     "/manage/assets/missing.js",
     "/manage/favicon.ico",
-    "/tabs-other/counter",
+    "/till/tabs-other/counter",
   ])("keeps missing APIs and files as 404s: %s", async (path) => {
     const res = await build().request(path, { headers: { Accept: "text/html" } });
     expect(res.status).toBe(404);
@@ -75,12 +72,13 @@ describe("SPA mounting alongside API routes (boot order)", () => {
   });
 
   it("does not return an app page to a non-HTML request", async () => {
-    expect((await build().request("/tabs/counter")).status).toBe(404);
+    expect((await build().request("/till/tabs/counter")).status).toBe(404);
   });
 
-  it("serves the till at / and the dashboard at /manage", async () => {
+  it("serves the dashboard at / and the till at /till/", async () => {
     const app = build();
-    expect(await (await app.request("/")).text()).toContain("till");
+    expect(await (await app.request("/")).text()).toContain("dashboard");
+    expect(await (await app.request("/till/")).text()).toBe("<html>till</html>");
     expect(await (await app.request("/manage/")).text()).toContain("dashboard");
     expect(await (await app.request("/manage/assets/d-1.js")).text()).toContain("dashboard asset");
   });

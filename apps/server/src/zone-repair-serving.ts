@@ -33,7 +33,8 @@ export function zoneRepairGate(admission: TradingAdmission): MiddlewareHandler {
       managementRoutes[method]?.some((route) => path === `/management-api/${route}`) === true;
     const read =
       method === "GET" &&
-      (path === "/health" ||
+      (path === "/" ||
+        path === "/health" ||
         path === "/api/node" ||
         path === "/manage" ||
         path.startsWith("/manage/") ||

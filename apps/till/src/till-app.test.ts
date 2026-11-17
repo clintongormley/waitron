@@ -3309,7 +3309,7 @@ describe("till-app", () => {
         await flush(el);
         await flush(el);
         expect(lock(el)).not.toBeNull();
-        expect(location.pathname).toBe(`/tabs/${home}`);
+        expect(location.pathname).toBe(`/till/tabs/${home}`);
         expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
         await signIn(el);
         expect(shell(el)!.activeScreen).toBe(home);
@@ -14371,7 +14371,7 @@ describe("till-app", () => {
 
     it("restores the URL tab through PIN login and refresh", async () => {
       const url = new URL(location.href);
-      url.pathname = "/tabs/floor";
+      url.pathname = "/till/tabs/floor";
       history.replaceState(null, "", url);
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
@@ -14414,7 +14414,7 @@ describe("till-app", () => {
       await toCounter(el);
       emit(shell(el)!, "screen-select", { screen: "floor" });
       await flush(el);
-      expect(location.pathname).toMatch(/^\/tabs\/floor(?:\/|$)/);
+      expect(location.pathname).toMatch(/^\/till\/tabs\/floor(?:\/|$)/);
       emit(shell(el)!, "screen-select", { screen: "counter" });
       await flush(el);
       const back = new Promise<void>((resolve) =>
@@ -14435,8 +14435,8 @@ describe("till-app", () => {
 
     it("uses the latest history destination when the login product load finishes", async () => {
       let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
-      history.replaceState(null, "", "/tabs/floor");
-      history.pushState(null, "", "/tabs/counter");
+      history.replaceState(null, "", "/till/tabs/floor");
+      history.pushState(null, "", "/till/tabs/counter");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -14459,18 +14459,18 @@ describe("till-app", () => {
       );
       history.back();
       await back;
-      expect(location.pathname).toBe("/tabs/floor");
+      expect(location.pathname).toBe("/till/tabs/floor");
       resolve(fixtureOffers({ menus: [], products: [] }));
       await flush(el);
       expect(shell(el)!.activeScreen).toBe("floor");
-      expect(location.pathname).toBe("/tabs/floor");
+      expect(location.pathname).toBe("/till/tabs/floor");
       expect(currentApi.getTablesState).toHaveBeenCalled();
     });
 
     it("uses the latest history destination when the handheld login floor load finishes", async () => {
       let resolve!: (value: TableState[]) => void;
-      history.replaceState(null, "", "/tabs/floor");
-      history.pushState(null, "", "/tabs/order");
+      history.replaceState(null, "", "/till/tabs/floor");
+      history.pushState(null, "", "/till/tabs/order");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
@@ -14493,12 +14493,12 @@ describe("till-app", () => {
       resolve([]);
       await flush(el);
       expect(shell(el)!.activeScreen).toBe("floor");
-      expect(location.pathname).toBe("/tabs/floor");
+      expect(location.pathname).toBe("/till/tabs/floor");
     });
 
     it("replaces an unavailable URL tab with the fixed home screen", async () => {
       const url = new URL(location.href);
-      url.pathname = "/tabs/removed";
+      url.pathname = "/till/tabs/removed";
       history.replaceState(null, "", url);
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
@@ -14511,7 +14511,7 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(shell(el)!.activeScreen).toBe("counter");
-      expect(location.pathname).toMatch(/^\/tabs\/counter(?:\/|$)/);
+      expect(location.pathname).toMatch(/^\/till\/tabs\/counter(?:\/|$)/);
     });
 
     it("renders the tab shell with Counter selected on a till", async () => {
@@ -15026,14 +15026,14 @@ describe("till-app", () => {
     });
 
     it("ignores the retired Allergens action and URL", async () => {
-      history.replaceState(null, "", "/tabs/counter/view/allergens");
+      history.replaceState(null, "", "/till/tabs/counter/view/allergens");
       const el = await toShellCounter();
       emit(shell(el)!, "open-allergens");
       await flush(el);
       expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
       expect(shell(el)!.shadowRoot!.querySelector(".allergens")).toBeNull();
       expect(drill(el)).toBeNull();
-      expect(location.pathname).toBe("/tabs/counter");
+      expect(location.pathname).toBe("/till/tabs/counter");
     });
 
     it("pops a drill-in back to the counter tab on back-to-counter", async () => {
@@ -16411,7 +16411,7 @@ describe("remembered dietary filters", () => {
 
 describe("persistent till destinations", () => {
   it("an old Pass address opens no screen for an unconfigured profile", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/expo/watcher/pass");
+    history.replaceState(null, "", "/till/tabs/counter/view/expo/watcher/pass");
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "till-dev",
@@ -16430,11 +16430,11 @@ describe("persistent till destinations", () => {
     const expo = el.shadowRoot!.querySelector("till-pass-screen")!;
     await flush(el);
     expect(expo).toBeNull();
-    expect(location.pathname).toBe("/tabs/counter");
+    expect(location.pathname).toBe("/till/tabs/counter");
   });
 
   it("ignores an old monitor address when the profile configures Pass", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/expo/watcher/monitor");
+    history.replaceState(null, "", "/till/tabs/counter/view/expo/watcher/monitor");
     const { el } = await mountApp({ getDevicePassMonitorBoard: vi.fn() });
     await toCounter(el);
     await flush(el);
@@ -16490,11 +16490,11 @@ describe("persistent till destinations", () => {
     emit(el.shadowRoot!.querySelector("till-shell")!, event);
     await flush(el);
     expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
-    expect(location.pathname).toContain(`/tabs/counter/view/${view}`);
+    expect(location.pathname).toContain(`/till/tabs/counter/view/${view}`);
     const destination = location.pathname;
     await traverse("back", el);
     expect(el.shadowRoot!.querySelector(selector)).toBeNull();
-    expect(location.pathname).toBe("/tabs/counter");
+    expect(location.pathname).toBe("/till/tabs/counter");
     await traverse("forward", el);
     expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
     el.remove();
@@ -16520,7 +16520,7 @@ describe("persistent till destinations", () => {
     expect(location.pathname).toBe(destination);
     emit(fresh.shadowRoot!.querySelector(selector)!, "back-to-counter");
     await flush(fresh);
-    expect(location.pathname).toBe("/tabs/counter");
+    expect(location.pathname).toBe("/till/tabs/counter");
     await traverse("back", fresh);
     expect(fresh.shadowRoot!.querySelector(selector)).not.toBeNull();
   });
@@ -16573,7 +16573,7 @@ describe("persistent till destinations", () => {
     await flush(el);
     station(el)!.shadowRoot!.querySelector<HTMLElement>('[data-station="st-bar"]')!.click();
     await flush(el);
-    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-bar");
+    expect(location.pathname).toBe("/till/tabs/counter/view/station/station/st-bar");
     await traverse("back", el);
     expect(
       station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!.stationId,
@@ -16631,15 +16631,15 @@ describe("persistent till destinations", () => {
     emit(floor(el)!, "show-station", { stationId: "st-bar" });
     await flush(el);
 
-    expect(location.pathname).toBe("/tabs/floor/view/station/station/st-bar");
+    expect(location.pathname).toBe("/till/tabs/floor/view/station/station/st-bar");
     expect(
       station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!.stationId,
     ).toBe("st-bar");
   });
 
   it("uses the current destination when login is pending and leaves history inert after logout", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/expo");
-    history.pushState(null, "", "/tabs/counter/view/schedule");
+    history.replaceState(null, "", "/till/tabs/counter/view/expo");
+    history.pushState(null, "", "/till/tabs/counter/view/schedule");
     let resolve!: (value: Awaited<ReturnType<TillApi["listDefaultZoneOffers"]>>) => void;
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn(
@@ -16662,15 +16662,15 @@ describe("persistent till destinations", () => {
   });
 
   it.each(["ticket", "table-order", "unknown"])("drops non-restorable %s paths", async (view) => {
-    history.replaceState(null, "", `/tabs/counter/view/${view}/station/forbidden`);
+    history.replaceState(null, "", `/till/tabs/counter/view/${view}/station/forbidden`);
     const { el } = await mountApp();
     await toCounter(el);
-    expect(location.pathname).toBe("/tabs/counter");
+    expect(location.pathname).toBe("/till/tabs/counter");
     expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
   });
 
   it("does not restore operator destinations on an enrolled kitchen display", async () => {
-    history.replaceState(null, "", "/tabs/kitchen/view/station/station/forbidden");
+    history.replaceState(null, "", "/till/tabs/kitchen/view/station/station/forbidden");
     const { el } = await mountApp({
       getTill: vi
         .fn()
@@ -16701,14 +16701,14 @@ describe("persistent till destinations", () => {
     expect(station(el)!.deviceMode).toBe(true);
     expect(station(el)!.shadowRoot!.querySelector("[data-station]")).toBeNull();
     expect(currentApi.listStations).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/tabs/kitchen");
+    expect(location.pathname).toBe("/till/tabs/kitchen");
   });
 });
 
 it.each(["station", "expo", "schedule"])(
   "rejects the %s destination on a handheld whose profile lacks its switch, without hiding its floor",
   async (view) => {
-    history.replaceState(null, "", `/tabs/floor/view/${view}`);
+    history.replaceState(null, "", `/till/tabs/floor/view/${view}`);
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
@@ -16720,7 +16720,7 @@ it.each(["station", "expo", "schedule"])(
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
     await toCounter(el);
-    expect(location.pathname).toBe("/tabs/floor");
+    expect(location.pathname).toBe("/till/tabs/floor");
     expect(floor(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
   },
@@ -16801,7 +16801,7 @@ describe("the device profile decides which screens a device offers", () => {
   it.each(["station", "expo", "schedule"])(
     "restores the %s destination on a handheld whose profile has its switch",
     async (view) => {
-      history.replaceState(null, "", `/tabs/floor/view/${view}`);
+      history.replaceState(null, "", `/till/tabs/floor/view/${view}`);
       const el = await signIn(
         "handheld",
         switches,
@@ -16809,7 +16809,7 @@ describe("the device profile decides which screens a device offers", () => {
         {},
         view === "station" ? "station" : "pass",
       );
-      expect(location.pathname).toContain(`/tabs/floor/view/${view}`);
+      expect(location.pathname).toContain(`/till/tabs/floor/view/${view}`);
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).not.toBeNull();
     },
   );
@@ -16817,9 +16817,9 @@ describe("the device profile decides which screens a device offers", () => {
   it.each(["station", "expo", "schedule"])(
     "rejects the %s destination on a till whose profile lacks its switch",
     async (view) => {
-      history.replaceState(null, "", `/tabs/counter/view/${view}`);
+      history.replaceState(null, "", `/till/tabs/counter/view/${view}`);
       const el = await signIn("till", ["print-receipt"]);
-      expect(location.pathname).toBe("/tabs/counter");
+      expect(location.pathname).toBe("/till/tabs/counter");
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
     },
   );
@@ -16988,7 +16988,7 @@ describe("the device profile decides which screens a device offers", () => {
     });
 
     it("installs no floor when a logout comes while a restored floor tab loads after the counter", async () => {
-      history.replaceState(null, "", "/tabs/floor");
+      history.replaceState(null, "", "/till/tabs/floor");
       let resolve!: (value: TableState[]) => void;
       const { el } = await mountApp({
         getTablesState: vi.fn(() => new Promise<TableState[]>((done) => (resolve = done))),
@@ -22938,7 +22938,7 @@ describe("W69 till shell leave routes", () => {
         const { el, owner, input, href } = await editedSchedule();
         await userEvent.fill(input.shadowRoot!.querySelector("input")!, "");
         const acceptedState: unknown = history.state;
-        const destination = new URL("/tabs/floor?source=legacy#table", location.origin).href;
+        const destination = new URL("/till/tabs/floor?source=legacy#table", location.origin).href;
         history.pushState({ external: "legacy", unrelated: 7 }, "", destination);
         if (direction === "back") history.pushState(acceptedState, "", href);
         else {
@@ -24518,7 +24518,7 @@ describe("A737 Find a bill page", () => {
     expect(location.pathname).not.toContain("/view/find-bill");
   });
   it("restores the Find a bill destination from its address", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/find-bill");
+    history.replaceState(null, "", "/till/tabs/counter/view/find-bill");
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
       listInvoiceCorrections: vi.fn().mockResolvedValue([]),

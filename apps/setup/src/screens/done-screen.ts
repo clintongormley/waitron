@@ -412,7 +412,7 @@ export class SetupDoneScreen extends LitElement {
         <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/manage"
           >${t("done.description.dashboard")}</wt-choice-row
         >
-        <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/"
+        <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/till/"
           >${t("done.description.till")}</wt-choice-row
         >
         ${

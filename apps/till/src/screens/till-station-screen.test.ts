@@ -2571,7 +2571,7 @@ describe("till-station-screen follows its device's station screen choice (A366 d
   });
 
   it("an address naming a station outside the choice opens the first chosen one", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-c");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-c");
     const { el, api } = await mountOperator(() =>
       Promise.resolve(
         identity([
@@ -2584,22 +2584,22 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     );
     expect(queueWidget(el)!.stationId).toBe("st-g");
     expect(api.getStationQueue).not.toHaveBeenCalledWith("st-c");
-    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-g");
+    expect(location.pathname).toBe("/till/tabs/counter/view/station/station/st-g");
   });
 });
 
 describe("station destination history", () => {
   it("drops a requested station from the address when the venue has no stations", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-2");
     const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
-    await vi.waitFor(() => expect(location.pathname).toBe("/tabs/counter/view/station"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/till/tabs/counter/view/station"));
     expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
   it("restores a validated station after refresh and replaces an unavailable station", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-2");
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api: stubApi({
         getStationQueue: vi
@@ -2610,15 +2610,15 @@ describe("station destination history", () => {
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-2");
     expect(queueWidget(el)!.groups).toEqual(barQueue);
-    history.replaceState(null, "", "/tabs/counter/view/station/station/missing");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/missing");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-1");
-    expect(location.pathname).toBe("/tabs/counter/view/station/station/st-1");
+    expect(location.pathname).toBe("/till/tabs/counter/view/station/station/st-1");
   });
 
   it("does not let an older queue response replace the station reached through Back", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-1");
     let resolve!: (value: StationQueue) => void;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api: stubApi({
@@ -2634,7 +2634,7 @@ describe("station destination history", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     resolve({ printersDown: [], items: barQueue, notices: [] });
@@ -2644,7 +2644,7 @@ describe("station destination history", () => {
   });
 
   it("keeps an embedded station picker local to its enclosing destination", async () => {
-    history.replaceState(null, "", "/tabs/kitchen/view/schedule");
+    history.replaceState(null, "", "/till/tabs/kitchen/view/schedule");
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api: stubApi(),
       embedded: true,
@@ -2653,7 +2653,7 @@ describe("station destination history", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-2");
-    expect(location.pathname).toBe("/tabs/kitchen/view/schedule");
+    expect(location.pathname).toBe("/till/tabs/kitchen/view/schedule");
   });
 });
 
@@ -5932,7 +5932,7 @@ describe("the Columns window on the till", () => {
   });
 
   it("the Columns window: Back to another station closes it", async () => {
-    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    history.replaceState(null, "", "/till/tabs/counter/view/station/station/st-2");
     const { el } = await mountOperator();
     expect(queueWidget(el)!.stationId).toBe("st-2");
     el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-1"]')!.click();

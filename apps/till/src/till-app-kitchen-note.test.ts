@@ -1928,21 +1928,21 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
         .shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
     await userEvent.click(primary()[0]!);
     await flush(el);
-    expect(location.pathname).toBe("/tabs/floor/zone/zone-counter");
+    expect(location.pathname).toBe("/till/tabs/floor/zone/zone-counter");
     const toOrder = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );
     history.back();
     await toOrder;
     await flush(el);
-    expect(location.pathname).toBe("/tabs/order");
+    expect(location.pathname).toBe("/till/tabs/order");
     const forward = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );
     history.forward();
     await forward;
     await flush(el);
-    expect(location.pathname).toBe("/tabs/floor/zone/zone-counter");
+    expect(location.pathname).toBe("/till/tabs/floor/zone/zone-counter");
     const back = new Promise<void>((done) =>
       window.addEventListener("popstate", () => done(), { once: true }),
     );

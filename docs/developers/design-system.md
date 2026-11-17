@@ -6124,9 +6124,9 @@ the selected tab's lists do not hold opens nothing and is dropped from the addre
 Back stop; closing the editor, with Cancel or a save, drops it the same way. Changing tab drops it
 too and, like any tab change, adds a Back stop.
 
-Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for the till's fixed primary
+Use `/manage/<section>` for dashboard destinations and `/till/tabs/<key>` for the till's fixed primary
 screens. Nested views and zones extend those paths, such as `/manage/floor-plan/set/<set>/zone/<zone>`.
-Till Schedule, Stations and Pass use `/tabs/<key>/view/<destination>`, with destinations
+Till Schedule, Stations and Pass use `/till/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station` and `expo`. The operator Stations picker adds `/station/<id>`;
 an embedded station keeps its selection local to its screen. Restore these destinations
 only after login and device validation. A prep station display opens the one station screen its device
@@ -6162,7 +6162,7 @@ each selected diet and allergen group once, regardless of how many kinds you cho
 changes the displayed offers, leaving the basket and browser history in place. Browser storage
 being blocked must not stop filtering.
 
-The production server serves app HTML for browser navigation under `/manage` and `/tabs`. APIs and
+The production server serves app HTML for browser navigation at `/` and under `/manage` and `/till/tabs`. APIs and
 static assets keep their own responses; setup continues to use its existing root page.
 
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each app

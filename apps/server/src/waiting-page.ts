@@ -42,21 +42,34 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
     : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
 }
 
-/**
- * Marks an answer to `GET /` as the waiting page; its absence tells an open page the wait ended.
- */
 const WAITING_HEADER = "X-Waitron-Waiting";
 
-// A failed fetch, a stalled one past its deadline, or an answer that is not OK is tried again at
-// the next turn. `replace`, not `reload`: a page drawn from the carry-on form's POST would send
-// that POST again.
-const LEAVE_WHEN_DONE = `<script>
+export function pageReturnPath(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  )
+    return "/";
+  const url = new URL(value, "http://local");
+  if (
+    url.origin !== "http://local" ||
+    !(url.pathname === "/" || /^\/(?:manage|till)(?:\/|$)/.test(url.pathname))
+  )
+    return "/";
+  return url.pathname + url.search;
+}
+
+function leaveWhenDone(destination: string): string {
+  return `<script>
 (() => {
+  const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
   const ask = async () => {
     try {
-      const response = await fetch("/", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      const response = await fetch(destination, { cache: "no-store", signal: AbortSignal.timeout(5000) });
       if (response.ok && response.headers.get("${WAITING_HEADER.toLowerCase()}") === null)
-        return location.replace("/");
+        return location.replace(destination);
     } catch {}
     setTimeout(ask, 5000);
   };
@@ -64,15 +77,21 @@ const LEAVE_WHEN_DONE = `<script>
 })();
 </script>
 `;
+}
 
 /** The waiting page, with `section` (escaped HTML, such as the carry-on form) below its body. */
-export function renderWaitingPage(other: string, locale: SupportedLocale, section = ""): string {
+export function renderWaitingPage(
+  other: string,
+  locale: SupportedLocale,
+  section = "",
+  destination = "/",
+): string {
   const text = WAITING_PAGE_WORDS[locale];
   return renderDocument(
     locale,
     `${text.title[0]}${other}${text.title[1]}`,
     `<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
-${section}${LEAVE_WHEN_DONE}`,
+${section}${leaveWhenDone(pageReturnPath(destination))}`,
   );
 }
 
@@ -93,7 +112,9 @@ export function waitingPageRoute(
   section?: WaitingPageSection,
 ): (app: Hono) => void {
   return (app) => {
-    app.get("/", async (c) => {
+    app.get("*", async (c, next) => {
+      const path = c.req.path;
+      if (path !== "/" && !/^\/(?:manage|till)(?:\/|$)/.test(path)) return next();
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
@@ -115,7 +136,14 @@ export function waitingPageRoute(
         }
       }
       return c.html(
-        typeof below === "string" ? renderWaitingPage(other, locale, below) : below.page,
+        typeof below === "string"
+          ? renderWaitingPage(
+              other,
+              locale,
+              below,
+              new URL(c.req.url).pathname + new URL(c.req.url).search,
+            )
+          : below.page,
       );
     });
   };

@@ -403,6 +403,12 @@ describe("startup zone admission", () => {
       expect(view).toMatchObject({ eligible: true, nodeId: NODE });
       expect(readVenueDetails).not.toHaveBeenCalled();
       noDuties();
+      const startPage = await fetch(`${url}/`, { headers: { accept: "text/html" } });
+      expect(startPage.status).toBe(200);
+      expect(await startPage.text()).toContain("Dashboard fixture");
+      const till = await fetch(`${url}/till/`, { headers: { accept: "text/html" } });
+      expect(till.status).toBe(409);
+      expect((await till.json()).error.code).toBe("venue.time_zone_not_ready");
       const asset = await fetch(`${url}/manage/account?token=synthetic`, {
         headers: { Accept: "text/html" },
       });

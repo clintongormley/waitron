@@ -903,7 +903,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     expect(floor(el)).not.toBeNull();
     expect(tableOrder(el)).toBeNull();
-    expect(location.pathname).toBe("/tabs/floor");
+    expect(location.pathname).toBe("/till/tabs/floor");
     expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
   });
 });

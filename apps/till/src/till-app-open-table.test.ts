@@ -1661,11 +1661,11 @@ describe("A768 the order screen shows at once", () => {
   const orderPushes = () =>
     vi
       .mocked(history.pushState)
-      .mock.calls.filter(([, , url]) => String(url).includes("/tabs/order"));
+      .mock.calls.filter(([, , url]) => String(url).includes("/till/tabs/order"));
   const orderReplaces = () =>
     vi
       .mocked(history.replaceState)
-      .mock.calls.filter(([, , url]) => String(url).includes("/tabs/order"));
+      .mock.calls.filter(([, , url]) => String(url).includes("/till/tabs/order"));
 
   it("the order screen shows with its loading line before the table's reads answer", async () => {
     const lines = deferred<{ lines: never[]; revision: number }>();

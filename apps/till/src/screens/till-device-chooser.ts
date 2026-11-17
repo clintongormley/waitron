@@ -126,7 +126,7 @@ export class TillDeviceChooser extends LitElement {
 
   #use(id: string): void {
     setDevDeviceId(id);
-    this.navigate("/");
+    this.navigate("/till/");
   }
 
   /** Adopts the fresh device for THIS tab (its id, not the browser cookie). The `enrolled` event stops
@@ -135,7 +135,7 @@ export class TillDeviceChooser extends LitElement {
     event.stopPropagation();
     const { deviceId } = (event as CustomEvent<{ deviceId: string }>).detail;
     setDevDeviceId(deviceId);
-    this.navigate("/");
+    this.navigate("/till/");
   }
 
   override render(): TemplateResult {

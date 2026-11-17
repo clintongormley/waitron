@@ -184,7 +184,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
       expect(bar).toBeTruthy();
       await bar.updateComplete;
-      expect(bar.shadowRoot!.querySelector('a[href="/"]')).toBeTruthy();
+      expect(bar.shadowRoot!.querySelector('a[href="/till/"]')).toBeTruthy();
       expect(Boolean(bar.shadowRoot!.querySelector('a[href="/manage/email"]'))).toBe(showInbox);
       await expectNoA11yViolations(host);
     },

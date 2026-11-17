@@ -1541,18 +1541,29 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("a trading boot with the setup app configured does not send unknown browser paths to the root", async () => {
+    const venue = await freshVenue();
+    await seedSharedVenue(venue.store.venue);
     const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-setup-spa-"));
     const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-till-spa-"));
+    const dashboardApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-dashboard-spa-"));
+    writeFileSync(join(dashboardApp, "index.html"), "<html>dashboard-page</html>");
     writeFileSync(join(wizardApp, "index.html"), "<html>setup-wizard</html>");
     writeFileSync(join(tillApp, "index.html"), "<html>till-page</html>");
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-trading-spa-state-"));
-    await seedModuleSettings(sharedVenueDir, { "fiscal-none": false });
+    await seedModuleSettings(venue.directory, { "fiscal-none": false });
+    const [admin] = await seedPersons(venue.store.venue, {
+      displayName: "SPA Admin",
+      role: "admin",
+    });
+    const session = await withTransaction(venue.store.venue, (tx) =>
+      startManagementSession(tx, { method: "password", personId: admin!.id }),
+    );
     let server: StartedServer | undefined;
     try {
       server = await startServer({
         ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_VENUE_DIR: venue.directory,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
@@ -1560,16 +1571,28 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         WAITRON_SETUP_APP_DIR: wizardApp,
         WAITRON_TILL_APP_DIR: tillApp,
+        WAITRON_DASHBOARD_APP_DIR: dashboardApp,
       });
+      const root = await fetch(`http://127.0.0.1:${httpPort()}/`);
+      expect(root.status).toBe(200);
+      expect(await root.text()).toBe("<html>dashboard-page</html>");
+      const pair = await fetch(`http://127.0.0.1:${httpPort()}/management-api/pairing-mode`, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
+      expect(pair.status).toBe(200);
+      expect((await pair.json()).deviceAddress).toBe("https://dashboard.example.com/till/");
       const html = { headers: { Accept: "text/html" }, redirect: "manual" as const };
       const unknown = await fetch(`http://127.0.0.1:${httpPort()}/anything/else`, html);
       expect(unknown.status).toBe(404);
       expect(unknown.headers.get("location")).toBeNull();
-      const tabs = await fetch(`http://127.0.0.1:${httpPort()}/tabs/counter`, html);
+      const tabs = await fetch(`http://127.0.0.1:${httpPort()}/till/tabs/counter`, html);
       expect(tabs.status).toBe(200);
       expect(await tabs.text()).toBe("<html>till-page</html>");
     } finally {
       await server?.close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      rmSync(dashboardApp, { recursive: true, force: true });
       await rm(stateDir, { recursive: true, force: true });
       rmSync(wizardApp, { recursive: true, force: true });
       rmSync(tillApp, { recursive: true, force: true });
@@ -2450,9 +2473,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("serves the built till at / and dashboard at /manage when the app dirs are configured, without shadowing the APIs", async () => {
-    // Distinctive markers catch a swapped /manage-vs-/ mapping; `boot.spa-mount.test.ts` pins the
-    // mount order, and this shows the catch-alls do not shadow /health or /api/staff in a real boot.
+  it("serves the built till at /till/ and dashboard at / when the app dirs are configured, without shadowing the APIs", async () => {
     const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-till-spa-"));
     const dashApp = mkdtempSync(join(tmpdir(), "waitron-boot-dash-spa-"));
     writeFileSync(join(tillApp, "index.html"), "<html>till-spa-root</html>");
@@ -2470,19 +2491,19 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_DASHBOARD_APP_DIR: dashApp,
     });
     try {
-      const till = await fetch(`http://127.0.0.1:${httpPort()}/`);
+      const till = await fetch(`http://127.0.0.1:${httpPort()}/till/`);
       expect(till.status).toBe(200);
       expect(till.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(till.headers.get("content-type")).toContain("text/html");
       expect(await till.text()).toContain("till-spa-root");
 
-      const dash = await fetch(`http://127.0.0.1:${httpPort()}/manage/`);
+      const dash = await fetch(`http://127.0.0.1:${httpPort()}/`);
       expect(dash.status).toBe(200);
       expect(await dash.text()).toContain("dashboard-spa-root");
 
       for (const [path, marker] of [
         ["/manage/floor/view/plano", "dashboard-spa-root"],
-        ["/tabs/counter/menu/lunch", "till-spa-root"],
+        ["/till/tabs/counter/menu/lunch", "till-spa-root"],
       ]) {
         const page = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
           headers: { Accept: "text/html" },

@@ -68,7 +68,13 @@ export function spareReadGate(deps: {
       return next();
     const locale = resolveLoginLocale(c.req.header("accept-language"), "en-GB");
     c.header("Cache-Control", "no-store");
-    if (path === "/" || path === "/manage" || path.startsWith("/manage/")) {
+    if (
+      path === "/" ||
+      path === "/manage" ||
+      path.startsWith("/manage/") ||
+      path === "/till" ||
+      path.startsWith("/till/")
+    ) {
       const main = deps.main();
       if (new URL(c.req.url).hostname !== BOX_HOSTNAME)
         return c.html(renderSparePage(locale, main, now()));

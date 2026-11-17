@@ -101,7 +101,7 @@ describe("till-device-chooser", () => {
     expect(el.shadowRoot!.textContent).toContain("No devices enrolled yet");
   });
 
-  it("Use this device stores the id in this tab's sessionStorage and navigates to /", async () => {
+  it("Use this device stores the id in this tab's sessionStorage and navigates to /till/", async () => {
     const navigate = vi.fn();
     const list: DevDeviceList = {
       devices: [{ id: "d1", kind: "handheld", label: "Phone", active: true }],
@@ -113,7 +113,7 @@ describe("till-device-chooser", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-use="d1"]')!.click();
     expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("d1");
-    expect(navigate).toHaveBeenCalledWith("/");
+    expect(navigate).toHaveBeenCalledWith("/till/");
   });
 
   it("centres the chooser and right-aligns the Set up a new device action", async () => {
@@ -222,7 +222,7 @@ describe("till-device-chooser", () => {
       await vi.advanceTimersByTimeAsync(2_000);
       await el.updateComplete;
       expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("fresh-99");
-      expect(navigate).toHaveBeenCalledWith("/");
+      expect(navigate).toHaveBeenCalledWith("/till/");
     } finally {
       vi.useRealTimers();
     }

@@ -5134,7 +5134,7 @@ export class TillApp extends LitElement {
       this.orderFlow = "prepay";
       this.#applyVenueSetup(till, asked);
       this.#applyProfileSetup(till);
-      // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
+      // Validated and retained, but not written to the URL: the front-door surfaces are not `/till/tabs/*`
       // destinations, so the tab is published only when the shell opens.
       this.activeTabKey = this.#requestedTab();
     } catch {

@@ -51,7 +51,7 @@ async function build(mirror = false, servesDashboard = false) {
     { root: root!, node: suite.node, nodeId: NODE, servesDashboard },
     () => {},
   );
-  mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, () => {});
+  mountSpa(app, { root: root!, basePath: "", navigationPath: "/till/tabs" }, () => {});
   return app;
 }
 it.each([false, true])(
@@ -102,7 +102,7 @@ it("serves the literal emergency page only on a mirror, before operation lookup"
 it("serves an operation page whose address carries a query, as without one", async () => {
   const app = await build(true);
   const answer = await app.request(
-    `/handover/${OP}?back=${encodeURIComponent("https://waitron.local/tabs")}`,
+    `/handover/${OP}?back=${encodeURIComponent("https://waitron.local/till/tabs")}`,
     { headers: { Accept: "text/html" } },
   );
   expect(answer.status).toBe(200);

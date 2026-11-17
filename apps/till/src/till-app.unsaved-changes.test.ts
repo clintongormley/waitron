@@ -51,7 +51,7 @@ describe("W69 activated native till document leave", () => {
     const result = await commands.probeTillReload("dirty-keep", "navigation");
     expect(result.dialogs).toEqual(["beforeunload"]);
     expect(result.reloaded).toBe(false);
-    expect(new URL(result.href!).pathname).toBe("/tabs/counter/view/schedule");
+    expect(new URL(result.href!).pathname).toBe("/till/tabs/counter/view/schedule");
     expect(result.note).toBe("Family visit");
     expect(result.savedNotes).toEqual([]);
   });

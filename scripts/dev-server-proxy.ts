@@ -25,9 +25,9 @@ export function devCrossAppLinks(app: "till" | "dashboard" | "setup"): Plugin {
         const url = request.url ?? "";
         const pathname = url.split("?")[0]!;
         const destination =
-          app !== "till" && pathname === "/"
+          app !== "till" && /^\/till(?:\/|$)/.test(pathname)
             ? devPort("WAITRON_TILL_VITE_PORT", 5190)
-            : app !== "dashboard" && /^\/manage(?:\/|$)/.test(pathname)
+            : app !== "dashboard" && (pathname === "/" || /^\/manage(?:\/|$)/.test(pathname))
               ? devPort("WAITRON_DASHBOARD_VITE_PORT", 5191)
               : undefined;
         if (destination !== undefined) {
