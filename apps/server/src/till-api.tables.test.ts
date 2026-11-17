@@ -304,12 +304,9 @@ describe("table + tab routes", () => {
     );
   });
 
-  it("GET /api/tables lists an active table", async () => {
-    const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "12", zoneId: seededZoneId }),
-    );
-    const list = (await (await request("/api/tables")).json()) as unknown[];
-    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", zoneId: seededZoneId }));
+  it("a signed-in staff session's GET /api/tables answers 404; the till reads /api/tables/state", async () => {
+    expect((await request("/api/tables/state")).status).toBe(200);
+    expect((await request("/api/tables")).status).toBe(404);
   });
 
   it("GET /api/tables/state names each table by its short name, or by its full name when it has none", async () => {
@@ -798,7 +795,6 @@ describe("table + tab routes", () => {
     const id = randomUUID();
     const json = { "content-type": "application/json" };
     const cases = [
-      noAuth.request("/api/tables"),
       noAuth.request("/api/tables/state"),
       noAuth.request(`/api/tables/${id}/seat`, {
         method: "POST",
@@ -856,19 +852,16 @@ it.each(["PUT", "DELETE"])(
   },
 );
 
-it("answers a table's state and list without the old columns", async () => {
+it("answers a table's state without the old columns", async () => {
   const { id } = await withTransaction(suite.db, (tx) =>
     createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId }),
   );
-  for (const path of ["/api/tables/state", "/api/tables"]) {
-    const response = await request(path);
-    expect(response.status).toBe(200);
-    const row = ((await response.json()) as Record<string, unknown>[]).find((t) => t.id === id)!;
-    expect(row).toMatchObject({ id, zoneId: seededZoneId });
-    for (const key of ["capacity", "active", "posX", "posY", "shape", "rotation"]) {
-      expect(row).not.toHaveProperty(key);
-    }
-    if (path.endsWith("/state")) expect(row.today).not.toBeNull();
-    else expect(row).toHaveProperty("planTableId", null);
+  const response = await request("/api/tables/state");
+  expect(response.status).toBe(200);
+  const row = ((await response.json()) as Record<string, unknown>[]).find((t) => t.id === id)!;
+  expect(row).toMatchObject({ id, zoneId: seededZoneId });
+  for (const key of ["capacity", "active", "posX", "posY", "shape", "rotation"]) {
+    expect(row).not.toHaveProperty(key);
   }
+  expect(row.today).not.toBeNull();
 });

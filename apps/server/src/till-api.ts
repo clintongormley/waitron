@@ -94,7 +94,7 @@ import {
   resolveInvoicePrinter,
   type OriginalReceiptPrint,
 } from "./receipt-print.js";
-import { listTables, listZones } from "./tables.js";
+import { listZones } from "./tables.js";
 import {
   abandonHeldOrder,
   advanceTicketItem,
@@ -2857,20 +2857,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         override,
       );
       return c.body(null, 200);
-    }),
-  );
-
-  app.get("/api/tables", (c) =>
-    run(c, log, async () => {
-      const { device } = await requireSession(deps, c);
-      const tables = await deps.db.withWriteLock(async () => {
-        const tx = deps.db;
-        const scope = await readZoneScope(tx, device.deviceProfileId);
-        return (await listTables(tx, deps.clock.now().instant)).filter((table) =>
-          inScope(scope, table.zoneId),
-        );
-      });
-      return c.json(tables);
     }),
   );
 

@@ -2500,7 +2500,7 @@ metadata only. Reset slots use each member's recorded placement size, then its k
 keeps these slots as the members' before-places. Group formation waits for the members, and a
 later catch-up keeps an already formed group's identity.
 
-`GET /api/tables` and bookings offer real members under their own labels and ids. They have no
+`GET /management-api/tables` and bookings offer real members under their own labels and ids. They have no
 saved-part exclusion. Today's table reads carry ordinary `joinId`, `joinSeats` and `joinName`;
 there is no synthetic joined-table row, joined-only action or Reset table route. Split tables…
 uses `splitGroup`; Join with… uses `writeMerge`. Fixed seats retain their party joins. Merge membership and its three before-place values live on `dining_tables`; `table_merges`

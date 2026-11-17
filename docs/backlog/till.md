@@ -1087,9 +1087,6 @@ decision for the whole dialog. Left open by A231q.
 - Tighten the till's `TableState.today` type: slice 5 keeps it nullable for now
   (`apps/till/src/api/client.ts`), even though the floor's in-service read requires today's row.
   Check all consumers and fixtures before making it required.
-- Retire the till's unused `GET /api/tables` route: the app reads `/api/tables/state`;
-  `apps/till/src/api/client.ts` has no method for the older list route. Check other callers
-  before removing the route (slice 5, decision 15).
 
 
 ## A857. A booking can take a table the evening's layout puts away (2026-10-18).
