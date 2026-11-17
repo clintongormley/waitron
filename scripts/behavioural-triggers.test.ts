@@ -202,7 +202,7 @@ function workingOrder(id, status, extra = {}) {
   const partyId = extra.partyId ? `'${extra.partyId}'` : "null";
   return (
     `insert into working_orders (id, source, device_id, order_number, status, opened_at, settled_at, collected_at, dining, party_id) ` +
-    `values ('${id}', 'device', 'dev-active', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, 'eat_in', ${partyId})`
+    `values ('${id}', 'device', 'dev-active', (select coalesce(max(order_number), 0) + 1 from working_orders), '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, 'eat_in', ${partyId})`
   );
 }
 
