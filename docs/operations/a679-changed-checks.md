@@ -3,8 +3,9 @@
 _2026-11-17, SETUP-STALE-CLOCK: Provision now takes its own fresh clock reading. So the restart
 case's `clock_stale` assertion and its manual clock comparison are removed, and
 `initial-hour-setup.test.ts`'s "issuing refuses clock_stale when the only passing reading is older
-than thirty seconds" became "…and no fresh second clock exists": the time service is made
-unavailable and the expected reason is `second_clock_missing`._
+than thirty seconds" became "issuing refuses when the only passing reading is older than thirty
+seconds and no fresh second clock exists": the time service is made unavailable and the expected
+reason is `second_clock_missing`._
 
 _2026-11-09, A1379: setup-password recovery ("Continue"), publication-only Finish, the command's
 resumption and its retained configuration import are removed, with their suites
