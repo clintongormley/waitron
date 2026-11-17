@@ -517,9 +517,10 @@ till stays on your screen, marked **Paid**.
 
 Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
 the table's bills, and **Pay**. The bill's **Full invoice** choice and receipt language sit beside
-it when offered. A partly paid bill also shows what has been received and what remains. The foot
-has no **Park**: a table's bill already waits at its table. On a handheld, when a bill is paid with
-a simplified invoice and others are not, **Back to the table** opens the first unpaid bill.
+it when offered. A partly paid bill whose receipt is not yet issued also shows what has been
+received and what remains. The foot has no **Park**: a table's bill already waits at its table. On a
+handheld, when a bill is paid with a simplified invoice and others are not, **Back to the table**
+opens the first unpaid bill.
 
 Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
 your **New order**, or another person's unsent dishes for it are shown with their **Take over
@@ -787,7 +788,7 @@ and **Still to pay**. Start with what is still to pay, rather than the bill's or
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-A bill presented for collection before its invoice was issued offers the whole amount only.
+A bill presented for collection offers the whole amount only, until its invoice is issued.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

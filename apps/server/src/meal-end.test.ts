@@ -902,30 +902,7 @@ describe("Print the bill's receipt", () => {
   });
 
   it("a full invoice staged for A4 prints no receipt on a device that has a printer", async () => {
-    const pagePrinterId = randomUUID();
-    await inTx(venue, (tx) =>
-      tx.insert(pagePrinters).values({
-        id: pagePrinterId,
-        name: "Office",
-        host: pagePrinterId,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        active: true,
-      }),
-    );
-    const party = await seatedWith(venue, "Red wine bottle");
-    expect((await choose(party.tabId, "F1")).status).toBe(200);
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ invoiceDelivery: { medium: "a4", pagePrinterId, personId: venue.operatorId } })
-        .where(eq(workingOrders.id, party.tabId)),
-    );
-    await serveAll(party);
+    const party = await stagedForA4(true);
 
     const { saleId } = await end(party);
 

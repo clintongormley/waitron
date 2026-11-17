@@ -175,7 +175,7 @@ may still be eating. For that bill, in one transaction, it:
 
 1. refuses as the departure does for a stale screen, someone else's unsent dishes and a payment in
    flight (`checkAndBumpParty`, `requireBillEditors`, `assertBillHasNoUnsent`,
-   `refusePaymentInFlight`, `refusePlacedPaymentInFlight`: `unpaid-departure.ts:94-117`), and
+   `refuseBillPaymentInFlight`), and
    refuses `meal_end.already_issued` when the bill already has a ticket, then
    `bill.nothing_outstanding` when the departure's `billOwes` says it owes nothing (a bill with no
    dishes, or one cancelled with Cancel order);
@@ -545,7 +545,8 @@ tests `apps/server/src/meal-end.test.ts`, `apps/server/src/counter-handover.test
 - [ ] **Step 5: wording** (the watcher clears final wording): `invoice.choice_locked` becomes "This
   bill already has its receipt or a payment, so it can no longer switch between a full and a
   simplified invoice." / "Esta cuenta ya tiene su tique o un pago, así que ya no puede cambiar entre
-  factura completa y simplificada." Run `pnpm --filter @waitron/till exec vitest run
+  factura completa y simplificada." (2026-11-17: wording changed by the finish-branch review;
+  `apps/till/src/i18n/codes.ts` holds it.) Run `pnpm --filter @waitron/till exec vitest run
   src/i18n/codes.test.ts src/till-app-bill-payments.test.ts`.
 - [ ] **Step 6: run** `meal-end.test.ts`, `counter-handover.test.ts`, `bill-payments-api.test.ts`,
   `bill-editing.order-choices.test.ts` and the fiscal pair — expect PASS.
