@@ -23,7 +23,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
   golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/`,
   `scripts/release/github-release.sh`, `scripts/fake-bluez.py` and `scripts/write-path-tables.json`.
-  The three named scripts files are outside the checker.
+  The three named `scripts/` files are outside the checker.
 
 ## Payments test points and transfer lock cases left by the comment-pruning sweeps
 
