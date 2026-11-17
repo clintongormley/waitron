@@ -260,7 +260,10 @@ export async function startLockedCopy(
               path: "/",
             });
             outcome = "success";
-            return c.json(session);
+            return c.json({
+              ...session,
+              remainingMs: Math.max(0, Date.parse(session.expiresAt) - Date.now()),
+            });
           } catch (error) {
             if (isAppError(error) && error.code === "password.invalid") outcome = "invalid";
             throw error;
@@ -276,7 +279,11 @@ export async function startLockedCopy(
           sessions.delete(hash);
           throw new AppError("management_session.expired", {});
         }
-        if (c.req.method === "GET") return c.json(session);
+        if (c.req.method === "GET")
+          return c.json({
+            ...session,
+            remainingMs: Math.max(0, Date.parse(session.expiresAt) - Date.now()),
+          });
         if (c.req.method === "DELETE") {
           sessions.delete(hash);
           deleteCookie(c, cookieName, { path: "/", secure: true });

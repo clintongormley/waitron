@@ -6,6 +6,7 @@ export const startEn = {
     "You need an authenticator app, set up in Waitron before the box failed. You cannot set one up here.",
   "emergency.no_passkeys": "Passkeys are not offered here.",
   "emergency.email": "Email",
+  "emergency.email_invalid": "Enter a valid email address.",
   "emergency.password": "Password",
   "emergency.code": "Authenticator code",
   "emergency.recovery_code": "Recovery code",
@@ -23,7 +24,7 @@ export const startEn = {
   "emergency.not_started":
     "The venue has not been started here. Declaration and activation are not available yet.",
   "emergency.actor": "Signed in as {name}.",
-  "emergency.stops": "This copy stops at",
+  "emergency.stops": "This copy stops by",
   "emergency.sign_out": "Sign out",
   "emergency.fix_fields": "Correct the highlighted fields to sign in.",
   "emergency.required": "Enter this value.",
@@ -161,6 +162,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Necesitas una aplicación de autenticación configurada en Waitron antes de que fallara el servidor. No puedes configurarla aquí.",
   "emergency.no_passkeys": "Aquí no se ofrecen claves de acceso.",
   "emergency.email": "Correo electrónico",
+  "emergency.email_invalid": "Introduce un correo electrónico válido.",
   "emergency.password": "Contraseña",
   "emergency.code": "Código del autenticador",
   "emergency.recovery_code": "Código de recuperación",
@@ -178,7 +180,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "emergency.not_started":
     "El local no se ha iniciado aquí. La declaración y la activación aún no están disponibles.",
   "emergency.actor": "Sesión iniciada como {name}.",
-  "emergency.stops": "Esta copia se detiene a las",
+  "emergency.stops": "Esta copia se detiene como máximo a las",
   "emergency.sign_out": "Cerrar sesión",
   "emergency.fix_fields": "Corrige los campos marcados para iniciar sesión.",
   "emergency.required": "Introduce este valor.",

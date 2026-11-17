@@ -1010,7 +1010,7 @@ an environment variable does not promise that the operating system cannot show i
 
 POST `/locked-api/session` from the emergency origin with `email`, `password` and either `totp`
 or `recoveryCode`. An active person needs an enrolled authenticator and `node.manage`.
-The response names `personId`, `displayName`, `copyOperationId`, `signedInAt`, `expiresAt` and `copyExpiresAt`,
+The response names `personId`, `displayName`, `copyOperationId`, `signedInAt`, `expiresAt`, `copyExpiresAt` and `remainingMs`,
 and sets a Secure, HttpOnly, SameSite=Strict cookie. GET reads it; DELETE ends it. Sessions expire
 after ten minutes, capped by the original copy deadline or TLS certificate expiry. Recovery-code use is
 remembered only in this process; it does not consume the stored row. Authentication, sessions and
@@ -1019,8 +1019,9 @@ all sessions. The process closes its immutable readers and exits on shutdown, de
 control failure. A failed control check or expired control lease is logged and exits non-zero. Year-sized placement and start timing remain unqualified.
 
 Build the separate emergency page with `pnpm --filter @waitron/setup build:emergency` before
-starting the locked entry. Its default directory is `apps/setup/dist-emergency`; set
+starting the locked entry. Its default directory is `apps/setup/emergency/dist`; set
 `emergencyAppDir` in the launch object to use a packaged copy. The ordinary setup build is separate.
 Open the copy's HTTPS origin to sign in with your password and authenticator or recovery code.
 After sign-in, you see your name and the copy's fixed stop time. The page offers no activation yet.
 Its owner-account link comes from `/locked-api/context`, using the server's configured Cloud origin.
+The page uses the server’s remaining session time, so a fast device clock does not end sign-in early.

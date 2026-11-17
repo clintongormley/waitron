@@ -8,7 +8,12 @@ import { fieldStyles, helpLinkStyles } from "../form-styles.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t, format, localTime } from "../i18n/t.js";
 
-type Session = { displayName: string; expiresAt: string; copyExpiresAt: string };
+type Session = {
+  displayName: string;
+  expiresAt: string;
+  copyExpiresAt: string;
+  remainingMs: number;
+};
 type Field = "email" | "password" | "code";
 
 @customElement("setup-emergency-start-screen")
@@ -77,29 +82,33 @@ export class EmergencyStartScreen extends LitElement {
   }
   private refuse(error: unknown) {
     const code = (error as { code?: string } | null)?.code;
+    const expired = code === "management_session.expired" || code === "management_session.required";
+    if (expired) {
+      this.session = undefined;
+      clearTimeout(this.timer);
+      this.feedback.reset();
+    }
     this.error =
       code === "password.invalid"
         ? t("emergency.invalid")
         : code === "authorization.not_permitted"
           ? t("emergency.permission")
-          : code === "management_session.expired"
+          : expired
             ? t("emergency.expired")
             : code === "password.throttled"
               ? t("emergency.throttled")
               : t("emergency.unavailable");
   }
   private accept(session: Session) {
+    this.feedback.reset();
     this.session = session;
     this.values = { email: "", password: "", code: "" };
     this.revealed = false;
     clearTimeout(this.timer);
-    this.timer = setTimeout(
-      () => {
-        this.session = undefined;
-        this.error = t("emergency.expired");
-      },
-      Math.max(0, Date.parse(session.expiresAt) - Date.now()),
-    );
+    this.timer = setTimeout(() => {
+      this.session = undefined;
+      this.error = t("emergency.expired");
+    }, session.remainingMs);
   }
   private async load() {
     this.pending = true;
@@ -186,13 +195,12 @@ export class EmergencyStartScreen extends LitElement {
       required
       type=${key === "password" && !this.revealed ? "password" : key === "email" ? "email" : "text"}
       autocomplete=${key === "email" ? "username" : key === "password" ? "current-password" : "one-time-code"}
-      inputmode=${key === "code" && !this.recovery ? "numeric" : "text"}
       autocapitalize="none"
       autocorrect="off"
       spellcheck="false"
       ?disabled=${this.pending}
       ?invalid=${invalid}
-      error=${invalid ? t("emergency.required") : ""}
+      error=${invalid ? t(key === "email" && this.values.email.trim() !== "" ? "emergency.email_invalid" : "emergency.required") : ""}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => {
         e.stopPropagation();

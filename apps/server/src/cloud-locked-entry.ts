@@ -57,7 +57,7 @@ try {
     binding,
     emergencyAppDir:
       input.emergencyAppDir ??
-      fileURLToPath(new URL("../../setup/dist-emergency", import.meta.url)),
+      fileURLToPath(new URL("../../setup/emergency/dist", import.meta.url)),
     processEnv: {},
     totpPurposeKeys,
     modules: ALL_MODULES,

@@ -9,7 +9,7 @@ export default defineConfig(({ command, mode }) => ({
   ...(mode === "emergency"
     ? {
         build: {
-          outDir: "dist-emergency",
+          outDir: "emergency/dist",
           rollupOptions: { input: fileURLToPath(new URL("emergency.html", import.meta.url)) },
         },
       }

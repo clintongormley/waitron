@@ -525,7 +525,7 @@ follow, being reached over the internet (owner, 2026-10-29).
 Local selected-backup placement preserves an admitted spare's identity and records its archive
 source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue that files with
 Veri*Factu can join, with nothing fiscal written at the join. Cloud placement
-still waits for Cloud's half and part 3's locked start, which calls A1425 part 3's placement of the copy under its own identity; the hosted start waits for those and for part 4's declaration and activation. The emergency-card adapter is built; its facts need
+uses A1425 part 3's placement of the copy under its own identity; the hosted start still waits for Cloud's launcher and part 4's declaration and activation. The emergency-card adapter is built; its facts need
 Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
 readiness; Cloud's code endpoint remains required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. Backups checks the printed emergency code and Cloud links to the existing pack maker. The hosted runtime remains open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two

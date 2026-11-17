@@ -15,6 +15,7 @@ const session = {
   signedInAt: "2026-11-17T22:01:00.000Z",
   expiresAt: "2026-11-17T22:11:00.000Z",
   copyExpiresAt: context.copyExpiresAt,
+  remainingMs: 600000,
 };
 afterEach(() => {
   cleanupWidgets();
@@ -66,9 +67,19 @@ it("requires all three factors and sends recovery codes in place of authenticato
   );
   await fill(el, "email", "nora@example.test");
   await fill(el, "password", " secret ");
+  el.shadowRoot!.querySelector<HTMLElement>("[name=password] wt-button")!.click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector("[name=password]")!.shadowRoot!.querySelector("input")!.type,
+  ).toBe("text");
+  el.shadowRoot!.querySelector<HTMLElement>("[name=password] wt-button")!.click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector("[name=password]")!.shadowRoot!.querySelector("input")!.type,
+  ).toBe("password");
   await click(el, "recovery");
   await fill(el, "code", "abcd-0123");
-  await click(el, "sign-in");
+  el.shadowRoot!.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Nora"));
   const post = requests.find((r) => r.init?.method === "POST")!;
   expect(JSON.parse(String(post.init!.body))).toEqual({
@@ -133,8 +144,10 @@ it("restores a protected handoff on reload and removes it when the session expir
   try {
     // Reconnect at a fixed time to exercise the real ten-minute session deadline.
     vi.setSystemTime(new Date(session.signedInAt));
+    const parent = el.parentElement!;
     el.remove();
-    document.body.append(el);
+    parent.append(el);
+    await el.updateComplete;
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Nora"));
     await vi.advanceTimersByTimeAsync(600000);
     await el.updateComplete;
@@ -157,4 +170,70 @@ it("shows Spanish sign-in words and clears a signed-in actor on sign-out", async
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull());
   expect(requests.some((r) => r.init?.method === "DELETE")).toBe(true);
   expect(el.shadowRoot!.textContent).toContain(startEs["emergency.authenticator"]);
+});
+
+it("expires a fresh sign-in without marking empty fields, even on a device with a fast clock", async () => {
+  const { el } = await mount();
+  for (const [name, value] of [
+    ["email", "nora@example.test"],
+    ["password", "secret"],
+    ["code", "012345"],
+  ])
+    await fill(el, name!, value!);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
+    await click(el, "sign-in");
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Nora"));
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain("Nora");
+    await vi.advanceTimersByTimeAsync(600000);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("wt-input[invalid]")).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector("[data-action=sign-in]")?.hasAttribute("disabled")).toBe(
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("returns to sign-in when the server already dropped the session", async () => {
+  const { el } = await mount("management_session.required", true);
+  el.transport = async () =>
+    Response.json({ error: { code: "management_session.expired" } }, { status: 401 });
+  await click(el, "sign-out");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull());
+  expect(el.shadowRoot!.textContent).not.toContain("Nora");
+});
+
+it("retries a failed initial read and loads only the emergency entry", async () => {
+  const app = document.createElement("div");
+  app.id = "app";
+  document.body.append(app);
+  const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new TypeError("offline"));
+  fetcher.mockImplementation(async (input) =>
+    String(input) === "/locked-api/context"
+      ? Response.json(context)
+      : Response.json({ error: { code: "management_session.required" } }, { status: 401 }),
+  );
+  try {
+    await import("../emergency-main.js");
+    const el = app.querySelector<LitElement>("setup-emergency-start-screen")!;
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(startEn["emergency.unavailable"]),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull());
+    await fill(el, "email", "nora");
+    await click(el, "sign-in");
+    const field = el.shadowRoot!.querySelector<LitElement>("[name=email]")!;
+    await field.updateComplete;
+    expect(field.shadowRoot!.textContent).toContain(startEn["emergency.email_invalid"]);
+    expect(document.documentElement.hasAttribute("data-wt-theme-root")).toBe(true);
+    expect(app.querySelector("setup-app")).toBeNull();
+  } finally {
+    app.remove();
+  }
 });

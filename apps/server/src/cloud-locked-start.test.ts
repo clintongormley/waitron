@@ -495,12 +495,15 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     expect(signed.body).toEqual({
       personId,
       displayName: "Copy administrator",
+      remainingMs: 600000,
       copyOperationId: deps.binding.copyOperationId,
       signedInAt: deps.now().toISOString(),
       expiresAt: "2026-11-17T10:20:00.000Z",
       copyExpiresAt: deps.binding.expiresAt,
     });
     expect((await request("GET", undefined, cookie)).body).toEqual(signed.body);
+    vi.setSystemTime(new Date("2026-11-17T10:15:00.000Z"));
+    expect((await request("GET", undefined, cookie)).body.remainingMs).toBe(300000);
     vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));
     expect((await request("GET", undefined, cookie)).body).toMatchObject({
       error: { code: "management_session.expired" },
