@@ -1029,6 +1029,8 @@ describe("till-menu-browser", () => {
         "Tostada",
         "Lemonade",
         "Comida (ES)",
+        "Vino",
+        "Burger",
       ]);
 
       await search(el, "");
@@ -2184,6 +2186,8 @@ describe("till-menu-browser", () => {
         "Tostada",
         "Lemonade",
         "Comida (ES)",
+        "Vino",
+        "Burger",
       ]);
     });
 
