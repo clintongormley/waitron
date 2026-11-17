@@ -65,12 +65,7 @@ export function contentLanguageChoices(
     choicesByLocale.set(displayLocale, choices);
     cached = choices;
   }
-  const choices = cached.map(({ code, name }) => ({
-    code,
-    name: presentation?.names[code]
-      ? contentLanguageDisplayName(code, displayLocale, presentation)
-      : name,
-  }));
+  const choices = cached.map((choice) => ({ ...choice }));
   for (const tag of presentation?.officialLocales ?? []) {
     const code = contentLanguageCode(tag);
     if (code !== new Intl.Locale(tag).language && !choices.some((choice) => choice.code === code))
@@ -78,6 +73,11 @@ export function contentLanguageChoices(
   }
   if (presentation) choices.sort((a, b) => a.name.localeCompare(b.name, displayLocale));
   return choices;
+}
+
+function tagWithoutExtensions(locale: Intl.Locale): string {
+  // Runtime aliases can leave extensions in baseName.
+  return locale.toString().split(/-[a-z0-9]-/i, 1)[0]!;
 }
 
 export function contentLanguageCode(value: string): string {
@@ -93,11 +93,12 @@ export function contentLanguageCode(value: string): string {
   ) {
     throw new AppError("content.language_invalid", {});
   }
-  const variant = locale.baseName
+  const tag = tagWithoutExtensions(locale);
+  const variant = tag
     .split("-")
     .slice(1)
     .some((part) => /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/i.test(part));
-  return variant ? locale.baseName : locale.language;
+  return variant ? tag : locale.language;
 }
 
 export function isRegionalContentLanguage(tag: string): boolean {
@@ -114,7 +115,7 @@ export function mainContentLanguages(languages: readonly string[]): string[] {
 
 export function contentLanguageTag(value: string): string {
   contentLanguageCode(value);
-  return new Intl.Locale(value).baseName;
+  return tagWithoutExtensions(new Intl.Locale(value));
 }
 
 /** A tag's language named in `locale`, capitalised when it stands alone rather than inside a

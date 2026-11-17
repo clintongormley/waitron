@@ -5,6 +5,7 @@ import {
   contentLanguageChoices,
   contentLanguageTag,
   contentLanguageDisplayName,
+  isRegionalContentLanguage,
   languageDisplayName,
   resolveContentText,
   resolveEnabledContentText,
@@ -339,6 +340,9 @@ it.each([
 });
 it("keeps canonical variants and strips extensions from content tags", () => {
   expect(contentLanguageTag("sl-ROZAJ-u-nu-latn")).toBe("sl-rozaj");
+  for (const tag of ["en-US-t-es", "en-US-x-guest", "en-US-9-demo"]) {
+    expect(contentLanguageTag(tag)).toBe("en-US");
+  }
   expect(contentLanguageTag("ca-AD-valencia")).toBe("ca-AD-valencia");
 });
 it("adds pack variants with short names without caching another pack's labels", () => {
@@ -346,9 +350,12 @@ it("adds pack variants with short names without caching another pack's labels", 
     officialLocales: ["sl-rozaj", "sl-rozaj", "en-US"],
     names: { "sl-rozaj": { en: "Pack variant", es: "short variant" } },
   };
-  expect(contentLanguageChoices("en-GB", data).filter(({ code }) => code === "sl-rozaj")).toEqual([
+  const choices = contentLanguageChoices("en-GB", data);
+  expect(choices.filter(({ code }) => code === "sl-rozaj")).toEqual([
     { code: "sl-rozaj", name: "Pack variant" },
   ]);
+  const names = choices.map(({ name }) => name);
+  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "en-GB")));
   expect(languageDisplayName("sl-rozaj", "es-ES", false, data)).toBe("short variant");
   expect(contentLanguageDisplayName("sl-rozaj", "es-ES", data)).toBe("Short variant");
   expect(contentLanguageChoices("en-GB").some(({ code }) => code === "sl-rozaj")).toBe(false);
@@ -362,4 +369,11 @@ it("adds pack variants with short names without caching another pack's labels", 
   expect(languageDisplayName("sl-rozaj", "fr", false, data)).toBe(
     new Intl.DisplayNames(["fr"], { type: "language", fallback: "none" }).of("sl-rozaj"),
   );
+});
+
+it("keeps aliases that canonicalize to extensions out of main variant identity", () => {
+  expect(contentLanguageCode("en-US-posix")).toBe("en");
+  expect(contentLanguageTag("en-US-posix")).toBe("en-US");
+  expect(isRegionalContentLanguage("en-US-posix")).toBe(true);
+  expect(contentLanguageCode("en-US-u-va-posix")).toBe("en");
 });
