@@ -102,6 +102,7 @@ async function automatic() {
         evidenceKeys: ["order:last"],
       },
       now,
+      f.dayId,
     ),
   );
   return { start, end, questionId };

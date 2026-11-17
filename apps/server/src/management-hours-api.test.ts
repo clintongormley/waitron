@@ -320,7 +320,7 @@ it("own automatic acknowledgement preserves counted hours and appends worker att
       at: "2026-01-06T17:00:00Z",
       openEntryId: openId,
     });
-    await seedAttendanceDay(tx, {
+    const attendanceDayId = await seedAttendanceDay(tx, {
       businessDay: "2026-01-06",
       startAt: "2026-01-06T04:00:00Z",
       endAt: "2026-01-07T04:00:00Z",
@@ -342,6 +342,7 @@ it("own automatic acknowledgement preserves counted hours and appends worker att
         evidenceKeys: ["order:last"],
       },
       now,
+      attendanceDayId,
     );
   });
   const response = await ask(own + "commands", {
@@ -460,7 +461,7 @@ it("another worker's actual target, question and proposal confer no own authorit
       actorPersonId: owner,
       origin: jobOrigin("dashboard"),
     });
-    await seedAttendanceDay(tx, {
+    const attendanceDayId = await seedAttendanceDay(tx, {
       businessDay: "2026-01-06",
       startAt: "2026-01-06T04:00:00Z",
       endAt: "2026-01-07T04:00:00Z",
@@ -482,6 +483,7 @@ it("another worker's actual target, question and proposal confer no own authorit
         evidenceKeys: ["rota:other"],
       },
       now,
+      attendanceDayId,
     );
   });
   const before = snapshot();

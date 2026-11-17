@@ -1,8 +1,8 @@
 // Weaker than its name: it finds a person's table only through declared foreign keys, so a person
 // id held without one, or inside a JSON column (`attendance_answers.input`,
 // `pay_period_closures.snapshot`, `attendance_questions.evidence_keys`), is not seen, nor is a
-// JSON list of ids of rows that name a person (`attendance_days.deferred_shift_ids`, shift
-// ids); the columns of `time_entries`, exported whole as the working-time record, are not checked
+// JSON list of ids of rows that name a person; the columns of `time_entries`, exported whole as
+// the working-time record, are not checked
 // at all; and it proves a column was classified, not that WORKFORCE_PERSONAL_DATA honours the
 // classification (personal-data.test.ts's exact-files cases do that).
 import { is } from "drizzle-orm";

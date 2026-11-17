@@ -38,7 +38,8 @@ export function run({ root = process.cwd(), write = false } = {}) {
     for (const [from, to] of pairs) {
       const source = new RegExp(`\\b${from}${from.includes("_") ? "(?=_|\\b)" : "\\b"}`, "g");
       if (!source.test(before)) continue;
-      if (new RegExp(`\\b${to}\\b`).test(before)) throw new Error(`Identifier collision: ${path}`);
+      if (new RegExp(`\\b${to}${from.includes("_") ? "(?=_|\\b)" : "\\b"}`).test(before))
+        throw new Error(`Identifier collision: ${path}`);
       after = after.replace(source, to);
     }
     if (after !== before) changes.push({ path, text: after });

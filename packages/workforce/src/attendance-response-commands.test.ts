@@ -47,6 +47,7 @@ const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
 const now = new Date("2026-01-07T08:00:00.000Z");
 let personId: string, manager: string, other: string, nodeId: string;
+let attendanceDayId: string;
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
@@ -92,6 +93,7 @@ function question(subject = personId, key = "rota:first") {
         evidenceKeys: [key],
       },
       now,
+      attendanceDayId,
     ),
   );
 }
@@ -250,6 +252,7 @@ async function automaticQuestion() {
         evidenceKeys: ["order:last"],
       },
       now,
+      attendanceDayId,
     ),
   );
   return { questionId: id, automaticEntryId };
@@ -990,7 +993,7 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
 });
 
 beforeEach(async () => {
-  await seedAttendanceDay(suite.db, {
+  attendanceDayId = await seedAttendanceDay(suite.db, {
     businessDay: "2026-01-05",
     startAt: "2026-01-05T04:00:00.000Z",
     endAt: "2026-01-06T04:00:00.000Z",

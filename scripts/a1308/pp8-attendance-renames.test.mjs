@@ -45,10 +45,13 @@ it("renames schemas, imports, SQL and subscription names once, keeping historica
   for (const path of preserved) expect(readFileSync(join(root, path), "utf8")).toBe(old);
   expect(run({ root, write: true })).toEqual([]);
 });
-it("refuses an identifier collision before writing any file", () => {
+it.each([
+  "const attendanceDays = attendanceDayWork;",
+  'index("attendance_day_work_due_idx"); index("attendance_days_due_idx");',
+])("refuses an identifier collision before writing any file: %s", (collision) => {
   const root = fixture({
     "apps/a.ts": old,
-    "apps/b.ts": "const attendanceDays = attendanceDayWork;",
+    "apps/b.ts": collision,
   });
   expect(() => run({ root, write: true })).toThrow("apps/b.ts");
   expect(readFileSync(join(root, "apps/a.ts"), "utf8")).toBe(old);

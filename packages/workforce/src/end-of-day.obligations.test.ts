@@ -121,7 +121,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
   );
   it("restores an inactive current rota identity, preserving an attempted reminder", async () => {
     const id = await f.run((tx) =>
-      upsertAttendanceQuestion(tx, missing("rota:morning"), f.input().now),
+      upsertAttendanceQuestion(tx, missing("rota:morning"), f.input().now, f.dayId),
     );
     await f.suite.db
       .update(attendanceQuestions)
@@ -230,7 +230,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
     "retired rota work remains a current activity question without repeating a %s reminder",
     async (status) => {
       const id = await f.run((tx) =>
-        upsertAttendanceQuestion(tx, missing("rota:removed"), f.input().now),
+        upsertAttendanceQuestion(tx, missing("rota:removed"), f.input().now, f.dayId),
       );
       await f.suite.db
         .update(attendanceQuestions)

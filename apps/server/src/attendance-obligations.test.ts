@@ -26,6 +26,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 const backend = new WorkforceBackend();
 const now = new Date("2026-01-08T12:00:00.000Z");
 let personId: string, shiftId: string, questionId: string;
+let attendanceDayId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
@@ -58,7 +59,7 @@ beforeEach(async () => {
     }),
   );
   await run((tx) => backend.publishRoster(tx, { versionId }));
-  await seedAttendanceDay(suite.db, day());
+  attendanceDayId = await seedAttendanceDay(suite.db, day());
   questionId = await run((tx) =>
     upsertAttendanceQuestion(
       tx,
@@ -73,6 +74,7 @@ beforeEach(async () => {
         evidenceKeys: ["rota:original"],
       },
       now,
+      attendanceDayId,
     ),
   );
   await run((tx) => markAttendanceSourceChanged(tx, "shift", shiftId));

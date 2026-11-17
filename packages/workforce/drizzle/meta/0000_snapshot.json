@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a3e7032f-53e2-47bd-9b9a-23245fafc75d",
+  "id": "ad32abf3-9b9d-4ad5-ab92-bd4eb3fd4ea0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -347,13 +347,6 @@
           "name": "attendance_days_due_idx",
           "columns": [
             "next_due_at"
-          ],
-          "isUnique": false
-        },
-        "attendance_days_start_idx": {
-          "name": "attendance_days_start_idx",
-          "columns": [
-            "start_at"
           ],
           "isUnique": false
         }

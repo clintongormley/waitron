@@ -54,7 +54,6 @@ export const attendanceDays = table(
   (t) => [
     uniqueIndex("attendance_days_scope_uq").on(t.businessDay),
     index("attendance_days_due_idx").on(t.nextDueAt),
-    index("attendance_days_start_idx").on(t.startAt),
     check("attendance_days_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
     check(
       "attendance_days_revision_ck",

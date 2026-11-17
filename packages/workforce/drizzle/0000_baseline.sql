@@ -50,7 +50,6 @@ CREATE TABLE `attendance_days` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `attendance_days_scope_uq` ON `attendance_days` (`business_day`);--> statement-breakpoint
 CREATE INDEX `attendance_days_due_idx` ON `attendance_days` (`next_due_at`);--> statement-breakpoint
-CREATE INDEX `attendance_days_start_idx` ON `attendance_days` (`start_at`);--> statement-breakpoint
 CREATE TABLE `attendance_questions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

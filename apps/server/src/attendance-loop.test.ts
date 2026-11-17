@@ -87,6 +87,26 @@ const gate = () => {
 };
 
 describe("attendance duty pass", () => {
+  it("continues immediately when another evaluated day is due from deferred work", async () => {
+    await suite.db.insert(attendanceDays).values([
+      {
+        businessDay: "2026-01-05",
+        startAt: "2026-01-05T04:00:00.000Z",
+        endAt: "2026-01-06T04:00:00.000Z",
+        nextDueAt: "2026-01-06T04:00:00.000Z",
+      },
+      {
+        businessDay: "2026-01-06",
+        startAt: "2026-01-06T04:00:00.000Z",
+        endAt: "2026-01-07T04:00:00.000Z",
+        dirtyRevision: 1,
+        evaluatedRevision: 1,
+        nextDueAt: "2026-01-07T05:00:00.000Z",
+      },
+    ]);
+    expect(await pass()).toEqual({ processed: true, more: true });
+    expect(await pass()).toEqual({ processed: true, more: false });
+  });
   it("keeps a day due until evaluated past its deferred end without a stored shift list", async () => {
     await suite.db.insert(attendanceDays).values({
       businessDay: "2026-01-05",

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
@@ -22,17 +22,6 @@ beforeEach(async () => {
 });
 
 describe("durable attendance day work", () => {
-  it("finds the day containing an instant through the start index", async () => {
-    await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
-    const result = suite.db.execute(sql`explain query plan select id from attendance_days
-      where start_at <= '2026-01-05T12:00:00.000Z' order by start_at desc limit 1`);
-    expect(result.rows.map((row) => row.detail).join(" ")).toContain("attendance_days_start_idx");
-    expect(
-      suite.db.execute(sql`select business_day from attendance_days
-      where start_at <= '2026-01-05T12:00:00.000Z' and end_at > '2026-01-05T12:00:00.000Z'
-      order by start_at desc limit 1`).rows,
-    ).toEqual([{ business_day: "2026-01-05" }]);
-  });
   it("re-enqueue preserves identity, bounds and deferred work while dirtying the revision", async () => {
     await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
     const [first] = await suite.db.select().from(attendanceDays);

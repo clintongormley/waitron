@@ -63,6 +63,7 @@ async function retainQuestion(
   tx: Transaction,
   input: Omit<AttendanceQuestion, "id" | "createdAt">,
   at: Date,
+  attendanceDayId: string,
 ): Promise<string> {
   const [old] = await tx
     .select()
@@ -81,7 +82,7 @@ async function retainQuestion(
     // Ambiguous or accepted delivery must not be retried when an obligation returns.
     await reopenAttendanceMail(tx, old.id, at);
   }
-  return upsertAttendanceQuestion(tx, input, at);
+  return upsertAttendanceQuestion(tx, input, at, attendanceDayId);
 }
 
 export async function processAttendanceDay(
@@ -217,6 +218,7 @@ export async function processAttendanceDay(
         evidenceKeys: [...new Set([...keys, ...retired.flatMap((q) => q.evidenceKeys)])],
       },
       now,
+      work.id,
     );
     const related = prior.filter(
       (q) =>

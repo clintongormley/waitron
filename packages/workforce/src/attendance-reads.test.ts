@@ -97,7 +97,7 @@ async function question(
   const date = input.date ?? "2026-01-05";
   const end = new Date(`${date}T04:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 1);
-  await seedAttendanceDay(suite.db, {
+  const attendanceDayId = await seedAttendanceDay(suite.db, {
     businessDay: date,
     startAt: `${date}T04:00:00Z`,
     endAt: end.toISOString(),
@@ -120,6 +120,7 @@ async function question(
         evidenceKeys: [input.key ?? `rota:${date}`],
       },
       now,
+      attendanceDayId,
     ),
   );
 }

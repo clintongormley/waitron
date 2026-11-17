@@ -125,27 +125,12 @@ export async function upsertAttendanceQuestion(
   tx: Transaction,
   input: QuestionInput,
   at: Date,
+  attendanceDayId: string,
 ): Promise<string> {
   validate(input, at);
-  const [day] = await tx
-    .select()
-    .from(attendanceDays)
-    .where(eq(attendanceDays.businessDay, input.day.businessDay));
-  if (
-    !day ||
-    day.startAt !== new Date(input.day.startAt).toISOString() ||
-    day.endAt !== new Date(input.day.endAt).toISOString()
-  )
-    throw invalid("attendance question day changed");
   const [existing] = await tx
-    .select({
-      ...getTableColumns(attendanceQuestions),
-      businessDay: attendanceDays.businessDay,
-      startAt: attendanceDays.startAt,
-      endAt: attendanceDays.endAt,
-    })
+    .select({ id: attendanceQuestions.id })
     .from(attendanceQuestions)
-    .innerJoin(attendanceDays, eq(attendanceDays.id, attendanceQuestions.attendanceDayId))
     .where(
       and(
         eq(attendanceQuestions.personId, input.personId),
@@ -155,7 +140,7 @@ export async function upsertAttendanceQuestion(
   let row: QuestionRow;
   if (existing) {
     row = await canonicalQuestion(tx, existing.id);
-    if (row.attendanceDayId !== day.id) {
+    if (row.attendanceDayId !== attendanceDayId) {
       throw invalid("attendance question day changed");
     }
     const fields = mergedFields(row, input);
@@ -166,7 +151,7 @@ export async function upsertAttendanceQuestion(
       .insert(attendanceQuestions)
       .values({
         personId: input.personId,
-        attendanceDayId: day.id,
+        attendanceDayId,
         shiftKey: input.shiftKey,
         kind: input.kind,
         missingKinds: union([], input.missingKinds),
@@ -176,7 +161,12 @@ export async function upsertAttendanceQuestion(
         createdAt: at.toISOString(),
       })
       .returning();
-    row = { ...created!, businessDay: day.businessDay, startAt: day.startAt, endAt: day.endAt };
+    row = {
+      ...created!,
+      businessDay: input.day.businessDay,
+      startAt: new Date(input.day.startAt).toISOString(),
+      endAt: new Date(input.day.endAt).toISOString(),
+    };
   }
   await ensureReminder(tx, row, at);
   return row.id;
