@@ -249,6 +249,7 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
   app.get("/", (c) => c.text("main handler must not run"));
   app.get("/setup", (c) => c.text("setup must stay local"));
   const lines: Parameters<Logger>[] = [];
+  let stopped = false;
   const server = startStaffListener(
     {
       staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 0 },
@@ -257,6 +258,7 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     },
     app,
     (...args) => lines.push(args),
+    [(c, next) => (stopped ? c.text("stopped", 503) : next())],
   );
   const ask = (path: string) =>
     new Promise<{ status: number; text: string }>((resolve, reject) => {
@@ -297,6 +299,8 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     port = Number(outcome[2]!.port);
     expect(await ask("/")).toEqual({ status: 200, text: "dashboard" });
     expect((await ask("/setup")).status).toBe(404);
+    stopped = true;
+    expect(await ask("/")).toEqual({ status: 503, text: "stopped" });
     await server!.close();
     await expect(ask("/")).rejects.toThrow();
   } finally {

@@ -115,7 +115,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "shows %s spare status at dashboard addresses and in API refusals",
   async (locale) => {
     const app = fixture();
-    for (const path of ["/", "/staff", "/assets/old.js", "/till/"]) {
+    for (const path of ["/", "/staff", "/assets/old.js", "/favicon.svg", "/till/"]) {
       const response = await app.request(path, { headers: { "accept-language": locale } });
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -161,7 +161,7 @@ it("at the venue's name a silent main server's spare sends pages to the switch p
   const app = fixture(SILENT);
   for (const [path, destination] of [
     ["/", "/handover/emergency"],
-    ["/", "/handover/emergency"],
+    ["/devices", "/handover/emergency"],
     ["/servers", "/handover/emergency"],
     [
       "/till/tabs/counter",

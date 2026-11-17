@@ -1873,5 +1873,6 @@ it("boot gives remote dashboard files the main handover stop and request metadat
   } finally {
     await server?.close();
     capture.mockRestore();
+    vi.mocked(startStaffListener).mockReset();
   }
 });
