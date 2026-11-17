@@ -2,7 +2,10 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import type { AgentPhase, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
 import { Hono, type Context } from "hono";
 import { isIP } from "node:net";
-import type { BluetoothAvailability } from "./bluetooth-availability.js";
+import type {
+  BluetoothAvailability,
+  BluetoothUnavailableReason,
+} from "./bluetooth-availability.js";
 
 export interface SetupDeps {
   snapshot: () => Promise<AgentSetupSnapshot>;
@@ -176,6 +179,25 @@ function resetCard(snapshot: AgentSetupSnapshot, now: number): string {
 <form method="post" action="/network/reset/cancel"><button type="submit">Cancel reset</button></form>`;
 }
 
+function bluetoothSentence(reason: BluetoothUnavailableReason): string {
+  switch (reason) {
+    case "dbus_unreachable":
+      return "the computer's system message bus (D-Bus) refused this agent. Check that the agent runs under its own AppArmor profile, waitron-print-agent: sudo bash waitron.sh install loads it and names it in .env as WAITRON_PRINT_AGENT_APPARMOR.";
+    case "bluez_not_answering":
+      return "the computer's Bluetooth service is not answering. Check that the Bluetooth service (bluetoothd) is running on this computer.";
+    case "no_controller":
+      return "this agent can see no Bluetooth adapter. Check that this computer has one.";
+    case "failed":
+      return "asking the computer's Bluetooth service failed. The agent's log has the details.";
+  }
+}
+
+function bluetoothCard(bluetooth: BluetoothAvailability | undefined): string {
+  if (bluetooth === undefined || bluetooth.available) return "";
+  return card(`<h2>Bluetooth</h2>
+<p>Bluetooth printers can't be found: ${bluetoothSentence(bluetooth.reason)}</p>`);
+}
+
 function renderRoot(deps: SetupDeps, snapshot: AgentSetupSnapshot): string {
   const sections: string[] = [];
   if (!snapshot.joined) {
@@ -186,6 +208,7 @@ function renderRoot(deps: SetupDeps, snapshot: AgentSetupSnapshot): string {
     sections.push(card(connectionCard(snapshot.status)));
     if (snapshot.outOfTouch) sections.push(card(resetCard(snapshot, deps.now())));
   }
+  sections.push(bluetoothCard(deps.bluetooth?.()));
   return layout(sections.join(""));
 }
 
@@ -218,7 +241,10 @@ export function createSetupApp(deps: SetupDeps): Hono {
     const origin = normaliseOrigin(rawUrl);
     if (origin === null) {
       return c.html(
-        layout(card(formCard(deps, rawUrl, `That is not a valid http(s) address: ${rawUrl}`))),
+        layout(
+          card(formCard(deps, rawUrl, `That is not a valid http(s) address: ${rawUrl}`)) +
+            bluetoothCard(deps.bluetooth?.()),
+        ),
         400,
       );
     }

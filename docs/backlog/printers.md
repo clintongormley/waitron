@@ -126,15 +126,13 @@ chosen destination.
   `docker compose exec -it print-agent bluetoothctl`, then
   `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
   `waitron-print-agent`.
-- **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the
-  log do. The page is English-only, with no language switch to carry a Spanish line.
 - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
   2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
   daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
   "No default controller available" and exited 0.
 - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
-  the agent has joined and is not out of touch, `/status.json` answers only loopback callers
-  (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
+  the agent has joined and is not out of touch, `/status.json` and the setup page's Bluetooth line
+  answer only loopback callers (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
 ## Measure one-job print pulls on the box
 
@@ -390,7 +388,7 @@ Hardware and inbox checks to complete in the owner session.
 - **A773 physical-till trial: serving part of a line.** Try marking part of a line served through
   the dish window during service. Decide whether it is practical before changing that workflow.
   [Spec §11](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
-- **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
+- **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** [Detail](printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 - **Loose ends left by C107 (#974).**
   [Detail](printers.md#loose-ends-left-by-c107-974)
 - **Loose ends left by #367.**
