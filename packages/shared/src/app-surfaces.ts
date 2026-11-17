@@ -28,3 +28,16 @@ export function isDashboardPath(path: string): boolean {
   const first = pathname.split("/")[1]!;
   return !first.includes(".") && !RESERVED_PREFIXES.has(first);
 }
+
+export function isDashboardAssetPath(path: string): boolean {
+  return (
+    path.startsWith("/assets/") ||
+    [
+      "/favicon.ico",
+      "/favicon.svg",
+      "/apple-touch-icon.png",
+      "/icon-192.png",
+      "/icon-512.png",
+    ].includes(path)
+  );
+}

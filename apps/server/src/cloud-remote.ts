@@ -1,6 +1,6 @@
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_STAFF_KEY_FILE, CLOUD_STAFF_CERT_FILE } from "@waitron/store";
-import { isDashboardPath } from "@waitron/shared";
+import { isDashboardAssetPath, isDashboardPath } from "@waitron/shared";
 import { mountSpa } from "./spa-api.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -142,18 +142,7 @@ export function createStaffApp(
     )
       return c.notFound();
     const read = c.req.method === "GET" || c.req.method === "HEAD";
-    if (
-      read &&
-      (isDashboardPath(path) ||
-        path.startsWith("/assets/") ||
-        [
-          "/favicon.ico",
-          "/favicon.svg",
-          "/apple-touch-icon.png",
-          "/icon-192.png",
-          "/icon-512.png",
-        ].includes(path))
-    )
+    if (read && (isDashboardPath(path) || isDashboardAssetPath(path)))
       return dashboard.fetch(c.req.raw, c.env);
     const allowed =
       path.startsWith("/management-api/") ||

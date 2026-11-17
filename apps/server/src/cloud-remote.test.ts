@@ -410,31 +410,25 @@ it("serves dashboard pages and assets directly, never arbitrary main-app root ha
 
 it("applies the supplied main page gates in order before serving staff pages", async () => {
   const { spareReadGate } = await import("./spare-read-gate.js");
-  const { zoneRepairGate } = await import("./zone-repair-serving.js");
-  const { TradingAdmission } = await import("./trading-admission.js");
+  const { createHandoverGate } = await import("./handover-gate.js");
   const root = await mkdtemp(join(tmpdir(), "waitron-staff-gates-"));
   try {
     await writeFile(join(root, "index.html"), "dashboard");
-    const admission = new TradingAdmission();
-    admission.repairOnly("invalid");
-    const gates = [spareReadGate({ main: () => undefined }), zoneRepairGate(admission)];
+    const handover = createHandoverGate();
+    const gates = [handover.middleware, spareReadGate({ main: () => undefined })];
     const mirror = createStaffApp(new Hono(), "https://staff.example.test", { root, gates });
     const response = await mirror.request("https://staff.example.test/account", {
       headers: { Accept: "text/html" },
     });
     expect(await response.text()).toContain("This server started as the spare");
-    const repair = createStaffApp(new Hono(), "https://staff.example.test", {
-      root,
-      gates: [zoneRepairGate(admission)],
+    handover.close({ allowed: () => false });
+    const stopped = await mirror.request("https://staff.example.test/account", {
+      headers: { Accept: "text/html" },
     });
-    expect(
-      await (
-        await repair.request("https://staff.example.test/account", {
-          headers: { Accept: "text/html" },
-        })
-      ).text(),
-    ).toBe("dashboard");
-    expect((await repair.request("https://staff.example.test/till/")).status).toBe(404);
+    expect(stopped.status).toBe(503);
+    expect(await stopped.json()).toEqual({
+      error: { code: "handover.stepping_down", params: {} },
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

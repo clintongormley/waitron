@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDashboardPath } from "./index.js";
+import { isDashboardAssetPath, isDashboardPath } from "./index.js";
 
 describe("dashboard page paths", () => {
   it.each([
@@ -45,5 +45,23 @@ describe("dashboard page paths", () => {
     ]),
   ] as const)("classifies %s as dashboard=%s", (path, expected) => {
     expect(isDashboardPath(path)).toBe(expected);
+  });
+});
+
+describe("dashboard asset paths", () => {
+  it.each([
+    ["/assets/app-hash.js", true],
+    ["/favicon.ico", true],
+    ["/favicon.svg", true],
+    ["/apple-touch-icon.png", true],
+    ["/icon-192.png", true],
+    ["/icon-512.png", true],
+    ["/assets-other/app.js", false],
+    ["/favicon.svg/other", false],
+    ["/till/assets/app.js", false],
+    ["/sw-probe.js", false],
+    ["/devices", false],
+  ] as const)("classifies %s as dashboard asset=%s", (path, expected) => {
+    expect(isDashboardAssetPath(path)).toBe(expected);
   });
 });

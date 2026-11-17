@@ -1,4 +1,4 @@
-import { isDashboardPath } from "@waitron/shared";
+import { isDashboardAssetPath, isDashboardPath } from "@waitron/shared";
 import type { MiddlewareHandler } from "hono";
 import type { TradingAdmission } from "./trading-admission.js";
 
@@ -35,7 +35,7 @@ export function zoneRepairGate(admission: TradingAdmission): MiddlewareHandler {
     const read =
       method === "GET" &&
       (isDashboardPath(path) ||
-        path.startsWith("/assets/") ||
+        isDashboardAssetPath(path) ||
         path === "/health" ||
         path === "/api/node" ||
         path.startsWith("/help/"));

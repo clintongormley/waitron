@@ -1,5 +1,11 @@
 import type { MiddlewareHandler } from "hono";
-import { AppError, isDashboardPath, formatDuration, type SupportedLocale } from "@waitron/shared";
+import {
+  AppError,
+  isDashboardAssetPath,
+  isDashboardPath,
+  formatDuration,
+  type SupportedLocale,
+} from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import { SAFE_METHODS } from "./read-only-gate.js";
 import { SPARE_WORDS } from "./i18n/spare.js";
@@ -70,7 +76,7 @@ export function spareReadGate(deps: {
     c.header("Cache-Control", "no-store");
     if (
       isDashboardPath(path) ||
-      path.startsWith("/assets/") ||
+      isDashboardAssetPath(path) ||
       path === "/till" ||
       path.startsWith("/till/")
     ) {

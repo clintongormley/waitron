@@ -1504,8 +1504,10 @@ async function bootServer(
     boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
-  app.use("*", requestIdMiddleware(log, now));
-  app.use("*", buildHeaderMiddleware(build));
+  const requestMetadata = requestIdMiddleware(log, now);
+  const buildMetadata = buildHeaderMiddleware(build);
+  app.use("*", requestMetadata);
+  app.use("*", buildMetadata);
   const ownPageCheck = requireManagementChangeFromOwnPage(
     async (origin) => origin === config.managementOrigin || (await allowOrigin(origin)),
     log,
@@ -2493,7 +2495,11 @@ async function bootServer(
           log,
         });
   undoOnFailure.push(async () => mainSilence?.stop());
-  const staffPageGates: MiddlewareHandler[] = [];
+  const staffPageGates: MiddlewareHandler[] = [
+    handoverGate.middleware,
+    requestMetadata,
+    buildMetadata,
+  ];
   if (isMirror) {
     const gate = spareReadGate({ main: () => mainSilence?.state() });
     app.use("*", gate);
@@ -2607,7 +2613,6 @@ async function bootServer(
     tradingAdmission.repairOnly(context.savedZone.kind);
     const gate = zoneRepairGate(tradingAdmission);
     app.use("*", gate);
-    staffPageGates.push(gate);
     mountWebhook(
       app,
       {
