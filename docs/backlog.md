@@ -725,7 +725,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   that drag** — left open by A642.
   [Detail](backlog/till.md#an-element-inside-a-shadow-root-attached-after-a-drag-starts-keeps-its-own-cursor-rule-during-that-drag)
 
-- **The "Goes with" line** (bundle of 2, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
+- **The "Goes with" line** (bundle of 1, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
 
 - **Status words on the pass and beside it** (bundle of 2, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
 

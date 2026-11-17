@@ -54,7 +54,7 @@ import {
   movedPlaceText,
 } from "./kitchen-ticket.js";
 import { readKitchenLanguage } from "./kitchen-language.js";
-import type { KitchenLanguage } from "./i18n/kitchen-ticket.js";
+import { kitchenLanguageFor } from "./i18n/kitchen-ticket.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -207,7 +207,7 @@ async function buildTicketItems(
   tx: Transaction,
   cfg: TradingContext,
   lineIds: string[],
-  language: KitchenLanguage,
+  language: string,
 ): Promise<
   Map<
     string,
@@ -319,7 +319,7 @@ async function buildTicketItems(
   const allergenLabels = (id: string): string[] =>
     Object.entries(nutrition.get(id)?.allergens ?? {})
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([code, entry]) => kitchenAllergenLabel(code, entry, language));
+      .map(([code, entry]) => kitchenAllergenLabel(code, entry, kitchenLanguageFor(language)));
   // The per-dish pick count is recovered from the stored combined child quantity. Every child's
   // parent is in `lineById` because children are read by parent id.
   const modifiersByParent = new Map<string, string[]>();
@@ -360,7 +360,9 @@ async function buildTicketItems(
       extraUnit,
     );
     const labels = allergenLabels(child.id);
-    names.push(labels.length === 0 ? label : extraWithAllergens(label, labels, language));
+    names.push(
+      labels.length === 0 ? label : extraWithAllergens(label, labels, kitchenLanguageFor(language)),
+    );
     modifiersByParent.set(child.parentLineId!, names);
   }
 
@@ -1549,7 +1551,7 @@ type TicketItemsByLine = Awaited<ReturnType<typeof buildTicketItems>>;
 export interface PortionRead {
   whole: ReadonlySet<string>;
   built: TicketItemsByLine;
-  language?: KitchenLanguage;
+  language?: string;
 }
 
 function toNoticeItem(item: CorrectionItem) {
@@ -2068,7 +2070,7 @@ type MovedItem = CorrectionItem & { held: boolean };
 
 /** What MOVED slips print with: their stations' printers and stations, their lines. */
 interface MovedSlipPrinting {
-  language: KitchenLanguage;
+  language: string;
   byStation: MappingsByStation;
   itemsByLine: Awaited<ReturnType<typeof buildTicketItems>>;
   stationNames: Awaited<ReturnType<typeof readStations>>;

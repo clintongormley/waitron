@@ -1,10 +1,11 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { addPortionRound } from "./testing/portion-bill.js";
-import { kitchenNotices } from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { nameParty } from "./testing/party-venue.js";
+import { nameParty, OPERATOR } from "./testing/party-venue.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order.js";
@@ -110,6 +111,39 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
 });
 
 describe("A964 venue language", () => {
+  it("prints an English other-station list using the supported regional locale", async () => {
+    const v = await setupSplitExtrasVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+      await updateStation(tx, v.stations.kitchen, { name: "Pastry" });
+      for (const id of [v.stations.grill, v.stations.fryer, v.stations.kitchen])
+        await updateStation(tx, id, { waitsForPass: true });
+      await updateStation(tx, v.stations.bar, { waitsForPass: false });
+      await setRoutingCell(
+        tx,
+        { row: { kind: "product", productId: v.products.water }, zoneId: null },
+        { kind: "station", stationId: v.stations.bar },
+      );
+      await placeGroups(tx, v.cfg, v.party.partyId, {
+        billId: v.party.tabId,
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "fire",
+            lines: v.tables.toOfferLines(
+              [v.products.burger, v.products.chips, v.products.cheese, v.products.water].map(
+                (productId) => ({ productId, quantity: "1" }),
+              ),
+            ),
+          },
+        ],
+      });
+    });
+    const bar = (await jobs()).find((job) => job.printerId === v.printers.bar)!;
+    const printed = printedLines(bar.payload);
+    expect(printed, printed.join("\n")).toContain("Goes with Fryer, Grill and Pastry");
+  });
+
   it.each(["en", "es"])(
     "prints new work from content %s despite German formatting and Spanish receipts",
     async (language) => {
@@ -419,7 +453,10 @@ it.each(["grouped", "portions"] as const)(
     const beforeJobs = await jobs();
     await withTransaction(suite.db, (tx) => tx.update(printers).set({ active: false }));
     const reader = vi.spyOn(kitchenLanguage, "readKitchenLanguage");
-    for (const language of ["en", "es"] as const) {
+    for (const [language, expectedLocale] of [
+      ["en", "en-GB"],
+      ["es", "es-ES"],
+    ] as const) {
       reader.mockClear();
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
@@ -436,7 +473,7 @@ it.each(["grouped", "portions"] as const)(
       if (shape === "grouped") expect(reader).not.toHaveBeenCalled();
       else {
         expect(reader).toHaveBeenCalledTimes(1);
-        expect(await reader.mock.results[0]!.value).toBe(language);
+        expect(await reader.mock.results[0]!.value).toBe(expectedLocale);
       }
       const notices = await suite.db
         .select({ kind: kitchenNotices.kind, movedTo: kitchenNotices.movedTo })

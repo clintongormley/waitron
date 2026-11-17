@@ -9,7 +9,7 @@ import {
 } from "./testing/decode-ticket.js";
 
 describe("A964 collection language", () => {
-  it.each(["en", "es"] as const)(
+  it.each(["en", "es", "en-GB", "es-ES"] as const)(
     "prints a centered two-line %s slip at each supported layout",
     (language) => {
       for (const [paperWidth, resolution, width] of [
