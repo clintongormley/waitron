@@ -583,11 +583,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1548. A zone picks which of its department's menus it sells (owner, 2026-11-17).** So a
-  standing bar counter can sell drinks and tapas but not a burger, while a till at that counter
-  can still order the burger for a terrace table. Needs a short design. Not started.
-  [Detail](backlog/service-periods.md#a1548-a-zone-picks-which-of-its-departments-menus-it-sells)
-
 - **After A760: A877's one helper first** (bundle of 4, 1 important, size L, waits for another entry). [Detail](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**

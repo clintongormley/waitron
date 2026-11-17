@@ -55,8 +55,8 @@ dishes cost nothing, a surcharge is charged on its dish, and paid extras are cha
 - Set menus on counter orders. A set menu goes only on the bill of a seated table: a table in a
   table-service zone, which includes a bar whose stools are set up as tables in such a zone
   (**owner**, 17 November: "these set menus are only for tables/bars with seating"). A counter
-  order, eaten in or not, is never offered one. Which dishes a standing counter may sell at all is
-  a separate entry, A1548 (a zone picks which of its department's menus it sells).
+  order, eaten in or not, is never offered one. Other dishes are not limited this way: whether a
+  standing guest can have a dish is the waiter's call (owner, 17 November).
 - Set menus on takeaway or delivery orders, while adviser question T17 is open (see "Counter orders and takeaway").
 - A selling schedule of the set menu's own. A set menu sells when the full menu it sits in sells,
   under that menu's existing periods (**owner**, 12 November: "with set menus, having a selling
