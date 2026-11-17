@@ -14,7 +14,7 @@ describe.each(["light", "dark"] as const)("wt-demo-bar a11y (%s theme)", (theme)
     el.navigationLabel = `${modeLabel} navigation`;
     el.links = [
       { label: "Dashboard", href: "/", current: true },
-      { label: "Device", href: "/" },
+      { label: "Device", href: "/till/" },
       { label: "Email inbox", href: "/email" },
     ];
     await el.updateComplete;

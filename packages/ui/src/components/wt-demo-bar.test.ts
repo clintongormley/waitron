@@ -12,14 +12,14 @@ test("marks the current page and keeps the other destinations as links", async (
   el.navigationLabel = "Demo navigation";
   el.links = [
     { label: "Dashboard", href: "/", current: true },
-    { label: "Device", href: "/" },
+    { label: "Device", href: "/till/" },
   ];
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("nav")?.getAttribute("aria-label")).toBe("Demo navigation");
   expect(el.shadowRoot!.querySelector("strong")?.textContent).toBe("Demo");
   expect(el.shadowRoot!.querySelector('[aria-current="page"]')?.textContent).toBe("Dashboard");
   expect(el.shadowRoot!.querySelector('a[href="/"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('a[href="/"]')?.textContent).toBe("Device");
+  expect(el.shadowRoot!.querySelector('a[href="/till/"]')?.textContent).toBe("Device");
 });
 
 test("paints the raised surface, border and text from tokens", async () => {
@@ -39,7 +39,7 @@ test("scrolls a fully hidden last destination into view when reached by keyboard
   el.navigationLabel = "Preparation navigation";
   el.links = [
     { label: "Dashboard", href: "/", current: true },
-    { label: "Device", href: "/" },
+    { label: "Device", href: "/till/" },
     { label: "Email inbox", href: "/email" },
   ];
   await el.updateComplete;
