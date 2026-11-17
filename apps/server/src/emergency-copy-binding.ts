@@ -63,11 +63,11 @@ function uuidV4(value: unknown, field: string): string {
   return value;
 }
 
-function instant(value: unknown, field: string): number {
+function instant(value: unknown, field: string): string {
   if (typeof value !== "string") refuse(field);
   const time = Date.parse(value);
   if (!Number.isFinite(time) || new Date(time).toISOString() !== value) refuse(field);
-  return time;
+  return value;
 }
 
 export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyCopyBinding {
@@ -94,10 +94,10 @@ export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyC
   const databaseSha256 = stream.databaseSha256;
   if (!isSha256Hex(databaseSha256)) refuse("selectedStream.databaseSha256");
 
-  const started = instant(top.startedAt, "startedAt");
-  const expires = instant(top.expiresAt, "expiresAt");
-  if (expires - started !== LIFETIME_MS) refuse("expiresAt");
-  const expiresAt = top.expiresAt as string;
+  const startedAt = instant(top.startedAt, "startedAt");
+  const expiresAt = instant(top.expiresAt, "expiresAt");
+  const expires = Date.parse(expiresAt);
+  if (expires - Date.parse(startedAt) !== LIFETIME_MS) refuse("expiresAt");
   if (now.getTime() >= expires) throw new AppError("emergency_copy.binding_expired", { expiresAt });
 
   return {
@@ -109,7 +109,7 @@ export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyC
     copyNodeId,
     installationId,
     selectedStream: { streamId, generation, databaseSha256 },
-    startedAt: top.startedAt as string,
+    startedAt,
     expiresAt,
   };
 }
