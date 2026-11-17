@@ -992,6 +992,9 @@ The table screen's «en el
 pase» (wait for the owner's table screen redesign) and the closed-station alert on the dashboard's
 alerts page.
 
+Found by the look, for the owner to decide: a held dish on the pass has no "state · station" line,
+so unless its station is closed the pass does not say which station the dish will go to.
+
 
 ## A559. The till's full-invoice dialog changes width when an error appears.
 

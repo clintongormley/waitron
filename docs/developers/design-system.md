@@ -503,7 +503,7 @@ The five `--wt-color-field-*` tokens paint the filled form field (see "The field
 | Token                            | Light     | Dark      | Paints                                                    |
 | -------------------------------- | --------- | --------- | --------------------------------------------------------- |
 | `--wt-color-field-fill`          | `#f0f1f4` | `#262a33` | the field's background                                    |
-| `--wt-color-field-line`          | `#7d8390` | `#7a8291` | the bottom line at rest, the dashed one when disabled, and the off switch track |
+| `--wt-color-field-line`          | `#7d8390` | `#7a8291` | the bottom line at rest, the dashed one when disabled, the off switch track, and a held kitchen card's border |
 | `--wt-color-field-label-focus`   | `#1a5fd0` | `#5c98ff` | the label of the focused field                            |
 | `--wt-color-field-fill-disabled` | `#f7f7f8` | `#1f2229` | a disabled field's background                             |
 | `--wt-color-field-value`         | `#000000` | `#ffffff` | the value typed or chosen                                 |
@@ -6549,7 +6549,7 @@ Collect and Reprint where they apply, each naming its bill's number when the car
 is a top border one `--wt-space-1` thick: `--wt-color-success` fresh, `--wt-color-warning` warm,
 and for overdue and forgotten the whole border in `--wt-color-danger`; a forgotten card pulses
 unless reduced motion is asked for (the `flash` class and the `@media` rule), and a card with no
-fired dish is dashed, with no band and no minutes (`station-queue.ts`). A dish tap in "One item at a
+fired dish is dashed in `--wt-color-field-line`, with no band and no minutes (`station-queue.ts`). A dish tap in "One item at a
 time" moves that dish; in "Whole ticket at once" it moves the card's fired dishes at the tapped
 dish's stage; the heading is a `<button>` only while the card has a fired dish not Ready, and its
 tap moves the card's fired dishes at the least advanced such stage, never a dish further on
