@@ -352,6 +352,12 @@ export class TillShell extends LitElement {
         border-color: var(--wt-color-border);
       }
 
+      .till-strip button:focus-visible,
+      .till-strip wt-row-actions::part(trigger):focus-visible,
+      .till-strip wt-button::part(button):focus-visible {
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
       [data-counter-zone] {
         display: flex;
         align-items: center;
@@ -745,6 +751,7 @@ export class TillShell extends LitElement {
   /** Observes the host, not the header: its width comes from its container, so a fit does not
    * resize it ("reports no ResizeObserver loop", till-shell.test.ts). */
   #observe(): void {
+    if (!this.isConnected) return;
     if (this.#observer === undefined) {
       this.#observer = new ResizeObserver((entries) => {
         for (const entry of entries) {

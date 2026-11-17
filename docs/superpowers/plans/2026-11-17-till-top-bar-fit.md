@@ -1,6 +1,6 @@
 # Till top-bar focus and observer lifecycle
 
-**Status:** Sol high-effort draft, shortened and checked by the Codex driver; Claude first read (202 s) and single correction read (133 s) complete; corrections/disposition below, awaiting watcher plan clearance. No owner design approval claimed.
+**Status:** Sol high-effort draft, shortened and checked by the Codex driver; Claude first read (202 s) and single correction read (133 s) complete; corrections/disposition below; watcher cleared the corrected inset-ring plan at 02:16 in Lane H’s questions.md. No owner design approval claimed.
 **Ask:** TILL-TOP-BAR-FIT in Lane H’s `queue.md`; the top-bar bundle in `docs/backlog/till.md`.
 **Scope clearance:** The watcher’s heading, 2026-11-17 02:03 in Lane H’s `questions.md`: “TILL-TOP-BAR-FIT: keep the permanent strip; fix focus and lifecycle only”. Its body says “Fix the clipped focus ring and the handheld observer leak in this item, with tests.” The More-overflow direction was withdrawn. Preserve Counter, Floor, Parked, Waiting, Transfers and Pass on their permanent scrolling strip, with name and Help reachable (`design-system.md:6191–6203`).
 

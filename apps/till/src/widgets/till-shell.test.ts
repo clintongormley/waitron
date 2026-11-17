@@ -2506,6 +2506,25 @@ describe("till-shell above phone width", () => {
     );
   });
 
+  it("a render queued before the handheld leaves the page observes no detached target", async () => {
+    const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+    try {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "phone-portrait",
+        operatorName: "Ana",
+      });
+      await settle(el);
+      expect(observe.mock.calls.filter(([target]) => target === el)).toHaveLength(1);
+      observe.mockClear();
+      el.operatorName = "Beatriz";
+      el.remove();
+      await el.updateComplete;
+      expect(observe.mock.calls).toHaveLength(0);
+    } finally {
+      observe.mockRestore();
+    }
+  });
+
   it("keeps fitting after it is taken off the page and put back", async () => {
     await atViewport(1024, async () => {
       const tables = tablesOf(await tablesMoving(full.operatorName!));

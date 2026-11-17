@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { BUSY_COUNTER, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -13,6 +13,81 @@ const tabsOf = (el: TillShell) => [
 ];
 
 afterEach(cleanupWidgets);
+
+function expectUnclippedOutline(button: HTMLElement): void {
+  const style = getComputedStyle(button);
+  expect(button.matches(":focus-visible")).toBe(true);
+  expect(style.outlineStyle).not.toBe("none");
+  expect(parseFloat(style.outlineWidth)).toBeGreaterThan(0);
+  const extent = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+  const box = button.getBoundingClientRect();
+  let ancestor: HTMLElement | null = button;
+  while (ancestor) {
+    const parent: HTMLElement | null =
+      ancestor.parentElement ??
+      ((ancestor.getRootNode() as ShadowRoot).host as HTMLElement | undefined) ??
+      null;
+    ancestor = parent;
+    if (!parent) break;
+    const clip = getComputedStyle(parent);
+    const bounds = parent.getBoundingClientRect();
+    const label = `${parent.tagName}.${parent.className}`;
+    if (clip.overflowX !== "visible") {
+      expect(box.left - extent, `${label} left`).toBeGreaterThanOrEqual(
+        bounds.left + parent.clientLeft - 0.5,
+      );
+      expect(box.right + extent, `${label} right`).toBeLessThanOrEqual(
+        bounds.left + parent.clientLeft + parent.clientWidth + 0.5,
+      );
+    }
+    if (clip.overflowY !== "visible") {
+      expect(box.top - extent, `${label} top`).toBeGreaterThanOrEqual(
+        bounds.top + parent.clientTop - 0.5,
+      );
+      expect(box.bottom + extent, `${label} bottom`).toBeLessThanOrEqual(
+        bounds.top + parent.clientTop + parent.clientHeight + 0.5,
+      );
+    }
+  }
+}
+
+it.each([
+  ["native", "ltr"],
+  ["zone menu", "ltr"],
+  ["zone menu", "rtl"],
+] as const)(
+  "keeps the counter's %s focus outline inside its scroll clippers in %s",
+  async (kind, dir) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el, host } = await mountWidget<TillShell>("till-shell", {
+        ...BUSY_COUNTER,
+        ...(kind === "native" ? { counterZones: [] } : {}),
+      });
+      host.dir = dir;
+      const root = el.shadowRoot!;
+      const first =
+        kind === "native"
+          ? root.querySelector<HTMLElement>(".tabs button")!
+          : root
+              .querySelector("[data-counter-zones]")!
+              .shadowRoot!.querySelector<HTMLElement>("button")!;
+      await userEvent.keyboard("{Tab}");
+      first.focus();
+      expectUnclippedOutline(first);
+      await page.viewport(390, 844);
+      const last = root
+        .querySelector(".till-strip .expo")!
+        .shadowRoot!.querySelector<HTMLElement>("button")!;
+      last.focus();
+      last.scrollIntoView({ block: "nearest", inline: "end" });
+      expectUnclippedOutline(last);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
 
 it("puts only the selected handheld tab in the Tab sequence", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
