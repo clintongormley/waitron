@@ -101,15 +101,13 @@ describe("daily housekeeping steps", () => {
     const started = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    await suite.db
-      .insert(signInChallenges)
-      .values({
-        id: "keep",
-        kind: "passkey_login",
-        challenge: "expired",
-        createdAt: old,
-        expiresAt: now.toISOString(),
-      });
+    await suite.db.insert(signInChallenges).values({
+      id: "keep",
+      kind: "passkey_login",
+      challenge: "expired",
+      createdAt: old,
+      expiresAt: now.toISOString(),
+    });
     const holding = withTransaction(suite.db, async () => {
       entered();
       await gate;
@@ -362,6 +360,14 @@ describe("activity log housekeeping", () => {
       }),
     );
   }
+  it("checks the activity clock gate after print cleanup finishes", async () => {
+    const p = await printer();
+    await job(p.id);
+    const entry = await activity("2026-10-01T00:00:00.000Z");
+    await pass(tidy({ clockUnconfirmed: () => lengths()[0]!.size === 0 }));
+    expect(lengths()[0]!.size).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).toEqual([entry.id]);
+  });
   it("prunes the log at 30 days while print payloads keep their seven-day rule", async () => {
     const expired = await activity("2026-10-15T03:59:59.999Z");
     const boundary = await activity("2026-10-15T04:00:00.000Z");

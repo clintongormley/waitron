@@ -182,14 +182,12 @@ export function housekeepingJob(deps: {
       if (ctx.now.getTime() >= due) {
         const runs = [
           { name: "print_jobs", run: () => clearOldPrintPayloads(deps.db, ctx.now, ctx.signal) },
-          ...(!deps.clockUnconfirmed()
-            ? [
-                {
-                  name: "activity_log",
-                  run: () => clearOldActivityLog(deps.db, ctx.now, ctx.signal),
-                },
-              ]
-            : []),
+          {
+            name: "activity_log",
+            run: async () => {
+              if (!deps.clockUnconfirmed()) await clearOldActivityLog(deps.db, ctx.now, ctx.signal);
+            },
+          },
           ...(deps.steps ?? HOUSEKEEPING_STEPS)
             .filter((step) => step.enabled)
             .map((step) => ({
