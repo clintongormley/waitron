@@ -548,15 +548,6 @@ Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were look
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
 address has not been looked at.
 
-## Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268
-
-Only dev mode lets a tab act as a separate device, and it names the device by id alone
-(`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
-whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
-tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
-lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
-secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
-
 ## A1325. Close the day: count the cash and save the day's close
 
 **Design approved by the owner, 2026-11-06:** [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md).

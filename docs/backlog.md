@@ -852,13 +852,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Nothing covers the order screen's bar** (bundle of 1, size S, needs the owner). Holds A1211. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
-- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
-  Only dev mode lets a tab act as a separate device, and it names the device by id alone
-  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
-  whole browser. **Next action:** a short spec for per-tab device secrets and per-tab sign-ins
-  usable in Demo, and reproduce the owner's report first.
-  [Detail](backlog/till.md#each-browser-tab-as-its-own-device-in-demo-too-a271-owner-2026-10-04--open-after-a268)
-
 - **Close the day: count the cash, record cash in and out, waiter floats** (bundle of 3, 2 go-live, 1 important, size L, design approved 2026-11-06, waits for A1308's payment and refund slices). Holds A1325. [Detail](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
