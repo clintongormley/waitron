@@ -478,7 +478,7 @@ status), `apps/till/src/i18n/codes.ts:174-177`; tests `apps/server/src/unpaid-de
 
 **Files:** create `apps/server/src/meal-end.ts` and `apps/server/src/meal-end.test.ts`; modify
 `apps/server/src/errors.ts` (`meal_end.already_issued { workingOrderId }`,
-`meal_end.unserved_dishes { workingOrderId; dishes: { lineId; name; quantity; released }[] }`).
+`meal_end.unserved_dishes { workingOrderId; dishes: { lineId; dishName; quantity; released }[] }`).
 
 **Interface:**
 `endMeal(tx, deps: { admission; db; backend; clock; log?; attendance? }, cfg: DeviceRequestConfig,

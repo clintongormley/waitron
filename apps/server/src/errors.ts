@@ -724,7 +724,7 @@ declare module "@waitron/shared" {
      */
     "meal_end.unserved_dishes": {
       workingOrderId: string;
-      dishes: { lineId: string; name: string; quantity: string; released: boolean }[];
+      dishes: { lineId: string; dishName: string; quantity: string; released: boolean }[];
     };
     /**
      * A submission id already recorded in this scope arrived with another command kind or other

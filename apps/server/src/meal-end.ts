@@ -152,7 +152,7 @@ export async function endMeal(
   );
 }
 
-/** A full invoice staged for A4 or email is delivered by `issueUnpaidInvoice`'s reservation. */
+/** A full invoice staged for A4 or email has its delivery reserved by `issueUnpaidInvoice`. */
 async function needsPaper(tx: Transaction, billId: string): Promise<boolean> {
   const [order] = await tx
     .select({ invoiceType: workingOrders.invoiceType, delivery: workingOrders.invoiceDelivery })
@@ -197,7 +197,7 @@ async function unservedDishes(tx: Transaction, billId: string) {
       : [
           {
             lineId: row.line.id,
-            name: staffPresentationName(row.line),
+            dishName: staffPresentationName(row.line),
             quantity: thousandthsToDecimal(remaining),
             released: isReleased({ ...row, sentAt: row.line.sentAt }),
           },

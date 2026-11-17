@@ -6,6 +6,7 @@ import {
   deviceProfilePrinters,
   devices,
   invoiceDeliveries,
+  pagePrinters,
   parties,
   partyTables,
   printJobs,
@@ -197,6 +198,15 @@ async function orderRow(billId: string) {
   return row!;
 }
 
+function deliveriesOf(saleId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ medium: invoiceDeliveries.medium })
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.saleId, saleId)),
+  );
+}
+
 async function choose(billId: string, invoiceType: "F1" | "F2") {
   const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
     readBillEditState(tx, billId),
@@ -349,7 +359,7 @@ describe("Print the bill", () => {
       code: "meal_end.unserved_dishes",
       params: {
         workingOrderId: party.tabId,
-        dishes: [{ lineId: tarta!.id, name: "Tarta", quantity: "1.000", released: true }],
+        dishes: [{ lineId: tarta!.id, dishName: "Tarta", quantity: "1.000", released: true }],
       },
     });
   });
@@ -362,7 +372,7 @@ describe("Print the bill", () => {
       code: "meal_end.unserved_dishes",
       params: {
         workingOrderId: party.tabId,
-        dishes: [{ lineId: tarta!.id, name: "Tarta", quantity: "1.000", released: false }],
+        dishes: [{ lineId: tarta!.id, dishName: "Tarta", quantity: "1.000", released: false }],
       },
     });
   });
@@ -703,8 +713,17 @@ describe("a printed bill's invoice type", () => {
     const party = await seatedWith(venue, "Red wine bottle");
     expect((await choose(party.tabId, "F1")).status).toBe(200);
     await serveAll(party);
-    await end(party);
+    const { saleId } = await end(party);
 
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ kind: printJobs.kind, copy: printJobs.receiptCopy })
+          .from(printJobs)
+          .where(eq(printJobs.saleId, saleId)),
+      ),
+    ).toEqual([{ kind: "document", copy: false }]);
+    expect(await deliveriesOf(saleId)).toEqual([{ medium: "receipt" }]);
     await refusesSwitch(party.tabId, "F2");
   });
 });
@@ -799,14 +818,7 @@ describe("Print the bill's receipt", () => {
     const { saleId } = await end(party, {}, cfg);
 
     expect(await jobsOf(saleId)).toEqual([]);
-    expect(
-      await inTx(venue, (tx) =>
-        tx
-          .select({ medium: invoiceDeliveries.medium })
-          .from(invoiceDeliveries)
-          .where(eq(invoiceDeliveries.saleId, saleId)),
-      ),
-    ).toEqual([{ medium: "email" }]);
+    expect(await deliveriesOf(saleId)).toEqual([{ medium: "email" }]);
   });
 
   it("a full invoice staged for email prints no receipt on a device that has a printer", async () => {
@@ -831,6 +843,38 @@ describe("Print the bill's receipt", () => {
     expect(await jobsOf(saleId)).toEqual([]);
   });
 
+  it("a full invoice staged for A4 prints no receipt on a device that has a printer", async () => {
+    const pagePrinterId = randomUUID();
+    await inTx(venue, (tx) =>
+      tx.insert(pagePrinters).values({
+        id: pagePrinterId,
+        name: "Office",
+        host: pagePrinterId,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        active: true,
+      }),
+    );
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ invoiceDelivery: { medium: "a4", pagePrinterId, personId: venue.operatorId } })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await serveAll(party);
+
+    const { saleId } = await end(party);
+
+    expect(await jobsOf(saleId)).toEqual([]);
+    expect(await deliveriesOf(saleId)).toEqual([{ medium: "a4" }]);
+  });
+
   it("refuses meal_end.no_printer when the device's receipts resolve to no printer, issuing nothing", async () => {
     const { cfg } = await bareDevice();
     const party = await seatedWith(venue, "Red wine bottle");
@@ -848,9 +892,10 @@ describe("Print the bill's receipt", () => {
     const submissionId = randomUUID();
     const expectedPartyRevision = revisionOf(party.partyId);
 
-    const { saleId } = await end(party, { submissionId, expectedPartyRevision });
-    await end(party, { submissionId, expectedPartyRevision });
+    const first = await end(party, { submissionId, expectedPartyRevision });
+    const second = await end(party, { submissionId, expectedPartyRevision });
 
-    expect(await jobsOf(saleId)).toHaveLength(1);
+    expect(second).toEqual(first);
+    expect(await jobsOf(first.saleId)).toHaveLength(1);
   });
 });
