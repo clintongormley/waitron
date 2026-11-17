@@ -228,7 +228,7 @@ export class BackupSupervisor {
 
   /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
    * teardowns. */
-  async reload(): Promise<void> {
+  async reload({ resumeCloudDeadline = false } = {}): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
@@ -311,6 +311,7 @@ export class BackupSupervisor {
       this.#schedule = createBackupSchedule({
         nodeId: this.#deps.nodeId,
         backends: this.#backends,
+        resumeCloudDeadline,
         cloud:
           cfg.cloud && this.#deps.cloudTarget
             ? { target: this.#deps.cloudTarget, readClock: this.#deps.readClock }

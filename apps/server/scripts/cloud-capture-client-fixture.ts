@@ -129,7 +129,7 @@ else if (request.command === "schedule") {
         uploadErrorCode = result.uploadErrorCode;
       },
       archive: (path) => store.venue.archiveTo(path),
-      log: () => {},
+      log: (_level, event) => assert.notEqual(event, "backup.failed"),
       now: () => now,
     });
     await schedule.pass(now, signal);

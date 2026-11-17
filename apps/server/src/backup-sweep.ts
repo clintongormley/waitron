@@ -72,6 +72,7 @@ export interface BackupSweepDeps {
   nodeId: string;
   backends: StorageBackend[];
   cloud?: { target: CloudArchiveTarget; readClock: () => Promise<ScheduleClock> };
+  resumeCloudDeadline?: boolean;
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
   /** Read for the manifest, and copied whole as the archive's `node.dump` through the state folder's scratch root. */
@@ -529,7 +530,7 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
     async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
       if (signal.aborted) return { nextDueAt: null };
       const nowMs = now.getTime();
-      if (first && deps.cloud?.target.readCaptureState) {
+      if (first && deps.resumeCloudDeadline !== false && deps.cloud?.target.readCaptureState) {
         const saved = await deps.cloud.target.readCaptureState().catch(() => undefined);
         if (saved?.storedAt != null && !saved.pending) {
           const clock = await scheduleClock().catch(() => undefined);

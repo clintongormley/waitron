@@ -228,7 +228,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
-  it("keeps Cloud freshness across reload and reports a failed recovery", async () => {
+  it("keeps Cloud freshness across a key rotation and starts a fresh backup", async () => {
     const refs: Refs = {
       config: { ...localFsConfig([], STRONG_KEY_1), cloud: true },
       role: "primary",
@@ -237,11 +237,12 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     };
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
     vi.spyOn(cloudArchive, "cloudArchiveAvailable").mockReturnValue(true);
-    let storedAt = Date.now() - 86_400_000;
-    const resume = Promise.withResolvers<void>();
+    let storedAt = Date.now();
+    let resume!: () => void;
+    const resumed = new Promise<void>((resolve) => (resume = resolve));
     const store = vi
-      .fn(async () => {
-        await resume.promise;
+      .fn<cloudArchive.CloudArchiveTarget["store"]>(async () => {
+        await resumed;
         return { stored: false, errorCode: "cloud.unavailable" };
       })
       .mockResolvedValueOnce({ stored: true, errorCode: null });
@@ -249,15 +250,16 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       outcomes,
       cloudTarget: {
         id: "cloud",
-        readCaptureState: async () => ({ storedAt, pending: true }),
+        readCaptureState: async () => ({ storedAt, pending: store.mock.calls.length === 0 }),
         roomNeeded: async (estimate) => estimate,
         store,
       },
     });
     try {
-      await sup.reload();
+      await sup.reload({ resumeCloudDeadline: true });
       await waitForEvent(refs, "backup.destination_completed");
       expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
+      refs.config = { ...refs.config!, recoveryKey: STRONG_KEY_2 };
       await sup.reload();
       await vi.waitFor(() => expect(store).toHaveBeenCalledTimes(2), { timeout: 5_000 });
       const { backupStatus } = await sup.status();
@@ -266,7 +268,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       });
       storedAt -= refs.config!.staleAfterMs;
       expect((await sup.status()).backupStatus).toMatchObject({ destinations: [{ stale: true }] });
-      resume.resolve();
+      resume();
       await waitForEvent(refs, "backup.destination_failed");
       expect((await sup.status()).backupStatus).toMatchObject({
         configured: true,
@@ -282,7 +284,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         expect.objectContaining({ key: "backup.destination_failed:cloud" }),
       );
     } finally {
-      resume.resolve();
+      resume();
       await sup.stop();
     }
   }, 60_000);

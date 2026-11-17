@@ -509,10 +509,11 @@ The first capture of each month in the venue's time zone is labelled monthly. Cl
 available on test connections and have a 512 MiB upload limit.
 
 Cloud starts turned off, including on test boxes that used the old worker. Until the Backups
-screen includes the Cloud setting, choose it through the backup settings API. When Cloud is on,
-the backup service uses the last successful Cloud capture to recover the venue's next due time
-after restart. Local and Cloud destinations share that due time. An interrupted capture still
-uses the recovery path. Backup status reads the saved Cloud capture time.
+screen includes the Cloud setting, choose it through the backup settings API. On startup, a
+recent successful Cloud capture lets the shared schedule recover the venue's next due time.
+Local and Cloud destinations share that time. An interrupted capture still uses the recovery
+path. Saving settings or rotating the local recovery key starts a backup immediately. Backup
+status reads the saved Cloud capture time.
 
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
 installed checkout. It needs a Cloud that supports `servicesVersion` 2 (see
