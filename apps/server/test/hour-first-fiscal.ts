@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import type { Database } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
-import type { ModuleConfig, WaitronModule } from "@waitron/module";
+import type { ModuleConfig, ModuleOperationHost, WaitronModule } from "@waitron/module";
 import { createFirstSetupModuleHost } from "../src/module-operation-host.js";
 import { firstSetupModuleContext } from "../src/first-fiscal-evidence.js";
 import { mountSetup } from "../src/setup-api.js";
@@ -20,6 +20,7 @@ export async function hourFirstFiscalFixture(options: {
   moduleConfig?: ModuleConfig;
   workspace?: { root: string; stateDir: string; venueDir: string };
   clock?: HourTestClock;
+  readBoot?: ModuleOperationHost["readBoot"];
   /** Defaults to a browser on another device; a case about the box's own screen passes `() => true`. */
   requestFromBox?: (c: Context) => boolean;
 }) {

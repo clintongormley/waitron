@@ -32,6 +32,7 @@ export function createFirstSetupModuleHost(options: {
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
   testClock?: ModuleOperationHost["testClock"];
   timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
+  readBoot?: ModuleOperationHost["readBoot"];
   grantClock?: () => number;
   setBoxClock?: Parameters<typeof createFirstSetupRuntime>[0]["setBoxClock"];
 }) {
@@ -41,7 +42,7 @@ export function createFirstSetupModuleHost(options: {
   const runtime = createFirstSetupRuntime({
     ...options,
     timeServiceSynchronised: options.timeServiceSynchronised ?? timeServiceReader(),
-    readBoot: bootReader().readBoot,
+    readBoot: options.readBoot ?? bootReader().readBoot,
     readPublicEvidence: async (binding) => evidence.current?.read(binding),
   });
   const { coordinator, store, owner, resolution, modules, bootId, keys, recoveryDelivery } =

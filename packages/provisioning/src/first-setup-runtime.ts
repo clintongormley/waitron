@@ -110,6 +110,8 @@ export function createFirstSetupRuntime(options: {
   };
   const preparation: { current?: ReturnType<typeof createSetupPreparationHost> } = {};
   const setBoxClock = options.setBoxClock;
+  const bootId = randomUUID();
+  const readBoot = options.readBoot;
   const host = createModuleOperationHost(options.environment, {
     testClock: options.testClock,
     ...(setBoxClock === undefined
@@ -126,7 +128,16 @@ export function createFirstSetupRuntime(options: {
             }),
         }),
     timeServiceSynchronised: options.timeServiceSynchronised,
-    readBoot: options.readBoot,
+    // A time agreed at the series step must not outlive this start of the server, as the
+    // owner's grants do not, so the box's boot id is paired with this start's.
+    ...(readBoot === undefined
+      ? {}
+      : {
+          readBoot: () => {
+            const boot = readBoot();
+            return { ms: boot.ms, id: boot.id === null ? null : `${boot.id} ${bootId}` };
+          },
+        }),
     readSetupFacts: async (binding) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.readSetupFacts(binding);
@@ -151,7 +162,6 @@ export function createFirstSetupRuntime(options: {
     publicEvidencePaths: retained.flatMap((sources) => sources.files),
     publicEvidenceDirectories: retained.flatMap((sources) => sources.directories),
   });
-  const bootId = randomUUID();
   const owner = createFirstSetupOwner({
     ...options,
     now: options.grantClock,
