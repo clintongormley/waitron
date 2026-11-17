@@ -629,6 +629,10 @@ it("follows phone languages unless lang is present, and varies successful and un
     headers: { "Accept-Language": "*;q=1, es;q=0" },
   });
   expect(await excluded.text()).toContain('<html lang="en"');
+  const repeated = await f.app.request("/public/menu", {
+    headers: { "Accept-Language": "es;q=0, es, en;q=0.5" },
+  });
+  expect(await repeated.text()).toContain('<html lang="es"');
   f.serve(false);
   for (const [query, text] of [
     ["", "Carta no disponible"],

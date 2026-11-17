@@ -1055,8 +1055,8 @@ is serving. It uses the same projection and renderer as the protected preview. S
 non-transferring menu settings document: configuration imports retain this box’s choice.
 
 On a plain `/public/menu` link, the box reads the phone's `Accept-Language` preferences in
-positive-weight order, preserving header order on ties. For each preference it tries the exact tag,
-then removes trailing tag parts one at a time, then takes a venue language with the same base.
+positive-weight order, preserving header order on ties. It reads only the first 32 entries in the header.
+For each preference it tries the exact tag, then removes trailing tag parts one at a time, then takes a venue language with the same base.
 Matching ties try the main language first, then saved order; visible links keep saved order.
 For example, `ca,es` matches offered `ca-ES-valencia` before `es`. No match uses the main language.
 For `ca-valencia` with both `ca` and `ca-ES-valencia` offered, shortening reaches `ca` first.

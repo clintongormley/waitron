@@ -957,7 +957,7 @@ The public locale response carries a separate `loginDefault`, and `venueDefault`
 venue. A signed-in person with no saved language gets `sessionDefault` from
 `GET /management-api/session/me`: that request's own browser match, floored at the venue locale when
 the browser asks for nothing Waitron ships. It is derived per request and never stored, and a saved
-language still wins. Account emails have no browser to ask, so a person with no saved language gets
+language still wins. Only the first 32 entries of the `Accept-Language` header are read. Account emails have no browser to ask, so a person with no saved language gets
 the venue default there. Before till login, `GET /api/locales` uses the same browser match; after
 logout the till returns to it. A till operator with no saved language still gets the venue default.
 An enrolled kitchen display that skips login also stays on the venue default.
