@@ -391,6 +391,7 @@ export class ProductBrowser extends LitElement {
       if (read === this.#previewRead) this.routingPreview = preview;
     } catch (error) {
       if (read !== this.#previewRead) return;
+      this.routingPreview = null;
       const code = codeOf(error, "");
       this.previewRetry = ![
         "category.name_taken",

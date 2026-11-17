@@ -156,6 +156,7 @@ older build before using the new published document. Status and remaining work:
 
 - **Dragging a product folder changes its ancestry without a routing preview.** Add the
   changed-products preview to drag-and-drop moves before extending them during service.
+  Product-only **Move to…** also has no routing preview.
 - **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
   uses `ON DELETE CASCADE`
   (`packages/db/src/schema/venue-service/routing.ts`); follow CLAUDE.md §3's rebuild rule and add

@@ -5077,6 +5077,22 @@ it("refreshes the folder delete preview for its choice and changed summary befor
 it("retries a failed folder preview without saving and lets a refused destination change", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.previewProductItemsRouting).mockRejectedValueOnce(new Error("offline"));
+  vi.mocked(el.api.previewProductItemsRouting).mockResolvedValueOnce({
+    moves: [
+      {
+        productId: "cola",
+        productName: "Cola",
+        zoneId: null,
+        zoneName: null,
+        from: null,
+        to: { kind: "station", stationId: "kitchen" },
+        toNoReplacement: false,
+        periodIds: null,
+      },
+    ],
+    stations: [{ id: "kitchen", name: "Kitchen" }],
+    periods: [],
+  });
   await selectKeys(el, ["folder:d"]);
   await press(el, "move");
   await destination(el, "f");
@@ -5101,6 +5117,7 @@ it("retries a failed folder preview without saving and lets a refused destinatio
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(codeMessage("category.name_taken")),
   );
+  expect(el.shadowRoot!.querySelector('[data-test="routing-preview-table"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("wt-combobox")!.disabled).toBe(false);
   expect(el.shadowRoot!.querySelector('[data-test="retry-routing-preview"]')).toBeNull();
   await destination(el, "f");
