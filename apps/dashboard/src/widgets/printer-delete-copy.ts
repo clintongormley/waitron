@@ -1,9 +1,8 @@
-import { deleteTargetName } from "@waitron/shared";
 import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
-import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
+import { countedDeleteLine, deleteTargetNames } from "./delete-copy-lines.js";
 
 type Counted =
   | "printers.delete_jobs"
@@ -22,15 +21,8 @@ const ROLES = [
   ["invoice", "printers.delete_role_invoice", "printers.delete_default_invoice"],
 ] as const;
 
-const names = (item: DeleteImpactItem): string =>
-  item.targets.map((target) => deleteTargetName(target, t("delete.deleted"))).join(", ");
-
 function line(key: Counted, item: DeleteImpactItem, role = ""): string {
-  return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {
-    role,
-    count: String(item.count),
-    names: names(item),
-  });
+  return countedDeleteLine(key, item, { role });
 }
 
 function itemLine(item: DeleteImpactItem): string {
@@ -38,7 +30,8 @@ function itemLine(item: DeleteImpactItem): string {
   if (key === "print_jobs") return line("printers.delete_jobs", item);
   if (key === "invoice_a4") return line("printers.delete_invoice_a4", item);
   if (key === "invoice_receipts") return line("printers.delete_invoice_receipts", item);
-  if (key === "portable_holder") return fill("printers.delete_holder", { names: names(item) });
+  if (key === "portable_holder")
+    return fill("printers.delete_holder", { names: deleteTargetNames(item.targets) });
   if (key === "station_printers") return line("printers.delete_stations", item);
   for (const [role, word, defaultWord] of ROLES) {
     if (key === `device_${role}`) return line("printers.delete_device_choice", item, t(word));
@@ -48,7 +41,10 @@ function itemLine(item: DeleteImpactItem): string {
     if (key === `profile_${role}_default`)
       return line("printers.delete_profile_default", item, t(defaultWord));
   }
-  return fill("printers.delete_unknown", { names: names(item), count: String(item.count) }).trim();
+  return fill("printers.delete_unknown", {
+    names: deleteTargetNames(item.targets),
+    count: String(item.count),
+  }).trim();
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {

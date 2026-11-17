@@ -99,6 +99,8 @@ before this cannot be restored or imported."
   stays).
 - `apps/server/src/device-delete.ts:17`, `:95-99`; `apps/server/src/printer-delete.ts:14`, `:55-59`,
   `:180`.
+  > **2026-11-17 (PRINTER-DELETE-HOME):** the holder delete at `printer-delete.ts:180` moved into
+  > layouts' `clearDeletedPrinter` (`packages/layouts/src/device-equipment.ts`).
 - `apps/dashboard/src/api/live-queries.ts:104`, `:117`, `:132` (drop `printer_holders`).
 - `apps/server/src/testing/clear-provision-fixture.ts` (if it lists `printer_holders`).
 - `docs/backlog/architecture.md:1301-1303` (the `ticket_scope` entry, deleted).

@@ -21,9 +21,9 @@ import {
   kindOfFormFactor,
   listDeviceProfiles,
   listDevices,
-  refuseDeletedPrinters,
   type ProfilePrinterRole,
 } from "@waitron/layouts";
+import { refuseDeletedPrinters } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";

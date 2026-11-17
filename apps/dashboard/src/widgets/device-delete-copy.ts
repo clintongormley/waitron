@@ -2,24 +2,25 @@ import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
-
-const names = (targets: DeleteImpactItem["targets"]): string =>
-  targets.map(({ name }) => name).join(", ");
+import { deleteTargetNames } from "./delete-copy-lines.js";
 
 function itemLine(item: DeleteImpactItem): string {
   const { key, count, targets } = item;
   if (key === "held_printers" || key === "held_readers")
-    return fill("devices.delete_held", { names: names(targets) });
+    return fill("devices.delete_held", { names: deleteTargetNames(targets) });
   if (key === "sessions")
     return fill(count === 1 ? "devices.delete_sessions_one" : "devices.delete_sessions", {
       count: String(count),
     });
   if (key === "join_request") return t("devices.delete_join_request");
-  return fill("devices.delete_unknown", { names: names(targets), count: String(count) }).trim();
+  return fill("devices.delete_unknown", {
+    names: deleteTargetNames(targets),
+    count: String(count),
+  }).trim();
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {
-  const named = names(refusal.targets);
+  const named = deleteTargetNames(refusal.targets);
   if (refusal.code === "device.payment_in_progress")
     return fill("devices.delete_payment", { names: named }).replace(/:\s*$/, "");
   const message = codeMessage(refusal.code);
