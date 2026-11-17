@@ -1602,9 +1602,7 @@ describe("setup-done-screen after a start that failed", () => {
     const links = [...el.shadowRoot!.querySelectorAll("[data-test=links] wt-choice-row")];
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/"]);
     expect(links[0]!.getAttribute("data-test")).toBe("link-server");
-    expect(links[0]!.textContent?.trim()).toBe(
-      "Its page explains what went wrong and has a button to try starting it again.",
-    );
+    expect(links[0]!.textContent?.trim()).toBe("Its page has a button to try starting it again.");
   });
 
   /** Answers as the box does: `GONE` from the setup route, and the recovery page's JSON once failed. */
@@ -1742,7 +1740,7 @@ describe("setup-done-screen after a start that failed", () => {
       ),
     );
     expect(q(el, "[data-test=link-server]")?.textContent?.trim()).toBe(
-      "Su página explica qué ha fallado y tiene un botón para intentar arrancarlo de nuevo.",
+      "Su página tiene un botón para intentar arrancarlo de nuevo.",
     );
   });
 
