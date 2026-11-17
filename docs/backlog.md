@@ -726,7 +726,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The "Goes with" line** (bundle of 2, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
 
-- **Status words on the pass and beside it** (bundle of 3, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
+- **Status words on the pass and beside it** (bundle of 2, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
 
 - **Segmented choices still break words when whole words cannot fit (left by A773-2 B4b).** Decide
   whether such a control should stack its choices instead.

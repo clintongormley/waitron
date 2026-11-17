@@ -844,6 +844,156 @@ describe("A773 pass screen", () => {
       ));
   });
 
+  describe("the header names what the pass covers", () => {
+    const covers = (el: TillPassScreen) =>
+      el.shadowRoot!.querySelector("[data-covers]")?.textContent?.trim() ?? null;
+    const lost = (el: TillPassScreen) =>
+      [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+        line.textContent!.trim(),
+      );
+    const stations = [
+      { id: "st-2", name: "Parrilla", available: true },
+      { id: "st-1", name: "Freidora", available: true },
+    ];
+
+    it("names the stations in the server's order, in the board's lead slot, with no zone filter", async () => {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(boardA, { stations }) });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+      const line = el.shadowRoot!.querySelector("[data-covers]")!;
+      expect(line.getAttribute("slot")).toBe("lead");
+      expect(line.parentElement).toBe(boardOf(el));
+    });
+
+    it("names the zones after the stations when the pass has a zone filter", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations,
+          zones: [
+            { id: "z-2", name: "Terraza", available: true },
+            { id: "z-1", name: "Sala", available: true },
+          ],
+        }),
+      });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora · Zones: Terraza, Sala");
+    });
+
+    it("leaves a station or zone no longer available to its lost line", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations: [
+            { id: "st-1", name: "Parrilla", available: true },
+            { id: "st-2", name: "Freidora", available: false },
+          ],
+          zones: [
+            { id: "z-1", name: "Terraza", available: false },
+            { id: "z-2", name: "Sala", available: true },
+          ],
+        }),
+      });
+      expect(covers(el)).toBe("Stations: Parrilla · Zones: Sala");
+      expect(lost(el)).toEqual([
+        t("station.unavailable").replace("{name}", "Freidora"),
+        t("zone.unavailable").replace("{name}", "Terraza"),
+      ]);
+    });
+
+    it("shows the same line on the pass monitor", async () => {
+      const api = fakeApi({
+        getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard(boardA, { stations })),
+      });
+      const el = await mount({ api, monitor: true });
+      expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+    });
+
+    it("shows the same line on the pass opened from the counter", async () => {
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardA, { stations })),
+      });
+      const el = await mount({ api });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+    });
+
+    it.each([
+      ["names no station at all", { stations: [] }],
+      [
+        "has lost every station",
+        { stations: [{ id: "st-1", name: "Freidora", available: false }] },
+      ],
+    ])("draws no line when the pass %s", async (_, slots) => {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(boardA, slots) });
+      expect(covers(el)).toBeNull();
+    });
+
+    it("words the line in Spanish", async () => {
+      const previous = currentLocale();
+      setLocale("es-ES");
+      try {
+        const el = await mount({
+          deviceMode: true,
+          initialBoard: deviceBoard(boardA, {
+            stations,
+            zones: [{ id: "z-1", name: "Terraza", available: true }],
+          }),
+        });
+        expect(covers(el)).toBe("Estaciones: Parrilla, Freidora · Zonas: Terraza");
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it.each([
+      [
+        "en-GB",
+        ["Kitchen", "Downstairs bar prep", "Upstairs bar prep", "Deli prep"],
+        ["Upstairs bar", "Deli counter"],
+      ],
+      [
+        "es-ES",
+        [
+          "Cocina",
+          "Preparación del bar de abajo",
+          "Preparación del bar de arriba",
+          "Preparación de charcutería",
+        ],
+        ["Bar de arriba", "Mostrador de charcutería"],
+      ],
+    ])(
+      "wraps the demo venue's names inside the header at 390 and 1024 px (%s)",
+      async (locale, stationNames, zoneNames) => {
+        const slot = (name: string, index: number) => ({ id: `s-${index}`, name, available: true });
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          for (const width of [390, 1024]) {
+            await pageAt(width, 800);
+            const el = await mount({
+              deviceMode: true,
+              deviceName: "Pass",
+              initialBoard: deviceBoard(boardA, {
+                stations: stationNames.map(slot),
+                zones: zoneNames.map(slot),
+              }),
+            });
+            const head = boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-board-head]")!;
+            const line = el.shadowRoot!.querySelector<HTMLElement>("[data-covers]")!;
+            expect(covers(el)).toContain(stationNames.at(-1));
+            expect(head.scrollWidth).toBeLessThanOrEqual(head.clientWidth);
+            expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
+              head.getBoundingClientRect().right + 0.5,
+            );
+            cleanupWidgets();
+          }
+        } finally {
+          setLocale(previous);
+          await resetPage();
+        }
+      },
+    );
+  });
+
   describe("lost slots and a lost screen", () => {
     const lines = (el: TillPassScreen) =>
       [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
