@@ -3605,10 +3605,12 @@ export class TillApp extends LitElement {
   /** The bill chosen last in the switcher while the draft's save before showing it is out. */
   #switchTo: string | undefined;
   /** Numbers each read of the party's groups as it starts; {@link #printProblemsShown} is the number
-   * of the read whose printing problems are on screen, so an answer from a read that started before
-   * it is dropped and a read that ends without an answer drops nothing. */
-  #printProblemsRead = 0;
+   * of the read whose printing problems are on screen, and {@link #groupsShown} the one whose groups
+   * and current orders are, so an answer from a read that started before it is dropped and a read
+   * that ends without an answer drops nothing. */
+  #groupsRead = 0;
   #printProblemsShown = 0;
+  #groupsShown = 0;
   /** Identifies the latest {@link #rereadAmounts} or {@link #readSettlementBills}, so once a
    * newer one has started, an older one works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
@@ -4640,7 +4642,7 @@ export class TillApp extends LitElement {
     if (view.snapshot.revision === this.orderParty.revision) return;
     if (view.snapshot.revision < this.orderParty.revision) throw { code: "party.out_of_date" };
     const tablesRead = this.#startTablesRead();
-    const problemsRead = ++this.#printProblemsRead;
+    const groupsRead = ++this.#groupsRead;
     const [tables, groups, orders] = await this.#allergyRequest((signal) =>
       Promise.all([
         api.getTablesState({ signal }),
@@ -4660,9 +4662,12 @@ export class TillApp extends LitElement {
     if (party.revision < this.orderParty!.revision) return;
     this.#applyTables(tablesRead, tables);
     this.orderParty = party;
-    this.tabGroups = groups.groups;
-    this.#showPrintProblems(problemsRead, groups.printProblems);
-    this.currentOrders = orders;
+    if (this.#showGroups(groupsRead, groups.groups, orders)) {
+      this.#groupsUnread = false;
+      this.#groupsReadFor = view.partyId;
+      this.currentOrdersUnread = false;
+    }
+    this.#showPrintProblems(groupsRead, groups.printProblems);
   }
 
   async #confirmTableAllergy(
@@ -13243,12 +13248,11 @@ export class TillApp extends LitElement {
     const read = ++this.#tabLinesRead;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
-    const problemsRead = ++this.#printProblemsRead;
+    const groupsRead = ++this.#groupsRead;
     if (this.activeTabId === undefined) {
       this.tabLines = [];
-      this.tabGroups = [];
-      this.#showPrintProblems(problemsRead, []);
-      this.currentOrders = null;
+      this.#showGroups(groupsRead, [], null);
+      this.#showPrintProblems(groupsRead, []);
       this.currentOrdersUnread = false;
       this.#groupsUnread = false;
       this.#groupsReadFor = partyId;
@@ -13274,12 +13278,11 @@ export class TillApp extends LitElement {
     const { groups: partyGroups, printProblems: partyProblems } = await groups;
     const partyOrders = await orders;
     if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
-    this.tabGroups = partyGroups ?? [];
+    this.requestUpdate();
+    this.#showPrintProblems(groupsRead, partyProblems);
+    if (!this.#showGroups(groupsRead, partyGroups ?? [], partyOrders)) return;
     this.#groupsUnread = partyGroups === null;
     this.#groupsReadFor = partyId;
-    this.requestUpdate();
-    this.#showPrintProblems(problemsRead, partyProblems);
-    this.currentOrders = partyOrders;
     this.currentOrdersUnread = partyId !== null && partyOrders === null;
   }
 
@@ -13287,6 +13290,15 @@ export class TillApp extends LitElement {
     if (read <= this.#printProblemsShown) return;
     this.#printProblemsShown = read;
     this.printProblems = problems;
+  }
+
+  /** Whether the groups read numbered `read` is shown: false once a read that started later is. */
+  #showGroups(read: number, groups: OrderGroup[], orders: CurrentOrders | null): boolean {
+    if (read <= this.#groupsShown) return false;
+    this.#groupsShown = read;
+    this.tabGroups = groups;
+    this.currentOrders = orders;
+    return true;
   }
 
   /** A failed read answers null: the screen then offers nothing to mark served. */
@@ -14372,7 +14384,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const tablesRead = this.#startTablesRead();
-      const problemsRead = ++this.#printProblemsRead;
+      const groupsRead = ++this.#groupsRead;
       const refreshed = await Promise.race([
         Promise.all([
           this.api.getTablesState(),
@@ -14449,12 +14461,12 @@ export class TillApp extends LitElement {
       if (party.revision < this.orderParty!.revision) return true;
       this.#applyTables(tablesRead, tables);
       this.orderParty = party;
-      this.tabGroups = groups.groups;
-      this.#showPrintProblems(problemsRead, groups.printProblems);
-      this.currentOrders = orders;
-      this.#groupsUnread = false;
-      this.#groupsReadFor = partyId;
-      this.currentOrdersUnread = false;
+      this.#showPrintProblems(groupsRead, groups.printProblems);
+      if (this.#showGroups(groupsRead, groups.groups, orders)) {
+        this.#groupsUnread = false;
+        this.#groupsReadFor = partyId;
+        this.currentOrdersUnread = false;
+      }
       this.errorKey = {
         replacedGroups: [...new Set(invalid.values())]
           .map((id) => {
@@ -20299,7 +20311,8 @@ export class TillApp extends LitElement {
     this.orderParty = null;
     this.#tabLinesRead++;
     this.#partyBillsRead++;
-    this.#printProblemsShown = ++this.#printProblemsRead;
+    this.#printProblemsShown = ++this.#groupsRead;
+    this.#groupsShown = this.#printProblemsShown;
     this.tabLines = [];
     this.tabGroups = [];
     this.printProblems = [];
