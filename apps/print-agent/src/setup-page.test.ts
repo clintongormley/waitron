@@ -150,7 +150,7 @@ describe("createSetupApp — access states", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
-  it("removes the Bluetooth card and its old routes", async () => {
+  it("removes the old Bluetooth scan and pair controls and routes", async () => {
     const app = createSetupApp(deps());
     const html = await (await request(app, "/", undefined, "127.0.0.1")).text();
     expect(html).not.toContain("Bluetooth printers");
@@ -328,6 +328,60 @@ describe("createSetupApp — rendering", () => {
     expect(escaped).toContain("&lt;script&gt;");
     expect(escaped).not.toContain("<script>alert(1)</script>");
   });
+
+  it.each([
+    [
+      "dbus_unreachable",
+      "Bluetooth printers can't be found: the computer's system message bus (D-Bus) refused this agent. Check that the agent runs under its own AppArmor profile, waitron-print-agent: sudo bash waitron.sh install loads it and names it in .env as WAITRON_PRINT_AGENT_APPARMOR.",
+    ],
+    [
+      "bluez_not_answering",
+      "Bluetooth printers can't be found: the computer's Bluetooth service is not answering. Check that the Bluetooth service (bluetoothd) is running on this computer.",
+    ],
+    [
+      "no_controller",
+      "Bluetooth printers can't be found: this agent can see no Bluetooth adapter. Check that this computer has one.",
+    ],
+    [
+      "failed",
+      "Bluetooth printers can't be found: asking the computer's Bluetooth service failed. The agent's log has the details.",
+    ],
+  ] as const)("says why Bluetooth is unavailable (%s)", async (reason, sentence) => {
+    const app = createSetupApp(
+      deps({ bluetooth: () => ({ available: false, reason, detail: "<raw detail>" }) }),
+    );
+    const html = await (await request(app, "/", undefined, "127.0.0.1")).text();
+    expect(html).toContain("<h2>Bluetooth</h2>");
+    expect(html).toContain(sentence);
+    expect(html).not.toContain("raw detail");
+  });
+
+  it.each([
+    ["available", () => ({ available: true }) as const],
+    ["not yet checked", () => undefined],
+  ])("shows no Bluetooth line when Bluetooth is %s", async (_label, bluetooth) => {
+    const html = await (
+      await request(createSetupApp(deps({ bluetooth })), "/", undefined, "127.0.0.1")
+    ).text();
+    expect(html).not.toContain("Bluetooth");
+  });
+
+  it("shows the Bluetooth line on a joined, out-of-touch page served to the network", async () => {
+    const app = createSetupApp(
+      deps({
+        snapshot: async () =>
+          snapshot({ status: RUNNING, config: CONFIG, joined: true, outOfTouch: true }),
+        bluetooth: () => ({ available: false, reason: "no_controller", detail: "" }),
+      }),
+    );
+    const response = await request(app, "/", undefined, "192.168.20.5");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("Join a new network");
+    expect(html).toContain(
+      "Bluetooth printers can't be found: this agent can see no Bluetooth adapter. Check that this computer has one.",
+    );
+  });
 });
 
 describe("createSetupApp — mutations", () => {
@@ -404,6 +458,30 @@ describe("createSetupApp — mutations", () => {
       serverUrl: "https://box.test",
       name: "kitchen-pi",
     });
+  });
+
+  it("keeps the Bluetooth line, after the form, on the invalid-address page", async () => {
+    const app = createSetupApp(
+      deps({ bluetooth: () => ({ available: false, reason: "no_controller", detail: "" }) }),
+    );
+    const response = await request(
+      app,
+      "/setup",
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "serverUrl=ftp%3A%2F%2Fbox.test&name=Barra",
+      },
+      "127.0.0.1",
+    );
+    expect(response.status).toBe(400);
+    const html = await response.text();
+    const sentence =
+      "Bluetooth printers can't be found: this agent can see no Bluetooth adapter. Check that this computer has one.";
+    expect(html).toContain(sentence);
+    expect(html.indexOf("That is not a valid http(s) address")).toBeLessThan(
+      html.indexOf(sentence),
+    );
   });
 
   it("returns 405 for an environment-locked unjoined agent and renders the address read-only", async () => {
