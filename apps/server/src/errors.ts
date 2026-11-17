@@ -221,6 +221,12 @@ declare module "@waitron/shared" {
      * refuses to start rather than sell beside the main box.
      */
     "node.state_missing": Record<string, never>;
+    /**
+     * This box's node.db records an emergency copy of the venue placed for an emergency start that
+     * has not been activated (its role is still `mirror`, or the start names another node id), so an
+     * ordinary start refuses before writing anything.
+     */
+    "node.emergency_copy_unactivated": Record<string, never>;
     /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
      * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
     "management.origin_refused": Record<string, never>;

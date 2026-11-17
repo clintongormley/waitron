@@ -1,5 +1,6 @@
 import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { getTableName, sql } from "drizzle-orm";
 import {
   KEY_RING_VARIABLES,
   keyRingEnv,
@@ -13,11 +14,17 @@ import {
   openVenueDatabase,
   withNodeTransaction,
   type DeploymentEnvironment,
+  type NodeDatabase,
 } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
-import { appendHandoverEventTx, setNodeModeTx } from "@waitron/node-db";
+import {
+  appendHandoverEventTx,
+  nodeHandoverEvents,
+  readNodeModeRow,
+  setNodeModeTx,
+} from "@waitron/node-db";
 import { generateKeyRing, inTurn } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -34,7 +41,12 @@ import {
   assertEmergencyCopyBindingUnexpired,
   type EmergencyCopyBinding,
 } from "./emergency-copy-binding.js";
-import { checkPlacedEmergencyCopy, PLACED, readImmutableNodeDb } from "./emergency-copy-check.js";
+import {
+  checkPlacedEmergencyCopy,
+  PLACED,
+  readImmutableNodeDb,
+  readPlacedEmergencyCopy,
+} from "./emergency-copy-check.js";
 import { parseEnvFile } from "./env-file.js";
 import { errnoOf } from "./errno.js";
 import { VENUE_FILE_MODE } from "./restore.js";
@@ -206,4 +218,27 @@ async function placeHeld(deps: PlacementDeps): Promise<void> {
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+}
+
+/**
+ * Refuses `node.emergency_copy_unactivated` when `node` records a placed emergency copy that is still
+ * a mirror, or that this start would run under another id than the copy's (`nodeId`, the configured
+ * one, possibly none). Read before migrations, so a `node.db` without the events table yet records
+ * none.
+ */
+export async function refuseUnactivatedEmergencyCopy(
+  node: NodeDatabase,
+  nodeId: string | undefined,
+): Promise<void> {
+  const tables = await node.all(
+    sql`select 1 from sqlite_master where type = 'table' and name = ${getTableName(nodeHandoverEvents)}`,
+  );
+  if (tables.length === 0) return;
+  const binding = await readPlacedEmergencyCopy(node);
+  if (binding === null) return;
+  if (
+    nodeId !== binding.copyNodeId ||
+    (await readNodeModeRow(node, binding.copyNodeId))?.mode === "mirror"
+  )
+    throw new AppError("node.emergency_copy_unactivated", {});
 }

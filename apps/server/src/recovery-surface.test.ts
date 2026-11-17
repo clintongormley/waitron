@@ -488,6 +488,39 @@ describe("a box that lost its own record", () => {
   });
 });
 
+describe("a box holding an emergency copy that is not activated", () => {
+  it("the recovery page shows the title, the action and Retry a normal boot in both languages, and no Start again", async () => {
+    const english = await pageFor("node.emergency_copy_unactivated", undefined, "en-GB");
+    expect(english).toContain(
+      escapeHtml(
+        "This box holds an emergency copy of the venue that has not been made the venue's box",
+      ),
+    );
+    expect(english).toContain(
+      escapeHtml(
+        "The copy was placed here for an emergency start and has not been activated, so this box does not sell or send anything to the tax agency. A normal start cannot activate it. “Retry a normal boot” starts this box once more, and stops here again while the copy is not activated.",
+      ),
+    );
+    expect(english).toContain('<button type="submit">Retry a normal boot</button>');
+    const spanish = await pageFor("node.emergency_copy_unactivated", undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml(
+        "Este equipo guarda una copia de emergencia del local que aún no se ha convertido en el equipo del local",
+      ),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "La copia se colocó aquí para un arranque de emergencia y no se ha activado, así que este equipo no vende ni envía nada a Hacienda. Un arranque normal no puede activarla. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras la copia no esté activada.",
+      ),
+    );
+    expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
+    for (const page of [english, spanish]) {
+      expect(page).not.toContain("/recovery-api/start-again");
+      expect(page).not.toContain("/recovery-api/environment/start-again");
+    }
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
@@ -600,6 +633,7 @@ describe("curated operator text", () => {
       "sif.producer_changed",
       "sif.allocation_invalid",
       "node.state_missing",
+      "node.emergency_copy_unactivated",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_WORDS),

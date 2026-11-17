@@ -348,6 +348,7 @@ import { boundObjectStore } from "./bounded-store.js";
 import { validateArtifact, validateArtifactFile } from "./restore.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { assertOutsideScratchResolved, emptyScratch } from "./scratch.js";
+import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -1320,6 +1321,7 @@ async function bootServer(
   let migrationModules: readonly WaitronModule[] = availableModules;
   let letGoOfCheckedAddresses: () => Promise<void>;
   try {
+    await refuseUnactivatedEmergencyCopy(stampProbe.node, config.node?.nodeId);
     // The first moment this start holds a node handle.
     if (placement?.kind === "copy_placed_owed") {
       await recordCopyPlaced({
