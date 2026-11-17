@@ -465,6 +465,12 @@ it("finds a product by its name", async () => {
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
 
+it("leaves a product with a deleted category out of a reached category filter", async () => {
+  const el = await mount({ rows: [lager, { ...burger, categoryId: "c-gone" }] });
+  await choose(el, "category", ["c-drinks"]);
+  expect(shown(el)).toEqual(["mi-lager"]);
+});
+
 it.each([
   "Brews",
   "Beverages / Brews",
