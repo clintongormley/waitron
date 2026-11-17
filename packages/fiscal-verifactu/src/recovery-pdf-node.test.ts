@@ -10,16 +10,12 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderRecoveryPdf } from "./recovery-pdf-node.js";
 import { decodeRecoveryKey } from "./recovery-key-code.js";
 import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
+import {
+  inspectSetupRecoveryPack,
+  setupPackDocument,
+} from "../test/setup-recovery-pack-inspect.js";
 
-const document: RecoveryDocument = {
-  kind: "waitron-recovery-document",
-  version: 1,
-  scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
-  taxpayerName: "Olivo Restauración SL",
-  venueName: "Olivo Centro",
-  createdAt: "2026-10-17T12:30:00.000Z",
-  nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-};
+const document: RecoveryDocument = setupPackDocument;
 const roots: string[] = [];
 afterAll(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
@@ -119,7 +115,7 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("carries its font and attachment in a relocated real Node bundle", async () => {
+it("the setup recovery pack carries its fonts and attachment in a relocated real Node bundle", async () => {
   const root = await mkdtemp(join(tmpdir(), "waitron-recovery-pdf-bundle-"));
   roots.push(root);
   const output = join(root, "recovery.mjs");
@@ -128,13 +124,13 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
     [
       "--input-type=module",
       "--eval",
-      `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)}; bundle(${JSON.stringify([{ entry: "test/recovery-pdf-node-runner.ts", outfile: output }])});`,
+      `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)}; bundle(${JSON.stringify([{ entry: "test/setup-recovery-pack-runner.ts", outfile: output }])});`,
     ],
     { encoding: "utf8", timeout: 60_000 },
   );
   expect(build.status, build.stderr).toBe(0);
   const input = join(root, "input.json");
-  await writeFile(input, JSON.stringify(document));
+  await writeFile(input, JSON.stringify(setupPackDocument));
   for (const locale of ["en", "es"] as const) {
     const run = spawnSync(process.execPath, [output, input, locale, "Europe/Madrid"], {
       cwd: root,
@@ -144,7 +140,7 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
       env: { ...process.env, NODE_PATH: "" },
     });
     expect(run.status, run.stderr?.toString()).toBe(0);
-    await inspect(new Uint8Array(run.stdout), locale);
+    await inspectSetupRecoveryPack(new Uint8Array(run.stdout), locale);
   }
 });
 

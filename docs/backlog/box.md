@@ -1332,10 +1332,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 - **A1187: looks nobody has taken.**
   Nobody has looked at the card since #2276 lengthened its unreceived sentences.
   [Detail](box.md#a1187-looks-nobody-has-taken).
-- **A1187: setup's command-line pack is not run under the source loader or from the bundle.**
-  `apps/server/src/recovery-pdf-source.test.ts` and `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`
-  still draw the old recovery sheet through `recovery-pdf-node.ts`; the command path's real renderer,
-  `renderSetupRecoveryPack`, is tested only inside Vitest.
 
 ## Bundle: Remaining bucket-copy limits
 
