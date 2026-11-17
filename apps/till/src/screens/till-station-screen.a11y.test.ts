@@ -119,7 +119,7 @@ const groups: StationQueueGroup[] = [
         state: "queued",
         name: "Vino",
         quantity: "1.000",
-        // A HELD later course (fired_at null) — greyed + non-advanceable, and the kitchen-fire target.
+        // A HELD later course (fired_at null) — greyed + non-advanceable.
         course: { id: "co-2", name: "Postres", displayOrder: 2 },
         firedAt: null,
         phase: "held",

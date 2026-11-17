@@ -46,19 +46,11 @@ their full text.
   titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)",
   "(SP-B2.1)").
 
-## Test titles repeat claims the branch corrected (#618)
-
-- Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
-  comments-only change. Test titles repeat claims the branch corrected:
-  `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
-  sums line totals).
-
 ## Till widget points from #616 that were read but not run
 
-- Found by #616 (`apps/till/src/widgets`). Read, not run: a courseless section the server held
-  shows its lines greyed with no fire button (`#fireAction` in `station-queue.ts`, from #131);
-  `ReaderOption.online` is never set outside tests; the fixed handheld mount and table screen still
-  need their redundant exit configuration audited; the tab shell and the supervisor dialog emit
+- Found by #616 (`apps/till/src/widgets`). Read, not run: `ReaderOption.online` is never set
+  outside tests; the fixed handheld mount and table screen still need their redundant exit
+  configuration audited; the tab shell and the supervisor dialog emit
   events not named `wt-*` (CLAUDE.md §3; not checked whether the rule reaches till widgets).
 
 ## The till always mounts the counter screen `embedded`
