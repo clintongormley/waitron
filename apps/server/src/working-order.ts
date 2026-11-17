@@ -2815,7 +2815,6 @@ export async function sendLines(
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
   command?: AllergyCommand,
-  lateSend?: LateSendConfirmation,
 ): Promise<void> {
   if (command !== undefined) {
     const partyId = await partyOfOrder(tx, tabId);
@@ -2845,7 +2844,7 @@ export async function sendLines(
             allergy,
             authority.operatorId ?? null,
           );
-          await sendLines(tx, cfg, tabId, lineNos, authority, attendance, undefined, lateSend);
+          await sendLines(tx, cfg, tabId, lineNos, authority, attendance);
           return null;
         },
         cfg.madeHereSink,

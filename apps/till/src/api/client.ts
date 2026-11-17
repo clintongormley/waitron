@@ -857,10 +857,6 @@ export interface LateSend {
   override?: { personId: string; pin: string };
 }
 
-export interface ReleaseCommand extends AllergyCommand {
-  lateSend?: LateSend;
-}
-
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -4446,7 +4442,7 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: ReleaseCommand,
+    command: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4566,7 +4562,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: ReleaseCommand,
+    command: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4643,7 +4639,7 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
-    command?: ReleaseCommand,
+    command?: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<void> {
     await this.#request<void>(

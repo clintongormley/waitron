@@ -157,8 +157,6 @@ export interface PartyCommandArgs {
 
 export interface PartyFireArgs extends PartyCommandArgs {
   allergy?: AllergyPatch;
-  /** The request's confirmation that stored courses whose period has ended may go. */
-  lateSend?: LateSendConfirmation;
 }
 
 /** Who fires a group: a person, or a kitchen display nobody is signed in on. */
@@ -579,6 +577,7 @@ export async function fireHeldLine(
         .where(
           and(
             eq(workingOrderLines.id, lineId),
+            // The NULL-parent index range includes historical top-level dishes.
             isNull(sql`+${workingOrderLines.parentLineId}`),
             inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
             eq(orderGroups.partyId, partyId),

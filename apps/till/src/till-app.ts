@@ -36,7 +36,6 @@ import {
   isLateSendManagerRefusal,
   lateSendAsked,
   storedLateSendAsked,
-  storedLinesAsked,
   type EndedPeriod,
   type LateSendAsked,
 } from "./state/late-send.js";
@@ -1541,11 +1540,6 @@ function lateSendApprovalAsked(
   return lateSend.override !== undefined && refused !== undefined && APPROVER_REFUSALS.has(refused)
     ? { lateSend, pinError: refused }
     : undefined;
-}
-
-/** `command` carrying `lateSend` when one is given. */
-function withLateSend<C extends object>(command: C, lateSend: LateSend | undefined): C {
-  return lateSend === undefined ? command : { ...command, lateSend };
 }
 
 /** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
@@ -14645,59 +14639,6 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The party's stored dishes the late-send window can name: every bill's from Current orders,
-   * then the open bill's own, which alone carry their offer. */
-  #storedTableDishes(): (LateSendDish & { lineId: string; menuItemId: string | null })[] {
-    const orders = this.currentOrders;
-    const rows =
-      orders === null ? [] : [...orders.groups.flatMap((g) => g.rows), ...orders.ungrouped];
-    const seen = new Set(rows.map((row) => row.lineId));
-    return [
-      ...rows.map((row) => ({
-        lineId: row.lineId,
-        menuItemId: null,
-        quantity: row.quantity,
-        name: row.name,
-      })),
-      ...this.tabLines
-        .filter((line) => line.parentLineNo == null && !seen.has(line.id))
-        .map((line) => ({
-          lineId: line.id,
-          menuItemId: line.menuItemId,
-          quantity: line.quantity,
-          name: line.name ?? "",
-        })),
-    ];
-  }
-
-  /**
-   * A table send or fire refused for stored dishes whose period has ended opens the
-   * window over the dishes it names, whose secondary choice leaves them unsent; one refused for
-   * want of a manager asks for their PIN. Answers whether it was either.
-   */
-  async #askTableLateSend(
-    error: unknown,
-    lateSend: LateSend | undefined,
-    retry: (lateSend: LateSend) => Promise<void>,
-    current: () => boolean,
-  ): Promise<boolean> {
-    const asked = storedLinesAsked(
-      error,
-      this.#storedTableDishes(),
-      (dish) => dish.lineId,
-      (dish) => dish.menuItemId,
-    );
-    if (asked !== undefined) {
-      const dishes = asked.listed.map(({ quantity, name }) => ({ quantity, name }));
-      this.#showLateSend(dishes, asked.periods, "stored", retry, () => undefined);
-      return true;
-    }
-    const approval = lateSendApprovalAsked(error, lateSend);
-    if (approval === undefined) return false;
-    await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry, current);
-    return true;
-  }
-
   /** As a line's own Remove does: a draft that can no longer be edited keeps them (`removeLine`). */
   #removeDraftLines(store: WorkingOrderStore, listed: readonly OrderLine[]): void {
     const indexes = listed.map((line) => store.lines.indexOf(line)).sort((a, b) => b - a);
@@ -15046,7 +14987,7 @@ export class TillApp extends LitElement {
     await this.#fireGroup(groupId);
   }
 
-  async #fireGroup(groupId: string, lateSend?: LateSend): Promise<void> {
+  async #fireGroup(groupId: string): Promise<void> {
     await this.#onGroupCommand(async (party) => {
       const allergy = await this.#prepareTableAllergy(
         party.id,
@@ -15054,19 +14995,9 @@ export class TillApp extends LitElement {
         () => true,
       );
       if (allergy === null) return;
-      let written;
-      try {
-        written = await this.#writeTableAllergy(
-          allergy,
-          (command, signal) =>
-            allergy.api.fireGroup(party.id, groupId, withLateSend(command, lateSend), { signal }),
-          lateSend,
-        );
-      } catch (error) {
-        const retry = (confirmed: LateSend) => this.#fireGroup(groupId, confirmed);
-        if (await this.#askTableLateSend(error, lateSend, retry, allergy.current)) return;
-        throw error;
-      }
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        allergy.api.fireGroup(party.id, groupId, command, { signal }),
+      );
       if (written === null || !allergy.current()) return;
       this.#notePartyRevision(party.id, written.value.revision);
     });
@@ -15077,7 +15008,7 @@ export class TillApp extends LitElement {
     await this.#fireHeldLine(lineId);
   }
 
-  async #fireHeldLine(lineId: string, lateSend?: LateSend): Promise<void> {
+  async #fireHeldLine(lineId: string): Promise<void> {
     await this.#onGroupCommand(async (party) => {
       const allergy = await this.#prepareTableAllergy(
         party.id,
@@ -15085,21 +15016,9 @@ export class TillApp extends LitElement {
         () => true,
       );
       if (allergy === null) return;
-      let written;
-      try {
-        written = await this.#writeTableAllergy(
-          allergy,
-          (command, signal) =>
-            allergy.api.fireHeldLine(party.id, lineId, withLateSend(command, lateSend), {
-              signal,
-            }),
-          lateSend,
-        );
-      } catch (error) {
-        const retry = (confirmed: LateSend) => this.#fireHeldLine(lineId, confirmed);
-        if (await this.#askTableLateSend(error, lateSend, retry, allergy.current)) return;
-        throw error;
-      }
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
+      );
       if (written === null || !allergy.current()) return;
       this.#notePartyRevision(party.id, written.value.revision);
     });
@@ -15451,11 +15370,7 @@ export class TillApp extends LitElement {
     await this.#sendLines(lineNos, expectedEdit);
   }
 
-  async #sendLines(
-    lineNos: number[],
-    expectedEdit: BillEditExpected | null,
-    lateSend?: LateSend,
-  ): Promise<void> {
+  async #sendLines(lineNos: number[], expectedEdit: BillEditExpected | null): Promise<void> {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const composition = this.#billComposition([billId]);
@@ -15481,25 +15396,14 @@ export class TillApp extends LitElement {
         live,
       );
       if (allergy === null) return;
-      const written = await this.#writeTableAllergy(
-        allergy,
-        (command, signal) =>
-          composition.api.sendLines(
-            billId,
-            lineNos,
-            expectedEdit,
-            withLateSend(command, lateSend),
-            {
-              signal,
-            },
-          ),
-        lateSend,
+      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+        composition.api.sendLines(billId, lineNos, expectedEdit, command, {
+          signal,
+        }),
       );
       if (written === null) return;
     } catch (error) {
       if (!live()) return;
-      const retry = (confirmed: LateSend) => this.#sendLines(lineNos, expectedEdit, confirmed);
-      if (await this.#askTableLateSend(error, lateSend, retry, live)) return;
       await this.#onReleaseRefusal(error);
       return;
     }

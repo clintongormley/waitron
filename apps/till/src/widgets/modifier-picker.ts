@@ -12,6 +12,7 @@ import {
 } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   ComboboxOption,
   DraftScope,
@@ -1045,28 +1046,31 @@ export class TillModifierPicker extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${fields}
-      ${!this.readOnly && this.feedback.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
-      <wt-button
+      <wt-form-actions
         slot="footer"
-        class="cancel"
-        variant="secondary"
-        @click=${(event: Event) => this.#cancel(event)}
+        .error=${!this.readOnly && this.feedback.attempted && this.lineDetails && this.#quantityInvalid() ? t("form.fix_fields") : ""}
       >
-        ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
-      </wt-button>
-      ${
-        this.readOnly
-          ? nothing
-          : html`<wt-button
-              slot="footer"
-              class="confirm"
-              variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
-              ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.feedback.attempted && this.lineDetails && this.#quantityInvalid())}
-              @click=${(e: Event) => this.#confirm(e)}
-            >
-              ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
-            </wt-button>`
-      }
+        <wt-button
+          slot="cancel"
+          class="cancel"
+          variant="secondary"
+          @click=${(event: Event) => this.#cancel(event)}
+        >
+          ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
+        </wt-button>
+        ${
+          this.readOnly
+            ? nothing
+            : html`<wt-button
+                class="confirm"
+                variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
+                ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.feedback.attempted && this.lineDetails && this.#quantityInvalid())}
+                @click=${(e: Event) => this.#confirm(e)}
+              >
+                ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
+              </wt-button>`
+        }
+      </wt-form-actions>
     </wt-modal>`;
     return keyed(this.#connection, modal);
   }
