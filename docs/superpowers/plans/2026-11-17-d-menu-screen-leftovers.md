@@ -1,6 +1,6 @@
 # Menu screen leftovers — implementation plan
 
-**Finish line:** One PR: Add to menus reads all structures once; Price overrides offers only reached categories and their ancestors; variant rows announce their parent. Use this worktree's existing base. FOLDER-ROUTING-PREVIEW is independent and excluded. Separate Sol-high author and driver check; one Claude read (351 seconds), corrections checked; watcher clearance pending; no owner design approval is claimed.
+**Finish line:** One PR: Add to menus reads all structures once; Price overrides offers only reached categories and their ancestors; variant rows announce their parent. Use this worktree's existing base. FOLDER-ROUTING-PREVIEW is independent and excluded. Separate Sol-high author and driver check; one Claude read (351 seconds), corrections checked; watcher cleared the corrected plan in Lane D questions.md, 2026-11-17 21:03, with an explicit 855-line bound; no owner design approval is claimed.
 
 **Request:** Lane D `queue.md`, MENU-SCREEN-LEFTOVERS, watcher 2026-11-17, verbatim:
 
@@ -40,4 +40,4 @@ pnpm exec vitest run scripts/live-subscriptions.test.ts
 
 Inspect changed UI in EN/ES, light/dark, phone/desktop as RUNNER requires, specifically phone overflow from hidden parent text; no extra layout expansion. Guide edits only if instructions change; none are expected. No benchmark claim.
 
-**Bounds and cleanup:** Expected additions/removals: production +150/−75, tests +190/−70, support +0/−0, docs +85/−15 (this plan and `docs/backlog/menu.md`): 585 changed lines; above 878, stop for the watcher's outside opinion. Reuse fixture support; no framework, records, revisions or helper fakes. **Driver flag:** remove only delivered clauses from both backlog bullets; preserve section-address/refusal gaps, editor-help/Columns gaps and the 2026-09-26 owner decision. Deleting whole bullets would lose unrelated work.
+**Bounds and cleanup:** Expected additions/removals: production +150/−75, tests +190/−70, support +0/−0, docs +85/−15 (this plan and `docs/backlog/menu.md`): 585 changed lines; above 855, stop for the watcher's outside opinion (watcher’s explicit bound, 2026-11-17 21:03). Reuse fixture support; no framework, records, revisions or helper fakes. **Driver flag:** remove only delivered clauses from both backlog bullets; preserve section-address/refusal gaps, editor-help/Columns gaps and the 2026-09-26 owner decision. Deleting whole bullets would lose unrelated work.
