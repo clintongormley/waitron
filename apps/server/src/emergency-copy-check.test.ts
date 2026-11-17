@@ -19,7 +19,7 @@ import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
-import { checkEmergencyCopy } from "./emergency-copy-check.js";
+import { checkPlacedEmergencyCopy } from "./emergency-copy-check.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const source = generateNodeKeyPair();
@@ -109,9 +109,9 @@ function bindingFor(
 
 function check(
   binding: EmergencyCopyBinding,
-  extra: Partial<Parameters<typeof checkEmergencyCopy>[0]> = {},
+  extra: Partial<Parameters<typeof checkPlacedEmergencyCopy>[0]> = {},
 ) {
-  return checkEmergencyCopy({
+  return checkPlacedEmergencyCopy({
     binding,
     venuePath,
     environment: "preproduction",

@@ -33,7 +33,7 @@ async function firstRow(query: BackupQuery, text: string, values: readonly strin
  * Whether the venue database Cloud placed at `venuePath` is the copy `binding` names and can become
  * a machine of its own. Every read is through read-only connections, so the file is never changed.
  */
-export async function checkEmergencyCopy(deps: {
+export async function checkPlacedEmergencyCopy(deps: {
   binding: EmergencyCopyBinding;
   venuePath: string;
   /** This process's. */
