@@ -59,6 +59,7 @@ export async function inspectSetupRecoveryPack(bytes: Uint8Array, locale: "en" |
       locale === "en" ? "17 October 2026, 14:30 CEST" : "17 de octubre de 2026, 14:30 CEST",
     ])
       expect(serverKey).toContain(expected);
+    expect(pages.join(" ")).not.toContain("TKR0 K07W");
   } finally {
     await task.destroy();
   }
