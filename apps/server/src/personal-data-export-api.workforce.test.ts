@@ -1,3 +1,4 @@
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { insertAttendanceMail } from "@waitron/workforce/test/fixtures.js";
@@ -23,7 +24,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  hashPin,
   hashSessionToken,
   dashboardSessions,
   persons,
@@ -211,13 +211,13 @@ beforeEach(async () => {
     {
       displayName: MARTHA.name,
       email: MARTHA.email,
-      pinHash: hashPin("4821"),
+      pinHash: fixturePinHash("4821"),
       passkeyOfferedAt: MARTHA.passkeyOfferedAt,
     },
     {
       displayName: COLLEAGUE.name,
       email: COLLEAGUE.email,
-      pinHash: hashPin("9137"),
+      pinHash: fixturePinHash("9137"),
       passkeyOfferedAt: COLLEAGUE.passkeyOfferedAt,
     },
     { displayName: MANAGER.name, email: MANAGER.email, role: "manager" },

@@ -251,14 +251,29 @@ async function until(check: () => boolean): Promise<void> {
 
 const servers: Server[] = [];
 const realReplyTimers: ReturnType<typeof setTimeout>[] = [];
+const beforeServerClose: Array<() => void> = [];
+const startedPrints: Array<{ stop: AbortController; finished: Promise<IppPrintOutcome> }> = [];
+
+function startPrint(port: number, options: IppPrintOptions = {}): Promise<IppPrintOutcome> {
+  const stop = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, stop.signal]) : stop.signal;
+  const finished = printOverIpp(target(port), DOCUMENT, { ...options, signal });
+  startedPrints.push({ stop, finished });
+  return finished;
+}
+
 afterEach(async () => {
-  vi.useRealTimers();
+  const prints = startedPrints.splice(0);
+  for (const { stop } of prints) stop.abort();
   for (const timer of realReplyTimers.splice(0)) clearTimeout(timer);
+  for (const server of servers) server.closeAllConnections();
+  await Promise.all(prints.map(({ finished }) => finished));
+  vi.useRealTimers();
   stalled.on = false;
   stalled.dials = 0;
   client.requests = 0;
   for (const server of servers.splice(0)) {
-    server.closeAllConnections();
+    for (const check of beforeServerClose.splice(0)) check();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
@@ -294,6 +309,31 @@ const refused: IppPrintOutcome = { status: "failed", failureCode: "printer_refus
 const unreachable: IppPrintOutcome = { status: "failed", failureCode: "printer_unreachable" };
 const aborted: IppPrintOutcome = { status: "unknown", failureCode: "printer_aborted" };
 const timedOut: IppPrintOutcome = { status: "unknown", failureCode: "timeout" };
+
+it("ends an unfinished print before closing its printer after an outcome wait fails", async () => {
+  const printer = await fakePrinter((req, res) => res.end(accepted(req)));
+  const controller = new AbortController();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let outcome: IppPrintOutcome | undefined;
+  let settledBeforeClose = false;
+  const finished = startPrint(printer.port, {
+    signal: controller.signal,
+  }).then((result) => (outcome = result));
+  beforeServerClose.push(() => (settledBeforeClose = outcome !== undefined));
+  onTestFinished(async () => {
+    try {
+      expect(settledBeforeClose).toBe(true);
+      expect(outcome).toEqual(timedOut);
+    } finally {
+      controller.abort();
+      await finished;
+    }
+  });
+  await until(() => printer.polls().length === 1);
+  const waitFailure = new Error("outcome wait failed");
+  await expect(Promise.race([finished, Promise.reject(waitFailure)])).rejects.toBe(waitFailure);
+  expect(outcome).toBeUndefined();
+});
 
 describe("printOverIpp — submission", () => {
   it("sends one Print-Job with the stored format, a fixed job name and the document, then polls that job until it completes", async () => {
@@ -491,7 +531,7 @@ describe("printOverIpp — submission", () => {
     const printer = await fakePrinter(() => {});
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let outcome: IppPrintOutcome | undefined;
-    void printOverIpp(target(printer.port), DOCUMENT).then((o) => (outcome = o));
+    void startPrint(printer.port).then((o) => (outcome = o));
     await until(() => printer.printJobs().length === 1);
     await vi.advanceTimersByTimeAsync(29_999);
     await new Promise((resolve) => setImmediate(resolve));
@@ -620,7 +660,7 @@ describe("printOverIpp — after the printer accepts", () => {
     const printer = await fakePrinter((req, res) => res.end(accepted(req)));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let outcome: IppPrintOutcome | undefined;
-    void printOverIpp(target(printer.port), DOCUMENT).then((o) => (outcome = o));
+    void startPrint(printer.port).then((o) => (outcome = o));
     await until(() => printer.polls().length === 1);
     await vi.advanceTimersByTimeAsync(119_999);
     await new Promise((resolve) => setImmediate(resolve));
@@ -920,7 +960,7 @@ describe("printOverIpp — a job the printer is holding", () => {
         },
       );
       let outcome: IppPrintOutcome | undefined;
-      const finished = printOverIpp(target(printer.port), DOCUMENT, {
+      const finished = startPrint(printer.port, {
         ...holding,
         pollLimitMs: IPP_POLL_REQUEST_TIMEOUT_MS + 300,
         onHold: (hold) => holds.push(hold),
@@ -980,7 +1020,7 @@ describe("printOverIpp — a job the printer is holding", () => {
         res.end(printerState(req, PRINTER_STOPPED, reasons === "" ? [] : reasons.split(","))),
     );
     let outcome: IppPrintOutcome | undefined;
-    void printOverIpp(target(printer.port), DOCUMENT, {
+    void startPrint(printer.port, {
       ...holding,
       onHold: (hold) => holds.push(hold),
     }).then((o) => (outcome = o));
@@ -1029,7 +1069,7 @@ describe("printOverIpp — a job the printer is holding", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let outcome: IppPrintOutcome | undefined;
     const holds: Array<PageHold | null> = [];
-    void printOverIpp(target(printer.port), DOCUMENT, {
+    void startPrint(printer.port, {
       signal: controller.signal,
       onHold: (hold) => holds.push(hold),
     }).then((o) => (outcome = o));
