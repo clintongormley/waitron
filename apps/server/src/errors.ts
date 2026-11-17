@@ -714,6 +714,11 @@ declare module "@waitron/shared" {
     /** Print the bill found the bill already has its ticket. */
     "meal_end.already_issued": { workingOrderId: string };
     /**
+     * Print the bill found the bill needs paper (a simplified invoice, or a full invoice not staged
+     * for A4 or email) and this device's receipts resolve to no printer.
+     */
+    "meal_end.no_printer": { workingOrderId: string };
+    /**
      * Print the bill found dishes on the bill neither served in full nor cancelled, and was not told
      * to print anyway. `released` says whether the kitchen has the dish.
      */

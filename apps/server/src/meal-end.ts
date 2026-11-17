@@ -1,5 +1,5 @@
 import { eq, inArray, and } from "drizzle-orm";
-import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { staffPresentationName } from "@waitron/menu";
@@ -13,9 +13,14 @@ import { readLineCancellations, serviceQuantities } from "./line-service-state.j
 import type { Logger } from "./logger.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { checkAndBumpParty, readBillsOfParties, runServiceCommand } from "./parties.js";
+import { enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
 import { serviceDishCondition } from "./service-dishes.js";
-import { refuseBillPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
+import {
+  readSettledTicket,
+  refuseBillPaymentInFlight,
+  settleIssuedOwingNothing,
+} from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
@@ -99,6 +104,10 @@ export async function endMeal(
         if (dishes.length > 0)
           throw new AppError("meal_end.unserved_dishes", { workingOrderId: req.billId, dishes });
       }
+      const printers = printerLookup(tx, cfg.origin);
+      const paper = await needsPaper(tx, req.billId);
+      if (paper && (await printers("receipt")) === undefined)
+        throw new AppError("meal_end.no_printer", { workingOrderId: req.billId });
 
       const invoice = await priceForIssuance(
         tx,
@@ -123,6 +132,14 @@ export async function endMeal(
       if (bill.status === "open")
         await markOrderPlaced(tx, deps.clock, cfg, req.billId, operatorId, deps.attendance);
       if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, req.billId, saleId);
+      if (paper)
+        await enqueueOriginalReceipt(
+          tx,
+          cfg,
+          await readSettledTicket(deps.backend, tx, cfg, req.billId),
+          saleId,
+          { printers, personId: operatorId },
+        );
       return {
         revision,
         workingOrderId: req.billId,
@@ -133,6 +150,16 @@ export async function endMeal(
       };
     },
   );
+}
+
+/** A full invoice staged for A4 or email is delivered by `issueUnpaidInvoice`'s reservation. */
+async function needsPaper(tx: Transaction, billId: string): Promise<boolean> {
+  const [order] = await tx
+    .select({ invoiceType: workingOrders.invoiceType, delivery: workingOrders.invoiceDelivery })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  const medium = order!.delivery?.medium;
+  return order!.invoiceType !== "F1" || (medium !== "a4" && medium !== "email");
 }
 
 /** The bill's dishes neither served in full nor cancelled, as Finish table reckons them. */

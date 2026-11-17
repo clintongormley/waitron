@@ -3,8 +3,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
+  deviceProfilePrinters,
+  devices,
+  invoiceDeliveries,
   parties,
   partyTables,
+  printJobs,
   saleLines,
   saleSettlements,
   sales,
@@ -14,8 +18,8 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedZone } from "@waitron/db/testing/seed.js";
-import { thousandthsToDecimal } from "@waitron/shared";
+import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
+import { deviceOrigin, thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
 import { cancelLine, giveAway } from "./testing/cancel-line.js";
@@ -47,6 +51,9 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
     prepayZone = await inTx(venue, async (tx) => {
       const zone = await seedZone(tx, { name: "Prepay counter" });
       return (
@@ -82,6 +89,7 @@ function revisionOf(partyId: string): number {
 async function end(
   party: Pick<Party, "partyId" | "tabId">,
   overrides: Partial<Parameters<typeof endMeal>[4]> = {},
+  cfg = venue.cfg,
 ) {
   const billId = overrides.billId ?? party.tabId;
   const expectedEdits = await inTx(venue, async (tx) => {
@@ -97,7 +105,7 @@ async function end(
     endMeal(
       tx,
       deps(),
-      venue.cfg,
+      cfg,
       party.partyId,
       {
         billId,
@@ -179,6 +187,33 @@ function payInCash(billId: string, amount: string) {
     tendered: amount,
     applied: amount,
     tip: "0.00",
+  });
+}
+
+async function orderRow(billId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+  );
+  return row!;
+}
+
+async function choose(billId: string, invoiceType: "F1" | "F2") {
+  const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+    readBillEditState(tx, billId),
+  );
+  return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/invoice-choice`, {
+    revision: (await orderRow(billId)).revision,
+    invoiceType,
+    recipient:
+      invoiceType === "F1"
+        ? {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "2 Main Street, 28013 Madrid, Madrid",
+            countryCode: "ES",
+          }
+        : null,
+    expectedEdit: { billId, editorVersion, draftId, draftRevision },
   });
 }
 
@@ -636,33 +671,6 @@ describe("a Counter bill presented with no ticket, moved to the table", () => {
 });
 
 describe("a printed bill's invoice type", () => {
-  async function orderRow(billId: string) {
-    const [row] = await inTx(venue, (tx) =>
-      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-    );
-    return row!;
-  }
-
-  async function choose(billId: string, invoiceType: "F1" | "F2") {
-    const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
-      readBillEditState(tx, billId),
-    );
-    return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/invoice-choice`, {
-      revision: (await orderRow(billId)).revision,
-      invoiceType,
-      recipient:
-        invoiceType === "F1"
-          ? {
-              taxId: "B12345674",
-              legalName: "Cliente SL",
-              address: "2 Main Street, 28013 Madrid, Madrid",
-              countryCode: "ES",
-            }
-          : null,
-      expectedEdit: { billId, editorVersion, draftId, draftRevision },
-    });
-  }
-
   async function refusesSwitch(billId: string, invoiceType: "F1" | "F2") {
     const before = await orderRow(billId);
     const sold = await salesOf(billId);
@@ -692,14 +700,157 @@ describe("a printed bill's invoice type", () => {
   });
 
   it("a printed, unpaid full-invoice bill refuses a switch to a simplified one", async () => {
-    await inTx(venue, (tx) =>
-      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
-    );
     const party = await seatedWith(venue, "Red wine bottle");
     expect((await choose(party.tabId, "F1")).status).toBe(200);
     await serveAll(party);
     await end(party);
 
     await refusesSwitch(party.tabId, "F2");
+  });
+});
+
+describe("Print the bill's receipt", () => {
+  function jobsOf(saleId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({
+          printerId: printJobs.printerId,
+          kind: printJobs.kind,
+          copy: printJobs.receiptCopy,
+        })
+        .from(printJobs)
+        .where(eq(printJobs.saleId, saleId)),
+    );
+  }
+
+  async function drawerJobs() {
+    return (
+      await inTx(venue, (tx) => tx.select().from(printJobs).where(eq(printJobs.kind, "drawer")))
+    ).length;
+  }
+
+  async function venuePrinterId() {
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: devices.receiptPrinterId })
+        .from(devices)
+        .where(eq(devices.id, venue.cfg.origin.deviceId)),
+    );
+    return row!.id!;
+  }
+
+  /** A device seeded after the venue's printers were chosen: none of its own, nor a profile default. */
+  async function bareDevice() {
+    const { deviceId, profileId } = await seedDevice(venue.db, { capabilities: [] });
+    return { cfg: { ...venue.cfg, origin: deviceOrigin(deviceId) }, profileId };
+  }
+
+  it("queues one original receipt on the device's chosen receipt printer", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+    const drawers = await drawerJobs();
+
+    const { saleId } = await end(party);
+
+    expect(await jobsOf(saleId)).toEqual([
+      { printerId: await venuePrinterId(), kind: "document", copy: false },
+    ]);
+    expect(await drawerJobs()).toBe(drawers);
+  });
+
+  it("a device with no printer of its own prints on its profile's default", async () => {
+    const { cfg, profileId } = await bareDevice();
+    const printerId = await venuePrinterId();
+    await inTx(venue, (tx) =>
+      tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: profileId,
+        printerId,
+        role: "receipt",
+        position: 0,
+        isDefault: true,
+      }),
+    );
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+
+    const { saleId } = await end(party, {}, cfg);
+
+    expect(await jobsOf(saleId)).toEqual([{ printerId, kind: "document", copy: false }]);
+  });
+
+  it("a full invoice staged for email prints no receipt and needs no printer", async () => {
+    const { cfg } = await bareDevice();
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.com",
+            personId: venue.operatorId,
+          },
+        })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await serveAll(party);
+
+    const { saleId } = await end(party, {}, cfg);
+
+    expect(await jobsOf(saleId)).toEqual([]);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ medium: invoiceDeliveries.medium })
+          .from(invoiceDeliveries)
+          .where(eq(invoiceDeliveries.saleId, saleId)),
+      ),
+    ).toEqual([{ medium: "email" }]);
+  });
+
+  it("a full invoice staged for email prints no receipt on a device that has a printer", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.com",
+            personId: venue.operatorId,
+          },
+        })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await serveAll(party);
+
+    const { saleId } = await end(party);
+
+    expect(await jobsOf(saleId)).toEqual([]);
+  });
+
+  it("refuses meal_end.no_printer when the device's receipts resolve to no printer, issuing nothing", async () => {
+    const { cfg } = await bareDevice();
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+
+    await refused(end(party, {}, cfg), party.tabId, {
+      code: "meal_end.no_printer",
+      params: { workingOrderId: party.tabId },
+    });
+  });
+
+  it("a resend with the same submission id queues no second receipt", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+    const submissionId = randomUUID();
+    const expectedPartyRevision = revisionOf(party.partyId);
+
+    const { saleId } = await end(party, { submissionId, expectedPartyRevision });
+    await end(party, { submissionId, expectedPartyRevision });
+
+    expect(await jobsOf(saleId)).toHaveLength(1);
   });
 });
