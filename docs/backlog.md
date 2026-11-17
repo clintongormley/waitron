@@ -267,9 +267,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
   [Detail](backlog/fiscal.md#loose-ends-left-by-a230-waitronverifactu-021-1099)
 
-- **The till offers no way back to a simplified invoice for a bill already saved as a full one.**
-  [Detail](backlog/fiscal.md#the-till-offers-no-way-back-to-a-simplified-invoice-for-a-bill-already-saved-as-a-full-one).
-
 - **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
   The quarterly _modelo 303_ keeps its old behaviour until the asesor answers Q25 (which VAT period a later annulment lands in).
   No till screen or server route calls `recordVoid` yet.

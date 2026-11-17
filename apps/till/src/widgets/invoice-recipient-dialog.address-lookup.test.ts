@@ -325,6 +325,20 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("Calle Mía 5");
   });
 
+  it("drops an address still on its way once Simplified invoice instead is pressed", async () => {
+    const { resolving, answers } = deferredProvider();
+    const el = await mountDialog({ addressProvider: resolving, offerSimplified: true });
+    let sent = 0;
+    el.addEventListener("invoice-recipient-simplified", () => sent++);
+    await startChoosing(el);
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    q(el, "[data-invoice-simplified]")!.click();
+    expect(sent).toBe(1);
+    answers[0]!(MADRID);
+    await flush(el);
+    expect(value(el, "address")).toBe("");
+  });
+
   it("ignores a chosen address once the dialog has closed", async () => {
     const el = await mountDialog();
     let cancelled = false;

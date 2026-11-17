@@ -221,6 +221,36 @@ function confirmations(el: TillInvoiceRecipientDialog) {
   return sent;
 }
 
+describe("till-invoice-recipient-dialog going back to a simplified invoice", () => {
+  it("offers no way back unless it is told the bill is already a full invoice", async () => {
+    const el = await mountDialog();
+    expect(el.shadowRoot!.querySelector("[data-invoice-simplified]")).toBeNull();
+  });
+
+  it.each([
+    ["en", "Simplified invoice instead"],
+    ["es-ES", "Factura simplificada en su lugar"],
+  ])("asks for a simplified invoice from the footer in %s", async (locale, label) => {
+    setLocale(locale);
+    const { el } = await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {
+      offerSimplified: true,
+    });
+    const asked: Event[] = [];
+    el.addEventListener("invoice-recipient-simplified", (event) => asked.push(event));
+    const action = el.shadowRoot!.querySelector<HTMLElement>(
+      "wt-form-actions > [data-invoice-simplified]",
+    )!;
+    expect(action.getAttribute("slot")).toBe("secondary");
+    expect(action.getAttribute("variant")).toBe("secondary");
+    expect(action.textContent!.trim()).toBe(label);
+
+    action.click();
+
+    expect(asked).toHaveLength(1);
+    expect([asked[0]!.bubbles, asked[0]!.composed]).toEqual([true, true]);
+  });
+});
+
 const anaGarcia = {
   taxId: "12345678Z",
   legalName: "Ana García",

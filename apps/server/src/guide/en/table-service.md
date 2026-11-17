@@ -110,6 +110,9 @@ invoice already issued, and Waitron does not offer that correction yet. Once a c
 their name and identifier show under the payment area's **Full invoice**. Merging bills, or
 moving every dish to another bill, asks before a full invoice's customer would change.
 
+Saved a full invoice by mistake? Open **Full invoice** again and choose **Simplified invoice
+instead**. Once the bill has taken a payment, it stays a full invoice.
+
 Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
 choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
 number as written. A passport is accepted with a Spanish address too; the issuing country

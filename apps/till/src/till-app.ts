@@ -4240,6 +4240,8 @@ export class TillApp extends LitElement {
     revision: number;
     partyId: string;
     session: number;
+    /** The bill's choice, as this window read it on opening or last saved it, is a full invoice. */
+    full: boolean;
     /** What opened the window: the ⋮, or the pay area's Full invoice. */
     opener?: HTMLElement;
     screen?: HTMLElement;
@@ -20514,6 +20516,7 @@ export class TillApp extends LitElement {
       revision,
       partyId,
       session: this.#operatorSession,
+      full: bill.invoiceType === "F1",
       expectedEdit,
       api: this.api,
       opener:
@@ -20532,7 +20535,7 @@ export class TillApp extends LitElement {
   }
 
   async #saveBillInvoiceChoice(
-    choice: InvoiceRecipientDetail,
+    choice: InvoiceRecipientDetail | { invoiceType: "F2"; recipient: null },
     complete: () => boolean,
   ): Promise<void> {
     const bill = this.invoiceRecipientBill;
@@ -20558,6 +20561,7 @@ export class TillApp extends LitElement {
       if (!current()) return;
       const close = complete();
       bill.revision = saved.revision;
+      bill.full = choice.invoiceType === "F1";
       this.invoiceRecipientOpen = !close;
       this.invoiceRecipientRefusal = "";
       this.invoiceRecipientRefusalField = "";
@@ -23700,6 +23704,14 @@ export class TillApp extends LitElement {
                 .savedDelivery=${this.invoiceRecipientSaved}
                 .refusal=${this.invoiceRecipientRefusal}
                 .refusalField=${this.invoiceRecipientRefusalField}
+                .offerSimplified=${this.invoiceRecipientBill?.full === true}
+                @invoice-recipient-simplified=${(event: Event) => {
+                  const form = event.currentTarget as TillInvoiceRecipientDialog;
+                  void this.#saveBillInvoiceChoice(
+                    { invoiceType: "F2", recipient: null },
+                    form.writeCompletion(),
+                  );
+                }}
                 @invoice-recipient-edit=${(event: CustomEvent<{ field: string }>) => {
                   if (event.detail.field === this.invoiceRecipientRefusalField) {
                     this.invoiceRecipientRefusal = "";
