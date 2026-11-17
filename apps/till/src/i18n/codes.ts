@@ -418,8 +418,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se puede enviar la factura por correo. Avisa a un responsable.",
   },
   "invoice.choice_locked": {
-    en: "This bill has received a payment. Its full invoice choice cannot be removed",
-    es: "Esta cuenta ya ha recibido un pago. No se puede quitar la elección de factura completa",
+    en: "This bill already has its receipt or a payment, so it can no longer switch between a full and a simplified invoice.",
+    es: "Esta cuenta ya tiene su tique o un pago, así que ya no puede cambiar entre factura completa y simplificada.",
   },
   "invoice_correction.not_settled": {
     en: "This bill is not fully paid, so its invoice cannot be corrected yet.",

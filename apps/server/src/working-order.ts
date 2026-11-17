@@ -4532,13 +4532,15 @@ export async function refuseUnavailableFullInvoice(
 
 /**
  * The order whose recorded choices (invoice type, receipt language) may still change: open, or
- * placed with no sale yet, at the revision the caller read, with no payment in flight.
+ * placed with no sale yet, at the revision the caller read, with no payment in flight. A placed
+ * order holding a sale refuses an invoice-type change as `invoice.choice_locked`.
  */
 async function readChoiceChangeableOrder(
   db: Database,
   tx: Transaction,
   orderId: string,
   expectedRevision: number,
+  choice: "invoice" | "receipt-language",
 ) {
   const [order] = await tx
     .select({
@@ -4558,6 +4560,7 @@ async function readChoiceChangeableOrder(
       .where(eq(sales.workingOrderId, orderId))
       .limit(1);
     if (issued !== undefined) {
+      if (choice === "invoice") throw new AppError("invoice.choice_locked", {});
       throw new AppError("working_order.not_open", { workingOrderId: orderId });
     }
   }
@@ -4593,7 +4596,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision, "invoice");
     await requireOrderBillEditor(tx, orderId, request);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
@@ -4646,7 +4649,13 @@ export async function setOrderReceiptLanguage(
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(
+      db,
+      tx,
+      orderId,
+      request.revision,
+      "receipt-language",
+    );
     await requireOrderBillEditor(tx, orderId, request);
     if (language !== null && !(await readOfferedReceiptLanguages(tx)).includes(language)) {
       throw new AppError("management.request_invalid", { field: "language" });

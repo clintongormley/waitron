@@ -8,7 +8,9 @@ import {
   saleLines,
   saleSettlements,
   sales,
+  taxpayer,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -630,5 +632,74 @@ describe("a Counter bill presented with no ticket, moved to the table", () => {
     expect(during.status).toBe("fulfilled");
     expect(started.status).toBe(200);
     expect(await salesOf(id)).toEqual([]);
+  });
+});
+
+describe("a printed bill's invoice type", () => {
+  async function orderRow(billId: string) {
+    const [row] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    return row!;
+  }
+
+  async function choose(billId: string, invoiceType: "F1" | "F2") {
+    const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+      readBillEditState(tx, billId),
+    );
+    return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: (await orderRow(billId)).revision,
+      invoiceType,
+      recipient:
+        invoiceType === "F1"
+          ? {
+              taxId: "B12345674",
+              legalName: "Cliente SL",
+              address: "2 Main Street, 28013 Madrid, Madrid",
+              countryCode: "ES",
+            }
+          : null,
+      expectedEdit: { billId, editorVersion, draftId, draftRevision },
+    });
+  }
+
+  async function refusesSwitch(billId: string, invoiceType: "F1" | "F2") {
+    const before = await orderRow(billId);
+    const sold = await salesOf(billId);
+    expect(await choose(billId, invoiceType)).toEqual({
+      status: 409,
+      json: { code: "invoice.choice_locked", params: {} },
+    });
+    expect(await orderRow(billId)).toEqual(before);
+    expect(await salesOf(billId)).toEqual(sold);
+  }
+
+  it("an unprinted bill switches both ways", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    expect((await orderRow(party.tabId)).invoiceType).toBe("F1");
+    expect((await choose(party.tabId, "F2")).status).toBe(200);
+    expect((await orderRow(party.tabId)).invoiceType).toBe("F2");
+  });
+
+  it("a printed, unpaid simplified bill refuses a switch to a full invoice", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+    await end(party);
+
+    await refusesSwitch(party.tabId, "F1");
+  });
+
+  it("a printed, unpaid full-invoice bill refuses a switch to a simplified one", async () => {
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await serveAll(party);
+    await end(party);
+
+    await refusesSwitch(party.tabId, "F2");
   });
 });
