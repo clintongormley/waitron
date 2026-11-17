@@ -6694,7 +6694,17 @@ export class TillTableOrderScreen extends LitElement {
                     }),
                   )
                 : nothing,
-              ...this.#billDocumentItems(shown),
+              ...this.#billDocumentItems(
+                shown,
+                owing(shown) &&
+                  shown.invoiceNumber === undefined &&
+                  !shown.leftUnpaid &&
+                  this.paymentConfirmation === undefined
+                  ? action("print-bill", "bill.print", () =>
+                      this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+                    )
+                  : nothing,
+              ),
             ],
       tableItems: [
         action("allergy", "allergy.title", () => {
@@ -6719,11 +6729,11 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Full invoice for a bill owing with no sale filed, and, as on the payment step, not while a
-   * whole payment's answer is unknown; Print the bill for a bill owing with no sale filed that was
-   * not left unpaid; Receipt copy for any bill with a sale filed, paid or not; Cancel and credit as
-   * the bills list offers it. */
-  #billDocumentItems(bill: PartyBill): (TemplateResult | typeof nothing)[] {
+  /** Print the bill follows Full invoice, which has to be chosen before the bill is printed. */
+  #billDocumentItems(
+    bill: PartyBill,
+    printBill: TemplateResult | typeof nothing,
+  ): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
     return [
       this.fullInvoices &&
@@ -6739,11 +6749,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("invoice.full")}
           </wt-button>`
         : nothing,
-      owing(bill) && bill.invoiceNumber === undefined && !bill.leftUnpaid
-        ? html`<wt-button data-print-bill @click=${() => this.#dispatch("end-meal", target)}>
-            ${t("bill.print")}
-          </wt-button>`
-        : nothing,
+      printBill,
       (bill.status === "settled" || bill.status === "placed") && bill.receiptAvailable
         ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
             ${t("table.bill_receipt")}

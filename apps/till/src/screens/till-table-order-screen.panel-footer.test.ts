@@ -541,7 +541,7 @@ describe("A803 pay scope", () => {
 
     expect(q(el, "[data-pay-sheet]")).not.toBeNull();
     expect(q(el, "[data-table-menu] [data-bill-receipt]")).not.toBeNull();
-    expect(q(el, "[data-table-menu] [data-print-bill]")).toBeNull();
+    expect(q(el, '[data-table-menu] [data-action="print-bill"]')).toBeNull();
     expect(q(el, "[data-bill-receipt]:not([data-table-menu] *)")).toBeNull();
   });
 
@@ -549,8 +549,8 @@ describe("A803 pay scope", () => {
     const { el } = await mountFooter(twoBills);
     await resized(el);
 
-    expect(q(el, "[data-table-menu] [data-print-bill]")).not.toBeNull();
-    expect(q(el, "[data-print-bill]:not([data-table-menu] *)")).toBeNull();
+    expect(q(el, '[data-table-menu] [data-action="print-bill"]')).not.toBeNull();
+    expect(q(el, '[data-action="print-bill"]:not([data-table-menu] *)')).toBeNull();
   });
 
   describe("quiet Pay while this bill has unsent dishes", () => {

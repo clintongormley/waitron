@@ -1747,6 +1747,7 @@ export const en = {
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
+  "bill.print": "Print the bill",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -1915,7 +1916,6 @@ export const en = {
     "The refund got no answer, so it may have been made. Check this bill's payments before trying again.",
   // Record unpaid departure
   "departure.record": "Record unpaid departure",
-  "bill.print": "Print the bill",
   "departure.title": "Record unpaid departure",
   "departure.left_unpaid": "Left unpaid",
   "departure.scope":
@@ -3864,6 +3864,7 @@ export const es: Record<StringKey, string> = {
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
+  "bill.print": "Imprimir la cuenta",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",
@@ -4032,7 +4033,6 @@ export const es: Record<StringKey, string> = {
   "bill_refund.unconfirmed":
     "La devolución no obtuvo respuesta, así que puede que se haya hecho. Revisa los pagos de esta cuenta antes de volver a intentarlo.",
   "departure.record": "Registrar salida sin pagar",
-  "bill.print": "Imprimir la cuenta",
   "departure.title": "Registrar salida sin pagar",
   "departure.left_unpaid": "Sin pagar",
   "departure.scope":

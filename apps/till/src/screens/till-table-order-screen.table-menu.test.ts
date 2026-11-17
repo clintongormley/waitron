@@ -320,9 +320,30 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     const el = await mountScreen();
     const printed = capture(el, "end-meal");
 
-    item(el, "[data-print-bill]")!.click();
+    item(el, '[data-action="print-bill"]')!.click();
 
     expect(printed).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("Print the bill sends nothing while the screen is busy", async () => {
+    const el = await mountScreen({ busy: true });
+    const printed = capture(el, "end-meal");
+
+    item(el, '[data-action="print-bill"]')!.click();
+
+    expect(printed).toEqual([]);
+  });
+
+  it("offers no Print the bill while a payment's answer is unknown", async () => {
+    const el = await mountScreen();
+    el.paymentConfirmation = {
+      tender: { method: "cash", amount: "12.00" },
+      outstanding: "10.00",
+      guestCount: 3,
+    };
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
   });
 
   it("offers Print the bill on a presented bill with no invoice number", async () => {
@@ -357,7 +378,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
   ])("offers no Print the bill on %s", async (_name, bill) => {
     const el = await mountScreen({ bills: [bill] });
 
-    expect(item(el, "[data-print-bill]")).toBeNull();
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
   });
 
   it("a printed bill not yet paid offers Receipt copy, sent for the bill on screen", async () => {
@@ -462,7 +483,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       receiptAvailable: true,
       hasPayments: true,
     });
-    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const presented = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceNumber: "F-0007",
+    });
     const billItem = (el: TillTableOrderScreen, selector: string) =>
       menu(el).querySelector<HTMLElement>(`[data-table-menu-bill] ${selector}`);
 
@@ -486,15 +511,13 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
     });
 
-    it("a presented bill keeps Name this bill, Move this bill, Full invoice and Cancel and credit", async () => {
+    it("a presented bill keeps Name this bill, Move this bill, Receipt copy and Cancel and credit", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([
         "Name this bill",
         "Move this bill",
         "Record unpaid departure",
-        "Full invoice",
-        "Print the bill",
         "Receipt copy",
         "Cancel and credit",
       ]);
