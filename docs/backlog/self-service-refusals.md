@@ -646,8 +646,8 @@ not verify that every provider, device or process eventually recovers.
 
 | Message/code and surface | Source receipt | Disposition |
 | --- | --- | --- |
-| `printer.probe_busy`, dashboard | `apps/server/src/printer-probes.ts:20` and `:52` prune expired targets and set a 30-second expiry. | Capacity can change with time; retain a wait/retry. |
-| `printer.bluetooth_command_busy`, dashboard | `apps/server/src/printer-bluetooth-commands.ts:80` prunes expired pending commands; `:110` checks their count. | Temporary capacity. A printer remaining unavailable is a different refusal. |
+| `printer.probe_busy`, dashboard | `apps/server/src/printer-probes.ts:26` and `:61` prune expired targets and set a 30-second expiry. | Capacity can change with time; retain a wait/retry. |
+| `printer.bluetooth_command_busy`, dashboard | `apps/server/src/printer-bluetooth-commands.ts:85` prunes expired pending commands; `:120` refuses while one is pending. | Temporary capacity. A printer remaining unavailable is a different refusal. |
 | `pin.throttled`, till/dashboard; `password.throttled`, dashboard/setup | `packages/identity/src/pin-throttle.ts:110`; `packages/provisioning/src/password-throttle.ts:139`. Both compare a clock with an unlock time or an in-flight attempt. | Waiting can release the throttle; it does not correct the entered credential. |
 | `account_action.rate_limited`, dashboard | `apps/server/src/account-rate-limit.ts:39` resets the request counters after the 60-second window. | Waiting can release this limit. It does not make an expired or invalid action link valid. |
 | `backup.reload_in_progress`, dashboard | `apps/server/src/stream-host.ts:213` clears its gate in `finally`; `apps/server/src/backup-supervisor.ts:189` sets a reload gate. | An active operation can finish. This audit did not reproduce a stuck reload. |
