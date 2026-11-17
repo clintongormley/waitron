@@ -1,3 +1,4 @@
+const RETIRED_KEY = ["WAITRON", "ACCOUNT", "KEY"].join("_");
 import { createPrivateKey, X509Certificate } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +15,6 @@ import * as cipherReaders from "./artifact-cipher.js";
 import * as archiveReaders from "./backup-archive.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifactAsync } from "./artifact-cipher.js";
-import { resolveAccountKey } from "./account-key.js";
 import { loadBoxEnv } from "./box-env.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import {
@@ -53,7 +53,7 @@ const privatePem = forge.pki.privateKeyToPem;
 function entries(): ArchiveEntry[] {
   return Object.entries({
     "secrets.env": `WAITRON_CREDENTIALS_KEY=${key}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`,
-    "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
+    "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ENV=preproduction\n${RETIRED_KEY}=${account}\n`,
     "tls/ca.crt": pem(ca),
     "tls/ca.key": privatePem(caKeys.privateKey),
     "tls/server.pem": pem(leaf) + privatePem(serverKeys.privateKey),
@@ -196,14 +196,14 @@ describe("private host recovery material", () => {
       reason: "binding_mismatch",
     });
   });
-  it("requires valid captured account-key encoding", async () => {
+  it("ignores a retired key in captured configuration", async () => {
     expect(
       await verifyBackupStateSecrets(
-        set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ACCOUNT_KEY=bad`),
+        set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n${RETIRED_KEY}=bad`),
         source,
         now,
       ),
-    ).toEqual(unavailable);
+    ).toEqual(pass);
   });
   it("accepts optional backup settings without accessing the old destination", async () => {
     const input = set(
@@ -309,18 +309,17 @@ describe("actual private key placement", () => {
     const dir = await place(input);
     const env = await loadBoxEnv({}, dir);
     expect(loadKeyRing(env).current.key).toEqual(Buffer.from(key, "base64"));
-    expect(resolveAccountKey(env, loadKeyRing(env))).toEqual(Buffer.from(account, "base64"));
     expect(await verifyBackupKeyPlacement(input, dir)).toBe("passed");
   });
   it("accepts a redundant equal later-file key override", async () => {
     const input = set(
       entries(),
       "backup.env",
-      `WAITRON_CREDENTIALS_KEY=${key}\nWAITRON_ACCOUNT_KEY=${account}\n`,
+      `WAITRON_CREDENTIALS_KEY=${key}\n${RETIRED_KEY}=${account}\n`,
     );
     expect(await verifyBackupKeyPlacement(input, await place(input))).toBe("passed");
   });
-  it.each(["WAITRON_CREDENTIALS_KEY", "WAITRON_CREDENTIALS_KEY_VERSION", "WAITRON_ACCOUNT_KEY"])(
+  it.each(["WAITRON_CREDENTIALS_KEY", "WAITRON_CREDENTIALS_KEY_VERSION"])(
     "refuses a dropped later-file %s override",
     async (name) => {
       const value = name.endsWith("VERSION") ? "3" : otherKey;
@@ -330,18 +329,16 @@ describe("actual private key placement", () => {
       expect(await verifyBackupKeyPlacement(input, dir)).toBe("unsupported");
     },
   );
-  it("refuses an account key present only in backup.env", async () => {
+  it("ignores a retired key present only in backup.env", async () => {
     const input = set(
       set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`),
       "backup.env",
-      `WAITRON_ACCOUNT_KEY=${account}\n`,
+      `${RETIRED_KEY}=${account}\n`,
     );
     const dir = await place(input);
-    const env = await loadBoxEnv({}, dir);
-    expect(resolveAccountKey(env, loadKeyRing(env))).not.toEqual(Buffer.from(account, "base64"));
-    expect(await verifyBackupKeyPlacement(input, dir)).toBe("unsupported");
+    expect(await verifyBackupKeyPlacement(input, dir)).toBe("passed");
   });
-  it("accepts the real derived account key when neither layout has an override", async () => {
+  it("accepts matching rings without a retired override", async () => {
     const input = set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`);
     expect(await verifyBackupKeyPlacement(input, await place(input))).toBe("passed");
   });
@@ -411,12 +408,12 @@ it("refuses authenticated plaintext that is not an archive", async () => {
     }),
   ).toEqual(invalid);
 });
-it("missing captured key files cannot borrow keys from the placed layout", async () => {
+it("requires the captured vault key independently of the key-free trading identity", async () => {
   const dir = await place(entries());
   for (const name of ["secrets/secrets.env", "secrets/trading.env"]) {
     const captured = entries().filter((e) => e.name !== name);
     expect(await verifyBackupKeyPlacement(captured, dir)).toBe(
-      name.endsWith("trading.env") ? "unsupported" : "unavailable",
+      name.endsWith("trading.env") ? "passed" : "unavailable",
     );
   }
 });
@@ -502,18 +499,11 @@ it("checks the server issuer name as well as its signature", async () => {
     await verifyBackupStateSecrets(set(entries(), "tls/server.pem", pem(wrong)), source, now),
   ).toEqual(invalid);
 });
-it("accepts an equal derived account key redundantly supplied by backup.env", async () => {
+it("ignores a redundant retired key in backup.env", async () => {
   const input = set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`);
   const dir = await place(input);
-  const derived = resolveAccountKey(
-    await loadBoxEnv({}, dir),
-    loadKeyRing(await loadBoxEnv({}, dir)),
-  );
   expect(
-    await verifyBackupKeyPlacement(
-      set(input, "backup.env", `WAITRON_ACCOUNT_KEY=${derived.toString("base64")}\n`),
-      dir,
-    ),
+    await verifyBackupKeyPlacement(set(input, "backup.env", `${RETIRED_KEY}=${account}\n`), dir),
   ).toBe("passed");
 });
 

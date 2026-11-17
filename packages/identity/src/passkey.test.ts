@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import {
   captureError,
   CORE_MIGRATIONS,
@@ -18,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readPasskeys } from "./profile.js";
 import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { generateSync } from "otplib";
-import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
+import { replaceRecoveryCodes } from "./mfa.js";
 import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 
 // Only the two VERIFY calls are mocked, so this suite asserts OUR wiring around them;
@@ -952,7 +953,9 @@ describe("checking the signed-in person's own passkey", () => {
       tx
         .update(persons)
         .set(
-          withFoldedPersonChanges({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) }),
+          withFoldedPersonChanges({
+            totpSecret: sealText({ current: TOTP_KEY_RING.current }, "totp", secret),
+          }),
         )
         .where(eq(persons.id, personId)),
     );

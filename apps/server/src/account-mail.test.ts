@@ -313,7 +313,7 @@ describe("account mail owner", () => {
           return { status: "sent" };
         };
       }
-      const codeKey = Buffer.alloc(32, 7);
+      const keyRing = { current: { version: 1, key: Buffer.alloc(32, 7) } };
       vi.mocked(randomInt)
         .mockReturnValueOnce(111111 as never)
         .mockReturnValueOnce(222222 as never);
@@ -324,7 +324,6 @@ describe("account mail owner", () => {
         startManagementSession(tx, { method: "password", personId }),
       );
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
-      const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
       for (const email of ["first@example.test", "second@example.test"]) {
         await withTransaction(suite.db, (tx) =>
           saveOwnProfile(tx, {
@@ -339,7 +338,7 @@ describe("account mail owner", () => {
       }
       deps.owners = [
         accountActionMail({
-          codeKey,
+          keyRing,
           emailChangeUrl: "https://box.test/",
           venueLocale: "en-GB",
           readTimeZone: async () => "Europe/Madrid",
@@ -369,7 +368,7 @@ describe("account mail owner", () => {
           confirmOwnEmailChange(tx, {
             managementSessionId: session.token,
             code: "111111",
-            codeKey,
+            keyRing,
           }),
         ),
       ).resolves.toBeNull();
@@ -378,7 +377,7 @@ describe("account mail owner", () => {
           confirmOwnEmailChange(tx, {
             managementSessionId: session.token,
             code: "222222",
-            codeKey,
+            keyRing,
           }),
         ),
       ).resolves.toBe("second@example.test");

@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { insertSignInChallenge } from "./sign-in-challenges.js";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
@@ -23,7 +24,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { and, eq, sql } from "drizzle-orm";
-import type { TotpKeyRing } from "./mfa.js";
+
 import { requireEnrolledCode } from "./profile.js";
 import {
   resolveManagementSession,
@@ -407,7 +408,7 @@ export async function verifyOwnPasskey(
     origin: string | string[];
     totp?: string;
     recoveryCode?: string;
-    keyRing: TotpKeyRing;
+    keyRing: KeyRing;
   },
 ): Promise<void> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);

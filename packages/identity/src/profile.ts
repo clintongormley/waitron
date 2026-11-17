@@ -1,3 +1,4 @@
+import { openText, sealText, type KeyRing } from "@waitron/credentials";
 import { insertSignInChallenge } from "./sign-in-challenges.js";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
@@ -31,13 +32,7 @@ import { assertPasswordLength, hashPasswordAsync, verifyPassword } from "./verif
 import { assertPinLength, hashPinAsync } from "./verify-pin.js";
 import { verifyTotp } from "./totp.js";
 import { generateTotpSecret, totpAuthUri } from "./totp.js";
-import {
-  consumeRecoveryCode,
-  decryptTotpSecret,
-  encryptTotpSecret,
-  replaceRecoveryCodes,
-  type TotpKeyRing,
-} from "./mfa.js";
+import { consumeRecoveryCode, replaceRecoveryCodes } from "./mfa.js";
 import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
 import { assertUsableAdminRemains } from "./admin-anchor.js";
@@ -48,7 +43,7 @@ interface Owner {
 }
 interface Credentials {
   totp?: string;
-  keyRing: TotpKeyRing;
+  keyRing: KeyRing;
 }
 
 /**
@@ -106,11 +101,11 @@ export async function requireEnrolledCode(
   tx: Transaction,
   person: Pick<typeof persons.$inferSelect, "id" | "totpSecret">,
   codes: { totp?: string; recoveryCode?: string },
-  keyRing: TotpKeyRing,
+  keyRing: KeyRing,
 ): Promise<void> {
   if (person.totpSecret === null) return;
-  const secret = decryptTotpSecret(person.totpSecret, keyRing);
-  if (codes.totp !== undefined && secret !== null && verifyTotp(codes.totp, secret.secret)) return;
+  const secret = openText(keyRing, "totp", person.totpSecret);
+  if (codes.totp !== undefined && secret !== null && verifyTotp(codes.totp, secret.value)) return;
   if (
     codes.recoveryCode !== undefined &&
     (await consumeRecoveryCode(tx, person.id, codes.recoveryCode))
@@ -178,7 +173,7 @@ export async function beginOwnTotpEnrollment(
   const enrollmentId = await insertSignInChallenge(tx, {
     kind: "totp_enrolment",
     personId: person.id,
-    encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
+    encryptedSecret: sealText(input.keyRing, "totp", secret),
     lifetimeMs: TOTP_ENROLLMENT_TTL_MS,
     now,
   });
@@ -192,7 +187,7 @@ export async function beginOwnTotpEnrollment(
 
 export async function finishOwnTotpEnrollment(
   tx: Transaction,
-  input: Owner & { enrollmentId: string; code: string; keyRing: TotpKeyRing },
+  input: Owner & { enrollmentId: string; code: string; keyRing: KeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   const [enrollment] = await tx
@@ -212,8 +207,8 @@ export async function finishOwnTotpEnrollment(
       ),
     );
   const secret =
-    enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret!, input.keyRing);
-  if (secret === null || !verifyTotp(input.code, secret.secret))
+    enrollment === undefined ? null : openText(input.keyRing, "totp", enrollment.encryptedSecret!);
+  if (secret === null || !verifyTotp(input.code, secret.value))
     throw new AppError("totp.invalid", {});
   await tx
     .update(persons)
@@ -376,13 +371,13 @@ export async function saveOwnProfile(
 
 export async function confirmOwnEmailChange(
   tx: Transaction,
-  input: Owner & { code: string; codeKey: Buffer },
+  input: Owner & { code: string; keyRing: KeyRing },
 ): Promise<string | null> {
   const person = await ownPerson(tx, input);
   const email = await confirmEmailChangeByCode(tx, {
     personId: person.id,
     code: input.code,
-    codeKey: input.codeKey,
+    keyRing: input.keyRing,
   });
   if (email !== null)
     await queueSecurityChangeMail(tx, { personId: person.id, change: "email_changed" });

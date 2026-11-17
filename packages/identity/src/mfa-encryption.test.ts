@@ -1,49 +1,55 @@
+import { sealText, openText, loadKeyRing } from "@waitron/credentials";
 import { describe, expect, it } from "vitest";
-import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
 
 const current = { version: 7, key: Buffer.alloc(32, 7) };
 const previous = { version: 6, key: Buffer.alloc(32, 6) };
 
 describe("TOTP secret encryption", () => {
   it("stores the key version and decrypts through the matching ring member", () => {
-    const stored = encryptTotpSecret("JBSWY3DPEHPK3PXP", previous);
-    expect(stored).toMatch(/^v1\.6\./);
-    expect(decryptTotpSecret(stored, { current, previous })).toEqual({
-      secret: "JBSWY3DPEHPK3PXP",
+    const stored = sealText({ current: previous }, "totp", "JBSWY3DPEHPK3PXP");
+    expect(stored).toMatch(/^v2\.6\./);
+    expect(openText({ current, previous }, "totp", stored)).toEqual({
+      value: "JBSWY3DPEHPK3PXP",
       keyVersion: 6,
     });
   });
 
   it("rejects plaintext and ciphertext whose key version is unavailable", () => {
-    expect(decryptTotpSecret("JBSWY3DPEHPK3PXP", { current })).toBeNull();
-    expect(decryptTotpSecret(encryptTotpSecret("secret", previous), { current })).toBeNull();
+    expect(openText({ current }, "totp", "JBSWY3DPEHPK3PXP")).toBeNull();
+    expect(
+      openText({ current }, "totp", sealText({ current: previous }, "totp", "secret")),
+    ).toBeNull();
   });
 
-  it("refuses to encrypt with a key that is not 32 bytes, rather than producing weak ciphertext", () => {
+  it("refuses a vault key that is not 32 bytes before sealing", () => {
     expect(() =>
-      encryptTotpSecret("JBSWY3DPEHPK3PXP", { version: 1, key: Buffer.alloc(16, 1) }),
-    ).toThrow("TOTP encryption key must contain 32 bytes");
+      sealText(
+        loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(16, 1).toString("base64") }),
+        "totp",
+        "JBSWY3DPEHPK3PXP",
+      ),
+    ).toThrow(expect.objectContaining({ code: "credentials.key_invalid" }));
   });
 
   it("returns null for stored text that has the prefix but not the shape", () => {
     // Not five dot-separated parts, or a version that is not a whole number.
-    const stored = encryptTotpSecret("JBSWY3DPEHPK3PXP", current);
-    expect(decryptTotpSecret(stored.split(".").slice(0, 4).join("."), { current })).toBeNull();
-    expect(decryptTotpSecret(`${stored}.extra`, { current })).toBeNull();
-    expect(decryptTotpSecret(stored.replace(/^v1\.7\./, "v1.seven."), { current })).toBeNull();
+    const stored = sealText({ current: current }, "totp", "JBSWY3DPEHPK3PXP");
+    expect(openText({ current }, "totp", stored.split(".").slice(0, 4).join("."))).toBeNull();
+    expect(openText({ current }, "totp", `${stored}.extra`)).toBeNull();
+    expect(openText({ current }, "totp", stored.replace(/^v2\.7\./, "v2.seven."))).toBeNull();
   });
 
   it("returns null when the ciphertext does not authenticate under the key its version names", () => {
     // A different key under the same version, and an altered ciphertext under the right key, both
     // fail the GCM tag check.
-    const stored = encryptTotpSecret("JBSWY3DPEHPK3PXP", current);
+    const stored = sealText({ current: current }, "totp", "JBSWY3DPEHPK3PXP");
     expect(
-      decryptTotpSecret(stored, { current: { version: 7, key: Buffer.alloc(32, 8) } }),
+      openText({ current: { version: 7, key: Buffer.alloc(32, 8) } }, "totp", stored),
     ).toBeNull();
     const parts = stored.split(".");
     const tampered = Buffer.from(parts[4]!, "base64url");
     tampered[0] = tampered[0]! ^ 1;
     parts[4] = tampered.toString("base64url");
-    expect(decryptTotpSecret(parts.join("."), { current })).toBeNull();
+    expect(openText({ current }, "totp", parts.join("."))).toBeNull();
   });
 });

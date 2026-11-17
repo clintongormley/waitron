@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
@@ -13,7 +14,6 @@ import {
   endManagementSession,
   loginManagerById,
   verifySecretAsync,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
 import {
@@ -104,7 +104,7 @@ export function isSwitchSignedIn(credentials: unknown): credentials is SwitchSig
 }
 
 export async function withAuthenticatedOperation<T>(
-  deps: { readonly db: Database; readonly credentialKeyRing: TotpKeyRing },
+  deps: { readonly db: Database; readonly credentialKeyRing: KeyRing },
   operation: {
     readonly binding: OperationBinding;
     readonly permission: "node.manage";

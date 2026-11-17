@@ -61,7 +61,7 @@ const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   boxHostname: "waitron.local",
   boxCaPem: MAIN_AUTHORITY.caCertPem,
   ...PAIR_BUNDLE_FIELDS,
-  accountKey: Buffer.alloc(32, 9).toString("base64"),
+
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },

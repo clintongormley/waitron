@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import type { Context, Hono } from "hono";
@@ -9,7 +10,6 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
 import { BEFORE_ACTIVATION } from "@waitron/handover";
@@ -46,7 +46,7 @@ export interface PromoteApiDeps {
   /** This node's id — whose break-glass verifier is checked. */
   nodeId: string;
   /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing: KeyRing;
   modules?: readonly WaitronModule[];
   nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
   /** Whether a request came from a browser on the box itself, for what it only withholds; tests replace it. */

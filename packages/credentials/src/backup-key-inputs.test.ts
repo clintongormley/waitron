@@ -8,10 +8,10 @@ describe("captured backup key inputs", () => {
     expect(
       resolveBackupKeyInputs({
         secretsEnv: bytes("WAITRON_CREDENTIALS_KEY=first==\nSHARED=one\n"),
-        tradingEnv: bytes("SHARED=two\nWAITRON_ACCOUNT_KEY=account==\n"),
-        backupEnv: bytes("SHARED=three\nWAITRON_CREDENTIALS_KEY=last==\nWAITRON_ACCOUNT_KEY=\n"),
+        tradingEnv: bytes("SHARED=two\nUNUSED=account==\n"),
+        backupEnv: bytes("SHARED=three\nWAITRON_CREDENTIALS_KEY=last==\nUNUSED=\n"),
       }),
-    ).toEqual({ WAITRON_CREDENTIALS_KEY: "last==", SHARED: "three", WAITRON_ACCOUNT_KEY: "" });
+    ).toEqual({ WAITRON_CREDENTIALS_KEY: "last==", SHARED: "three", UNUSED: "" });
   });
 
   it("matches first-equals parsing without shell, quote or inline-comment evaluation", () => {

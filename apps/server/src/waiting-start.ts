@@ -1,7 +1,8 @@
+import type { KeyRing } from "@waitron/credentials";
 import type { Hono, MiddlewareHandler } from "hono";
 import type { Context } from "hono";
 import type { Database, NodeDatabase } from "@waitron/db";
-import type { TotpKeyRing } from "@waitron/identity";
+
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import type { NewerBucketMain } from "./stream-host.js";
@@ -48,7 +49,7 @@ export interface WaitingStartDeps {
   /** Signs in the person who carries on as the main box; without it the page offers no form. */
   carryOn?: {
     db: Database;
-    credentialKeyRing: TotpKeyRing;
+    credentialKeyRing: KeyRing;
     readNewerMain?: () => Promise<NewerBucketMain | null>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;

@@ -37,7 +37,6 @@ import { AppError, decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
 import { generateSync } from "otplib";
-import { accountPurposeKey } from "./account-key.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { enrolAuthenticator } from "./testing/authenticator.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -205,7 +204,6 @@ beforeEach(async () => {
     WAITRON_HTTP_PORT: "32123",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_ACCOUNT_KEY: Buffer.alloc(32, 11).toString("base64"),
     WAITRON_STATE_DIR: scratch,
     WAITRON_VENUE_DIR: dirname(file),
     WAITRON_NODE_ID: NODE,
@@ -558,9 +556,7 @@ describe("startup zone admission", () => {
   );
   it("retains MFA before issuing a new session in repair mode", async () => {
     await rawZone("Invalid/Zone");
-    const secret = await enrolAuthenticator(suite.db, manager, {
-      current: { version: 1, key: accountPurposeKey(Buffer.alloc(32, 11), "totp") },
-    });
+    const secret = await enrolAuthenticator(suite.db, manager, loadKeyRing(env));
     const before = (await suite.db.select().from(dashboardSessions)).length;
     await boot();
     const missing = await request(

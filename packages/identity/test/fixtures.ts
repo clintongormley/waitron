@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { foldForUniqueness } from "@waitron/db";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "./person-rows.js";
@@ -12,9 +13,8 @@ import { hashSessionToken } from "../src/session-token.js";
 import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";
 import type { BuiltInRoleKey } from "../src/permissions.js";
-import type { TotpKeyRing } from "../src/mfa.js";
 
-export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+export const TOTP_KEY_RING: KeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /** Pairs a new device at the venue (seeding the venue on first use) and returns its id: the device
  * a shift session is opened on. */

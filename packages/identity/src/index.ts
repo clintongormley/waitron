@@ -63,8 +63,6 @@ export {
   signInWithToken,
   staleBefore,
 } from "./device-token.js";
-export { encryptTotpSecret } from "./mfa.js";
-export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export {
   checkManagerPassword,
   loginManager,
@@ -198,3 +196,5 @@ export { IDENTITY_BACKUP_VERIFICATION } from "./backup-verification.js";
 export { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 
 export { assertUsableAdminRemains } from "./admin-anchor.js";
+
+export { resealTwoStepSecrets } from "./reseal.js";

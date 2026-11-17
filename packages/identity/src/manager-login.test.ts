@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { CORE_MIGRATIONS, withTransaction, dashboardSessions, persons } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -20,7 +21,7 @@ import {
   personIdForLoginEmail,
 } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
-import { encryptTotpSecret } from "./mfa.js";
+
 import { hashSessionToken } from "./session-token.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization KDF runs are
@@ -239,7 +240,7 @@ describe("loginManager", () => {
     const totpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 8) } };
     await run((tx) =>
       tx.execute(
-        sql`update persons set totp_secret = ${encryptTotpSecret(secret, totpKeyRing.current)} where id = ${personId}`,
+        sql`update persons set totp_secret = ${sealText({ current: totpKeyRing.current }, "totp", secret)} where id = ${personId}`,
       ),
     );
     const missing = await run((tx) =>
@@ -351,7 +352,7 @@ async function withAuthenticator(personId: string): Promise<string> {
   const secret = generateSecret();
   await run((tx) =>
     tx.execute(
-      sql`update persons set totp_secret = ${encryptTotpSecret(secret, TOTP_KEY_RING.current)} where id = ${personId}`,
+      sql`update persons set totp_secret = ${sealText({ current: TOTP_KEY_RING.current }, "totp", secret)} where id = ${personId}`,
     ),
   );
   return secret;

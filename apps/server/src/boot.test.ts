@@ -505,6 +505,22 @@ afterEach(async () => {
 });
 
 describe("startServer, against a migrated venue directory", () => {
+  it("starts a box with a leftover retired key and ignores it", async () => {
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: sharedVenueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      [["WAITRON", "ACCOUNT", "KEY"].join("_")]: "invalid-retired-key",
+    });
+    try {
+      await awaitListening(httpPort());
+    } finally {
+      await server.close();
+    }
+  });
+
   it("keeps a live fixture behind the server's open transaction", async () => {
     const port = await freePort();
     let server: StartedServer | undefined;
@@ -1833,6 +1849,7 @@ describe("startServer, against a migrated venue directory", () => {
             expect(trading[key]).toBeTruthy();
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");
+          expect(trading).not.toHaveProperty(["WAITRON", "ACCOUNT", "KEY"].join("_"));
 
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
           const taxpayer = await check.execute<{ n: number }>(

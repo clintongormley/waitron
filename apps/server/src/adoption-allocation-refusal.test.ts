@@ -69,7 +69,7 @@ function bundle(): MirrorBundle {
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
     ...PAIR_BUNDLE_FIELDS,
-    accountKey: Buffer.alloc(32, 3).toString("base64"),
+
     reservedIdentity: {
       modules: {},
       series: [],

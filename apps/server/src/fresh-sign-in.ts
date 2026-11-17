@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import {
   withTransaction,
   type Database,
@@ -9,7 +10,6 @@ import {
   resolveManagementSession,
   verifyOwnFreshSignIn,
   verifyOwnPasskey,
-  type TotpKeyRing,
 } from "@waitron/identity";
 import { eq } from "drizzle-orm";
 import { AppError, isAppError } from "@waitron/shared";
@@ -21,7 +21,7 @@ import { isUuid } from "./till-session.js";
 export interface FreshSignInDeps {
   db: Database;
   throttle: PasswordThrottle & PasswordThrottleProbe;
-  keyRing: TotpKeyRing;
+  keyRing: KeyRing;
   /** Where a passkey must have been used; asked only when the check is by passkey. */
   passkeySite: () => Promise<{ rpId: string; origin: string | string[] }>;
 }

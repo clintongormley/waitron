@@ -97,7 +97,6 @@ it.each(["archive", "bucket"] as const)(
       WAITRON_HTTP_PORT: "32123",
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_ORIGIN: origin,
-      WAITRON_ACCOUNT_KEY: Buffer.alloc(32, 11).toString("base64"),
       WAITRON_TLS_CERT_FILE: tls.certFile,
       WAITRON_TLS_KEY_FILE: tls.keyFile,
       WAITRON_LOG_DIR: join(roots.stateDir, "logs"),

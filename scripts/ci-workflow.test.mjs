@@ -4539,7 +4539,7 @@ describe("the sharded packages' scripts", () => {
  * It reads the workflow as TEXT, so it sees a `node …server.js` written literally and nothing
  * reached through a variable or a script.
  *
- * The credentials CLI is deliberately outside it: `packages/credentials/dist/bin.js` refuses and
+ * The credentials CLI is deliberately outside it: `packages/identity/dist/credentials-bin.js` refuses and
  * exits when `WAITRON_VENUE_DIR` is unset, so a capture of THAT one returns.
  */
 describe("the server bundle's smoke steps", () => {

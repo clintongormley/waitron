@@ -1046,6 +1046,7 @@ it("the production venue command checks accepted readiness and seals its exact p
   ).toMatchObject({ doc: { from: "elena@example.test" }, updatedBy: null });
   const trading = await readFile(join(f.root, "state/trading.env"), "utf8");
   expect(trading).toContain("WAITRON_ENV=production\n");
+  expect(trading).not.toContain(["WAITRON", "ACCOUNT", "KEY"].join("_"));
   for (const secret of [
     productionCertificate.passphrase,
     productionEmail.password,

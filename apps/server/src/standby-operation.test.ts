@@ -102,7 +102,7 @@ function bundleDeps() {
     stateDir: stateDir!,
     ...PAIR_BUNDLE_FIELDS,
     boxHostname: "waitron.local",
-    accountKey: "public-test",
+
     designated: { nodeId: PRIMARY },
     standby: { nodeId: TARGET, publicKey: generateNodeKeyPair().publicKey },
   };

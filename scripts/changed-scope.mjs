@@ -75,8 +75,8 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
     [
       "apps/print-agent",
       "apps/server",
-      "packages/credentials",
       "packages/fiscal-verifactu",
+      "packages/identity",
       "packages/provisioning",
     ],
   ],

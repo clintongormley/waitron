@@ -25,6 +25,8 @@ import {
   nodeSigningPublicKey,
   readNodeSigningKey,
   type KeyRing,
+  keyRingEnv,
+  type EncodedKeyRing,
 } from "@waitron/credentials";
 import {
   signDocumentBody,
@@ -36,7 +38,7 @@ import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { keyRingEnv, type EncodedKeyRing } from "@waitron/credentials";
+
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
@@ -160,7 +162,7 @@ beforeAll(async () => {
           stateDir: aState,
           ...PAIR_BUNDLE_FIELDS,
           boxHostname: "waitron.local",
-          accountKey: "test-account-key",
+
           designated: { nodeId: aId },
           standby,
         });

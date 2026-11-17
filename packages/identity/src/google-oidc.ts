@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -8,7 +9,6 @@ import { AppError } from "@waitron/shared";
 import { startManagementSession } from "./management-session.js";
 import type { ManagementSession } from "./management-session.js";
 import { verifyOwnCredentials } from "./profile.js";
-import type { TotpKeyRing } from "./mfa.js";
 
 import { insertSignInChallenge } from "./sign-in-challenges.js";
 
@@ -81,7 +81,7 @@ export async function beginGoogleLink(
   input: GoogleStartInput & {
     managementSessionId: string;
     totp?: string;
-    keyRing: TotpKeyRing;
+    keyRing: KeyRing;
   },
 ) {
   const person = await verifyOwnCredentials(tx, input);

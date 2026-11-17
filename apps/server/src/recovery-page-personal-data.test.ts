@@ -768,7 +768,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         const personId = (answer.body as { id: string }).id;
         await flushAccountMail(suite.db, {
           log: r.log,
-          codeKey: Buffer.alloc(32, 21),
+          keyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
           timeZone: "Europe/Madrid",
           smtp: { url: relay.url, from: "venue@example.test" },
         });
@@ -820,7 +820,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       });
       await flushAccountMail(suite.db, {
         log: r.log,
-        codeKey: Buffer.alloc(32, 21),
+        keyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
         timeZone: "Europe/Madrid",
         smtp: { url: relay.url, from: "venue@example.test" },
       });

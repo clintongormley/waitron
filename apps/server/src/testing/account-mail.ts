@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { sql } from "drizzle-orm";
 import { composeAccountEmail, type AccountEmail } from "../account-email.js";
 import { accountActionMail } from "../account-mail.js";
@@ -19,7 +20,7 @@ export function messageSender(
 export async function flushAccountMail(
   db: MailSenderDeps["db"],
   options: {
-    codeKey?: Buffer;
+    keyRing?: KeyRing;
     timeZone?: string;
     log?: MailSenderDeps["log"];
     smtp?: SmtpConnection;
@@ -28,7 +29,7 @@ export async function flushAccountMail(
   } = {},
 ) {
   const owner = accountActionMail({
-    codeKey: options.codeKey,
+    keyRing: options.keyRing,
     emailChangeUrl: "/",
     venueLocale: "en-GB",
     readTimeZone: async () => options.timeZone ?? "UTC",

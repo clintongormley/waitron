@@ -1,3 +1,4 @@
+import { openText, type KeyRing } from "@waitron/credentials";
 import "./errors.js";
 import { createHmac, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
@@ -8,7 +9,7 @@ import { normalizeEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
 import { verifyTotp } from "./totp.js";
-import { consumeRecoveryCode, decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
+import { consumeRecoveryCode } from "./mfa.js";
 import type { Permission } from "./permissions.js";
 import { holds, type PersonAuthority } from "./authority.js";
 import {
@@ -100,7 +101,7 @@ async function completeManagerLogin(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing: TotpKeyRing;
+    totpKeyRing: KeyRing;
     checked?: SecretCheck;
   },
   person: PersonLoginRow | undefined,
@@ -129,9 +130,9 @@ async function completeManagerLogin(
     if (input.totp === undefined && input.recoveryCode === undefined) {
       throw new AppError(missingFactorCode, {}, { reason: "missing_code" });
     }
-    const secret = decryptTotpSecret(person.totpSecret, input.totpKeyRing);
+    const secret = openText(input.totpKeyRing, "totp", person.totpSecret);
     const totpOk =
-      input.totp !== undefined && secret !== null && verifyTotp(input.totp, secret.secret);
+      input.totp !== undefined && secret !== null && verifyTotp(input.totp, secret.value);
     const recoveryOk =
       !totpOk &&
       input.recoveryCode !== undefined &&
@@ -157,7 +158,7 @@ export async function loginManager(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing: TotpKeyRing;
+    totpKeyRing: KeyRing;
     /** From {@link checkManagerPassword}, taken before the transaction opened. */
     checked?: SecretCheck;
   },
@@ -173,7 +174,7 @@ export async function loginManagerById(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing: TotpKeyRing;
+    totpKeyRing: KeyRing;
     /** From {@link checkManagerPassword}, taken before the transaction opened. */
     checked?: SecretCheck;
   },

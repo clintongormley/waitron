@@ -3,7 +3,6 @@ import { isDeepStrictEqual } from "node:util";
 import { posix } from "node:path";
 import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import { resolveAccountKey } from "./account-key.js";
 import { decryptArtifactAsync } from "./artifact-cipher.js";
 import { unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { loadRecoveryKey } from "./backup-config.js";
@@ -31,8 +30,7 @@ function inputs(entries: readonly ArchiveEntry[]): Readonly<Record<string, strin
   });
 }
 function keys(env: Readonly<Record<string, string | undefined>>) {
-  const ring = loadKeyRing(env);
-  return { ring, account: resolveAccountKey(env, ring) };
+  return loadKeyRing(env);
 }
 
 export async function verifyBackupKeyPlacement(

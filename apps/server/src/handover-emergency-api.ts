@@ -1,3 +1,4 @@
+import { type KeyRing } from "@waitron/credentials";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
@@ -14,7 +15,7 @@ import {
   type NodeDatabase,
   type DeploymentEnvironment,
 } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
+
 import {
   ACTIVATED_OR_LATER,
   isOperationId,
@@ -33,7 +34,6 @@ import {
   pinThrottleIdle,
   pinThrottleRetryAfterSeconds,
   pinThrottleUnlockAt,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
 import { servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
@@ -115,7 +115,7 @@ interface Deps {
   origin: string;
   /** The passkey relying party, `config.managementRpId`. */
   rpId: string;
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing: KeyRing;
   passwordThrottle?: PasswordThrottle;
   fetch?: AskPeerStatusDeps["fetch"];
   follow?: {

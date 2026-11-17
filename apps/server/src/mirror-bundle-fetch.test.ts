@@ -58,7 +58,6 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
   primaryUrl: "https://box-4444.waitron.local",
   store: PAIR_STORE,
-  accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
       "fiscal-verifactu": { nif: "B00000000", idSistemaInformatico: "W1", numeroInstalacion: 7 },
@@ -398,7 +397,6 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ],
     ["a wrong module override type", { ...SAMPLE_BUNDLE, moduleOverrides: { media: "yes" } }],
     ["a numeric CA certificate", { ...SAMPLE_BUNDLE, boxCaPem: 42 }],
-    ["a null account key", { ...SAMPLE_BUNDLE, accountKey: null }],
     ["an unknown environment", { ...SAMPLE_BUNDLE, environment: "staging" }],
     ["a numeric optional WireGuard key", { ...SAMPLE_BUNDLE, wireguardPublicKey: 42 }],
     ["a null designated identity", { ...SAMPLE_BUNDLE, designated: null }],

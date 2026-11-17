@@ -199,7 +199,7 @@ async function bundleApp() {
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
     designated: { nodeId: PRIMARY },
-    accountKey: "test-account",
+
     credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });

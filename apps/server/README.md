@@ -382,7 +382,7 @@ mode as in trading (`loadBoxEnv`, `src/box-env.ts`). So joining another box as i
 `mirror.vault_key_differs`, before writing anything, while one of them differs from the main
 box's ring, and a Start again Move's copy of the ring holds the environment's values.
 
-Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.aeat`,
+Use `waitron-credentials` to provision and rotate credentials (`fiscal.aeat`,
 `payments.stripe`, `payments.sumup`), for example
 `waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin. That CLI refuses a
 `--tenant` flag because one database holds one taxpayer. Run

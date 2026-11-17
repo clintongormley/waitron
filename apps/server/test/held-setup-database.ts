@@ -58,7 +58,7 @@ interface HeldSetup {
 }
 
 const CRASH_FILES = ["venue.db", "venue.db-wal", "venue.db-shm"];
-const ACCOUNT_KEY = Buffer.alloc(32, 8).toString("base64");
+const VAULT_KEY = Buffer.alloc(32, 8).toString("base64");
 
 const heldTemplate = migratedTemplate("held-setup-template-", TEST_MIGRATIONS);
 
@@ -102,7 +102,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
       workspace: { root, ...f.roots },
     });
     const host = setup.host;
-    const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: ACCOUNT_KEY });
+    const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: VAULT_KEY });
     const deps: SetupDeps = {
       environment: "production",
       db: held.venue,
@@ -137,8 +137,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         );
       },
       persistTrading: async (settings) => {
-        if (options.tradingSettings === true)
-          await writeTradingEnv(f.roots.stateDir, { ...settings, accountKey: ACCOUNT_KEY });
+        if (options.tradingSettings === true) await writeTradingEnv(f.roots.stateDir, settings);
         if (status === "committed") throw new Error("injected publication failure");
       },
       requestRestart: () => {},

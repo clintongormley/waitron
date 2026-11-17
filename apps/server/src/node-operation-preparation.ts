@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import "./errors.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isDeepStrictEqual as equal } from "node:util";
@@ -9,7 +10,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { readNodeMode, readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
-import type { TotpKeyRing } from "@waitron/identity";
+
 import {
   configureModuleOperations,
   moduleOperationFor,
@@ -59,7 +60,7 @@ export function createNodeOperationPreparation(options: {
   nodeDb: NodeDatabase;
   node: ProvisionedNode;
   modules: readonly WaitronModule[];
-  credentialKeyRing?: TotpKeyRing;
+  credentialKeyRing?: KeyRing;
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
   testClock?: ModuleOperationHost["testClock"];

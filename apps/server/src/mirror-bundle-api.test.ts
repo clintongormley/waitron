@@ -247,7 +247,7 @@ function mountApp(
       boxHostname: "waitron.local",
       advertisedOrigin,
       designated,
-      accountKey: Buffer.alloc(32, 9).toString("base64"),
+
       credentialKeyRing: TOTP_KEY_RING,
       wakeSpareJoin,
       now,

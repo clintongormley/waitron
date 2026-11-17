@@ -1,3 +1,4 @@
+import { type KeyRing, credentialRevision, writePairLinkTx } from "@waitron/credentials";
 import { peerBodyLimit } from "./peer-route-limits.js";
 // `POST /management-api/mirror-bundle`, on the singleton primary. The mirror calls it server-side, so
 // the admin's sign-in email, password and code ride in the body.
@@ -27,10 +28,9 @@ import {
   endManagementSession,
   loginManagerById,
   personIdForLoginEmail,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
-import { credentialRevision, writePairLinkTx, type KeyRing } from "@waitron/credentials";
+
 import { readPairLink } from "@waitron/node-db";
 import type { AdoptResult } from "@waitron/provisioning";
 import {
@@ -75,8 +75,8 @@ export interface MirrorBundleApiDeps {
   /** This box's `advertisedOrigin`; its own chart row carries `ownContactUrl` of it. */
   advertisedOrigin: string;
   designated: AdoptResult;
-  accountKey: string;
-  credentialKeyRing: TotpKeyRing;
+
+  credentialKeyRing: KeyRing;
   /** Called once a join's pending pair link has committed. */
   wakeSpareJoin: () => void;
   now?: () => Date;
@@ -211,7 +211,7 @@ export function mountMirrorBundleApi(
             boxHostname: deps.boxHostname,
             designated: deps.designated,
             standby,
-            accountKey: deps.accountKey,
+
             moduleOperations,
             moduleConfig,
             primaryPrivateKey: signingKey,

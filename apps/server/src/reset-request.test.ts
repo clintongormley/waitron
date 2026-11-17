@@ -90,7 +90,7 @@ const BUNDLE: MirrorBundle = {
   boxHostname: "waitron.local",
   boxCaPem: MAIN_AUTHORITY.caCertPem,
   ...PAIR_BUNDLE_FIELDS,
-  accountKey: Buffer.alloc(32, 9).toString("base64"),
+
   reservedIdentity: {
     modules: {
       "fiscal-verifactu": { nif: "90000001K", idSistemaInformatico: "WS", numeroInstalacion: 7 },

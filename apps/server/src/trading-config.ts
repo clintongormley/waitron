@@ -23,8 +23,6 @@ export interface TradingConfig {
   developmentMode?: boolean;
   /** Absent for a mirror or a restored configuration which did not create a fresh primary. */
   onboardingIntent?: OnboardingIntent;
-  /** Venue-wide account key, shared with mirrors while each node keeps its own vault key. */
-  accountKey?: string;
 }
 
 /** Atomically write `<stateDir>/trading.env` (0600). Returns the path written. */
@@ -36,7 +34,6 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
     ...(cfg.onboardingIntent === undefined
       ? {}
       : { WAITRON_ONBOARDING_INTENT: cfg.onboardingIntent }),
-    ...(cfg.accountKey === undefined ? {} : { WAITRON_ACCOUNT_KEY: cfg.accountKey }),
   });
   await writeFileDurable(path, body, 0o600);
   return path;

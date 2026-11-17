@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -17,7 +18,6 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   registerModulePermissions,
   startManagementSession,
-  encryptTotpSecret,
   hashSessionToken,
   persons,
   verifyPin,
@@ -442,7 +442,7 @@ describe("mountMeApi — profile credentials", () => {
     await suite.db.execute(sql`
       update persons
       set password_hash=${fixturePasswordHash("current password")},
-          totp_secret=${encryptTotpSecret(secret, PROFILE_KEY_RING.current)}
+          totp_secret=${sealText({ current: PROFILE_KEY_RING.current }, "totp", secret)}
       where id=${me}`);
 
     const response = await send(mountApp(), "PUT", "/management-api/session/me/password", {
@@ -461,9 +461,9 @@ describe("mountMeApi — profile credentials", () => {
       update persons set email='old@example.com', email_folded = 'old@example.com', pending_email=null, pending_email_folded = null,
         password_hash=${fixturePasswordHash("current password")}, totp_secret=null where id=${me}`);
     const sent: string[] = [];
-    const codeKey = Buffer.alloc(32, 21);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 21) } };
     const app = mountApp({
-      accountActionCodeKey: codeKey,
+      credentialKeyRing: keyRing,
       rpId: "waitron.local",
       origin: "https://waitron.local",
       accountMailMode: async () => "smtp",
@@ -482,7 +482,7 @@ describe("mountMeApi — profile credentials", () => {
     });
     expect(await saved.json()).toEqual({ emailVerificationSent: true, delivery: "queued" });
     await flushAccountMail(suite.db, {
-      codeKey,
+      keyRing,
       send: async (_, message) => {
         sent.push(String(message.text));
         return { status: "sent" };

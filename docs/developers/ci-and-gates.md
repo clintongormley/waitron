@@ -690,8 +690,8 @@ implicit `success()`, not a real run.
 ### Built applications in `bundle-smoke`
 
 A source test cannot catch a shipped bundle that builds but fails when opened.
-The code-gated `bundle-smoke` job builds credentials, server, print-agent and
-provisioning with their existing Node build scripts, plus dashboard, setup and
+The code-gated `bundle-smoke` job builds the credentials command from identity,
+server, print-agent and provisioning with their existing Node build scripts, plus dashboard, setup and
 till with their Vite build scripts. This includes code pull requests that change
 no image input.
 

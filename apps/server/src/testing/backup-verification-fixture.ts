@@ -11,7 +11,6 @@ import { DatabaseSync } from "node:sqlite";
 import forge from "node-forge";
 import type { BackupQuery } from "@waitron/store";
 import { beginOwnTotpEnrollment, startManagementSession } from "@waitron/identity";
-import { accountPurposeKey, resolveAccountKey } from "../account-key.js";
 import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
@@ -268,11 +267,10 @@ export function useBackupVerificationFixture() {
     );
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
     const env = { WAITRON_CREDENTIALS_KEY: vault };
-    const accountKey = resolveAccountKey(env, loadKeyRing(env));
     await withTransaction(suite.db, (tx) =>
       beginOwnTotpEnrollment(tx, {
         managementSessionId: session.token,
-        keyRing: { current: { version: 1, key: accountPurposeKey(accountKey, "totp") } },
+        keyRing: loadKeyRing(env),
       }),
     );
     const files: Record<string, string> = {
