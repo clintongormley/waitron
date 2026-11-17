@@ -1,58 +1,36 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
-import {
-  billIdentities,
-  billNumberAllocations,
-  workingOrders,
-  type Transaction,
-} from "@waitron/db";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { parties, workingOrders, type Transaction } from "@waitron/db";
 import type { BillIdentity } from "@waitron/module";
 
-/**
- * Give a bill the party's next number. The next number is read from the history, not from the
- * bills the party shows now, so a number whose bill merged away or left is never given again.
- */
 export async function allocateBillNumber(
   tx: Transaction,
   billId: string,
   partyId: string,
 ): Promise<number> {
-  const [top] = await tx
-    .select({ number: sql<number | null>`max(${billNumberAllocations.number})` })
-    .from(billNumberAllocations)
-    .where(eq(billNumberAllocations.partyId, partyId));
-  const number = (top?.number ?? 0) + 1;
-  await tx.insert(billNumberAllocations).values({ partyId, number, workingOrderId: billId });
+  const [party] = await tx
+    .update(parties)
+    .set({ lastBillNumber: sql`${parties.lastBillNumber} + 1` })
+    .where(eq(parties.id, partyId))
+    .returning({ number: parties.lastBillNumber });
+  const number = party!.number;
   await tx
-    .insert(billIdentities)
-    .values({ workingOrderId: billId, partyId, number })
-    .onConflictDoUpdate({ target: billIdentities.workingOrderId, set: { partyId, number } });
+    .update(workingOrders)
+    .set({ partyId, billNumber: number })
+    .where(eq(workingOrders.id, billId));
   return number;
 }
 
-/**
- * Give every bill numbered in `fromPartyId` that is not abandoned the next numbers of `intoPartyId`,
- * in their old number order. Run it after any merge, so a bill merged away keeps its old row.
- */
+/** The caller captures number order before clearing numbers and moving the bills. */
 export async function rescopeBillNumbers(
   tx: Transaction,
-  fromPartyId: string,
+  billIds: readonly string[],
   intoPartyId: string,
 ): Promise<void> {
-  const rows = await tx
-    .select({ billId: billIdentities.workingOrderId })
-    .from(billIdentities)
-    .innerJoin(workingOrders, eq(workingOrders.id, billIdentities.workingOrderId))
-    .where(and(eq(billIdentities.partyId, fromPartyId), ne(workingOrders.status, "abandoned")))
-    .orderBy(asc(billIdentities.number), asc(billIdentities.workingOrderId));
-  for (const { billId } of rows) await allocateBillNumber(tx, billId, intoPartyId);
+  for (const billId of billIds) await allocateBillNumber(tx, billId, intoPartyId);
 }
 
-/** A bill leaving for the counter keeps its name and loses its number; its history row stays. */
 export async function releaseBillNumber(tx: Transaction, billId: string): Promise<void> {
-  await tx
-    .update(billIdentities)
-    .set({ partyId: null, number: null })
-    .where(eq(billIdentities.workingOrderId, billId));
+  await tx.update(workingOrders).set({ billNumber: null }).where(eq(workingOrders.id, billId));
 }
 
 export async function setBillName(
@@ -61,11 +39,11 @@ export async function setBillName(
   name: string | null,
 ): Promise<void> {
   const updated = await tx
-    .update(billIdentities)
-    .set({ name })
-    .where(eq(billIdentities.workingOrderId, billId))
-    .returning({ billId: billIdentities.workingOrderId });
-  if (updated.length === 0) throw new Error(`bill ${billId} has no identity to name`);
+    .update(workingOrders)
+    .set({ billName: name })
+    .where(and(eq(workingOrders.id, billId), isNotNull(workingOrders.partyId)))
+    .returning({ billId: workingOrders.id });
+  if (updated.length === 0) throw new Error(`bill ${billId} has no party to name`);
 }
 
 export async function readBillIdentities(
@@ -75,12 +53,17 @@ export async function readBillIdentities(
   if (billIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      billId: billIdentities.workingOrderId,
-      partyId: billIdentities.partyId,
-      number: billIdentities.number,
-      name: billIdentities.name,
+      billId: workingOrders.id,
+      partyId: workingOrders.partyId,
+      number: workingOrders.billNumber,
+      name: workingOrders.billName,
     })
-    .from(billIdentities)
-    .where(inArray(billIdentities.workingOrderId, [...billIds]));
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.id, [...billIds]),
+        or(isNotNull(workingOrders.partyId), isNotNull(workingOrders.billName)),
+      ),
+    );
   return new Map(rows.map(({ billId, ...identity }) => [billId, identity]));
 }

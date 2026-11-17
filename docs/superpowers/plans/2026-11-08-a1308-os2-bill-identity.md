@@ -161,6 +161,8 @@ venue-service's backup check that treated `bill_number_allocations` as immutable
 
 Each is named here in advance; any other changed assertion is a stop.
 
+Watcher direction, 2026-11-17 19:00 (Lane H questions.md): default editor-row assertions become exact null/zero column assertions, retaining API, ownership, version and no-write checks. Settled no-op updates remain refused; the five-column branch requires a change to at least one of those columns.
+
 Watcher clearance, 2026-11-17 18:43 (Lane H questions.md): retire only `bill-editing.test.ts`’s orphan-editor acceptance case; the planned person-key refusal owns rejection, and other invented-editor fixtures seed real people (U11).
 
 - `packages/db/src/schema/orders.transition.test.ts:696, :720, :740` (Task 2 Step 2): the owner's

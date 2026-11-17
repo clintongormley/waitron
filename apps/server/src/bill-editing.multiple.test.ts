@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   CORE_MIGRATIONS,
   orderDraftLines,
   orderDrafts,
@@ -74,11 +73,13 @@ async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
         draftRevision: null,
       };
       if (owner !== null) {
-        await tx.insert(billEditStates).values({
-          billId,
-          editorId,
-          editorVersion: state.editorVersion,
-        });
+        await tx
+          .update(workingOrders)
+          .set({
+            editorId,
+            editorVersion: state.editorVersion,
+          })
+          .where(eq(workingOrders.id, billId));
         const [draft] = await tx
           .insert(orderDrafts)
           .values({ partyId: party!.id, billId, ownerId: editorId!, revision: index + 5 })
@@ -102,7 +103,13 @@ async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
 
 async function snapshot() {
   return {
-    states: await suite.db.select().from(billEditStates),
+    states: await suite.db
+      .select({
+        billId: workingOrders.id,
+        editorId: workingOrders.editorId,
+        editorVersion: workingOrders.editorVersion,
+      })
+      .from(workingOrders),
     drafts: await suite.db.select().from(orderDrafts),
     lines: await suite.db.select().from(orderDraftLines),
     bills: await suite.db.select().from(workingOrders),
@@ -327,7 +334,9 @@ describe("validating every affected bill before composition", () => {
 
   it("compares a released destination's retained version even though it has no draft", async () => {
     const { anna, states, expected } = await fixture(["Anna", null]);
-    await inTx((tx) => tx.insert(billEditStates).values({ billId: ids[1]!, editorVersion: 8 }));
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ editorVersion: 8 }).where(eq(workingOrders.id, ids[1]!)),
+    );
     const edit = { ...states[1]!, editorVersion: 8 };
     await refused(
       () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), anna.id, expected)),
@@ -422,9 +431,9 @@ describe("validating bill relocation without changing the common editor", () => 
     const before = await snapshot();
     const error = await inTx(async (tx) => {
       await tx
-        .update(billEditStates)
+        .update(workingOrders)
         .set({ editorId: lewis.id, editorVersion: 4 })
-        .where(eq(billEditStates.billId, ids[1]!));
+        .where(eq(workingOrders.id, ids[1]!));
       return requireRelocatableBillEditors(tx, ids.slice(0, 2), anna.id, expected);
     }).then(
       () => null,

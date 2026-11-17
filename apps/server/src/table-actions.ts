@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
@@ -217,8 +217,8 @@ function combinedGuests(from: number | null, into: number | null): number | null
 
 /**
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
- * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
- * on it and count through the family. No bill merges (spec §3.4). `from`'s tables are left
+ * move, and its open, presented and paid bills move across whole (P13); its abandoned bills stay
+ * on it. No bill merges (spec §3.4). `from`'s tables are left
  * for clearing, or join `into`. The caller has checked and moved on both parties' revisions, and
  * tells the kitchen.
  */
@@ -258,13 +258,26 @@ export async function combineParties(
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
+  const numbered = await tx
+    .select({ id: workingOrders.id, status: workingOrders.status })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.partyId, from), ne(workingOrders.status, "abandoned")))
+    .orderBy(asc(workingOrders.billNumber), asc(workingOrders.id));
+  const billIds = numbered.map((bill) => bill.id);
+  if (billIds.length > 0)
+    await tx
+      .update(workingOrders)
+      .set({ billNumber: null })
+      .where(and(inArray(workingOrders.id, billIds), isNotNull(workingOrders.billNumber)));
   const movingBills = await billsTaking(tx, from, ["open", "placed"]);
   for (const billId of movingBills) {
     // Whole groups travel with the party, so no bill leaves its group here.
     await takeIntoParty(tx, cfg, billId, into, zoneId);
   }
 
-  await VENUE_SERVICE.rescopeBillNumbers(tx, from, into);
+  for (const bill of numbered.filter((bill) => bill.status === "settled"))
+    await tx.update(workingOrders).set({ partyId: into }).where(eq(workingOrders.id, bill.id));
+  await VENUE_SERVICE.rescopeBillNumbers(tx, billIds, into);
   await moveDraftsToParty(
     tx,
     from,

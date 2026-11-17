@@ -1,9 +1,8 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   CORE_MIGRATIONS,
   orderDrafts,
   parties,
@@ -50,8 +49,9 @@ async function ownedBill() {
   const data = await fixture();
   const draft = await inTx(async (tx) => {
     await tx
-      .insert(billEditStates)
-      .values({ billId: data.bill.id, editorId: data.anna.id, editorVersion: 2 });
+      .update(workingOrders)
+      .set({ editorId: data.anna.id, editorVersion: 2 })
+      .where(eq(workingOrders.id, data.bill.id));
     const [row] = await tx
       .insert(orderDrafts)
       .values({ billId: data.bill.id, partyId: data.party.id, ownerId: data.anna.id, revision: 5 })
@@ -69,7 +69,13 @@ async function ownedBill() {
 
 async function snapshot() {
   return {
-    states: await suite.db.select().from(billEditStates),
+    states: await suite.db
+      .select({
+        billId: workingOrders.id,
+        editorId: workingOrders.editorId,
+        editorVersion: workingOrders.editorVersion,
+      })
+      .from(workingOrders),
     drafts: await suite.db.select().from(orderDrafts),
     bills: await suite.db.select().from(workingOrders),
   };
@@ -211,9 +217,9 @@ describe("validating a bill's editor", () => {
     await inTx(async (tx) => {
       await tx.update(orderDrafts).set({ state: "submitted" }).where(eq(orderDrafts.id, draft.id));
       await tx
-        .update(billEditStates)
+        .update(workingOrders)
         .set({ editorId: null, editorVersion: 3 })
-        .where(eq(billEditStates.billId, bill.id));
+        .where(eq(workingOrders.id, bill.id));
     });
     const edit = {
       billId: bill.id,
@@ -243,7 +249,7 @@ describe("validating a bill's editor", () => {
   it("compares the version even when the original person owns the bill again", async () => {
     const { bill, anna, draft, expected } = await ownedBill();
     await inTx((tx) =>
-      tx.update(billEditStates).set({ editorVersion: 6 }).where(eq(billEditStates.billId, bill.id)),
+      tx.update(workingOrders).set({ editorVersion: 6 }).where(eq(workingOrders.id, bill.id)),
     );
     await refusedWith(
       () => inTx((tx) => requireBillEditor(tx, bill.id, anna.id, expected)),
@@ -266,7 +272,7 @@ describe("validating a bill's editor", () => {
 });
 
 describe("reading a bill's editing state", () => {
-  it("reads a missing version row as unowned without creating one", async () => {
+  it("reads the default editor columns as unowned without changing them", async () => {
     const { bill } = await fixture();
     expect(await read(bill.id)).toEqual({
       billId: bill.id,
@@ -277,17 +283,28 @@ describe("reading a bill's editing state", () => {
       draftRevision: null,
     });
     expect(
-      await suite.db.select().from(billEditStates).where(eq(billEditStates.billId, bill.id)),
-    ).toEqual([]);
+      await suite.db
+        .select({
+          billId: workingOrders.id,
+          editorId: workingOrders.editorId,
+          editorVersion: workingOrders.editorVersion,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, bill.id)),
+    ).toEqual([{ billId: bill.id, editorId: null, editorVersion: 0 }]);
   });
 
   it("reads independent editors and open draft revisions for two bills at one table", async () => {
     const { bill, other, party, anna, lewis } = await fixture();
     const drafts = await inTx(async (tx) => {
-      await tx.insert(billEditStates).values([
-        { billId: bill.id, editorId: anna.id, editorVersion: 3 },
-        { billId: other.id, editorId: lewis.id, editorVersion: 8 },
-      ]);
+      await tx
+        .update(workingOrders)
+        .set({ editorId: anna.id, editorVersion: 3 })
+        .where(eq(workingOrders.id, bill.id));
+      await tx
+        .update(workingOrders)
+        .set({ editorId: lewis.id, editorVersion: 8 })
+        .where(eq(workingOrders.id, other.id));
       return tx
         .insert(orderDrafts)
         .values([
@@ -319,7 +336,10 @@ describe("reading a bill's editing state", () => {
     async (state) => {
       const { bill, party, anna } = await fixture();
       await inTx(async (tx) => {
-        await tx.insert(billEditStates).values({ billId: bill.id, editorVersion: 12 });
+        await tx
+          .update(workingOrders)
+          .set({ editorVersion: 12 })
+          .where(eq(workingOrders.id, bill.id));
         await tx
           .insert(orderDrafts)
           .values({ billId: bill.id, partyId: party.id, ownerId: anna.id, revision: 7, state });
@@ -339,8 +359,9 @@ describe("reading a bill's editing state", () => {
     const { bill, party, anna, lewis } = await fixture();
     const draft = await inTx(async (tx) => {
       await tx
-        .insert(billEditStates)
-        .values({ billId: bill.id, editorId: anna.id, editorVersion: 2 });
+        .update(workingOrders)
+        .set({ editorId: anna.id, editorVersion: 2 })
+        .where(eq(workingOrders.id, bill.id));
       const [row] = await tx
         .insert(orderDrafts)
         .values({ billId: bill.id, partyId: party.id, ownerId: anna.id, revision: 5 })
@@ -349,9 +370,9 @@ describe("reading a bill's editing state", () => {
     });
     await inTx(async (tx) => {
       await tx
-        .update(billEditStates)
+        .update(workingOrders)
         .set({ editorId: lewis.id, editorVersion: 3 })
-        .where(eq(billEditStates.billId, bill.id));
+        .where(eq(workingOrders.id, bill.id));
       await tx
         .update(orderDrafts)
         .set({ ownerId: lewis.id, revision: 6 })
@@ -367,30 +388,15 @@ describe("reading a bill's editing state", () => {
     });
   });
 
-  it("keeps the editor id and version when the identity module has no matching person", async () => {
-    const { bill } = await fixture();
-    const editorId = randomUUID();
-    await inTx((tx) =>
-      tx.insert(billEditStates).values({ billId: bill.id, editorId, editorVersion: 6 }),
-    );
-    expect(await read(bill.id)).toEqual({
-      billId: bill.id,
-      editorId,
-      editorName: null,
-      editorVersion: 6,
-      draftId: null,
-      draftRevision: null,
-    });
-  });
-
   it("observes the caller's transaction without writing a version or draft", async () => {
     const { bill, anna } = await fixture();
     const stop = new Error("roll back test state");
     await expect(
       inTx(async (tx) => {
         await tx
-          .insert(billEditStates)
-          .values({ billId: bill.id, editorId: anna.id, editorVersion: 11 });
+          .update(workingOrders)
+          .set({ editorId: anna.id, editorVersion: 11 })
+          .where(eq(workingOrders.id, bill.id));
         expect(await readBillEditState(tx, bill.id)).toEqual({
           billId: bill.id,
           editorId: anna.id,

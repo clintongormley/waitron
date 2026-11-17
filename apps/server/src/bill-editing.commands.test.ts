@@ -1,9 +1,8 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
@@ -97,17 +96,30 @@ function take(
   );
 }
 
+const {
+  editorId: _editorId,
+  editorVersion: _editorVersion,
+  ...billColumns
+} = getTableColumns(workingOrders);
+
 async function rows() {
   return {
     parties: await venue.db.select().from(parties).orderBy(parties.id),
-    edits: await venue.db.select().from(billEditStates).orderBy(billEditStates.billId),
+    edits: await venue.db
+      .select({
+        billId: workingOrders.id,
+        editorId: workingOrders.editorId,
+        editorVersion: workingOrders.editorVersion,
+      })
+      .from(workingOrders)
+      .orderBy(workingOrders.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
     events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     charges: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     tickets: await venue.db.select().from(ticketItems).orderBy(ticketItems.id),
-    bills: await venue.db.select().from(workingOrders).orderBy(workingOrders.id),
+    bills: await venue.db.select(billColumns).from(workingOrders).orderBy(workingOrders.id),
   };
 }
 

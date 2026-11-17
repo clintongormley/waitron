@@ -7,7 +7,6 @@ import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { billIdentities } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { numberBill } from "./testing/bill-identities.js";
 import { describe, expect, it } from "vitest";
@@ -899,9 +898,9 @@ describe("A803 create bill route: POST /api/parties/:id/bills", () => {
     expect(bills).toContainEqual({ id: answer.billId, status: "open" });
     const [identity] = await withTransaction(suite.db, (tx) =>
       tx
-        .select({ number: billIdentities.number })
-        .from(billIdentities)
-        .where(eq(billIdentities.workingOrderId, answer.billId)),
+        .select({ number: workingOrders.billNumber })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.billId)),
     );
     expect(identity).toEqual({ number: 2 });
   });
@@ -1015,7 +1014,10 @@ describe("A803 a bill at a table stored with no number", () => {
   async function unnumbered() {
     const seated = await seat();
     await withTransaction(suite.db, (tx) =>
-      tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId)),
+      tx
+        .update(workingOrders)
+        .set({ billNumber: null, billName: null })
+        .where(eq(workingOrders.id, seated.tabId)),
     );
     return seated;
   }

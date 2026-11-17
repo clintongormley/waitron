@@ -7,7 +7,7 @@ import { AppError } from "@waitron/shared";
 import { createPartyBill, insertPartyBill } from "./parties.js";
 import { mergeBills } from "./testing/bill-action-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
-import { allocationsOf, billNumberTables, numbersOf } from "./testing/bill-identities.js";
+import { lastBillNumberOf, billNumberTables, numbersOf } from "./testing/bill-identities.js";
 import {
   OPERATOR,
   billsOfParty,
@@ -90,11 +90,7 @@ describe("A803 create bill:", () => {
       [tabId, 1, null],
       [created.billId, 3, null],
     ]);
-    expect(await allocationsOf(v, partyId)).toEqual([
-      [1, tabId],
-      [2, second],
-      [3, created.billId],
-    ]);
+    expect(await lastBillNumberOf(v, partyId)).toBe(3);
   });
 
   it("a stale revision refuses party.out_of_date and writes nothing", async () => {

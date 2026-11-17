@@ -3528,6 +3528,11 @@ BEGIN
         AND new.delivery_table_label IS old.delivery_table_label)
     -- settled: party, bill number, bill name and editor may change (owner, 2026-11-04)
     OR (old.status = 'settled' AND new.status = 'settled'
+        AND (new.party_id IS NOT old.party_id
+          OR new.bill_number IS NOT old.bill_number
+          OR new.bill_name IS NOT old.bill_name
+          OR new.editor_id IS NOT old.editor_id
+          OR new.editor_version IS NOT old.editor_version)
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id

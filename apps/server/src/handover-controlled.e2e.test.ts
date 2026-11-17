@@ -1407,8 +1407,8 @@ function editOf(file: string, billId: string) {
     draftRevision: number | null;
   }>(
     file,
-    `select coalesce(s.editor_version, 0) as editorVersion, d.id as draftId, d.revision as draftRevision
-     from working_orders o left join bill_edit_states s on s.bill_id = o.id
+    `select o.editor_version as editorVersion, d.id as draftId, d.revision as draftRevision
+     from working_orders o
      left join order_drafts d on d.bill_id = o.id and d.state = 'open'
      where o.id = ?`,
     billId,

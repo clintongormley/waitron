@@ -1,8 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billEditStates,
   CORE_MIGRATIONS,
   orderDraftLines,
   orderDrafts,
@@ -94,12 +93,24 @@ async function addCharge(data: Awaited<ReturnType<typeof fixture>>) {
   });
 }
 
+const {
+  editorId: _editorId,
+  editorVersion: _editorVersion,
+  ...billColumns
+} = getTableColumns(workingOrders);
+
 async function rows() {
   return {
-    states: await suite.db.select().from(billEditStates),
+    states: await suite.db
+      .select({
+        billId: workingOrders.id,
+        editorId: workingOrders.editorId,
+        editorVersion: workingOrders.editorVersion,
+      })
+      .from(workingOrders),
     drafts: await suite.db.select().from(orderDrafts),
     lines: await suite.db.select().from(orderDraftLines),
-    bills: await suite.db.select().from(workingOrders),
+    bills: await suite.db.select(billColumns).from(workingOrders),
     charges: await suite.db.select().from(workingOrderLines),
   };
 }
@@ -133,8 +144,17 @@ describe("bill editor lifecycle", () => {
       editorId: null,
       editorName: null,
     });
-    expect(await suite.db.select().from(billEditStates)).toEqual([
+    expect(
+      await suite.db
+        .select({
+          billId: workingOrders.id,
+          editorId: workingOrders.editorId,
+          editorVersion: workingOrders.editorVersion,
+        })
+        .from(workingOrders),
+    ).toEqual([
       { billId: data.bill.id, editorId: data.anna.id, editorVersion: 1 },
+      { billId: data.other.id, editorId: null, editorVersion: 0 },
     ]);
   });
 
@@ -193,8 +213,17 @@ describe("bill editor lifecycle", () => {
         .from(orderDrafts)
         .where(eq(orderDrafts.id, draft.id));
       expect(closed).toMatchObject({ id: draft.id, state, ownerId: data.anna.id, revision: 1 });
-      expect(await suite.db.select().from(billEditStates)).toEqual([
+      expect(
+        await suite.db
+          .select({
+            billId: workingOrders.id,
+            editorId: workingOrders.editorId,
+            editorVersion: workingOrders.editorVersion,
+          })
+          .from(workingOrders),
+      ).toEqual([
         { billId: data.bill.id, editorId: null, editorVersion: 2 },
+        { billId: data.other.id, editorId: null, editorVersion: 0 },
       ]);
     },
   );
@@ -367,8 +396,17 @@ describe("bill editor lifecycle", () => {
       await inTx((tx) => editing.relocateBillEditor(tx, data.bill.id, blank(data.bill.id))),
     ).toEqual({ ...blank(data.bill.id), editorId: null, editorName: null, editorVersion: 1 });
     expect(await suite.db.select().from(orderDrafts)).toEqual([]);
-    expect(await suite.db.select().from(billEditStates)).toEqual([
+    expect(
+      await suite.db
+        .select({
+          billId: workingOrders.id,
+          editorId: workingOrders.editorId,
+          editorVersion: workingOrders.editorVersion,
+        })
+        .from(workingOrders),
+    ).toEqual([
       { billId: data.bill.id, editorId: null, editorVersion: 1 },
+      { billId: data.other.id, editorId: null, editorVersion: 0 },
     ]);
   });
 
@@ -425,8 +463,17 @@ describe("bill editor lifecycle", () => {
       });
       expect(await suite.db.select().from(orderDrafts)).toEqual([accepted.draft]);
       expect(await suite.db.select().from(orderDraftLines)).toEqual([accepted.line]);
-      expect(await suite.db.select().from(billEditStates)).toEqual([
+      expect(
+        await suite.db
+          .select({
+            billId: workingOrders.id,
+            editorId: workingOrders.editorId,
+            editorVersion: workingOrders.editorVersion,
+          })
+          .from(workingOrders),
+      ).toEqual([
         { billId: data.bill.id, editorId: data[first].id, editorVersion: 1 },
+        { billId: data.other.id, editorId: null, editorVersion: 0 },
       ]);
     },
   );

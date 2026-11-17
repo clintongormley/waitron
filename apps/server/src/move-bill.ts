@@ -247,11 +247,11 @@ async function moveBillOnce(
       .update(workingOrders)
       .set({
         partyId: null,
+        billNumber: null,
         revision: movedRevision,
         ...(open ? { label: await counterLabel(tx, source) } : {}),
       })
       .where(eq(workingOrders.id, billId));
-    await VENUE_SERVICE.releaseBillNumber(tx, billId);
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     await relocateBillEditor(tx, billId, expectedEdit);
     result = { partyId: null, billId };
@@ -339,8 +339,10 @@ export async function moveSettledBillToCounter(
   const before = await workStillToCome(tx, await readSentWork(tx, billId));
   await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
   await leaveParty(tx, billId, "refuse");
-  await tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, billId));
-  await VENUE_SERVICE.releaseBillNumber(tx, billId);
+  await tx
+    .update(workingOrders)
+    .set({ partyId: null, billNumber: null })
+    .where(eq(workingOrders.id, billId));
   await relocateBillEditor(tx, billId, expectedEdit);
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
   await enqueueMovedSlips(tx, cfg, before, billId);
@@ -508,7 +510,7 @@ export async function takeIntoParty(
 ): Promise<void> {
   const [bill] = await tx
     .update(workingOrders)
-    .set({ partyId, deliveryTableId: null, revision: movedRevision })
+    .set({ partyId, billNumber: null, deliveryTableId: null, revision: movedRevision })
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);

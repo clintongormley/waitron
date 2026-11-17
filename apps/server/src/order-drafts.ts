@@ -9,7 +9,6 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
-  billEditStates,
   orderGroups,
   workingOrders,
 } from "@waitron/db";
@@ -522,12 +521,9 @@ export async function moveDraftsToBill(
         ? null
         : operatorId;
     await tx
-      .insert(billEditStates)
-      .values({ billId: edit.billId, editorId, editorVersion: edit.editorVersion + 1 })
-      .onConflictDoUpdate({
-        target: billEditStates.billId,
-        set: { editorId, editorVersion: edit.editorVersion + 1 },
-      });
+      .update(workingOrders)
+      .set({ editorId, editorVersion: edit.editorVersion + 1 })
+      .where(eq(workingOrders.id, edit.billId));
   }
 }
 
