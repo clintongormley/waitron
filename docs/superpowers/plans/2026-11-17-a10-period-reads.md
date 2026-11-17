@@ -1,49 +1,46 @@
 # A10 workforce period reads implementation plan
 
-Managers and workers get the same period totals, roster comparisons and frozen closure records
-without loading a year's ordinary clock entries to show one week or month. The
-[backlog ask](../../backlog/workforce.md#a10-period-read-cost) requires retaining late answers
-and corrections that move work or history across periods. Keep the current event order, record
-format and write paths. This change uses the existing indexes and adds no table or index.
+A week or month reads a slice of clock history for totals, roster comparisons, records and
+pay-period closure. Hours loads the full history once for outstanding work, down from four
+reads. Totals, open work, corrections and frozen records keep their current meaning. The
+[backlog ask](../../backlog/workforce.md#a10-period-read-cost) requires late answers and
+corrections across period boundaries. Keep the event order, storage and write paths.
 
-1. **Bound the entries that feed period projection.** Add `readPeriodEntries(tx, { period,
-   personId? })` beside `readRecordedEntries` in `packages/workforce/src/record-reads.ts`.
-   Query the indexed UTC envelope of the local dates using the stored offset limit of ±14 hours.
-   Per person, include context from the nearest earlier unretimed direct clock-in through the
-   first later unretimed direct clock-in, including every row at either instant. A clock-in resets
-   the existing projection even if an earlier shift remains open. An approved replacement means
-   the original cannot serve as a reset. Where a reset is absent, keep that side's history. Fetch
-   each selected entry's complete same-person correction and response family in both directions,
-   regardless of event or recording date. Use the current row mapper, ordering and projection.
-   For `readTimeRecord`, also scope to the whole of each intersecting closure, and include its
-   frozen entry families for annotations on live rows. Keep each frozen snapshot as saved.
-   In `record-reads.test.ts`, keep the late-answer, moved-shift, cross-node, scoped snapshot and
-   overnight controls. Add a scoped read of a narrow slice of a longer history and compare the
-   full result to the existing projection over the uncut input, including a retimed boundary.
-2. **Use the bounded reader in the current product paths.** Replace the summary and actual-side
-   reads in `clocking.ts`. Keep the published-roster filter and the comparison in
-   `planned-vs-actual.ts`. In `pay-period-close.ts`, use the same slice for both projections and
-   keep the automatic-marker eligibility, replay and hash calculation. `pay-period-reads.ts`
-   already selects overlapping closures by date and needs no second query or new behavior.
-   Run the existing `record-reads.test.ts`, `scheduling.test.ts` and `pay-period-closure.test.ts`
-   controls, including late retimes, next-month automatic ends and closed 480 versus live 540.
-3. **Keep Hours' independent open and outstanding work.** In `hours-reads.ts`, use bounded
-   `readTimeRecord` for the selected period, and a separate event tail from the latest unretimed
-   direct clock-in for open work. Load the families of automatic ends that can still appear as
-   unacknowledged regardless of date. In `attendance-reads.ts`, share the existing prompt and item
-   projection with Hours. Use the active questions, request/response families and their named
-   targets to find outstanding work. Load an unresolved question's stored day and families for its
-   printed history. Keep full person context when an outstanding request needs the existing
-   whole-sequence readiness check. The existing attendance inbox still returns its revision;
-   Hours uses only the prompts and items. Keep `hours-reads.test.ts` assertions for old questions,
-   disputed and pending changes, unacknowledged ends, open breaks, privacy and frozen totals.
-4. **Measure and close.** Seed a year of one worker's daily clock entries, with a narrow week and
-   an out-of-window response. Test first with a read-row counter at the query boundary, so the
-   old path reports all ordinary history rows and fails, even if the totals match. Run the same
-   fixture at the base in a temporary worktree and at the candidate. Record rows loaded, output
-   equality and elapsed medians for Hours, summary and comparison reads, and verify closure
-   correctness in its database suite. Run changed test files before the branch review. Delete
-   the completed entries from `docs/backlog.md` and `docs/backlog/workforce.md`.
+1. **Read the period and its pairing context.** Add `readPeriodEntries(tx, { period, personId? })`
+   in `packages/workforce/src/record-reads.ts`. Use `(person_id, event_at)` and the stored ±14-hour
+   offset limit to seed the local-date window. For each person, extend to the last earlier and
+   first later unretimed direct clock-in, with all ties at both instants. An approved replacement
+   disqualifies a reset. If there is no reset on a side, keep that side's context. Follow parent
+   ids directly, retime children by `corrects_entry_id`, and response children by person and
+   the parent's event instant. Correction decisions, worker confirmations and closure markers
+   all copy that instant. Keep the existing mapper and projection. This cut depends on
+   `compareEvents`. A1268-2 must revisit it if clock pairing moves to write order.
+   In `record-reads.test.ts`, compare with the full projection for a pending retime at a reset,
+   an out after an in at the same instant, and a sole earlier in retimed across the boundary.
+   Keep the late-answer, cross-node and overnight assertions. Check the copied-time invariant
+   through the decision and confirmation writers in their existing cases.
+2. **Use that slice in the existing callers.** `readTimeRecord` includes the whole period of every
+   overlapping closure for the live comparison. It uses the stored snapshots as before, and
+   only loads live families selected by the normal window/context rule. `clocking.ts` uses the
+   slice in `workSummary` and `getPlannedVsActual`. `pay-period-close.ts` uses it for both
+   projections, preserving marker eligibility, replay and hashing. `planned-vs-actual.ts` and
+   `pay-period-reads.ts` keep their existing logic, including whole stored snapshots for each
+   overlapping closure. Run `record-reads.test.ts`, `clocking.test.ts`, `scheduling.test.ts`,
+   `pay-period-closure.test.ts` and `attendance-reads.test.ts` for the callers.
+3. **Read Hours' outstanding work once.** `hours-reads.ts` keeps its one full person read for
+   open shifts, unconfirmed automatic ends and the existing pending item readiness check. Pass
+   those entries to the existing prompt/item projection in `attendance-reads.ts`. Only the actual
+   inbox reader computes its revision. Hours uses the bounded `readTimeRecord` for the period.
+   Keep the existing `hours-reads.test.ts` assertions on open breaks, old pending work, privacy
+   and frozen history. Bounding open and outstanding work remains separate.
+4. **Measure on a year of history.** In `record-read-budget.test.ts`, reuse `timeRows` to count
+   SQLite results, including reads using a CTE. Seed 730 daily entries plus a late request and
+   answer for the selected week. Before the change, expect summary and venue comparison to fail
+   with `expected 732 to be less than or equal to 48` and Hours with `expected 2928 to be less than
+   or equal to 780`. Keep the existing eight-row person-scope assertion. Run the same fixture on
+   the base in a throwaway worktree and on the candidate. Record counts, equal output and elapsed
+   medians. Check the emitted SQL plan on box-matching SQLite to distinguish indexed lookups from
+   scans. Run all changed tests. Remove the completed period-read entry from `docs/backlog.md`
+   and `docs/backlog/workforce.md`, keeping a pointer to the remaining Hours history read.
 
-Estimate 210–330 production lines and 120–200 test lines. Attendance write validation, general
-inbox/manager queue performance, and the A1268-2 write-order change stay outside this work.
+Estimate 150–220 production lines and 150–230 test lines. No table or index change.
