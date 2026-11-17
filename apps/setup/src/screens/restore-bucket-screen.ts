@@ -1,6 +1,13 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  FormFeedback,
+  baseStyles,
+  bottomMessage,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -16,6 +23,7 @@ import {
 import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { refusalShown, renewRefusal } from "./restore-feedback.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { currentLocale, t, format } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -80,13 +88,9 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
   @state() private previewVenue?: RestoredVenue;
-  @state() private attempted = false;
   /** Restore was pressed with no Review backup matching the copy on screen. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
-  /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
-  @state() private refusalDismissed = false;
-  @state() private fieldRefusalDismissed = false;
 
   @state() private previewField?: "kit" | "environment";
   @state() private previewOldKit = false;
@@ -94,6 +98,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
   @state() private kitFile?: File;
+  private readonly feedback = new FormFeedback(this);
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -129,8 +134,9 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.venueConfirmed = false;
-        this.attempted = false;
+        this.feedback.attempted = false;
         this.kitFile = undefined;
+        this.requestUpdate();
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -143,8 +149,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+    renewRefusal(this.feedback, changed.has("errorMessage"), changed.has("invalidField"));
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;
       this.environment = this.request.environment;
@@ -169,8 +174,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   /** The field showing the server's refusal, if any. */
   #refusalUnder(): BucketField | undefined {
     return this.errorMessage === undefined ||
-      this.refusalDismissed ||
-      this.fieldRefusalDismissed ||
+      !refusalShown(this.feedback, "refusal", "field") ||
       !this.#shows(this.invalidField)
       ? undefined
       : this.invalidField;
@@ -192,7 +196,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       }
     }
     if (field === this.previewField) this.previewField = undefined;
-    if (field === this.invalidField) this.fieldRefusalDismissed = true;
+    if (field === this.invalidField) this.feedback.dismiss("field");
   }
 
   /**
@@ -256,10 +260,9 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #restore(): void {
-    this.attempted = true;
-    this.refusalDismissed = true;
+    this.feedback.press("refusal");
     if (this.#incomplete) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
@@ -295,7 +298,7 @@ export class SetupRestoreBucketScreen extends LitElement {
     const venue = this.#venue;
     if (venue === undefined) return nothing;
     const error =
-      this.attempted && this.#venueUnconfirmed
+      this.feedback.attempted && this.#venueUnconfirmed
         ? t("restore_bucket.venue_missing")
         : this.#refusalUnder() === "venueConfirmed"
           ? this.errorMessage
@@ -326,7 +329,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   override render(): TemplateResult {
     const refused = this.#refusalUnder();
     const kitError =
-      this.attempted && this.#kitMissing
+      this.feedback.attempted && this.#kitMissing
         ? t("restore_bucket.kit_missing")
         : this.previewField === "kit"
           ? t(this.previewOldKit ? "shell.bucket.kit_old_version" : "restore.preview_kit_error")
@@ -341,20 +344,25 @@ export class SetupRestoreBucketScreen extends LitElement {
         : refused === "environment"
           ? this.errorMessage
           : undefined;
-    const acknowledgeInvalid = this.attempted && !this.acknowledged;
-    const fieldsInvalid = this.attempted && this.#incomplete;
-    const bottom = [
-      ...(this.errorMessage !== undefined &&
-      !this.refusalDismissed &&
-      !this.fieldRefusalDismissed &&
-      !this.#shows(this.invalidField)
-        ? [this.errorMessage]
-        : []),
-      ...(fieldsInvalid || refused !== undefined || this.previewField !== undefined
-        ? [t("restore_bucket.fix_fields")]
-        : []),
-      ...(this.reviewNeeded ? [t("restore.review_first")] : []),
-    ].join(" ");
+    const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
+    const fieldsInvalid = this.feedback.attempted && this.#incomplete;
+    const bottom = bottomMessage(
+      this.feedback.message(
+        {
+          refusal:
+            refusalShown(this.feedback, "refusal", "field") && !this.#shows(this.invalidField)
+              ? this.errorMessage
+              : undefined,
+        },
+        new Set(
+          fieldsInvalid || refused !== undefined || this.previewField !== undefined
+            ? ["fields"]
+            : [],
+        ),
+        t("restore_bucket.fix_fields"),
+      ),
+      this.reviewNeeded ? t("restore.review_first") : null,
+    );
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
       <p>${t("restore_bucket.intro")}</p>
@@ -435,7 +443,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         liveSince: this.#askingOldBox ? (this.liveSince ?? this.previewLiveSince) : undefined,
         liveUnknown: this.#askingOldBox && (this.liveUnknown || this.previewLiveUnknown),
         checked: this.oldBoxGone,
-        invalid: this.attempted && this.#oldBoxUnanswered,
+        invalid: this.feedback.attempted && this.#oldBoxUnanswered,
         refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
         onChange: (checked) => {
           this.oldBoxGone = checked;
@@ -462,11 +470,11 @@ export class SetupRestoreBucketScreen extends LitElement {
                 };
           this.venueConfirmed = false;
         }}
-        .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+        .errorMessage=${refusalShown(this.feedback, "refusal", "field") ? this.errorMessage : undefined}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
           event.stopPropagation();
-          if (event.detail.field === this.invalidField) this.fieldRefusalDismissed = true;
+          if (event.detail.field === this.invalidField) this.feedback.dismiss("field");
         }}
         @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
           event.stopPropagation();

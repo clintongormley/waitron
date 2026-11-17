@@ -1,6 +1,13 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  FormFeedback,
+  baseStyles,
+  bottomMessage,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -21,6 +28,7 @@ import { oldBoxQuestion } from "./old-box-question.js";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { refusalShown, renewRefusal } from "./restore-feedback.js";
 
 interface RestoreForm {
   artifact?: File;
@@ -61,15 +69,12 @@ export class SetupRestoreScreen extends LitElement {
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  @state() private attempted = false;
   /** Restore was pressed with no Review backup matching the copy on screen. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
-  /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
-  @state() private refusalDismissed = false;
-  @state() private fieldRefusalDismissed = false;
   @state() private previewRefusal?: RestoreField;
 
+  private readonly feedback = new FormFeedback(this);
   #baseline?: RestoreForm;
   #scope?: DraftScope<RestoreForm>;
 
@@ -108,7 +113,8 @@ export class SetupRestoreScreen extends LitElement {
         this.environment = form.environment;
         this.acknowledged = false;
         this.oldBoxGone = false;
-        this.attempted = false;
+        this.feedback.attempted = false;
+        this.requestUpdate();
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -121,8 +127,7 @@ export class SetupRestoreScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+    renewRefusal(this.feedback, changed.has("errorMessage"), changed.has("invalidField"));
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
       this.recoveryKey = this.request.recoveryKey;
@@ -143,14 +148,14 @@ export class SetupRestoreScreen extends LitElement {
 
   /** The field showing the server's refusal, if any. */
   #refusalUnder(): RestoreField | undefined {
-    return this.errorMessage === undefined || this.refusalDismissed || this.fieldRefusalDismissed
+    return this.errorMessage === undefined || !refusalShown(this.feedback, "refusal", "field")
       ? undefined
       : this.invalidField;
   }
 
   #edited(field: RestoreField): void {
     this.#scope?.changed();
-    if (field === this.invalidField) this.fieldRefusalDismissed = true;
+    if (field === this.invalidField) this.feedback.dismiss("field");
     this.previewRefusal = undefined;
   }
 
@@ -196,12 +201,11 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   #restore(): void {
-    this.attempted = true;
-    this.refusalDismissed = true;
+    this.feedback.press("refusal");
     this.previewRefusal = undefined;
     const artifact = this.artifact;
     if (artifact === undefined || this.#incomplete) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
@@ -222,28 +226,38 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const fieldsInvalid = this.attempted && this.#incomplete;
+    const fieldsInvalid = this.feedback.attempted && this.#incomplete;
     const refused = this.#refusalUnder();
     const artifactError = this.#fieldError(
       "artifact",
-      this.attempted && this.artifact === undefined ? t("restore.backup_file_missing") : undefined,
+      this.feedback.attempted && this.artifact === undefined
+        ? t("restore.backup_file_missing")
+        : undefined,
     );
     const keyError = this.#fieldError(
       "recoveryKey",
-      this.attempted && this.recoveryKey === "" ? t("restore.recovery_key_missing") : undefined,
+      this.feedback.attempted && this.recoveryKey === ""
+        ? t("restore.recovery_key_missing")
+        : undefined,
     );
     const environmentError = this.#fieldError("environment", undefined);
-    const bottom = [
-      ...(this.errorMessage !== undefined &&
-      !this.refusalDismissed &&
-      this.invalidField === undefined
-        ? [this.errorMessage]
-        : []),
-      ...(fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
-        ? [t("restore.fix_fields")]
-        : []),
-      ...(this.reviewNeeded ? [t("restore.review_first")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      this.feedback.message(
+        {
+          refusal:
+            refusalShown(this.feedback, "refusal") && this.invalidField === undefined
+              ? this.errorMessage
+              : undefined,
+        },
+        new Set(
+          fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
+            ? ["fields"]
+            : [],
+        ),
+        t("restore.fix_fields"),
+      ),
+      this.reviewNeeded ? t("restore.review_first") : null,
+    );
     return html`
       <h1>${t("restore.heading")}</h1>
       <p>
@@ -342,11 +356,11 @@ export class SetupRestoreScreen extends LitElement {
           event.stopPropagation();
           this.reviewNeeded = true;
         }}
-        .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
+        .errorMessage=${refusalShown(this.feedback, "refusal", "field") ? this.errorMessage : undefined}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
           event.stopPropagation();
-          if (event.detail.field === this.invalidField) this.fieldRefusalDismissed = true;
+          if (event.detail.field === this.invalidField) this.feedback.dismiss("field");
         }}
         @recovery-invalid=${(event: CustomEvent<{ invalid: boolean }>) => {
           event.stopPropagation();
@@ -367,7 +381,7 @@ export class SetupRestoreScreen extends LitElement {
           name="no-running-server"
           type="checkbox"
           required
-          aria-invalid=${this.attempted && !this.acknowledged ? "true" : "false"}
+          aria-invalid=${this.feedback.attempted && !this.acknowledged ? "true" : "false"}
           aria-describedby="acknowledge-error"
           data-test="acknowledge"
           .checked=${this.acknowledged}
@@ -380,12 +394,12 @@ export class SetupRestoreScreen extends LitElement {
           >${t("restore.acknowledge_help")}</wt-help-tooltip
         >
       </label>
-      ${this.attempted && !this.acknowledged ? html`<p class="error" id="acknowledge-error">${t("restore.acknowledge_missing")}</p>` : nothing}
+      ${this.feedback.attempted && !this.acknowledged ? html`<p class="error" id="acknowledge-error">${t("restore.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
         liveSince: this.#askingOldBox ? this.liveSince : undefined,
         liveUnknown: this.#askingOldBox && this.liveUnknown,
         checked: this.oldBoxGone,
-        invalid: this.attempted && this.#oldBoxUnanswered,
+        invalid: this.feedback.attempted && this.#oldBoxUnanswered,
         onChange: (checked) => {
           this.oldBoxGone = checked;
         },
