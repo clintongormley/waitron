@@ -845,7 +845,8 @@ total original de la cuenta.
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Una cuenta ya presentada para su cobro solo permite el importe completo.
+si solo se pagan algunos. Una cuenta presentada para su cobro antes de emitirse su factura solo
+permite el importe completo.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.

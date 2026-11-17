@@ -330,6 +330,29 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     expect(asked).toEqual([]);
   });
 
+  it.each([false, true])(
+    "a printed bill's Pay asks for the bill Pay window (holding a payment: %s)",
+    async (holding) => {
+      const printed: PartyBill = {
+        ...untouched,
+        status: "placed",
+        receiptAvailable: true,
+        invoiceNumber: "A/7",
+        amountDue: "45.00",
+        ...(holding ? { outstanding: "40.00", hasPayments: true, holdsMoney: true } : {}),
+      };
+      const el = await mountScreen({ handheld: true, bills: [printed] });
+      const presented = capture<{ workingOrderId: string }>(el, "pay-presented");
+      const asked = capture<BillPayDetail>(el, "bill-pay");
+
+      expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+      await press(el, "[data-pay-sheet]");
+
+      expect(presented).toEqual([]);
+      expect(asked).toEqual([expect.objectContaining({ way: "whole" })]);
+    },
+  );
+
   it("draws one Pay for a presented bill's unanswered whole payment, which asks for its sheet", async () => {
     const confirmation = {
       tender: { method: "cash" as const, amount: "50.00" },

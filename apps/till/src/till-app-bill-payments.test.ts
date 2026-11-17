@@ -3977,6 +3977,62 @@ describe("till-app: a bill that already holds money", () => {
     expect(ticket.result.invoiceNumber).toBe("F-0007");
   });
 
+  it.each([
+    ["printed before it", true],
+    ["not printed before it", false],
+  ])(
+    "the payment that settles a bill %s shows the change, offering the receipt as original only when it issued it",
+    async (_, printed) => {
+      const bill = billOf({
+        outstanding: "70.00",
+        hasPayments: true,
+        holdsMoney: true,
+        ...(printed
+          ? {
+              status: "placed" as const,
+              receiptAvailable: true,
+              invoiceNumber: "F-0007",
+              creditNotes: [],
+              amountDue: "120.00",
+            }
+          : {}),
+      });
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { applied: "70.00", tendered: "80.00", change: "10.00" },
+            { received: "120.00", outstanding: "0.00", status: "settled" },
+            invoiceOf("120.00"),
+          ),
+        );
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([bill]),
+        getBillBalance: vi
+          .fn()
+          .mockResolvedValue({ ...heldMoney, status: printed ? "placed" : "open" }),
+        previewBillPayment: vi.fn().mockResolvedValue(cash("70.00", "10.00")),
+        takeBillPayment,
+      });
+      await openTable(el);
+
+      await openDialog(el, "rest");
+      await type(el, "tendered", "80");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+
+      expect(takeBillPayment).toHaveBeenCalledOnce();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      const settlement = el.shadowRoot!.querySelector<
+        HTMLElementTagNameMap["till-settlement-document-dialog"]
+      >("till-settlement-document-dialog")!;
+      expect(text(settlement.shadowRoot!.querySelector("[data-settlement-change]"))).toContain(
+        money("10.00"),
+      );
+      expect(settlement.originalReceiptAvailable).toBe(!printed);
+    },
+  );
+
   it("marks nothing paid and says nothing received when the bill's payments cannot be read", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockResolvedValue([partly]),

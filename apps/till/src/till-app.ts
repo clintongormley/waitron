@@ -348,6 +348,7 @@ import {
   owing,
   paidInPart,
   shownBills,
+  stillOwed,
   stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
@@ -1355,6 +1356,8 @@ interface PayingOrder {
   surface: "table" | "counter";
   billId: string;
   visit: number;
+  /** The bill's receipt was issued before the window opened, so the payment settling it issues none. */
+  printed?: boolean;
 }
 
 /** The presented bill's sheet, open on `billId`. */
@@ -19607,7 +19610,7 @@ export class TillApp extends LitElement {
       bill === undefined ||
       bill.leftUnpaid ||
       !owing(bill) ||
-      compareDecimal(decimal(bill.amountDue ?? bill.outstanding), decimal("0")) <= 0 ||
+      compareDecimal(decimal(stillOwed(bill)), decimal("0")) <= 0 ||
       this.activeTabId !== workingOrderId
     )
       return;
@@ -19618,7 +19621,7 @@ export class TillApp extends LitElement {
       bill: {
         workingOrderId,
         name: billName(party.displayName, bill),
-        outstanding: bill.amountDue ?? bill.outstanding,
+        outstanding: stillOwed(bill),
       },
       id: ++this.#departings,
       partyId: party.id,
@@ -21006,6 +21009,11 @@ export class TillApp extends LitElement {
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
+      printed:
+        order.printed ??
+        (order.surface === "table" &&
+          this.partyBills.find((bill) => bill.workingOrderId === billId)?.invoiceNumber !==
+            undefined),
       way,
       amount: amount ?? "",
       lines,
@@ -21609,7 +21617,7 @@ export class TillApp extends LitElement {
     this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
-    this.#showTicket(open.billId, true, { surface: open.surface, cashChange });
+    this.#showTicket(open.billId, open.printed !== true, { surface: open.surface, cashChange });
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
