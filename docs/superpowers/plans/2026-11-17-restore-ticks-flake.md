@@ -1,6 +1,6 @@
 # Restore integrity test: check offloading without a timer race
 
-**Status:** Proposed by Codex; Claude read it once (217 seconds), and the corrections below incorporate its findings. Watcher clearance pending. The owner authorizes the queue item; no owner approval of this design is claimed. Execute inline with TDD after clearance.
+**Status:** Proposed by Codex; Claude read it once (217 seconds), and the corrections below incorporate its findings. Watcher cleared the corrected test-only plan and generic-index exception on 17 November 2026 at 06:09 CET (Lane I questions.md). The owner authorizes the queue item; no owner approval of this design is claimed. Execute inline with TDD after clearance.
 
 **Ask:** RESTORE-TICKS-FLAKE in Lane I's queue: diagnose the twice-failing restore timer test on Linux under load, fix the cause, show a test-only repair still fails with main-thread checking, explain #3508, and delete the two backlog paragraphs. The exact item and measured traces are in `~/waitron-campaign-i/receipts/restore-ticks-flake-20261117/{item,diagnosis}.md`.
 
@@ -11,7 +11,7 @@
 **Files and existing code:**
 
 - `apps/server/src/restore-stream.test.ts`: remove the flaky large-file/timer case and add its offloading check to the neighbouring healthy-copy case, retaining that case’s `true` assertion. Reuse `fixtureDb`, `fresh` and `copyFile`. After copying, record calls with `vi.spyOn(DatabaseSync.prototype, "prepare")` (no replacement implementation), await the real `checkIntegrity(file)`, and assert the spy was not called; restore it in `finally`. Worker SQLite has its own prototype. The case names preparation, not timer fairness; it does not cover constructors, thread startup or `createTagStore` SQL.
-- `docs/backlog/ci.md`: remove the two restore paragraphs and only their portion of the shared incident row. Preserve every other incident. Rewrite the shared row’s second cell to “See detail” after removing its restore-only latest-sighting link. Leave the generic `docs/backlog.md` incident link unchanged: it names no restore incident; ask the watcher to clear this exception to the queue’s mandatory index edit.
+- `docs/backlog/ci.md`: remove the two restore paragraphs and only their portion of the shared incident row. Preserve every other incident. Rewrite the shared row’s second cell to “See detail” after removing its restore-only latest-sighting link. Leave the generic `docs/backlog.md` incident link unchanged: it names no restore incident; the watcher cleared this exception to the queue’s mandatory index edit at 06:09 CET.
 - This plan. Read/run, but do not edit, `apps/server/src/handover-integrity.test.ts`: its existing `setImmediate`/`turned === true` case owns the event-loop yield check.
 
 **Implementation and proof:**

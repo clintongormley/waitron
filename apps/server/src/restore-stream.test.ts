@@ -988,45 +988,16 @@ function integrityOf(dir: string): Promise<boolean> {
 }
 
 describe("checkIntegrity", () => {
-  it("keeps the main thread's timers turning while it checks a copy that takes the main thread over one timer period", async () => {
-    const file = join(await fresh("waitron-integrity-large-"), "venue.db");
-    const build = new DatabaseSync(file);
-    try {
-      build.exec("create table t(x blob)");
-      build.exec("begin");
-      const insert = build.prepare("insert into t values (randomblob(4000))");
-      for (let i = 0; i < 15_000; i++) insert.run();
-      build.exec("commit");
-    } finally {
-      build.close();
-    }
-    const ticksDuring = async (work: () => unknown) => {
-      let ticks = 0;
-      const interval = setInterval(() => ticks++, 10);
-      try {
-        return { answer: await work(), ticks };
-      } finally {
-        clearInterval(interval);
-      }
-    };
-    // The file is large enough only if checking it on the main thread outlasts the interval below.
-    const started = performance.now();
-    const db = new DatabaseSync(file);
-    try {
-      db.prepare("pragma integrity_check").all();
-    } finally {
-      db.close();
-    }
-    expect(performance.now() - started).toBeGreaterThanOrEqual(10);
-    const threaded = await ticksDuring(() => checkIntegrity(file));
-    expect(threaded.answer).toBe(true);
-    expect(threaded.ticks).toBeGreaterThan(0);
-  }, 60_000);
-
-  it("passes a healthy venue file", async () => {
+  it("passes a healthy venue file without preparing SQLite statements on the main thread", async () => {
     const dir = await fresh("waitron-integrity-");
     await copyFile(fixtureDb, join(dir, "venue.db"));
-    expect(await integrityOf(dir)).toBe(true);
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    try {
+      expect(await integrityOf(dir)).toBe(true);
+      expect(prepare).not.toHaveBeenCalled();
+    } finally {
+      prepare.mockRestore();
+    }
   });
 
   it("fails a download that is not a database as a damaged copy, without a raw error", async () => {
