@@ -97,20 +97,18 @@ export async function readPeriodEntries(
   const until = new Date(Date.parse(period.end) + OFFSET_MARGIN_MS).toISOString();
   const people = personId === undefined ? sql`select id from persons` : sql`select ${personId}`;
 
-  // An unretimed clock-in resets the event-ordered projection. Include every tie at both
-  // resets and keep the reachable context on a side without a reset.
-  const resetAt = (range: SQL, order: SQL) => sql`(
+  // A shift belongs to its start's local date, so it cannot start before the offset margin.
+  // A later unretimed clock-in resets the projection. Keep every event at that instant.
+  const later = sql`(
     select anchor.event_at from time_entries anchor indexed by time_entries_person_event_idx
-    where anchor.person_id = people.person_id and anchor.entry_kind = 'in' and ${range}
+    where anchor.person_id = people.person_id and anchor.entry_kind = 'in' and anchor.event_at >= ${until}
       and not exists (
         select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
         where corrected.corrects_entry_id = anchor.id and corrected.person_id = anchor.person_id
           and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
       )
-    order by anchor.event_at ${order} limit 1
+    order by anchor.event_at limit 1
   )`;
-  const earlier = resetAt(sql`anchor.event_at < ${from}`, sql`desc`);
-  const later = resetAt(sql`anchor.event_at >= ${until}`, sql`asc`);
 
   // A retime may move either endpoint out of the seed window. Decisions and confirmations
   // copy the entry they answer's event time, so their inverse lookup can use person and time.
@@ -118,14 +116,13 @@ export async function readPeriodEntries(
     with recursive
     people(person_id) as (${people}),
     bounds as materialized (
-      select person_id, coalesce(${earlier}, ${FIRST_EVENT_AT}) as first_at,
-        coalesce(${later}, ${LAST_EVENT_AT}) as last_at
+      select person_id, coalesce(${later}, ${LAST_EVENT_AT}) as last_at
       from people
     ),
     family(id, person_id, event_at, corrects_entry_id, responds_to_entry_id) as (
       select seed.id, seed.person_id, seed.event_at, seed.corrects_entry_id, seed.responds_to_entry_id
       from bounds cross join time_entries seed indexed by time_entries_person_event_idx
-      where seed.person_id = bounds.person_id and seed.event_at between bounds.first_at and bounds.last_at
+      where seed.person_id = bounds.person_id and seed.event_at between ${from} and bounds.last_at
       union
       select parent.id, parent.person_id, parent.event_at, parent.corrects_entry_id, parent.responds_to_entry_id
       from family join time_entries parent

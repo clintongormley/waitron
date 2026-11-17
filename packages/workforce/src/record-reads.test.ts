@@ -248,17 +248,42 @@ async function expectFullJanuaryRecord() {
   return record;
 }
 
-it("keeps a pending retime into January attached to the earlier start", async () => {
-  await run(async (tx) => {
-    await backend.clockIn(tx, event("2025-12-30T09:00:00Z"));
-    await backend.clockOut(tx, event("2026-01-01T08:00:00Z"));
+it("follows an earlier automatic end and its answer when retimed into January", async () => {
+  await run((tx) => backend.clockIn(tx, event("2025-12-28T09:00:00Z")));
+  const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
+  const { target, answer } = await run(async (tx) => {
+    const target = await backend.recordAutomaticClose(tx, {
+      ...event("2025-12-28T17:00:00Z"),
+      openEntryId: start!.id,
+    });
+    const answer = await backend.confirmAutomaticEntry(tx, {
+      nodeId,
+      entryId: target,
+      workerPersonId: personId,
+      origin,
+    });
+    return { target, answer };
   });
+  const { request, answer: approval } = await correct(target, "2026-01-01T01:00:00Z");
+  const record = await expectFullJanuaryRecord();
+  expect(record.sessions).toEqual([]);
+  expect(record.entries.map((row) => row.entry.entryId)).toEqual([
+    target,
+    answer,
+    request,
+    approval,
+  ]);
+  expect(record.entries.every((row) => row.confirmedByWorker)).toBe(true);
+});
+
+it("includes a pending retime before January when its target is in January", async () => {
+  await day();
   const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
   const request = await run((tx) =>
     backend.requestCorrection(tx, {
       nodeId,
       correctsEntryId: start!.id,
-      at: "2026-01-01T01:00:00Z",
+      at: "2025-12-29T09:00:00Z",
       offsetMinutes: 0,
       reason: "Correct arrival",
       actorPersonId: personId,
@@ -266,10 +291,8 @@ it("keeps a pending retime into January attached to the earlier start", async ()
     }),
   );
   const record = await expectFullJanuaryRecord();
-  expect(record.sessions).toEqual([]);
-  expect(record.entries.map((row) => row.entry.entryId)).toEqual(
-    expect.arrayContaining([start!.id, request]),
-  );
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([480]);
+  expect(record.entries.map((row) => row.entry.entryId)).toContain(request);
 });
 
 it("keeps every event at the next start when it shares the last session's end time", async () => {
@@ -284,16 +307,40 @@ it("keeps every event at the next start when it shares the last session's end ti
   expect(record.entries.map((row) => row.entry.entryKind)).toEqual(["in", "out", "in", "out"]);
 });
 
-it("follows the only earlier clock-in when its approved time moves into January", async () => {
+it("pairs a January start past a later clock-in retimed after its end", async () => {
   await run(async (tx) => {
-    await backend.clockIn(tx, event("2025-12-29T09:00:00Z"));
-    await backend.clockOut(tx, event("2026-01-01T08:00:00Z"));
+    await backend.clockIn(tx, event("2026-01-31T20:00:00Z"));
+    await backend.clockOut(tx, event("2026-02-02T16:00:00Z"));
+    await backend.clockIn(tx, event("2026-02-01T16:00:00Z"));
+    await backend.clockOut(tx, event("2026-02-04T16:00:00Z"));
   });
-  const [start] = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "in"));
-  await correct(start!.id, "2026-01-01T01:00:00Z");
+  const [start] = await suite.db
+    .select()
+    .from(timeEntries)
+    .where(eq(timeEntries.eventAt, "2026-02-01T16:00:00.000Z"));
+  await correct(start!.id, "2026-02-03T09:00:00Z");
   const record = await expectFullJanuaryRecord();
-  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([420]);
-  expect(record.entries.map((row) => row.entry.entryId)).toContain(start!.id);
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([2640]);
+});
+
+it("compares the full frozen month when reading one of its weeks", async () => {
+  await day();
+  await run(async (tx) => {
+    await backend.clockIn(tx, event("2026-01-20T09:00:00Z"));
+    await backend.clockOut(tx, event("2026-01-20T17:00:00Z"));
+  });
+  await freezeJanuary();
+  const record = await run((tx) =>
+    backend.timeRecord(tx, {
+      period: { start: "2026-01-05", end: "2026-01-12" },
+      personId,
+    }),
+  );
+  expect(record.sessions.map((session) => session.workedMinutes)).toEqual([480]);
+  expect(record.closures[0]!.snapshot.sessions.map((session) => session.workedMinutes)).toEqual([
+    480, 480,
+  ]);
+  expect(record.closedPeriodImpacts).toEqual([]);
 });
 
 it.each([

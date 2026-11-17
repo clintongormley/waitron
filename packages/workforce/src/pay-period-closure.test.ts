@@ -86,7 +86,11 @@ it("counts a next-month local-day automatic end only when that next month closes
     (e) => e.entryKind === "confirmation",
   );
   expect(markers).toHaveLength(1);
-  expect(markers[0]).toMatchObject({ respondsToEntryId: entryId, payPeriodClosureId: november.id });
+  expect(markers[0]).toMatchObject({
+    eventAt: "2026-11-01T04:00:00.000Z",
+    respondsToEntryId: entryId,
+    payPeriodClosureId: november.id,
+  });
 });
 async function open(personId = worker) {
   await run((tx) => backend.clockIn(tx, event("2026-10-05T09:00:00Z", personId)));
