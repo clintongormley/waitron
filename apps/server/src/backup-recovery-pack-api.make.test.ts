@@ -79,6 +79,7 @@ const BUCKET = {
 };
 const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
   enabled: true,
+  cloud: false,
   destinations: [{ kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" } }],
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   retention: { count: 7, days: 30 },

@@ -386,13 +386,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 ### The setup wizard, onboarding and the demo venue
 
 - **Recovery operations still buffer whole database files.** First-setup repair snapshots retain
-  their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
-  whole database files. Replace these buffers with file-based processing while preserving their
+  their 128 MiB budget, and Start again's deletion fingerprints also read whole database files.
+  Replace these buffers with file-based processing while preserving their
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
-  The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB;
-  Cloud transfers and configuration imports keep their separate buffers.
-  Cloud snapshot streaming waits for a Cloud decision on its 512 MiB object limit and
-  256 MiB verification scratch limit, alongside Cloud's TEST-CLOUD-AWS work.
+  The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB.
+  Cloud recovery downloads and configuration imports keep their separate buffers. Larger Cloud
+  backups depend on Cloud's object and verification limits.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**

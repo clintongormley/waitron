@@ -82,6 +82,7 @@ const BUCKET = {
 function folderSettings(dir: string): Omit<ArchiveSettings, "revision"> {
   return {
     enabled: true,
+    cloud: false,
     destinations: [{ kind: "local-fs", id: "primary", dir }],
     schedule: DAILY,
     retention: { count: 7, days: 30 },

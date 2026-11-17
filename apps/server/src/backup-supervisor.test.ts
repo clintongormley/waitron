@@ -51,6 +51,7 @@ import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { LiveEvents } from "./live-api.js";
 import { AppError } from "@waitron/shared";
+import * as cloudArchive from "./cloud-archive-target.js";
 import "./errors.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -225,6 +226,67 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         }),
       ]),
     );
+  }, 60_000);
+
+  it("keeps Cloud freshness across a key rotation and starts a fresh backup", async () => {
+    const refs: Refs = {
+      config: { ...localFsConfig([], STRONG_KEY_1), cloud: true },
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    vi.spyOn(cloudArchive, "cloudArchiveAvailable").mockReturnValue(true);
+    let storedAt = Date.now();
+    let resume!: () => void;
+    const resumed = new Promise<void>((resolve) => (resume = resolve));
+    const store = vi
+      .fn<cloudArchive.CloudArchiveTarget["store"]>(async () => {
+        await resumed;
+        return { stored: false, errorCode: "cloud.unavailable" };
+      })
+      .mockResolvedValueOnce({ stored: true, errorCode: null });
+    const sup = makeSupervisor(refs, await makeStateDir(), {
+      outcomes,
+      cloudTarget: {
+        id: "cloud",
+        readCaptureState: async () => ({ storedAt, pending: store.mock.calls.length === 0 }),
+        roomNeeded: async (estimate) => estimate,
+        store,
+      },
+    });
+    try {
+      await sup.reload({ resumeCloudDeadline: true });
+      await waitForEvent(refs, "backup.destination_completed");
+      expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
+      refs.config = { ...refs.config!, recoveryKey: STRONG_KEY_2 };
+      await sup.reload();
+      await vi.waitFor(() => expect(store).toHaveBeenCalledTimes(2), { timeout: 5_000 });
+      const { backupStatus } = await sup.status();
+      expect(backupStatus).toMatchObject({
+        destinations: [{ lastBackupAt: new Date(storedAt).toISOString(), stale: false }],
+      });
+      storedAt -= refs.config!.staleAfterMs;
+      expect((await sup.status()).backupStatus).toMatchObject({ destinations: [{ stale: true }] });
+      resume();
+      await waitForEvent(refs, "backup.destination_failed");
+      expect((await sup.status()).backupStatus).toMatchObject({
+        configured: true,
+        destinations: [{ id: "cloud", uploadErrorCode: "cloud.unavailable" }],
+      });
+      const source = backupAlertSource({
+        listStatus: async () => (await sup.status()).backupStatus,
+        outcomes,
+        now: () => new Date(),
+        readStream: () => ({ state: "off" }),
+      });
+      expect(await source.read({ tx: {} as never, now: new Date() })).toContainEqual(
+        expect.objectContaining({ key: "backup.destination_failed:cloud" }),
+      );
+    } finally {
+      resume();
+      await sup.stop();
+    }
   }, 60_000);
 
   it("enable from off writes an archive whose db.dump opens as the venue database", async () => {

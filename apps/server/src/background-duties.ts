@@ -30,7 +30,6 @@ interface Stopper {
 export interface BackgroundDutyHandles {
   controller: Aborter;
   pendingCardController: Aborter;
-  cloudController: Aborter;
   invoiceEmailController: Aborter;
   tenderRefundController: Aborter;
   pendingCardLoop: unknown;
@@ -38,7 +37,6 @@ export interface BackgroundDutyHandles {
   certificateDiagnosis: Stopper | undefined;
   fiscalReconciliation?: Stopper;
   invoiceEmailLoop: unknown;
-  cloudSnapshots: unknown;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
   liveEvents: { close(): unknown };
@@ -158,20 +156,13 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "jobRunnerServices",
       close: () => h.jobRunner.stopServices(),
-      reason:
-        "stops after venue.db writers; Cloud snapshots read that database and are awaited afterwards",
-    },
-    {
-      name: "cloudSnapshots",
-      close: () => h.cloudSnapshots,
-      reason: LOOP_WAIT,
+      reason: "stops after venue.db writers",
     },
   ];
   return {
     aborts: [
       { name: "controller", abort: () => h.controller.abort() },
       { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
-      { name: "cloudController", abort: () => h.cloudController.abort() },
       { name: "invoiceEmailController", abort: () => h.invoiceEmailController.abort() },
       { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
       { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },

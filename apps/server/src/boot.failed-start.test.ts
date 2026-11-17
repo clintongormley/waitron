@@ -35,7 +35,7 @@ import { clockWatchJob } from "./clock-watch.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
+import { backupsJob } from "./backup-supervisor.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
@@ -114,9 +114,9 @@ vi.mock("./content-suggestion-runner.js", async (importOriginal) => {
     createContentSuggestionRunner: vi.fn(actual.createContentSuggestionRunner),
   };
 });
-vi.mock("./cloud-snapshot-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./cloud-snapshot-loop.js")>();
-  return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
+vi.mock("./backup-supervisor.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./backup-supervisor.js")>();
+  return { ...actual, backupsJob: vi.fn(actual.backupsJob) };
 });
 vi.mock("./job-runner.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./job-runner.js")>();
@@ -204,7 +204,7 @@ afterEach(async () => {
   vi.mocked(subscribeToChanges).mockReset();
   vi.mocked(cloudConnectionJob).mockClear();
   vi.mocked(createContentSuggestionRunner).mockClear();
-  vi.mocked(runCloudSnapshotLoop).mockClear();
+  vi.mocked(backupsJob).mockClear();
   vi.mocked(startSpareStore).mockClear();
   vi.mocked(createJobRunner).mockClear();
   vi.mocked(tamperWatchJob).mockClear();
@@ -219,6 +219,8 @@ afterAll(async () => {
   }
 });
 
+const { backupsJob: realBackupsJob } =
+  await vi.importActual<typeof import("./backup-supervisor.js")>("./backup-supervisor.js");
 const { cloudConnectionJob: realCloudJob } =
   await vi.importActual<typeof import("./cloud-worker.js")>("./cloud-worker.js");
 
@@ -857,7 +859,9 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(
       vi.mocked(createJobRunner).mock.results.at(-1)!.value.views()["cloud.connection"].state,
     ).toBe("stopped");
-    expect(vi.mocked(runCloudSnapshotLoop).mock.calls.at(-1)![0].signal.aborted).toBe(true);
+    expect(
+      vi.mocked(createJobRunner).mock.results.at(-1)!.value.views()["backups.scheduled"].state,
+    ).toBe("stopped");
   }, 60_000);
 
   it("in trading mode, when a step after the listener is started throws, stopping the job runner", async () => {
@@ -934,14 +938,15 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
-  it("aborts and awaits a started cloud worker when snapshot initialization throws", async () => {
+  it("aborts and awaits a started cloud worker when the landing listener fails", async () => {
     const venueDir = await seededVenueDir();
-    const state = await stateDir();
+    const state = await stateDir(undefined, { leaf: true });
     const env = {
-      ...(await tradingEnv(venueDir, state)),
+      ...(await tradingEnv(venueDir, state, { landing: true })),
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     };
-    const failure = new Error("snapshot initialization failed");
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
     let workerSignal: AbortSignal | undefined;
     let workerStopped = false;
     let release!: () => void;
@@ -965,9 +970,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
         return { nextDueAt: null };
       },
     }));
-    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(() => {
-      throw failure;
-    });
     try {
       await expect(startServer(env)).rejects.toBe(failure);
       expect(workerSignal?.aborted).toBe(true);
@@ -979,7 +981,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
     }
   }, 60_000);
 
-  it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
+  it("waits for the backup job when the Cloud connection job refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = {
@@ -994,25 +996,20 @@ describe("a start that fails after the venue folder is opened gives the folder b
         throw new Error("cloud worker stop failed");
       },
     }));
-    let snapshotStopped = false;
-    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(
-      ({ signal }) =>
-        new Promise<void>((resolve) => {
-          signal.addEventListener(
-            "abort",
-            () => {
-              setTimeout(() => {
-                snapshotStopped = true;
-                resolve();
-              }, 200);
-            },
-            { once: true },
-          );
-        }),
-    );
-
+    let backupStopped = false;
+    vi.mocked(backupsJob).mockImplementationOnce((...args) => {
+      const job = realBackupsJob(...args);
+      return {
+        ...job,
+        onStop: async () => {
+          await new Promise((resolve) => setImmediate(resolve));
+          await job.onStop?.();
+          backupStopped = true;
+        },
+      };
+    });
     await expect(startServer(env)).rejects.toBe(failure);
-    expect(snapshotStopped).toBe(true);
+    expect(backupStopped).toBe(true);
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
@@ -1440,14 +1437,13 @@ describe("closing a started server", () => {
       ...(await tradingEnv(venueDir, state)),
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     };
-    const failure = new Error("snapshot loop failed to stop");
-    // Second in trading mode's teardown, after the cloud worker, so most stops come after it.
-    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(
-      ({ signal }) =>
-        new Promise<void>((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(failure), { once: true });
-        }),
-    );
+    const failure = new Error("Cloud connection job failed to stop");
+    vi.mocked(cloudConnectionJob).mockImplementationOnce((options) => ({
+      ...realCloudJob(options),
+      onStop: async () => {
+        throw failure;
+      },
+    }));
     const server = await startServer(env);
     expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
 

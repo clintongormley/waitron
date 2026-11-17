@@ -25,6 +25,7 @@ import { MAX_SLEEP_MS, type ScheduleClock } from "./backup-schedule.js";
 import {
   STATUS_READ_TIMEOUT_MS,
   readDestinationStatus,
+  unreadDestination,
   type DestinationStatus,
 } from "./backup-status.js";
 import { StatusClients } from "./backup-status-clients.js";
@@ -44,6 +45,8 @@ import type { StagingTurn } from "./backup-staging-turn.js";
 import type { Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import { BACKUP_STAGING_DIR } from "./start-space.js";
+import { cloudArchiveAvailable, type CloudArchiveTarget } from "./cloud-archive-target.js";
+import type { CloudConnectionStatus } from "./cloud-client.js";
 import "./errors.js";
 
 /** Where a destination is and which access key id it uses, never the secret that opens it. */
@@ -88,6 +91,7 @@ export interface BackupRuntimeStatus {
    * code, never its message. */
   loadErrorCode: string | null;
   destinations: DestinationView[];
+  cloud?: boolean;
   schedule: BackupSchedule | undefined;
   retention: { count: number; days: number } | undefined;
   /** Short hash PREFIX of the running recovery key — NEVER the key itself. */
@@ -156,7 +160,9 @@ export interface BackupSupervisorDeps {
   log: Logger;
   /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
-  onScheduled?: (at: number | null) => void;
+  onScheduled?: (at: number | null, cloud: boolean) => void;
+  cloudTarget?: CloudArchiveTarget;
+  readCloudStatus?: () => Promise<CloudConnectionStatus>;
   /** DI for tests; defaults to `buildBackupBackend`. */
   buildBackend?: (dest: BackupDestination) => StorageBackend;
   /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
@@ -222,7 +228,7 @@ export class BackupSupervisor {
 
   /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
    * teardowns. */
-  async reload(): Promise<void> {
+  async reload({ resumeCloudDeadline = false } = {}): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
@@ -305,6 +311,11 @@ export class BackupSupervisor {
       this.#schedule = createBackupSchedule({
         nodeId: this.#deps.nodeId,
         backends: this.#backends,
+        resumeCloudDeadline,
+        cloud:
+          cfg.cloud && this.#deps.cloudTarget
+            ? { target: this.#deps.cloudTarget, readClock: this.#deps.readClock }
+            : undefined,
         db: venue.venue,
         node: venue.node,
         modules: this.#deps.modules,
@@ -331,7 +342,7 @@ export class BackupSupervisor {
         onArchivesDeleted: this.#deps.recordArchivesDeleted,
         statfs: this.#deps.statfs,
         signal: controller.signal,
-        onScheduled: this.#deps.onScheduled,
+        onScheduled: (at) => this.#deps.onScheduled?.(at, cfg.cloud === true),
         onDestinationResult: (result) => {
           // A replaced sweep is aborted before `reload()` waits for it, and its in-flight tick can
           // still report a store under the OLD key during that wait.
@@ -456,6 +467,7 @@ export class BackupSupervisor {
       storedDisabled: cfg !== undefined && !cfg.enabled,
       loadErrorCode: this.#loadErrorCode,
       destinations: cfg?.destinations.map(destinationView) ?? [],
+      ...(cfg?.cloud ? { cloud: true } : {}),
       schedule: cfg?.schedule,
       retention: cfg === undefined ? undefined : { count: cfg.retain, days: cfg.retainDays },
       keyFingerprint: cfg?.recoveryKey === undefined ? undefined : keyFingerprint(cfg.recoveryKey),
@@ -492,7 +504,7 @@ export class BackupSupervisor {
     // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
     const sweep = this.#sweep;
     const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
-    if (cfg === undefined || !cfg.enabled || cfg.destinations.length === 0)
+    if (cfg === undefined || !cfg.enabled || (!cfg.cloud && cfg.destinations.length === 0))
       return {
         ...base,
         backupStatus:
@@ -508,11 +520,37 @@ export class BackupSupervisor {
         ...(sweep.get(dest.id) ?? NO_RECORD),
       })),
     );
+    if (cfg.cloud) {
+      destinations.push({
+        ...(await this.#readCloudDestination(cfg.staleAfterMs, now)),
+        ...(sweep.get("cloud") ?? NO_RECORD),
+      });
+    }
     return {
       ...base,
       backupStatus: { configured: true, destinations },
       archiveUnderCurrentKey: archiveUnderCurrentKey(),
     };
+  }
+
+  async #readCloudDestination(staleAfterMs: number, now: Date): Promise<DestinationStatus> {
+    try {
+      if (!cloudArchiveAvailable(await this.#deps.readCloudStatus?.())) {
+        return unreadDestination("cloud", "cloud.unavailable");
+      }
+      const storedAt = (await this.#deps.cloudTarget?.readCaptureState?.())?.storedAt;
+      if (storedAt == null) return unreadDestination("cloud", null);
+      const ageMs = now.getTime() - storedAt;
+      return {
+        id: "cloud",
+        lastBackupAt: new Date(storedAt).toISOString(),
+        ageSeconds: Math.max(0, Math.floor(ageMs / 1000)),
+        stale: ageMs > staleAfterMs || ageMs < -staleAfterMs,
+        readErrorCode: null,
+      };
+    } catch (error) {
+      return unreadDestination("cloud", codeOf(error));
+    }
   }
 
   /** Answers by the read limit, on the status reads' own client for `dest`. */
@@ -551,8 +589,9 @@ export class BackupSupervisor {
    * store, and a pruning code only by a later store whose pruning succeeded. */
   #recordResult(result: DestinationResult): void {
     const prev = this.#sweep.get(result.id);
+    const cloud = result.id === "cloud";
     this.#sweep.set(result.id, {
-      storedUnderCurrentKey: (prev?.storedUnderCurrentKey ?? false) || result.stored,
+      storedUnderCurrentKey: !cloud && ((prev?.storedUnderCurrentKey ?? false) || result.stored),
       uploadErrorCode: result.uploadErrorCode,
       pruneErrorCode: result.stored ? result.pruneErrorCode : (prev?.pruneErrorCode ?? null),
     });
@@ -570,7 +609,7 @@ export class BackupSupervisor {
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#running !== undefined) await this.#running.catch(() => {});
-    if (this.#schedule !== undefined) this.#deps.onScheduled?.(null);
+    if (this.#schedule !== undefined) this.#deps.onScheduled?.(null, false);
     this.#closeBackends(this.#backends.splice(0));
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
     this.#controller = undefined;

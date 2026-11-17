@@ -28,6 +28,31 @@ README §10 ("Waitron Cloud backups: follow the venue's schedule, which must be 
 Cloud is a destination"); owner 2026-10-23 (Waitron works entirely on-premises with no Cloud).
 Slice rules apply.
 
+## Measure 13 — 2026-11-17, watcher-cleared to continue at 21:34
+
+The existing untrimmed 366-day bench fixture produced a **1,676,015,028-byte compressed and encrypted
+local archive** from a 12,318,072,832-byte database copy through the real `runOnce` path. Cloud
+packs the raw database, as the retired worker did. In this fixture the database alone is about
+22.94 times Cloud's current 536,870,912-byte (512 MiB) limit, before packing or encryption.
+`cloud-archive-sweep.test.ts` confirms the Cloud format by decrypting and unpacking a real SQLite
+copy without decompression. The fixture used its matching
+`30c1c1c564` checkout on the 32-core bench stand-in; current main refuses its older schema. No new
+year was built. The archive-building functions were unchanged at the time of the measurement.
+The bench fixture retained the year's print payloads. The watcher noted on 2026-11-17 at 22:31
+that a venue applying its usual housekeeping would trim those payloads after a week.
+
+The watcher cleared this plan to build the test-only destination under the current ceiling and
+real-venue refusal. The owner chose a streaming ceiling increase, assigned to lanes J and G
+(watcher, 21:35); this slice does not raise it. No owner approval of this slice's design is claimed.
+
+The measurement's post-store warning was its own wrong outcome-holder shape. It supplied
+`destinations`, while `recordBackupOutcome` reads `failed`. With the wrong shape, the real
+`runOnce` probe logged `backup.destination_prune_failed` before listing anything; with `failed:
+new Map()`, it listed once and logged completion. This corrects the probe, not a jr8/jr10 product
+path. The year measurement sized the local archive and the database fixture. No year archive was
+uploaded to Cloud. Its owned
+remote data and ciphertext are deleted; small text receipts remain with Lane E.
+
 ## What it builds
 
 1. The backup settings record gains `cloud: boolean` (default `false`): in `ArchiveSettings`
@@ -110,9 +135,14 @@ jr8 (and so jr3, which moved `runCloudWorker` onto the runner). If env6 has land
   `<state>/cloud-snapshots/archive.enc` (`cloud-snapshot-worker.ts:142`, written `:275`), beside its
   `state.json`, because a capture cut off after upload is published from it at the next run. It is
   not in the per-run staging folder. The room check before the copy (`backup-sweep.ts:228-247`)
-  counts one more ciphertext's worth of space when `cloud` is set, plus the size of an `archive.enc`
-  already waiting.
+  counts one more ciphertext's worth of space, plus the size of an `archive.enc` already waiting,
+  when the connection can take a capture and its estimated size fits the limit. The watcher cleared
+  this condition on 2026-11-17 at 23:56 so a Cloud refusal does not stop the local backup.
 - Waitron works with no Cloud at all: with `cloud: false` nothing Cloud-related runs and nothing fails.
+- The shared schedule uses a recent successful Cloud capture to recover a future due time on
+  startup. Both destinations wait for that due time. A pending capture still gets a recovery pass.
+  Backup status reads the same saved capture time. The watcher cleared this change on 2026-11-18
+  at 00:17 after the cross-repository proof reproduced a premature upload.
 
 ## Review Focus
 

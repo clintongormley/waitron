@@ -40,9 +40,7 @@ import {
   checkTimeHealth,
   type TimeHealth,
 } from "./time-health.js";
-import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
-import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
-import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
+import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
@@ -3586,6 +3584,8 @@ async function bootServer(
     const read = nodeBackend.latestClockStep?.bind(nodeBackend);
     return read === undefined ? null : db.withWriteLock(() => read(db));
   });
+  const cloudPrimary = () =>
+    holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   const backupSupervisor = new BackupSupervisor({
     bus: liveEvents,
     onReloaded: () => jobRunner.wake("backups.scheduled"),
@@ -3606,9 +3606,20 @@ async function bootServer(
       withTransaction(db, async (tx) => {
         return resolveVenueClock(tx, tradingContext.nodeId);
       }),
+    cloudTarget: createCloudArchiveTarget({
+      stateDir: config.stateDir,
+      connection: cloudConnection,
+      sourceNodeId: tradingContext.nodeId,
+      isPrimary: cloudPrimary,
+      upload: async (grant, file, metadata, signal) => {
+        await uploadCloudCaptureFile(grant, file, metadata, { signal });
+      },
+    }),
+    readCloudStatus: cloudConnection?.status,
     outcomes: backupOutcomes,
-    onScheduled: (at) => {
+    onScheduled: (at, cloud) => {
       backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
+      backupDeadlines.cloud = cloud ? backupDeadlines.archive : null;
     },
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
@@ -3619,7 +3630,7 @@ async function bootServer(
   });
   undoOnFailure.push(() => backupSupervisor.stop());
   correction.addAnchor({ reanchor: () => backupSupervisor.noteClockStep() });
-  await backupSupervisor.reload();
+  await backupSupervisor.reload({ resumeCloudDeadline: true });
   jobRunner.add(backupsJob(backupSupervisor, () => holders.singletonRole.current === "primary"));
   const sealedStateStatus: SealedStateStatus = { failedSince: null, errorCode: null };
   // After migrations, so the row's manifest names the schema the database holds.
@@ -4115,8 +4126,6 @@ async function bootServer(
   } catch (error) {
     log("warn", "cloud.replacement_resume_failed", { errorCode: codeOf(error) });
   }
-  const cloudPrimary = () =>
-    holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   cloudServing = cloudPrimary;
   const guestMenuDelivery = cloudConnection
     ? createGuestMenuDelivery({
@@ -4182,6 +4191,7 @@ async function bootServer(
       readRecoveryKey,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       sealedState,
+      readCloudStatus: cloudConnection?.status,
       readStream: () => streamHost.status(),
       stream: streamHost,
       turns: backupTurns,
@@ -4687,8 +4697,6 @@ async function bootServer(
   undoOnFailure.push(() => mdns.stop());
   venueNameAnswers.responder = mdns;
   if (mainSilence?.state().silent === true) mdns.announce(BOX_HOSTNAME);
-  const cloudController = new AbortController();
-  undoOnFailure.push(async () => cloudController.abort());
   if (cloudConnection)
     jobRunner.add(
       cloudConnectionJob({
@@ -4714,43 +4722,6 @@ async function bootServer(
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       }),
     );
-  const cloudSnapshots = cloudConnection
-    ? runCloudSnapshotLoop({
-        signal: cloudController.signal,
-        onError: (error) => log("error", "cloud.snapshot_failed", { errorCode: codeOf(error) }),
-        worker: createCloudSnapshotWorker({
-          stateDir: config.stateDir,
-          connection: cloudConnection,
-          sourceNodeId: tradingContext.nodeId,
-          onScheduled: (at) => {
-            backupDeadlines.cloud = at === null ? null : new Date(at).toISOString();
-          },
-          isPrimary: cloudPrimary,
-          readClock: () =>
-            withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
-          createArchive: (grant, at, signal) =>
-            createCloudSnapshotArchive(
-              {
-                db,
-                node: store.node,
-                modules: availableModules,
-                environment: config.environment,
-                stateDir: config.stateDir,
-              },
-              grant.recoveryKey,
-              at,
-              signal,
-            ),
-          upload: async (grant, file, metadata, signal) => {
-            await uploadCloudCaptureFile(grant, file, metadata, { signal });
-          },
-        }),
-      })
-    : undefined;
-  undoOnFailure.push(async () => {
-    cloudController.abort();
-    await cloudSnapshots;
-  });
   if (suggestionRunner)
     jobRunner.add(
       suggestionsJob(suggestionRunner, cloudPrimary, (error) =>
@@ -4762,7 +4733,6 @@ async function bootServer(
   const duties = backgroundDuties({
     controller,
     pendingCardController,
-    cloudController,
     invoiceEmailController,
     tenderRefundController,
     pendingCardLoop,
@@ -4770,7 +4740,6 @@ async function bootServer(
     certificateDiagnosis,
     fiscalReconciliation,
     invoiceEmailLoop,
-    cloudSnapshots,
     unsubscribeFromChanges,
     jobRunner,
     liveEvents,

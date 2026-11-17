@@ -50,18 +50,11 @@ const BINDING: HandoverBinding = {
 const ABORTS = [
   "controller",
   "pendingCardController",
-  "cloudController",
   "invoiceEmailController",
   "tenderRefundController",
   "jobRunner",
 ] as const;
-const LOOPS = [
-  "pendingCardLoop",
-  "tenderRefundLoop",
-  "invoiceEmailLoop",
-  "cloudSnapshots",
-  "loop",
-] as const;
+const LOOPS = ["pendingCardLoop", "tenderRefundLoop", "invoiceEmailLoop", "loop"] as const;
 const STOPPERS = [
   "certificateDiagnosis",
   "spareSettings",
@@ -303,7 +296,7 @@ describe("a stepdown", () => {
     }
   });
 
-  it("after the answer the close runs in the table's order, Cloud snapshots last", async () => {
+  it("after the answer the close runs in the table's order, with services last", async () => {
     await begin();
     const r = rig(suite.node);
     await r.app.request("/stepdown", { method: "POST" });
@@ -312,7 +305,7 @@ describe("a stepdown", () => {
     expect(after).toEqual(
       r.deps.duties.closers.filter((c) => c.atStepdown !== true).map((c) => c.name),
     );
-    expect(after.at(-1)).toBe("cloudSnapshots");
+    expect(after.at(-1)).toBe("jobRunnerServices");
   });
 
   it("each stop runs exactly once across the stepdown and the close", async () => {
@@ -381,7 +374,7 @@ describe("a stepdown", () => {
   it("a throw while signalling still schedules the restart", async () => {
     await begin();
     const duties = fakeDuties({
-      cloudController: {
+      pendingCardController: {
         abort: () => {
           throw new Error("abort failed");
         },
@@ -429,7 +422,7 @@ describe("a stepdown", () => {
     await r.app.request("/stepdown", { method: "POST" });
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect(r.logs.map((l) => l.event)).toContain("handover.stepdown_close_failed");
-    expect(r.calls.at(-1)).toBe("cloudSnapshots");
+    expect(r.calls.at(-1)).toBe("jobRunnerServices");
   });
 
   it("a request still running at the limit is cut and logged by route, and the stepdown proceeds", async () => {
@@ -452,7 +445,7 @@ describe("a stepdown", () => {
     expect(r.logs.filter((l) => l.event === "handover.admitted_work_cut")).toEqual([
       { event: "handover.admitted_work_cut", fields: { method: "GET", path: "/slow" } },
     ]);
-    expect(r.calls.at(-1)).toBe("cloudSnapshots");
+    expect(r.calls.at(-1)).toBe("jobRunnerServices");
   });
 
   it("a close that never settles still restarts once the shutdown deadline passes", async () => {

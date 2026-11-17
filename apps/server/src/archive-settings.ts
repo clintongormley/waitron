@@ -40,7 +40,8 @@ export interface ArchiveSettings {
   /** Fresh on every write, so a reader can tell any edit apart, a secret-only one included. */
   revision: string;
   enabled: boolean;
-  /** Never empty; ids are unique and at most one is a bucket. */
+  cloud: boolean;
+  /** Empty only for Cloud-only archives. IDs are unique and at most one is a bucket. */
   destinations: BackupDestination[];
   schedule: BackupSchedule;
   retention: { count: number; days: number };
@@ -212,6 +213,12 @@ function parseStoredDestination(raw: unknown, keys: ArchiveKeys | null): BackupD
   return { kind: "s3", id, bucket };
 }
 
+export function isAtLeastDaily(schedule: BackupSchedule): boolean {
+  return schedule.kind === "interval"
+    ? schedule.ms <= 86_400_000
+    : schedule.days === "daily" || schedule.days.length === 7;
+}
+
 const SETTINGS_FIELDS = [
   "revision",
   "enabled",
@@ -222,12 +229,13 @@ const SETTINGS_FIELDS = [
 ] as const;
 
 export function parseArchiveSettings(raw: unknown, keys: ArchiveKeys | null): ArchiveSettings {
-  if (!isRecord(raw) || !hasExactKeys(raw, SETTINGS_FIELDS, ["writtenAt"]))
+  if (!isRecord(raw) || !hasExactKeys(raw, SETTINGS_FIELDS, ["writtenAt", "cloud"]))
     throw settingsInvalid("fields");
-  const { revision, enabled, destinations, retention, destinationTimeoutMs } = raw;
+  const { revision, enabled, destinations, retention, destinationTimeoutMs, cloud = false } = raw;
+  if (typeof cloud !== "boolean") throw settingsInvalid("fields");
   if (typeof revision !== "string" || !UUID.test(revision)) throw settingsInvalid("revision");
   if (typeof enabled !== "boolean") throw settingsInvalid("enabled");
-  if (!Array.isArray(destinations) || destinations.length === 0) {
+  if (!Array.isArray(destinations) || (destinations.length === 0 && !cloud)) {
     throw settingsInvalid("destinations");
   }
   const parsed = destinations.map((destination) => parseStoredDestination(destination, keys));
@@ -254,11 +262,14 @@ export function parseArchiveSettings(raw: unknown, keys: ArchiveKeys | null): Ar
   ) {
     throw settingsInvalid("destinationTimeoutMs");
   }
+  const schedule = parseSchedule(raw.schedule, () => settingsInvalid("schedule"));
+  if (cloud && !isAtLeastDaily(schedule)) throw settingsInvalid("schedule");
   return {
     revision,
     enabled,
+    cloud,
     destinations: parsed,
-    schedule: parseSchedule(raw.schedule, () => settingsInvalid("schedule")),
+    schedule,
     retention: { count: retention.count, days: retention.days },
     destinationTimeoutMs,
   };
@@ -370,11 +381,17 @@ function splitArchiveSettings(settings: ArchiveSettings): {
   return { archive: { ...settings, destinations, writtenAt: nowIso() }, keys };
 }
 
-export function archiveRecord(settings: Omit<ArchiveSettings, "revision">): {
+type ArchiveSettingsInput = Omit<ArchiveSettings, "revision" | "cloud"> & { cloud?: boolean };
+
+export function archiveRecord(settings: ArchiveSettingsInput): {
   json: string;
   stored: ArchiveSettings;
 } {
-  const { archive, keys } = splitArchiveSettings({ ...settings, revision: randomUUID() });
+  const { archive, keys } = splitArchiveSettings({
+    ...settings,
+    cloud: settings.cloud ?? false,
+    revision: randomUUID(),
+  });
   const stored = parseArchiveSettings(archive, keys);
   return { json: JSON.stringify(stored), stored };
 }
@@ -382,7 +399,7 @@ export function archiveRecord(settings: Omit<ArchiveSettings, "revision">): {
 export async function writeArchiveSettings(
   tx: Transaction,
   ring: KeyRing,
-  settings: Omit<ArchiveSettings, "revision">,
+  settings: ArchiveSettingsInput,
   personId: string | null,
 ): Promise<ArchiveSettings> {
   const { stored } = archiveRecord(settings);
@@ -544,10 +561,13 @@ export const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
 
 /** Counts the raw kinds before any entry resolves, so an entry's own refusal never answers for a
  * list that is wrong as a whole. */
-export function checkArchiveChoiceList(raw: unknown): Record<string, unknown>[] {
+export function checkArchiveChoiceList(
+  raw: unknown,
+  allowEmpty = false,
+): Record<string, unknown>[] {
   if (
     !Array.isArray(raw) ||
-    raw.length === 0 ||
+    (raw.length === 0 && !allowEmpty) ||
     raw.length > 2 ||
     !raw.every(isRecord) ||
     raw.filter((c) => c.kind === "local-fs").length > 1 ||
@@ -561,9 +581,11 @@ export function checkArchiveChoiceList(raw: unknown): Record<string, unknown>[] 
 /** A Save's destinations: at most one folder and one bucket, returned folder first. */
 export function resolveArchiveChoices(
   choices: unknown,
-  ctx: { stream: StreamSettings | null; held: ArchiveSettings | null },
+  ctx: { stream: StreamSettings | null; held: ArchiveSettings | null; cloud?: boolean },
 ): BackupDestination[] {
-  const resolved = checkArchiveChoiceList(choices).map((c) => resolveArchiveChoice(c, ctx));
+  const resolved = checkArchiveChoiceList(choices, ctx.cloud).map((c) =>
+    resolveArchiveChoice(c, ctx),
+  );
   return [
     ...resolved.filter((d) => d.kind === "local-fs"),
     ...resolved.filter((d) => d.kind === "s3"),

@@ -20,10 +20,12 @@ import {
   type BackupSweepDeps,
   type ManifestBuilder,
   clockStepHold,
+  createBackupSchedule,
   pruneBackend,
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import { createCloudArchiveTarget, type CloudArchiveTarget } from "./cloud-archive-target.js";
 import type { BackupSchedule } from "./backup-config.js";
 import { longestFireAheadMs, nextFireMs } from "./backup-schedule.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
@@ -402,6 +404,164 @@ describe("runOnce (fan-out)", () => {
     const recovered = new FakeBackend("bad");
     await runOnce({ ...deps([recovered]), outcomes });
     expect(outcomes.failed.has("bad")).toBe(false);
+  });
+
+  const cloudClock = { timeZone: "Europe/Madrid", dayCutover: "04:00", cutoverChanges: [] };
+
+  it("shares one staged copy with both box-key destinations and the Cloud target", async () => {
+    const local = new FakeBackend("local");
+    const bucket = new FakeBackend("bucket");
+    const archive = archiveSpy();
+    const store = vi.fn<CloudArchiveTarget["store"]>(async (input) => {
+      const chunks = [];
+      for await (const chunk of input.entries()) chunks.push(chunk);
+      const packed = Buffer.concat(chunks);
+      expect(input.plaintextBytes).toBe(packed.length);
+      expect(input.clock).toEqual(cloudClock);
+      expect(input.modules).toEqual({ core: 3 });
+      expect(unpackArchive(packed).find((entry) => entry.name === "db.dump")?.bytes).toEqual(
+        Buffer.from("DUMP-BYTES"),
+      );
+      return { stored: true, errorCode: null };
+    });
+    const onDestinationResult = vi.fn();
+    await runOnce({
+      ...deps([local, bucket]),
+      archive,
+      cloud: {
+        target: { id: "cloud", roomNeeded: async () => 0, store },
+        readClock: async () => cloudClock,
+      },
+      onDestinationResult,
+    });
+    expect(archive).toHaveBeenCalledTimes(1);
+    expect(local.objects.get(keyIn(local))).toEqual(bucket.objects.get(keyIn(bucket)));
+    expect(store).toHaveBeenCalledTimes(1);
+    expect(onDestinationResult).toHaveBeenCalledWith({
+      id: "cloud",
+      stored: true,
+      uploadErrorCode: null,
+      pruneErrorCode: null,
+    });
+  });
+
+  it("makes room for a new Cloud ciphertext plus the waiting one before copying", async () => {
+    const archive = archiveSpy();
+    const roomNeeded = vi.fn(async (estimate: number) => estimate + 49 + 200);
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    await expect(
+      runOnce({
+        ...deps([new FakeBackend("local")]),
+        archive,
+        outcomes,
+        stagingEstimateBytes: async () => 100,
+        spaceFloorBytes: 0,
+        spaceAimBytes: 0,
+        statfs: async () => ({ bavail: 548, frsize: 1 }),
+        cloud: {
+          target: { id: "cloud", roomNeeded, store: vi.fn() },
+          readClock: async () => cloudClock,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "backup.staging_space_low" });
+    expect(roomNeeded).toHaveBeenCalledWith(100);
+    expect(archive).not.toHaveBeenCalled();
+    expect(outcomes.runStopped?.sizes).toEqual({ neededBytes: 549, availableBytes: 548 });
+  });
+
+  it("stores the local backup and reports the refused Cloud destination on every run", async () => {
+    const dir = join(stateDir, "local-backups");
+    const local = new LocalFsBackend("local", dir);
+    const onDestinationResult = vi.fn();
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const statfs = vi.fn(async () => ({ bavail: 1_000_000, frsize: 1 }));
+    statfs.mockResolvedValueOnce({ bavail: 300, frsize: 1 });
+    const input = {
+      ...deps([local]),
+      cloud: {
+        target: createCloudArchiveTarget({
+          stateDir,
+          connection: undefined,
+          sourceNodeId: BACKUP_NODE_ID,
+          isPrimary: () => true,
+          upload: vi.fn(),
+        }),
+        readClock: async () => cloudClock,
+      },
+      stagingEstimateBytes: async () => 100,
+      spaceFloorBytes: 0,
+      spaceAimBytes: 0,
+      statfs,
+      outcomes,
+      onDestinationResult,
+    };
+    await runOnce(input);
+    expect(await readdir(dir)).toHaveLength(1);
+    await runOnce(input);
+    expect(await readdir(dir)).toHaveLength(2);
+    expect(onDestinationResult.mock.calls.filter(([result]) => result.id === "cloud")).toEqual(
+      Array(2).fill([
+        {
+          id: "cloud",
+          stored: false,
+          uploadErrorCode: "cloud.unavailable",
+          pruneErrorCode: null,
+        },
+      ]),
+    );
+    expect(outcomes.failed.has("cloud")).toBe(true);
+  });
+
+  it("keeps the original interval after restart with Cloud and a local destination", async () => {
+    const storedAt = Date.parse(FIXED_MANIFEST.createdAt);
+    const interval = 86_400_000;
+    const due = new Date(storedAt + interval);
+    let now = new Date(storedAt + 3_600_000);
+    const local = new FakeBackend("local");
+    const store = vi.fn(async () => ({ stored: true, errorCode: null }));
+    const schedule = createBackupSchedule({
+      ...deps([local]),
+      schedule: { kind: "interval", ms: interval },
+      jitterSeed: BACKUP_NODE_ID,
+      readClock: async () => cloudClock,
+      cloud: {
+        target: {
+          id: "cloud",
+          roomNeeded: async () => 0,
+          store,
+          readCaptureState: async () => ({ storedAt, pending: false }),
+        },
+        readClock: async () => cloudClock,
+      },
+      now: () => now,
+    });
+    const signal = new AbortController().signal;
+    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: due });
+    expect(local.objects.size).toBe(0);
+    expect(store).not.toHaveBeenCalled();
+    now = due;
+    expect(await schedule.pass(due, signal)).toEqual({
+      nextDueAt: new Date(due.getTime() + interval),
+    });
+    expect(local.objects.size).toBe(1);
+    expect(store).toHaveBeenCalledTimes(1);
+  });
+
+  it("stores a Cloud-only backup without encrypting under the box key", async () => {
+    const store = vi.fn<CloudArchiveTarget["store"]>(async () => {
+      expect((await readdir(staging)).filter((name) => name.startsWith("backup-encrypt-"))).toEqual(
+        [],
+      );
+      return { stored: true, errorCode: null };
+    });
+    await runOnce({
+      ...deps([]),
+      cloud: {
+        target: { id: "cloud", roomNeeded: async () => 0, store },
+        readClock: async () => cloudClock,
+      },
+    });
+    expect(store).toHaveBeenCalledTimes(1);
   });
 
   it("prunes each backend to retain", async () => {

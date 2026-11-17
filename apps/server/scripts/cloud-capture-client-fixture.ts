@@ -1,12 +1,18 @@
-import { CLOUD_CONNECTION_FILE, VENUE_DIR_NAME, TRADING_ENV_FILE } from "@waitron/store";
+import {
+  BACKUP_STAGING_DIR,
+  CLOUD_CONNECTION_FILE,
+  VENUE_DIR_NAME,
+  TRADING_ENV_FILE,
+} from "@waitron/store";
 import assert from "node:assert/strict";
 import { readFile, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createCloudConnection } from "../src/cloud-client.js";
-import { openVenueDatabase, readCloudVenueId } from "@waitron/db";
-import { createCloudSnapshotWorker } from "../src/cloud-snapshot-worker.js";
-import { createCloudSnapshotArchive } from "../src/cloud-snapshot-archive.js";
+import { openVenueDatabase, readCloudVenueId, withTransaction } from "@waitron/db";
+import { createCloudArchiveTarget } from "../src/cloud-archive-target.js";
+import { createBackupSchedule } from "../src/backup-sweep.js";
+import { resolveVenueClock } from "../src/report-api.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
 import type { CloudCapturePoint } from "../src/cloud-backup.js";
@@ -64,45 +70,73 @@ else if (request.command === "schedule") {
     await client.refresh();
     const identity = parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"));
     let created = 0;
-    let point: CloudCapturePoint | undefined;
-    const scheduler = createCloudSnapshotWorker({
+    const points: CloudCapturePoint[] = [];
+    const target = createCloudArchiveTarget({
       stateDir,
       sourceNodeId: identity.WAITRON_NODE_ID!,
       connection: {
         ...client,
         async publishCapture(...args) {
-          point = await client.publishCapture(...args);
+          const point = await client.publishCapture(...args);
+          points.push(point);
           return point;
         },
       },
       isPrimary: () => true,
-      readClock: async () => ({
-        timeZone: "Europe/Madrid",
-        dayCutover: "04:00",
-        cutoverChanges: [],
-      }),
-      createArchive: async (grant, at, signal) => {
-        created++;
-        return createCloudSnapshotArchive(
-          {
-            db: store.venue,
-            node: store.node,
-            modules: ALL_MODULES,
-            environment: "preproduction",
-            stateDir,
-          },
-          grant.recoveryKey,
-          at,
-          signal,
-        );
-      },
       upload: async (grant, file, metadata, signal) => {
         await uploadCloudCaptureFile(grant, file, metadata, { ca: request.ca, signal });
         if (request.crashAfterUpload) process.exit(17);
       },
     });
-    await scheduler.tick(new AbortController().signal);
-    result = { created, point };
+    const now = new Date();
+    const signal = new AbortController().signal;
+    const readClock = () =>
+      withTransaction(store.venue, (tx) => resolveVenueClock(tx, identity.WAITRON_NODE_ID!));
+    let uploadErrorCode: string | null | undefined;
+    const schedule = createBackupSchedule({
+      nodeId: identity.WAITRON_NODE_ID!,
+      backends: [],
+      cloud: {
+        target: {
+          ...target,
+          store: (input) =>
+            target.store({
+              ...input,
+              entries: () => {
+                created++;
+                return input.entries();
+              },
+            }),
+        },
+        readClock,
+      },
+      db: store.venue,
+      node: store.node,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      resolvers: {},
+      stateDir,
+      stagingDir: join(stateDir, BACKUP_STAGING_DIR),
+      recoveryKey: "",
+      schedule: { kind: "interval", ms: 86_400_000 },
+      retain: 1,
+      retainDays: 1,
+      jitterSeed: identity.WAITRON_NODE_ID!,
+      readClock,
+      signal,
+      destinationTimeoutMs: 15 * 60_000,
+      onDestinationResult: (result) => {
+        uploadErrorCode = result.uploadErrorCode;
+      },
+      archive: (path) => store.venue.archiveTo(path),
+      log: (_level, event) => assert.notEqual(event, "backup.failed"),
+      now: () => now,
+    });
+    await schedule.pass(now, signal);
+    assert.equal(uploadErrorCode ?? null, null);
+    const afterDue = created;
+    await schedule.pass(now, signal);
+    result = { created: afterDue, idleCreated: created - afterDue, points };
   } finally {
     await store.close();
   }
