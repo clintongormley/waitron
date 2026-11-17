@@ -119,6 +119,15 @@ describe("archiveInWorker", () => {
   });
 
   it("waits for a running copy, then discards it on abort before answering", async () => {
+    const { Worker } = await vi.importActual<typeof threads>("node:worker_threads");
+    let exitCode: number | undefined;
+    vi.mocked(threads.Worker).mockImplementationOnce(function (...args) {
+      const worker = new Worker(...args);
+      worker.once("exit", (code) => {
+        exitCode = code;
+      });
+      return worker;
+    });
     const { source, target } = fixture(true);
     const controller = new AbortController();
     const copy = archiveInWorker(source, target, controller.signal);
@@ -126,6 +135,7 @@ describe("archiveInWorker", () => {
     await untilWriting(target);
     controller.abort();
     await refused;
+    expect(exitCode).toBe(0);
     expect(existsSync(target)).toBe(false);
     expect(existsSync(`${target}.partial`)).toBe(false);
   });
