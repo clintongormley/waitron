@@ -394,7 +394,7 @@ describe("WorkingOrderStore", () => {
     expect(store.lines).toEqual([]);
   });
 
-  it("adds an each line and previews the total via priceBasket", () => {
+  it("adds an each line and previews the basket total from its line total", () => {
     const s = new WorkingOrderStore();
     s.addProduct(coffee, "2");
     expect(s.total).toBe("3.00");

@@ -787,11 +787,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     deleted (#621). Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still
     pending review, as `vegan`/`vegetarian` do?
     [Detail](backlog/till.md#resets-any-leftover-drillactive-tab-on-login-still-passes-with-logins-own-clearing-line-deleted)
-  - Test titles repeat claims the branch corrected (#618, `apps/till` `src/api` + `src/state` +
-    `src/i18n`). [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-618)
-  - Till widget points from #616 that were read but not run (`apps/till/src/widgets`). A courseless
-    section the server held shows its lines greyed with no fire button (`#fireAction` in
-    `station-queue.ts`, from #131).
+  - Till widget points from #616 that were read but not run (`apps/till/src/widgets`).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
   - The till always mounts the counter screen `embedded` (#614).
     [Detail](backlog/till.md#the-till-always-mounts-the-counter-screen-embedded)
