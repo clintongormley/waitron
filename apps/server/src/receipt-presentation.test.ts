@@ -446,26 +446,22 @@ describe("receipt charge wording", () => {
   it("does not call a mixed cash and simulator payment uncharged", async () => {
     const f = await fixture("absent", paid.db);
     const order = await seedWorkingOrder(paid.db);
-    await paid.db
-      .insert(payments)
-      .values({
-        workingOrderId: order.id,
-        source: "readiness_test",
-        saleId: f.sale.id,
-        provider: "simulator",
-        state: "captured",
-        paymentRef: randomUUID(),
-        amount: 100,
-      });
-    await paid.db
-      .insert(tenders)
-      .values({
-        saleId: f.sale.id,
-        method: "cash",
-        amount: 40,
-        cashTendered: 40,
-        settledAt: "2026-11-17T17:36:29.000Z",
-      });
+    await paid.db.insert(payments).values({
+      workingOrderId: order.id,
+      source: "readiness_test",
+      saleId: f.sale.id,
+      provider: "simulator",
+      state: "captured",
+      paymentRef: randomUUID(),
+      amount: 100,
+    });
+    await paid.db.insert(tenders).values({
+      saleId: f.sale.id,
+      method: "cash",
+      amount: 40,
+      cashTendered: 40,
+      settledAt: "2026-11-17T17:36:29.000Z",
+    });
     expect((await f.read("es-ES", true)).simulatedCardPayment).toBe(false);
   });
 });
