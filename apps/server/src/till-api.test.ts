@@ -410,6 +410,65 @@ async function seedDeviceProfile(
   return rows[0]!.id;
 }
 
+describe("chosen-device sessions", () => {
+  it("keeps two chosen devices signed in independently and refuses a borrowed session", async () => {
+    const app = new Hono();
+    const auth = { ...deps(suite.db), devMode: true, deviceChooserEnabled: true };
+    mountTillApi(app, auth, collect([]));
+    app.get("/chooser-person", (c) =>
+      run(c, collect([]), async () => c.json(await requireSession(auth, c))),
+    );
+    const a = await seedSessionDevice(suite.db);
+    const b = await seedSessionDevice(suite.db);
+    const login = async (device: string, person: string, pin: string) => {
+      const response = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", [DEV_DEVICE_HEADER]: device },
+        body: JSON.stringify({ personId: person, pin }),
+      });
+      expect(response.status).toBe(200);
+      const cookie = response.headers.get("set-cookie")!;
+      expect(cookie).toContain(`${SESSION_COOKIE}_${device}=`);
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/SameSite=Strict/i);
+      return cookie.split(";")[0]!;
+    };
+    const cookieA = await login(a, anna.id, "5555");
+    const cookieB = await login(b, abel.id, "1111");
+    const browserCookies = `${cookieA}; ${cookieB}; ${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const headers = (device: string, person: string, cookie = browserCookies) => ({
+      cookie,
+      [DEV_DEVICE_HEADER]: device,
+      [PERSON_HEADER]: person,
+    });
+    for (const [device, person] of [
+      [a, anna.id],
+      [b, abel.id],
+    ]) {
+      const response = await app.request("/chooser-person", { headers: headers(device!, person!) });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ personId: person, deviceId: device });
+    }
+    const tokenA = cookieA.slice(cookieA.indexOf("=") + 1);
+    const borrowed = await app.request("/chooser-person", {
+      headers: headers(b, anna.id, `${SESSION_COOKIE}_${b}=${tokenA}`),
+    });
+    expect(borrowed.status).toBe(401);
+    expect(await borrowed.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    const signedOut = await app.request("/api/session", {
+      method: "DELETE",
+      headers: headers(a, anna.id),
+    });
+    expect(signedOut.status).toBe(200);
+    expect((await app.request("/chooser-person", { headers: headers(a, anna.id) })).status).toBe(
+      401,
+    );
+    expect((await app.request("/chooser-person", { headers: headers(b, abel.id) })).status).toBe(
+      200,
+    );
+  });
+});
+
 describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   it("POST opens a session and sets an httpOnly SameSite=Strict cookie; DELETE ends it", async () => {
     const app = new Hono();

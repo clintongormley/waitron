@@ -522,6 +522,7 @@ export class TillShell extends LitElement {
    * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
   @property({ type: Boolean }) canSwitchProfile = false;
+  @property({ type: Boolean }) canChooseDevice = false;
 
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
 
@@ -1454,6 +1455,7 @@ export class TillShell extends LitElement {
           this.#barless()
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
+                  ${this.canChooseDevice ? html`<wt-button data-switch-device variant="secondary" @click=${() => this.#emit("switch-device")}>${t("device.switch")}</wt-button>` : nothing}
                   ${this.#helpSwitch()}${this.#aboutCorner()}${themeChooser()}${this.#chooser()}
                 </div>`
               : nothing

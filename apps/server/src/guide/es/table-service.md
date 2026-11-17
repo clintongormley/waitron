@@ -927,3 +927,13 @@ como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo*
 
 Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página
 **Ventas y recaudación** del panel.
+
+## Practicar con distintos dispositivos en Demostración {#demo-devices}
+
+Abre la caja en una pestaña nueva del navegador para elegir un dispositivo. Si el navegador
+ya está emparejado, sigue usando ese dispositivo; pulsa **Elegir otro dispositivo** en la
+pantalla de acceso para cambiarlo. Una pantalla de cocina ofrece la misma opción junto al idioma.
+
+Elige dispositivos distintos en cada pestaña para iniciar y cerrar sesión por separado. Las
+pestañas que eligen el mismo dispositivo comparten su sesión. Usa **Emparejar otro dispositivo**
+si necesitas añadir uno.

@@ -1,7 +1,6 @@
 import type { Hono } from "hono";
-import type { Database } from "@waitron/db";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { requireDeviceProof } from "./device-session.js";
+import { requireDeviceProof, type DeviceAuthDeps } from "./device-session.js";
 import { checkDeviceStillProven } from "./till-session.js";
 import { liveStreamResponse, parseInterests } from "./live-stream.js";
 import type { LiveEvents } from "./live-api.js";
@@ -14,7 +13,7 @@ const run = createErrorBoundary(
 
 export function mountDeviceLiveApi(
   app: Hono,
-  deps: { db: Database; bus: LiveEvents; resourceTypes: readonly string[]; devMode?: boolean },
+  deps: DeviceAuthDeps & { bus: LiveEvents; resourceTypes: readonly string[] },
   log: Logger,
 ): void {
   const allowed = new Set(deps.resourceTypes);

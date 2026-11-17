@@ -247,7 +247,7 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
       loginDefault: "en",
     }),
     getTill: vi.fn().mockResolvedValue(till(formFactor)),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "device-1",
       name: "Device 1",

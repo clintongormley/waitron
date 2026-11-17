@@ -864,3 +864,12 @@ profile, under **Device profiles** on the dashboard.
 
 Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
 dashboard's **Sales & takings** page.
+
+## Practise with different devices in Demo {#demo-devices}
+
+Open the till in a new browser tab to choose a device. A browser already paired with a device
+starts as that device; choose **Choose another device** on the sign-in screen to change it.
+A kitchen display offers the same choice beside its language control.
+
+Choose different devices in different tabs to sign in and sign out independently. Tabs that
+choose the same device share its sign-in. Use **Pair another device** if you need to add one.

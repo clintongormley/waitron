@@ -558,7 +558,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     // `getDevDevices` rejects by default, so the default boot is not the dev chooser; `getDeviceIdentity`
     // resolves an enrolled `till`, so the default boot lands on the login (lock) screen.
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
       name: "Till 1",
@@ -2278,6 +2278,7 @@ describe("till-app", () => {
   // by the "Device front door" suite below.
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
+      getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
       // The enrolled display has no operator and has kept no language, so boot applies the venue language.
       getTill: vi.fn().mockResolvedValue({
         ...till,
@@ -2317,6 +2318,9 @@ describe("till-app", () => {
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
     expect(currentLocale()).toBe("en-GB");
+    const shell = el.shadowRoot!.querySelector("till-shell")!;
+    await shell.updateComplete;
+    expect(shell.shadowRoot!.querySelector("[data-switch-device]")).not.toBeNull();
   });
 
   it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and for a till starts the PIN-screen poll, then a separate signed-in poll", async () => {
@@ -3473,11 +3477,9 @@ describe("till-app", () => {
     expect(counter(el)).not.toBeNull();
   });
 
-  it("renders the dev CHOOSER when in dev mode and this tab has no adopted device", async () => {
-    // getDevDevices RESOLVES (the dev-mode signal) and this tab has no sessionStorage device → the chooser,
-    // ahead of any identity probe (the cookie identity is not consulted on this path).
+  it("shows the device list for an unpaired development tab", async () => {
     const list: DevDeviceList = { devices: [] };
-    const getDeviceIdentity = vi.fn();
+    const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
     const { el } = await mountApp({
       getDevDevices: vi.fn().mockResolvedValue(list),
       getDeviceIdentity,
@@ -3486,7 +3488,7 @@ describe("till-app", () => {
     expect(chooser(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
-    expect(getDeviceIdentity).not.toHaveBeenCalled();
+    expect(getDeviceIdentity).toHaveBeenCalledOnce();
     expect(chooser(el)!.list).toEqual(list);
   });
 
@@ -3494,11 +3496,29 @@ describe("till-app", () => {
     history.replaceState(null, "", "/");
     const { el } = await mountApp({
       getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
+      getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     });
     await flush(el);
     expect(chooser(el)).not.toBeNull();
     expect(location.pathname).toBe("/");
   });
+
+  it.each(["demo", "prepare"] as const)(
+    "keeps a paired %s device and offers an explicit chooser",
+    async (onboardingIntent) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
+        getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
+      });
+      await flush(el);
+      expect(chooser(el)).toBeNull();
+      expect(lock(el)?.deviceId).toBe("till-dev");
+      expect(lock(el)?.shadowRoot!.querySelector("[data-switch-device]")).not.toBeNull();
+      emit(lock(el)!, "switch-device");
+      await flush(el);
+      expect(chooser(el)).not.toBeNull();
+    },
+  );
 
   it("skips the chooser when this tab has already adopted a device (probes identity with its header)", async () => {
     // A dev tab that adopted a device (sessionStorage id set) boots AS that device — its identity probe
@@ -3542,7 +3562,7 @@ describe("till-app", () => {
     }
   });
 
-  it("forgets a stale dev device and shows the join screen when the device list then fails to load", async () => {
+  it("reports a failed device list after forgetting a stale selected device", async () => {
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
     try {
       const { el } = await mountApp({
@@ -3552,8 +3572,8 @@ describe("till-app", () => {
       await flush(el);
       expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
       expect(chooser(el)).toBeNull();
-      expect(enrolScreen(el)).not.toBeNull();
-      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
+      expect(enrolScreen(el)).toBeNull();
+      expect(el.shadowRoot!.textContent).toContain(t("boot.error"));
     } finally {
       sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
     }
@@ -3563,7 +3583,7 @@ describe("till-app", () => {
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
     try {
       const { el } = await mountApp({
-        getDevDevices: vi.fn().mockRejectedValue({ code: "server.not_found" }),
+        getDevDevices: vi.fn().mockRejectedValue({ code: "server.not_found", status: 404 }),
         getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       await flush(el);
@@ -3612,7 +3632,7 @@ describe("till-app", () => {
       });
       await flush(el);
       expect(lock(el)).not.toBeNull();
-      expect(lock(el)!.devMode).toBe(true);
+      expect(lock(el)!.canChooseDevice).toBe(true);
       emit(lock(el)!, "switch-device");
       await flush(el);
       expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
@@ -3626,7 +3646,7 @@ describe("till-app", () => {
     const { el } = await mountApp(); // default enrolled till, no tab device, not dev
     await flush(el);
     expect(lock(el)).not.toBeNull();
-    expect(lock(el)!.devMode).toBe(false);
+    expect(lock(el)!.canChooseDevice).toBe(false);
   });
 
   it("a fresh browser enrols through the front door and re-boots into the login shell", async () => {

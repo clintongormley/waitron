@@ -2740,3 +2740,22 @@ describe("the notices slot", () => {
     expect(child.assignedSlot).toBeNull();
   });
 });
+
+it.each([false, true])(
+  "offers device choice on a paired kitchen display only when available=%s",
+  async (canChooseDevice) => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      kiosk: true,
+      canChooseDevice,
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-switch-device]");
+    expect(button !== null).toBe(canChooseDevice);
+    if (canChooseDevice) {
+      const chosen = vi.fn();
+      el.addEventListener("switch-device", chosen);
+      await userEvent.click(button!);
+      expect(chosen).toHaveBeenCalledOnce();
+    }
+  },
+);

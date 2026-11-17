@@ -51,7 +51,7 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
       const empty = async () => [];
       app.api = {
         getDevDevices: async () => {
-          throw { code: "server.internal" };
+          throw { code: "server.internal", status: 404 };
         },
         getDeviceIdentity: async () => ({
           deviceId: "native-reload-till",

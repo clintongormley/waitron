@@ -422,7 +422,14 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
   it("kiosk mode with its language chooser has no violations", async () => {
     const { host } = await mountWidget<TillShell>(
       "till-shell",
-      { formFactor: "till", activeScreen: "counter", affordances, kiosk: true, loadLocales },
+      {
+        formFactor: "till",
+        activeScreen: "counter",
+        affordances,
+        kiosk: true,
+        loadLocales,
+        canChooseDevice: true,
+      },
       theme,
     );
     await expectNoA11yViolations(host);

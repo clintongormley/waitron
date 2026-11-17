@@ -1937,10 +1937,6 @@ export interface DeviceStationScreen {
   )[];
 }
 
-/**
- * The dev-only `GET /api/dev/devices` list: this venue's ACTIVE enrolled devices, each with its derived
- * `kind`.
- */
 export interface DevDevice {
   id: string;
   kind: string;
@@ -3806,7 +3802,7 @@ export class TillApi {
     await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
   }
 
-  /** Dev chooser: this venue's ACTIVE enrolled devices (dev-only route, 404 outside devMode). */
+  /** Available in development and Demo venues; other venues answer 404. */
   getDevDevices(): Promise<DevDeviceList> {
     return this.#request<DevDeviceList>("/api/dev/devices", "GET");
   }

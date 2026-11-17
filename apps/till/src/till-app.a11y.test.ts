@@ -125,7 +125,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
       name: "Till 1",

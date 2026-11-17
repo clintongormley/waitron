@@ -226,6 +226,7 @@ import {
   setSessionCookie,
 } from "./till-session.js";
 import {
+  DEV_DEVICE_HEADER,
   assertDeviceCapability,
   assertProfileAction,
   assertDeviceStillProven,
@@ -324,8 +325,8 @@ export interface TillApiDeps {
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
   providers?: readonly CardProviderContribution[];
-  /** Gates the per-tab device override header (`x-waitron-dev-device`); unset leaves it inert. */
   devMode?: boolean;
+  deviceChooserEnabled?: boolean;
   /** The venue's default UI locale, distinct from its receipt language. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the till. */
@@ -1301,6 +1302,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         backend: deps.backend,
         clock: deps.clock,
         devMode: deps.devMode === true,
+        deviceChooserEnabled: deps.deviceChooserEnabled,
         attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
         boxClock: deps.boxClock,
       },
@@ -1312,6 +1314,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       {
         db: deps.db,
         devMode: deps.devMode === true,
+        deviceChooserEnabled: deps.deviceChooserEnabled,
         cfg: deps.cfg,
         now: () => deps.clock.now().instant,
       },
@@ -1323,6 +1326,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       {
         db: deps.db,
         devMode: deps.devMode === true,
+        deviceChooserEnabled: deps.deviceChooserEnabled,
         cfg: deps.cfg,
         now: () => deps.clock.now().instant,
         attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
@@ -1443,10 +1447,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const carriesPersonHeader = c.req.header(PERSON_HEADER) !== undefined;
+      const chosen =
+        c.req.header(DEV_DEVICE_HEADER) === undefined
+          ? null
+          : await requireDeviceProof(deps, c, { passive: true });
       const token = readSessionToken(c);
       if (token !== null)
         await withTransaction(deps.db, async (tx) => {
-          const holder = await openSessionPerson(tx, token);
+          const holder = await openSessionPerson(tx, token, chosen?.device.deviceId);
           if (holder === null) return;
           const refusal = personRefusal(c, holder);
           if (refusal !== null) throw refusal;
@@ -1479,10 +1487,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
       // Resolve the device before this turn: a due sighting takes a turn of its own.
-      const device =
-        c.req.query("everyone") === "true"
-          ? null
-          : await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = c.req.query("everyone") === "true" ? null : await tryReadDevice(deps, c);
       const staff = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         return device === null
@@ -1497,7 +1502,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/till", (c) =>
     run(c, log, async () => {
       // Resolve the device before this turn: a due sighting takes a turn of its own.
-      const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await tryReadDevice(deps, c);
       const held = await readNodeMembership(deps.db);
       const setup = completeTillSetup(
         await deps.db.withWriteLock(() => readTillSetup(deps.db, deps, device)),

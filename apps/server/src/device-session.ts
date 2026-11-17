@@ -26,11 +26,7 @@ export function lastDeviceSighting(
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
 
-/**
- * DEV-ONLY: in `devMode`, a request carrying this header is authenticated AS the named device
- * WITHOUT a token, so each tab of one browser can adopt a different device; a sign-in still belongs
- * to the whole browser. NEVER read unless `deps.devMode` is true.
- */
+/** A token-free device choice, accepted only when the server enables its chooser. */
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 /** The device's own clock, in milliseconds since the epoch, sent with its equipment read. */
 export const DEVICE_CLOCK_HEADER = "x-waitron-device-clock";
@@ -140,9 +136,15 @@ export function toDeviceBinding(
   };
 }
 
+export interface DeviceAuthDeps {
+  db: Database;
+  devMode?: boolean;
+  deviceChooserEnabled?: boolean;
+}
+
 /** {@link readDeviceProof}'s binding alone. */
 export async function tryReadDevice(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
 ): Promise<DeviceBinding | null> {
   return (await readDeviceProof(deps, c))?.device ?? null;
@@ -150,7 +152,7 @@ export async function tryReadDevice(
 
 /**
  * What authenticating a request's device proved: its binding, and the stored token hash the cookie
- * verified against — `null` for the dev header, which carries no token.
+ * verified against — `null` for the chooser header, which carries no token.
  */
 export interface DeviceProof {
   device: DeviceBinding;
@@ -165,19 +167,17 @@ export interface DeviceProof {
  * {@link signInWithToken}'s, which {@link readDevDevice} repeats for the dev header.
  */
 async function readDeviceProof(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   options: { passive?: boolean } = {},
 ): Promise<DeviceProof | null> {
   // The dev header WINS over the cookie and does not fall back to it: an override naming a bad
   // device is a clean miss, not a silent switch to the cookie's identity.
-  if (deps.devMode === true) {
-    const override = c.req.header(DEV_DEVICE_HEADER);
-    if (override !== undefined) {
-      if (!isUuid(override)) return null;
-      const device = await readDevDevice(deps.db, override, options);
-      return device === null ? null : { device, tokenHash: null };
-    }
+  const override = c.req.header(DEV_DEVICE_HEADER);
+  if (override !== undefined) {
+    if (!(deps.deviceChooserEnabled ?? deps.devMode === true) || !isUuid(override)) return null;
+    const device = await readDevDevice(deps.db, override, options);
+    return device === null ? null : { device, tokenHash: null };
   }
 
   const parsed = parseDeviceCookie(readDeviceCookie(c));
@@ -279,16 +279,13 @@ export async function recordSighting(
 
 /** Throwing wrapper over {@link requireDeviceProof}: every miss becomes the SAME
  * `device.unauthorized`. */
-export async function requireDevice(
-  deps: { db: Database; devMode?: boolean },
-  c: Context,
-): Promise<DeviceBinding> {
+export async function requireDevice(deps: DeviceAuthDeps, c: Context): Promise<DeviceBinding> {
   return (await requireDeviceProof(deps, c)).device;
 }
 
 /** {@link requireDevice}, keeping the proof for {@link assertDeviceStillProven}. */
 export async function requireDeviceProof(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   options: { passive?: boolean } = {},
 ): Promise<DeviceProof> {
@@ -344,7 +341,7 @@ export function assertProfileAction(
  * read here.
  */
 export async function assertDeviceCapability(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   capability: ProfileAction,
   action: string,

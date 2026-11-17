@@ -135,6 +135,7 @@ export interface OrdersApiDeps {
   cfg: { nodeId: string };
   tradingContext: TradingContext;
   devMode?: boolean;
+  deviceChooserEnabled?: boolean;
   /** Whether a mail transport is set up to email invoices. */
   invoiceEmailAvailable: () => Promise<boolean>;
 }

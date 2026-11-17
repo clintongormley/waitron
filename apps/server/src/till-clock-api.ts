@@ -28,6 +28,7 @@ import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 export interface TillClockApiDeps {
   db: Database;
   devMode?: boolean;
+  deviceChooserEnabled?: boolean;
   cfg: { nodeId: string };
   now: () => Date;
 }

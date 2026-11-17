@@ -1,3 +1,5 @@
+import { useTestProducer } from "./testing/test-producer.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -747,6 +749,50 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
       },
       async () => {
         nobody = (await sessionHolding(suite.db, [])).cookie;
+      },
+    );
+  });
+});
+
+describe("the booted device chooser", () => {
+  useTestProducer();
+  it.each([
+    ["demo", "preproduction", true],
+    ["prepare", "preproduction", false],
+    ["live", "production", false],
+    ["prepare", "dev", true],
+    ["live", "dev", true],
+  ] as const)("booted %s on %s exposes chooser=%s", async (intent, environment, allowed) => {
+    let deviceId = "";
+    let cookie = "";
+    await withServer(
+      {
+        WAITRON_ENV: environment,
+        WAITRON_ONBOARDING_INTENT: intent,
+        WAITRON_MANAGEMENT_RP_ID: "till.example.test",
+      },
+      async ({ app }) => {
+        expect((await app.request("/api/dev/devices")).status).toBe(allowed ? 200 : 404);
+        const response = await app.request("/api/device/me", {
+          headers: { [DEV_DEVICE_HEADER]: deviceId, ...(!allowed ? { cookie } : {}) },
+        });
+        expect(response.status).toBe(allowed ? 200 : 401);
+        expect(await response.json()).toMatchObject(
+          allowed ? { deviceId } : { error: { code: "device.unauthorized" } },
+        );
+      },
+      async (venue) => {
+        const [profile] = await seedDeviceProfiles(suite.db, {
+          name: "Chooser till",
+          formFactor: "till",
+          capabilities: [],
+        });
+        const enrolled = await enrolDeviceForTest(suite.db, venue.cfg, {
+          name: "Chooser till",
+          profileId: profile!.id,
+        });
+        deviceId = enrolled.deviceId;
+        cookie = `${DEVICE_COOKIE}=${deviceId}.${enrolled.token}`;
       },
     );
   });

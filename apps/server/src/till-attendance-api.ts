@@ -46,6 +46,7 @@ export interface TillAttendanceApiDeps {
   exporter?: ModuleTimeRecordExport;
   db: Database;
   devMode?: boolean;
+  deviceChooserEnabled?: boolean;
   cfg: { nodeId: string };
   now: () => Date;
   attemptsFor: (deviceId: string) => PinAttempts;

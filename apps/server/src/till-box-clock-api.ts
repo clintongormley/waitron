@@ -107,6 +107,7 @@ export function mountTillBoxClockApi(
     backend: FiscalBackend;
     clock: TrustedClock;
     devMode: boolean;
+    deviceChooserEnabled?: boolean;
     attemptsFor: (deviceId: string) => PinAttempts;
     boxClock: TillBoxClockDeps;
   },

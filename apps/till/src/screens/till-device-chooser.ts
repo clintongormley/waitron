@@ -4,27 +4,11 @@ import { trackDialog } from "../widgets/track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { setDevDeviceId } from "../api/dev-device.js";
+import { t } from "../i18n/t.js";
 import { deviceKindLabel } from "../i18n/device-label.js";
 import "./till-enrol-screen.js";
 import type { DevDeviceList, TillApi } from "../api/client.js";
 
-/**
- * The dev-only device front door, shown when the host runs in dev mode, its device list loads, and
- * this tab has adopted no device: none yet, or the one it adopted was refused `device.unauthorized`
- * and has been forgotten. The adopted id lives in THIS TAB's `sessionStorage` ({@link setDevDeviceId})
- * and rides every request as the `x-waitron-dev-device` header the server trusts in dev mode, so
- * each tab can adopt a different device. A sign-in is a cookie the whole browser shares, and a sale
- * records the signed-in session's device, so two devices signed in at once need windows that share
- * no cookies, such as a private window.
- *
- * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that
- * knock with the venue's default `till` profile, so it can only mint a `till`, and the name of a
- * device still active is refused with `device.name_taken`. Acceptable for a dev tool: `dev-setup`
- * also seeds a phone-portrait handheld and a kitchen display, so the chooser lists those without
- * minting them.
- *
- * Its own chrome is DELIBERATELY plain English literals, not `t()` keys: no venue ever sees this tool.
- */
 @customElement("till-device-chooser")
 export class TillDeviceChooser extends LitElement {
   static override styles = [
@@ -105,13 +89,11 @@ export class TillDeviceChooser extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) => location.assign(url);
 
   @property({ attribute: false }) list?: DevDeviceList;
-  /** It only knows the list failed to load, not why, so the hint's copy does not assert the cause. */
   @state() private loadFailed = false;
   @state() private settingUp = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // The app hands a pre-fetched list (it read one to detect dev mode); only an isolated mount fetches.
     if (this.list === undefined) void this.#load();
   }
 
@@ -125,23 +107,24 @@ export class TillDeviceChooser extends LitElement {
   }
 
   #use(id: string): void {
-    setDevDeviceId(id);
-    this.navigate("/till/");
+    try {
+      setDevDeviceId(id);
+      this.navigate("/till/");
+    } catch {
+      this.loadFailed = true;
+    }
   }
 
-  /** Adopts the fresh device for THIS tab (its id, not the browser cookie). The `enrolled` event stops
-   * here: a dev-tab join is not the production front-door re-boot. */
   #onEnrolled(event: Event): void {
     event.stopPropagation();
     const { deviceId } = (event as CustomEvent<{ deviceId: string }>).detail;
-    setDevDeviceId(deviceId);
-    this.navigate("/till/");
+    this.#use(deviceId);
   }
 
   override render(): TemplateResult {
     return html`
       <div class="screen">
-        <h1 class="title">Choose a device</h1>
+        <h1 class="title">${t("device.chooser.title")}</h1>
         ${this.#body()}
       </div>
     `;
@@ -149,23 +132,20 @@ export class TillDeviceChooser extends LitElement {
 
   #body(): TemplateResult {
     if (this.loadFailed) {
-      return html`<p class="hint" data-load-failed>
-        Couldn't load devices. If this host isn't running in dev mode, start it with
-        <code>WAITRON_ENV=dev</code> and reload.
-      </p>`;
+      return html`<p class="hint" data-load-failed>${t("boot.error")}</p>`;
     }
     if (this.list === undefined) {
-      return html`<p class="hint" role="status">Loading…</p>`;
+      return html`<p class="hint" role="status">${t("login.loading")}</p>`;
     }
     return html`${this.#devicesSection(this.list)} ${this.#setupSection()}`;
   }
 
   #devicesSection(list: DevDeviceList): TemplateResult {
     return html`<section class="devices">
-      <h2>Select a device</h2>
+      <h2>${t("device.chooser.select")}</h2>
       ${
         list.devices.length === 0
-          ? html`<p class="hint">No devices enrolled yet — set one up below.</p>`
+          ? html`<p class="hint">${t("device.chooser.empty")}</p>`
           : html`<ul>
               ${list.devices.map(
                 (device) =>
@@ -179,7 +159,7 @@ export class TillDeviceChooser extends LitElement {
                       variant="primary"
                       @click=${() => this.#use(device.id)}
                     >
-                      Use this device
+                      ${t("device.chooser.use")}
                     </wt-button>
                   </li>`,
               )}
@@ -192,7 +172,7 @@ export class TillDeviceChooser extends LitElement {
     return html`
       <section class="setup">
         <wt-button data-setup-new variant="secondary" @click=${() => (this.settingUp = true)}>
-          Set up a new device
+          ${t("device.chooser.pair")}
         </wt-button>
       </section>
       ${
@@ -200,7 +180,7 @@ export class TillDeviceChooser extends LitElement {
           ? html`<wt-dialog
               ${trackDialog()}
               .open=${true}
-              aria-label="Set up a new device"
+              aria-label=${t("device.chooser.pair")}
               @wt-close=${() => (this.settingUp = false)}
             >
               <till-enrol-screen
@@ -214,7 +194,7 @@ export class TillDeviceChooser extends LitElement {
                   variant="secondary"
                   @click=${() => (this.settingUp = false)}
                 >
-                  Cancel
+                  ${t("action.cancel")}
                 </wt-button>
               </till-enrol-screen>
             </wt-dialog>`
