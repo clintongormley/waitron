@@ -518,6 +518,23 @@ describe("A803 portion grouping: a card's rows", () => {
     expect(rows(card).flat()).toEqual([["a"], ["b"]]);
   });
 
+  it("A803 portion grouping: an unsent portion asked for shows apart from one still held; two held group", () => {
+    const held = { firedAt: null, phase: "held" as const, requestedAt: null };
+    const requested = { firedAt: null, phase: "requested" as const, requestedAt: at("19:59") };
+    const card = one(
+      bill("o-1", [
+        portion("a", held),
+        portion("b", requested),
+        portion("c", held),
+        portion("d", requested),
+      ]),
+    );
+    expect(rows(card).flat()).toEqual([
+      ["a", "c"],
+      ["b", "d"],
+    ]);
+  });
+
   it("A803 portion grouping: a portion sent after its period without asking shows apart from an agreed one", () => {
     const card = one(
       bill("o-1", [

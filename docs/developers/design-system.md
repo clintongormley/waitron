@@ -6364,7 +6364,7 @@ paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), a
 order detail (`readBillLines`, `apps/server/src/orders-list.ts`). Two rows stay apart when anything
 the row draws or acts on
 differs: the dish, its names and answers, note, course, release group, station, preparation state,
-served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
+held or asked for, served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
 screen shows for the line, such as an allergy or paid mark. Only a whole portion groups, a line of
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.
@@ -6530,7 +6530,8 @@ with no party and no table (`isCounterOrder`), the allergy marker, each distinct
 delivery table kept, else its label;
 `cardPlaces`, `kitchen-cards.ts`; the station read's `tableShortNames`), the group's name, the course when every dish shares one, "Held, not released" when the group
 is held or no dish on the card is fired ("Waiting for the pass" instead when no dish is fired and
-every dish has been requested), and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
+every dish has been requested; nothing when no dish is fired and the card holds both a requested
+dish and a held one), and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
 the heading can move something), each bill's station note and printing problem, the dishes (course
 sub-heads only when the card has more than one course), and each bill's "Also on this order",
 Collect and Reprint where they apply, each naming its bill's number when the card merges bills (`#card`, `apps/till/src/widgets/station-queue.ts`). Its age band
@@ -6555,8 +6556,9 @@ fired Waiting and Preparing dishes by quantity, a dish whose unit shows counting
 with such a dish whose band is overdue or forgotten; it shows while either count is above nothing
 (`thousandthsToMake`, `lateCards`, `kitchen-cards.ts`; `#header`, `station-queue.ts`). A dish at its
 card's column shows no state word, a dish further on shows "Preparing" or "Ready", and a held dish on
-a card with a fired dish shows "Held, not released", or "Waiting for the pass" once requested
-(`#stateWord`, `station-queue.ts`).
+a card with a fired dish, or on a card with none fired that holds both a requested dish and a held
+one, shows "Held, not released", or "Waiting for the pass" once requested (`#stateWord`,
+`station-queue.ts`).
 
 Which cards a column holds is its own (`DRAWN`, `station-queue.ts`). `waiting`, headed Waiting on
 the board and named "Waiting + Held" in Columns (`station.columns_waiting_held`), holds every card

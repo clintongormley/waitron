@@ -76,6 +76,7 @@ function sectionRows(
         item.afterPeriod ?? null,
         item.afterPeriodUnasked ?? false,
         item.lastMove ?? null,
+        item.phase,
       ]),
     // A stable sort, so each row keeps the read's order.
     () => 0,

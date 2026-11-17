@@ -5298,24 +5298,58 @@ describe("A773 held column", () => {
   const lineWord = (el: TillStationQueue, id: string) =>
     shadow(el).querySelector(`[data-item="${id}"] .line-state`)?.textContent?.trim();
 
-  it("a card in Held says Waiting for the pass when every dish on it is Requested, else Held, not released", async () => {
+  it("a card in Held says Waiting for the pass when every dish on it is Requested, Held, not released when none is, and nothing when it holds both", async () => {
     const { el } = await mountBoard(wordsScene(), APART);
     expect(ordersIn(el, "held")).toEqual(["1", "2"]);
     expect(note(el, 1)).toBe(t("pass.waiting_for_pass"));
-    expect(note(el, 2)).toBe(t("station.group_held"));
+    expect(shadow(el).querySelector('[data-card][data-order="2"]')).not.toBeNull();
+    expect(note(el, 2)).toBeUndefined();
+    cleanupWidgets();
+
+    const heldOnly = await mountBoard(scene(), APART);
+    expect(note(heldOnly.el, 1)).toBe(t("station.group_held"));
   });
 
-  it("on a released card a Requested dish says Waiting for the pass and a held one Held, not released; a dish in Held says nothing", async () => {
+  it("on a released card, or a card in Held holding both, a Requested dish says Waiting for the pass and a held one Held, not released; a dish on an all-Requested card in Held says nothing", async () => {
     const { el } = await mountBoard(wordsScene(), APART);
     expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
     expect(lineWord(el, "line-asked")).toBe(t("pass.waiting_for_pass"));
     expect(lineWord(el, "line-kept")).toBe(t("station.group_held"));
     expect(lineWord(el, "sent")).toBeUndefined();
-    for (const id of ["asked-a", "asked-b", "mixed-asked", "mixed-kept"]) {
+    expect(lineWord(el, "mixed-asked")).toBe(t("pass.waiting_for_pass"));
+    expect(lineWord(el, "mixed-kept")).toBe(t("station.group_held"));
+    for (const id of ["asked-a", "asked-b"]) {
       expect(shadow(el).querySelector(`[data-item="${id}"]`)).not.toBeNull();
       expect(lineWord(el, id)).toBeUndefined();
     }
   });
+
+  const lineName = (el: TillStationQueue, id: string) => {
+    const name = shadow(el).querySelector(`[data-item="${id}"] .line-name`);
+    return name === null ? undefined : flat(name);
+  };
+  it.each([
+    { first: "Requested", card: "in Held holding both" },
+    { first: "held", card: "in Held holding both" },
+    { first: "Requested", card: "released" },
+    { first: "held", card: "released" },
+  ])(
+    "on a card $card, two identical dishes, one Requested and one held, are two rows with their own words ($first first)",
+    async ({ first, card }) => {
+      const whole = { unitName: null, unitPrecision: 0, soldInEach: true };
+      const twins = [
+        { ...asked("twin-asked", "Burger"), ...whole },
+        { ...kept("twin-kept", "Burger"), ...whole },
+      ];
+      if (first === "held") twins.reverse();
+      const dishes = card === "released" ? [{ ...ageDish("sent", 18), name: "Octopus" }] : [];
+      const { el } = await mountBoard([ageBill(1, [...dishes, ...twins])], APART);
+      expect(lineName(el, "twin-asked")).toBe("1× Burger");
+      expect(lineName(el, "twin-kept")).toBe("1× Burger");
+      expect(lineWord(el, "twin-asked")).toBe(t("pass.waiting_for_pass"));
+      expect(lineWord(el, "twin-kept")).toBe(t("station.group_held"));
+    },
+  );
 
   it("Overview counts a Requested dish after the +, as it counts a held one", async () => {
     const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])], APART);
@@ -5333,8 +5367,14 @@ describe("A773 held column", () => {
         es["pass.column.held"],
       );
       expect(note(el, 1)).toBe(es["pass.waiting_for_pass"]);
-      expect(note(el, 2)).toBe(es["station.group_held"]);
+      expect(note(el, 2)).toBeUndefined();
+      expect(lineWord(el, "mixed-asked")).toBe(es["pass.waiting_for_pass"]);
+      expect(lineWord(el, "mixed-kept")).toBe(es["station.group_held"]);
       expect(lineWord(el, "line-asked")).toBe(es["pass.waiting_for_pass"]);
+      cleanupWidgets();
+
+      const heldOnly = await mountBoard(scene(), APART);
+      expect(note(heldOnly.el, 1)).toBe(es["station.group_held"]);
     } finally {
       setLocale(previousLocale);
     }

@@ -6148,7 +6148,9 @@ From `grep -rn "till-station-queue\|view_rail\|view_kanban\|data-view-toggle\|ad
 - **D12. A dish's own words on a card.** A dish at its card's column shows no state word (the
   column says it); a dish further on shows "Preparing" or "Ready" and keeps today's coloured left
   edge (`.line.state-*`, `:353-363`); a held dish on a card that is not itself held shows "Held,
-  not released", so a fired-and-held card does not rest on the dashed look alone. Everything else
+  not released", so a fired-and-held card does not rest on the dashed look alone. (2026-11-17,
+  STATION-MIXED-HELD-CARD: a card with no dish fired that holds both a Requested dish and a held
+  one also gives each dish its word; its heading says none.) Everything else
   on a dish row is today's (`#renderLine`): Move, the move attribution, the note, extras, cross
   references, allergens, diet, the allergy block, the after-period mark. In a merged screen each
   dish keeps its station's name as today (`data-line-station`); moving it to the heading is left to
