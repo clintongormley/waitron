@@ -31,17 +31,6 @@ reading unless marked run:
   Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
   chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
 
-## What C47 part 2 found and did not fix
-
-  In a screenshot of a `wt-modal` editor after a
-  refusal that names no field, a blue line runs along the top of the footer, which looks like the
-  modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
-  observation from the implementer's session. On 2026-11-10, a fresh Chromium modal opened by a
-  pointer kept focus on its body with no outline before and after a no-field refusal; Enter
-  opening gave the body a 2 px blue focus ring. A plain native dialog matched the two
-  `:focus-visible` states. The earlier observation is still open; that focused probe did not
-  establish a focus-contract defect to fix.
-
 ## Every login failure is one answer (C95, #930, owner decision 2026-09-30)
 
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
@@ -262,7 +251,7 @@ than becoming new items.
 
 ## Bundle: Form implementation leftovers
 
-An untraced dialog focus line and retiring the summary once its last consumer moves away remain open.
+Retiring the summary once its last consumer moves away remains open.
 
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
@@ -368,7 +357,7 @@ specific existing sentence applies.
 The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's
 matching series pairs and derived geography, and configuration export's matching passphrase
 minimum. Their source references are [in the approved plan](../superpowers/plans/2026-11-10-forms-refusal-placement.md), read, not run. Provider forms keep their existing credential,
-merchant and Reader ID handling. The blue-line observation remains open above.
+merchant and Reader ID handling.
 
 
 - **A1400 save/read limit (watcher, 2026-11-07 23:12; retained 2026-11-10).** A venue-model or
@@ -663,11 +652,7 @@ forms receive field messages from their parent screen.
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-  - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
-    footer, in a screenshot after a refusal that names no field, which looks like the modal's
-    scrolling body showing a focus ring — not traced, and not checked against `main`. A502 part 2
-    saw the same line above the buttons of the floor plan editor's compact "Delete {name}?"
-    question, opened by a click.
+
 
 
 ## Still open from #298/#305/#317, device checks before deployment
