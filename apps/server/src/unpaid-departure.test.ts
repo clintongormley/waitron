@@ -2549,7 +2549,21 @@ describe("left unpaid with part paid", () => {
   it("refuses a printed bill with a card refund in progress, and writes nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     await printBill(party.tabId);
-    const paid = await payInCash(party.tabId, "5.00");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "5.00",
+        method: "card",
+        entry: "reader",
+        applied: "5.00",
+        tip: "0.00",
+      },
+    );
     expect(paid.status).toBe(200);
     await inTx(venue, (tx) =>
       tx.insert(billPaymentRefunds).values({
