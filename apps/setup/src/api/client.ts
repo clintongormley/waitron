@@ -477,6 +477,11 @@ export class SetupApi {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }
 
+  /** Answered only by the page a box shows when its start failed (`recovery-surface.ts`). */
+  getRecoveryStatus(): Promise<unknown> {
+    return this.#request<unknown>("/recovery-api/status", "GET");
+  }
+
   /**
    * The server takes the admin account's language from `Accept-Language`, so `locale` is sent there
    * only when the operator chose one; otherwise the browser's own header stands.

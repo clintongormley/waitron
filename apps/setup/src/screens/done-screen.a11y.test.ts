@@ -7,7 +7,10 @@ import type { SetupDoneScreen } from "./done-screen.js";
 import type { SetupApi } from "../api/client.js";
 
 function apiWith(getStatus: () => Promise<unknown>): SetupApi {
-  return { getStatus } as unknown as SetupApi;
+  return {
+    getStatus,
+    getRecoveryStatus: () => Promise.reject({ code: "server.internal", status: 404 }),
+  } as unknown as SetupApi;
 }
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);

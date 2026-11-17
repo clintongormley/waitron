@@ -9,8 +9,11 @@ import { SetupApi } from "../api/client.js";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
+/** What a trading server answers at `/recovery-api/status`: no such route. */
+const trading = () => Promise.reject({ code: "server.internal", status: 404 });
+
 function apiWith(getStatus: () => Promise<unknown>): SetupApi {
-  return { getStatus } as unknown as SetupApi;
+  return { getStatus, getRecoveryStatus: trading } as unknown as SetupApi;
 }
 
 async function mountDone(
@@ -78,7 +81,11 @@ function clockApiWith(
   clock: ReturnType<typeof clockApi>,
   getStatus: () => Promise<unknown>,
 ): SetupApi {
-  return { getStatus, restoreClock: clock.restoreClock } as unknown as SetupApi;
+  return {
+    getStatus,
+    restoreClock: clock.restoreClock,
+    getRecoveryStatus: trading,
+  } as unknown as SetupApi;
 }
 
 function mountWaiting(
@@ -622,7 +629,7 @@ describe("setup-done-screen", () => {
       });
       const getStatus = vi.fn().mockRejectedValue(WAITING);
       const el = await mountDone(getStatus, {
-        api: { getStatus, restoreClock } as unknown as SetupApi,
+        api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
         nodeRecoveryKey: "node-key-secret",
       });
       await vi.waitFor(() =>
@@ -655,7 +662,7 @@ describe("setup-done-screen", () => {
     });
     const getStatus = vi.fn().mockRejectedValue(WAITING);
     const el = await mountDone(getStatus, {
-      api: { getStatus, restoreClock } as unknown as SetupApi,
+      api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
       nodeRecoveryKey: "node-key-secret",
     });
     await vi.waitFor(() =>
@@ -682,7 +689,7 @@ describe("setup-done-screen", () => {
     });
     const getStatus = vi.fn().mockRejectedValue(WAITING);
     const el = await mountDone(getStatus, {
-      api: { getStatus, restoreClock } as unknown as SetupApi,
+      api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
       nodeRecoveryKey: "node-key-secret",
     });
     await vi.waitFor(() =>
@@ -720,7 +727,7 @@ describe("setup-done-screen", () => {
     });
     const getStatus = vi.fn().mockRejectedValue(WAITING);
     const el = await mountDone(getStatus, {
-      api: { getStatus, restoreClock } as unknown as SetupApi,
+      api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
       nodeRecoveryKey: "node-key-secret",
     });
     await vi.waitFor(() => expect(sent).toEqual(["challenge"]));
@@ -754,7 +761,7 @@ describe("setup-done-screen", () => {
       )
       .mockRejectedValue(WAITING);
     const el = await mountDone(getStatus, {
-      api: { getStatus, restoreClock } as unknown as SetupApi,
+      api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
       nodeRecoveryKey: "node-key-secret",
     });
     await vi.waitFor(() =>
@@ -821,7 +828,7 @@ describe("setup-done-screen", () => {
     });
     const getStatus = vi.fn(() => Promise.reject(status));
     const el = await mountDone(getStatus, {
-      api: { getStatus, restoreClock } as unknown as SetupApi,
+      api: { getStatus, restoreClock, getRecoveryStatus: trading } as unknown as SetupApi,
       nodeRecoveryKey: "node-key-secret",
     });
     await vi.waitFor(() =>
@@ -1563,5 +1570,118 @@ describe("setup-done-screen layout", () => {
     expect(css.match(/\d(rem|em)\b/g)).toBeNull();
     expect(css.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
     expect(css.match(/var\(--[\w-]+\s*,/g)).toBeNull();
+  });
+});
+
+describe("setup-done-screen after a start that failed", () => {
+  const FAILED_EN = "The server did not start. Open it to see what went wrong and what you can do:";
+  const GONE = { code: "server.internal", status: 404 };
+  const RECOVERY = {
+    failures: 3,
+    level: "recovery",
+    lastErrorCode: "restore.stream_failed",
+    lastFailureAt: "2026-11-17T21:00:00.000Z",
+    refused: false,
+  };
+
+  function mountWith(
+    getStatus: () => Promise<unknown>,
+    getRecoveryStatus: () => Promise<unknown>,
+  ): Promise<SetupDoneScreen> {
+    return mountDone(getStatus, {
+      api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
+      restored: "bucket",
+    });
+  }
+
+  it("says the server did not start and links to its page when the recovery page answers", async () => {
+    const getRecoveryStatus = vi.fn().mockResolvedValue(RECOVERY);
+    const el = await mountWith(vi.fn().mockRejectedValue(GONE), getRecoveryStatus);
+    await vi.waitFor(() => expect(getRecoveryStatus.mock.calls.length).toBeGreaterThan(1));
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN);
+    const links = [...el.shadowRoot!.querySelectorAll("[data-test=links] wt-choice-row")];
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/"]);
+    expect(links[0]!.getAttribute("data-test")).toBe("link-recovery");
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountWith(
+      vi.fn().mockRejectedValue(GONE),
+      vi.fn().mockResolvedValue(RECOVERY),
+    );
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
+        "El servidor no ha arrancado. Ábrelo para ver qué ha fallado y qué puedes hacer:",
+      ),
+    );
+  });
+
+  it("reports ready when the recovery status read is refused, as on a trading server", async () => {
+    const el = await mountWith(vi.fn().mockRejectedValue(GONE), vi.fn().mockRejectedValue(GONE));
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(q(el, "[data-test=link-dashboard]")).not.toBeNull();
+  });
+
+  it("reports ready once a later start trades after a failed one", async () => {
+    const getRecoveryStatus = vi
+      .fn()
+      .mockResolvedValueOnce(RECOVERY)
+      .mockResolvedValueOnce(RECOVERY)
+      .mockRejectedValue(GONE);
+    const el = await mountWith(vi.fn().mockRejectedValue(GONE), getRecoveryStatus);
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(getRecoveryStatus).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps waiting when the recovery status read cannot reach the box", async () => {
+    const getRecoveryStatus = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await mountWith(vi.fn().mockRejectedValue(GONE), getRecoveryStatus);
+    await vi.waitFor(() => expect(getRecoveryStatus.mock.calls.length).toBeGreaterThan(1));
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
+  });
+
+  // A trading server has no `/recovery-api/status` route: the dashboard's catch-all
+  // (`mountBuiltApps` in apps/server/src/spa-api.ts) answers a fetch, which sends no
+  // `Accept: text/html`, with an empty 404; Hono's own 404 is plain text.
+  it.each([
+    ["an empty 404", () => new Response(null, { status: 404 })],
+    ["a plain-text 404", () => new Response("404 Not Found", { status: 404 })],
+    ["a page", () => new Response("<!doctype html>", { headers: { "content-type": "text/html" } })],
+  ])(
+    "through the real client, reports ready when the trading server answers %s",
+    async (_, answer) => {
+      const paths: string[] = [];
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+        const path = new URL(String(input), location.href).pathname;
+        paths.push(path);
+        return path === "/recovery-api/status" ? answer() : new Response(null, { status: 404 });
+      });
+      const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+        api: new SetupApi("", fetchImpl),
+        startDelayMs: 0,
+        pollIntervalMs: 3,
+      });
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN),
+      );
+      expect(paths).toEqual(["/setup-api/status", "/recovery-api/status"]);
+    },
+  );
+
+  it("through the real client, says the server did not start on the recovery page's answer", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      new URL(String(input), location.href).pathname === "/recovery-api/status"
+        ? Response.json(RECOVERY)
+        : new Response(null, { status: 404 }),
+    );
+    const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: new SetupApi("", fetchImpl),
+      startDelayMs: 0,
+      pollIntervalMs: 3,
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
+    );
   });
 });
