@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
-import { lineGross, productAsVariant } from "./order-line.js";
+import { lineGross, productAsVariant, toWireProductIdentity } from "./order-line.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
+import {
+  menuOfferToTillProduct,
+  sellingValuesOf,
+  type TillMenuOffer,
+  type TillProduct,
+} from "../api/client.js";
 
 // A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -588,10 +593,14 @@ describe("WorkingOrderStore", () => {
       labelCustomerName: { es: "Grande para el cliente" },
       labelKitchenName: "Grande cocina",
     };
-    s.setLineModifiers(0, {
-      options: [{ listId: "list-size", labelId: "label-large" }],
-      optionSnapshots: [frozen],
-    });
+    expect(
+      s.setLineModifiers(0, {
+        selection: {
+          options: [{ listId: "list-size", labelId: "label-large" }],
+          optionSnapshots: [frozen],
+        },
+      }),
+    ).toBe(true);
     // The picks the new selection does not name are gone; the note is not an answer, so it stays.
     expect(s.lines[0]).toEqual({
       product: coffee,
@@ -610,11 +619,121 @@ describe("WorkingOrderStore", () => {
     s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]);
     let n = 0;
     s.subscribe(() => n++);
-    s.setLineModifiers(-1, { options: [{ listId: "l", labelId: "x" }] });
-    s.setLineModifiers(3, { options: [{ listId: "l", labelId: "x" }] });
+    const selection = { options: [{ listId: "l", labelId: "x" }] };
+    expect(s.setLineModifiers(-1, { selection })).toBe(false);
+    expect(s.setLineModifiers(3, { selection })).toBe(false);
     expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
     expect(s.dirty).toBe(false);
     expect(n).toBe(0);
+  });
+
+  describe("a reopened line's changed variant", () => {
+    const sized: TillProduct = {
+      ...coffee,
+      menuItemId: "mi-cafe",
+      variants: [
+        {
+          ...sellingValuesOf(coffee),
+          id: "v-small",
+          name: "Pequeño",
+          unitPrice: "1.50",
+          unitPriceDifference: null,
+          available: true,
+        },
+        {
+          ...sellingValuesOf(coffee),
+          id: "v-large",
+          name: "Grande",
+          unitPrice: "2.50",
+          unitPriceDifference: "1.00",
+          available: true,
+        },
+      ],
+    };
+    const small = productAsVariant(sized, sized.variants![0]!);
+    const large = productAsVariant(sized, sized.variants![1]!);
+
+    const swaps = (quantity: string) =>
+      [
+        [
+          "setLineModifiers",
+          (s: WorkingOrderStore) => s.setLineModifiers(0, { selection: {}, product: large }),
+        ],
+        [
+          "setLineDetails",
+          (s: WorkingOrderStore) =>
+            s.setLineDetails(0, { quantity, note: "", selection: {}, product: large }),
+        ],
+      ] as const;
+
+    function watched(quantity: string): {
+      s: WorkingOrderStore;
+      refusals: unknown[];
+      changes: unknown[];
+    } {
+      const s = new WorkingOrderStore();
+      s.loadFrom("held-1", [{ product: small, quantity }]);
+      const refusals: unknown[] = [];
+      const changes: unknown[] = [];
+      s.on("refused", (value) => refusals.push(value));
+      s.on("changed", () => changes.push(true));
+      return { s, refusals, changes };
+    }
+
+    it.each(swaps("2"))("%s carries it into the line and what is sent", (_, change) => {
+      const { s } = watched("2");
+      expect(change(s)).toBe(true);
+      expect(s.lines[0]!.product).toEqual(large);
+      expect(s.total).toBe("5.00");
+      expect(s.dirty).toBe(true);
+      expect(toDraftLineInput(s.lines[0]!).variantId).toBe("v-large");
+      expect(toWireProductIdentity(s.lines[0]!.product).variantId).toBe("v-large");
+    });
+
+    it.each(swaps("1"))(
+      "%s refuses it when the new variant's price passes the limit, changing nothing",
+      (_, change) => {
+        const { s, refusals, changes } = watched("1");
+        s.simplifiedInvoiceLimit = "2.00";
+        expect(change(s)).toBe(false);
+        expect(refusals).toEqual([{ code: "sale.total_exceeds_simplified_limit", limit: "2.00" }]);
+        expect(s.lines[0]!.product).toEqual(small);
+        expect(s.total).toBe("1.50");
+        expect(s.dirty).toBe(false);
+        expect(changes).toEqual([]);
+      },
+    );
+
+    it.each(swaps("1"))(
+      "%s refuses it while the line's menu cannot be ordered from, changing nothing",
+      (_, change) => {
+        const { s, refusals, changes } = watched("1");
+        s.canSelectProduct = () => false;
+        expect(change(s)).toBe(false);
+        expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+        expect(s.lines[0]!.product).toEqual(small);
+        expect(s.dirty).toBe(false);
+        expect(changes).toEqual([]);
+      },
+    );
+
+    it("keeps taking a note on a line whose menu cannot be ordered from, its variant unchanged", () => {
+      const { s, refusals } = watched("1");
+      s.canSelectProduct = () => false;
+      expect(
+        s.setLineDetails(0, { quantity: "1", note: "Hot", selection: {}, product: small }),
+      ).toBe(true);
+      expect(s.lines[0]).toEqual({ product: small, quantity: "1", note: "Hot" });
+      expect(refusals).toEqual([]);
+    });
+
+    it("keeps taking answers on a line whose menu cannot be ordered from, its variant unchanged", () => {
+      const { s, refusals } = watched("1");
+      s.canSelectProduct = () => false;
+      expect(s.setLineModifiers(0, { selection: {}, product: small })).toBe(true);
+      expect(s.lines[0]!.product).toEqual(small);
+      expect(refusals).toEqual([]);
+    });
   });
 
   it("stops notifying once the subscription is disposed", () => {
@@ -847,7 +966,9 @@ describe("WorkingOrderStore", () => {
       s.addProduct(ham, "0.500");
       s.setLineQuantity(0, "2");
       s.setLineExtras(0, { note: "con hielo" });
-      s.setLineModifiers(0, { options: [{ listId: "l", labelId: "x" }] });
+      expect(
+        s.setLineModifiers(0, { selection: { options: [{ listId: "l", labelId: "x" }] } }),
+      ).toBe(false);
       s.removeLine(0);
       expect(s.lines).toEqual([{ product: coffee, quantity: "1", note: "sin azúcar" }]);
       s.sending = false;
@@ -962,7 +1083,7 @@ describe("WorkingOrderStore", () => {
     it.each([
       ["addProduct", (s: WorkingOrderStore) => s.addProduct(coffee, "1")],
       ["setLineQuantity", (s: WorkingOrderStore) => s.setLineQuantity(1, "2")],
-      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(1, {})],
+      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(1, { selection: {} })],
       ["setLineExtras", (s: WorkingOrderStore) => s.setLineExtras(1, { note: "sin azúcar" })],
       ["removeLine", (s: WorkingOrderStore) => s.removeLine(1)],
     ])("%s on another line keeps them, and the total with them", (_, edit) => {
@@ -974,7 +1095,7 @@ describe("WorkingOrderStore", () => {
     });
 
     it.each([
-      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(0, {})],
+      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(0, { selection: {} })],
       [
         "setLineDetails",
         (s: WorkingOrderStore) => s.setLineDetails(0, { quantity: "2", note: "", selection: {} }),
@@ -1710,7 +1831,7 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
     const { store, refusals } = limited();
     store.addProduct(banquet, "3");
     // Two picks of 5.01 on each of three dishes: 30.06 more.
-    store.setLineModifiers(0, { extras: [extra] });
+    expect(store.setLineModifiers(0, { selection: { extras: [extra] } })).toBe(false);
     expect(store.lines[0]!.extras).toBeUndefined();
     expect(refusals).toEqual([refusal]);
   });

@@ -23711,14 +23711,15 @@ describe("basket protection lifetimes", () => {
       2,
     );
     expect(unloadCancelled()).toBe(false);
-    c.store.setLineModifiers(0, { extras: [...extras].reverse(), options: [...options].reverse() });
+    c.store.setLineModifiers(0, {
+      selection: { extras: [...extras].reverse(), options: [...options].reverse() },
+    });
     expect(unloadCancelled()).toBe(false);
     c.store.setLineModifiers(0, {
-      extras: [{ ...extras[0]!, listId: "another-list" }, extras[1]!],
-      options,
+      selection: { extras: [{ ...extras[0]!, listId: "another-list" }, extras[1]!], options },
     });
     expect(unloadCancelled()).toBe(true);
-    c.store.setLineModifiers(0, { extras, options });
+    c.store.setLineModifiers(0, { selection: { extras, options } });
     expect(unloadCancelled()).toBe(false);
     c.store.setLineExtras(0, { note: "No sugar" });
     expect(unloadCancelled()).toBe(true);

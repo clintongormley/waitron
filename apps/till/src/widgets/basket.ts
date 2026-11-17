@@ -17,7 +17,13 @@ import { type Decimal, decimal, formatMoney, grossOf, multiplyDecimal } from "@w
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
-import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
+import {
+  dishGross,
+  extraGross,
+  needsModifierPicker,
+  offeredListsOf,
+  quantityLabel,
+} from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
@@ -613,14 +619,15 @@ export class TillBasket extends LitElement {
       return false;
     const finish = (selection: LineSelection) => {
       if (!this.lineDetails) {
-        this.store.setLineModifiers(index, selection);
-        this.#closeModifierPicker();
-        return true;
+        const applied = this.store.setLineModifiers(index, { selection, product: detail.product });
+        if (applied) this.#closeModifierPicker();
+        return applied;
       }
       const applied = this.store.setLineDetails(index, {
         quantity: detail.quantity ?? line.quantity,
         note: detail.note ?? "",
         selection,
+        product: detail.product,
         ...(courseChanged
           ? {
               course: {
@@ -959,12 +966,7 @@ export class TillBasket extends LitElement {
                     : nothing
                 }
                 ${
-                  // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
-                  // answers and never its product, so a dish whose only question is its variant gets no
-                  // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
-                  // variants AND an offered list — still re-asks the variant and discards it; open in
-                  // `docs/backlog.md`.
-                  !this.lineDetails && offeredListsOf(line.product).length > 0
+                  !this.lineDetails && needsModifierPicker(line.product)
                     ? html`<wt-button
                         class="edit-modifiers"
                         size="sm"

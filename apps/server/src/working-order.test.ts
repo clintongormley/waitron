@@ -471,7 +471,7 @@ async function addOptionList(
 async function seedVariantOffer(
   tx: Transaction,
   menuId: string,
-): Promise<{ offerId: string; variantId: string; productId: string }> {
+): Promise<{ offerId: string; variantId: string; smallVariantId: string; productId: string }> {
   const product = await createProduct(tx, {
     categoryId: null,
     name: "Coffee",
@@ -514,7 +514,12 @@ async function seedVariantOffer(
     { variantId: variants[1]!.id, price: "2.20" },
   ]);
   await publishWorkingMenu(tx, menuId);
-  return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
+  return {
+    offerId: offer.id,
+    variantId: variants[0]!.id,
+    smallVariantId: variants[1]!.id,
+    productId: product.id,
+  };
 }
 
 describe("a sold variant line carries its product and relative variant names", () => {
@@ -3236,6 +3241,50 @@ describe("updateHeldOrder", () => {
       { id: expect.any(String), ...coffee },
     ]);
     expect(after.rows[1]!.id).not.toBe(lineId);
+  });
+
+  it("keeps a new variant sent for a saved, unsent line, at that variant's price and name", async () => {
+    const { cfg, zoneId, menuId } = await setupVenue();
+    const seeded = await withTransaction(db, (tx) => seedVariantOffer(tx, menuId));
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: seeded.offerId, variantId: seeded.variantId, quantity: "1" }],
+    });
+    const read = () =>
+      db.execute<{
+        id: string;
+        product_id: string;
+        variant_name: string | null;
+        unit_price_gross: number;
+      }>(sql`
+        select id, product_id, variant_name, cast(unit_price_gross as int) as unit_price_gross
+        from working_order_lines where working_order_id = ${id} order by line_no`);
+    const lineId = (await read()).rows[0]!.id;
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        {
+          workingOrderLineId: lineId,
+          menuItemId: seeded.offerId,
+          variantId: seeded.smallVariantId,
+          quantity: "1",
+        },
+      ],
+    });
+
+    const after = (await read()).rows;
+    expect(after).toEqual([
+      {
+        id: expect.any(String),
+        product_id: seeded.smallVariantId,
+        variant_name: "Small",
+        unit_price_gross: 220,
+      },
+    ]);
+    expect(after[0]!.id).not.toBe(lineId);
   });
 
   it("replaces an offer line using the order's stored zone and refreshes its attribution", async () => {

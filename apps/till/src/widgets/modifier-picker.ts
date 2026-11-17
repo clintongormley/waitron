@@ -484,6 +484,7 @@ export class TillModifierPicker extends LitElement {
     this.editedQuantity = this.quantity;
     this.courseId = this.initialCourse ?? "";
     if (this.initialSelections !== undefined) {
+      this.variantId = this.product.variantId ?? "";
       if (this.withNote) this.note = this.initialSelections.note ?? "";
       this.noteExpanded = this.note !== "";
       for (const extra of this.initialSelections.extras ?? [])

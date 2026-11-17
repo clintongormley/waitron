@@ -7,6 +7,8 @@ import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
+import type { TillModifierPicker } from "./modifier-picker.js";
+import { productAsVariant } from "../state/order-line.js";
 import {
   sellingValuesOf,
   type OfferedExtraItem,
@@ -1045,29 +1047,85 @@ it("keeps each line's own answer through a quantity edit, and shows it in STAFF 
   ).toEqual(["Cortar: Fino", "Cortar: Grueso"]);
 });
 
-it("offers no Edit on a line whose only question was its variant", async () => {
-  // The basket's Edit reaches a line's ANSWERS only — `setLineModifiers` never replaces the line's
-  // product — so a variant-only dish has nothing to edit here, unlike the two surfaces that ADD a
-  // line, which hand the picker's variant-resolved product to `addProduct`.
+const sizes: NonNullable<TillProduct["variants"]> = [
+  {
+    ...sellingValuesOf(coffee),
+    id: "v-small",
+    name: "Pequeño",
+    unitPrice: "1.50",
+    unitPriceDifference: null,
+    available: true,
+  },
+  {
+    ...sellingValuesOf(coffee),
+    id: "v-large",
+    name: "Grande",
+    unitPrice: "2.50",
+    unitPriceDifference: "1.00",
+    available: true,
+  },
+];
+const sizedCoffee: TillProduct = { ...coffee, variants: sizes };
+
+async function reopenedPicker(el: TillBasket) {
+  el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  await picker.updateComplete;
+  return picker;
+}
+const variantRadio = (picker: TillModifierPicker, id: string) =>
+  picker.shadowRoot!.querySelector<HTMLInputElement>(`[name="product-variant"][value="${id}"]`)!;
+
+it("offers Edit on a line whose only question was its variant, reopened on that variant", async () => {
   const store = new WorkingOrderStore();
-  const product: TillProduct = {
-    ...coffee,
-    variants: [
-      {
-        ...sellingValuesOf(coffee),
-        id: "v-large",
-        name: "Grande",
-        unitPrice: "2.00",
-        unitPriceDifference: "0.50",
-        available: true,
-      },
-    ],
-    variantId: "v-large",
-    variantName: "Grande",
-  };
-  store.addProduct(product, "1");
+  store.addProduct(productAsVariant(sizedCoffee, sizes[1]!), "1");
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
-  expect(el.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+  const picker = await reopenedPicker(el);
+  expect(variantRadio(picker, "v-large").checked).toBe(true);
+  expect(variantRadio(picker, "v-small").checked).toBe(false);
+});
+
+it("saves a variant changed on a reopened line into the line, its price and its name", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(
+    productAsVariant({ ...sizedCoffee, offeredModifiers: [cutList] }, sizes[0]!),
+    "1",
+    answered("label-fino", "Fino"),
+  );
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  const picker = await reopenedPicker(el);
+  expect(variantRadio(picker, "v-small").checked).toBe(true);
+  variantRadio(picker, "v-large").click();
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+  expect(store.lines[0]!.product.variantId).toBe("v-large");
+  expect(store.lines[0]!.options).toEqual([{ listId: "list-cut", labelId: "label-fino" }]);
+  const shown = el.shadowRoot!.textContent!;
+  expect(shown).toContain("Grande");
+  expect(shown).not.toContain("Pequeño");
+  expect(shown).toContain(formatMoney("2.50", currentLocale()));
+});
+
+it("keeps the picker open on its changed variant when the new price passes the limit", async () => {
+  const store = new WorkingOrderStore();
+  store.simplifiedInvoiceLimit = "2.00";
+  store.addProduct(productAsVariant(sizedCoffee, sizes[0]!), "1");
+  const refusals: unknown[] = [];
+  store.on("refused", (value) => refusals.push(value));
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  const picker = await reopenedPicker(el);
+  variantRadio(picker, "v-large").click();
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  await el.updateComplete;
+  await picker.updateComplete;
+  expect(refusals).toEqual([{ code: "sale.total_exceeds_simplified_limit", limit: "2.00" }]);
+  expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+  expect(variantRadio(picker, "v-large").checked).toBe(true);
+  expect(store.lines[0]!.product.variantId).toBe("v-small");
 });
 
 it("offers no Edit on a weighed line whose dish offers only extras", async () => {

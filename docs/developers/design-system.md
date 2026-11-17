@@ -6886,7 +6886,7 @@ held press does the same. On a narrow table screen, opening it shows Order.
 An unsent Counter row shows the name and nutrition marks, quantity steps, amount, information and
 removal actions. Extras and a note sit on their own indented lines. Amounts share a right edge;
 a note has no invented quantity or charge. Information, a held press, a mouse double click or the
-note opens the same existing modifiers window. Quantity, extras and note are staged there together.
+note opens the same existing modifiers window. Quantity, variant, extras and note are staged there together.
 An unchanged Save stays quiet and disabled; Cancel, Escape and leaving retain the shared draft
 protection. Sent lines are read-only. A sent, unpaid Counter dish can offer Move to station in that
 window using its separately checked movement facts. Table draft, group, course and sending controls
