@@ -106,7 +106,6 @@ const FOLDED_APPEND_ONLY = [
   "menu_versions",
   "menu_version_images",
   "sale_receipt_headers",
-  "bill_number_allocations",
   "adjustments",
   "adjustment_refunds",
   "adjustment_lines",
@@ -140,13 +139,6 @@ const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update:
           values ('sale-1', null, 'Bar', 1)`,
     ],
     update: sql`update sale_receipt_headers set trading_name = 'Other'`,
-  },
-  bill_number_allocations: {
-    insert: [
-      sql`insert into bill_number_allocations (id, party_id, number, working_order_id, allocated_at)
-          values ('allocation-1', 'party-1', 1, 'order-1', ${AT})`,
-    ],
-    update: sql`update bill_number_allocations set number = 2`,
   },
   adjustments: {
     insert: [

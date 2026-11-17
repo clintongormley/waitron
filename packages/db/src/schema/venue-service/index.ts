@@ -10,7 +10,6 @@ export * from "./party-allergy.js";
 export * from "./kitchen-allergy.js";
 export * from "./device-zone-selection.js";
 export * from "./service-steps.js";
-export * from "./bill-identities.js";
 
 export * from "./department-courses.js";
 export * from "./opening-hours.js";

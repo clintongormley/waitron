@@ -56,8 +56,6 @@ export * from "./page-printers.js";
 
 export * from "./tender-refunds.js";
 
-export * from "./bill-edit-states.js";
-
 // The tables of the modules whose tables live in core's set.
 export * from "./credentials/index.js";
 export * from "./media/index.js";

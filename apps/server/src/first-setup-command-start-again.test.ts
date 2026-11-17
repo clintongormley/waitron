@@ -313,8 +313,8 @@ it.each(["activation-started", "uncertain"] as const)(
     const db = new DatabaseSync(join(f.folders.venueDir, "venue.db"));
     try {
       db.prepare(
-        "insert into bill_number_allocations (id, party_id, working_order_id, number, allocated_at) values (?, ?, ?, ?, ?)",
-      ).run(randomUUID(), randomUUID(), randomUUID(), 1, "2026-10-16T11:40:00.000Z");
+        "insert into order_portions (id, cohort_id, ordinal, measured, created_at) values (?, ?, ?, ?, ?)",
+      ).run(randomUUID(), randomUUID(), 1, 0, "2026-10-16T11:40:00.000Z");
     } finally {
       db.close();
     }

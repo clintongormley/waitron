@@ -1625,14 +1625,6 @@ CREATE UNIQUE INDEX `tender_refunds_pending_capture_key` ON `tender_refunds` (`p
 CREATE UNIQUE INDEX `tender_refunds_provider_event_key` ON `tender_refunds` (`provider`,`provider_payment_ref`,`provider_refund_ref`) WHERE "tender_refunds"."provider_refund_ref" is not null;--> statement-breakpoint
 CREATE INDEX `tender_refunds_recovery_idx` ON `tender_refunds` (`state`,`next_retry_at`,`created_at`,`id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `tender_refunds_submission_key` ON `tender_refunds` (`sale_id`,`submission_id`);--> statement-breakpoint
-CREATE TABLE `bill_edit_states` (
-	`bill_id` text PRIMARY KEY NOT NULL,
-	`editor_id` text,
-	`editor_version` integer DEFAULT 0 NOT NULL,
-	FOREIGN KEY (`bill_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "bill_edit_states_version_ck" CHECK("bill_edit_states"."editor_version" >= 0)
-);
---> statement-breakpoint
 CREATE TABLE `venue_credentials` (
 	`purpose` text PRIMARY KEY NOT NULL,
 	`ciphertext` blob NOT NULL,
@@ -2651,29 +2643,6 @@ CREATE TABLE `service_steps` (
 CREATE UNIQUE INDEX `service_steps_department_id_uq` ON `service_steps` (`department_id`,`id`);--> statement-breakpoint
 CREATE INDEX `service_steps_department_position_idx` ON `service_steps` (`department_id`,`position`);--> statement-breakpoint
 CREATE INDEX `service_steps_course_idx` ON `service_steps` (`course_id`);--> statement-breakpoint
-CREATE TABLE `bill_identities` (
-	`working_order_id` text PRIMARY KEY NOT NULL,
-	`party_id` text,
-	`number` integer,
-	`name` text,
-	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "bill_identities_scope_ck" CHECK(("bill_identities"."party_id" is null) = ("bill_identities"."number" is null)),
-	CONSTRAINT "bill_identities_number_ck" CHECK("bill_identities"."number" is null or (typeof("bill_identities"."number") = 'integer' and "bill_identities"."number" >= 1)),
-	CONSTRAINT "bill_identities_name_ck" CHECK("bill_identities"."name" is null or (length("bill_identities"."name") between 1 and 40 and "bill_identities"."name" = trim("bill_identities"."name")))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `bill_identities_party_number_key` ON `bill_identities` (`party_id`,`number`);--> statement-breakpoint
-CREATE TABLE `bill_number_allocations` (
-	`id` text PRIMARY KEY NOT NULL,
-	`party_id` text NOT NULL,
-	`number` integer NOT NULL,
-	`working_order_id` text NOT NULL,
-	`allocated_at` text NOT NULL,
-	CONSTRAINT "bill_number_allocations_number_ck" CHECK(typeof("bill_number_allocations"."number") = 'integer' and "bill_number_allocations"."number" >= 1)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `bill_number_allocations_party_number_key` ON `bill_number_allocations` (`party_id`,`number`);--> statement-breakpoint
 CREATE TABLE `department_courses` (
 	`department_id` text NOT NULL,
 	`course_id` text NOT NULL,

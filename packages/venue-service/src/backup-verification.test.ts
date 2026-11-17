@@ -137,7 +137,7 @@ describe("service backup evidence", () => {
     expect(owner.data).toEqual({
       kind: "custom",
       tables: VENUE_SERVICE_CLASSIFICATION.map((c) => c.table),
-      immutableTables: ["sale_receipt_headers", "bill_number_allocations"],
+      immutableTables: ["sale_receipt_headers"],
       checks: ["data"],
     });
     expect([

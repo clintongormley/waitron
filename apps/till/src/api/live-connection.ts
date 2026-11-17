@@ -104,7 +104,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "menu_periods",
     "kitchen_courses",
     "order_draft_events",
-    "bill_edit_states",
     "working_line_portions",
     "order_portions",
     "kitchen_stations",

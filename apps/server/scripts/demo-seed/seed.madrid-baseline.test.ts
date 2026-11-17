@@ -302,8 +302,6 @@ const ADDED_TABLES = [
   "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
-  "bill_identities",
-  "bill_number_allocations",
   "device_invoice_revisions",
   "device_invoice_save_operations",
   "document_delivery_requests",
@@ -327,6 +325,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "bill_edit_states",
   "working_order_counters",
   "shift_assignments",
   "webauthn_challenges",

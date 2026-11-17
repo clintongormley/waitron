@@ -42,7 +42,6 @@ const NOT_YET_REASON =
 
 const NOT_YET: Record<string, string> = Object.fromEntries(
   [
-    "bill_edit_states.editor_id",
     "working_orders.editor_id",
     "bill_payments.attested_by",
     "bill_payments.requested_by",

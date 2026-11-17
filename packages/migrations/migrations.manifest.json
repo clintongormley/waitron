@@ -29,7 +29,6 @@
       "menu_versions",
       "menu_version_images",
       "sale_receipt_headers",
-      "bill_number_allocations",
       "adjustments",
       "adjustment_refunds",
       "adjustment_lines"

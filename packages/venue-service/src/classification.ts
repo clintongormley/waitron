@@ -25,8 +25,6 @@ export const VENUE_SERVICE_TABLES = [
   "order_kitchen_notes",
   "party_allergy_guests",
   "allergy_line_ticks",
-  "bill_identities",
-  "bill_number_allocations",
   "seasons",
   "special_days",
   "special_day_dates",

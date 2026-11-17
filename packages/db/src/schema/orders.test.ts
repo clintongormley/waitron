@@ -5,7 +5,12 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { refusalOn, triggerRaised } from "../constraint-target.js";
-import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import {
+  CHECK_VIOLATION,
+  FOREIGN_KEY_VIOLATION,
+  NOT_NULL_VIOLATION,
+  UNIQUE_VIOLATION,
+} from "../sql-state.js";
 import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
@@ -193,6 +198,42 @@ describe("working_orders", () => {
         (await db.execute(sql`select bill_number from working_orders where id in (${one}, ${two})`))
           .rows,
       ).toEqual([{ bill_number: 2 }, { bill_number: 2 }]);
+    });
+
+    it("keeps two named counter bills with no numbers", async () => {
+      const first = await openOrder(db);
+      const second = await openOrder(db);
+      await db.update(workingOrders).set({ billName: "Anna" }).where(eq(workingOrders.id, first));
+      await db.update(workingOrders).set({ billName: "Lewis" }).where(eq(workingOrders.id, second));
+      expect(
+        (
+          await db.execute(sql`
+            select bill_name, bill_number, party_id from working_orders
+            where id in (${first}, ${second}) order by bill_name
+          `)
+        ).rows,
+      ).toEqual([
+        { bill_name: "Anna", bill_number: null, party_id: null },
+        { bill_name: "Lewis", bill_number: null, party_id: null },
+      ]);
+    });
+
+    it("refuses an explicitly null editor version", async () => {
+      const error = await captureError(() =>
+        db.insert(workingOrders).values({
+          ...DASHBOARD_ORDER,
+          orderNumber: ++orderNumberSeq,
+          status: "open",
+          openedAt: AT,
+          editorVersion: sql`null`,
+        }),
+      );
+      expect(
+        refusalOn(error, NOT_NULL_VIOLATION, {
+          table: "working_orders",
+          columns: ["editor_version"],
+        }),
+      ).toBe(true);
     });
 
     it("defaults the editor to nobody at version zero and refuses negative versions", async () => {

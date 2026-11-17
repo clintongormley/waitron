@@ -86,10 +86,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
         entry.table,
         entry.class,
       ]),
-    ).toEqual([
-      ["sale_receipt_headers", "ledger"],
-      ["bill_number_allocations", "ledger"],
-    ]);
+    ).toEqual([["sale_receipt_headers", "ledger"]]);
     expect(VENUE_SERVICE_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(
       true,
     );
