@@ -811,7 +811,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#loose-ends-left-by-a429-slice-5)
 
 - **Loose ends left by A718.**
-  `wt-floor-plan-preview` has no product user. Retire it, or record why it is kept.
+  One screenshot showed a gap in the pinned Actions column's left divider between two zone rows;
+  not known whether it predates A718.
   [Detail](backlog/till.md#loose-ends-left-by-a718)
 
 - **One rule for a booking when the evening's layout changes** (bundle of 3, 1 important, size M, needs the owner). Holds A474, A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)

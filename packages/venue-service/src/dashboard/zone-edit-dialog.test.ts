@@ -15,7 +15,7 @@ afterEach(() => {
   setLocale("en");
   vi.restoreAllMocks();
 });
-it("shows no season sentence, hours link, floor-plan link or preview, and reads neither", async () => {
+it("shows no season sentence, hours link or floor-plan link, and reads neither", async () => {
   const hours = vi.spyOn(OpeningHoursApi.prototype, "watchOpeningHours");
   const paths: string[] = [];
   const { el } = await mountZoneEditor((async (path: string) => {
@@ -28,7 +28,6 @@ it("shows no season sentence, hours link, floor-plan link or preview, and reads 
   expect(root.querySelector("[data-test=closed-week-summary]")).toBeNull();
   expect(root.querySelector("[data-test=zone-opening-hours]")).toBeNull();
   expect(root.querySelector("[data-test=zone-floor-plan]")).toBeNull();
-  expect(root.querySelector("wt-floor-plan-preview")).toBeNull();
   expect(root.querySelector("a")).toBeNull();
   expect(paths.filter((path) => path.includes("/floor-plan"))).toEqual([]);
   expect(hours).not.toHaveBeenCalled();
