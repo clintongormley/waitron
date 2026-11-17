@@ -181,6 +181,30 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   }
 }
 
+function openCopy(path: string) {
+  const connection = new DatabaseSync(path, { readOnly: true, allowExtension: false });
+  return {
+    connection,
+    copy: drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} }),
+  };
+}
+
+/** Opened read-only. Refuses a copy of `venue.db` whose schema is ahead of this software. */
+export async function assertVenueCopyNotAhead(
+  path: string,
+  migrationsRoot: string | null,
+): Promise<void> {
+  const { connection, copy } = openCopy(path);
+  try {
+    const files: MigrationFiles = { venue: copy, node: copy };
+    // The copy is venue.db alone; node.db's sets are this box's own.
+    const venueSets = manifestSets().filter((set) => set.database !== "node");
+    await assertNotAhead(files, venueSets, migrationsRoot);
+  } finally {
+    connection.close();
+  }
+}
+
 /**
  * Opened read-only, so the checks cannot change the copy. Refuses a schema ahead of this software;
  * true only when the copy's `nodes` row for this box holds this box's own key.
@@ -191,13 +215,9 @@ export async function checkCopy(
   ownPublicKey: string,
   migrationsRoot: string | null,
 ): Promise<boolean> {
-  const connection = new DatabaseSync(path, { readOnly: true, allowExtension: false });
+  await assertVenueCopyNotAhead(path, migrationsRoot);
+  const { connection, copy } = openCopy(path);
   try {
-    const copy = drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
-    const files: MigrationFiles = { venue: copy, node: copy };
-    // The copy is venue.db alone; node.db's sets are this box's own.
-    const venueSets = manifestSets().filter((set) => set.database !== "node");
-    await assertNotAhead(files, venueSets, migrationsRoot);
     const [row] = await copy
       .select({ publicKey: nodes.publicKey })
       .from(nodes)
