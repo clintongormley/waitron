@@ -1601,7 +1601,133 @@ describe("setup-done-screen after a start that failed", () => {
     expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN);
     const links = [...el.shadowRoot!.querySelectorAll("[data-test=links] wt-choice-row")];
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/"]);
-    expect(links[0]!.getAttribute("data-test")).toBe("link-recovery");
+    expect(links[0]!.getAttribute("data-test")).toBe("link-server");
+    expect(links[0]!.textContent?.trim()).toBe(
+      "Its page explains what went wrong and has a button to try starting it again.",
+    );
+  });
+
+  /** Answers as the box does: `GONE` from the setup route, and the recovery page's JSON once failed. */
+  function failingBox() {
+    const box = { answer: WAITING as object };
+    const getStatus = vi.fn(() => Promise.reject(box.answer));
+    const getRecoveryStatus = vi.fn(() =>
+      box.answer === GONE ? Promise.resolve(RECOVERY) : trading(),
+    );
+    return { box, getStatus, getRecoveryStatus };
+  }
+
+  async function failedFromWaiting(clock: ReturnType<typeof clockApi>) {
+    const { box, getStatus, getRecoveryStatus } = failingBox();
+    const el = await mountDone(getStatus, {
+      api: {
+        getStatus,
+        getRecoveryStatus,
+        restoreClock: clock.restoreClock,
+      } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+      restored: "archive",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    box.answer = GONE;
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
+    );
+    return { el, box };
+  }
+
+  it("shows no clock controls once a start that waited for its time fails", async () => {
+    const { el } = await failedFromWaiting(clockApi());
+    expect(q(el, "[data-test=clock-step]")).toBeNull();
+    expect(q(el, "[data-test=clock-confirm]")).toBeNull();
+  });
+
+  it("compares the times afresh when a failed start goes back to waiting for its time", async () => {
+    const clock = clockApi();
+    const { el, box } = await failedFromWaiting(clock);
+    box.answer = WAITING;
+    await vi.waitFor(() =>
+      expect(clock.sent.filter((call) => call.route === "compare")).toHaveLength(2),
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=clock-confirm]")).not.toBeNull());
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(WAITING_EN);
+  });
+
+  it("sends nothing more for a This device press whose answer arrives after the start failed", async () => {
+    let answerSet!: () => void;
+    const clock = clockApi();
+    const restoreClock = vi.fn((route: string, body: Record<string, unknown>) =>
+      route === "set"
+        ? new Promise((resolve) => {
+            clock.sent.push({ route, body });
+            answerSet = () => resolve({ status: "set" });
+          })
+        : clock.restoreClock(route, body),
+    );
+    const { box, getStatus, getRecoveryStatus } = failingBox();
+    const el = await mountDone(getStatus, {
+      api: { getStatus, getRecoveryStatus, restoreClock } as unknown as SetupApi,
+      nodeRecoveryKey: "node-key-secret",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=clock-server]")?.textContent).toBe(when(SERVER_MS)),
+    );
+    q(el, "[data-test=clock-this-device]")!.click();
+    await vi.waitFor(() => expect(clock.sent.at(-1)?.route).toBe("set"));
+    box.answer = GONE;
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
+    );
+    const sent = clock.sent.length;
+    answerSet();
+    await afterATimerTurn(el);
+    expect(clock.sent).toHaveLength(sent);
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN);
+  });
+
+  it.each([
+    ["a file restore", { restored: "archive" }],
+    ["a fresh Live setup", { onboardingIntent: "live" }],
+  ] as const)(
+    "after %s whose start failed, hides the cards that say the server trades but keeps the server key",
+    async (_, extra) => {
+      const { box, getStatus, getRecoveryStatus } = failingBox();
+      box.answer = GONE;
+      const el = await mountDone(getStatus, {
+        api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
+        openingHours: { departmentId: "first-department" },
+        breakGlassSecret: "key-on-paper",
+        ...extra,
+      });
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
+      );
+      expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+      expect(q(el, "[data-test=opening-hours]")).toBeNull();
+      expect(q(el, "[data-test=device-steps]")).toBeNull();
+      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    },
+  );
+
+  it("shows those cards again once a later start trades", async () => {
+    const { box, getStatus, getRecoveryStatus } = failingBox();
+    box.answer = GONE;
+    const el = await mountDone(getStatus, {
+      api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
+      openingHours: { departmentId: "first-department" },
+      restored: "archive",
+    });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
+    );
+    expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+    getRecoveryStatus.mockImplementation(trading);
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
+    expect(q(el, "[data-test=opening-hours]")).not.toBeNull();
+    expect(q(el, "[data-test=device-steps]")).not.toBeNull();
   });
 
   it("says it in Spanish", async () => {
@@ -1614,6 +1740,9 @@ describe("setup-done-screen after a start that failed", () => {
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
         "El servidor no ha arrancado. Ábrelo para ver qué ha fallado y qué puedes hacer:",
       ),
+    );
+    expect(q(el, "[data-test=link-server]")?.textContent?.trim()).toBe(
+      "Su página explica qué ha fallado y tiene un botón para intentar arrancarlo de nuevo.",
     );
   });
 

@@ -67,6 +67,8 @@ export const finishEn = {
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
   "done.description.email": "Read Demo account emails, such as invitations and password resets.",
+  "done.description.server":
+    "Its page explains what went wrong and has a button to try starting it again.",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
   "done.link.server": "Server",
@@ -167,6 +169,8 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.description.till": "Toma pedidos y cobra.",
   "done.description.email":
     "Lee los correos de cuentas de demostración, como invitaciones y restablecimientos de contraseña.",
+  "done.description.server":
+    "Su página explica qué ha fallado y tiene un botón para intentar arrancarlo de nuevo.",
   "done.link.till": "Caja",
   "done.link.dashboard": "Panel",
   "done.link.server": "Servidor",

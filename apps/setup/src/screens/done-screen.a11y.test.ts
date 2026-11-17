@@ -142,6 +142,25 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations once the start has failed", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: {
+          getStatus: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
+          getRecoveryStatus: vi.fn().mockResolvedValue({ failures: 3, level: "recovery" }),
+        } as unknown as SetupApi,
+        startDelayMs: 0,
+        pollIntervalMs: 100000,
+        restored: "archive",
+        breakGlassSecret: "bg-9f3a",
+      },
+      theme,
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=link-server]")).not.toBeNull());
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the mirror path", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

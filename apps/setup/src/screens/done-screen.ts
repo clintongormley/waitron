@@ -173,7 +173,10 @@ export class SetupDoneScreen extends LitElement {
 
   #compares = 0;
 
-  /** Moves on when the screen leaves the page, so work begun before then sends no keyed request. */
+  /**
+   * Moves on when the screen leaves the page or the start fails, so clock work begun before then
+   * sends no keyed request and its answer is dropped.
+   */
   #life = 0;
 
   #timer?: ReturnType<typeof setTimeout>;
@@ -240,11 +243,25 @@ export class SetupDoneScreen extends LitElement {
       if (!this.isConnected) return;
       const failed = await this.#startFailed();
       if (failed === undefined || !this.isConnected) return;
-      this.startFailed = failed;
-      if (failed) return;
+      if (failed) {
+        this.#failed();
+        return;
+      }
+      this.startFailed = false;
       this.ready = true;
       this.nodeRecoveryKey = undefined;
     }
+  }
+
+  /** A later start that waits for its time again is compared afresh. */
+  #failed(): void {
+    this.#life += 1;
+    this.startFailed = true;
+    this.waitingForClock = false;
+    this.clockTimes = undefined;
+    this.confirmed = false;
+    this.clockNote = undefined;
+    this.#compareAgain = false;
   }
 
   /** Undefined when the box could not be reached, or answered 5xx, so the next poll asks again. */
@@ -437,16 +454,17 @@ export class SetupDoneScreen extends LitElement {
         ${this.startFailed ? this.#serverLink() : this.#appLinks()}
       </div>
       ${
-        this.openingHours === undefined
+        this.openingHours === undefined || this.startFailed
           ? nothing
           : html`<wt-card data-test="opening-hours">
               <p>${t("done.opening_hours")}</p>
               <a href="/opening-hours/view/year">${t("done.change_opening_hours")}</a>
             </wt-card>`
       }
-      ${this.restored === undefined ? nothing : this.#deviceSteps()} ${this.#breakGlass()}
+      ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
+      ${this.#breakGlass()}
       ${
-        this.onboardingIntent === "demo" || this.restored === "bucket"
+        this.onboardingIntent === "demo" || this.restored === "bucket" || this.startFailed
           ? nothing
           : html`<wt-card data-test="backup-nudge">
               <p>${t("done.backup_nudge")}</p>
@@ -476,11 +494,9 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #serverLink(): TemplateResult {
-    return html`<wt-choice-row
-      data-test="link-recovery"
-      heading=${t("done.link.server")}
-      href="/"
-    ></wt-choice-row>`;
+    return html`<wt-choice-row data-test="link-server" heading=${t("done.link.server")} href="/"
+      >${t("done.description.server")}</wt-choice-row
+    >`;
   }
 
   #statusKey():
