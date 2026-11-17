@@ -57,6 +57,8 @@ export const restoreEn = {
     "Choose the environment the backup came from. A preparation or demo backup cannot become a Live database.",
   "restore.environment_live": "Live",
   "restore.environment_preproduction": "Preparation or demo",
+  "restore.environment_followed":
+    "This backup is from “{environment}”, so Backup environment now matches it.",
   "restore.acknowledge": "I confirm no other running server has newer restaurant data.",
   "restore.acknowledge_help_label": "Help with recovery confirmation",
   "restore.acknowledge_help":
@@ -93,6 +95,8 @@ export const restoreEn = {
     "Choose the environment the old server ran in. A preparation copy cannot become a Live database.",
   "restore_bucket.environment_live": "Live",
   "restore_bucket.environment_preproduction": "Preparation",
+  "restore_bucket.environment_followed":
+    "This copy is from “{environment}”, so Environment now matches it.",
   "restore_bucket.acknowledge": "I confirm no other running server has newer restaurant data.",
   "restore_bucket.acknowledge_missing": "Confirm that no other running server has newer data.",
   "restore_bucket.venue_owner": "The copy in the bucket belongs to",
@@ -251,6 +255,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Elige el entorno del que viene la copia. Una copia de preparación o de demostración no puede convertirse en una base de datos en vivo.",
   "restore.environment_live": "En vivo",
   "restore.environment_preproduction": "Preparación o demostración",
+  "restore.environment_followed":
+    "Esta copia es de «{environment}», así que «Entorno de la copia» ahora coincide con ella.",
   "restore.acknowledge":
     "Confirmo que ningún otro servidor en funcionamiento tiene datos más recientes del restaurante.",
   "restore.acknowledge_help_label": "Ayuda sobre la confirmación de la recuperación",
@@ -290,6 +296,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Elige el entorno en el que funcionaba el servidor anterior. Una copia de preparación no puede convertirse en una base de datos en vivo.",
   "restore_bucket.environment_live": "En vivo",
   "restore_bucket.environment_preproduction": "Preparación",
+  "restore_bucket.environment_followed":
+    "Esta copia es de «{environment}», así que «Entorno» ahora coincide con ella.",
   "restore_bucket.acknowledge":
     "Confirmo que ningún otro servidor en funcionamiento tiene datos más recientes del restaurante.",
   "restore_bucket.acknowledge_missing":

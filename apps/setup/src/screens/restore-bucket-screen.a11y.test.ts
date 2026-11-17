@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { SetupApi } from "../api/client.js";
+import {
+  REVIEWED_PREVIEW,
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import "./restore-bucket-screen.js";
 import type { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 
@@ -12,6 +18,24 @@ async function bottomOf(el: HTMLElement): Promise<string> {
   };
   await actions.updateComplete;
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+/** A Review that refuses any environment but a pre-production copy's own, as `restore-gate.ts` does. */
+function preproductionCopy(environmentOf: (init: RequestInit) => string): SetupApi {
+  return new SetupApi("", async (_input, init) => {
+    const environment = environmentOf(init!);
+    if (environment !== "preproduction")
+      return Response.json(
+        {
+          error: {
+            code: "restore.environment_mismatch",
+            params: { backup: "preproduction", target: environment },
+          },
+        },
+        { status: 409 },
+      );
+    return Response.json({ ...REVIEWED_PREVIEW, environment });
+  });
 }
 
 describe.each(["light", "dark"] as const)(
@@ -101,6 +125,32 @@ describe.each(["light", "dark"] as const)(
         theme,
       );
       expect(await bottomOf(el)).toContain("could not be downloaded");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations with the note that Review switched the environment", async () => {
+      const api = preproductionCopy(
+        (init) => (JSON.parse(String(init.body)) as { environment: string }).environment,
+      );
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        { api },
+        theme,
+      );
+      const area = el
+        .shadowRoot!.querySelector("[data-test=kit]")!
+        .shadowRoot!.querySelector("textarea")!;
+      area.value = "selected-private-kit";
+      area.dispatchEvent(new Event("input"));
+      await el.updateComplete;
+      const copy = el.shadowRoot!.querySelector("setup-recovery-copy")! as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await copy.updateComplete;
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=environment-followed]")).not.toBeNull(),
+      );
       await expectNoA11yViolations(host);
     });
   },
