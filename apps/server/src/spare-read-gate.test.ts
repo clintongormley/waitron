@@ -115,7 +115,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "shows %s spare status at dashboard addresses and in API refusals",
   async (locale) => {
     const app = fixture();
-    for (const path of ["/", "/manage", "/manage/staff", "/manage/assets/old.js", "/till/"]) {
+    for (const path of ["/", "/staff", "/assets/old.js", "/favicon.svg", "/till/"]) {
       const response = await app.request(path, { headers: { "accept-language": locale } });
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -146,7 +146,10 @@ it("serves the handover page and its built assets while private reads remain clo
     const response = await app.request(path);
     expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
   }
-  for (const path of ["/handover-other/operation-one", "/handover/operation-one/private"]) {
+  const otherPage = await app.request("/handover-other/operation-one");
+  expect(otherPage.status).toBe(200);
+  expect(await otherPage.text()).toContain(SPARE_WORDS["en-GB"].title);
+  for (const path of ["/handover/operation-one/private"]) {
     expect((await app.request(path)).status).toBe(403);
   }
 });
@@ -158,8 +161,8 @@ it("at the venue's name a silent main server's spare sends pages to the switch p
   const app = fixture(SILENT);
   for (const [path, destination] of [
     ["/", "/handover/emergency"],
-    ["/manage", "/handover/emergency"],
-    ["/manage/servers", "/handover/emergency"],
+    ["/devices", "/handover/emergency"],
+    ["/servers", "/handover/emergency"],
     [
       "/till/tabs/counter",
       "/handover/emergency?back=https%3A%2F%2Fwaitron.local%2Ftill%2Ftabs%2Fcounter",
@@ -175,7 +178,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "at the venue's name, with the main server answering, pages say it is back and reload: %s",
   async (locale) => {
     const app = fixture(ANSWERING);
-    for (const path of ["/", "/manage", "/manage/servers", "/till/tabs/counter"]) {
+    for (const path of ["/", "/devices", "/servers", "/till/tabs/counter"]) {
       const response = await app.request(`${VENUE}${path}`, {
         headers: { "accept-language": locale },
       });
@@ -213,7 +216,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "the closed page says for how long a silent main server has not answered and links to the switch: %s",
   async (locale) => {
     const app = fixture({ silentSinceMs: NOW - 65_000, reached: true, silent: true });
-    for (const path of ["/", "/manage", "/manage/servers", "/till/tabs/counter"]) {
+    for (const path of ["/", "/devices", "/servers", "/till/tabs/counter"]) {
       const body = await (
         await app.request(`${OWN}${path}`, { headers: { "accept-language": locale } })
       ).text();
@@ -233,7 +236,7 @@ it.each(["en-GB", "es-ES"] as const)(
   async (locale) => {
     const app = fixture({ silentSinceMs: null, reached: false, silent: false });
     const body = await (
-      await app.request(`${OWN}/manage`, { headers: { "accept-language": locale } })
+      await app.request(`${OWN}/`, { headers: { "accept-language": locale } })
     ).text();
     expect(body).toContain(SPARE_WORDS[locale].mainUnreached);
     expect(body).not.toContain("/handover/emergency");
@@ -245,7 +248,7 @@ it.each([
   ["not yet silent long enough", { silentSinceMs: NOW - 5_000, reached: true, silent: false }],
   ["watching nothing", null],
 ] as const)("the closed page says nothing of the main server while %s", async (_, main) => {
-  const body = await (await fixture(main).request(`${OWN}/manage/servers`)).text();
+  const body = await (await fixture(main).request(`${OWN}/servers`)).text();
   expect(body).toContain(SPARE_WORDS["en-GB"].title);
   expect(body).not.toContain(SPARE_WORDS["en-GB"].mainBack);
   expect(body).not.toContain(SPARE_WORDS["en-GB"].mainUnreached);

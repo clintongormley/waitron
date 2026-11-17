@@ -22,7 +22,7 @@ afterEach(() => {
 });
 it("keeps a staged password on Keep and erases it on Discard, then leaves cleanly", async () => {
   setLocale("en");
-  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/box-status");
   const { el: app } = await mountWidget<WifiLeaveApp>("wifi-leave-test-app", {});
   const wifi = app.shadowRoot!.querySelector("dashboard-box-wifi-dialog")!;
   wifi.show(false);

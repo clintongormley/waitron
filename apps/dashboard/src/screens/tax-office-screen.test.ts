@@ -19,7 +19,7 @@ import "./tax-office-screen.js";
 const locale = currentLocale();
 beforeEach(() => {
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage/invoices");
+  history.replaceState(null, "", "/invoices");
   localStorage.removeItem("waitron.invoices.table:columns");
 });
 afterEach(() => {
@@ -221,7 +221,7 @@ it.each([
   ["rate", "21", { rate: "21" }],
   ["amount", "34.10", { amount: "34.10" }],
 ] as const)("sends the %s filter as its query parameter", async (name, value, sent) => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
   const el = await mount({ listTaxOfficeInvoices });
   await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(1));
@@ -241,7 +241,7 @@ it.each([
 });
 
 it("sends the issue range, the operation range and the kind as their query parameters", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
   const el = await mount({ listTaxOfficeInvoices });
   await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(1));
@@ -271,7 +271,7 @@ it("reads the filters from the address", async () => {
   history.replaceState(
     null,
     "",
-    "/manage/invoices/from/2026-10-01/to/2026-10-31/q/Ruiz/rate/21/amount/34.10/operation-from/2026-09-01/operation-to/2026-09-30/kind/F1",
+    "/invoices/from/2026-10-01/to/2026-10-31/q/Ruiz/rate/21/amount/34.10/operation-from/2026-09-01/operation-to/2026-09-30/kind/F1",
   );
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
   await mount({ listTaxOfficeInvoices });
@@ -290,7 +290,7 @@ it("reads the filters from the address", async () => {
 });
 
 it("asks for the next page with the keyset the last page named, and adds its rows", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30/kind/F2");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/kind/F2");
   const next = { at: "2026-11-05T10:30:00.000Z", id: "sale-1" };
   const listTaxOfficeInvoices = vi
     .fn()
@@ -312,7 +312,7 @@ it("asks for the next page with the keyset the last page named, and adds its row
 });
 
 it("reads the next page with the listed rows' filter while a new range is half typed", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
   const next = { at: "2026-11-05T10:30:00.000Z", id: "sale-1" };
   const listTaxOfficeInvoices = vi
     .fn()
@@ -425,7 +425,7 @@ const monthButton = (el: TaxOfficeScreen) =>
   )!;
 
 it("names the month of the issue range's start on the download action, in the person's language", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount({ listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
 
@@ -439,7 +439,7 @@ it("names the month of the issue range's start on the download action, in the pe
 });
 
 it("keeps the download action quiet and switched off while the issue start date is empty", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const requestTaxOfficeMonth = vi.fn();
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -458,7 +458,7 @@ it("keeps the download action quiet and switched off while the issue start date 
 });
 
 it("keeps the download action quiet and switched off when the address holds an impossible start date", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-13-01/to/2026-13-31");
+  history.replaceState(null, "", "/invoices/from/2026-13-01/to/2026-13-31");
   const requestTaxOfficeMonth = vi.fn();
   const el = await mount({
     listTaxOfficeInvoices: vi
@@ -498,7 +498,7 @@ const preparing = (month: string) =>
   `Preparing the invoices for ${month}. You can leave this page: a notice appears when they are ready.`;
 
 it("Download asks the server to prepare the month, tells the app, and shows it being prepared", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const requestTaxOfficeMonth = vi.fn().mockResolvedValue(building());
   const told: unknown[] = [];
   const listen = (event: Event) => told.push((event as CustomEvent).detail);
@@ -524,7 +524,7 @@ it("Download asks the server to prepare the month, tells the app, and shows it b
 
 it("says in Spanish that the month is being prepared", async () => {
   setLocale("es-ES");
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
     { monthFile: building() },
@@ -536,7 +536,7 @@ it("says in Spanish that the month is being prepared", async () => {
 });
 
 it("ignores a second press while the month is being asked for and prepared", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   let answer!: (view: MonthDownloadDto) => void;
   const requestTaxOfficeMonth = vi.fn(
     () => new Promise<MonthDownloadDto>((resolve) => (answer = resolve)),
@@ -561,7 +561,7 @@ it("ignores a second press while the month is being asked for and prepared", asy
 });
 
 it("shows the state the app holds when the person leaves the page and comes back", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const api: Partial<DashboardApi> = {
     liveData: new LiveData(),
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -592,7 +592,7 @@ it("shows the state the app holds when the person leaves the page and comes back
 });
 
 it("follows the app's record while the page is open, from preparing to ready", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
     { monthFile: building() },
@@ -606,7 +606,7 @@ it("follows the app's record while the page is open, from preparing to ready", a
 });
 
 it("Save the file on the ready line starts the browser's download, shows the file's size, and the line goes", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const startDownload = vi.fn();
   const el = await mount(
     {
@@ -635,7 +635,7 @@ it("Save the file on the ready line starts the browser's download, shows the fil
 });
 
 it("says the file is no longer on the server when Save finds it gone, and downloads nothing", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const startDownload = vi.fn();
   const el = await mount(
     {
@@ -659,7 +659,7 @@ it("says the file is no longer on the server when Save finds it gone, and downlo
 });
 
 it("tells the app which file was saved from the ready line", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const told: unknown[] = [];
   const listen = (event: Event) => told.push((event as CustomEvent).detail);
   document.addEventListener("tax-office-month-settled", listen);
@@ -681,7 +681,7 @@ it("tells the app which file was saved from the ready line", async () => {
 });
 
 it("keeps Save the file when the check before saving is refused for another reason", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const told: unknown[] = [];
   const listen = (event: Event) => told.push((event as CustomEvent).detail);
   document.addEventListener("tax-office-month-settled", listen);
@@ -707,7 +707,7 @@ it("keeps Save the file when the check before saving is refused for another reas
 });
 
 it("takes the ready line away once the app marks that same file settled", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
     { monthFile: ready() },
@@ -724,7 +724,7 @@ it("takes the ready line away once the app marks that same file settled", async 
 });
 
 it("names the month whose invoices could not be prepared", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
+  history.replaceState(null, "", "/invoices/from/2026-04-15/to/2026-04-30");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
     { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: null } },
@@ -741,7 +741,7 @@ it("names the month whose invoices could not be prepared", async () => {
 });
 
 it("says why the month could not be downloaded, and keeps the list", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([invoice()])),
     requestTaxOfficeMonth: vi.fn().mockRejectedValue({ code: "tax_office.export_running" }),
@@ -762,7 +762,7 @@ it("says why the month could not be downloaded, and keeps the list", async () =>
 });
 
 it("names the free and needed space when the disk is too full to prepare the month", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const params = { freeBytes: 2_300_000_000, neededBytes: 2_416_000_000 };
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([invoice()])),
@@ -795,7 +795,7 @@ const nextStep = (el: TaxOfficeScreen, test: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`);
 
 it("says how far the month had got when the server ran short of space, in place of the plain failure", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-04-15/to/2026-04-30");
+  history.replaceState(null, "", "/invoices/from/2026-04-15/to/2026-04-30");
   const el = await mount(
     { listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])) },
     { monthFile: { status: "failed", id: "b1", month: "2026-03", refusal: ranOut } },
@@ -812,7 +812,7 @@ it.each([
 ] as const)(
   "offers an administrator's sign-in beside %s for want of space when the person cannot open Backups",
   async (_case, where) => {
-    history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+    history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
     const el = await mount(
       {
         listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -844,7 +844,7 @@ it.each([
 ] as const)(
   "offers Backups beside %s for want of space when the person can open it",
   async (_case, where) => {
-    history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+    history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
     const el = await mount(
       {
         listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -871,7 +871,7 @@ it.each([
 );
 
 it("offers no next step beside a refusal that is not about disk space", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount(
     {
       listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -888,7 +888,7 @@ it("offers no next step beside a refusal that is not about disk space", async ()
 });
 
 it("keeps naming the month being prepared when Issued from moves to another month", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const requestTaxOfficeMonth = vi.fn().mockResolvedValue(building());
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
@@ -910,7 +910,7 @@ it("keeps naming the month being prepared when Issued from moves to another mont
 });
 
 it("keeps the download action primary and busy when Issued from is cleared while the month is prepared", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const el = await mount({
     listTaxOfficeInvoices: vi.fn().mockResolvedValue(page([])),
     requestTaxOfficeMonth: vi.fn().mockResolvedValue(building()),
@@ -934,7 +934,7 @@ it("keeps the download action primary and busy when Issued from is cleared while
 });
 
 it("clears an earlier download refusal when the month is asked for again", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-03-15/to/2026-04-10");
+  history.replaceState(null, "", "/invoices/from/2026-03-15/to/2026-04-10");
   const requestTaxOfficeMonth = vi
     .fn()
     .mockRejectedValueOnce({ code: "tax_office.export_running" })
@@ -1034,7 +1034,7 @@ it.each([
 });
 
 it("clears an earlier field refusal once a read succeeds", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30/rate/x");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/rate/x");
   const listTaxOfficeInvoices = vi
     .fn()
     .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "rate" } })
@@ -1055,7 +1055,7 @@ it("clears an earlier field refusal once a read succeeds", async () => {
 it.each(["from", "to"] as const)(
   "marks a cleared %s date as needed, and reads again once it is filled",
   async (name) => {
-    history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+    history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
     const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice()]));
     const el = await mount({ listTaxOfficeInvoices });
     await vi.waitFor(() => expect(table(el).rows).toHaveLength(1));
@@ -1083,7 +1083,7 @@ const changeField = (el: TaxOfficeScreen, name: string, value: string) =>
   );
 
 it("keeps a text filter edited moments before another one", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
   const el = await mount({ listTaxOfficeInvoices });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
@@ -1102,13 +1102,11 @@ it("keeps a text filter edited moments before another one", async () => {
     amount: "34.10",
   });
   expect(field(el, "q").value).toBe("Ruiz");
-  expect(location.pathname).toBe(
-    "/manage/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz/amount/34.10",
-  );
+  expect(location.pathname).toBe("/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz/amount/34.10");
 });
 
 it("drops an edit still waiting to be sent when Back restores an earlier search", async () => {
-  const base = "/manage/invoices/from/2026-11-01/to/2026-11-30/q/";
+  const base = "/invoices/from/2026-11-01/to/2026-11-30/q/";
   history.replaceState(null, "", `${base}Restored`);
   history.pushState(null, "", `${base}Current`);
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
@@ -1134,7 +1132,7 @@ it("drops an edit still waiting to be sent when Back restores an earlier search"
 });
 
 it("reads nothing and leaves the address alone while an issue date is empty, when Search or Kind changes", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-10-01/to/2026-10-31");
+  history.replaceState(null, "", "/invoices/from/2026-10-01/to/2026-10-31");
   const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([invoice()]));
   const el = await mount({ listTaxOfficeInvoices });
   await vi.waitFor(() => expect(table(el).loading).toBe(false));
@@ -1147,7 +1145,7 @@ it("reads nothing and leaves the address alone while an issue date is empty, whe
   await el.updateComplete;
 
   expect(listTaxOfficeInvoices).toHaveBeenCalledTimes(1);
-  expect(location.pathname).toBe("/manage/invoices/from/2026-10-01/to/2026-10-31");
+  expect(location.pathname).toBe("/invoices/from/2026-10-01/to/2026-10-31");
   expect(field(el, "from").value).toBe("");
   expect(field(el, "from").error).toBe(en["tax_office.date_required"]);
   expect(field(el, "q").value).toBe("Ruiz");
@@ -1163,7 +1161,7 @@ it("reads nothing and leaves the address alone while an issue date is empty, whe
 });
 
 it("keeps a space still being typed once the app's guarded address takes the search, and reads each search once", async () => {
-  history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async (proceed) => {
@@ -1181,7 +1179,7 @@ it("keeps a space still being typed once the app's guarded address takes the sea
   vi.advanceTimersByTime(400);
   await el.updateComplete;
 
-  expect(location.pathname).toBe("/manage/invoices/from/2026-11-01/to/2026-11-30/q/Comidas");
+  expect(location.pathname).toBe("/invoices/from/2026-11-01/to/2026-11-30/q/Comidas");
   expect(field(el, "q").value).toBe("Comidas ");
 
   changeField(el, "q", "Ruiz");
@@ -1189,7 +1187,7 @@ it("keeps a space still being typed once the app's guarded address takes the sea
   field(el, "q").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
   await el.updateComplete;
 
-  expect(location.pathname).toBe("/manage/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz");
+  expect(location.pathname).toBe("/invoices/from/2026-11-01/to/2026-11-30/q/Ruiz");
   expect(listTaxOfficeInvoices.mock.calls.map((call) => (call[0] as TaxOfficeQuery).q)).toEqual([
     undefined,
     "Comidas",

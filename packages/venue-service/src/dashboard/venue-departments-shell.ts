@@ -151,9 +151,9 @@ export class VenueDepartmentsShell extends LitElement {
     )
       return undefined;
     const parts = destination.pathname.split("/");
-    if (parts[1] !== "manage" || parts[2] !== "venue-operations") return undefined;
+    if (parts[1] !== "venue-operations") return undefined;
     const pairs = new Map<string, string>();
-    for (let i = 3; i < parts.length; i += 2) {
+    for (let i = 2; i < parts.length; i += 2) {
       if (parts[i + 1] === undefined || pairs.has(parts[i]!)) return undefined;
       try {
         pairs.set(parts[i]!, decodeURIComponent(parts[i + 1]!));
@@ -365,7 +365,7 @@ export class VenueDepartmentsShell extends LitElement {
     }
   }
   readonly #url = new UrlStateController(this, () => this.#restore(), {
-    basePath: "/manage",
+    basePath: "",
     primary: "dashboard",
     children: { "venue-operations": { department: "department", view: "view", zone: "zone" } },
   });

@@ -40,7 +40,7 @@ it("refreshes product, variant and inherited colour-ring images without changing
   expect(images[1]!.parentElement!.part.contains("inherited")).toBe(true);
   expect(images.every((i) => i.alt === "" && !i.draggable)).toBe(true);
   const link = host.querySelector("a")!;
-  expect(link.getAttribute("href")).toBe("/manage/products/product/parent?field=image");
+  expect(link.getAttribute("href")).toBe("/products/product/parent?field=image");
   link.click();
   expect(open).toHaveBeenCalledOnce();
 });

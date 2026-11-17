@@ -281,7 +281,7 @@ it("links a consent refusal to the Cloud account page in a new tab", async () =>
 
 it("links a box that is not connected to the Cloud services screen", async () => {
   const { el } = await mount({ service: "not_connected" });
-  expect(q(el, "[data-test=suggestions-connect]")!.getAttribute("href")).toBe("/manage/cloud");
+  expect(q(el, "[data-test=suggestions-connect]")!.getAttribute("href")).toBe("/cloud");
   expect(q(el, "[data-test=suggestions-consent]")).toBeNull();
 });
 

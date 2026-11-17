@@ -152,7 +152,7 @@ describe("setup-done-screen", () => {
       expect(q(el, "[data-test=opening-hours]")?.textContent).toContain(hours);
       const anchor = q(el, "[data-test=opening-hours] a");
       expect(anchor?.textContent?.trim()).toBe(link);
-      expect(anchor?.getAttribute("href")).toBe("/manage/opening-hours/view/year");
+      expect(anchor?.getAttribute("href")).toBe("/opening-hours/view/year");
     },
   );
 
@@ -170,15 +170,11 @@ describe("setup-done-screen", () => {
     [
       "en-GB",
       [
-        [
-          "Dashboard",
-          "/manage",
-          "Set up your menu, staff, devices and settings, and see your sales.",
-        ],
+        ["Dashboard", "/", "Set up your menu, staff, devices and settings, and see your sales."],
         ["Till", "/till/", "Take orders and payments."],
         [
           "Email inbox",
-          "/manage/email",
+          "/email",
           "Read Demo account emails, such as invitations and password resets.",
         ],
       ],
@@ -188,13 +184,13 @@ describe("setup-done-screen", () => {
       [
         [
           "Panel",
-          "/manage",
+          "/",
           "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
         ],
         ["Caja", "/till/", "Toma pedidos y cobra."],
         [
           "Bandeja de correo",
-          "/manage/email",
+          "/email",
           "Lee los correos de cuentas de demostración, como invitaciones y restablecimientos de contraseña.",
         ],
       ],
@@ -1109,7 +1105,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}));
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
     const hrefs = [...links.querySelectorAll("wt-choice-row")].map((row) => row.href);
-    expect(hrefs).toEqual(["/manage", "/till/"]);
+    expect(hrefs).toEqual(["/", "/till/"]);
   });
 
   it("does not promise trading mode on the mirror path", async () => {
@@ -1382,9 +1378,9 @@ describe("setup-done-screen layout", () => {
     const rows = [...q(el, "[data-test=links]")!.querySelectorAll("wt-choice-row")];
     expect(q(el, "[data-test=links]")!.classList.contains("choices")).toBe(true);
     expect(rows.map((row) => [row.heading, row.href])).toEqual([
-      ["Dashboard", "/manage"],
+      ["Dashboard", "/"],
       ["Till", "/till/"],
-      ["Email inbox", "/manage/email"],
+      ["Email inbox", "/email"],
     ]);
     expect(rows.every((row) => row.textContent!.trim().length > 0)).toBe(true);
     expect(q(el, "[data-test=links]")!.querySelectorAll("a")).toHaveLength(0);
@@ -1396,8 +1392,8 @@ describe("setup-done-screen layout", () => {
       el.shadowRoot!.querySelector<HTMLElement & { href: string }>(`[data-test=${test}]`)?.href;
     expect(["link-till", "link-dashboard", "link-email"].map(hrefOf)).toEqual([
       "/till/",
-      "/manage",
-      "/manage/email",
+      "/",
+      "/email",
     ]);
   });
 

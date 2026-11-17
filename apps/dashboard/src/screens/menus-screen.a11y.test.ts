@@ -271,7 +271,7 @@ async function mount(state: State, theme: "light" | "dark", path: string) {
   return mounted;
 }
 
-const LUNCH = "/manage/menus/menu/menu-lunch/view/structure";
+const LUNCH = "/menus/menu/menu-lunch/view/structure";
 
 function q(el: MenusScreen, selector: string): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(selector)!;
@@ -307,13 +307,13 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   it.each(["empty-list", "populated", "failed", "loading"] as const)(
     "accessible menus list, %s",
     async (state) => {
-      const { host } = await mount(state, theme, "/manage/menus");
+      const { host } = await mount(state, theme, "/menus");
       await expectNoA11yViolations(host);
     },
   );
 
   it("accessible create form refusing a blank name", async () => {
-    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const { el, host } = await mount("populated", theme, "/menus");
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
     q(el, '[data-test="menu-form"]')
@@ -420,22 +420,14 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   );
 
   it("accessible Price overrides tab", async () => {
-    const { el, host } = await mount(
-      "populated",
-      theme,
-      "/manage/menus/menu/menu-lunch/view/prices",
-    );
+    const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/prices");
     const prices = q(el, "dashboard-menu-prices-table") as HTMLElement & { rows: unknown[] };
     await vi.waitFor(() => expect(prices.rows).toHaveLength(1));
     await expectNoA11yViolations(host);
   });
 
   it("accessible Preview tab", async () => {
-    const { el, host } = await mount(
-      "populated",
-      theme,
-      "/manage/menus/menu/menu-lunch/view/preview",
-    );
+    const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/preview");
     const panel = q(el, "dashboard-menu-preview");
     await vi.waitFor(() => {
       if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");
@@ -462,7 +454,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const frame = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(width, 900);
     onTestFinished(() => page.viewport(frame.width, frame.height));
-    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const { el, host } = await mount("populated", theme, "/menus");
     const table = q(el, '[data-test="menus"]');
     await vi.waitFor(() =>
       expect(
@@ -476,7 +468,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const frame = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(700, 900);
     onTestFinished(() => page.viewport(frame.width, frame.height));
-    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const { el, host } = await mount("populated", theme, "/menus");
     const table = q(el, '[data-test="menus"]');
     await vi.waitFor(() => {
       expect(table.shadowRoot!.querySelectorAll("thead th")).toHaveLength(3);
@@ -490,7 +482,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const frame = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(width, 900);
     onTestFinished(() => page.viewport(frame.width, frame.height));
-    const mounted = await mount("populated", theme, "/manage/menus/menu/menu-lunch/view/home");
+    const mounted = await mount("populated", theme, "/menus/menu/menu-lunch/view/home");
     await vi.waitFor(() => {
       const root = mounted.el.shadowRoot!;
       if (!root.querySelector('wt-slider[name="home-columns"]')) throw new Error("home");
@@ -708,7 +700,7 @@ describe.each(["light", "dark"] as const)("menus list highlighted row (%s)", (th
       height = window.innerHeight;
     await page.viewport(1280, 900);
     onTestFinished(() => page.viewport(width, height));
-    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const { el, host } = await mount("populated", theme, "/menus");
     const table = q(el, 'wt-data-table[data-test="menus"]');
     const row = () => table.shadowRoot!.querySelector('tr[data-row-key="menu-lunch"]')!;
     await vi.waitFor(() =>

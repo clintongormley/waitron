@@ -176,7 +176,7 @@ describe("department list", () => {
     const cells = rows(el).map((row) => row.querySelectorAll("td")[0]!);
     expect(cells[0]!.textContent).toContain("Restaurant and bar has no opening periods.");
     expect(cells[0]!.querySelector('[part="setup-issue"] a')!.getAttribute("href")).toBe(
-      "/manage/periods",
+      "/periods",
     );
     expect(cells[0]!.querySelector('[part="setup-issue"] a')!.textContent).toBe("Set up periods");
     expect(cells[0]!.textContent).toContain("Dining room needs an active, published menu.");
@@ -265,7 +265,7 @@ describe("department list", () => {
     );
     expect(
       find(el, '[data-test="default-station-missing"]')!.querySelector("a")!.getAttribute("href"),
-    ).toBe("/manage/prep-stations");
+    ).toBe("/prep-stations");
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
       "No department is available: add one to take orders",
     );

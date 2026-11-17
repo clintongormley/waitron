@@ -68,7 +68,7 @@ function api(status: MenuStatus = changed): DashboardApi {
 
 describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) => {
   it("accessible path, name, live version and starred Preview tab above the Structure tree", async () => {
-    history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
+    history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
       { api: api() },
@@ -87,7 +87,7 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
   });
 
   it("accessible state line saying publishing waits on clashes, as a link to the Prices tab", async () => {
-    history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
+    history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
       { api: api({ ...changed, clashes: 3 }) },

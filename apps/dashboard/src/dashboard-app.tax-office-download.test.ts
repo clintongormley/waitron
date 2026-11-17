@@ -178,7 +178,7 @@ async function openReadyNotice(background: Mock, overrides: Record<string, unkno
 
 const initialUrl = location.href;
 beforeEach(() => {
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
   setLocale("en-GB");
 });
 afterEach(() => {
@@ -468,7 +468,7 @@ describe("the shell's notice for the tax office's month file", () => {
   });
 
   it("takes the Invoices screen's ready line away once the notice's Save the file saved it", async () => {
-    history.replaceState(null, "", "/manage/invoices");
+    history.replaceState(null, "", "/invoices");
     const background = vi.fn().mockResolvedValueOnce(building()).mockResolvedValue(ready());
     const { el } = await openReadyNotice(background);
     await expect.poll(() => screenSave(el)).not.toBeNull();
@@ -496,7 +496,7 @@ describe("the shell's notice for the tax office's month file", () => {
     signInButton.click();
     await expect.poll(() => login(el)).not.toBeNull();
     expect(api.logout).toHaveBeenCalledOnce();
-    expect(location.pathname).toBe("/manage/backup");
+    expect(location.pathname).toBe("/backup");
   });
 
   it("offers Backups itself on the low-disk notice to a session that can open it", async () => {
@@ -538,13 +538,13 @@ describe("the shell's notice for the tax office's month file", () => {
     const goTo = toast(el).querySelector<HTMLElement>("[data-test=tax-office-go-to-backups]")!;
     expect(goTo.textContent!.trim()).toBe("Go to Backups");
     goTo.click();
-    await expect.poll(() => location.pathname).toBe("/manage/backup");
+    await expect.poll(() => location.pathname).toBe("/backup");
     expect(api.logout).not.toHaveBeenCalled();
     expect(toast(el).open).toBe(false);
   });
 
   it("keeps Save on the Invoices screen when the file turns ready before the request's own answer arrives", async () => {
-    history.replaceState(null, "", "/manage/invoices/from/2026-03-01/to/2026-03-31");
+    history.replaceState(null, "", "/invoices/from/2026-03-01/to/2026-03-31");
     let answer!: (view: MonthDownloadDto) => void;
     const requestTaxOfficeMonth = vi.fn(
       () => new Promise<MonthDownloadDto>((resolve) => (answer = resolve)),
@@ -568,7 +568,7 @@ describe("the shell's notice for the tax office's month file", () => {
   });
 
   it("reads the month file once for the notice and the Invoices screen, and the screen shows what it read", async () => {
-    history.replaceState(null, "", "/manage/invoices");
+    history.replaceState(null, "", "/invoices");
     const background = vi.fn().mockResolvedValue(building());
     const { api, foreground } = shellApi(background);
     const { el } = await mount(api);
@@ -654,7 +654,7 @@ describe("where the shell draws the notice", () => {
     "stacks the notice under the alerts pop-up at %i px, over the page rather than pushing it down",
     async (width) => {
       await page.viewport(width, 844);
-      history.replaceState(null, "", "/manage/invoices");
+      history.replaceState(null, "", "/invoices");
       const listAlerts = vi
         .fn()
         .mockResolvedValueOnce({ visible: true, alerts: [] })

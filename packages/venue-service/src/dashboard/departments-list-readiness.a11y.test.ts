@@ -149,7 +149,7 @@ describe.each(["light", "dark"] as const)("phone readiness list (%s)", (theme) =
           locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
         );
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
-        expect(link.getAttribute("href")).toBe("/manage/periods");
+        expect(link.getAttribute("href")).toBe("/periods");
         expect(link.textContent!.trim()).toBe(
           locale === "en" ? "Set up periods" : "Configura los periodos",
         );
@@ -200,7 +200,7 @@ describe.each(["light", "dark"] as const)("desktop Opening hours warning (%s)", 
           locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
         );
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
-        expect(link.getAttribute("href")).toBe("/manage/periods");
+        expect(link.getAttribute("href")).toBe("/periods");
         expect(link.textContent!.trim()).toBe(
           locale === "en" ? "Set up periods" : "Configura los periodos",
         );

@@ -167,7 +167,7 @@ function headingFocused(el: PaymentsScreen): boolean {
 
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/payments/view/readers");
+  history.replaceState(null, "", "/payments/view/readers");
 });
 afterEach(() => {
   cleanupWidgets();

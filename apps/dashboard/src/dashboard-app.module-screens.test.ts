@@ -112,20 +112,20 @@ it("opens a further screen from the nav, and the primary one still opens", async
   const el = await mount();
   navItem(el, "widget-report")!.click();
   await vi.waitFor(() => expect(shown(el, "widget-report")).not.toBeNull());
-  expect(location.pathname).toBe("/manage/widget-report");
+  expect(location.pathname).toBe("/widget-report");
   navItem(el, "widgets")!.click();
   await vi.waitFor(() => expect(shown(el, "widgets")).not.toBeNull());
   expect(shown(el, "widget-report")).toBeNull();
 });
 
 it("restores a permitted further screen from its address", async () => {
-  const el = await mount("/manage/widget-report");
+  const el = await mount("/widget-report");
   await vi.waitFor(() => expect(shown(el, "widget-report")).not.toBeNull());
   expect(navItem(el, "widget-report")!.getAttribute("aria-current")).toBe("page");
 });
 
 it("refuses a further screen's address without its permission, and lands on the overview", async () => {
-  const el = await mount("/manage/widget-audit");
+  const el = await mount("/widget-audit");
   await vi.waitFor(() => expect(overview(el)).not.toBeNull());
   expect(shown(el, "widget-audit")).toBeNull();
 });
@@ -210,7 +210,7 @@ it("refuses to start when a further screen repeats another screen's id", async (
 });
 
 it("opens the core Modules menu for hardware managers without relying on enabled contributions", async () => {
-  history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+  history.replaceState(null, "", "/modules/view/card-providers/state/all");
   const api = stubApi();
   vi.mocked(api.getMe).mockResolvedValue({
     ...(await api.getMe()),
@@ -245,11 +245,11 @@ it("opens the core Modules menu for hardware managers without relying on enabled
       .shadowRoot!.querySelector("[data-test=switch-stripe]"),
   ).toBeNull();
   expect(navItem(el, "modules")).not.toBeNull();
-  expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
 });
 
 it("redirects the old provider setup address to all card providers", async () => {
-  history.replaceState(null, "", "/manage/payments/view/providers");
+  history.replaceState(null, "", "/payments/view/providers");
   const api = stubApi();
   vi.mocked(api.getMe).mockResolvedValue({
     ...(await api.getMe()),
@@ -264,13 +264,13 @@ it("redirects the old provider setup address to all card providers", async () =>
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
   );
-  expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
 });
 
 it.each([true, false])(
   "gates payment checks under Reporting and leaves for a fresh readers page (hardware.manage=%s)",
   async (allowed) => {
-    history.replaceState(null, "", "/manage/check-card-payments");
+    history.replaceState(null, "", "/check-card-payments");
     const api = stubApi();
     vi.mocked(api.getMe).mockResolvedValue({
       ...(await api.getMe()),
@@ -298,7 +298,7 @@ it.each([true, false])(
       expect(el.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull(),
     );
     if (!allowed) {
-      await vi.waitFor(() => expect(location.pathname).not.toBe("/manage/check-card-payments"));
+      await vi.waitFor(() => expect(location.pathname).not.toBe("/check-card-payments"));
       expect(navItem(el, "check-card-payments")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).toBeNull();
       return;

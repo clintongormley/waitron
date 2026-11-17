@@ -1247,7 +1247,7 @@ export class MenuStructureTable extends LitElement {
       return html`<a
           data-test=${`source-${key}`}
           aria-disabled=${this.busy ? "true" : nothing}
-          href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}
+          href=${`/menus/menu/${node.includedMenuId}/view/structure`}
           >${fill("menus.open_included", {
             name: memberName(node.ref, this.#productNames, this.#sectionNames),
           })}</a
@@ -1272,7 +1272,7 @@ export class MenuStructureTable extends LitElement {
       this.#productById.has(productId)
         ? html`<a
             data-test=${`edit-product-${key}`}
-            href=${`/manage/products/product/${encodeURIComponent(productId)}`}
+            href=${`/products/product/${encodeURIComponent(productId)}`}
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;
               event.preventDefault();

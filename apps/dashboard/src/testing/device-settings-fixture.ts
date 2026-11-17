@@ -93,7 +93,7 @@ export function mountDeviceApp(
 ) {
   const answers = deviceResponses(options);
   return mountReceiptApp({
-    path: "/manage/devices",
+    path: "/devices",
     permissions: ["venue.view", "hardware.manage"],
     modules: [],
     ...options,
@@ -114,7 +114,7 @@ export const deviceScreen = (app: Awaited<ReturnType<typeof mountDeviceApp>>["ap
 export function mountProfileApp(options: Parameters<typeof mountDeviceApp>[0] = {}) {
   const profiles = options.profiles ?? [deviceProfile];
   return mountDeviceApp({
-    path: "/manage/device-profiles",
+    path: "/device-profiles",
     permissions: ["venue.view", "venue.configure", "hardware.manage"],
     ...options,
     respond(path, init) {

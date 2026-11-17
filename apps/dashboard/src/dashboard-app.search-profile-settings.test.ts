@@ -41,7 +41,7 @@ it("settings land on their tab without writes", async () => {
   await expect
     .poll(() => profileScreen(app).shadowRoot!.querySelector("[name=inactivityTimeout]"))
     .toBeTruthy();
-  expect(location.pathname).toBe("/manage/device-profiles/profile/dp1/view/general");
+  expect(location.pathname).toBe("/device-profiles/profile/dp1/view/general");
   await expect
     .poll(() => profileScreen(app).shadowRoot!.querySelector("[name=defaultReaderId]"))
     .toBeTruthy();
@@ -87,7 +87,7 @@ it.each([
   ["venue.view", "hardware.manage"],
   ["venue.view", "venue.configure", "hardware.manage"],
 ])("profile and equipment gates match their reads: %j", async (...permissions: string[]) => {
-  const { app } = await mountProfileApp({ permissions, path: "/manage/overview" });
+  const { app } = await mountProfileApp({ permissions, path: "/overview" });
   await searchSettings(app, t("device_profiles.name"));
   expect(!!searchResult(app, "dashboard:device-profile:name:general")).toBe(
     permissions.includes("venue.configure"),
@@ -103,7 +103,7 @@ it.each([
 });
 
 it("same-profile search asks Keep/Discard and retains the editor without reloading", async () => {
-  const { app, fetchImpl } = await mountProfileApp({ path: "/manage/device-profiles/profile/dp1" });
+  const { app, fetchImpl } = await mountProfileApp({ path: "/device-profiles/profile/dp1" });
   const screen = profileScreen(app);
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=name]")).toBeTruthy();
   screen
@@ -111,7 +111,7 @@ it("same-profile search asks Keep/Discard and retains the editor without reloadi
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft" } }));
   await selectProfileTab(screen, "who");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(location.pathname).toBe("/manage/device-profiles/profile/dp1/view/who");
+  expect(location.pathname).toBe("/device-profiles/profile/dp1/view/who");
   expect(screen.shadowRoot!.querySelector("[name=name]")).toHaveProperty("value", "Draft");
   await selectProfileTab(screen, "general");
   const open = async () => {

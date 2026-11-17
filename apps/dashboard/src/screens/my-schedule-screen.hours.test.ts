@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 async function mount(
-  path = "/manage/my-schedule",
+  path = "/my-schedule",
   modules: readonly string[] = ["workforce"],
   language = "en-GB",
 ) {
@@ -53,7 +53,7 @@ async function choose(el: MyScheduleScreen, key: string) {
   await el.updateComplete;
 }
 it("keeps Schedule first and lazy, opens Hours on one push and preserves unrelated query values", async () => {
-  const { el, request } = await mount("/manage/my-schedule?keep=yes");
+  const { el, request } = await mount("/my-schedule?keep=yes");
   expect(tabs(el)?.items.map((i) => [i.key, i.label])).toEqual([
     ["schedule", "Schedule"],
     ["hours", "Hours"],
@@ -62,27 +62,27 @@ it("keeps Schedule first and lazy, opens Hours on one push and preserves unrelat
   const push = vi.spyOn(history, "pushState");
   await choose(el, "hours");
   expect(push).toHaveBeenCalledTimes(1);
-  expect(location.pathname).toBe("/manage/my-schedule/view/hours");
+  expect(location.pathname).toBe("/my-schedule/view/hours");
   expect(location.search).toBe("?keep=yes");
   await vi.waitFor(() => expect(request).toHaveBeenCalled());
-  history.replaceState(null, "", "/manage/my-schedule/view/schedule?keep=yes");
+  history.replaceState(null, "", "/my-schedule/view/schedule?keep=yes");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await el.updateComplete;
   expect(tabs(el).value).toBe("schedule");
 });
 it("restores a direct Hours path and Spanish tab labels", async () => {
-  const { el, request } = await mount("/manage/my-schedule/view/hours", ["workforce"], "es-ES");
+  const { el, request } = await mount("/my-schedule/view/hours", ["workforce"], "es-ES");
   expect(tabs(el)?.items.map((i) => i.label)).toEqual(["Horario", "Horas"]);
   expect(tabs(el).value).toBe("hours");
   await vi.waitFor(() => expect(request).toHaveBeenCalled());
 });
-it.each(["/manage/my-schedule/view/hours", "/manage/my-schedule/view/nope"])(
+it.each(["/my-schedule/view/hours", "/my-schedule/view/nope"])(
   "hides disabled Hours at%s and makes no attendance read",
   async (path) => {
     const { el, request } = await mount(path, []);
     expect(el.shadowRoot!.querySelector("dashboard-my-hours-panel")).toBeNull();
     expect(request).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/my-schedule/view/schedule");
+    expect(location.pathname).toBe("/my-schedule/view/schedule");
   },
 );
 it("preserves a mounted schedule draft when switching to Hours and back", async () => {
@@ -122,6 +122,6 @@ it("moves keyboard tabs to Hours and pushes its address once", async () => {
   expect(push).not.toHaveBeenCalled();
   await userEvent.keyboard("{Enter}");
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/my-schedule/view/hours");
+  expect(location.pathname).toBe("/my-schedule/view/hours");
   expect(push).toHaveBeenCalledTimes(1);
 });

@@ -71,7 +71,7 @@ async function press(el: PaymentsScreen, selector: string) {
 }
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/payments/view/readers");
+  history.replaceState(null, "", "/payments/view/readers");
 });
 afterEach(() => {
   cleanupWidgets();

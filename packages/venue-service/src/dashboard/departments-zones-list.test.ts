@@ -214,7 +214,7 @@ it("draws no floor-plan link on a zone row; the Floor plans page holds them", as
     { id: "z2", name: "Bar" },
   ]);
   expect(table.shadowRoot!.querySelectorAll('[data-test^="floor-plan-zone-"]')).toHaveLength(0);
-  expect(table.shadowRoot!.querySelectorAll('a[href*="/manage/floor-plan"]')).toHaveLength(0);
+  expect(table.shadowRoot!.querySelectorAll('a[href*="/floor-plan"]')).toHaveLength(0);
 });
 
 it("makes no floor-plan read, on mount or when a zone's menu opens", async () => {

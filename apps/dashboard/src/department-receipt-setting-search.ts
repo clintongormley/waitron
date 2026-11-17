@@ -20,7 +20,7 @@ export function departmentReceiptSearchDestinations(
         .map((row) => ({
           id: row.id,
           label: row.name,
-          path: `/manage/venue-operations/department/${encodePathSegment(row.id)}/view/receipt`,
+          path: `/venue-operations/department/${encodePathSegment(row.id)}/view/receipt`,
         }));
     },
   }));

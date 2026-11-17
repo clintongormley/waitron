@@ -50,7 +50,7 @@ afterEach(() => {
   setLocale("en");
 });
 async function mount(
-  path = "/manage/venue-operations",
+  path = "/venue-operations",
   model = view(),
   write?: Promise<unknown>,
   read?: Promise<unknown>,
@@ -187,7 +187,7 @@ it("Add saves once, closes, refreshes passively and opens the created department
   list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-department]")!.click();
   const el = await dialogs(shell);
   await saveName(el, " Brunch ");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/new");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/new");
   expect(el.dialog).toBeUndefined();
   expect(shell.model.departments.find((row) => row.id === "new")!.name).toBe("Brunch");
   expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(1);
@@ -222,7 +222,7 @@ it("a successful write with failed refresh closes the dialog and reports a load 
 });
 
 it("a moved zone closes its old department editor and stays in the list", async () => {
-  const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  const { shell } = await mount("/venue-operations/department/d1/view/zones/zone/z1");
   const moved = view();
   moved.departments[1]!.active = true;
   moved.zones[0]!.departmentId = "d2";
@@ -230,7 +230,7 @@ it("a moved zone closes its old department editor and stays in the list", async 
   await shell.updateComplete;
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeNull();
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-  expect(location.pathname).toBe("/manage/venue-operations");
+  expect(location.pathname).toBe("/venue-operations");
 });
 it("refresh completion retains a newer externally delivered model", async () => {
   const { shell } = await mount();
@@ -288,7 +288,7 @@ it.each([0, 2])(
     await saveName(el, "Garden");
     await expect.poll(() => el.dialog).toBeUndefined();
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(shell.model.zones.find((row) => row.id === "new")!.name).toBe("Garden");
     expect(request.mock.calls.filter((call) => call[1] === "POST")).toEqual([
       ["/management-api/venue-service/zones", "POST", { name: "Garden", departmentId: "d1" }],
@@ -353,7 +353,7 @@ it("a refresh finishing after browser navigation does not reopen the created dep
   emit(shell.shadowRoot!.querySelector("departments-list")!, "add-department");
   await saveName(await dialogs(shell), "Brunch");
   await expect.poll(() => read.mock.calls.length).toBe(1);
-  history.pushState(null, "", "/manage/venue-operations/department/d1");
+  history.pushState(null, "", "/venue-operations/department/d1");
   dispatchEvent(new PopStateEvent("popstate"));
   await shell.updateComplete;
   const next = view();
@@ -365,7 +365,7 @@ it("a refresh finishing after browser navigation does not reopen the created dep
   });
   release(next);
   await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(location.pathname).toBe("/venue-operations/department/d1");
 });
 
 it("a delivered recovery snapshot clears an earlier load failure", async () => {
@@ -400,7 +400,7 @@ it.each(["department", "zone"] as const)(
     await expect
       .poll(() => list.shadowRoot!.activeElement)
       .toBe(list.shadowRoot!.querySelector("[data-test=add-department]"));
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(request.mock.calls.filter(([, method]) => method !== "GET")).toEqual([]);
   },
 );
@@ -425,9 +425,7 @@ it("a saved department edit returns focus to the same row menu after refresh", a
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
 it("removing a zone's department closes its editor and returns to Add", async () => {
-  const { shell, request } = await mount(
-    "/manage/venue-operations/department/d1/view/zones/zone/z1",
-  );
+  const { shell, request } = await mount("/venue-operations/department/d1/view/zones/zone/z1");
   const { list } = await listTable(shell);
   const next = view();
   next.departments = next.departments.filter((row) => row.id !== "d1");
@@ -462,7 +460,7 @@ it.each(["success", "failure"] as const)(
       finish = resolve;
     });
     const { shell, request, loaded, failRead } = await mount(
-      "/manage/venue-operations/department/d1",
+      "/venue-operations/department/d1",
       view(),
       write,
     );
@@ -490,7 +488,7 @@ it.each(["success", "failure"] as const)(
     expect(shell.shadowRoot!.querySelector("department-edit-dialog")?.departmentId).toBe("d1");
     expect(box.value).toBe("Newer");
     expect(box.isConnected).toBe(true);
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
       passive: true,
     });
@@ -526,7 +524,7 @@ it("a retained dialog cannot write again while its successful write is refreshin
     finishRead = resolve;
   });
   const { shell, request, loaded } = await mount(
-    "/manage/venue-operations/department/d1",
+    "/venue-operations/department/d1",
     view(),
     write,
     read,
@@ -574,7 +572,7 @@ it("a retained zone draft cannot save twice while its first write is refreshing"
     finishRead = yes;
   });
   const { shell, loaded, request } = await mount(
-    "/manage/venue-operations/department/d1/view/zones/zone/z1",
+    "/venue-operations/department/d1/view/zones/zone/z1",
     view(),
     write,
     read,

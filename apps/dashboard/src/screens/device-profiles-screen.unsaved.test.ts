@@ -634,7 +634,7 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
 });
 
 it("W69 a create kept open for newer input names the new profile in the address without asking", async () => {
-  history.replaceState(null, "", "/manage/device-profiles");
+  history.replaceState(null, "", "/device-profiles");
   let finish!: () => void;
   const { app, screen } = await mount({
     createDeviceProfile: async () => {
@@ -661,7 +661,7 @@ it("W69 a create kept open for newer input names the new profile in the address 
   await expect.poll(() => finish).toBeTypeOf("function");
   change(screen, "profile-name", "Newer phone");
   finish();
-  await expect.poll(() => location.pathname).toBe("/manage/device-profiles/profile/p2");
+  await expect.poll(() => location.pathname).toBe("/device-profiles/profile/p2");
   await screen.updateComplete;
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"]).value).toBe(
@@ -671,7 +671,7 @@ it("W69 a create kept open for newer input names the new profile in the address 
 });
 
 it("W69 a create kept open while another page's address showed stays open when the address comes back", async () => {
-  history.replaceState(null, "", "/manage/device-profiles");
+  history.replaceState(null, "", "/device-profiles");
   let finish!: () => void;
   const { screen } = await mount({
     createDeviceProfile: async () => {
@@ -689,19 +689,19 @@ it("W69 a create kept open while another page's address showed stays open when t
   change(screen, "profile-department", "d1");
   q(screen, "profile-save")!.click();
   await expect.poll(() => finish).toBeTypeOf("function");
-  history.replaceState(null, "", "/manage/profile");
+  history.replaceState(null, "", "/profile");
   window.dispatchEvent(new PopStateEvent("popstate"));
   change(screen, "profile-name", "Newer phone");
   finish();
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
-  expect(location.pathname).toBe("/manage/profile");
-  history.replaceState(null, "", "/manage/device-profiles");
+  expect(location.pathname).toBe("/profile");
+  history.replaceState(null, "", "/device-profiles");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await screen.updateComplete;
   expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"] | null)?.value).toBe(
     "Newer phone",
   );
-  expect(location.pathname).toBe("/manage/device-profiles/profile/p2");
+  expect(location.pathname).toBe("/device-profiles/profile/p2");
   expect(unload()).toBe(true);
 });
 
@@ -913,7 +913,7 @@ it("the profile parent link keeps the item heading and protects unsaved edits", 
     "Counter",
   ]);
   const parent = screen.shadowRoot!.querySelector<HTMLAnchorElement>("nav a")!;
-  expect(parent.getAttribute("href")).toBe("/manage/device-profiles");
+  expect(parent.getAttribute("href")).toBe("/device-profiles");
   expect(parent.textContent!.trim()).toBe(t("device_profiles.title"));
   expect(parent.closest("nav")!.getAttribute("aria-label")).toBeTruthy();
   const modified = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });

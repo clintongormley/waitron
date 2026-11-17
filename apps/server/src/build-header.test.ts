@@ -7,7 +7,7 @@ function app(): Hono {
   a.get("/health", (c) => c.json({ ok: true }));
   a.use("*", buildHeaderMiddleware("1c57940"));
   a.get("/api/staff", (c) => c.json([]));
-  a.get("/manage/", (c) =>
+  a.get("/", (c) =>
     c.body("<html>dashboard</html>", 200, {
       "Content-Type": "text/html",
       "Cache-Control": "no-cache",
@@ -23,7 +23,7 @@ function app(): Hono {
 describe("buildHeaderMiddleware", () => {
   it.each([
     ["/api/staff", 200],
-    ["/manage/", 200],
+    ["/", 200],
     ["/raw", 200],
     ["/boom", 500],
     ["/nowhere", 404],

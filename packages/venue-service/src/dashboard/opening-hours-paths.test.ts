@@ -9,13 +9,13 @@ import {
 const readBack = (path: string) =>
   new URL(path, "http://venue.test").pathname
     .split("/")
-    .slice(3)
+    .slice(2)
     .map((part) => decodePathSegment(part));
 
 describe("opening hours paths", () => {
   it("round-trips the exact list of separately selected dates", () => {
     const path = specialDayPainterPath({ specialDayId: null, dates: ["2026-10-20", "2026-10-23"] });
-    expect(path).toBe("/manage/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-23");
+    expect(path).toBe("/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-23");
     expect(readBack(path)).toEqual(["view", "special-day", "dates", "2026-10-20,2026-10-23"]);
   });
 
@@ -39,10 +39,10 @@ describe("opening hours paths", () => {
   it("writes a new special day's run as its first and last date, and one date alone", () => {
     expect(
       specialDayPainterPath({ specialDayId: null, date: "2026-10-20", to: "2026-10-23" }),
-    ).toBe("/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23");
+    ).toBe("/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23");
     expect(
       specialDayPainterPath({ specialDayId: null, date: "2026-10-20", to: "2026-10-20" }),
-    ).toBe("/manage/opening-hours/view/special-day/date/2026-10-20");
+    ).toBe("/opening-hours/view/special-day/date/2026-10-20");
   });
 
   it("keeps a module view's empty values and leaves its view pair out", () => {

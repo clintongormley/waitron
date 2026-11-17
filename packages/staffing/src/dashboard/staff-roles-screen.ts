@@ -335,7 +335,7 @@ export class StaffRolesScreen extends LitElement {
         }
       </div>
       <p class="intro">${t("staffing.role.intro")}</p>
-      ${this.canOpenAccessRoles ? html`<p><a href="/manage/access-roles">${t("staffing.role.access_roles")}</a></p>` : nothing}
+      ${this.canOpenAccessRoles ? html`<p><a href="/access-roles">${t("staffing.role.access_roles")}</a></p>` : nothing}
       ${
         staffRoles && this.loadError
           ? html`<p class="alert" role="alert" data-test="load-alert">${this.loadError}</p>`

@@ -825,13 +825,13 @@ export function mountManagementApi(
             subject,
           });
         });
-        return c.redirect(`${passkeySite(c).origin}/manage/profile?google=linked`);
+        return c.redirect(`${passkeySite(c).origin}/profile?google=linked`);
       }
       const completion = await withTransaction(deps.db, async (tx) => {
         return loginWithGoogle(tx, { subject });
       });
       setManagementCookie(c, completion.token, secureCookie(c));
-      return c.redirect(`${passkeySite(c).origin}/manage/?login=google`);
+      return c.redirect(`${passkeySite(c).origin}/?login=google`);
     }),
   );
   app.get("/management-api/staff-roster", (c) =>

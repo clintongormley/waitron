@@ -1570,7 +1570,7 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     expect(text).not.toContain("needs setup"); // NOT the inline placeholder shell
   });
 
-  it.each(["/manage", "/anything/else"])(
+  it.each(["/account", "/anything/else"])(
     "redirects setup navigation %s to the root",
     async (path) => {
       const app = new Hono();

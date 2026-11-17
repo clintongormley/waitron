@@ -443,7 +443,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      for (const path of ["/", "/manage", "/manage/staff"]) {
+      for (const path of ["/", "/devices", "/staff"]) {
         const page = await fetch(`${base}${path}`, { headers: { accept: "text/html" } });
         expect(page.status).toBe(200);
         expect(page.headers.get("set-cookie")).toBeNull();

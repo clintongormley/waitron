@@ -56,7 +56,7 @@ export function deviceProfileSettingSearchDestinations(
               ? {
                   id: profile.id,
                   label: profile.name,
-                  path: `/manage/device-profiles/profile/${encodePathSegment(profile.id)}/view/${field.tab}`,
+                  path: `/device-profiles/profile/${encodePathSegment(profile.id)}/view/${field.tab}`,
                 }
               : null;
           }),

@@ -802,7 +802,7 @@ export class MenuPricesTable extends LitElement {
       label=${`${t("members.actions")}: ${this.#lineName(line)}`}
       ><a
         data-test=${`edit-product-${keyOf(line)}`}
-        href=${`/manage/products/product/${encodeURIComponent(id)}`}
+        href=${`/products/product/${encodeURIComponent(id)}`}
         @click=${(event: MouseEvent) => this.#openProduct(event, id)}
         >${t("product.edit")}</a
       ></wt-row-actions

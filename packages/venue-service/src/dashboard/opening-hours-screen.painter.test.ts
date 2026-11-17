@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, captureAppLinks, LeaveController, NavigationGuard } from "@waitron/ui";
+import { isDashboardPath } from "@waitron/shared";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -62,7 +63,7 @@ class PainterApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this, "/manage");
+    this.releaseLinks = captureAppLinks(this, isDashboardPath);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -157,7 +158,7 @@ async function choose(app: PainterApp, decision: "keep" | "discard") {
 
 describe("the season painter's address", () => {
   it("opens over the Year on a direct load, fed the screen's live model and api", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/spring/department/d1/zone/z2");
+    const el = await mount("/opening-hours/view/season/season/spring/department/d1/zone/z2");
     const painter = await shownPainter(el);
     expect(painter.open).toBe(true);
     expect([painter.seasonId, painter.departmentId, painter.zoneId]).toEqual([
@@ -174,13 +175,13 @@ describe("the season painter's address", () => {
   });
 
   it("takes the current season for an unknown one, the first active department for a missing one, and the department's own week for a zone it does not have", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/autumn");
+    const el = await mount("/opening-hours/view/season/season/autumn");
     const painter = await shownPainter(el);
     expect([painter.seasonId, painter.departmentId, painter.zoneId]).toEqual(["winter", "d1", ""]);
     history.replaceState(
       null,
       "",
-      "/manage/opening-hours/view/season/season/spring/department/d2/zone/z1",
+      "/opening-hours/view/season/season/spring/department/d2/zone/z1",
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => painter.seasonId).toBe("spring");
@@ -188,7 +189,7 @@ describe("the season painter's address", () => {
     history.replaceState(
       null,
       "",
-      "/manage/opening-hours/view/season/season/spring/department/d3/zone/z1",
+      "/opening-hours/view/season/season/spring/department/d3/zone/z1",
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => painter.departmentId).toBe("d3");
@@ -196,7 +197,7 @@ describe("the season painter's address", () => {
   });
 
   it("replaces the address as the painter moves, so Back leaves it", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1");
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1");
     const painter = await shownPainter(el);
     const pushed = pushedPaths();
     painter.shadowRoot!.querySelector("[name=department]")!.dispatchEvent(
@@ -208,28 +209,26 @@ describe("the season painter's address", () => {
     );
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d1/zone/z2");
+      .toBe("/opening-hours/view/season/season/winter/department/d1/zone/z2");
     painter.shadowRoot!.querySelector<HTMLElement>("[data-test=next-season]")!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/spring/department/d1/zone/z2");
+      .toBe("/opening-hours/view/season/season/spring/department/d1/zone/z2");
     expect(pushed()).toEqual([]);
     expect(painterOf(el)).toBe(painter);
   });
 
   it("closes to the Year on a direct load", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1");
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1");
     await cancel(await shownPainter(el));
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year");
     await expect.poll(() => painterOf(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
   });
   it("closes a painter opened by Painted in to the Periods page", async () => {
-    const el = await mount(
-      "/manage/opening-hours/view/season/season/winter/department/d1?back=/manage/periods",
-    );
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1?back=/periods");
     await cancel(await shownPainter(el));
-    await expect.poll(() => location.pathname).toBe("/manage/periods");
+    await expect.poll(() => location.pathname).toBe("/periods");
   });
 });
 
@@ -248,7 +247,7 @@ describe("links into the painter", () => {
   }
 
   it("a season chip's body opens that season's week over the Year, and closing returns to that year", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const el = await mount("/opening-hours/view/year/year/2027");
     const seasonChips = await chips(el);
     const pushed = pushedPaths();
     seasonChips
@@ -256,36 +255,36 @@ describe("links into the painter", () => {
       .click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/season/season/spring/department/d1"]);
+      .toBe("/opening-hours/view/season/season/spring/department/d1");
+    expect(pushed()).toEqual(["/opening-hours/view/season/season/spring/department/d1"]);
     const painter = await shownPainter(el);
     expect(painter.seasonId).toBe("spring");
     expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2027);
     expect(el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
     await cancel(painter);
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2027");
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
   it("closing a painter opened in the app goes back, so the first Back after it leaves the year", async () => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/view/year/year/2027");
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    history.replaceState(null, "", "/before");
+    history.pushState(null, "", "/opening-hours/view/year/year/2027");
+    const el = await mount("/opening-hours/view/year/year/2027");
     const seasonChips = await chips(el);
     const pushed = pushedPaths();
     seasonChips
       .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
       .click();
     await cancel(await shownPainter(el));
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2027");
     await expect.poll(() => painterOf(el)).toBeNull();
-    expect(pushed()).toEqual(["/manage/opening-hours/view/season/season/spring/department/d1"]);
+    expect(pushed()).toEqual(["/opening-hours/view/season/season/spring/department/d1"]);
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/before");
+    await expect.poll(() => location.pathname).toBe("/before");
   });
 
   it("with the app's guard, closing a painter a chip opened goes back too", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -293,7 +292,7 @@ describe("links into the painter", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/year/year/2027");
+      await guard.write("/opening-hours/view/year/year/2027");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const pushed = pushedPaths();
@@ -302,59 +301,57 @@ describe("links into the painter", () => {
         .click();
       await cancel(await shownPainter(el));
       await expect.poll(() => painterOf(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
-      expect(pushed()).toEqual(["/manage/opening-hours/view/season/season/spring/department/d1"]);
+      expect(location.pathname).toBe("/opening-hours/view/year/year/2027");
+      expect(pushed()).toEqual(["/opening-hours/view/season/season/spring/department/d1"]);
       history.back();
-      await expect.poll(() => location.pathname).toBe("/manage/before");
+      await expect.poll(() => location.pathname).toBe("/before");
     } finally {
       guard.dispose();
     }
   });
 
   it("closing a painter reached by Back to an address naming a department replaces it with the view it drew over", async () => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/department/d1");
-    history.pushState(null, "", "/manage/opening-hours/view/year");
-    const el = await mount("/manage/opening-hours/view/year");
+    history.replaceState(null, "", "/before");
+    history.pushState(null, "", "/opening-hours/department/d1");
+    history.pushState(null, "", "/opening-hours/view/year");
+    const el = await mount("/opening-hours/view/year");
     history.back();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+      .toBe("/opening-hours/view/season/season/winter/department/d1");
     await cancel(await shownPainter(el));
     await expect.poll(() => painterOf(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(location.pathname).toBe("/opening-hours/view/year");
   });
 
   it.each([
-    ["a department", "/manage/opening-hours/view/old/department/d3", "winter/department/d3"],
+    ["a department", "/opening-hours/view/old/department/d3", "winter/department/d3"],
     [
       "a zone and a season",
-      "/manage/opening-hours/view/old/department/d1/zone/z1/season/spring",
+      "/opening-hours/view/old/department/d1/zone/z1/season/spring",
       "spring/department/d1/zone/z1",
     ],
-    ["no view and a department", "/manage/opening-hours/department/d1", "winter/department/d1"],
+    ["no view and a department", "/opening-hours/department/d1", "winter/department/d1"],
   ])("an address naming %s opens the painter in its place", async (_, address, painted) => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/before-hours");
+    history.replaceState(null, "", "/before");
+    history.pushState(null, "", "/before-hours");
     const pushed = pushedPaths();
     const el = await mount(address);
-    await expect
-      .poll(() => location.pathname)
-      .toBe(`/manage/opening-hours/view/season/season/${painted}`);
+    await expect.poll(() => location.pathname).toBe(`/opening-hours/view/season/season/${painted}`);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
     expect(drawnView(el)).toBe("year");
   });
 
-  it.each([["a station's query", "/manage/opening-hours?view=week&station=s1"]])(
+  it.each([["a station's query", "/opening-hours?view=week&station=s1"]])(
     "an old Week address naming %s opens the painter in its place",
     async (_, address) => {
-      history.replaceState(null, "", "/manage/before");
+      history.replaceState(null, "", "/before");
       const pushed = pushedPaths();
       const el = await mount(address);
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+        .toBe("/opening-hours/view/season/season/winter/department/d1");
       expect(new URLSearchParams(location.search).has("station")).toBe(false);
       expect(pushed()).toEqual([]);
       await shownPainter(el);
@@ -363,7 +360,7 @@ describe("links into the painter", () => {
   );
 
   it("a season chip asking for a week while the painter is open changes nothing", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const el = await mount("/opening-hours/view/year/year/2027");
     const seasonChips = await chips(el);
     seasonChips
       .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
@@ -374,14 +371,14 @@ describe("links into the painter", () => {
       .shadowRoot!.querySelector<HTMLElement>("[data-season=winter] [data-test=season-week]")!
       .click();
     await settle(painter);
-    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+    expect(location.pathname).toBe("/opening-hours/view/season/season/spring/department/d1");
     expect(pushed()).toEqual([]);
     expect(painterOf(el)).toBe(painter);
     expect(painter.seasonId).toBe("spring");
   });
 
   it("a painter address on a venue with no active department names no department and draws nothing", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1", () => {
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1", () => {
       const model = withBar();
       return {
         ...model,
@@ -420,7 +417,7 @@ describe("Save closes the season painter", () => {
 
   it("Save closes the painter and returns to the view it opened over", async () => {
     const writes: unknown[] = [];
-    const el = await mount("/manage/opening-hours/view/year/year/2027", () => withBar(), writes);
+    const el = await mount("/opening-hours/view/year/year/2027", () => withBar(), writes);
     const painter = await openFromChip(el);
     const back = vi.spyOn(history, "back");
     await drag(painter, "3", 7 * 60, 9 * 60);
@@ -428,13 +425,13 @@ describe("Save closes the season painter", () => {
     await expect.poll(() => painterOf(el)).toBeNull();
     expect(writes.filter((write) => (write as unknown[])[1] === "PUT")).toHaveLength(1);
     expect(back).toHaveBeenCalledTimes(1);
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2027");
     expect(drawnView(el)).toBe("year");
     expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2027);
   });
 
   it("with the app's guard, Save closes the painter a chip opened without asking", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -443,7 +440,7 @@ describe("Save closes the season painter", () => {
     });
     let sampler: ReturnType<typeof setInterval> | undefined;
     try {
-      await guard.write("/manage/opening-hours/view/year/year/2027");
+      await guard.write("/opening-hours/view/year/year/2027");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const question =
@@ -456,7 +453,7 @@ describe("Save closes the season painter", () => {
       await drag(painter, "3", 7 * 60, 9 * 60);
       saveButton(painter).click();
       await expect.poll(() => painterOf(el)).toBeNull();
-      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+      await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2027");
       await new Promise((resolve) => setTimeout(resolve, 50));
       clearInterval(sampler);
       expect(asked.length).toBeGreaterThan(0);
@@ -464,7 +461,7 @@ describe("Save closes the season painter", () => {
       expect(question.open).toBe(false);
       expect(app.writes.filter((write) => (write as unknown[])[1] === "PUT")).toHaveLength(1);
       history.back();
-      await expect.poll(() => location.pathname).toBe("/manage/before");
+      await expect.poll(() => location.pathname).toBe("/before");
     } finally {
       clearInterval(sampler);
       guard.dispose();
@@ -472,7 +469,7 @@ describe("Save closes the season painter", () => {
   });
 
   it("a save left in flight when Back moved to another season leaves the newer painter open", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -480,8 +477,8 @@ describe("Save closes the season painter", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
-      await guard.write("/manage/opening-hours/view/season/season/spring/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/spring/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const painter = await shownPainter(el);
@@ -508,9 +505,7 @@ describe("Save closes the season painter", () => {
       expect(painterOf(el)).toBe(painter);
       expect(painter.seasonId).toBe("winter");
       expect(back).not.toHaveBeenCalled();
-      expect(location.pathname).toBe(
-        "/manage/opening-hours/view/season/season/winter/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d1");
       expect(frame(painter).dirty).toBe(false);
       expect(saved).not.toHaveBeenCalled();
     } finally {
@@ -519,7 +514,7 @@ describe("Save closes the season painter", () => {
   });
 
   it("Save on a painter loaded directly closes onto the Year by replacement", async () => {
-    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1");
+    const el = await mount("/opening-hours/view/season/season/winter/department/d1");
     const painter = await shownPainter(el);
     const pushed = pushedPaths();
     const replaced = vi.spyOn(history, "replaceState");
@@ -527,17 +522,17 @@ describe("Save closes the season painter", () => {
     await drag(painter, "3", 7 * 60, 9 * 60);
     saveButton(painter).click();
     await expect.poll(() => painterOf(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(location.pathname).toBe("/opening-hours/view/year");
     expect(
       replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
-    ).toContain("/manage/opening-hours/view/year");
+    ).toContain("/opening-hours/view/year");
     expect(pushed()).toEqual([]);
     expect(back).not.toHaveBeenCalled();
     expect(drawnView(el)).toBe("year");
   });
 
   it("a refused Save keeps the painter open with its message beside Save", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const el = await mount("/opening-hours/view/year/year/2027");
     const painter = await openFromChip(el);
     vi.spyOn(el.api, "saveSeasonWeeks").mockRejectedValueOnce({
       code: "season.not_found",
@@ -552,11 +547,11 @@ describe("Save closes the season painter", () => {
     expect(painterOf(el)).toBe(painter);
     expect(frame(painter).dirty).toBe(true);
     expect(back).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+    expect(location.pathname).toBe("/opening-hours/view/season/season/spring/department/d1");
   });
 
   it("a paint made while the save is in flight keeps the painter open, unsaved", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const el = await mount("/opening-hours/view/year/year/2027");
     const painter = await openFromChip(el);
     let succeed!: () => void;
     const save = vi.spyOn(el.api, "saveSeasonWeeks").mockImplementationOnce(
@@ -580,13 +575,13 @@ describe("Save closes the season painter", () => {
       { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
     ]);
     expect(back).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+    expect(location.pathname).toBe("/opening-hours/view/season/season/spring/department/d1");
   });
 });
 
 describe("leaving a painter with edits", () => {
   it("Back to another season goes through the leave question, keeping the draft on keep", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -594,11 +589,11 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/season/season/spring/department/d1");
+      await guard.write("/opening-hours/view/season/season/spring/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       await shownPainter(el);
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       const painter = await shownPainter(el);
       await expect.poll(() => painter.seasonId).toBe("winter");
       await drag(painter, "3", 120, 240);
@@ -608,15 +603,13 @@ describe("leaving a painter with edits", () => {
       await choose(app, "keep");
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+        .toBe("/opening-hours/view/season/season/winter/department/d1");
       expect(painter.seasonId).toBe("winter");
       expect(painted()).toEqual({ departments: ["d1"], zones: [] });
       history.back();
       await choose(app, "discard");
       await expect.poll(() => painter.seasonId).toBe("spring");
-      expect(location.pathname).toBe(
-        "/manage/opening-hours/view/season/season/spring/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/spring/department/d1");
       expect(painted()).toEqual({ departments: [], zones: [] });
     } finally {
       guard.dispose();
@@ -624,7 +617,7 @@ describe("leaving a painter with edits", () => {
   });
 
   it("switching department with edits rewrites the address without asking and keeps the draft", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -632,7 +625,7 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const painter = await shownPainter(el);
@@ -644,7 +637,7 @@ describe("leaving a painter with edits", () => {
         );
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/season/season/winter/department/d3");
+        .toBe("/opening-hours/view/season/season/winter/department/d3");
       expect(new URL(guard.href).pathname).toBe(location.pathname);
       await app.updateComplete;
       expect(
@@ -663,7 +656,7 @@ describe("leaving a painter with edits", () => {
     ["after painting", true],
     ["before painting (control)", false],
   ])("a department switch %s keeps the Year behind the painter for Back", async (_, paintFirst) => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -671,10 +664,10 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/year");
+      await guard.write("/opening-hours/view/year");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       const painter = await shownPainter(el);
       const switchTo = async (departmentId: string) => {
         painter.shadowRoot!.querySelector("[name=department]")!.dispatchEvent(
@@ -686,7 +679,7 @@ describe("leaving a painter with edits", () => {
         );
         await expect
           .poll(() => location.pathname)
-          .toBe(`/manage/opening-hours/view/season/season/winter/department/${departmentId}`);
+          .toBe(`/opening-hours/view/season/season/winter/department/${departmentId}`);
       };
       if (paintFirst) await drag(painter, "3", 120, 240);
       await switchTo("d3");
@@ -694,12 +687,10 @@ describe("leaving a painter with edits", () => {
       expect(painter.edited().departments.length).toBe(1);
       history.back();
       await choose(app, "keep");
-      expect(location.pathname).toBe(
-        "/manage/opening-hours/view/season/season/winter/department/d3",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d3");
       history.back();
       await choose(app, "discard");
-      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+      await expect.poll(() => location.pathname).toBe("/opening-hours/view/year");
       await expect.poll(() => painterOf(el)).toBeNull();
     } finally {
       guard.dispose();
@@ -707,16 +698,13 @@ describe("leaving a painter with edits", () => {
   });
 
   it.each([
-    ["season", "Winter", "/manage/opening-hours/view/season/season/spring/department/d1"],
-    ["department", "Restaurant", "/manage/opening-hours/view/season/season/winter/department/d3"],
+    ["season", "Winter", "/opening-hours/view/season/season/spring/department/d1"],
+    ["department", "Restaurant", "/opening-hours/view/season/season/winter/department/d3"],
   ])(
     "removing the %s being painted drops its painting, says so, and moves the address",
     async (kind, name, address) => {
       let model = withBar();
-      const el = await mount(
-        "/manage/opening-hours/view/season/season/winter/department/d1",
-        () => model,
-      );
+      const el = await mount("/opening-hours/view/season/season/winter/department/d1", () => model);
       const painter = await shownPainter(el);
       await drag(painter, "3", 7 * 60, 9 * 60);
       expect(painter.edited().departments).toEqual(["d1"]);
@@ -739,7 +727,7 @@ describe("leaving a painter with edits", () => {
   );
 
   it("with the app's guard, removing the season being painted moves the address without asking", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -747,7 +735,7 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const painter = await shownPainter(el);
@@ -760,7 +748,7 @@ describe("leaving a painter with edits", () => {
       app.api.rereadWatches();
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+        .toBe("/opening-hours/view/season/season/spring/department/d1");
       expect(new URL(guard.href).pathname).toBe(location.pathname);
       await settle(painter);
       expect(painter.seasonId).toBe("spring");
@@ -778,7 +766,7 @@ describe("leaving a painter with edits", () => {
   });
 
   it("stepping to the next season with edits asks first, keeping the season and address on keep", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -786,7 +774,7 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
       const painter = await shownPainter(el);
@@ -798,14 +786,12 @@ describe("leaving a painter with edits", () => {
       await settle(painter);
       expect(painter.seasonId).toBe("winter");
       expect(painter.edited().departments).toEqual(["d1"]);
-      expect(location.pathname).toBe(
-        "/manage/opening-hours/view/season/season/winter/department/d1",
-      );
+      expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d1");
       next();
       await choose(app, "discard");
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+        .toBe("/opening-hours/view/season/season/spring/department/d1");
       await settle(painter);
       expect(painter.seasonId).toBe("spring");
       expect(painter.edited()).toEqual({ departments: [], zones: [] });
@@ -816,7 +802,7 @@ describe("leaving a painter with edits", () => {
   });
 
   it("Close with edits asks once, then goes back to the view the painter opened over", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -824,16 +810,16 @@ describe("leaving a painter with edits", () => {
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
     try {
-      await guard.write("/manage/opening-hours/view/year");
+      await guard.write("/opening-hours/view/year");
       ({ app } = await mountApp());
       const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/opening-hours/view/season/season/winter/department/d1");
       const pushed = pushedPaths();
       const painter = await shownPainter(el);
       await drag(painter, "3", 120, 240);
       frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
       await choose(app, "discard");
-      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+      await expect.poll(() => location.pathname).toBe("/opening-hours/view/year");
       await expect.poll(() => painterOf(el)).toBeNull();
       await app.updateComplete;
       expect(
@@ -851,7 +837,7 @@ describe("leaving a painter with edits", () => {
 
 describe("a viewer's painter", () => {
   it("a read-only season chip's name opens that season's read-only week, with no ✎", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027", undefined, [], true);
+    const el = await mount("/opening-hours/view/year/year/2027", undefined, [], true);
     const seasonChips = await expect
       .poll(() =>
         el
@@ -871,23 +857,23 @@ describe("a viewer's painter", () => {
       .click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+      .toBe("/opening-hours/view/season/season/spring/department/d1");
     const painter = await shownPainter(el);
     expect(painter.seasonId).toBe("spring");
     expect(painter.readOnly).toBe(true);
     expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
     frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2027");
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
   it("a department address with no view opens a painter with no Save, whose drag changes and sends nothing", async () => {
     const writes: unknown[] = [];
-    const el = await mount("/manage/opening-hours/department/d1", undefined, writes, true);
+    const el = await mount("/opening-hours/department/d1", undefined, writes, true);
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+      .toBe("/opening-hours/view/season/season/winter/department/d1");
     const painter = await shownPainter(el);
     expect(painter.readOnly).toBe(true);
     expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
@@ -900,11 +886,11 @@ describe("a viewer's painter", () => {
 });
 
 it("a same-path station query still resolves the old address after the Calendar has loaded", async () => {
-  const el = await mount("/manage/opening-hours");
-  history.pushState(null, "", "/manage/opening-hours?station=s1");
+  const el = await mount("/opening-hours");
+  history.pushState(null, "", "/opening-hours?station=s1");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await expect.poll(() => painterOf(el)?.seasonId).toBe("winter");
-  expect(location.pathname).toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+  expect(location.pathname).toBe("/opening-hours/view/season/season/winter/department/d1");
 });
 
 class AddingApp extends PainterApp {
@@ -1007,7 +993,7 @@ class ReplacingApp extends PainterApp {
 customElements.define("opening-hours-replacing-test-app", ReplacingApp);
 
 describe("period updates while painting", () => {
-  const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+  const base = "/opening-hours/view/season/season/winter/department/d1";
 
   it("a newly stored period reaches the painter without losing its draft", async () => {
     history.replaceState(null, "", base);

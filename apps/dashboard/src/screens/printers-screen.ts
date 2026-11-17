@@ -3740,7 +3740,7 @@ export class PrintersScreen extends LitElement {
               ${usedByProfileLine(
                 link(
                   "device-profiles",
-                  `/manage/device-profiles/profile/${encodeURIComponent(offer.profileId)}`,
+                  `/device-profiles/profile/${encodeURIComponent(offer.profileId)}`,
                   offer.profileName,
                 ),
                 offer.roles.map((role) => t(USE_WORDS[role])).join(", "),
@@ -3758,7 +3758,7 @@ export class PrintersScreen extends LitElement {
             .map(([id, name]) =>
               link(
                 "venue-operations",
-                `/manage/venue-operations/department/${encodeURIComponent(id)}`,
+                `/venue-operations/department/${encodeURIComponent(id)}`,
                 name,
               ),
             ),
@@ -3772,7 +3772,7 @@ export class PrintersScreen extends LitElement {
           stations.map(({ stationId, stationName }) =>
             link(
               "prep-stations",
-              `/manage/prep-stations/view/stations/station/${encodeURIComponent(stationId)}`,
+              `/prep-stations/view/stations/station/${encodeURIComponent(stationId)}`,
               stationName,
             ),
           ),

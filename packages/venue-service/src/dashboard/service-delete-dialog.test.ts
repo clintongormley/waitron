@@ -458,7 +458,7 @@ async function mountShell(readFailure = false) {
   await import("./venue-departments-shell.js");
   const { host } = await mountDelete();
   host.replaceChildren();
-  history.replaceState(null, "", "/manage/venue-operations");
+  history.replaceState(null, "", "/venue-operations");
   const shell = document.createElement("venue-departments-shell");
   const { VenueServiceApi } = await import("./client.js");
   let missing = false;

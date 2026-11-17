@@ -17,21 +17,21 @@ afterEach(() => {
 });
 
 it.each([
-  { path: "/manage/venue-operations/department/deli", department: "deli", view: null, zone: null },
+  { path: "/venue-operations/department/deli", department: "deli", view: null, zone: null },
   {
-    path: "/manage/venue-operations/department/deli/view/zones",
+    path: "/venue-operations/department/deli/view/zones",
     department: "deli",
     view: "zones",
     zone: null,
   },
   {
-    path: "/manage/venue-operations/department/deli/view/zones/zone/patio",
+    path: "/venue-operations/department/deli/view/zones/zone/patio",
     department: "deli",
     view: "zones",
     zone: "patio",
   },
   {
-    path: "/manage/venue-operations/department/deli%2Fbar/view/zones/zone/patio%2Froof",
+    path: "/venue-operations/department/deli%2Fbar/view/zones/zone/patio%2Froof",
     department: "deli/bar",
     view: "zones",
     zone: "patio/roof",
@@ -57,7 +57,7 @@ it.each([
 );
 
 it("pushes a department tab, replaces its zone, and clears both when returning to Departments", () => {
-  history.replaceState(null, "", "/manage/venue-operations/department/deli?dev=1");
+  history.replaceState(null, "", "/venue-operations/department/deli?dev=1");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -65,21 +65,21 @@ it("pushes a department tab, replaces its zone, and clears both when returning t
   const push = vi.spyOn(history, "pushState");
   const replace = vi.spyOn(history, "replaceState");
   url.write({ view: "zones" });
-  expect(location.pathname).toBe("/manage/venue-operations/department/deli/view/zones");
+  expect(location.pathname).toBe("/venue-operations/department/deli/view/zones");
   expect(push).toHaveBeenCalledTimes(1);
   expect(replace).not.toHaveBeenCalled();
   url.write({ zone: "patio" }, true);
-  expect(location.pathname).toBe("/manage/venue-operations/department/deli/view/zones/zone/patio");
+  expect(location.pathname).toBe("/venue-operations/department/deli/view/zones/zone/patio");
   expect(push).toHaveBeenCalledTimes(1);
   expect(replace).toHaveBeenCalledTimes(1);
   url.write({ department: null, view: null, zone: null });
-  expect(location.pathname).toBe("/manage/venue-operations");
+  expect(location.pathname).toBe("/venue-operations");
   expect(location.search).toBe("?dev=1");
   expect(push).toHaveBeenCalledTimes(2);
 });
 
 it("preserves the Prep stations tab when the dashboard rewrites its destination, and drops an old tester's product", () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/tickets/test/bread");
+  history.replaceState(null, "", "/prep-stations/view/tickets/test/bread");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -87,11 +87,11 @@ it("preserves the Prep stations tab when the dashboard rewrites its destination,
   expect(url.read("view")).toBe("tickets");
   expect(url.read("test")).toBeNull();
   url.write({ dashboard: "prep-stations" }, true);
-  expect(location.pathname).toBe("/manage/prep-stations/view/tickets");
+  expect(location.pathname).toBe("/prep-stations/view/tickets");
 });
 
 it("A725 drops a retired Prep station child when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
+  history.replaceState(null, "", "/prep-stations/view/times/station/grill");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -99,11 +99,11 @@ it("A725 drops a retired Prep station child when the dashboard rewrites its dest
   expect(url.read("view")).toBe("times");
   expect(url.read("station")).toBeNull();
   url.write({ dashboard: "prep-stations" }, true);
-  expect(location.pathname).toBe("/manage/prep-stations/view/times");
+  expect(location.pathname).toBe("/prep-stations/view/times");
 });
 
 it("preserves the Opening hours tab and department a link names when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/deli");
+  history.replaceState(null, "", "/opening-hours/view/week/department/deli");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -111,11 +111,11 @@ it("preserves the Opening hours tab and department a link names when the dashboa
   expect(url.read("department")).toBe("deli");
   expect(url.read("view")).toBe("week");
   url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/deli");
+  expect(location.pathname).toBe("/opening-hours/view/week/department/deli");
 });
 
 it("keeps the Opening hours year a link names when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/year/year/2027");
+  history.replaceState(null, "", "/opening-hours/view/year/year/2027");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -123,11 +123,11 @@ it("keeps the Opening hours year a link names when the dashboard rewrites its de
   expect(url.read("view")).toBe("year");
   expect(url.read("year")).toBe("2027");
   url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+  expect(location.pathname).toBe("/opening-hours/view/year/year/2027");
 });
 
 it("ignores a retired Station hours station child when rewriting its destination", () => {
-  history.replaceState(null, "", "/manage/hours/view/week/station/bar");
+  history.replaceState(null, "", "/hours/view/week/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -135,14 +135,14 @@ it("ignores a retired Station hours station child when rewriting its destination
   expect(url.read("department")).toBeNull();
   expect(url.read("station")).toBeNull();
   url.write({ dashboard: "hours" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/week");
+  expect(location.pathname).toBe("/hours/view/week");
   url.write({ station: null, department: "deli" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/week");
+  expect(location.pathname).toBe("/hours/view/week");
   expect(url.read("department")).toBeNull();
 });
 
 it("drops station and department children from a retired Station hours destination", () => {
-  history.replaceState(null, "", "/manage/hours/view/calendar/department/deli/station/bar");
+  history.replaceState(null, "", "/hours/view/calendar/department/deli/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -150,90 +150,78 @@ it("drops station and department children from a retired Station hours destinati
   expect(url.read("department")).toBeNull();
   expect(url.read("station")).toBeNull();
   url.write({ dashboard: "hours" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/calendar");
+  expect(location.pathname).toBe("/hours/view/calendar");
 });
 
 it("preserves the explicit menu price filter when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/menus/menu/drinks/view/prices/filter/clashes");
+  history.replaceState(null, "", "/menus/menu/drinks/view/prices/filter/clashes");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   url.write({ dashboard: "menus" }, true);
-  expect(location.pathname).toBe("/manage/menus/menu/drinks/view/prices/filter/clashes");
+  expect(location.pathname).toBe("/menus/menu/drinks/view/prices/filter/clashes");
   expect(url.read("price-filter")).toBe("clashes");
 });
 
 it("preserves Opening hours zone and All departments URLs", async () => {
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
-  history.replaceState(
-    null,
-    "",
-    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
-  );
+  history.replaceState(null, "", "/opening-hours/view/week/department/restaurant/zone/terrace");
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("zone")).toBe("terrace");
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe(
-    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
-  );
+  expect(location.pathname).toBe("/opening-hours/view/week/department/restaurant/zone/terrace");
   await url.write({ department: "all", zone: null }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
+  expect(location.pathname).toBe("/opening-hours/view/week/department/all");
   expect(url.read("department")).toBe("all");
 });
 
 it("preserves an Opening hours date view's date while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/date/date/2026-12-25");
+  history.replaceState(null, "", "/opening-hours/view/date/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/date/date/2026-12-25");
+  expect(location.pathname).toBe("/opening-hours/view/date/date/2026-12-25");
   expect(url.read("date")).toBe("2026-12-25");
   host.remove();
 });
 
 it("preserves an Opening hours special day's address while the shell replaces its section", async () => {
-  history.replaceState(
-    null,
-    "",
-    "/manage/opening-hours/view/special-day/special-day/sd1/date/2026-12-25",
-  );
+  history.replaceState(null, "", "/opening-hours/view/special-day/special-day/sd1/date/2026-12-25");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe(
-    "/manage/opening-hours/view/special-day/special-day/sd1/date/2026-12-25",
-  );
+  expect(location.pathname).toBe("/opening-hours/view/special-day/special-day/sd1/date/2026-12-25");
   expect(url.read("special-day")).toBe("sd1");
   host.remove();
 });
 
 it("preserves an Opening hours month view's month while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+  history.replaceState(null, "", "/opening-hours/view/month/month/2026-12");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+  expect(location.pathname).toBe("/opening-hours/view/month/month/2026-12");
   expect(url.read("month")).toBe("2026-12");
   host.remove();
 });
 
 it("keeps a Calendar module view and its week while the shell replaces its section", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+  history.replaceState(null, "", "/opening-hours/view/staffing/week/2026-11-30");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   document.body.append(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   await url.write({ dashboard: "opening-hours" }, true);
-  expect(location.pathname).toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+  expect(location.pathname).toBe("/opening-hours/view/staffing/week/2026-11-30");
 });
 
 it("draws the Calendar's own-hours clock from the dashboard registry", async () => {
@@ -262,7 +250,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
 });
 
 it("reads the floor plan editor's zone from its path", () => {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
@@ -272,7 +260,7 @@ it("reads the floor plan editor's zone from its path", () => {
 });
 
 it("reads the device profile a device profiles address names", () => {
-  history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+  history.replaceState(null, "", "/device-profiles/profile/p1");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);

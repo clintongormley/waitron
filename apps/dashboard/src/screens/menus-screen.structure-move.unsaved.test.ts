@@ -98,7 +98,7 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
 }
 
 async function mount(api: DashboardApi) {
-  history.replaceState(null, "", "/manage/menus/menu/menu/view/structure");
+  history.replaceState(null, "", "/menus/menu/menu/view/structure");
   const { el: app } = await mountWidget<StructureMoveLeaveApp>("structure-move-leave-test-app", {
     api,
   });

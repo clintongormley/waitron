@@ -21,7 +21,7 @@ describe("account email", () => {
       purpose: "email_change",
       email: "bea@example.test",
       displayName: "Bea",
-      actionUrl: "https://dashboard.example.test/manage/profile",
+      actionUrl: "https://dashboard.example.test/profile",
       code: "123456",
       expiresAt,
       codeExpiresAt: expiresAt,
@@ -50,7 +50,7 @@ describe("account email", () => {
       purpose: "invitation",
       email: "bea@example.test",
       displayName: "Bea",
-      actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+      actionUrl: "https://dashboard.example.test/account?token=secret-token",
       expiresAt: "2026-09-09T12:00:00.000Z",
       locale: "en-GB",
     });
@@ -82,7 +82,7 @@ describe("account email", () => {
       purpose: "invitation",
       email: "bea@example.test",
       displayName: "Bea",
-      actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+      actionUrl: "https://dashboard.example.test/account?token=secret-token",
       expiresAt: "2026-09-09T12:00:00.000Z",
       locale: "en-GB",
     });
@@ -90,7 +90,7 @@ describe("account email", () => {
     expect(message.text).not.toContain("Privacy notice");
     expect(message.html.match(/<a href/g)).toEqual(["<a href"]);
     expect(message.html).toContain(
-      '<a href="https://dashboard.example.test/manage/account?token=secret-token">',
+      '<a href="https://dashboard.example.test/account?token=secret-token">',
     );
   });
 
@@ -104,7 +104,7 @@ describe("account email", () => {
       purpose: "password_reset",
       email: "bea@example.test",
       displayName: "Bea",
-      actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+      actionUrl: "https://dashboard.example.test/account?token=secret-token",
       expiresAt: "2026-09-08T12:30:00.000Z",
       locale: "en-GB",
     });
@@ -125,7 +125,7 @@ describe("account email", () => {
         purpose: "invitation",
         email: "bea@example.test",
         displayName: "Bea",
-        actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+        actionUrl: "https://dashboard.example.test/account?token=secret-token",
         code: "123456",
         codeExpiresAt: "2026-09-08T12:10:00.000Z",
         expiresAt: "2026-09-09T12:00:00.000Z",
@@ -179,7 +179,7 @@ describe("account email", () => {
       purpose: "invitation",
       email: "bea@example.test",
       displayName: "Bea",
-      actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+      actionUrl: "https://dashboard.example.test/account?token=secret-token",
       expiresAt: "2026-09-09T12:00:00.000Z",
       locale: "es-ES",
     });
@@ -237,7 +237,7 @@ describe("invitation roles", () => {
     purpose: "invitation" as const,
     email: "ana@example.test",
     displayName: "Anna",
-    actionUrl: "https://dashboard.example.test/manage/account?token=secret-token",
+    actionUrl: "https://dashboard.example.test/account?token=secret-token",
     expiresAt: "2026-09-09T12:00:00.000Z",
   };
   const roles = [

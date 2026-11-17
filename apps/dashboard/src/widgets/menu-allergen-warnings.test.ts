@@ -67,8 +67,8 @@ describe("allergen publish warnings", () => {
     expect(section.textContent).toContain("Allergens not yet reviewed");
     const links = [...section.querySelectorAll("a")];
     expect(links.map((a) => [a.textContent!.trim(), a.getAttribute("href")])).toEqual([
-      ["Staff bread <b>", "/manage/products/product/bread%20%2F%3F"],
-      ["Staff soup (Staff large)", "/manage/products/product/large"],
+      ["Staff bread <b>", "/products/product/bread%20%2F%3F"],
+      ["Staff soup (Staff large)", "/products/product/large"],
     ]);
     expect(section.querySelector("b")).toBeNull();
     const published = vi.fn();
@@ -111,7 +111,7 @@ describe("allergen publish warnings", () => {
     const { el } = await mount();
     const opened = vi.fn();
     el.addEventListener("wt-edit-product", opened);
-    const link = q(el, 'a[href="/manage/products/product/large"]');
+    const link = q(el, 'a[href="/products/product/large"]');
     expect(link).not.toBeNull();
     for (const init of [
       { ctrlKey: true },

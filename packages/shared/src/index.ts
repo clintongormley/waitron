@@ -1,3 +1,4 @@
+export { isDashboardAssetPath, isDashboardPath } from "./app-surfaces.js";
 // Excluded from coverage by path in vitest.config.ts: @vitest/coverage-v8 has reported phantom
 // uncovered entries for this barrel on some runs and not others, and an in-file `v8 ignore file`
 // did not reliably suppress them.

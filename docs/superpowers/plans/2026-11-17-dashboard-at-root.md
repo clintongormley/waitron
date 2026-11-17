@@ -8,6 +8,8 @@
 
 **Remote/waits:** retain staff method/API allowlists, machine refusals and throttle. Serve dashboard GET/HEAD directly with `mountSpa`; never delegate arbitrary root GETs. Reuse main’s spare-read and zone-repair gates in their existing order with identical boot inputs before staff pages; APIs keep main delegation/gates. Named server/till routes precede dashboard fallback. Peer-wait serves both apps’ page GETs and probes the current path. Clock-wait returns by GET to its safe path/query. Carry-on transports that destination in a hidden field, validates a local dashboard/till page, and preserves it through errors/success/back links; never replay POSTs.
 
+**As built after the watcher’s 2026-11-17 20:16 review clearance:** remote dashboard files keep direct static serving. Their gate list starts with the same handover, request-id and build-header middleware instances used locally, followed by the spare gate when applicable. Repair startup returns before a staff listener starts, so repair’s gate stays local; the artificial remote-repair test is removed. Staff, spare and repair share dashboard asset membership, including the relocated icons. One boot-to-staff test closes the real handover gate and checks page/asset refusal plus the open response’s metadata.
+
 **Enrolled tills:** no compatibility redirect. Cookies have `Path=/` (`device-session.ts:76`); saved addresses reduce to origins (`server-router.ts:405`). Replace old bookmarks/home-screen launches with `/till/`. Move manifest start/scope/link and dev handler, keep shared icons. The only found worker registration is the missing-script trust probe, not an offline worker.
 
 **Files and owning checks** (S=server/src, D=dashboard/src, T=till/src, P=ui/src):
@@ -24,3 +26,5 @@
 **Cloud coordination:** Lane G’s 17:11 source comparison finds no relay path rewrite; no live forwarding claim. Watcher assigns G’s `registration/src/relay-smtp.ts:17` invitation/reset change to `/account`: prepare alongside, deploy Waitron boxes first, then Cloud; qualify destinations. Pre-live, no resend step. Email-change `/` stays. Tell Lane G in its questions.md when PR 2 opens; the watcher updates external `wa-wt` addresses after landing. No Cloud/shared-tool edits here.
 
 **Validation/exclusions:** TDD by owning layer, changed suites, normal hook/current-head CI. Build all apps; LOOK in both themes at phone/desktop widths, refresh deep links, check assets/manifest and existing/fresh enrolment. No redirects, storage migrations, auth redesign, route framework, offline support or unrelated cleanup.
+
+Watcher size clearance (Lane I questions.md, 2026-11-17 18:55): PR2 may grow to about5,000–5,600 added+removed lines because existing URL assertions account for about4,500–4,900; production/config350–500. Keep the mechanical substitution in one recorded-command commit, with no hand edits mixed in. No new behavior was cleared by this size adjustment.

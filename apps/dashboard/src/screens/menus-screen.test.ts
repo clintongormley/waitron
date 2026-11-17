@@ -88,12 +88,12 @@ const forgetListColumns = () => {
 };
 beforeEach(forgetListColumns);
 afterEach(forgetListColumns);
-beforeEach(() => history.replaceState(null, "", "/manage/menus"));
+beforeEach(() => history.replaceState(null, "", "/menus"));
 
-const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
-const PRICES_PATH = "/manage/menus/menu/menu-lunch/view/prices";
-const PREVIEW_PATH = "/manage/menus/menu/menu-lunch/view/preview";
-const HOME_PATH = "/manage/menus/menu/menu-lunch/view/home";
+const LUNCH_PATH = "/menus/menu/menu-lunch/view/structure";
+const PRICES_PATH = "/menus/menu/menu-lunch/view/prices";
+const PREVIEW_PATH = "/menus/menu/menu-lunch/view/preview";
+const HOME_PATH = "/menus/menu/menu-lunch/view/home";
 
 /** The three names read differently (docs/developers/products.md), so a surface showing the
  * customer-facing or kitchen name where the staff name belongs fails. */
@@ -715,7 +715,7 @@ function writeCalls(client: Api): string[] {
   );
 }
 
-async function mount(client: Api = api(), path = "/manage/menus", theme?: "light" | "dark") {
+async function mount(client: Api = api(), path = "/menus", theme?: "light" | "dark") {
   history.replaceState(null, "", path);
   const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client }, theme);
   await vi.waitFor(
@@ -1010,7 +1010,7 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   expect(tabs.value).toBe("structure");
   expect(tabs.items.map((item) => item.key)).toEqual(["structure", "prices", "home", "preview"]);
   history.back();
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/menus"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/menus"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
 });
 
@@ -1081,18 +1081,18 @@ it("opens the menu and tab the address names, and leaves the list by the Back co
   expect(text(q(el, "h1"))).toBe("Lunch Menu");
   expect(client.getMenuStructure).toHaveBeenCalledWith("menu-lunch");
   await click(el, "back");
-  expect(location.pathname).toBe("/manage/menus");
+  expect(location.pathname).toBe("/menus");
   expect(table(el)).not.toBeNull();
 });
 
 it("replaces an address naming an unknown menu or tab rather than adding a history entry", async () => {
   const push = vi.spyOn(history, "pushState");
   onTestFinished(() => push.mockRestore());
-  const el = await mount(api(), "/manage/menus/menu/menu-gone/view/structure");
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/menus"));
+  const el = await mount(api(), "/menus/menu/menu-gone/view/structure");
+  await vi.waitFor(() => expect(location.pathname).toBe("/menus"));
   expect(table(el)).not.toBeNull();
   cleanupWidgets();
-  await mount(api(), "/manage/menus/menu/menu-lunch/view/bogus");
+  await mount(api(), "/menus/menu/menu-lunch/view/bogus");
   await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
   expect(push).not.toHaveBeenCalled();
 });
@@ -1285,7 +1285,7 @@ describe("a menus list row", () => {
         force: true,
       });
       await vi.waitFor(() =>
-        expect(location.pathname).toBe("/manage/menus/menu/menu-dinner/view/structure"),
+        expect(location.pathname).toBe("/menus/menu/menu-dinner/view/structure"),
       );
       expect(opens()).toHaveLength(1);
     });
@@ -1327,7 +1327,7 @@ describe("a menus list row", () => {
       table(el).shadowRoot.querySelector<HTMLElement>('[data-test="rename-menu-lunch"]')!,
     );
     await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
-    expect(location.pathname).toBe("/manage/menus");
+    expect(location.pathname).toBe("/menus");
     expect(opens()).toHaveLength(0);
   });
 
@@ -1495,7 +1495,7 @@ describe("the menus list's columns", () => {
 });
 
 describe("the menus list's Changes column", () => {
-  const PREVIEW = (id: string) => `/manage/menus/menu/${id}/view/preview`;
+  const PREVIEW = (id: string) => `/menus/menu/${id}/view/preview`;
   const BRUNCH: MenuSummary = {
     id: "menu-brunch",
     name: "Brunch Menu",
@@ -1680,7 +1680,7 @@ describe("the menus list's Changes column", () => {
         // Forced, so a row activator lying over the point takes the click rather than stalling it.
         await userEvent.click(cell, { position, force: true });
         await el.updateComplete;
-        expect(location.pathname, label).toBe("/manage/menus");
+        expect(location.pathname, label).toBe("/menus");
       }
       expect(opens()).toEqual([]);
     });
@@ -1711,7 +1711,7 @@ describe("the menus list's Changes column", () => {
     );
     await el.updateComplete;
     expect(seen).toEqual([false]);
-    expect(location.pathname).toBe("/manage/menus");
+    expect(location.pathname).toBe("/menus");
     expect(opens()).toEqual([]);
   });
 
@@ -1973,7 +1973,7 @@ describe("the menus list's Changes column", () => {
           // Forced, so a row activator lying over the point takes the click rather than stalling it.
           await userEvent.click(cell, { position, force: true });
           await el.updateComplete;
-          expect(location.pathname, label).toBe("/manage/menus");
+          expect(location.pathname, label).toBe("/menus");
         }
         expect(opens()).toEqual([]);
       });
@@ -1996,7 +1996,7 @@ describe("the menus list's Changes column", () => {
       expect(after).not.toBe(before);
       expect(table(el).shadowRoot.activeElement).toBe(after);
       await userEvent.keyboard("{Enter}");
-      const structure = "/manage/menus/menu/menu-lunch/view/structure";
+      const structure = "/menus/menu/menu-lunch/view/structure";
       await vi.waitFor(() => expect(location.pathname).toBe(structure));
       expect(opens()).toEqual([structure]);
     });
@@ -2022,7 +2022,7 @@ describe("the menus list's Changes column", () => {
         activator,
       );
       await userEvent.click(cell, { position });
-      const structure = "/manage/menus/menu/menu-lunch/view/structure";
+      const structure = "/menus/menu/menu-lunch/view/structure";
       await vi.waitFor(() => expect(location.pathname).toBe(structure));
       expect(opens()).toEqual([structure]);
     });
@@ -2127,7 +2127,7 @@ describe("unique menu names on Create and Rename", () => {
         setLocale(locale);
         await page.viewport(width, 844);
         const client = api();
-        const el = await mount(client, "/manage/menus", theme);
+        const el = await mount(client, "/menus", theme);
         if (mode === "create") await click(el, "add-menu");
         else await inTable(el, "rename-menu-lunch");
         const name = inModal<HTMLElementTagNameMap["wt-input"]>(
@@ -2395,7 +2395,7 @@ describe("copying a menu from the list", () => {
     );
     expect(client.duplicateMenu).toHaveBeenCalledExactlyOnceWith("menu-lunch", "Weekday lunch");
     expect(form(el).open).toBe(false);
-    expect(location.pathname).toBe("/manage/menus");
+    expect(location.pathname).toBe("/menus");
     expect(q(el, '[data-test="member-error"]')).toBeNull();
     expect(writeCalls(client)).toEqual(["duplicateMenu"]);
   });
@@ -4080,7 +4080,7 @@ async function visit(el: MenusScreen, path: string, heading: string): Promise<vo
   await el.updateComplete;
 }
 
-const DINNER_PATH = "/manage/menus/menu/menu-dinner/view/structure";
+const DINNER_PATH = "/menus/menu/menu-dinner/view/structure";
 
 it("closes an open window without a message when the person goes to another menu", async () => {
   const el = await mountLunch();
@@ -7100,7 +7100,7 @@ describe("the Structure tree", () => {
     it("removes the inclusion from this menu alone, and links to the included menu's own Structure tab", async () => {
       const { client, el } = await mountWithWines();
       expect(inStructure(el, '[data-test="source-included-wine"]')!.getAttribute("href")).toBe(
-        "/manage/menus/menu/wine/view/structure",
+        "/menus/menu/wine/view/structure",
       );
       await rowAction(el, "included-wine", "remove");
       await vi.waitFor(() =>
@@ -7584,7 +7584,7 @@ describe("the Structure tree", () => {
       );
       const link = inStructure<HTMLAnchorElement>(el, '[data-test="edit-product-m-burger"]')!;
       expect(link.textContent!.trim()).toBe(t("product.edit"));
-      expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
+      expect(link.getAttribute("href")).toBe("/products/product/p-burger");
       await vi.waitFor(() => {
         const at = link.getBoundingClientRect();
         expect(at.width).toBeGreaterThan(0);
@@ -8288,7 +8288,7 @@ it("names the product when its save is refused after the person has gone to anot
   const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
   const el = await mountPrices(client);
   await commitPrice(el, "mi-burger", "11.00");
-  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
   pending.reject({ code: "menu.not_found" });
@@ -8319,7 +8319,7 @@ it("finishes a save quietly when the person has gone to another menu, reading no
   const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
   const el = await mountPrices(client);
   await commitPrice(el, "mi-burger", "11.00");
-  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
   const lunchReads = client.getMenuPrices.mock.calls.filter(([id]) => id === "menu-lunch").length;
@@ -8342,7 +8342,7 @@ it("stops following a menu's prices once another menu is opened, so its changes 
   client.getMenuPrices.mockImplementation((id: string) =>
     id === "menu-dinner" ? dinner.promise : Promise.resolve(lunchPrices()),
   );
-  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/structure");
+  history.pushState(null, "", "/menus/menu/menu-dinner/view/structure");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
   const reads = client.getMenuPrices.mock.calls.length;
@@ -8491,7 +8491,7 @@ it("names the product and its variant beside the list when a variant's refusal l
   await expandPrices(el, "mi-lemonade");
   await commitPrice(el, "mi-lemonade:v-small", "1.90");
   await vi.waitFor(() => expect(client.setMenuVariantPrice).toHaveBeenCalledOnce());
-  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
   pending.reject({ code: "management.request_invalid" });
@@ -8618,7 +8618,7 @@ const AWAY_FROM_PRICES = [
   {
     away: "another menu",
     leave: async () => {
-      history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+      history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
       window.dispatchEvent(new PopStateEvent("popstate"));
     },
   },
@@ -9208,7 +9208,7 @@ describe("publishing", () => {
   });
 
   for (const action of ["Schedule", "Change time"] as const) {
-    for (const destination of ["/manage/menus/menu/menu-dinner/view/preview", "/manage/menus"]) {
+    for (const destination of ["/menus/menu/menu-dinner/view/preview", "/menus"]) {
       it(`${action}: reports a refused save on the screen after leaving for ${destination}`, async () => {
         const pending = deferred<never>();
         const client = api({
@@ -9538,7 +9538,7 @@ describe("publishing", () => {
     )!;
     expect(link).not.toBeNull();
     if (id === "home-columns") {
-      expect(link.getAttribute("href")).toBe("/manage/menus/menu/menu-lunch/view/home");
+      expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/home");
       return;
     }
     link.focus();
@@ -9697,7 +9697,7 @@ describe("publishing", () => {
       await followChange(el, "lemon-description");
       live.invalidate([{ type: "products" }]);
       await vi.waitFor(() => expect(lunchReads).toBe(2));
-      history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+      history.pushState(null, "", "/menus/menu/menu-dinner/view/preview");
       window.dispatchEvent(new PopStateEvent("popstate"));
       await vi.waitFor(() => expect(panel(el).preview).toBe(dinner));
       if (answer === "success") oldRead.resolve(initial);
@@ -10521,7 +10521,7 @@ describe("publishing", () => {
     await publish(el);
     const button = () => inPanel(el, "publish") as HTMLElementTagNameMap["wt-button"] | null;
     expect(button()!.loading).toBe(true);
-    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+    history.pushState(null, "", "/menus/menu/menu-dinner/view/preview");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish now"));
     expect(button()!.loading).toBe(false);
@@ -10550,7 +10550,7 @@ describe("publishing", () => {
     });
     const el = await mount(client, PREVIEW_PATH);
     await vi.waitFor(() => expect(inPanel(el, "preview-loading")).not.toBeNull());
-    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+    history.pushState(null, "", "/menus/menu/menu-dinner/view/preview");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(inPanel(el, "no-changes")).not.toBeNull());
     lunchPreviewRead.resolve(lunchPreview());
@@ -11383,7 +11383,7 @@ describe("the Home page tab", () => {
       ),
     });
     const el = await mount(client, HOME_PATH);
-    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    history.pushState(null, "", "/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
     await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
@@ -11393,7 +11393,7 @@ describe("the Home page tab", () => {
   });
 
   async function goToDinnerHome(el: MenusScreen, client: Api): Promise<void> {
-    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
+    history.pushState(null, "", "/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
     await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
@@ -11496,7 +11496,7 @@ describe("the name forms", () => {
       field: "name",
       required: "menus.name_required",
       write: "createMenu",
-      path: "/manage/menus",
+      path: "/menus",
       open: (el) => click(el, "add-menu"),
     },
     {
@@ -11903,8 +11903,8 @@ it("lists the menus that include this one, with their clashes", async () => {
   expect(
     [...notice.querySelectorAll("a")].map((a) => [a.textContent?.trim(), a.getAttribute("href")]),
   ).toEqual([
-    ["Evening", "/manage/menus/menu/evening/view/structure"],
-    ["Afternoon (1 clash)", "/manage/menus/menu/afternoon/view/structure"],
+    ["Evening", "/menus/menu/evening/view/structure"],
+    ["Afternoon (1 clash)", "/menus/menu/afternoon/view/structure"],
   ]);
 });
 
@@ -12930,9 +12930,9 @@ it.each(["link", "keyboard", "address", "retry"])(
 );
 
 it.each([
-  ["/manage/menus/filter/clashes", "/manage/menus"],
-  ["/manage/menus/menu/menu-lunch/view/structure/filter/clashes", LUNCH_PATH],
-  ["/manage/menus/menu/menu-lunch/view/prices/filter/unknown", PRICES_PATH],
+  ["/menus/filter/clashes", "/menus"],
+  ["/menus/menu/menu-lunch/view/structure/filter/clashes", LUNCH_PATH],
+  ["/menus/menu/menu-lunch/view/prices/filter/unknown", PRICES_PATH],
 ])(
   "A349 removes a price-filter request that does not name a Prices destination: %s",
   async (path, wanted) => {
@@ -12944,7 +12944,7 @@ it.each([
 it("A349 removes the explicit price-filter destination when returning to the menu list", async () => {
   const el = await mount(api(), `${PRICES_PATH}/filter/clashes`);
   await click(el, "back");
-  expect(location.pathname).toBe("/manage/menus");
+  expect(location.pathname).toBe("/menus");
 });
 
 it.each(["member", "destination", "menu"])(
@@ -13261,7 +13261,7 @@ describe("a name put into a sentence", () => {
     });
     const el = await mountPrices(client);
     await commitPrice(el, "mi-burger", "11.00");
-    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+    history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
     pending.reject({ code: "menu.not_found" });

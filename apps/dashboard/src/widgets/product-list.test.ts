@@ -5102,7 +5102,7 @@ describe("product media link", () => {
     const media = root.querySelector<HTMLAnchorElement>('[data-test="color-cola"]');
     expect(media).not.toBeNull();
     expect(media!.tagName).toBe("A");
-    expect(media!.getAttribute("href")).toBe("/manage/products/product/cola?field=image");
+    expect(media!.getAttribute("href")).toBe("/products/product/cola?field=image");
     expect(media!.getAttribute("aria-label")).toBe(
       t("product.edit_named_inherited").replace("{name}", "Cola").replace("{from}", "Drinks"),
     );
@@ -5501,7 +5501,7 @@ describe("variant media slot", () => {
     const media = root.querySelector<HTMLAnchorElement>('[data-test="color-quarter"]')!;
     expect(media).not.toBeNull();
     expect(media.tagName).toBe("A");
-    expect(media.getAttribute("href")).toBe("/manage/products/product/quarter?field=image");
+    expect(media.getAttribute("href")).toBe("/products/product/quarter?field=image");
     expect(media.getAttribute("aria-label")).toBe(
       t("product.edit_named").replace("{name}", "1/4 Chicken"),
     );

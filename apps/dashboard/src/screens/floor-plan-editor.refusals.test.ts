@@ -111,7 +111,7 @@ async function flush(el: FloorPlanEditor): Promise<void> {
 }
 
 async function open(api: DashboardApi): Promise<FloorPlanEditor> {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
   await flush(el);
   return el;
@@ -976,7 +976,7 @@ it("a save still pending on one zone does not stop Save on the next", async () =
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   await change(el, changePlacement(draftFromPlan(bar), "m1", { x: 9, y: 4 }));

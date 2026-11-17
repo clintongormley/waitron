@@ -16,10 +16,10 @@ describe.each(["light", "dark"] as const)("Seasons page (%s)", (theme) => {
       {},
       "",
       state === "new"
-        ? "/manage/seasons/view/new"
+        ? "/seasons/view/new"
         : ["edit", "refused"].includes(state)
-          ? "/manage/seasons/season/winter"
-          : "/manage/seasons",
+          ? "/seasons/season/winter"
+          : "/seasons",
     );
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-seasons-screen");

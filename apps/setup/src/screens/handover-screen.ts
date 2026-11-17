@@ -286,7 +286,7 @@ export class SetupHandoverScreen extends LitElement {
     try {
       const { mainUrl } = await this.api.mainServer(signal);
       if (typeof mainUrl !== "string" || mainUrl === "") return undefined;
-      const serversUrl = new URL("/manage/servers", mainUrl).href;
+      const serversUrl = new URL("/servers", mainUrl).href;
       await this.api.probeMain(mainUrl, signal);
       return serversUrl;
     } catch {

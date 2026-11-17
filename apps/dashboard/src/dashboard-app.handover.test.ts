@@ -51,7 +51,7 @@ it.each([true, false])(
       listServers: async () => ({ term: 2, authorityFingerprint: null, nodes: [] }),
     } as unknown as DashboardApi;
     Object.defineProperty(api, "background", { get: () => api });
-    history.replaceState(null, "", "/manage/servers");
+    history.replaceState(null, "", "/servers");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
       request: vi.fn(async () => {

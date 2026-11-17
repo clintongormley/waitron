@@ -22,7 +22,7 @@ class SearchDestinationFixture extends LitElement {
       this.windowId = this.url.read("window") ?? "";
     },
     {
-      basePath: "/manage",
+      basePath: "",
       primary: "dashboard",
       children: { "*": { view: "view", mode: "mode", window: "window" } },
     },
@@ -62,19 +62,19 @@ function searchModule(): DashboardContribution {
         id: "library:stock",
         screen: "search-library",
         labelKey: "search.stock",
-        path: "/manage/search-library/view/stock/mode/person",
+        path: "/search-library/view/stock/mode/person",
       },
       {
         id: "library:window",
         screen: "search-library",
         labelKey: "search.settings",
-        path: "/manage/search-library/view/stock/window/settings",
+        path: "/search-library/view/stock/window/settings",
       },
       {
         id: "library:secret",
         screen: "search-library",
         labelKey: "search.secret",
-        path: "/manage/search-library/view/secret",
+        path: "/search-library/view/secret",
         requiresPermission: "library.secret",
       },
     ],
@@ -119,7 +119,7 @@ async function mount(
   } = {},
 ) {
   await page.viewport(options.width ?? 1280, 800);
-  history.replaceState(null, "", options.path ?? "/manage/search-library");
+  history.replaceState(null, "", options.path ?? "/search-library");
   const api = {
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
@@ -183,9 +183,7 @@ it("keeps all matching pages ahead of inner results across groups and labels the
   await search(el, "stock");
   expect(results(el).map((x) => x.textContent!.trim())).toEqual(["Stock", "Stock — in Library"]);
   await userEvent.click(destination(el, "library:stock")!);
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/manage/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   await vi.waitFor(() =>
     expect(fixture(el).shadowRoot!.querySelector("[data-test=chosen]")!.textContent).toBe(
       "stock/person",
@@ -199,9 +197,7 @@ it("Enter opens the same complete inner address and preserves blank ordinary nav
   await search(el, "stock library");
   box(el).focus();
   await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/manage/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   expect(box(el).value).toBe("");
 });
 it("opens a window from an address and restores it through Back Forward and a fresh mount", async () => {
@@ -211,7 +207,7 @@ it("opens a window from an address and restores it through Back Forward and a fr
   await vi.waitFor(() =>
     expect(fixture(el).shadowRoot!.querySelector("wt-dialog")!.open).toBe(true),
   );
-  expect(location.pathname).toBe("/manage/search-library/view/stock/window/settings");
+  expect(location.pathname).toBe("/search-library/view/stock/window/settings");
   history.back();
   await vi.waitFor(() =>
     expect(fixture(el).shadowRoot!.querySelector("wt-dialog")!.open).toBe(false),
@@ -248,7 +244,7 @@ it("keeps same-page drafts and the phone search on Keep, then navigates only aft
   await question.updateComplete;
   await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
   await vi.waitFor(() => expect(question.open).toBe(false));
-  expect(location.pathname).toBe("/manage/search-library");
+  expect(location.pathname).toBe("/search-library");
   expect(value).toBe("edited");
   expect(box(el).value).toBe("stock library");
   expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(true);
@@ -256,9 +252,7 @@ it("keeps same-page drafts and the phone search on Keep, then navigates only aft
   await vi.waitFor(() => expect(question.open).toBe(true));
   await question.updateComplete;
   await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe("/manage/search-library/view/stock/mode/person"),
-  );
+  await vi.waitFor(() => expect(location.pathname).toBe("/search-library/view/stock/mode/person"));
   expect(value).toBe("saved");
   expect(box(el).value).toBe("");
   expect(el.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
@@ -313,12 +307,12 @@ it("finds payment checks under Reporting while Card readers still opens Hardware
   )!;
   expect(checks.checkVisibility()).toBe(true);
   await userEvent.click(checks);
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/check-card-payments"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/check-card-payments"));
   await search(el, "Card readers");
   const readers = destination(el, "payments:readers")!;
   expect(readers.checkVisibility()).toBe(true);
   await userEvent.click(readers);
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/payments"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/payments"));
   expect(
     el.shadowRoot!.querySelector("#nav-group-panel-hardware [data-test=nav-payments]"),
   ).not.toBeNull();

@@ -10,7 +10,7 @@ When a filing response conflicts with this box's active invoice identity, new in
 collections or refunds stop. Money already captured remains recorded for later completion. Keep any
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
-Open **Open recovery** beside the till refusal, or open `/manage/recovery/fiscal-conflict` on this
+Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
 box over HTTPS. Use the current live box's server key. A dashboard sign-in, backup password or
 key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is

@@ -17,7 +17,7 @@ import { mountReceiptTab } from "../testing/department-receipt-app-fixture.js";
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 const cases = (["light", "dark"] as const).flatMap((theme) =>
   ["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ theme, locale, width }))),

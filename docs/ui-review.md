@@ -8,8 +8,8 @@ the owner how each area works today (screenshots + plain English), the owner the
 corrects what is wrong or unintuitive, and the fixes land. This file records where we are so the
 walkthrough survives a context clear.
 
-**Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190/till/>, dashboard
-<http://localhost:5191/manage/>, setup <http://localhost:5192/setup/>. Those are the default ports; use `wa-wt ls`
+**Run path:** `wa-wt demo <worktree-name>` — till <http://localhost:5190/till/>, dashboard
+<http://localhost:5191/>, setup <http://localhost:5192/setup/>. Those are the default ports; use `wa-wt ls`
 for another worktree's till and dashboard URLs. The default server on `:8080` uses HTTP without a
 development box leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The
 till enrols itself on first load in dev mode, with no code or approval step. Till PIN **5555**;
@@ -130,6 +130,7 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   views/zones and saved canvas editor tabs.
   A requested destination still needs the current session's permissions and device canvas.
   Paths use `/manage/<section>` and `/tabs/<key>`, with nested selections as path segments.
+  2026-11-17: current paths are `/<section>` and `/till/tabs/<key>`; the addresses above record this historical walk.
 - Keep unsaved canvas tabs out of URL writes, including when you reselect them. Embedded station
   pickers keep their selection local; an enrolled kitchen display opens the kitchen screen its device chose.
 - Keep history for meaningful navigation. Payment and modifier steps do not add entries. Since A740

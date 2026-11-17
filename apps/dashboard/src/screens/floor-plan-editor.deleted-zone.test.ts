@@ -64,7 +64,7 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 async function mount() {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   applyTokens(app);
   document.body.append(app);
@@ -144,7 +144,7 @@ it("deleting another zone keeps the floor move and Save/Undo", async () => {
   ).toBe(2);
 });
 it("a plan read that finishes after deletion cannot reopen the same owner", async () => {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   let finish!: (value: FloorPlan) => void;
   app.read.mockReturnValueOnce(

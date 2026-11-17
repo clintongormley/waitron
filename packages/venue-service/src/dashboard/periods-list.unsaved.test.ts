@@ -196,4 +196,4 @@ it("the period dialog's draft is asked about only under the list's draft parent"
   ).toBe("proceeded");
 });
 
-beforeEach(() => history.replaceState({}, "", "/manage/periods"));
+beforeEach(() => history.replaceState({}, "", "/periods"));

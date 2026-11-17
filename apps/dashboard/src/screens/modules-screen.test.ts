@@ -11,7 +11,7 @@ import "./modules-screen.js";
 registerIcons(DASHBOARD_ICONS);
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/modules");
+  history.replaceState(null, "", "/modules");
 });
 afterEach(() => {
   cleanupWidgets();
@@ -48,14 +48,14 @@ it("opens Enabled, and Add discovers Disabled without changing the independent c
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-module]")!.click();
   await el.updateComplete;
   expect(rows(el)).toEqual([]);
-  expect(location.pathname).toBe("/manage/modules/view/card-providers/state/disabled");
+  expect(location.pathname).toBe("/modules/view/card-providers/state/disabled");
   change(el, "category", "all");
   await el.updateComplete;
   expect(rows(el).join()).toContain("Bookings");
   expect(rows(el).join()).toContain("Spanish workforce rules");
 });
 it("honours the direct all-provider link and separates Enabled from Needs setup", async () => {
-  history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+  history.replaceState(null, "", "/modules/view/card-providers/state/all");
   const el = await mount();
   const text = rows(el).join();
   expect(rows(el)).toHaveLength(2);
@@ -145,7 +145,7 @@ it("confirms provider Off separately from configuration and keeps attached-reade
     ),
   );
   const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=remove-readers]")!;
-  expect(link.getAttribute("href")).toBe("/manage/payments");
+  expect(link.getAttribute("href")).toBe("/payments");
   expect(api.setPaymentProviderState).toHaveBeenCalledWith("sumup", false, 0);
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=provider-state-error]")?.textContent).toContain(
@@ -162,7 +162,7 @@ it("a manager can configure but cannot switch a provider", async () => {
 it.each([true, false])(
   "switches a provider from enabled=%s and refreshes its state without changing configuration",
   async (enabled) => {
-    history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+    history.replaceState(null, "", "/modules/view/card-providers/state/all");
     const api = modulesClient({
       listModules: vi
         .fn()
@@ -188,7 +188,7 @@ it.each([true, false])(
 );
 
 it("offers no provider switch while the Payments module is disabled", async () => {
-  history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+  history.replaceState(null, "", "/modules/view/card-providers/state/all");
   const el = await mount(
     modulesClient({
       listModules: vi.fn().mockResolvedValue([
@@ -243,7 +243,7 @@ it("refreshes a stale provider revision so the open confirmation can be retried"
 
 it.each(
   ["bookings", "payments", "workforce-es"].flatMap((id) =>
-    ["/manage/modules/state/all", "/manage/modules"].map((path) => ({ id, path })),
+    ["/modules/state/all", "/modules"].map((path) => ({ id, path })),
   ),
 )("confirms $id and keeps its pending state visible at $path", async ({ id, path }) => {
   history.replaceState(null, "", path);
@@ -333,7 +333,7 @@ it("keeps the Payments provider prerequisite refusal beside the confirmation", a
   expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
 });
 it("narrows the modules to those whose shown name or configuration matches the search, beside the Category and State choices", async () => {
-  history.replaceState(null, "", "/manage/modules/view/all/state/all");
+  history.replaceState(null, "", "/modules/view/all/state/all");
   const el = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   const rowKeys = () =>

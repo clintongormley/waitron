@@ -1332,7 +1332,7 @@ it("the actual Done links leave a successfully provisioned root without another 
   const links: [HTMLAnchorElement, string][] = [];
   for (const [id, path] of [
     ["till", "/till/"],
-    ["dashboard", "/manage"],
+    ["dashboard", "/"],
   ]) {
     const choice = done.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-row"]>(
       `[data-test=link-${id}]`,
@@ -1343,7 +1343,7 @@ it("the actual Done links leave a successfully provisioned root without another 
   }
   links.push([
     done.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=backup-nudge] a")!,
-    "/manage/backup",
+    "/backup",
   ]);
   for (const [link, path] of links) {
     expect(link.pathname).toBe(path);

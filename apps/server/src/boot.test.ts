@@ -1541,7 +1541,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("a trading boot with the setup app configured does not send unknown browser paths to the root", async () => {
+  it("a trading boot serves dashboard pages in place without redirecting to setup", async () => {
     const venue = await freshVenue();
     await seedSharedVenue(venue.store.venue);
     const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-trading-setup-spa-"));
@@ -1584,7 +1584,8 @@ describe("startServer, against a migrated venue directory", () => {
       expect((await pair.json()).deviceAddress).toBe("https://dashboard.example.com/till/");
       const html = { headers: { Accept: "text/html" }, redirect: "manual" as const };
       const unknown = await fetch(`http://127.0.0.1:${httpPort()}/anything/else`, html);
-      expect(unknown.status).toBe(404);
+      expect(unknown.status).toBe(200);
+      expect(await unknown.text()).toBe("<html>dashboard-page</html>");
       expect(unknown.headers.get("location")).toBeNull();
       const tabs = await fetch(`http://127.0.0.1:${httpPort()}/till/tabs/counter`, html);
       expect(tabs.status).toBe(200);
@@ -2503,7 +2504,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(await dash.text()).toContain("dashboard-spa-root");
 
       for (const [path, marker] of [
-        ["/manage/floor/view/plano", "dashboard-spa-root"],
+        ["/floor/view/plano", "dashboard-spa-root"],
         ["/till/tabs/counter/menu/lunch", "till-spa-root"],
       ]) {
         const page = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
@@ -2530,7 +2531,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
 
-      const asset = await fetch(`http://127.0.0.1:${httpPort()}/manage/assets/d-1.js`);
+      const asset = await fetch(`http://127.0.0.1:${httpPort()}/assets/d-1.js`);
       expect(asset.status).toBe(200);
       expect(asset.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await asset.text()).toContain("dashboard-spa-asset");

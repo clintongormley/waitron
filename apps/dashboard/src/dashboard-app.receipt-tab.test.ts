@@ -24,7 +24,7 @@ import {
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 it.each([true, false])(
   "mounts the selected protected receipt editor on the Receipts tab with installed description visibility (%s)",
@@ -53,7 +53,7 @@ it("successful receipt save closes the department dialog when the department for
   const closed = dialogClosed(dialog);
   await userEvent.click(page.elementLocator(receiptSave(editor)));
   await closed;
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/venue-operations");
   expect(
     JSON.parse(
       fetchImpl.mock.calls.find(
@@ -101,7 +101,7 @@ it("a live receipt read after Cancel begins cannot keep the dialog open", async 
       { headers: { "content-type": "application/json" } },
     ),
   );
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/venue-operations");
   expect(modal.open).toBe(false);
   expect(receiptTabEditor(app)).toBeNull();
   expect(departmentDialog(app)).toBeNull();
@@ -116,7 +116,7 @@ it("a dirty receipt draft asks before another department's Receipts address; Kee
   const editor = receiptTabEditor(app)!;
   await editReceipt(editor, "email", "draft@example.com");
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  const cafe = "/manage/venue-operations/department/cafe/view/receipt";
+  const cafe = "/venue-operations/department/cafe/view/receipt";
   for (const decision of ["keep", "discard"] as const) {
     void navigationGuardFor(window)!.write(cafe);
     await expect.poll(() => question.open).toBe(true);
@@ -126,7 +126,7 @@ it("a dirty receipt draft asks before another department's Receipts address; Kee
     );
     await expect.poll(() => question.open).toBe(false);
     if (decision === "keep") {
-      expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+      expect(location.pathname).toBe("/venue-operations/department/bar/view/receipt");
       expect(receiptTabEditor(app)).toBe(editor);
       expect(editor.subject).toEqual({ id: "bar", name: "Bar" });
       expect(receiptField(editor, "email").value).toBe("draft@example.com");
@@ -165,7 +165,7 @@ it("a receipt refusal naming a field that lands while Details shows returns to R
   await userEvent.click(page.elementLocator(receiptSave(editor)));
   await expect.poll(() => editor.saving).toBe(true);
   await showDepartmentTab(app, "details");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar");
   const form = departmentForm(app)!;
   const strip = form.shadowRoot!.querySelector("wt-tabs")!;
   const push = vi.spyOn(history, "pushState");
@@ -175,7 +175,7 @@ it("a receipt refusal naming a field that lands while Details shows returns to R
     await expect.poll(() => form.tab).toBe("receipt");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/venue-operations/department/bar/view/receipt");
+      .toBe("/venue-operations/department/bar/view/receipt");
     expect(push).not.toHaveBeenCalled();
     expect(
       replace.mock.calls.some(([, , url]) => String(url).includes("/department/bar/view/receipt")),
@@ -213,7 +213,7 @@ it("a fieldless receipt refusal returns from Details without marking a field, re
   await userEvent.click(page.elementLocator(receiptSave(editor)));
   await expect.poll(() => editor.saving).toBe(true);
   await showDepartmentTab(app, "details");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar");
   const form = departmentForm(app)!;
   const modal = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   const alertCounts: number[] = [];
@@ -244,7 +244,7 @@ it("a fieldless receipt refusal returns from Details without marking a field, re
     await expect.poll(() => form.tab).toBe("receipt");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/venue-operations/department/bar/view/receipt");
+      .toBe("/venue-operations/department/bar/view/receipt");
     expect(push).not.toHaveBeenCalled();
     expect(
       replace.mock.calls.some(([, , url]) => String(url).includes("/department/bar/view/receipt")),
@@ -306,7 +306,7 @@ it("a receipt refusal from the scrolled footer focuses its field below the tabs 
   expect(strip.items.find(({ key }) => key === "receipt")!.marked).toBe("needs fixing");
   expect(form.tab).toBe("receipt");
   expect(changes).not.toHaveBeenCalled();
-  expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+  expect(location.pathname).toBe("/venue-operations/department/bar/view/receipt");
 });
 it("a last-language footer refusal at phone width leaves its focused textarea in view in the department dialog's scrolled body", async () => {
   const viewport = { width: innerWidth, height: innerHeight };
@@ -353,8 +353,8 @@ it("a last-language footer refusal at phone width leaves its focused textarea in
   }
 });
 it("Venue settings no longer hosts a global receipt tab or global receipt reads", async () => {
-  const { app, fetchImpl } = await mount({ path: "/manage/venue-settings/view/receipts" });
-  await expect.poll(() => location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  const { app, fetchImpl } = await mount({ path: "/venue-settings/view/receipts" });
+  await expect.poll(() => location.pathname).toBe("/venue-settings/view/venue-details");
   const settings = deep(app.shadowRoot!, "dashboard-venue-settings-screen")!;
   expect(settings.shadowRoot!.querySelector("wt-tabs")!.items.map(({ key }) => key)).not.toContain(
     "receipts",
@@ -405,7 +405,7 @@ async function mountDetails(
   respond?: (path: string, init: RequestInit) => Promise<Response> | undefined,
 ) {
   const mounted = await mountReceiptTab({
-    path: "/manage/venue-operations/department/bar",
+    path: "/venue-operations/department/bar",
     respond: (path, init) =>
       respond?.(path, init) ??
       (init.method === "PUT" && path.endsWith("/bar/settings")

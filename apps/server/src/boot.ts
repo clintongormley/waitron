@@ -1,3 +1,4 @@
+import type { MiddlewareHandler } from "hono";
 import { attachRequestReceiveLimits } from "./request-receive-limits.js";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
@@ -1503,8 +1504,10 @@ async function bootServer(
     boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
-  app.use("*", requestIdMiddleware(log, now));
-  app.use("*", buildHeaderMiddleware(build));
+  const requestMetadata = requestIdMiddleware(log, now);
+  const buildMetadata = buildHeaderMiddleware(build);
+  app.use("*", requestMetadata);
+  app.use("*", buildMetadata);
   const ownPageCheck = requireManagementChangeFromOwnPage(
     async (origin) => origin === config.managementOrigin || (await allowOrigin(origin)),
     log,
@@ -2492,7 +2495,16 @@ async function bootServer(
           log,
         });
   undoOnFailure.push(async () => mainSilence?.stop());
-  if (isMirror) app.use("*", spareReadGate({ main: () => mainSilence?.state() }));
+  const staffPageGates: MiddlewareHandler[] = [
+    handoverGate.middleware,
+    requestMetadata,
+    buildMetadata,
+  ];
+  if (isMirror) {
+    const gate = spareReadGate({ main: () => mainSilence?.state() });
+    app.use("*", gate);
+    staffPageGates.push(gate);
+  }
   if (isMirror) mountMainServerApi(app, { readMembership: () => readNodeMembership(db) }, log);
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
@@ -2599,7 +2611,8 @@ async function bootServer(
   const spareStore = isMirror ? await startServedStore() : undefined;
   if (context.savedZone.kind !== "valid") {
     tradingAdmission.repairOnly(context.savedZone.kind);
-    app.use("*", zoneRepairGate(tradingAdmission));
+    const gate = zoneRepairGate(tradingAdmission);
+    app.use("*", gate);
     mountWebhook(
       app,
       {
@@ -4428,7 +4441,9 @@ async function bootServer(
     config.environment !== "production" &&
     !existsSync(join(config.stateDir, CLOUD_STAFF_CERT_FILE));
   let staffListener =
-    isMirror || waitingForStaffCertificate ? undefined : startStaffListener(config, app, log);
+    isMirror || waitingForStaffCertificate
+      ? undefined
+      : startStaffListener(config, app, log, staffPageGates);
   undoOnFailure.push(async () => {
     await staffListener?.close();
   });
@@ -4681,7 +4696,7 @@ async function bootServer(
                 if (signal.aborted || !cloudPrimary() || staffListener?.isListening()) return;
                 await staffListener?.close();
                 if (!signal.aborted && cloudPrimary())
-                  staffListener = startStaffListener(config, app, log);
+                  staffListener = startStaffListener(config, app, log, staffPageGates);
               },
             }
           : {}),

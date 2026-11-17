@@ -32,7 +32,7 @@ for (const locale of ["en", "es"] as const)
             refusal: {
               code: "sale.charged_not_recorded",
               reason: "disk_full",
-              recoveryUrl: "/manage/check-card-payments",
+              recoveryUrl: "/check-card-payments",
             },
           },
           theme,
@@ -64,7 +64,7 @@ for (const locale of ["en", "es"] as const)
               takesCash: true,
               refusal: refusalOf({
                 code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
-                recoveryUrl: "/manage/recovery/fiscal-conflict",
+                recoveryUrl: "/recovery/fiscal-conflict",
               }),
             },
             theme,

@@ -20,7 +20,7 @@ afterEach(() => {
 });
 async function mount() {
   setLocale("en");
-  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/box-status");
   const scanBoxNetwork = vi.fn().mockResolvedValue({ networks });
   const joinBoxNetwork = vi.fn().mockResolvedValue({});
   const { el } = await mountWidget<BoxWifiDialog>("dashboard-box-wifi-dialog", {
@@ -135,7 +135,7 @@ it("never collects or sends a password from HTTP, even on localhost", async () =
   expect(joinBoxNetwork).not.toHaveBeenCalled();
 });
 it("shows a failed first scan without claiming an empty successful scan", async () => {
-  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/box-status");
   const { el } = await mountWidget<BoxWifiDialog>("dashboard-box-wifi-dialog", {
     api: {
       scanBoxNetwork: vi.fn().mockRejectedValue({ code: "box_network.no_wifi" }),

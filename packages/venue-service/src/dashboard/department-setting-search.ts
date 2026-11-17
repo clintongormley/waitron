@@ -41,7 +41,7 @@ export const departmentSettingSearchDestinations: readonly DashboardSettingSearc
       return shown.map((row) => ({
         id: row.id,
         label: row.name,
-        path: `/manage/venue-operations/department/${encodePathSegment(row.id)}${field.tab === "details" ? "" : `/view/${field.tab}`}`,
+        path: `/venue-operations/department/${encodePathSegment(row.id)}${field.tab === "details" ? "" : `/view/${field.tab}`}`,
       }));
     },
   }));

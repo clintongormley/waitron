@@ -144,7 +144,7 @@ async function mount(
   } = {},
 ) {
   await page.viewport(options.width ?? 1280, 800);
-  history.replaceState(null, "", options.path ?? "/manage/opening-hours/view/year");
+  history.replaceState(null, "", options.path ?? "/opening-hours/view/year");
   const session = {
     personId: "p1",
     roleIds: ["manager"],
@@ -171,9 +171,9 @@ async function mount(
   await vi.waitFor(() =>
     expect(
       el.shadowRoot!.querySelector(
-        options.path?.startsWith("/manage/seasons")
+        options.path?.startsWith("/seasons")
           ? "dashboard-seasons-screen"
-          : options.path?.startsWith("/manage/periods")
+          : options.path?.startsWith("/periods")
             ? "periods-list"
             : "dashboard-opening-hours-screen",
       ),
@@ -209,7 +209,7 @@ it("opens the shipped Staffing, Rota for everyone and Routes tab from search", a
         ?.shadowRoot?.querySelector("[data-test=month]")?.textContent,
     ).toContain("2026"),
   );
-  expect(location.pathname).toBe("/manage/opening-hours/view/staffing");
+  expect(location.pathname).toBe("/opening-hours/view/staffing");
   await search(el, "everyone");
   await userEvent.click(result(el, "calendar:rota:everyone")!);
   await vi.waitFor(() =>
@@ -220,7 +220,7 @@ it("opens the shipped Staffing, Rota for everyone and Routes tab from search", a
         ?.value,
     ).toBe("everyone"),
   );
-  expect(location.pathname).toBe("/manage/opening-hours/view/rota/area/everyone");
+  expect(location.pathname).toBe("/opening-hours/view/rota/area/everyone");
   await search(el, "routes");
   await userEvent.click(result(el, "venue-service:prep:routing")!);
   await vi.waitFor(() =>
@@ -256,7 +256,7 @@ it.each(["light", "dark"] as const)(
         "Spring",
       ),
     );
-    expect(location.pathname).toBe("/manage/seasons");
+    expect(location.pathname).toBe("/seasons");
     await expectNoA11yViolations(el.shadowRoot!.querySelector("dashboard-seasons-screen")!);
   },
 );
@@ -273,7 +273,7 @@ it.each(["light", "dark"] as const)(
         el.shadowRoot!.querySelector("periods-list")?.shadowRoot?.querySelector("wt-data-table"),
       ).toBeTruthy(),
     );
-    expect(location.pathname).toBe("/manage/periods");
+    expect(location.pathname).toBe("/periods");
     await expectNoA11yViolations(el.shadowRoot!.querySelector("periods-list")!);
   },
 );
@@ -317,13 +317,13 @@ it.each(["sidebar", "Back", "parent", "Cancel"])(
   async (way) => {
     const { el } = await mount();
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!);
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/seasons"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/seasons"));
     const seasonList = el.shadowRoot!.querySelector("dashboard-seasons-screen")!;
     await expect.poll(() => seasonList.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
     const table = seasonList.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!);
-    await expect.poll(() => location.pathname).toBe("/manage/seasons/season/spring");
+    await expect.poll(() => location.pathname).toBe("/seasons/season/spring");
     const editor = () =>
       el
         .shadowRoot!.querySelector("dashboard-seasons-screen")
@@ -357,7 +357,7 @@ it.each(["sidebar", "Back", "parent", "Cancel"])(
     await vi.waitFor(() => expect(question.open).toBe(true));
     await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
     await vi.waitFor(() => expect(question.open).toBe(false));
-    expect(location.pathname).toBe("/manage/seasons/season/spring");
+    expect(location.pathname).toBe("/seasons/season/spring");
     expect(input().value).toBe("Late spring");
     await leave();
     await vi.waitFor(() => expect(question.open).toBe(true));
@@ -365,7 +365,7 @@ it.each(["sidebar", "Back", "parent", "Cancel"])(
       question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!,
     );
     await vi.waitFor(() =>
-      expect(location.pathname).toBe(way === "sidebar" ? "/manage/periods" : "/manage/seasons"),
+      expect(location.pathname).toBe(way === "sidebar" ? "/periods" : "/seasons"),
     );
     expect(
       el.shadowRoot!.querySelector(way === "sidebar" ? "periods-list" : "dashboard-seasons-screen"),
@@ -392,17 +392,17 @@ it("Painted in opens its painter through the shell and Close returns to Periods"
     await userEvent.click(chip()!);
     await vi.waitFor(() =>
       expect(location.pathname).toBe(
-        "/manage/opening-hours/view/season/season/spring/department/restaurant",
+        "/opening-hours/view/season/season/spring/department/restaurant",
       ),
     );
-    expect(location.search).toBe("?back=/manage/periods");
+    expect(location.search).toBe("?back=/periods");
     expect(navigation).toHaveBeenCalledTimes(1);
     const painter = calendar(el).shadowRoot!.querySelector("season-painter")!;
     await vi.waitFor(() => expect(painter.shadowRoot?.querySelector("painter-frame")).toBeTruthy());
     const frame = painter.shadowRoot!.querySelector("painter-frame")!;
     await frame.updateComplete;
     await userEvent.click(frame.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!);
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/periods"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/periods"));
     expect(back).toHaveBeenCalledTimes(1);
     expect(el.shadowRoot!.querySelector("periods-list")).not.toBeNull();
   } finally {
@@ -411,7 +411,7 @@ it("Painted in opens its painter through the shell and Close returns to Periods"
 });
 it("a direct Painted in address closes to Periods without stepping outside this document", async () => {
   const { el } = await mount({
-    path: "/manage/opening-hours/view/season/season/spring/department/restaurant?back=/manage/periods",
+    path: "/opening-hours/view/season/season/spring/department/restaurant?back=/periods",
   });
   const back = vi.spyOn(history, "back").mockImplementation(() => {});
   const painter = () => calendar(el).shadowRoot!.querySelector("season-painter");
@@ -421,12 +421,12 @@ it("a direct Painted in address closes to Periods without stepping outside this 
   const frame = painter()!.shadowRoot!.querySelector("painter-frame")!;
   await frame.updateComplete;
   await userEvent.click(frame.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!);
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/periods"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/periods"));
   expect(back).not.toHaveBeenCalled();
 });
 describe("inline period editing inside the real shell", () => {
-  const seasonBase = "/manage/opening-hours/view/season/season/spring/department/restaurant";
-  const specialBase = "/manage/opening-hours/view/special-day/special-day/sd1";
+  const seasonBase = "/opening-hours/view/season/season/spring/department/restaurant";
+  const specialBase = "/opening-hours/view/special-day/special-day/sd1";
   async function openPeriodEditor(el: DashboardApp, painter: HTMLElement, base: string) {
     const pushed = vi.spyOn(history, "pushState");
     expect(painter.shadowRoot!.querySelector("[data-test=periods-link]")).toBeNull();
@@ -522,13 +522,13 @@ it("the Voids and comps page follows its permission rather than every enabled mo
 it.each(["parent", "Back", "sidebar", "Cancel"])(
   "the real shell protects a Periods page draft on %s",
   async (way) => {
-    const { el } = await mount({ path: "/manage/periods" });
+    const { el } = await mount({ path: "/periods" });
     const screen = el.shadowRoot!.querySelector("periods-list")!;
     await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
     const table = screen.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!);
-    await expect.poll(() => location.pathname).toBe("/manage/periods/period/lunch");
+    await expect.poll(() => location.pathname).toBe("/periods/period/lunch");
     const editor = screen.shadowRoot!.querySelector("period-dialog")!;
     await editor.updateComplete;
     const input = editor.shadowRoot!.querySelector<WtInput>("[name=name]")!;
@@ -558,7 +558,7 @@ it.each(["parent", "Back", "sidebar", "Cancel"])(
     await expect.poll(() => question.open).toBe(true);
     await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
     await expect.poll(() => question.open).toBe(false);
-    expect(location.pathname).toBe("/manage/periods/period/lunch");
+    expect(location.pathname).toBe("/periods/period/lunch");
     expect(
       el
         .shadowRoot!.querySelector("periods-list")!
@@ -570,15 +570,13 @@ it.each(["parent", "Back", "sidebar", "Cancel"])(
     await userEvent.click(
       question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!,
     );
-    await expect
-      .poll(() => location.pathname)
-      .toBe(way === "sidebar" ? "/manage/seasons" : "/manage/periods");
+    await expect.poll(() => location.pathname).toBe(way === "sidebar" ? "/seasons" : "/periods");
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
   },
 );
 
 it("returns a dirty Periods editor to the list when a session refresh removes editing access", async () => {
-  const { el, session, getMe } = await mount({ path: "/manage/periods/period/lunch" });
+  const { el, session, getMe } = await mount({ path: "/periods/period/lunch" });
   const screen = el.shadowRoot!.querySelector("periods-list")!;
   await expect.poll(() => screen.shadowRoot!.querySelector("period-dialog")).not.toBeNull();
   const editor = screen.shadowRoot!.querySelector("period-dialog")!;
@@ -598,7 +596,7 @@ it("returns a dirty Periods editor to the list when a session refresh removes ed
   await expect.poll(() => getMe.mock.calls.length).toBeGreaterThan(reads);
   const current = () => el.shadowRoot!.querySelector("periods-list")!;
   await expect.poll(() => current()?.readOnly).toBe(true);
-  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  await expect.poll(() => location.pathname).toBe("/periods");
   expect(screen.isConnected).toBe(false);
   expect(current().shadowRoot!.querySelector("period-dialog")).toBeNull();
   expect(current().shadowRoot!.querySelector("wt-data-table")!.closest("[hidden]")).toBeNull();

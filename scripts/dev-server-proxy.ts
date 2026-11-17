@@ -1,3 +1,4 @@
+import { isDashboardPath } from "../packages/shared/src/app-surfaces.js";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -27,7 +28,7 @@ export function devCrossAppLinks(app: "till" | "dashboard" | "setup"): Plugin {
         const destination =
           app !== "till" && /^\/till(?:\/|$)/.test(pathname)
             ? devPort("WAITRON_TILL_VITE_PORT", 5190)
-            : app !== "dashboard" && (pathname === "/" || /^\/manage(?:\/|$)/.test(pathname))
+            : app !== "dashboard" && isDashboardPath(pathname)
               ? devPort("WAITRON_DASHBOARD_VITE_PORT", 5191)
               : undefined;
         if (destination !== undefined) {

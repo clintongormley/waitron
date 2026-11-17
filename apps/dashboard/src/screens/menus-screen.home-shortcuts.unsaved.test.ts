@@ -106,7 +106,7 @@ function client(addHomeShortcut: () => Promise<unknown>, afterAdd: () => Promise
 }
 
 async function mount(api: DashboardApi) {
-  history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
+  history.replaceState(null, "", "/menus/menu/menu/view/home");
   const { el: app } = await mountWidget<HomeShortcutsLeaveApp>("home-shortcuts-leave-test-app", {
     api,
   });

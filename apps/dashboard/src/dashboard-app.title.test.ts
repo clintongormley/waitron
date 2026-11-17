@@ -39,7 +39,7 @@ it.each([
   "the browser tab names the open screen in $locale and follows navigation",
   async ({ locale, diagnostics, overview }) => {
     setLocale(locale);
-    const el = await mount(stubShellApi(true, locale), "/manage/diagnostics");
+    const el = await mount(stubShellApi(true, locale), "/diagnostics");
     await vi.waitFor(() => expect(document.title).toBe(diagnostics));
     let link: HTMLElement | null = null;
     await vi.waitFor(() => {
@@ -53,7 +53,7 @@ it.each([
 
 it("the browser tab's title changes language with the dashboard", async () => {
   setLocale("en-GB");
-  await mount(stubShellApi(true, "en-GB"), "/manage/diagnostics");
+  await mount(stubShellApi(true, "en-GB"), "/diagnostics");
   await vi.waitFor(() => expect(document.title).toBe("Diagnostics · Waitron"));
   setLocale("es-ES");
   await vi.waitFor(() => expect(document.title).toBe(`${es["nav.diagnostics"]} · Waitron`));
@@ -65,7 +65,7 @@ it.each([
 ] as const)("the sign-in page's tab reads $title in $locale", async ({ locale, title }) => {
   setLocale(locale);
   document.title = "";
-  const el = await mount(stubShellApi(false, locale), "/manage/");
+  const el = await mount(stubShellApi(false, locale), "/");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull(),
   );

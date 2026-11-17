@@ -1,7 +1,7 @@
 import { encodePathSegment } from "@waitron/ui";
 
 /** The Calendar's address; every address below starts with it. */
-export const openingHoursPath = "/manage/opening-hours";
+export const openingHoursPath = "/opening-hours";
 
 /** Written with the URL controller's own encoder, so the screen reads back what was written. */
 const pairsPath = (pairs: readonly (readonly [string, string])[]) =>
@@ -55,5 +55,5 @@ export function hoursPath(month?: string | null): string {
   ]);
 }
 
-export const seasonsPath = "/manage/seasons";
-export const periodsPath = "/manage/periods";
+export const seasonsPath = "/seasons";
+export const periodsPath = "/periods";

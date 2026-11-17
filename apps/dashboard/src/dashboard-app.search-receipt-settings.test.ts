@@ -31,7 +31,7 @@ it.each([
 ] as const)("real receipt label %s/%s opens Receipt", async (locale, label, name) => {
   const { app, fetchImpl } = await mountReceiptApp({
     locale,
-    path: "/manage/venue-operations",
+    path: "/venue-operations",
     departments: [
       { id: "bar", name: "Bar" },
       { id: "closed", name: "Closed", active: false },
@@ -50,7 +50,7 @@ it.each([
   await expect
     .poll(() => receiptTabEditor(app)?.shadowRoot?.querySelector(`[name=${name}]`))
     .toBeTruthy();
-  expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+  expect(location.pathname).toBe("/venue-operations/department/bar/view/receipt");
   const reads = fetchImpl.mock.calls.filter(
     ([path]) => path === "/management-api/venue-service/departments-and-zones",
   );
@@ -80,13 +80,13 @@ it("receipt chooser includes the current department and excludes inactive rows",
   );
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/restaurant/view/receipt");
+    .toBe("/venue-operations/department/restaurant/view/receipt");
   await expect.poll(() => receiptTabEditor(app)?.subject?.id).toBe("restaurant");
 });
 it.each([{ permissions: ["venue.view"] }, { modules: [] }])(
   "receipt search is absent without configure permission or venue-service (%j)",
   async (options) => {
-    const { app } = await mountReceiptApp({ ...options, path: "/manage/overview" });
+    const { app } = await mountReceiptApp({ ...options, path: "/overview" });
     await searchSettings(app, t("receipts.email"));
     expect(searchResult(app, id("email"))).toBeNull();
   },
@@ -94,7 +94,7 @@ it.each([{ permissions: ["venue.view"] }, { modules: [] }])(
 
 it("keeps an open receipt chooser usable after returning to the browser tab", async () => {
   const { app, fetchImpl } = await mountReceiptApp({
-    path: "/manage/overview",
+    path: "/overview",
     departments: [
       { id: "bar", name: "Bar" },
       { id: "restaurant", name: "Restaurant" },
@@ -124,6 +124,6 @@ it("keeps an open receipt chooser usable after returning to the browser tab", as
   );
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/restaurant/view/receipt");
+    .toBe("/venue-operations/department/restaurant/view/receipt");
   await expect.poll(() => receiptTabEditor(app)?.subject?.id).toBe("restaurant");
 });

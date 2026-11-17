@@ -646,7 +646,7 @@ it("shows usage links and blocks a delete when the server reports uses", async (
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Breakfast"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/products/product/product-1",
+    "/products/product/product-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
@@ -670,7 +670,7 @@ it("links a blocking variant use to the variant's own product page, not its pare
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Large"));
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/products/product/variant-1",
+    "/products/product/variant-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
 });
@@ -940,7 +940,7 @@ it("links a section using the image by its internal name to its editor, and bloc
     expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe("Drinks (internal)"),
   );
   expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-    "/manage/menus/menu/drinks-menu/view/structure",
+    "/menus/menu/drinks-menu/view/structure",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
@@ -961,7 +961,7 @@ it("links a live menu version using the image to its menu, and blocks the delete
     ),
   );
   expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-    "/manage/menus/menu/lunch",
+    "/menus/menu/lunch",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
@@ -992,7 +992,7 @@ for (const [locale, label] of [
       expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
     );
     expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-      "/manage/menus/menu/lunch",
+      "/menus/menu/lunch",
     );
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   });
@@ -1028,7 +1028,7 @@ for (const [locale, label] of [
       expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
     );
     expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-      "/manage/menus/menu/lunch/view/structure",
+      "/menus/menu/lunch/view/structure",
     );
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   });
@@ -1426,7 +1426,7 @@ it.each([
       expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
     );
     expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-      "/manage/venue-operations/department/dining/view/receipt",
+      "/venue-operations/department/dining/view/receipt",
     );
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   },
@@ -1926,11 +1926,11 @@ it("lists every place the image is used under a heading, each linked to the plac
   const modal = await openedViewer();
   await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
   expect(usesShown()).toEqual([
-    ["Toast", "/manage/products/product/toast"],
-    ["Old toast (Archived product)", "/manage/products/product/old"],
-    ["Large toast", "/manage/products/product/large"],
-    ["Drinks (internal)", "/manage/menus/menu/drinks-menu/view/structure"],
-    ["Lunch Menu (Published menu)", "/manage/menus/menu/lunch"],
+    ["Toast", "/products/product/toast"],
+    ["Old toast (Archived product)", "/products/product/old"],
+    ["Large toast", "/products/product/large"],
+    ["Drinks (internal)", "/menus/menu/drinks-menu/view/structure"],
+    ["Lunch Menu (Published menu)", "/menus/menu/lunch"],
   ]);
   const list = modal.querySelector(".uses ul")!;
   expect(el.shadowRoot!.getElementById(list.getAttribute("aria-labelledby")!)!.textContent).toBe(
@@ -1960,9 +1960,7 @@ it("shows that the uses are being looked up until the answer arrives", async () 
   );
   expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
   lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   expect(modal.querySelector(".uses [role=status]")).toBeNull();
 });
 
@@ -1981,9 +1979,7 @@ it("reports a failed lookup in the preview and shows the uses after Try again", 
   );
   expect(usesShown()).toEqual([]);
   modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   expect(client.getImage).toHaveBeenCalledTimes(2);
   expect(client.getImage).toHaveBeenLastCalledWith("one");
   expect(modal.querySelector(".uses [role=alert]")).toBeNull();
@@ -2034,9 +2030,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   await previewClosed();
   thumbnail("two").click();
   await openedViewer();
-  await vi.waitFor(() =>
-    expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]),
-  );
+  await vi.waitFor(() => expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]));
   first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
   await new Promise((resolve) => setTimeout(resolve, 20));
   await el.updateComplete;
@@ -2044,7 +2038,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   expect(viewer()!.querySelector<HTMLImageElement>("img")!.getAttribute("src")).toBe(
     `/media/${mediaTestReference("two.jpg")}`,
   );
-  expect(usesShown()).toEqual([["Toast", "/manage/products/product/toast"]]);
+  expect(usesShown()).toEqual([["Toast", "/products/product/toast"]]);
 });
 
 it("does not reopen a closed preview when its lookup answers late, or fails late", async () => {
@@ -2206,7 +2200,7 @@ it.each([
     expect(uses.map((use) => use.textContent?.trim())).toEqual([deleted, active]);
     expect(uses[0]!.querySelector("a")).toBeNull();
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/manage/venue-operations/department/dining/view/receipt",
+      "/venue-operations/department/dining/view/receipt",
     ]);
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   },
@@ -2225,9 +2219,7 @@ it("keeps a live department receipt usage linked to its editor", async () => {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(1));
   const link = el.shadowRoot!.querySelector("wt-modal li a")!;
   expect(link.textContent?.trim()).toBe("Bar receipt logo");
-  expect(link.getAttribute("href")).toBe(
-    "/manage/venue-operations/department/bar%2Fa%26b/view/receipt",
-  );
+  expect(link.getAttribute("href")).toBe("/venue-operations/department/bar%2Fa%26b/view/receipt");
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
@@ -2250,7 +2242,7 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
     "Logo of theme a&b/<c>",
   ]);
   for (const li of entries()) {
-    expect(li.querySelector("a")!.getAttribute("href")).toBe("/manage/appearance");
+    expect(li.querySelector("a")!.getAttribute("href")).toBe("/appearance");
     expect(li.querySelector("a")!.textContent?.trim()).toBe(li.textContent?.trim());
   }
   expect(entries()[1]!.querySelector("c")).toBeNull();

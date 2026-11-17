@@ -867,7 +867,7 @@ observation once; a second independent observation had fetched the warnings twic
 
 ## Another module's view inside the Calendar is a `calendarViews` entry
 
-A module adds a view to the Calendar (the page at `/manage/opening-hours`) through
+A module adds a view to the Calendar (the page at `/opening-hours`) through
 `calendarViews` on its `DashboardContribution` (`packages/dashboard-kit/src/contract.ts`), never by
 venue-service importing it. The app hands the page only the views the person may read, each with
 `canWrite` worked out from its `requiresPermission`, and refuses a repeated id or one of the page's

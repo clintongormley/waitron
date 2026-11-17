@@ -4,19 +4,17 @@ import { consumePermissionReturn, preparePermissionReturn } from "./permission-c
 afterEach(() => sessionStorage.removeItem("waitron-permission-return"));
 
 it("keeps only the current pathname across a Google return and consumes it once", () => {
-  preparePermissionReturn("/manage/test-evidence");
-  expect(sessionStorage.getItem("waitron-permission-return")).toBe(
-    '{"path":"/manage/test-evidence"}',
-  );
-  expect(consumePermissionReturn(true)).toBe("/manage/test-evidence");
+  preparePermissionReturn("/test-evidence");
+  expect(sessionStorage.getItem("waitron-permission-return")).toBe('{"path":"/test-evidence"}');
+  expect(consumePermissionReturn(true)).toBe("/test-evidence");
   expect(consumePermissionReturn(true)).toBeUndefined();
 });
 it.each([
-  "https://other.example/manage/",
-  "//other.example/manage/",
+  "https://other.example/",
+  "//other.example/",
   "/setup/",
-  "/manage/?secret=value",
-  "/manage/#secret",
+  "/?secret=value",
+  "/#secret",
   "not-a-path",
 ])("does not restore an invalid or non-surface return path: %s", (path) => {
   sessionStorage.setItem("waitron-permission-return", JSON.stringify({ path }));
@@ -31,7 +29,7 @@ it.each(["null", "{}", "[]", "invalid json"])(
   },
 );
 it("drops the descriptor when the page is not a Google callback", () => {
-  preparePermissionReturn("/manage/test-evidence");
+  preparePermissionReturn("/test-evidence");
   expect(consumePermissionReturn(false)).toBeUndefined();
   expect(sessionStorage.getItem("waitron-permission-return")).toBeNull();
 });

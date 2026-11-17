@@ -100,7 +100,7 @@ async function flush(el: FloorPlanEditor): Promise<void> {
 
 async function open(
   api: DashboardApi = stubApi(),
-  path = "/manage/floor-plan/set/s1/zone/z1",
+  path = "/floor-plan/set/s1/zone/z1",
 ): Promise<FloorPlanEditor> {
   history.replaceState(null, "", path);
   const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
@@ -164,13 +164,13 @@ it.each([
         .fn()
         .mockResolvedValue([{ id: "z1", name: "Inside", displayOrder: 0, active: true }]),
     });
-    const el = await open(api, "/manage/floor-plan/set/s9/zone/z1?back=%2Fmanage%2Ffloor-plans");
+    const el = await open(api, "/floor-plan/set/s9/zone/z1?back=%2Ffloor-plans");
     expect(api.getFloorPlan).toHaveBeenCalledWith("s9", "z1");
     expect(heading(el)).toBe("Inside · Dinner");
     const shared = el.shadowRoot!.querySelector("header h1 + [data-shared-tables]");
     expect(shared!.textContent!.trim()).toBe(line);
     expect(el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href")).toBe(
-      "/manage/floor-plans",
+      "/floor-plans",
     );
   },
 );
@@ -179,7 +179,7 @@ it("saves to the set and zone the address names", async () => {
   const save = vi.fn().mockResolvedValue({ revision: 4, ids: { m1: "m1", m2: "m2" } });
   const el = await open(
     stubApi({ saveFloorPlan: save } as Partial<DashboardApi>),
-    "/manage/floor-plan/set/s9/zone/z1",
+    "/floor-plan/set/s9/zone/z1",
   );
   await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
   await press(el, "save");
@@ -189,7 +189,7 @@ it("saves to the set and zone the address names", async () => {
 
 it("an address naming no set opens nothing", async () => {
   const api = stubApi();
-  const el = await open(api, "/manage/floor-plan/zone/z1");
+  const el = await open(api, "/floor-plan/zone/z1");
   expect(api.getFloorPlan).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
 });
@@ -213,7 +213,7 @@ it("another set in the address loads that set's layout afresh", async () => {
   );
   const el = await open(stubApi({ getFloorPlan } as Partial<DashboardApi>));
   await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
-  history.pushState(null, "", "/manage/floor-plan/set/s2/zone/z1");
+  history.pushState(null, "", "/floor-plan/set/s2/zone/z1");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(getFloorPlan).toHaveBeenLastCalledWith("s2", "z1");
@@ -436,7 +436,7 @@ it("another zone in the address loads that zone afresh", async () => {
   const el = await open(api);
   await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
   await fromCanvas(el, "wt-table-select", { key: "m1" });
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(api.getFloorPlan).toHaveBeenLastCalledWith("s1", "z2");
@@ -459,7 +459,7 @@ it("a late answer for the zone it left is dropped", async () => {
     ) as DashboardApi["getFloorPlan"],
   });
   const el = await open(api);
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(heading(el)).toBe("Bar · Standard");
@@ -482,29 +482,29 @@ it("a load failure shows its sentence and no canvas", async () => {
   expect(el.shadowRoot!.querySelector("a[data-action=close]")).not.toBeNull();
 });
 
-it("Cancel links to the way back, or to /manage when it is not a dashboard path", async () => {
+it("Cancel links to the way back, or to / when it is not a dashboard path", async () => {
   const close = (el: FloorPlanEditor) =>
     el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href");
-  const back = await open(stubApi(), "/manage/floor-plan/set/s1/zone/z1?back=%2Fmanage%2Foverview");
-  expect(close(back)).toBe("/manage/overview");
+  const back = await open(stubApi(), "/floor-plan/set/s1/zone/z1?back=%2Foverview");
+  expect(close(back)).toBe("/overview");
   cleanupWidgets();
   const evil = await open(
     stubApi(),
-    `/manage/floor-plan/set/s1/zone/z1?back=${encodeURIComponent("https://evil.example/")}`,
+    `/floor-plan/set/s1/zone/z1?back=${encodeURIComponent("https://evil.example/")}`,
   );
-  expect(close(evil)).toBe("/manage");
+  expect(close(evil)).toBe("/");
   cleanupWidgets();
-  const elsewhere = await open(stubApi(), "/manage/floor-plan/set/s1/zone/z1?back=%2Flogin");
-  expect(close(elsewhere)).toBe("/manage");
+  const elsewhere = await open(stubApi(), "/floor-plan/set/s1/zone/z1?back=%2Ftill%2F");
+  expect(close(elsewhere)).toBe("/");
   cleanupWidgets();
   const unparsable = await open(
     stubApi(),
-    `/manage/floor-plan/set/s1/zone/z1?back=${encodeURIComponent("http://[")}`,
+    `/floor-plan/set/s1/zone/z1?back=${encodeURIComponent("http://[")}`,
   );
-  expect(close(unparsable)).toBe("/manage");
+  expect(close(unparsable)).toBe("/");
   cleanupWidgets();
   const none = await open();
-  expect(close(none)).toBe("/manage");
+  expect(close(none)).toBe("/");
 });
 
 it("takes its draft scope again when put back in the page", async () => {
@@ -582,7 +582,7 @@ it("a late answer for a zone it left for no zone is dropped", async () => {
     ) as DashboardApi["getFloorPlan"],
   });
   const el = await open(api);
-  history.pushState(null, "", "/manage/floor-plan");
+  history.pushState(null, "", "/floor-plan");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   answerTerrace(terrace());
@@ -603,7 +603,7 @@ it("a late failure for the zone it left is dropped", async () => {
     ) as DashboardApi["getFloorPlan"],
   });
   const el = await open(api);
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   failTerrace({ code: "zone.not_found" });
@@ -1234,7 +1234,7 @@ it("forgets where tables stood when another zone opens", async () => {
   const el = await open(stubApi({ getFloorPlan }));
   await toggleRow(el, "m1");
   for (const zone of ["z2", "z1"]) {
-    history.pushState(null, "", `/manage/floor-plan/set/s1/zone/${zone}`);
+    history.pushState(null, "", `/floor-plan/set/s1/zone/${zone}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
   }

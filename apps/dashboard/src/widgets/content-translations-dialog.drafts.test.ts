@@ -1294,9 +1294,7 @@ describe("Translate all notes", () => {
       fill("suggestions.fix_internal", { wrong: "ZURRITO", right: "ZURITO" }),
     );
     expect(field(el, "one")!.value).toBe("CLIENT-es one");
-    expect(note(el, "s2")!.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/products/product/one",
-    );
+    expect(note(el, "s2")!.querySelector("a")!.getAttribute("href")).toBe("/products/product/one");
     expect(note(el, "s2")!.querySelector("[data-test=use-fix]")).toBeNull();
   });
   it("names the language of a spelling fix and waits for Use fix", async () => {
@@ -1470,7 +1468,7 @@ describe("rows outside the current page", () => {
     });
     const { el, api } = await open(state, { liveData });
     expect(note(el, "s1")!.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/products/product/named",
+      "/products/product/named",
     );
     for (const id of ["one", "two"]) {
       state.suggestions.push(
@@ -1487,7 +1485,7 @@ describe("rows outside the current page", () => {
     await reopened(el);
     expect(field(el, "two")!.value).toBe("CLIENT-ca two");
     expect(note(el, "s1")!.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/products/product/named",
+      "/products/product/named",
     );
     expect(
       api.getContentTranslationCells.mock.calls

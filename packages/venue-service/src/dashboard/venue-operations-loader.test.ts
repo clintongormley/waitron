@@ -41,7 +41,7 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations", initial = model()) {
+async function mount(path = "/venue-operations", initial = model()) {
   history.replaceState(null, "", path);
   setLocale("en");
   let value = initial;
@@ -166,7 +166,7 @@ it("the initial read opens the department list actively and later live reads are
   });
 });
 it("a live read updates the heading without resetting the dirty Settings draft", async () => {
-  const { shell, value, liveData, request } = await mount("/manage/venue-operations/department/d1");
+  const { shell, value, liveData, request } = await mount("/venue-operations/department/d1");
   const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const settings = page.shadowRoot!.querySelector("department-settings")!;
@@ -254,7 +254,7 @@ it("an action refresh updates another cached observer when the change feed is si
     .toBe("Saved without feed");
 });
 it("an initial load failure recovers through a passive live read", async () => {
-  history.replaceState(null, "", "/manage/venue-operations");
+  history.replaceState(null, "", "/venue-operations");
   const liveData = new LiveData();
   let failed = true;
   const request = vi.fn(async (path: string) => {
@@ -308,7 +308,7 @@ it("live recovery clears a refresh failure without clearing a later action refus
   ).toBe("Changed name");
 });
 it("a reconnected load wrapper reads passively and retains its Settings draft", async () => {
-  const { shell, loader, app, request } = await mount("/manage/venue-operations/department/d1");
+  const { shell, loader, app, request } = await mount("/venue-operations/department/d1");
   const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const settings = page.shadowRoot!.querySelector("department-settings")!;
@@ -373,7 +373,7 @@ it.each(["resolve", "reject"] as const)(
 );
 
 it("opening an already cached query displays it without extending the session", async () => {
-  history.replaceState(null, "", "/manage/venue-operations");
+  history.replaceState(null, "", "/venue-operations");
   const data = new LiveData();
   const request = vi.fn(async (path: string) =>
     path.endsWith("/management-api/zones") ? [] : model("Cached restaurant"),
@@ -537,7 +537,7 @@ it.each(["live", "one-off"] as const)(
   "an older %s read cannot take back a saved department name when its refresh fails",
   async (kind) => {
     const { shell, request, liveData, value, deferRead, deferSave, readFailure } = await mount(
-      "/manage/venue-operations/department/d1",
+      "/venue-operations/department/d1",
     );
     const form = await openSettings(shell);
     const saved = deferSave();
@@ -602,7 +602,7 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
     },
   ];
   const { shell, request, liveData, value, deferRead, readFailure } = await mount(
-    "/manage/venue-operations/department/d1/view/service",
+    "/venue-operations/department/d1/view/service",
     initial,
   );
   const form = await openSettings(shell);
@@ -697,7 +697,7 @@ it("an older live copy cannot remove a saved Coffee step from the next save", as
 
 it("a department save answered after leaving reaches its shell without restarting reads", async () => {
   const { shell, loader, request, value, deferSave } = await mount(
-    "/manage/venue-operations/department/d1",
+    "/venue-operations/department/d1",
   );
   const form = await openSettings(shell);
   const saved = deferSave();

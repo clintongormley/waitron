@@ -45,7 +45,7 @@ it.each([
       .toBe(false);
     expect(screen.shadowRoot!.querySelector(`[name=${name}]`)).toBeTruthy();
     expect(location.pathname).toBe(
-      `/manage/printers/view/printers/printer/p1/editor/calibrate/step/${step}`,
+      `/printers/view/printers/printer/p1/editor/calibrate/step/${step}`,
     );
     expect(fetchImpl.mock.calls.slice(start).filter(([, init]) => init.method !== "GET")).toEqual(
       [],
@@ -70,10 +70,10 @@ it("Name chooser includes receipt and A4 rows and opens A4 Edit", async () => {
     .poll(() => printerScreen(app).shadowRoot!.querySelector("[name=printer-detail-name]"))
     .toBeTruthy();
   expect(printerScreen(app).shadowRoot!.querySelector("[name=printer-detail-host]")).toBeNull();
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/pp1/editor/edit");
+  expect(location.pathname).toBe("/printers/view/printers/printer/pp1/editor/edit");
 });
 it("permission hides printer settings", async () => {
-  const { app } = await mountPrinterApp({ permissions: ["venue.view"], path: "/manage/overview" });
+  const { app } = await mountPrinterApp({ permissions: ["venue.view"], path: "/overview" });
   await searchSettings(app, t("printers.portable"));
   expect(searchResult(app, "dashboard:printer:printer-portable")).toBeNull();
 });

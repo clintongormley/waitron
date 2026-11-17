@@ -40,7 +40,7 @@ describe.each(["light", "dark"] as const)("wt-choice-row a11y (%s theme)", (them
 });
 
 describe.each(["light", "dark"] as const)("wt-choice-row link a11y (%s theme)", (theme) => {
-  const LINK = '<wt-choice-row heading="Dashboard" href="/manage"></wt-choice-row>';
+  const LINK = '<wt-choice-row heading="Dashboard" href="/"></wt-choice-row>';
 
   test("at rest", async () => {
     await mountThemed(LINK, theme);

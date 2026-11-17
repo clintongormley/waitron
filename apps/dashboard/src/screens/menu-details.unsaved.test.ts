@@ -28,7 +28,7 @@ for (const kind of ["menu", "section"] as const) {
       history.replaceState(
         null,
         "",
-        kind === "menu" ? "/manage/menus" : "/manage/menus/menu/menu/view/structure",
+        kind === "menu" ? "/menus" : "/menus/menu/menu/view/structure",
       );
       let written = false;
       const inputs: SectionInput[] = [];
@@ -139,7 +139,7 @@ for (const kind of ["menu", "section"] as const) {
 
 for (const succeeds of [true, false]) {
   it(`Device Home Page display writes remain exempt after ${succeeds ? "success" : "refusal"}`, async () => {
-    history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
+    history.replaceState(null, "", "/menus/menu/menu/view/home");
     const writes: unknown[] = [];
     const client = {
       listMenus: async () => [{ id: "menu", name: "Menu", active: true }],

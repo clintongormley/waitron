@@ -13,9 +13,9 @@ describe.each(["light", "dark"] as const)("wt-demo-bar a11y (%s theme)", (theme)
     el.modeLabel = modeLabel;
     el.navigationLabel = `${modeLabel} navigation`;
     el.links = [
-      { label: "Dashboard", href: "/manage", current: true },
-      { label: "Device", href: "/" },
-      { label: "Email inbox", href: "/manage/email" },
+      { label: "Dashboard", href: "/", current: true },
+      { label: "Device", href: "/till/" },
+      { label: "Email inbox", href: "/email" },
     ];
     await el.updateComplete;
     await expectNoA11yViolations(host);

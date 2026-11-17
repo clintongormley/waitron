@@ -71,7 +71,7 @@ async function mountShell(locale: ShellLocale, alerts: AlertView[]) {
 it.each(["en-GB", "es-ES"] as const)(
   "shows every line of a long alert on a phone without panning, left of its action (%s)",
   async (locale) => {
-    history.replaceState(null, "", "/manage/alerts");
+    history.replaceState(null, "", "/alerts");
     const { el } = await mountShell(locale, [station, refusals]);
     const tableIn = () =>
       el

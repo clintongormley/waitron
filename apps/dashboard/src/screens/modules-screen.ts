@@ -33,7 +33,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 
-export const CARD_PROVIDERS_PATH = "/manage/modules/view/card-providers/state/all";
+export const CARD_PROVIDERS_PATH = "/modules/view/card-providers/state/all";
 
 @customElement("dashboard-modules-screen")
 export class ModulesScreen extends LitElement {
@@ -485,7 +485,7 @@ export class ModulesScreen extends LitElement {
                   ? html`<p class="error" role="alert" data-test="provider-state-error">
                       ${this.switchError === "payment.provider_in_use" ? text("modules.remove_readers") : codeMessage(this.switchError)}
                       ${this.readerNames.join(", ")}
-                      ${this.switchError === "payment.provider_in_use" ? html`<a data-test="remove-readers" href="/manage/payments">${text("modules.open_readers")}</a>` : nothing}
+                      ${this.switchError === "payment.provider_in_use" ? html`<a data-test="remove-readers" href="/payments">${text("modules.open_readers")}</a>` : nothing}
                     </p>`
                   : nothing
               }

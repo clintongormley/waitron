@@ -58,7 +58,7 @@ afterEach(cleanupWidgets);
 type Screen = HTMLElementTagNameMap["dashboard-printers-screen"];
 
 async function mount() {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/pp2");
+  history.replaceState(null, "", "/printers/view/printers/printer/pp2");
   const { el: app } = await mountWidget<A4DetailsLeaveApp>("printer-details-a4-leave-app", {});
   const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
   await expect.poll(() => q(screen, "[data-test=edit-page-printer-details]")).not.toBeNull();

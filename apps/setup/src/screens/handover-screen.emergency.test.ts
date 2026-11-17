@@ -18,7 +18,7 @@ const saved = {
 const preview = {
   sourceNodeId: "old",
   destinationNodeId: "new",
-  sourceServersUrl: "https://main.example/manage/servers",
+  sourceServersUrl: "https://main.example/servers",
   copy: {
     source: "followed-copy",
     sourceId: "c".repeat(64),
@@ -734,7 +734,7 @@ it.each([
   [
     "handover.source_still_answering",
     "handover.emergency.source_answered",
-    "https://main.example/manage/servers",
+    "https://main.example/servers",
     ["preview"],
   ],
   [
@@ -1624,9 +1624,9 @@ async function mainAnsweringRefusal(el: SetupHandoverScreen) {
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_answering")),
   );
   const link = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-    (candidate) => candidate.getAttribute("href") === `${MAIN}/manage/servers`,
+    (candidate) => candidate.getAttribute("href") === `${MAIN}/servers`,
   );
-  expect(link?.textContent).toBe(`${MAIN}/manage/servers`);
+  expect(link?.textContent).toBe(`${MAIN}/servers`);
   expect(q(el, "[data-test=emergency-preview]")).toBeNull();
 }
 const answers = () => Promise.resolve(new Response(null));

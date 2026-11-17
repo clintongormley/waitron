@@ -353,7 +353,7 @@ describe("Management API staff + session routes", () => {
       { headers: { cookie: startLink.headers.get("set-cookie")!.split(";")[0]! } },
     );
     expect(linked.status).toBe(302);
-    expect(linked.headers.get("location")).toBe("http://localhost/manage/profile?google=linked");
+    expect(linked.headers.get("location")).toBe("http://localhost/profile?google=linked");
 
     const startLogin = await app.request("/management-api/google/login", { method: "POST" });
     const loginUrl = new URL(
@@ -364,7 +364,7 @@ describe("Management API staff + session routes", () => {
       { headers: { cookie: startLogin.headers.get("set-cookie")!.split(";")[0]! } },
     );
     expect(signedIn.status).toBe(302);
-    expect(signedIn.headers.get("location")).toBe("http://localhost/manage/?login=google");
+    expect(signedIn.headers.get("location")).toBe("http://localhost/?login=google");
     expect(signedIn.headers.get("set-cookie")).toContain("waitron_management_session=");
     expect(exchange).toHaveBeenCalledTimes(2);
     expect(exchange.mock.calls[0]![1]).toMatchObject({
@@ -604,7 +604,7 @@ describe("Management API staff + session routes", () => {
       email: "invited@x.com",
       displayName: "Invited",
     });
-    expect(new URL(sent[0]!.actionUrl).pathname).toBe("/manage/account");
+    expect(new URL(sent[0]!.actionUrl).pathname).toBe("/account");
     expect(new URL(sent[0]!.actionUrl).searchParams.get("token")).toBeTruthy();
     expect(new URL(sent[0]!.actionUrl).searchParams.get("purpose")).toBe("invitation");
     expect(new URLSearchParams(new URL(sent[0]!.actionUrl).hash.slice(1)).get("email")).toBe(
@@ -3366,7 +3366,7 @@ it("keeps the remote Google ceremony and its return on the staff origin", async 
     { headers: { cookie: started.headers.get("set-cookie")!.split(";")[0]! } },
   );
   expect(callback.status).toBe(302);
-  expect(callback.headers.get("location")).toBe("https://staff.example.test/manage/?login=google");
+  expect(callback.headers.get("location")).toBe("https://staff.example.test/?login=google");
   expect(callback.headers.get("set-cookie")).toContain("; Secure");
 });
 

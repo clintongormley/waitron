@@ -304,6 +304,7 @@ the season painter continues saving through the season-week route._
 - **No redirect for an old `/manage/periods` address (A719).** Until Waitron is in production
   there is no backwards-compatibility code (CLAUDE.md §3); the address falls back as any unknown
   page does.
+  2026-11-17: all retired `/manage/…` addresses follow that same rule; dashboard paths now start at `/`.
 
 - **Periods and staff roles pick from thirteen calendar colours, in rainbow order (owner,
   2026-10-17, option (a) of the A753 swatch board).**
@@ -348,6 +349,7 @@ the season painter continues saving through the season-week route._
   the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
   painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
   names a season, department, zone or `?station=` still opens it.
+  2026-11-17: the Week's current address starts `/opening-hours/view/week`; the `/manage` prefix above is retired.
 
 - **Every block in the Week shows its whole label on pointing or tapping, not only the clipped ones
   ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 4; plan default, sent to the owner as an FYI, 2026-10-17).** Telling which labels are clipped would mean measuring text, and a

@@ -1027,7 +1027,7 @@ describe("queued account mail at a fresh server start", () => {
       for (const message of smtp.messages) {
         const text = message.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
         const link = new URL(
-          text.split(/\r?\n/).find((line) => line.startsWith("https://entry.test/manage/account"))!,
+          text.split(/\r?\n/).find((line) => line.startsWith("https://entry.test/account"))!,
         );
         const purpose = link.searchParams.get("purpose") as "invitation" | "password_reset";
         expect(

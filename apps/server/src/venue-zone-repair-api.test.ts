@@ -480,7 +480,7 @@ it("serves a native same-origin browser GET with the dashboard no-referrer polic
       });
     await next();
   });
-  realApp.get("/manage", (c) =>
+  realApp.get("/", (c) =>
     c.html('<!doctype html><meta name="referrer" content="no-referrer"><title>Manager</title>'),
   );
   const server = serve({ fetch: realApp.fetch, hostname: "127.0.0.1", port: 0 });
@@ -515,7 +515,7 @@ it("serves a native same-origin browser GET with the dashboard no-referrer polic
       },
     ]);
     const page = await context.newPage();
-    await page.goto(`${origin}/manage`);
+    await page.goto(`${origin}/`);
     const read = await page.evaluate(async (path) => {
       const response = await fetch(path, {
         credentials: "include",

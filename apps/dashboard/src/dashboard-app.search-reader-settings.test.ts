@@ -29,7 +29,7 @@ it.each(["en-GB", "es-ES"])("%s settings land without writes", async (locale) =>
   await userEvent.click(result!);
   const editor = await readyReaderEditor(app);
   expect(editor.querySelector("[name=reader-name]")).toHaveProperty("value", "Counter");
-  expect(location.pathname).toBe("/manage/payments/reader/r1");
+  expect(location.pathname).toBe("/payments/reader/r1");
   const closed = dialogClosed(editor);
   await userEvent.click(editor.querySelector<HTMLElement>("[data-test=close-reader-editor]")!);
   await closed;
@@ -51,7 +51,7 @@ it("chooser selects the reader and Cancel stays put", async () => {
   const push = vi.spyOn(history, "pushState");
   await cancelSettingSearch(app);
   expect(push).not.toHaveBeenCalled();
-  expect(location.pathname).toBe("/manage/payments");
+  expect(location.pathname).toBe("/payments");
   await userEvent.click(searchResult(app, "dashboard:reader:reader-name")!);
   await chooseSettingRow(app, "r2");
   await userEvent.click(
@@ -59,11 +59,11 @@ it("chooser selects the reader and Cancel stays put", async () => {
   );
   const editor = await readyReaderEditor(app);
   expect(editor.querySelector("[name=reader-name]")).toHaveProperty("value", "Bar");
-  expect(location.pathname).toBe("/manage/payments/reader/r2");
+  expect(location.pathname).toBe("/payments/reader/r2");
   expect(fetchImpl.mock.calls.slice(start).filter(([, init]) => init.method !== "GET")).toEqual([]);
 });
 it("hardware permission gates reader settings", async () => {
-  const { app } = await mountReaderApp({ permissions: ["venue.view"], path: "/manage/overview" });
+  const { app } = await mountReaderApp({ permissions: ["venue.view"], path: "/overview" });
   await searchSettings(app, t("payments.reader_col_name"));
   expect(searchResult(app, "dashboard:reader:reader-name")).toBeNull();
   await searchSettings(app, t("payments.prints_own_slip_automatically"));

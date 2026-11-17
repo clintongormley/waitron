@@ -223,7 +223,7 @@ export class OpeningHoursScreen extends LitElement {
    *  does closing go back, because only there is the entry below known to be the base view. */
   private pushedPainter?: { entry: string; base: string | undefined };
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
-    basePath: "/manage",
+    basePath: "",
     primary: "dashboard",
     children: {
       "opening-hours": {

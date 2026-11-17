@@ -327,7 +327,7 @@ export class DepartmentsList extends LitElement {
               part="link name-link"
               data-own-click
               data-test=${`open-${row.kind}-name-${row.id}`}
-              href=${row.kind === "department" ? `/manage/venue-operations/department/${encodeURIComponent(row.id)}` : `/manage/venue-operations/department/${encodeURIComponent(row.departmentId)}/view/zones/zone/${encodeURIComponent(row.id)}`}
+              href=${row.kind === "department" ? `/venue-operations/department/${encodeURIComponent(row.id)}` : `/venue-operations/department/${encodeURIComponent(row.departmentId)}/view/zones/zone/${encodeURIComponent(row.id)}`}
               @click=${(event: MouseEvent) => {
                 if (leftToBrowser(event)) return;
                 event.preventDefault();
@@ -361,7 +361,7 @@ export class DepartmentsList extends LitElement {
           >+ ${t("venue.add_department")}</wt-button
         >
       </div>
-      ${model.readiness.some((issue) => issue.code === "venue.default_station_missing") ? html`<p class="issue" data-test="default-station-missing">${t("venue.readiness.default_station_missing")} <a href="/manage/prep-stations">${t("nav.prep_stations")}</a></p>` : nothing}
+      ${model.readiness.some((issue) => issue.code === "venue.default_station_missing") ? html`<p class="issue" data-test="default-station-missing">${t("venue.readiness.default_station_missing")} <a href="/prep-stations">${t("nav.prep_stations")}</a></p>` : nothing}
       ${model.readiness.map((issue) =>
         issue.code === "special_day.date_shared"
           ? html`<p class="issue" data-test="date-shared">

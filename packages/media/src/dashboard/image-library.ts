@@ -42,16 +42,16 @@ import { DEFAULT_FRAMING, type ImageFraming } from "../framing.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
-  if (use.kind === "theme_logo") return "/manage/appearance";
+  if (use.kind === "theme_logo") return "/appearance";
   if (use.kind === "department_receipt")
-    return `/manage/venue-operations/department/${encodeURIComponent(use.id)}/view/receipt`;
+    return `/venue-operations/department/${encodeURIComponent(use.id)}/view/receipt`;
   if (use.kind === "section")
-    return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
+    return `/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
   if (use.kind === "menu_include")
-    return `/manage/menus/menu/${encodeURIComponent(use.menuId)}/view/structure`;
+    return `/menus/menu/${encodeURIComponent(use.menuId)}/view/structure`;
   if (use.kind === "menu_version" || use.kind === "scheduled_menu_version")
-    return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
-  return `/manage/products/product/${encodeURIComponent(use.id)}`;
+    return `/menus/menu/${encodeURIComponent(use.menuId)}`;
+  return `/products/product/${encodeURIComponent(use.id)}`;
 }
 
 function usageName(use: ImageUsage): string {

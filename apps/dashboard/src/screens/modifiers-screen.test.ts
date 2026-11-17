@@ -45,7 +45,7 @@ beforeEach(() => columnKeys.forEach((key) => localStorage.removeItem(key)));
 afterEach(() => columnKeys.forEach((key) => localStorage.removeItem(key)));
 // The screen reads and writes the chosen tab in the path, so every test starts from the screen's own
 // route rather than from wherever the previous file left the browser.
-beforeEach(() => history.replaceState(null, "", "/manage/modifiers"));
+beforeEach(() => history.replaceState(null, "", "/modifiers"));
 
 const BREAD = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
 const RYE = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
@@ -363,41 +363,41 @@ it("keeps the Extras tab and its path when a control inside it announces a chang
   );
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
-  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  expect(location.pathname).toBe("/modifiers/view/extras");
 });
 
 it("records the chosen tab in the path and walks back to the previous one", async () => {
   const el = await mount();
-  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  expect(location.pathname).toBe("/modifiers/view/extras");
 
   await selectTab(el, "options");
-  expect(location.pathname).toBe("/manage/modifiers/view/options");
+  expect(location.pathname).toBe("/modifiers/view/options");
 
   history.back();
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/modifiers/view/extras"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/modifiers/view/extras"));
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras"));
 });
 
 it("opens on the tab the path names", async () => {
-  history.replaceState(null, "", "/manage/modifiers/view/options");
+  history.replaceState(null, "", "/modifiers/view/options");
   const el = await mount();
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("options");
   expect(table(el, "option-lists").rows).toEqual([optionList]);
 });
 
 it("falls back to Extras for an unknown tab without adding a history entry", async () => {
-  history.replaceState(null, "", "/manage/modifiers/view/bogus");
+  history.replaceState(null, "", "/modifiers/view/bogus");
   const push = vi.spyOn(history, "pushState");
   onTestFinished(() => push.mockRestore());
   const el = await mount();
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
-  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  expect(location.pathname).toBe("/modifiers/view/extras");
   expect(push).not.toHaveBeenCalled();
 });
 
 describe("a path naming one list", () => {
   it("opens the options list the path names in its editor, on the Options tab", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    history.replaceState(null, "", "/modifiers/view/options/list/o1");
     const el = await mount();
     await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
     expect(optionForm(el).value).toEqual(optionList);
@@ -406,7 +406,7 @@ describe("a path naming one list", () => {
   });
 
   it("opens the extras list the path names in its editor", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    history.replaceState(null, "", "/modifiers/view/extras/list/e1");
     const el = await mount();
     await vi.waitFor(() => expect(extraForm(el).open).toBe(true));
     expect(extraForm(el).value).toEqual(extraList);
@@ -414,17 +414,17 @@ describe("a path naming one list", () => {
   });
 
   it("opens nothing for a list it does not hold, and drops it from the path without a history entry", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/options/list/gone");
+    history.replaceState(null, "", "/modifiers/view/options/list/gone");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     const el = await mount();
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/modifiers/view/options"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/modifiers/view/options"));
     expect(optionForm(el).open).toBe(false);
     expect(push).not.toHaveBeenCalled();
   });
 
   it("drops the list from the path, without a history entry, when its editor closes", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    history.replaceState(null, "", "/modifiers/view/options/list/o1");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     const el = await mount();
@@ -432,12 +432,12 @@ describe("a path naming one list", () => {
     optionForm(el).dispatchEvent(new CustomEvent("wt-cancel", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(optionForm(el).open).toBe(false);
-    expect(location.pathname).toBe("/manage/modifiers/view/options");
+    expect(location.pathname).toBe("/modifiers/view/options");
     expect(push).not.toHaveBeenCalled();
   });
 
   it("drops the list from the path once its editor saves", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    history.replaceState(null, "", "/modifiers/view/extras/list/e1");
     const el = await mount();
     await vi.waitFor(() => expect(extraForm(el).open).toBe(true));
     extraForm(el).dispatchEvent(
@@ -448,11 +448,11 @@ describe("a path naming one list", () => {
       }),
     );
     await vi.waitFor(() => expect(extraForm(el).open).toBe(false));
-    expect(location.pathname).toBe("/manage/modifiers/view/extras");
+    expect(location.pathname).toBe("/modifiers/view/extras");
   });
 
   it("leaves the path alone when a row opens an editor", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/options");
+    history.replaceState(null, "", "/modifiers/view/options");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     const el = await mount();
@@ -464,12 +464,12 @@ describe("a path naming one list", () => {
     });
     await el.updateComplete;
     expect(optionForm(el).open).toBe(true);
-    expect(location.pathname).toBe("/manage/modifiers/view/options");
+    expect(location.pathname).toBe("/modifiers/view/options");
     expect(push).not.toHaveBeenCalled();
   });
 
   it("keeps the editor and its shown refusal when the address comes back naming the same list", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    history.replaceState(null, "", "/modifiers/view/extras/list/e1");
     const el = await mount(
       api({
         updateExtraList: vi
@@ -487,9 +487,9 @@ describe("a path naming one list", () => {
     );
     const message = codeMessage("extras.invalid");
     await vi.waitFor(() => expect(extraForm(el).fieldErrors.name).toBe(message));
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    history.replaceState(null, "", "/manage/modifiers/view/extras/list/e1");
+    history.replaceState(null, "", "/modifiers/view/extras/list/e1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await el.updateComplete;
     expect(extraForm(el).open).toBe(true);
@@ -497,16 +497,14 @@ describe("a path naming one list", () => {
   });
 
   it("drops the list from the path when the tab changes, still as a history entry", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/extras");
-    history.pushState(null, "", "/manage/modifiers/view/options/list/o1");
+    history.replaceState(null, "", "/modifiers/view/extras");
+    history.pushState(null, "", "/modifiers/view/options/list/o1");
     const el = await mount();
     await vi.waitFor(() => expect(optionForm(el).open).toBe(true));
     await selectTab(el, "extras");
-    expect(location.pathname).toBe("/manage/modifiers/view/extras");
+    expect(location.pathname).toBe("/modifiers/view/extras");
     history.back();
-    await vi.waitFor(() =>
-      expect(location.pathname).toBe("/manage/modifiers/view/options/list/o1"),
-    );
+    await vi.waitFor(() => expect(location.pathname).toBe("/modifiers/view/options/list/o1"));
   });
 });
 
@@ -1476,7 +1474,7 @@ describe("after the server comes back", () => {
   });
 
   it("opens the list the path names once a failed first load recovers", async () => {
-    history.replaceState(null, "", "/manage/modifiers/view/options/list/o1");
+    history.replaceState(null, "", "/modifiers/view/options/list/o1");
     const client = Object.assign(api({ listOptionLists: vi.fn().mockRejectedValue(down) }), {
       liveData: new LiveData(),
     });
@@ -2036,7 +2034,7 @@ it("switches back to the Extras tab from Options", async () => {
   await selectTab(el, "options");
   await selectTab(el, "extras");
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
-  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  expect(location.pathname).toBe("/modifiers/view/extras");
 });
 
 // ---------------------------------------------------------------------------

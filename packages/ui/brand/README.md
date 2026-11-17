@@ -30,8 +30,8 @@ which changes when either drawing is.
 
 `public/` is what the apps serve: `apps/{till,dashboard,setup}/vite.config.ts` each point `publicDir`
 at it, so there is one copy rather than three. Vite prefixes the URLs with each app's `base` at build
-time — verified by building all three: the dashboard emits `/manage/favicon.ico`, till and setup
-`/favicon.ico`. `scripts/brand-icons.test.ts` (root project, so it runs on every non-docs push) fails
+time: the dashboard emits `/favicon.ico`, the till `/till/favicon.ico`, and the setup
+build keeps its relative `./favicon.ico`. `scripts/brand-icons.test.ts` (root project, so it runs on every non-docs push) fails
 if an app links to a file this directory does not hold, or points its `publicDir` somewhere else.
 
 Standalone SVGs carry literal colours because an `<img>` cannot read the page's CSS custom
@@ -78,13 +78,6 @@ as _"iOS forbids transparent icons ... it fills the gaps with black"_
 ([apple touch icon turns black](https://realfavicongenerator.net/blog/apple-touch-icon-turns-black)).
 That it is in fact opaque was checked rather than assumed: decoding the PNG gives alpha 255 for all
 32,400 pixels.
-
-One case the `.ico` does not cover. A box that mounts **only** the dashboard serves
-`/manage/favicon.ico` but answers 404 for the root `/favicon.ico`, because nothing is mounted there.
-Run, not reasoned: booting the server's routes with only the dashboard dir configured and issuing
-both requests returned `200 image/x-icon` and `404` respectively. The explicit `<link>` still resolves, so the dashboard's own tab is fine; it is a
-browser's implicit root request that misses. A normal box mounts the till at the root, which serves
-it.
 
 ## Regenerating
 

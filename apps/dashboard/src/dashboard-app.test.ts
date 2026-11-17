@@ -180,7 +180,7 @@ it.each(["prepare", "live", "demo", undefined] as const)(
   "lists Email under System only for eligible roles in %s",
   async (intent) => {
     for (const role of ["admin", "manager", "supervisor", "staff"] as const) {
-      history.replaceState(null, "", "/manage/email");
+      history.replaceState(null, "", "/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
@@ -336,7 +336,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
 it.each(["staff", "supervisor", "manager", "admin"])(
   "makes Your profile reachable for %s as a modal over their ordinary landing face, by URL",
   async (role) => {
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
@@ -364,7 +364,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
     if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).not.toBeNull();
-    expect(new URL(location.href).pathname).toBe("/manage/profile");
+    expect(new URL(location.href).pathname).toBe("/profile");
     expect(
       el.shadowRoot!.querySelector(
         role === "staff" ? "dashboard-my-schedule-screen" : "dashboard-overview-screen",
@@ -375,9 +375,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     await flush(el);
     expect(modal.open).toBe(false);
     await expect.poll(() => el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
-    expect(new URL(location.href).pathname).toBe(
-      role === "staff" ? "/manage/my-schedule" : "/manage/overview",
-    );
+    expect(new URL(location.href).pathname).toBe(role === "staff" ? "/my-schedule" : "/overview");
   },
 );
 
@@ -565,7 +563,7 @@ afterEach(() => {
 
 describe("dashboard-app", () => {
   it("waits for content languages before mounting an editable screen", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     let finish!: (config: { defaultLanguage: string; languages: string[] }) => void;
     const api = stubApi({
       getContentLanguages: vi.fn().mockImplementation(
@@ -589,7 +587,7 @@ describe("dashboard-app", () => {
   });
 
   it("offers retry while failed initial content-language loading keeps screens unmounted", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const getContentLanguages = vi
       .fn()
       .mockRejectedValueOnce({ code: "server.internal" })
@@ -979,7 +977,7 @@ describe("dashboard-app", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=action-token&purpose=invitation#email=new%40example.test",
+      "/account?token=action-token&purpose=invitation#email=new%40example.test",
     );
     const getMe = vi.fn().mockResolvedValue({
       personId: "p1",
@@ -1114,7 +1112,7 @@ describe("dashboard-app", () => {
     [["person.manage"], true],
     [["system.manage"], false],
   ] as const)("gates Email by its first read permission: %j", async (permissions, shown) => {
-    history.replaceState(null, "", "/manage/email");
+    history.replaceState(null, "", "/email");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({ ...meResponse, roleIds: [], permissions, modules: [] }),
@@ -1313,13 +1311,13 @@ describe("dashboard-app", () => {
     expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
     expect(navItem(el, "products")!.getAttribute("aria-current")).toBe("page");
-    expect(new URL(location.href).pathname).toBe("/manage/profile");
+    expect(new URL(location.href).pathname).toBe("/profile");
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
     expect(modal.open).toBe(false);
     expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
-    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/products");
+    await expect.poll(() => new URL(location.href).pathname).toBe("/products");
   });
 
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
@@ -1382,7 +1380,7 @@ describe("dashboard-app", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
-    await expect.poll(() => new URL(location.href).pathname).toBe("/manage/products");
+    await expect.poll(() => new URL(location.href).pathname).toBe("/products");
   });
 
   const deviceProfile = {
@@ -1443,7 +1441,7 @@ describe("dashboard-app", () => {
   ])(
     "closing Your profile with %s keeps the device profile editor it opened over, with its unsaved name",
     async (_how, close) => {
-      history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
+      history.replaceState(null, "", "/device-profiles/profile/dp1");
       const { el, screen, name, rename } = await mountOnDeviceProfiles();
       await expect.poll(() => name()?.value).toBe("Front counter");
       await rename("Back counter");
@@ -1451,7 +1449,7 @@ describe("dashboard-app", () => {
       expect(unsavedOnUnload()).toBe(true);
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
       await flush(el);
-      expect(location.pathname).toBe("/manage/profile");
+      expect(location.pathname).toBe("/profile");
       const closed =
         close === closeProfileButton
           ? new Promise<void>((resolve) =>
@@ -1466,14 +1464,14 @@ describe("dashboard-app", () => {
       await flush(el);
       await screen.updateComplete;
 
-      expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+      expect(location.pathname).toBe("/device-profiles/profile/dp1");
       expect(name()?.value).toBe("Back counter");
       expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     },
   );
 
   it("closing Your profile with its close button keeps a new device profile's editor, with its unsaved name", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     const { el, screen, name, rename } = await mountOnDeviceProfiles();
     await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=create]")).not.toBeNull();
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
@@ -1482,19 +1480,19 @@ describe("dashboard-app", () => {
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     closeProfileButton(el);
-    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await expect.poll(() => location.pathname).not.toBe("/profile");
     await flush(el);
     await screen.updateComplete;
 
-    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(location.pathname).toBe("/device-profiles");
     expect(name()?.value).toBe("New counter");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it("a device profile editor whose read lands while Your profile shows is named in the address once the window closes", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     let land!: () => void;
     const { el, screen, name } = await mountOnDeviceProfiles({
       getDeviceProfile: () =>
@@ -1510,22 +1508,22 @@ describe("dashboard-app", () => {
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     land();
     await expect.poll(() => name()?.value).toBe("Front counter");
     closeProfileButton(el);
-    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await expect.poll(() => location.pathname).not.toBe("/profile");
     await flush(el);
     await screen.updateComplete;
 
-    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(location.pathname).toBe("/device-profiles/profile/dp1");
     expect(name()?.value).toBe("Front counter");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it("closing Your profile, reached by Forward after a reload, keeps the device profile editor beneath it", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
-    history.pushState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/device-profiles/profile/dp1");
+    history.pushState(null, "", "/profile");
     await travel(() => history.back());
     const { el, screen, name, rename } = await mountOnDeviceProfiles();
     await expect.poll(() => name()?.value).toBe("Front counter");
@@ -1533,42 +1531,42 @@ describe("dashboard-app", () => {
 
     await travel(() => history.forward());
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     closeProfileButton(el);
-    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await expect.poll(() => location.pathname).not.toBe("/profile");
     await flush(el);
     await screen.updateComplete;
 
-    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(location.pathname).toBe("/device-profiles/profile/dp1");
     expect(name()?.value).toBe("Back counter");
   });
 
   it("closing Your profile, reached by Forward after Back, keeps the device profile editor opened between", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     const { el, screen, name } = await mountOnDeviceProfiles();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     await travel(() => history.back());
     await flush(el);
-    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(location.pathname).toBe("/device-profiles");
     await expect
       .poll(() => profileListRoot(screen).querySelector("[data-test=edit-dp1]"))
       .not.toBeNull();
     await profileAction(screen, "edit-dp1");
     await expect.poll(() => name()?.value).toBe("Front counter");
-    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(location.pathname).toBe("/device-profiles/profile/dp1");
 
     await travel(() => history.forward());
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     closeProfileButton(el);
-    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await expect.poll(() => location.pathname).not.toBe("/profile");
     await flush(el);
     await screen.updateComplete;
 
-    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(location.pathname).toBe("/device-profiles/profile/dp1");
     expect(name()?.value).toBe("Front counter");
   });
 
@@ -1666,16 +1664,16 @@ describe("dashboard-app", () => {
     const passThroughYourProfile = async () => {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
       await flush(el);
-      expect(location.pathname).toBe("/manage/profile");
+      expect(location.pathname).toBe("/profile");
       closeProfileButton(el);
-      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await expect.poll(() => location.pathname).not.toBe("/profile");
       await flush(el);
     };
     return { el, editor, price, fromBrowser, reprice, passThroughYourProfile };
   }
 
   it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
-    history.replaceState(null, "", "/manage/products/product/p1");
+    history.replaceState(null, "", "/products/product/p1");
     const { el, editor, price, reprice, passThroughYourProfile } = await mountOnMenu();
     await expect.poll(() => editor()?.open).toBe(true);
     await expect.poll(() => price()?.value).toBe("8.50");
@@ -1685,14 +1683,14 @@ describe("dashboard-app", () => {
     await passThroughYourProfile();
 
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-    expect(location.pathname).toBe("/manage/products/product/p1");
+    expect(location.pathname).toBe("/products/product/p1");
     expect(editor()?.open).toBe(true);
     expect(price()?.value).toBe("9.25");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it("closing Your profile keeps a new product's editor, with its unsaved price", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const { el, editor, price, fromBrowser, reprice, passThroughYourProfile } = await mountOnMenu();
     await expect
       .poll(() => menu(el)?.shadowRoot!.querySelector("dashboard-product-browser"))
@@ -1706,15 +1704,15 @@ describe("dashboard-app", () => {
     await passThroughYourProfile();
 
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-    expect(location.pathname).toBe("/manage/products");
+    expect(location.pathname).toBe("/products");
     expect(editor()?.open).toBe(true);
     expect(price()?.value).toBe("9.25");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it.each([
-    ["/manage/products", "/manage/products/product/p1"],
-    ["/manage/products/category/c1", "/manage/products/product/p1/category/c1"],
+    ["/products", "/products/product/p1"],
+    ["/products/category/c1", "/products/product/p1/category/c1"],
   ])(
     "a product editor whose read lands while Your profile shows over %s is named in the address once the window closes",
     async (start, named) => {
@@ -1734,11 +1732,11 @@ describe("dashboard-app", () => {
 
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
       await flush(el);
-      expect(location.pathname).toBe("/manage/profile");
+      expect(location.pathname).toBe("/profile");
       land();
       await expect.poll(() => price()?.value).toBe("8.50");
       closeProfileButton(el);
-      await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+      await expect.poll(() => location.pathname).not.toBe("/profile");
       await flush(el);
 
       expect(location.pathname).toBe(named);
@@ -2062,7 +2060,7 @@ describe("dashboard-app", () => {
   });
 
   it("remembers an opted-in Google callback only after its identity probe succeeds", async () => {
-    history.replaceState(null, "", "/manage/?login=google");
+    history.replaceState(null, "", "/?login=google");
     sessionStorage.setItem(
       "waitron-google-login-preference",
       JSON.stringify({ expiresAt: Date.now() + 60000 }),
@@ -2102,11 +2100,7 @@ describe("dashboard-app", () => {
   it.each(["failed", "different-account", "not-callback", "no-intent"])(
     "does not save Google preference for %s",
     async (scenario) => {
-      history.replaceState(
-        null,
-        "",
-        scenario === "not-callback" ? "/manage/" : "/manage/?login=google",
-      );
+      history.replaceState(null, "", scenario === "not-callback" ? "/" : "/?login=google");
       if (scenario !== "no-intent")
         sessionStorage.setItem(
           "waitron-google-login-preference",
@@ -2190,14 +2184,14 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(menu(el)).toBeTruthy();
     expect(units(el)).toBeNull();
-    expect(location.pathname).toContain("/manage/products/product/p1");
+    expect(location.pathname).toContain("/products/product/p1");
   });
 
   // The jump is an ordinary screen change, so it clears the previous screen's `view` segment the
   // way every nav click does — otherwise a units URL reached by deep link carries its `view` into
   // the menu URL, where it means something else entirely.
   it("clears a stale view segment when opening a product's editor from the units modal", async () => {
-    history.replaceState(null, "", "/manage/units/view/detail");
+    history.replaceState(null, "", "/units/view/detail");
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       listUnits: vi.fn().mockResolvedValue([
@@ -2216,7 +2210,7 @@ describe("dashboard-app", () => {
     expect(units(el)).toBeTruthy();
     // Without this the test passes even if the units URL never carries a `view` segment at all,
     // which is the very thing the navigation is supposed to clear.
-    expect(location.pathname).toBe("/manage/units/view/detail");
+    expect(location.pathname).toBe("/units/view/detail");
 
     units(el)!.dispatchEvent(
       new CustomEvent("wt-edit-product", {
@@ -2226,7 +2220,7 @@ describe("dashboard-app", () => {
       }),
     );
     await flush(el);
-    expect(location.pathname).toBe("/manage/products/product/p1");
+    expect(location.pathname).toBe("/products/product/p1");
   });
 
   it("navigates between the staff and menu screens", async () => {
@@ -2325,7 +2319,7 @@ describe("dashboard-app", () => {
     expect(rotaChoice).not.toBeNull();
     await userEvent.click(rotaChoice!);
     await expect.poll(() => calendar.shadowRoot!.querySelector("staffing-rota")).not.toBeNull();
-    expect(new URL(location.href).pathname).toBe("/manage/opening-hours/view/rota");
+    expect(new URL(location.href).pathname).toBe("/opening-hours/view/rota");
   });
 
   it("navigates to the approvals screen", async () => {
@@ -2408,11 +2402,11 @@ describe("dashboard-app", () => {
     expect(settingsTabKeys(el)).toEqual(["venue-details"]);
     expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).toBeNull();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
   });
 
   it("venue service adds no panel to Venue settings, and the Kitchen address opens Venue details", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
+    history.replaceState(null, "", "/venue-settings/view/kitchen");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2426,12 +2420,12 @@ describe("dashboard-app", () => {
       request: venueServiceRequest,
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
     expect(settingsTabKeys(el)).toEqual(["venue-details"]);
   });
 
   it("has no Kitchen tab when venue service is disabled", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
+    history.replaceState(null, "", "/venue-settings/view/kitchen");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2443,11 +2437,11 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
     expect(settingsTabKeys(el)).toEqual(["venue-details"]);
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
   });
 
   it("hands each core panel the shell's api", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/venue-details");
+    history.replaceState(null, "", "/venue-settings/view/venue-details");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
@@ -2464,11 +2458,11 @@ describe("dashboard-app", () => {
       expect(page.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag)!.api).toBe(
         api,
       );
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
   });
 
   it("replaces the retired Tables tab's address with the first visible tab", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/tables");
+    history.replaceState(null, "", "/venue-settings/view/tables");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -2482,30 +2476,27 @@ describe("dashboard-app", () => {
       request: venueServiceRequest,
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
     expect(
       venueSettings(el)!.shadowRoot!.querySelector("dashboard-service-status-screen"),
     ).toBeNull();
   });
 
-  it.each([
-    "/manage/kitchen",
-    "/manage/statuses",
-    "/manage/receipts",
-    "/manage/receipt",
-    "/manage/location-settings",
-  ])("treats the retired address %s as an unknown screen", async (path) => {
-    history.replaceState(null, "", path);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
-    });
-    await flush(el);
-    expect(overview(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
-  });
+  it.each(["/kitchen", "/statuses", "/receipts", "/receipt", "/location-settings"])(
+    "treats the retired address %s as an unknown screen",
+    async (path) => {
+      history.replaceState(null, "", path);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      });
+      await flush(el);
+      expect(overview(el)).not.toBeNull();
+      expect(location.pathname).toBe("/overview");
+    },
+  );
 
   it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
-    history.replaceState(null, "", "/manage/adjustment-reasons");
+    history.replaceState(null, "", "/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2522,7 +2513,7 @@ describe("dashboard-app", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen")).not.toBeNull(),
     );
-    expect(location.pathname).toBe("/manage/adjustment-reasons");
+    expect(location.pathname).toBe("/adjustment-reasons");
     expect(navItem(el, "adjustment-report")).not.toBeNull();
     const service = [
       ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
@@ -2534,7 +2525,7 @@ describe("dashboard-app", () => {
   });
 
   it("opens the first visible Venue settings tab at the retired adjustment reasons tab's address", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/adjustment-reasons");
+    history.replaceState(null, "", "/venue-settings/view/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2558,9 +2549,7 @@ describe("dashboard-app", () => {
           : adjustmentsRequest(path, method, body, options),
     });
     await flush(el);
-    await vi.waitFor(() =>
-      expect(location.pathname).toBe("/manage/venue-settings/view/venue-details"),
-    );
+    await vi.waitFor(() => expect(location.pathname).toBe("/venue-settings/view/venue-details"));
     expect(
       venueSettings(el)!.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen"),
     ).toBeNull();
@@ -2568,7 +2557,7 @@ describe("dashboard-app", () => {
   });
 
   it("keeps Voids and comps from a session that may not manage adjustments", async () => {
-    history.replaceState(null, "", "/manage/adjustment-reasons");
+    history.replaceState(null, "", "/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2583,7 +2572,7 @@ describe("dashboard-app", () => {
     });
     await flush(el);
     expect(overview(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
+    expect(location.pathname).toBe("/overview");
     expect(navItem(el, "adjustment-reasons")).toBeNull();
     expect(navItem(el, "adjustment-report")).not.toBeNull();
   });
@@ -2665,7 +2654,7 @@ describe("dashboard-app", () => {
   ])(
     "tells the orders screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
-      history.replaceState(null, "", "/manage/orders");
+      history.replaceState(null, "", "/orders");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
@@ -2685,7 +2674,7 @@ describe("dashboard-app", () => {
   ])(
     "tells the sales screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
-      history.replaceState(null, "", "/manage/sales");
+      history.replaceState(null, "", "/sales");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
@@ -2705,7 +2694,7 @@ describe("dashboard-app", () => {
   ])(
     "tells the sales screen whether the session may add printers ($permissions)",
     async ({ permissions, canManagePrinters }) => {
-      history.replaceState(null, "", "/manage/sales");
+      history.replaceState(null, "", "/sales");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
@@ -2720,7 +2709,7 @@ describe("dashboard-app", () => {
   );
 
   it("signs out to come back to Printers when the sales screen asks for an administrator", async () => {
-    history.replaceState(null, "", "/manage/sales");
+    history.replaceState(null, "", "/sales");
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       getMe: vi.fn().mockResolvedValue(venueViewer(["report.view"])),
@@ -2734,7 +2723,7 @@ describe("dashboard-app", () => {
     await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     await expect.poll(() => login(el)).toBeTruthy();
     expect(sales(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/printers");
+    expect(location.pathname).toBe("/printers");
   });
 
   it("tells the open devices screen when a session re-read finds hardware.manage gone", async () => {
@@ -3111,7 +3100,7 @@ describe("dashboard-app", () => {
   });
 
   it("starts with only the group holding the opened page expanded", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3167,13 +3156,13 @@ describe("dashboard-app", () => {
   });
 
   it("opens Orders from its URL inside an expanded Reporting section", async () => {
-    history.replaceState(null, "", "/manage/orders");
+    history.replaceState(null, "", "/orders");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/orders");
+    expect(location.pathname).toBe("/orders");
     const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-reports"]')!;
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
@@ -3198,7 +3187,7 @@ describe("dashboard-app", () => {
   });
 
   it("collapses the current page's group when its header is clicked, and opens it on a second click", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3224,10 +3213,10 @@ describe("dashboard-app", () => {
   it.each(["Back", "query write"])(
     "keeps a manually opened nav group on a same-page %s",
     async (operation) => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
       await flush(el);
-      if (operation === "Back") history.pushState(null, "", "/manage/products?review=1");
+      if (operation === "Back") history.pushState(null, "", "/products?review=1");
       const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
       team.click();
       await flush(el);
@@ -3239,10 +3228,10 @@ describe("dashboard-app", () => {
         history.back();
         await back;
       } else {
-        await navigationGuardFor(window)!.write("/manage/products?review=2");
+        await navigationGuardFor(window)!.write("/products?review=2");
       }
       await flush(el);
-      expect(location.pathname).toBe("/manage/products");
+      expect(location.pathname).toBe("/products");
       expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
       expect(team.getAttribute("aria-expanded")).toBe("true");
       expect(
@@ -3252,7 +3241,7 @@ describe("dashboard-app", () => {
   );
 
   it("opens a collapsed group when the Back button arrives at a page in it", async () => {
-    history.replaceState(null, "", "/manage/staff");
+    history.replaceState(null, "", "/staff");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3263,7 +3252,7 @@ describe("dashboard-app", () => {
 
     navItem(el, "products")!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/products");
+    expect(location.pathname).toBe("/products");
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
 
@@ -3274,7 +3263,7 @@ describe("dashboard-app", () => {
     await back;
     await flush(el);
 
-    expect(location.pathname).toBe("/manage/staff");
+    expect(location.pathname).toBe("/staff");
     expect(el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
@@ -3285,7 +3274,7 @@ describe("dashboard-app", () => {
   });
 
   it("starts with a module page's group expanded when that page is opened", async () => {
-    history.replaceState(null, "", "/manage/bookings");
+    history.replaceState(null, "", "/bookings");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       request: stubRequest,
@@ -3342,7 +3331,7 @@ describe("dashboard-app", () => {
   it("hides a module's nav AND denies its screen when the permission is absent (enabled but not permitted)", async () => {
     // Drive the URL restore path, so `#permittedScreen` is tested and not just the nav filter.
     const url = new URL(location.href);
-    url.pathname = "/manage/bookings";
+    url.pathname = "/bookings";
     history.replaceState(null, "", url);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -3366,7 +3355,7 @@ describe("dashboard-app", () => {
 
   it("hides a module entirely when it is not in the enabled set (permitted but not enabled)", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/bookings";
+    url.pathname = "/bookings";
     history.replaceState(null, "", url);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -3572,8 +3561,8 @@ describe("dashboard-app", () => {
     );
 
     it.each([
-      "/manage/opening-hours/view/staffing/area/station%3Aa/week/2026-11-30",
-      "/manage/opening-hours/view/staffing/painter/season/season/s1",
+      "/opening-hours/view/staffing/area/station%3Aa/week/2026-11-30",
+      "/opening-hours/view/staffing/painter/season/season/s1",
     ])(
       "keeps a Calendar view's own address words through the shell's rewrite: %s",
       async (path) => {
@@ -3614,7 +3603,7 @@ describe("dashboard-app", () => {
       HTMLElement & { api?: DashboardApi }
     >("dashboard-venue-details-panel");
     expect(details!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
   });
 
   it("shows a supervisor Venue settings without its Receipts tab", async () => {
@@ -3676,8 +3665,8 @@ describe("dashboard-app", () => {
     expect(navItem(el, "courses")).toBeNull();
   });
 
-  it("/manage/courses opens the Courses page", async () => {
-    history.replaceState(null, "", "/manage/courses");
+  it("/courses opens the Courses page", async () => {
+    history.replaceState(null, "", "/courses");
     const api = stubApi({
       getMe: vi
         .fn()
@@ -3696,7 +3685,7 @@ describe("dashboard-app", () => {
     expect(page).not.toBeNull();
     expect(page.api).toBe(api);
     expect(page.readOnly).toBe(false);
-    expect(location.pathname).toBe("/manage/courses");
+    expect(location.pathname).toBe("/courses");
     const courses = page.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
     await vi.waitFor(() =>
       expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).not.toBeNull(),
@@ -3704,7 +3693,7 @@ describe("dashboard-app", () => {
   });
 
   it("a supervisor sees Courses read-only", async () => {
-    history.replaceState(null, "", "/manage/courses");
+    history.replaceState(null, "", "/courses");
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -3824,12 +3813,12 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    ["admin", ["node.manage"], "dashboard-servers-screen", "/manage/servers"],
-    ["manager", ["booking.manage", "venue.view"], "dashboard-overview-screen", "/manage/overview"],
+    ["admin", ["node.manage"], "dashboard-servers-screen", "/servers"],
+    ["manager", ["booking.manage", "venue.view"], "dashboard-overview-screen", "/overview"],
   ])(
-    "opens /manage/servers for the %s role only when the session holds the permission",
+    "opens /servers for the %s role only when the session holds the permission",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/servers");
+      history.replaceState(null, "", "/servers");
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
         listServers: vi.fn().mockResolvedValue({ term: 0, authorityFingerprint: null, nodes: [] }),
@@ -3873,9 +3862,9 @@ describe("dashboard-app", () => {
     ["manager", ["menu.manage"]],
     ["manager", ["person.manage"]],
   ])(
-    "opens /manage/menu-defaults as the default page for a %s session holding %j",
+    "opens /menu-defaults as the default page for a %s session holding %j",
     async (role, permissions) => {
-      history.replaceState(null, "", "/manage/menu-defaults");
+      history.replaceState(null, "", "/menu-defaults");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
@@ -3884,7 +3873,7 @@ describe("dashboard-app", () => {
       });
       await flush(el);
       expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
-      expect(location.pathname).toBe("/manage/overview");
+      expect(location.pathname).toBe("/overview");
     },
   );
 
@@ -3907,7 +3896,7 @@ describe("dashboard-app", () => {
       "dashboard-content-languages-screen",
     );
     expect(face!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/content-languages");
+    expect(location.pathname).toBe("/content-languages");
   });
 
   it.each([
@@ -3930,13 +3919,13 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["manager", ["menu.manage"], "dashboard-content-languages-screen", "/manage/content-languages"],
-    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
-    ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["menu.manage"], "dashboard-content-languages-screen", "/content-languages"],
+    ["manager", ["person.manage"], "dashboard-overview-screen", "/overview"],
+    ["supervisor", [], "dashboard-overview-screen", "/overview"],
   ])(
-    "opens /manage/content-languages for a %s session only when it holds menu.manage",
+    "opens /content-languages for a %s session only when it holds menu.manage",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/content-languages");
+      history.replaceState(null, "", "/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
@@ -3971,14 +3960,14 @@ describe("dashboard-app", () => {
       "dashboard-appearance-screen",
     );
     expect(face!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/appearance");
+    expect(location.pathname).toBe("/appearance");
   });
 
   it.each([
     [["venue.view", "venue.configure"], true],
     [["venue.view"], false],
   ])("lets the Appearance page edit with %j: %s", async (permissions, canEdit) => {
-    history.replaceState(null, "", "/manage/appearance");
+    history.replaceState(null, "", "/appearance");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
@@ -3994,7 +3983,7 @@ describe("dashboard-app", () => {
   });
 
   it("hands the Appearance page the taxpayer's legal name, as the banner shows it", async () => {
-    history.replaceState(null, "", "/manage/appearance");
+    history.replaceState(null, "", "/appearance");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -4031,14 +4020,14 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    ["manager", ["venue.view"], "dashboard-appearance-screen", "/manage/appearance"],
-    ["manager", ["venue.configure"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
-    ["supervisor", [], "dashboard-my-schedule-screen", "/manage/my-schedule"],
-    ["staff", ["payment.take"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
+    ["manager", ["venue.view"], "dashboard-appearance-screen", "/appearance"],
+    ["manager", ["venue.configure"], "dashboard-my-schedule-screen", "/my-schedule"],
+    ["supervisor", [], "dashboard-my-schedule-screen", "/my-schedule"],
+    ["staff", ["payment.take"], "dashboard-my-schedule-screen", "/my-schedule"],
   ])(
-    "opens /manage/appearance for a %s session only when it holds venue.view",
+    "opens /appearance for a %s session only when it holds venue.view",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/appearance");
+      history.replaceState(null, "", "/appearance");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
@@ -4058,13 +4047,13 @@ describe("dashboard-app", () => {
   );
 
   it("opens the Devices page from the approval link's URL for a manager", async () => {
-    history.replaceState(null, "", "/manage/devices");
+    history.replaceState(null, "", "/devices");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ getMe: vi.fn().mockResolvedValue(meResponse) }),
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-devices-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/devices");
+    expect(location.pathname).toBe("/devices");
   });
 
   it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
@@ -4087,7 +4076,7 @@ describe("dashboard-app", () => {
       "dashboard-vat-return-screen",
     );
     expect(face!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/vat-return");
+    expect(location.pathname).toBe("/vat-return");
   });
 
   it.each([
@@ -4108,12 +4097,12 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["manager", ["report.export"], "dashboard-vat-return-screen", "/manage/vat-return"],
-    ["supervisor", ["report.view"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["report.export"], "dashboard-vat-return-screen", "/vat-return"],
+    ["supervisor", ["report.view"], "dashboard-overview-screen", "/overview"],
   ])(
-    "opens /manage/vat-return for a %s session only when it holds report.export",
+    "opens /vat-return for a %s session only when it holds report.export",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/vat-return");
+      history.replaceState(null, "", "/vat-return");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
@@ -4126,13 +4115,13 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["manager", "dashboard-email-screen", "/manage/email"],
-    ["admin", "dashboard-email-screen", "/manage/email"],
-    ["supervisor", "dashboard-overview-screen", "/manage/overview"],
+    ["manager", "dashboard-email-screen", "/email"],
+    ["admin", "dashboard-email-screen", "/email"],
+    ["supervisor", "dashboard-overview-screen", "/overview"],
   ])(
-    "opens /manage/email from System signed in as %s, only for a manager or an admin",
+    "opens /email from System signed in as %s, only for a manager or an admin",
     async (role, tag, path) => {
-      history.replaceState(null, "", "/manage/email");
+      history.replaceState(null, "", "/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
@@ -4152,24 +4141,19 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    [
-      "manager",
-      ["venue.configure"],
-      "dashboard-floor-plan-editor",
-      "/manage/floor-plan/set/s1/zone/z1",
-    ],
-    ["supervisor", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["venue.configure"], "dashboard-floor-plan-editor", "/floor-plan/set/s1/zone/z1"],
+    ["supervisor", ["venue.view"], "dashboard-overview-screen", "/overview"],
     [
       "supervisor",
       ["venue.configure"],
       "dashboard-floor-plan-editor",
-      "/manage/floor-plan/set/s1/zone/z1",
+      "/floor-plan/set/s1/zone/z1",
     ],
-    ["manager", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["venue.view"], "dashboard-overview-screen", "/overview"],
   ])(
-    "opens the floor plan editor at /manage/floor-plan/set/s1/zone/z1 as %s, only with venue.configure",
+    "opens the floor plan editor at /floor-plan/set/s1/zone/z1 as %s, only with venue.configure",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+      history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
@@ -4485,14 +4469,7 @@ describe("dashboard-app", () => {
     modules: [],
   };
 
-  it.each([
-    "/manage",
-    "/manage/orders",
-    "/manage/my-schedule",
-    "/manage/alerts",
-    "/manage/staff",
-    "/manage/sales",
-  ])(
+  it.each(["/", "/orders", "/my-schedule", "/alerts", "/staff", "/sales"])(
     "a session holding only invoice.inspect lands on Invoices, and sees no other venue screen, from %s",
     async (path) => {
       history.replaceState(null, "", path);
@@ -4504,8 +4481,8 @@ describe("dashboard-app", () => {
       expect(el.shadowRoot!.querySelector("[data-test=nav-my-schedule]")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).toBeNull();
       expect(mySchedule(el)).toBeNull();
-      expect(["/manage/orders", "/manage/my-schedule"]).not.toContain(location.pathname);
-      expect(location.pathname).toMatch(/^\/manage\/invoices(\/|$)/);
+      expect(["/orders", "/my-schedule"]).not.toContain(location.pathname);
+      expect(location.pathname).toMatch(/^\/invoices(\/|$)/);
       expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
       expect(
         [...sidebarNav(el)!.querySelectorAll("[data-test^=nav-]")]
@@ -4516,7 +4493,7 @@ describe("dashboard-app", () => {
   );
 
   it("a session holding only invoice.inspect has no page search in its sidebar", async () => {
-    history.replaceState(null, "", "/manage");
+    history.replaceState(null, "", "/");
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -4527,7 +4504,7 @@ describe("dashboard-app", () => {
   });
 
   it("a session holding only invoice.inspect reads no alerts, no disk stop and no live updates", async () => {
-    history.replaceState(null, "", "/manage");
+    history.replaceState(null, "", "/");
     const liveUpdates = { start: vi.fn(), stop: vi.fn() };
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
@@ -4540,11 +4517,11 @@ describe("dashboard-app", () => {
   });
 
   it("a session holding only invoice.inspect opens its account settings over Invoices, without a PIN", async () => {
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...inspectorMe }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     const profile = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen");
     expect(profile).not.toBeNull();
     expect(profile!.tillPin).toBe(false);
@@ -4552,7 +4529,7 @@ describe("dashboard-app", () => {
   });
 
   it("a manager whose live stream ends as inspection-only switches to Invoices, not to sign-in", async () => {
-    history.replaceState(null, "", "/manage");
+    history.replaceState(null, "", "/");
     const liveData = new LiveData();
     const streams: EventTarget[] = [];
     const signals = createSessionSignals();
@@ -4587,11 +4564,11 @@ describe("dashboard-app", () => {
     expect(login(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-tax-office-screen")).not.toBeNull();
     expect(overview(el)).toBeNull();
-    expect(location.pathname).toMatch(/^\/manage\/invoices(\/|$)/);
+    expect(location.pathname).toMatch(/^\/invoices(\/|$)/);
   });
 
   it("a manager holding invoice.inspect beside other permissions keeps the PIN and alerts", async () => {
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -5162,14 +5139,14 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 
 describe("dashboard URL navigation", () => {
   it.each([
-    ["manager", ["venue.configure"], ["venue-service"], "/manage/prep-stations/view/stations"],
-    ["supervisor", ["venue.view"], ["venue-service"], "/manage/overview"],
-    ["manager", [], [], "/manage/overview"],
+    ["manager", ["venue.configure"], ["venue-service"], "/prep-stations/view/stations"],
+    ["supervisor", ["venue.view"], ["venue-service"], "/overview"],
+    ["manager", [], [], "/overview"],
   ] as const)(
     "replaces a retired printing bookmark with a permitted destination (%s, %s)",
     async (role, permissions, modules, destination) => {
-      history.replaceState(null, "", "/manage/staff");
-      history.pushState(null, "", "/manage/printing-rules");
+      history.replaceState(null, "", "/staff");
+      history.pushState(null, "", "/printing-rules");
       const push = vi.spyOn(history, "pushState");
       onTestFinished(() => push.mockRestore());
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -5210,7 +5187,7 @@ describe("dashboard URL navigation", () => {
       history.back();
       await back;
       await flush(el);
-      expect(location.pathname).toBe("/manage/staff");
+      expect(location.pathname).toBe("/staff");
       const forward = new Promise<void>((resolve) =>
         window.addEventListener("popstate", () => resolve(), { once: true }),
       );
@@ -5221,45 +5198,44 @@ describe("dashboard URL navigation", () => {
     },
   );
 
-  it.each([
-    "/manage/prep-stations",
-    "/manage/prep-stations/view/stations",
-    "/manage/prep-stations/view/settings",
-  ])("does not offer Prep stations to a venue viewer (%s)", async (address) => {
-    history.replaceState(null, "", address);
-    const reads: string[] = [];
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        getMe: vi.fn().mockResolvedValue({
-          personId: "p1",
-          roleIds: ["supervisor"],
-          locale: "en-GB",
-          venueLocale: "en-GB",
-          sessionDefault: "en-GB",
-          permissions: ["venue.view"],
-          modules: ["venue-service"],
-          venueName: "Venue",
+  it.each(["/prep-stations", "/prep-stations/view/stations", "/prep-stations/view/settings"])(
+    "does not offer Prep stations to a venue viewer (%s)",
+    async (address) => {
+      history.replaceState(null, "", address);
+      const reads: string[] = [];
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            personId: "p1",
+            roleIds: ["supervisor"],
+            locale: "en-GB",
+            venueLocale: "en-GB",
+            sessionDefault: "en-GB",
+            permissions: ["venue.view"],
+            modules: ["venue-service"],
+            venueName: "Venue",
+          }),
         }),
-      }),
-      request: async (path) => {
-        reads.push(path);
-        return [] as never;
-      },
-    });
-    await flush(el);
-    await expect.poll(() => location.pathname).toBe("/manage/overview");
-    expect(navItem(el, "prep-stations")).toBeNull();
-    expect(navItem(el, "opening-hours")).not.toBeNull();
-    expect(navItem(el, "hours")).toBeNull();
-    expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
-    expect(
-      reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
-    ).toEqual([]);
-    expect(reads).not.toContain("/management-api/venue-service/routing");
-  });
+        request: async (path) => {
+          reads.push(path);
+          return [] as never;
+        },
+      });
+      await flush(el);
+      await expect.poll(() => location.pathname).toBe("/overview");
+      expect(navItem(el, "prep-stations")).toBeNull();
+      expect(navItem(el, "opening-hours")).not.toBeNull();
+      expect(navItem(el, "hours")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
+      expect(
+        reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
+      ).toEqual([]);
+      expect(reads).not.toContain("/management-api/venue-service/routing");
+    },
+  );
 
   it("offers a venue service manager Prep stations with both tabs", async () => {
-    history.replaceState(null, "", "/manage/prep-stations");
+    history.replaceState(null, "", "/prep-stations");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -5369,29 +5345,29 @@ describe("dashboard URL navigation", () => {
       ) ?? null;
 
   it("an address naming a station opens that station's editor and keeps it in the address", async () => {
-    const el = await mountWithGrill("/manage/printers");
+    const el = await mountWithGrill("/printers");
     void navigationGuardFor(window)!.write(
-      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+      new URL("/prep-stations/view/stations/station/grill", location.href),
     );
     await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/grill");
+    expect(location.pathname).toBe("/prep-stations/view/stations/station/grill");
   });
 
   it("Back from an address naming a station closes the editor it opened", async () => {
-    const el = await mountWithGrill("/manage/prep-stations/view/stations");
+    const el = await mountWithGrill("/prep-stations/view/stations");
     void navigationGuardFor(window)!.write(
-      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+      new URL("/prep-stations/view/stations/station/grill", location.href),
     );
     await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/stations");
+    await expect.poll(() => location.pathname).toBe("/prep-stations/view/stations");
     await expect.poll(() => grillEditor(el)).toBeNull();
   });
 
   it("Back from an address naming a station asks before closing a changed editor: Keep keeps it, Discard closes it", async () => {
-    const el = await mountWithGrill("/manage/prep-stations/view/stations");
+    const el = await mountWithGrill("/prep-stations/view/stations");
     void navigationGuardFor(window)!.write(
-      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+      new URL("/prep-stations/view/stations/station/grill", location.href),
     );
     await expect.poll(() => grillEditor(el)?.station?.id).toBe("grill");
     const nameField = () =>
@@ -5408,16 +5384,16 @@ describe("dashboard URL navigation", () => {
       if (decision === "keep") {
         await expect
           .poll(() => location.pathname)
-          .toBe("/manage/prep-stations/view/stations/station/grill");
+          .toBe("/prep-stations/view/stations/station/grill");
         expect(nameField().value).toBe("Hot grill");
       }
     }
-    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/stations");
+    await expect.poll(() => location.pathname).toBe("/prep-stations/view/stations");
     await expect.poll(() => grillEditor(el)).toBeNull();
   });
 
   it("an old tester link opens the Routing tab", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager?dev=1#saved");
+    history.replaceState(null, "", "/prep-stations/view/routing/test/lager?dev=1#saved");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -5456,7 +5432,7 @@ describe("dashboard URL navigation", () => {
     const tabs = screen.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!;
     expect(tabs.value).toBe("routing");
     expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
+    expect(location.pathname).toBe("/prep-stations/view/routing");
     expect(location.search).toBe("?dev=1");
     expect(location.hash).toBe("#saved");
     expect(push).not.toHaveBeenCalled();
@@ -5468,7 +5444,7 @@ describe("dashboard URL navigation", () => {
     "denies a saved venue tab unless both module and permission are present: %j",
     async ({ modules, permissions }) => {
       const url = new URL(location.href);
-      url.pathname = "/manage/venue-operations/view/zones";
+      url.pathname = "/venue-operations/view/zones";
       history.replaceState(null, "", url);
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -5488,13 +5464,13 @@ describe("dashboard URL navigation", () => {
       expect(navItem(el, "venue-operations")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-venue-operations-screen")).toBeNull();
       expect(overview(el)).toBeTruthy();
-      expect(location.pathname).toBe("/manage/overview");
+      expect(location.pathname).toBe("/overview");
     },
   );
 
   it("restores a saved venue link through refresh and Back from another section", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/venue-operations/view/zones";
+    url.pathname = "/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
     history.replaceState(null, "", url);
     const api = stubApi({
@@ -5528,7 +5504,7 @@ describe("dashboard URL navigation", () => {
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     await expect
       .poll(() =>
         Boolean(
@@ -5539,7 +5515,7 @@ describe("dashboard URL navigation", () => {
         ),
       )
       .toBe(true);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     el.remove();
     const { el: refreshed } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(refreshed);
@@ -5553,11 +5529,11 @@ describe("dashboard URL navigation", () => {
         ),
       )
       .toBe(true);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(location.search).toBe(url.search);
     navItem(refreshed, "staff")!.click();
     await flush(refreshed);
-    expect(location.pathname).toBe("/manage/staff");
+    expect(location.pathname).toBe("/staff");
     const back = new Promise<void>((resolve) =>
       window.addEventListener("popstate", () => resolve(), { once: true }),
     );
@@ -5574,13 +5550,13 @@ describe("dashboard URL navigation", () => {
         ),
       )
       .toBe(true);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(location.search).toBe(url.search);
   });
 
   it("opens a saved venue link after signing in to a protected destination", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/venue-operations/view/zones";
+    url.pathname = "/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
     history.replaceState(null, "", url);
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
@@ -5607,7 +5583,7 @@ describe("dashboard URL navigation", () => {
     });
     await flush(el);
     expect(login(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+    expect(location.pathname).toBe("/venue-operations/view/zones");
     getMe.mockResolvedValue({
       personId: "p1",
       roleIds: ["manager"],
@@ -5620,7 +5596,7 @@ describe("dashboard URL navigation", () => {
     });
     emitLoggedIn(login(el)!);
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     await expect
       .poll(() =>
         Boolean(
@@ -5631,13 +5607,13 @@ describe("dashboard URL navigation", () => {
         ),
       )
       .toBe(true);
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(location.search).toBe(url.search);
   });
 
   it("restores the requested section after a session probe and after refresh", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/staff";
+    url.pathname = "/staff";
     url.searchParams.set("dev", "1");
     history.replaceState(null, "", url);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
@@ -5655,7 +5631,7 @@ describe("dashboard URL navigation", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/staff");
+    expect(location.pathname).toBe("/staff");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
@@ -5686,7 +5662,7 @@ describe("dashboard URL navigation", () => {
     ["supervisor", "box-status", "overview"],
   ])("validates a %s session's requested %s section", async (role, requested, expected) => {
     const url = new URL(location.href);
-    url.pathname = `/manage/${requested}`;
+    url.pathname = `/${requested}`;
     history.replaceState(null, "", url);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -5703,12 +5679,12 @@ describe("dashboard URL navigation", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector(`dashboard-${expected}-screen`)).not.toBeNull();
-    expect(location.pathname).toBe(`/manage/${expected}`);
+    expect(location.pathname).toBe(`/${expected}`);
   });
 
   it("keeps a protected destination behind login and ignores history after logout", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/staff";
+    url.pathname = "/staff";
     history.replaceState(null, "", url);
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
@@ -5735,7 +5711,7 @@ describe("dashboard URL navigation", () => {
   });
 
   it("keeps a protected destination behind login when the real client reports the signed-out probe", async () => {
-    history.replaceState(null, "", "/manage/staff");
+    history.replaceState(null, "", "/staff");
     const signals = createSessionSignals();
     const refusal = (code: string, status: number) =>
       new Response(JSON.stringify({ error: { code } }), { status });
@@ -5751,7 +5727,7 @@ describe("dashboard URL navigation", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await expect.poll(() => login(el)).not.toBeNull();
     await flush(el);
-    expect(location.pathname).toBe("/manage/staff");
+    expect(location.pathname).toBe("/staff");
   });
 });
 
@@ -5791,7 +5767,7 @@ async function mountInRealPage(
 }
 
 it("keeps an overflowing read-only Overview accessible and scrollable by keyboard", async () => {
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
   const { el, unmount } = await mountInRealPage(
     stubApi({
       getSalesOverview: async () => ({
@@ -5893,7 +5869,7 @@ it("keeps the phone drawer within the window inside the real page", async () => 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 it("keeps Venue settings within the window at desktop width, in view and edit mode, and scrolls to its last panel", async () => {
-  history.replaceState(null, "", "/manage/venue-settings/view/venue-details");
+  history.replaceState(null, "", "/venue-settings/view/venue-details");
   const { el, unmount } = await mountInRealPage(
     stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -6081,7 +6057,7 @@ describe("the floor plan editor inside the real page", () => {
     width: number,
     overrides: Record<string, unknown> = {},
   ) => {
-    history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+    history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
     const mounted = await mountInRealPage(floorPlanApi(locale, overrides), width, 844);
     const editor = mounted.el.shadowRoot!.querySelector<HTMLElement>(
       "dashboard-floor-plan-editor",
@@ -6283,7 +6259,7 @@ describe("the floor plan editor inside the real page", () => {
     });
 
     it("keeps both in the banner row on another screen", async () => {
-      history.replaceState(null, "", "/manage/overview");
+      history.replaceState(null, "", "/overview");
       const { el, unmount } = await mountInRealPage(floorPlanApi("en-GB"), 1280, 844);
       try {
         window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
@@ -6299,7 +6275,7 @@ describe("the floor plan editor inside the real page", () => {
   });
 
   it("keeps another screen's narrow gutters at 390 px", async () => {
-    history.replaceState(null, "", "/manage/overview");
+    history.replaceState(null, "", "/overview");
     const { el, unmount } = await mountInRealPage(floorPlanApi("en-GB"), 390, 844);
     try {
       expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
@@ -6319,8 +6295,8 @@ const signedOut = () =>
   stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) });
 
 it.each([
-  ["the sign-in form", "/manage/"],
-  ["an emailed account link", "/manage/account?token=t1&purpose=invitation"],
+  ["the sign-in form", "/"],
+  ["an emailed account link", "/account?token=t1&purpose=invitation"],
 ])(
   "puts the language chooser at the trailing edge of the signed-out banner on %s, and none in the login screen",
   async (_where, url) => {
@@ -6474,7 +6450,7 @@ describe("the banner's email inbox link", () => {
   const inboxLink = (el: DashboardApp) =>
     el
       .shadowRoot!.querySelector("wt-demo-bar")
-      ?.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/email"]') ?? null;
+      ?.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/email"]') ?? null;
   const withIntent = (signedIn: boolean, intent: string | undefined) =>
     signedIn
       ? stubApi({
@@ -6515,7 +6491,7 @@ describe("the banner's email inbox link", () => {
       expect(login(el) === null).toBe(signedIn);
       const link = inboxLink(el)!;
       expect(link.tagName).toBe("A");
-      expect(link.getAttribute("href")).toBe("/manage/email");
+      expect(link.getAttribute("href")).toBe("/email");
       expect(link.textContent!.trim()).toBe("Bandeja de correo");
     },
   );
@@ -6529,7 +6505,7 @@ describe("the banner's email inbox link", () => {
     const links = [...bar.shadowRoot!.querySelectorAll("a")].map((link) =>
       link.getAttribute("href"),
     );
-    expect(links.indexOf("/manage/demo-printer")).toBe(links.indexOf("/manage/email") + 1);
+    expect(links.indexOf("/demo-printer")).toBe(links.indexOf("/email") + 1);
   });
 
   it("keeps practice card decisions on the till rather than linking another screen", async () => {
@@ -6542,11 +6518,11 @@ describe("the banner's email inbox link", () => {
       link.getAttribute("href"),
     );
 
-    expect(links).not.toContain("/manage/demo-reader");
+    expect(links).not.toContain("/demo-reader");
   });
 
   it("opens the pretend printer page for a manager", async () => {
-    history.replaceState(null, "", "/manage/demo-printer");
+    history.replaceState(null, "", "/demo-printer");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi
@@ -6557,14 +6533,14 @@ describe("the banner's email inbox link", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-demo-printer-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/demo-printer");
+    expect(location.pathname).toBe("/demo-printer");
   });
 
   it.each([
     ["supervisor", "demo"],
     ["manager", "live"],
   ] as const)("refuses the pretend printer page for %s in %s", async (role, intent) => {
-    history.replaceState(null, "", "/manage/demo-printer");
+    history.replaceState(null, "", "/demo-printer");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -6577,7 +6553,7 @@ describe("the banner's email inbox link", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-demo-printer-screen")).toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
+    expect(location.pathname).toBe("/overview");
   });
 
   it.each([
@@ -6694,8 +6670,8 @@ it("opens the reusable modifiers library from its own management destination", a
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-modifiers"]')!.click();
   await flush(el);
   // The bare destination normalises to the default tab, which is what every other tabbed screen
-  // does: alerts-screen.test.ts:60 opens `/manage/alerts` and :75 expects `/manage/alerts/view/open`.
-  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+  // does: alerts-screen.test.ts:60 opens `/alerts` and :75 expects `/alerts/view/open`.
+  expect(location.pathname).toBe("/modifiers/view/extras");
   expect(el.shadowRoot!.querySelector("dashboard-modifiers-screen")).not.toBeNull();
 });
 
@@ -6753,7 +6729,7 @@ describe("alerts in the shell", () => {
   }
 
   it("holds an alert that arrives while a window is open until it closes, then closes on a real click", async () => {
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     const liveData = new LiveData();
     const listAlerts = vi
       .fn()
@@ -6918,9 +6894,7 @@ describe("alerts in the shell", () => {
       await atViewport(host, 1280, async () => {
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(
-            intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/till/"]',
-          )!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -6998,9 +6972,7 @@ describe("alerts in the shell", () => {
         const logo = items[1]!.box;
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(
-            intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/till/"]',
-          )!
+          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/email"]' : 'a[href="/till/"]')!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -7338,11 +7310,11 @@ describe("alerts in the shell", () => {
     bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-see-all]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).not.toBeNull();
-    expect(location.pathname).toMatch(/^\/manage\/alerts/);
+    expect(location.pathname).toMatch(/^\/alerts/);
   });
 
   it("opens the Alerts screen from a deep link for a non-staff session", async () => {
-    history.replaceState(null, "", "/manage/alerts");
+    history.replaceState(null, "", "/alerts");
     const api = alertsApi({
       listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     });
@@ -7375,7 +7347,7 @@ describe("alerts in the shell", () => {
     bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-go-to]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-printers-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/printers");
+    expect(location.pathname).toBe("/printers");
   });
 
   it("offers Go to Box status on a low-disk alert to a session that manages the system, and opens the page", async () => {
@@ -7410,11 +7382,11 @@ describe("alerts in the shell", () => {
     goTo.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-box-status-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
   });
 
   it("does not open the Alerts screen for a staff session", async () => {
-    history.replaceState(null, "", "/manage/alerts");
+    history.replaceState(null, "", "/alerts");
     const api = alertsApi({
       getMe: vi
         .fn()
@@ -7671,7 +7643,7 @@ describe("dashboard-app: session signals", () => {
   });
 
   it("keeps the sign-in page's address when a no-session refusal arrives while signed out", async () => {
-    history.replaceState(null, "", "/manage/staff");
+    history.replaceState(null, "", "/staff");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
@@ -7682,7 +7654,7 @@ describe("dashboard-app: session signals", () => {
     sessionInvalid("management_session.required");
     await flush(el);
     expect(notice(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/staff");
+    expect(location.pathname).toBe("/staff");
   });
 
   it("returns to login on a no-session refusal in a session signed into after a sign-out", async () => {
@@ -7994,7 +7966,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     ["check-card-payments", "dashboard-payments-screen"],
     ["alerts", "dashboard-alerts-screen"],
   ])("opens %s for a manager from its address, with the shell's api", async (screen, tag) => {
-    history.replaceState(null, "", `/manage/${screen}`);
+    history.replaceState(null, "", `/${screen}`);
     const api = faceApi();
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -8002,11 +7974,11 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
     if (screen === "cloud") expect((face as CloudServicesScreen).canManageEmergency).toBe(false);
-    expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
+    expect(location.pathname).toMatch(new RegExp(`^/${screen}(/|$)`));
   });
 
   it("passes box-management permission to the Cloud screen", async () => {
-    history.replaceState(null, "", "/manage/cloud");
+    history.replaceState(null, "", "/cloud");
     const api = faceApi();
     api.getMe = vi.fn().mockResolvedValue({
       ...meResponse,
@@ -8022,17 +7994,17 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   });
 
   it("handles the retired Sections address as an unknown screen", async () => {
-    history.replaceState(null, "", "/manage/sections");
+    history.replaceState(null, "", "/sections");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: faceApi(),
       request: stubRequest,
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-sections-screen")).toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
+    expect(location.pathname).toBe("/overview");
   });
 
-  it.each(["/manage/floor", "/manage/floor/view/plano/zone/z1"])(
+  it.each(["/floor", "/floor/view/plano/zone/z1"])(
     "handles the retired Floor plan address %s as an unknown screen",
     async (address) => {
       history.replaceState(null, "", address);
@@ -8043,12 +8015,12 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       await flush(el);
       expect(el.shadowRoot!.querySelector("dashboard-floor-screen")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=nav-floor]")).toBeNull();
-      expect(location.pathname).toBe("/manage/overview");
+      expect(location.pathname).toBe("/overview");
     },
   );
 
   it("hands the payments face the request primitive and the venue's onboarding mode", async () => {
-    history.replaceState(null, "", "/manage/payments");
+    history.replaceState(null, "", "/payments");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: faceApi(),
       request: stubRequest,
@@ -8062,7 +8034,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   });
 
   it("follows a Go to from the Alerts face, keeping the event inside the shell", async () => {
-    history.replaceState(null, "", "/manage/alerts");
+    history.replaceState(null, "", "/alerts");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: faceApi(),
       request: stubRequest,
@@ -8078,7 +8050,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     emit(alertsFace, "wt-alert-go-to", { screen: "sales" });
     await flush(el);
     expect(sales(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/sales");
+    expect(location.pathname).toBe("/sales");
     expect(escaped).not.toHaveBeenCalled();
   });
 
@@ -8088,7 +8060,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   ])(
     "lets the Alerts face open Fiscal filing, the fiscal alerts' Go to, for %j: %s",
     async (permissions, opens) => {
-      history.replaceState(null, "", "/manage/alerts");
+      history.replaceState(null, "", "/alerts");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: Object.assign(faceApi(), {
           getMe: vi
@@ -8113,7 +8085,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     });
 
   it("opens Box status for a session that manages the system from its address, with the shell's api", async () => {
-    history.replaceState(null, "", "/manage/box-status");
+    history.replaceState(null, "", "/box-status");
     const api = systemManagerFaceApi();
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -8122,13 +8094,13 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     );
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
-    expect(location.pathname).toMatch(/^\/manage\/box-status(\/|$)/);
+    expect(location.pathname).toMatch(/^\/box-status(\/|$)/);
   });
 
   it.each([false, true])(
     "lets Box status check the box's clock only for an administrator (%s)",
     async (admin) => {
-      history.replaceState(null, "", "/manage/box-status");
+      history.replaceState(null, "", "/box-status");
       const api = Object.assign(faceApi(), {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
@@ -8148,7 +8120,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   it.each([false, true])(
     "lets Box status restart the box for holders of system.manage (%s)",
     async (admin) => {
-      history.replaceState(null, "", "/manage/box-status");
+      history.replaceState(null, "", "/box-status");
       const api = Object.assign(faceApi(), {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
@@ -8166,7 +8138,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   );
 
   it("signs out to come back to Box status when the Box status screen asks for an administrator", async () => {
-    history.replaceState(null, "", "/manage/box-status");
+    history.replaceState(null, "", "/box-status");
     const api = Object.assign(faceApi(), {
       getMe: vi
         .fn()
@@ -8185,11 +8157,11 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     await expect.poll(() => login(el)).toBeTruthy();
     expect(boxStatus()).toBeNull();
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
   });
 
   it("follows a Go to from the Box status page, keeping the event inside the shell", async () => {
-    history.replaceState(null, "", "/manage/box-status");
+    history.replaceState(null, "", "/box-status");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: systemManagerFaceApi(),
       request: stubRequest,
@@ -8205,7 +8177,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     emit(boxFace, "wt-alert-go-to", { screen: "printers" });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-printers-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/printers");
+    expect(location.pathname).toBe("/printers");
     expect(escaped).not.toHaveBeenCalled();
   });
 
@@ -8570,7 +8542,7 @@ describe("the nav search", () => {
     await press(el, "Enter");
 
     expect(screenPrinters(el)).toBeTruthy();
-    expect(new URL(location.href).pathname).toBe("/manage/printers");
+    expect(new URL(location.href).pathname).toBe("/printers");
     expect(navPrinters(el)!.getAttribute("aria-current")).toBe("page");
     expect(layout(el).classList.contains("drawer-open")).toBe(false);
     expect(searchBox(el).value).toBe("");
@@ -8579,7 +8551,7 @@ describe("the nav search", () => {
   });
 
   it("opens the current page's group again when a search picks another page in it after it was collapsed", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const el = await mountSession(sessionIn("en-GB"));
     const menu = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
     menu().click();
@@ -8589,13 +8561,13 @@ describe("the nav search", () => {
     await search(el, "Units");
     await press(el, "Enter");
 
-    expect(new URL(location.href).pathname).toBe("/manage/units");
+    expect(new URL(location.href).pathname).toBe("/units");
     expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
     expect(navItem(el, "units")!.checkVisibility()).toBe(true);
   });
 
   it("opens the current page's collapsed group when a search picks that same page", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const el = await mountSession(sessionIn("en-GB"));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!.click();
     await flush(el);
@@ -8604,7 +8576,7 @@ describe("the nav search", () => {
     await search(el, "Products");
     await press(el, "Enter");
 
-    expect(new URL(location.href).pathname).toBe("/manage/products");
+    expect(new URL(location.href).pathname).toBe("/products");
     expect(expandedHeaders(el)).toEqual(["nav-group-menu"]);
     expect(navItem(el, "products")!.checkVisibility()).toBe(true);
   });
@@ -8617,7 +8589,7 @@ describe("the nav search", () => {
     await press(el, "Enter");
 
     expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
-    expect(new URL(location.href).pathname).toBe("/manage/orders");
+    expect(new URL(location.href).pathname).toBe("/orders");
     expect(expandedHeaders(el)).toEqual(["nav-group-reports"]);
     expect(navItem(el, "orders")!.getAttribute("aria-current")).toBe("page");
     expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
@@ -8634,14 +8606,14 @@ describe("the nav search", () => {
   });
 
   it("does nothing on Enter in an empty or blank box", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const el = await mountSession(sessionIn("en-GB"));
     expect(menu(el)).toBeTruthy();
     await press(el, "Enter");
     await search(el, "   ");
     await press(el, "Enter");
     expect(menu(el)).toBeTruthy();
-    expect(new URL(location.href).pathname).toBe("/manage/products");
+    expect(new URL(location.href).pathname).toBe("/products");
   });
 
   it("clears the term and closes the drawer when a match is clicked", async () => {
@@ -8814,7 +8786,7 @@ describe("telling the password manager which passkeys are accepted after a sign-
   });
 
   it("sends them after a Google sign-in returns", async () => {
-    history.replaceState(null, "", "/manage/?login=google");
+    history.replaceState(null, "", "/?login=google");
     const api = stubApi({ passkeySignals: vi.fn().mockResolvedValue(SIGNALS) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -9107,7 +9079,7 @@ describe("printer details window during a pending save", () => {
     for (const theme of ["light", "dark"] as const) {
       for (const editor of ["name", "connection"] as const) {
         it(`${locale}/${theme}: keeps the ${editor} save and its refusal under the real app`, async () => {
-          history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+          history.replaceState(null, "", "/printers/view/printers/printer/p1");
           let refuse!: (error: unknown) => void;
           const api = stubApi({
             getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }),
@@ -9178,7 +9150,7 @@ describe("printer details window during a pending save", () => {
           const modal = q("[data-test=printer-details-modal]") as import("@waitron/ui").WtModal;
           void modal.requestClose("escape");
           await flush(el);
-          expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+          expect(location.pathname).toBe("/printers/view/printers/printer/p1");
           expect(screenPrinters(el)).toBe(screen);
           expect(input.isConnected).toBe(true);
           expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -9204,7 +9176,7 @@ describe("printer details window during a pending save", () => {
           await expect.poll(() => question.open).toBe(true);
           await question.updateComplete;
           question.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
-          await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers");
+          await expect.poll(() => location.pathname).toBe("/printers/view/printers");
           await expect
             .poll(() => screen.shadowRoot!.querySelector("[data-test=printer-status]"))
             .toBeNull();
@@ -9332,7 +9304,7 @@ it.each(["home", "clash"] as const)(
       anchor.click();
       if (kind === "home") {
         expect(nativeNavigation).toBe(false);
-        await expect.poll(() => location.pathname).toBe("/manage/menus/menu/menu-lunch/view/home");
+        await expect.poll(() => location.pathname).toBe("/menus/menu/menu-lunch/view/home");
       } else expect(clashEvent).toBe(true);
     } finally {
       window.removeEventListener("click", blockNative);
@@ -9450,7 +9422,7 @@ describe("inline translation application leave paths", () => {
       await vi.waitFor(() => expect(warning.open).toBe(false));
       expect(form.open).toBe(true);
       expect(field.value).toBe("New customer soup");
-      expect(location.pathname).toBe("/manage/content-languages");
+      expect(location.pathname).toBe("/content-languages");
       expect(api.logout).not.toHaveBeenCalled();
       expect(api.putLocale).not.toHaveBeenCalled();
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -9458,10 +9430,9 @@ describe("inline translation application leave paths", () => {
       await vi.waitFor(() => expect(warning.open).toBe(true));
       await warning.updateComplete;
       warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      if (route === "navigation")
-        await vi.waitFor(() => expect(location.pathname).toBe("/manage/staff"));
+      if (route === "navigation") await vi.waitFor(() => expect(location.pathname).toBe("/staff"));
       else if (route === "editor")
-        await vi.waitFor(() => expect(location.pathname).toBe("/manage/products/product/dish"));
+        await vi.waitFor(() => expect(location.pathname).toBe("/products/product/dish"));
       else if (route === "locale") await vi.waitFor(() => expect(currentLocale()).toBe("en-GB"));
       else await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     },
@@ -9568,7 +9539,7 @@ describe("mounted public department dialogs", () => {
     return null;
   }
   async function mountDepartments(
-    path = "/manage/venue-operations",
+    path = "/venue-operations",
     permissions = ["venue.configure", "venue.view"],
     missingPeriods = false,
     liveDeli = false,
@@ -9711,7 +9682,7 @@ describe("mounted public department dialogs", () => {
     expect(find(app, "departments-list")!.textContent).not.toContain("Ready for service");
     await expect.poll(() => find(app, '[data-test="open-department-name-d1"]')).not.toBeNull();
     find(app, '[data-test="open-department-name-d1"]')!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
     await expect.poll(() => find(app, "department-edit-dialog")).not.toBeNull();
     expect(
       find(app, "department-edit-dialog")!.shadowRoot!.querySelector("wt-modal")!.heading,
@@ -9719,15 +9690,15 @@ describe("mounted public department dialogs", () => {
     expect(find(app, "departments-list")).not.toBeNull();
   });
   it("Escape asks before discarding Settings and restores the department list", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const app = await mountDepartments("/venue-operations/department/d1");
     const box = await draft(app);
     await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(box.value).toBe("Draft restaurant");
     await userEvent.keyboard("{Escape}");
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     await expect.poll(() => find(app, "departments-list")).not.toBeNull();
     expect(box.isConnected).toBe(false);
   });
@@ -9738,25 +9709,25 @@ describe("mounted public department dialogs", () => {
     const box = await draft(app);
     history.back();
     await choose(app, "keep");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(box.value).toBe("Draft restaurant");
     history.back();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     history.forward();
     await expect.poll(() => find(app, 'wt-input[name="name"]')?.getAttribute("name")).toBe("name");
     expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
   it("an address naming the Receipts tab opens it with no question and keeps a Details draft", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", [
+    const app = await mountDepartments("/venue-operations/department/d1", [
       "venue.configure",
       "venue.view",
       "venue.configure",
     ]);
     const box = await draft(app);
-    void navigationGuardFor(window)!.write("/manage/venue-operations/department/d1/view/receipt");
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/receipt");
+    void navigationGuardFor(window)!.write("/venue-operations/department/d1/view/receipt");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/receipt");
     const form = find(app, "department-settings") as HTMLElement & { tab: string };
     await expect.poll(() => form.tab).toBe("receipt");
     expect(box.isConnected).toBe(true);
@@ -9779,59 +9750,59 @@ describe("mounted public department dialogs", () => {
     expect(location.pathname).toBe(path);
   }
   it('typing a name then choosing Service asks nothing, records /view/service and keeps "Draft restaurant"', async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const app = await mountDepartments("/venue-operations/department/d1");
     const box = await draft(app);
     await chooseTab(app, "service");
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/service");
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
   });
   it("Back from Service returns to Details with no question and the draft kept", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const app = await mountDepartments("/venue-operations/department/d1");
     const box = await draft(app);
     await chooseTab(app, "service");
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/service");
     history.back();
-    await noQuestionAt(app, "/manage/venue-operations/department/d1");
+    await noQuestionAt(app, "/venue-operations/department/d1");
     const form = find(app, "department-settings") as HTMLElement & { tab: string };
     await expect.poll(() => form.tab).toBe("details");
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
   });
   it("Back from Service to an opening address naming an unknown view returns to Details with no question and the draft kept", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1/view/missing");
+    const app = await mountDepartments("/venue-operations/department/d1/view/missing");
     const box = await draft(app);
     await chooseTab(app, "service");
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/service");
     history.back();
-    await noQuestionAt(app, "/manage/venue-operations/department/d1");
+    await noQuestionAt(app, "/venue-operations/department/d1");
     const form = find(app, "department-settings") as HTMLElement & { tab: string };
     await expect.poll(() => form.tab).toBe("details");
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
   });
   it("Forward after Back returns to Service with no question and the draft kept", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const app = await mountDepartments("/venue-operations/department/d1");
     const box = await draft(app);
     await chooseTab(app, "service");
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/service");
     history.back();
-    await noQuestionAt(app, "/manage/venue-operations/department/d1");
+    await noQuestionAt(app, "/venue-operations/department/d1");
     history.forward();
-    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    await noQuestionAt(app, "/venue-operations/department/d1/view/service");
     const form = find(app, "department-settings") as HTMLElement & { tab: string };
     await expect.poll(() => form.tab).toBe("service");
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
   });
   it.each([
-    { permissions: [], landing: "/manage/my-schedule" },
-    { permissions: ["venue.view"], landing: "/manage/overview" },
+    { permissions: [], landing: "/my-schedule" },
+    { permissions: ["venue.view"], landing: "/overview" },
   ])(
     "a department deep link still requires its own permission: %j",
     async ({ permissions, landing }) => {
-      const app = await mountDepartments("/manage/venue-operations/department/d1", permissions);
+      const app = await mountDepartments("/venue-operations/department/d1", permissions);
       expect(location.pathname).toBe(landing);
       expect(find(app, "department-settings")).toBeNull();
       expect(navItem(app, "venue-operations")).toBeNull();
@@ -9839,7 +9810,7 @@ describe("mounted public department dialogs", () => {
   );
   it.each(["d1", "d2"])("Receipt opens the authoritative live department %s", async (id) => {
     const app = await mountDepartments(
-      `/manage/venue-operations/department/${id}/view/receipt?departmentId=d1`,
+      `/venue-operations/department/${id}/view/receipt?departmentId=d1`,
       ["venue.configure"],
       false,
       true,
@@ -9864,7 +9835,7 @@ describe("mounted public department dialogs", () => {
   it.each(["escape"] as const)(
     "the Receipts tab's %s Keeps then Discards one draft and returns to the list",
     async () => {
-      const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
+      const app = await mountDepartments("/venue-operations/department/d1/view/receipt", [
         "venue.configure",
       ]);
       await expect.poll(() => find(app, 'wt-input[name="email"]')).not.toBeNull();
@@ -9877,19 +9848,19 @@ describe("mounted public department dialogs", () => {
       const close = () => userEvent.keyboard("{Escape}");
       await close();
       await choose(app, "keep");
-      expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
+      expect(location.pathname).toBe("/venue-operations/department/d1/view/receipt");
       expect(field.value).toBe("draft@example.com");
       expect(find(app, "departments-list")).not.toBeNull();
       await close();
       await choose(app, "discard");
-      await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+      await expect.poll(() => location.pathname).toBe("/venue-operations");
       expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
       expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
       expect(find(app, "department-edit-dialog")).toBeNull();
     },
   );
   it("a missing department Receipt URL does not borrow another department", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
+    const app = await mountDepartments("/venue-operations/department/gone/view/receipt", [
       "venue.configure",
     ]);
     expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
@@ -9899,7 +9870,7 @@ describe("mounted public department dialogs", () => {
     ).toBe("This department no longer exists.");
   });
   it("the department dialog and Receipts tab need venue permission", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", ["venue.view"]);
+    const app = await mountDepartments("/venue-operations/department/d1", ["venue.view"]);
     expect(find(app, "department-settings")).toBeNull();
     expect(find(app, "dashboard-overview-screen")).not.toBeNull();
     expect(find(app, 'button[data-key="receipt"]')).toBeNull();
@@ -9908,7 +9879,7 @@ describe("mounted public department dialogs", () => {
   it.each([["venue.view"], ["booking.manage"], []])(
     "a Receipt deep link cannot bypass venue permission: %j",
     async (...permissions) => {
-      const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
+      const app = await mountDepartments("/venue-operations/department/d1/view/receipt", [
         "venue.view",
         ...permissions,
       ]);
@@ -9919,15 +9890,15 @@ describe("mounted public department dialogs", () => {
     },
   );
   it("the real sidebar returns to the bare list after accepting the department draft", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const app = await mountDepartments("/venue-operations/department/d1");
     const box = await draft(app);
     navItem(app, "venue-operations")!.click();
     await choose(app, "keep");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(box.value).toBe("Draft restaurant");
     navItem(app, "venue-operations")!.click();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     expect(find(app, "department-edit-dialog")).toBeNull();
     expect(find(app, "departments-list")).not.toBeNull();
     expect(box.value).toBe("Restaurant");
@@ -9940,68 +9911,68 @@ describe("mounted public department dialogs", () => {
     find(app, '[data-test="open-zone-name-z2"]')!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
+      .toBe("/venue-operations/department/d1/view/zones/zone/z2");
     expect(push).toHaveBeenCalledTimes(1);
     expect(replace).not.toHaveBeenCalled();
     const editor = find(app, "zone-edit-dialog")!;
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     expect(editor.isConnected).toBe(false);
     expect(replace).toHaveBeenCalledTimes(1);
     find(app, '[data-test="open-department-name-d1"]')!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
     expect(push).toHaveBeenCalledTimes(2);
     expect(replace).toHaveBeenCalledTimes(1);
     expect(find(app, "department-settings")).not.toBeNull();
   });
   it("a deleted department deep link keeps its address and parent without editable fields", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d2");
+    const app = await mountDepartments("/venue-operations/department/d2");
     await expect.poll(() => find(app, "venue-departments-shell")).not.toBeNull();
     expect(
       find(app, "venue-departments-shell")!
         .shadowRoot!.querySelector('[role="status"]')!
         .textContent!.trim(),
     ).toBe("This department no longer exists.");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d2");
+    expect(location.pathname).toBe("/venue-operations/department/d2");
     expect(find(app, 'wt-input[name="name"]')).toBeNull();
     expect(find(app, "department-settings")).toBeNull();
     expect(find(app, '[data-test="enable-department"]')).toBeNull();
     expect(find(app, "departments-list")).not.toBeNull();
     expect(find(app, '[data-test="save-editor"]')).toBeNull();
     navItem(app, "venue-operations")!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     await expect.poll(() => find(app, "departments-list")).not.toBeNull();
   });
   it("an unknown department keeps its address and returns through the real parent link", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/gone");
+    const app = await mountDepartments("/venue-operations/department/gone");
     await expect.poll(() => find(app, "venue-departments-shell")).not.toBeNull();
     const shell = find(app, "venue-departments-shell")!;
     expect(shell.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe(
       "This department no longer exists.",
     );
-    expect(location.pathname).toBe("/manage/venue-operations/department/gone");
+    expect(location.pathname).toBe("/venue-operations/department/gone");
     expect(find(app, "department-settings")).toBeNull();
     navItem(app, "venue-operations")!.click();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     await expect.poll(() => find(app, "departments-list")).not.toBeNull();
   });
   it.each(["departments", "zones", "status", "menus", "kitchen"])(
     "a saved %s bookmark opens the list without an extra history entry",
     async (view) => {
       const push = vi.spyOn(history, "pushState");
-      const app = await mountDepartments(`/manage/venue-operations/view/${view}?source=bookmark`);
+      const app = await mountDepartments(`/venue-operations/view/${view}?source=bookmark`);
       await expect.poll(() => find(app, "departments-list")).not.toBeNull();
-      expect(location.pathname).toBe("/manage/venue-operations");
+      expect(location.pathname).toBe("/venue-operations");
       expect(location.search).toBe("?source=bookmark");
       expect(push).not.toHaveBeenCalled();
     },
   );
 
-  const periodsPage = "/manage/periods";
+  const periodsPage = "/periods";
   const periodsList = (app: DashboardApp) => find(app, "periods-list") ?? null;
 
   it("the real Set up periods link keeps Settings edits until Discard and then pushes the Periods page", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    const app = await mountDepartments("/venue-operations/department/d1", undefined, true);
     const box = await draft(app);
     const link = find(app, '[part="setup-issue"] a') as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe(periodsPage);
@@ -10009,7 +9980,7 @@ describe("mounted public department dialogs", () => {
     link.click();
     await choose(app, "keep");
     expect(pushed).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
     expect(box.value).toBe("Draft restaurant");
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
@@ -10025,7 +9996,7 @@ describe("mounted public department dialogs", () => {
   });
 
   it("the real Set up periods link has its own history entry and returns through Back and Forward", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
+    const app = await mountDepartments("/venue-operations/department/d1", undefined, true);
     await expect.poll(() => find(app, '[part="setup-issue"] a')).not.toBeNull();
     const pushed = vi.spyOn(history, "pushState");
     const pushedPaths = () =>
@@ -10035,13 +10006,13 @@ describe("mounted public department dialogs", () => {
     await expect.poll(() => periodsList(app)).not.toBeNull();
     expect(pushedPaths()).toEqual([periodsPage]);
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
     await expect.poll(() => find(app, "department-settings")).not.toBeNull();
     expect(pushedPaths()).toEqual([periodsPage]);
     const box = await draft(app);
     history.forward();
     await choose(app, "keep");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
     expect(pushedPaths()).toEqual([periodsPage]);
     expect(box.value).toBe("Draft restaurant");
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
@@ -10055,15 +10026,15 @@ describe("mounted public department dialogs", () => {
   });
 
   it("the Periods page address opens its module-contributed page", async () => {
-    const app = await mountDepartments("/manage/periods");
+    const app = await mountDepartments("/periods");
     await expect.poll(() => find(app, "periods-list")).not.toBeNull();
     expect(find(app, "[data-test=nav-periods]")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/periods");
+    expect(location.pathname).toBe("/periods");
   });
 });
 
 it("A182 old canvas URL falls back to the role home without a canvas navigation entry", async () => {
-  history.replaceState(null, "", "/manage/canvas-editor");
+  history.replaceState(null, "", "/canvas-editor");
   const api = stubApi();
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
@@ -10137,7 +10108,7 @@ const ordersScreen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboa
 it.each([false, true])(
   "passes the personal-data export permission to the Orders screen (%s)",
   async (canExport) => {
-    history.replaceState(null, "", "/manage/orders");
+    history.replaceState(null, "", "/orders");
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       getMe: vi.fn().mockResolvedValue({
@@ -10156,7 +10127,7 @@ it.each([false, true])(
 );
 
 it("signs out when the Orders screen asks for an administrator", async () => {
-  history.replaceState(null, "", "/manage/orders");
+  history.replaceState(null, "", "/orders");
   const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
@@ -10174,7 +10145,7 @@ it("signs out when the Orders screen asks for an administrator", async () => {
 const backupScreen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-backup-screen");
 
 it("signs out when the Backups screen asks for an administrator", async () => {
-  history.replaceState(null, "", "/manage/backup");
+  history.replaceState(null, "", "/backup");
   const api = stubApi();
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
@@ -10192,7 +10163,7 @@ it("signs out when the Backups screen asks for an administrator", async () => {
 it.each(["demo", "live"] as const)(
   "hands the Backups screen the box's setup choice from /me (%s)",
   async (intent) => {
-    history.replaceState(null, "", "/manage/backup");
+    history.replaceState(null, "", "/backup");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, onboardingIntent: intent }),
     });
@@ -10297,7 +10268,7 @@ describe("the Users screen's administrator sign-in, pressed for real", () => {
 
 describe("startup zone repair", () => {
   it.each(["staff", "manager"])("mounts %s repair before ordinary loaders", async (role) => {
-    history.replaceState(null, "", "/manage/sales");
+    history.replaceState(null, "", "/sales");
     const start = vi.fn();
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -10384,7 +10355,7 @@ it("retains repair on browser history changes without mounting ordinary screens"
   await expect
     .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
     .not.toBeNull();
-  history.pushState(null, "", "/manage/sales");
+  history.pushState(null, "", "/sales");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(el.shadowRoot!.querySelector("dashboard-venue-zone-repair")).not.toBeNull();
@@ -10564,7 +10535,7 @@ describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => 
 it.each([false, true])(
   "passes administrator access to profile mail recovery (%s)",
   async (admin) => {
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     const api = stubApi({
       getMe: vi
         .fn()
@@ -10580,7 +10551,7 @@ it.each([false, true])(
 );
 
 it("profile mail recovery signs out through the leave coordinator", async () => {
-  history.replaceState(null, "", "/manage/profile");
+  history.replaceState(null, "", "/profile");
   const api = stubApi({ getProfile: vi.fn().mockResolvedValue(ownProfile) });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
@@ -10717,7 +10688,7 @@ describe("dashboard-app: About Waitron", () => {
 it.each([false, true])(
   "opens Access roles only for holders of staff permission management (%s)",
   async (allowed) => {
-    history.replaceState(null, "", "/manage/access-roles");
+    history.replaceState(null, "", "/access-roles");
     const permissions = allowed ? ["venue.view", "person.admin"] : ["venue.view"];
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

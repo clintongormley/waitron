@@ -67,7 +67,7 @@ function forgetViews() {
 
 beforeEach(() => {
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage/alerts");
+  history.replaceState(null, "", "/alerts");
   forgetViews();
 });
 afterEach(() => {
@@ -84,7 +84,7 @@ describe("dashboard-alerts-screen", () => {
     expect(rows(el, "open-alerts-table")[0]!.textContent).toContain(
       "A card refund of €12.50 has been waiting",
     );
-    expect(location.pathname).toBe("/manage/alerts/view/open");
+    expect(location.pathname).toBe("/alerts/view/open");
   });
 
   it("never breaks a written time across two lines", async () => {
@@ -222,7 +222,7 @@ describe("dashboard-alerts-screen", () => {
     )!;
     await userEvent.click(handledTab);
     await flush(el);
-    expect(location.pathname).toBe("/manage/alerts/view/handled");
+    expect(location.pathname).toBe("/alerts/view/handled");
     const text = rows(el, "handled-alerts-table")[0]!.textContent!;
     expect(text).toContain("Marta");
   });
@@ -262,7 +262,7 @@ describe("dashboard-alerts-screen", () => {
   });
 
   it("opens on the Handled tab from the URL", async () => {
-    history.replaceState(null, "", "/manage/alerts/view/handled");
+    history.replaceState(null, "", "/alerts/view/handled");
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("handled");
@@ -386,13 +386,13 @@ describe("dashboard-alerts-screen", () => {
   });
 
   it("shows the Open tab for an unknown view and corrects the URL in place", async () => {
-    history.replaceState(null, "", "/manage/alerts/view/bogus");
+    history.replaceState(null, "", "/alerts/view/bogus");
     const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
-    expect(location.pathname).toBe("/manage/alerts/view/open");
+    expect(location.pathname).toBe("/alerts/view/open");
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -406,7 +406,7 @@ describe("dashboard-alerts-screen", () => {
         .mockRejectedValueOnce({ code: "server.internal" })
         .mockReturnValue(new Promise(() => {})),
     });
-    history.replaceState(null, "", "/manage/alerts/view/handled");
+    history.replaceState(null, "", "/alerts/view/handled");
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")).not.toBeNull();
@@ -418,7 +418,7 @@ describe("dashboard-alerts-screen", () => {
 
   it("shows the loading message on Handled until its own read arrives", async () => {
     const api = stubApi({ listHandledAlerts: vi.fn().mockReturnValue(new Promise(() => {})) });
-    history.replaceState(null, "", "/manage/alerts/view/handled");
+    history.replaceState(null, "", "/alerts/view/handled");
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     expect(rows(el, "open-alerts-table")).toHaveLength(2);
@@ -523,7 +523,7 @@ describe("dashboard-alerts-screen", () => {
     const api = stubApi({
       listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [anonymous] }),
     });
-    history.replaceState(null, "", "/manage/alerts/view/handled");
+    history.replaceState(null, "", "/alerts/view/handled");
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     const cells = rows(el, "handled-alerts-table")[0]!.querySelectorAll("td");
@@ -538,7 +538,7 @@ describe("dashboard-alerts-screen", () => {
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
-    expect(location.pathname).toBe("/manage/alerts/view/open");
+    expect(location.pathname).toBe("/alerts/view/open");
   });
 });
 

@@ -7,7 +7,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it("keeps the ordinary dashboard entry on the authenticated shell", async () => {
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
   const app = document.createElement("div");
   app.id = "app";
   document.body.append(app);

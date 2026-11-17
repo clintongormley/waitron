@@ -35,7 +35,7 @@ function api(readers: ReaderRow[] = [reader], overrides: Partial<DashboardApi> =
 
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/payments");
+  history.replaceState(null, "", "/payments");
 });
 afterEach(() => {
   cleanupWidgets();
@@ -64,7 +64,7 @@ describe("Card payments reader tools", () => {
       expect(el.shadowRoot!.querySelector("[data-test=refresh-readers]")).not.toBeNull();
       expect(
         el.shadowRoot!.querySelector("[data-test=configure-providers]")?.getAttribute("href"),
-      ).toBe("/manage/modules/view/card-providers/state/all");
+      ).toBe("/modules/view/card-providers/state/all");
       expect(el.shadowRoot!.querySelector("[data-test=add-reader]")).toBeNull();
     },
   );
@@ -180,7 +180,7 @@ it("asks which connected provider to discover and keeps provider setup in that c
   expect(client.availableReaders).not.toHaveBeenCalled();
   expect(choice.querySelector("[data-test=add-reader-other]")).toBeNull();
   expect(choice.querySelector("a")?.getAttribute("href")).toBe(
-    "/manage/modules/view/card-providers/state/all",
+    "/modules/view/card-providers/state/all",
   );
   choice.querySelector<HTMLElement>("[data-test=add-reader-zeta]")!.click();
   await vi.waitFor(() => expect(root.querySelector("[data-test=reader-discovery]")).not.toBeNull());

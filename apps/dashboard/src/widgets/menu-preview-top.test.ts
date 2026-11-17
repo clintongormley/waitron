@@ -69,8 +69,8 @@ it("names every includer and links to its Preview", async () => {
     "Lunch and Terrace include this menu. They keep their live version until each of them is published.",
   );
   expect([...note!.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
-    "/manage/menus/menu/lunch/view/preview",
-    "/manage/menus/menu/terrace/view/preview",
+    "/menus/menu/lunch/view/preview",
+    "/menus/menu/terrace/view/preview",
   ]);
 });
 it.each([1, 2])(
@@ -152,9 +152,7 @@ it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
     );
     expect(prevented).toBe(false);
     expect(heard).not.toHaveBeenCalled();
-    expect(link.getAttribute("href")).toBe(
-      "/manage/menus/menu/menu-lunch/view/prices/filter/clashes",
-    );
+    expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/prices/filter/clashes");
   },
 );
 

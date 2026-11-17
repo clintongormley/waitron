@@ -23,7 +23,7 @@ it.each(["en-GB", "es-ES"])("offers permission help and role-page links (%s)", a
     [...permissions, "venue.view"],
     locale,
   );
-  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/staff-roles"]');
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/staff-roles"]');
   expect(link?.textContent?.trim()).toBe(
     locale === "es-ES"
       ? es["access_roles.job_roles"]
@@ -77,11 +77,11 @@ it.each([
 });
 it("does not offer Job roles when the viewer cannot open it", async () => {
   const { el } = await mount({}, ["person.admin"]);
-  expect(el.shadowRoot!.querySelector('a[href="/manage/staff-roles"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('a[href="/staff-roles"]')).toBeNull();
 });
 it.each(["venue.view", "schedule.manage"])("links to Job roles with %s", async (permission) => {
   const { el } = await mount({}, ["person.admin", permission]);
-  expect(el.shadowRoot!.querySelector('a[href="/manage/staff-roles"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('a[href="/staff-roles"]')).not.toBeNull();
 });
 const locale = currentLocale();
 afterEach(() => {

@@ -409,7 +409,7 @@ describe("startup zone admission", () => {
       const till = await fetch(`${url}/till/`, { headers: { accept: "text/html" } });
       expect(till.status).toBe(409);
       expect((await till.json()).error.code).toBe("venue.time_zone_not_ready");
-      const asset = await fetch(`${url}/manage/account?token=synthetic`, {
+      const asset = await fetch(`${url}/account?token=synthetic`, {
         headers: { Accept: "text/html" },
       });
       expect(asset.status).toBe(200);
@@ -700,7 +700,7 @@ describe("startup zone admission", () => {
       ).toBe(202);
       await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
       expect(smtp.messages[0]).toContain("UTC");
-      expect(smtp.messages[0]).toContain("/manage/account");
+      expect(smtp.messages[0]).toContain("/account");
       expect(smtp.messages[0]).not.toContain("Invalid/Zone");
       noDuties();
     } finally {

@@ -416,7 +416,7 @@ describe.each(["light", "dark"] as const)(
   (theme) => {
     it.each(["en", "es"] as const)("opens a retired address on Stations in %s", async (locale) => {
       setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
+      history.replaceState(null, "", "/prep-stations/view/times/station/grill");
       const container = await mountThemed("<div></div>", theme);
       const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
       el.api = {
@@ -429,7 +429,7 @@ describe.each(["light", "dark"] as const)(
         "stations",
         "routing",
       ]);
-      expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+      expect(location.pathname).toBe("/prep-stations/view/stations");
       await expectNoA11yViolations(container);
     });
   },

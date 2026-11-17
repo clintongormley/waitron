@@ -33,7 +33,7 @@ afterEach(() => {
 
 async function mount() {
   setLocale("en");
-  history.replaceState(null, "", "/manage/venue-operations/department/d1");
+  history.replaceState(null, "", "/venue-operations/department/d1");
   const stored: VenueServiceView = structuredClone(zonesModel);
   stored.departments = [stored.departments[0]!];
   stored.zones = [stored.zones[0]!, stored.zones[1]!];

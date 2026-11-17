@@ -247,7 +247,7 @@ it("shows schedule conflicts and keeps Save disabled", async () => {
   await click(el, "change");
   await change(el, "dayCutover", "03:00");
   expect(q(el, "[data-test=conflicts]")?.textContent).toContain("1");
-  expect(q(el, "[data-test=conflicts] a")?.getAttribute("href")).toBe("/manage/opening-hours");
+  expect(q(el, "[data-test=conflicts] a")?.getAttribute("href")).toBe("/opening-hours");
   expect(save(el).disabled).toBe(true);
 });
 it("offers only Change start while a change waits, and opens the dialog from it", async () => {

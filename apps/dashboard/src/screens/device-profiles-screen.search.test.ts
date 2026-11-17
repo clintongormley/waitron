@@ -36,7 +36,7 @@ it.each(["en-GB", "es-ES"])(
           locale,
           profiles: [profile],
           kitchen: [{ profileId: "dp1", screens }],
-          path: "/manage/device-profiles/profile/dp1",
+          path: "/device-profiles/profile/dp1",
           respond(path) {
             const answer =
               path === "/management-api/printers" && equipment === "full"

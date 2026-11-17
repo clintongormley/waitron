@@ -144,7 +144,7 @@ it("keeps a dirty schedule draft across the Hours tab and still protects an actu
   await screen.updateComplete;
   const tabs = screen.shadowRoot!.querySelector("wt-tabs")!;
   await userEvent.click(tabs.shadowRoot!.querySelector('[data-key="hours"]')!);
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule/view/hours");
+  await expect.poll(() => location.pathname).toBe("/my-schedule/view/hours");
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).not.toBe(true);
   expect(screen.shadowRoot!.querySelector('[data-test="abs-note"]')).toBe(note);
   expect((note as unknown as { value: string }).value).toBe("Family visit");
@@ -153,12 +153,7 @@ it("keeps a dirty schedule draft across the Hours tab and still protects an actu
 });
 
 it("lets a supervisor open their own Hours without workforce.correct", async () => {
-  const { el, requests } = await mount(
-    ["workforce"],
-    [],
-    "supervisor",
-    "/manage/my-schedule/view/hours",
-  );
+  const { el, requests } = await mount(["workforce"], [], "supervisor", "/my-schedule/view/hours");
   await expect
     .poll(() => el.shadowRoot!.querySelector("dashboard-my-schedule-screen"))
     .not.toBeNull();
@@ -196,7 +191,7 @@ it("Back from Hours protects a dirty own request while retaining the hidden sche
     }),
   );
   await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(false);
-  expect(location.pathname).toBe("/manage/my-schedule/view/hours");
+  expect(location.pathname).toBe("/my-schedule/view/hours");
   expect(reason.value).toBe("Worked later");
   expect(editor.open).toBe(true);
   history.back();
@@ -208,7 +203,7 @@ it("Back from Hours protects a dirty own request while retaining the hidden sche
       composed: true,
     }),
   );
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  await expect.poll(() => location.pathname).toBe("/my-schedule");
   await panel.updateComplete;
   expect(panel.shadowRoot!.querySelector("dashboard-hours-record")).toBeNull();
   expect(screen.shadowRoot!.querySelector('[data-test="abs-note"]')).not.toBeNull();
@@ -219,7 +214,7 @@ it("opens contributed manager Hours directly while preserving the Time correctio
     ["workforce"],
     ["workforce.correct"],
     "supervisor",
-    "/manage/hours",
+    "/hours",
   );
   const nav = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-hours]");
   expect(nav).toBeTruthy();
@@ -231,7 +226,7 @@ it("opens contributed manager Hours directly while preserving the Time correctio
           ?.shadowRoot?.querySelector("dashboard-hours-record")?.view,
     )
     .toBeTruthy();
-  expect(location.pathname).toBe("/manage/hours");
+  expect(location.pathname).toBe("/hours");
   expect(requests.some((path) => path.includes("/attendance/hours?"))).toBe(true);
   expect(requests.some((path) => path.endsWith("/attendance/queue"))).toBe(false);
   setLocale("es-ES");
@@ -242,7 +237,7 @@ it("opens contributed manager Hours directly while preserving the Time correctio
   await userEvent.click(
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-time-corrections]")!,
   );
-  await expect.poll(() => location.pathname).toBe("/manage/time-corrections");
+  await expect.poll(() => location.pathname).toBe("/time-corrections");
   await expect.poll(() => requests.some((path) => path.endsWith("/attendance/queue"))).toBe(true);
   expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")?.mode).toBe(
     "corrections",
@@ -254,7 +249,7 @@ it.each([
 ])(
   "hides manager Hours without enabled workforce and authority: %j / %j",
   async (modules, permissions) => {
-    const { el, requests } = await mount(modules, permissions, "supervisor", "/manage/hours");
+    const { el, requests } = await mount(modules, permissions, "supervisor", "/hours");
     expect(el.shadowRoot!.querySelector("[data-test=nav-hours]")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")).toBeNull();
     expect(requests).toEqual([]);
@@ -268,7 +263,7 @@ it.each(["own", "manager"] as const)(
       ["workforce", "workforce-es"],
       ["workforce.correct", "report.export"],
       mode === "own" ? "staff" : "manager",
-      mode === "own" ? "/manage/my-schedule" : "/",
+      mode === "own" ? "/my-schedule" : "/",
     );
     if (mode === "own") {
       const schedule = el.shadowRoot!.querySelector("dashboard-my-schedule-screen")!;
@@ -317,9 +312,7 @@ it.each(["own", "manager"] as const)(
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
     choice("keep");
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBeFalsy();
-    expect(location.pathname).toBe(
-      mode === "own" ? "/manage/my-schedule/view/hours" : "/manage/hours",
-    );
+    expect(location.pathname).toBe(mode === "own" ? "/my-schedule/view/hours" : "/hours");
     expect(field.value).toBe("2020-01-01");
     el.remove();
     await dialog.updateComplete;

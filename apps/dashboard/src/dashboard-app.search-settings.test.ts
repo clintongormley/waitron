@@ -58,7 +58,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
 }));
 const row = (
   id: string,
-  path = `/manage/venue-operations/department/${id}`,
+  path = `/venue-operations/department/${id}`,
 ): DashboardSettingCandidate => ({ id, label: id === "bar" ? "Bar" : "Restaurant", path });
 const originalViewport: [number, number] = [window.innerWidth, window.innerHeight];
 beforeEach(async () => {
@@ -73,7 +73,7 @@ afterEach(async () => {
   await page.viewport(...originalViewport);
 });
 async function mount() {
-  const { app } = await mountReceiptApp({ path: "/manage/overview" });
+  const { app } = await mountReceiptApp({ path: "/overview" });
   await searchSettings(app, "reminder");
   return app;
 }
@@ -87,14 +87,14 @@ it("one candidate opens directly using the mounted module context and clears the
   const app = await mount();
   expect(searchResult(app, "reminder")!.textContent).toContain("Departments / Service");
   await open(app);
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar");
   expect(state.resolve.mock.calls[0]![0]).toBe(state.contexts[0]);
   expect(searchBox(app).value).toBe("");
 });
 it("chooses among all rows, starts quiet, re-resolves identity and opens its refreshed path with keyboard", async () => {
   state.resolve
     .mockResolvedValueOnce([row("bar"), row("restaurant")])
-    .mockResolvedValue([row("bar", "/manage/venue-operations/department/bar/view/service")]);
+    .mockResolvedValue([row("bar", "/venue-operations/department/bar/view/service")]);
   await page.viewport(390, 800);
   const app = await mount();
   searchBox(app).focus();
@@ -111,9 +111,7 @@ it("chooses among all rows, starts quiet, re-resolves identity and opens its ref
     .poll(() => (action(app, "open") as HTMLElementTagNameMap["wt-button"]).disabled)
     .toBe(false);
   await userEvent.click(action(app, "open"));
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/bar/view/service");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar/view/service");
   expect(state.resolve).toHaveBeenCalledTimes(2);
 });
 it("no candidates explains, and Cancel retains query and address", async () => {
@@ -125,7 +123,7 @@ it("no candidates explains, and Cancel retains query and address", async () => {
   await cancelSettingSearch(app);
   await expect.poll(() => settingChooser(app)).toBeNull();
   expect(searchBox(app).value).toBe("reminder");
-  expect(location.pathname).toBe("/manage/overview");
+  expect(location.pathname).toBe("/overview");
 });
 it("failed reads offer Retry and can then open", async () => {
   state.resolve.mockRejectedValueOnce(new Error("Offline")).mockResolvedValue([row("bar")]);
@@ -133,7 +131,7 @@ it("failed reads offer Retry and can then open", async () => {
   await open(app);
   await expect.poll(() => settingChooser(app)?.textContent).toContain("Retry");
   await userEvent.click(action(app, "retry"));
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/bar");
 });
 it.each(["vanished", "invalid"])(
   "explains a %s chosen candidate without opening a substitute",
@@ -143,7 +141,7 @@ it.each(["vanished", "invalid"])(
       .mockResolvedValue(
         mode === "vanished"
           ? [row("restaurant")]
-          : [row("bar", "https://outside.example/manage/venue-operations")],
+          : [row("bar", "https://outside.example/venue-operations")],
       );
     const app = await mount();
     await open(app);
@@ -151,7 +149,7 @@ it.each(["vanished", "invalid"])(
     await chooseSettingRow(app, "bar");
     await userEvent.click(action(app, "open"));
     await expect.poll(() => settingChooser(app)?.textContent).toContain("no longer available");
-    expect(location.pathname).toBe("/manage/overview");
+    expect(location.pathname).toBe("/overview");
     expect(searchBox(app).value).toBe("reminder");
   },
 );
@@ -164,7 +162,7 @@ it.each(["cancel", "new activation", "session exit", "disconnect", "back"])(
     });
     state.resolve.mockReturnValueOnce(pending).mockResolvedValue([]);
     const app = await mount();
-    if (mode === "back") await navigationGuardFor(window)!.write("/manage/venue-operations");
+    if (mode === "back") await navigationGuardFor(window)!.write("/venue-operations");
     await open(app);
     await expect.poll(() => settingChooser(app)).toBeTruthy();
     if (mode === "cancel") await cancelSettingSearch(app);
@@ -173,7 +171,7 @@ it.each(["cancel", "new activation", "session exit", "disconnect", "back"])(
       await expect.poll(() => settingChooser(app)?.textContent).toContain("No available");
     } else if (mode === "back") {
       history.back();
-      await expect.poll(() => location.pathname).toBe("/manage/overview");
+      await expect.poll(() => location.pathname).toBe("/overview");
     } else if (mode === "session exit")
       window.dispatchEvent(
         new CustomEvent("waitron-session-invalid", {
@@ -202,7 +200,7 @@ it("a changed permission removes a pending setting and refuses its answer", asyn
   );
   let permissions = ["venue.configure", "venue.view"];
   const { app } = await mountReceiptApp({
-    path: "/manage/overview",
+    path: "/overview",
     respond: (path) =>
       path === "/management-api/session/me"
         ? Promise.resolve(
@@ -224,5 +222,5 @@ it("a changed permission removes a pending setting and refuses its answer", asyn
   finish([row("bar")]);
   await app.updateComplete;
   await expect.poll(() => settingChooser(app)?.textContent).toContain("no longer available");
-  expect(location.pathname).toBe("/manage/overview");
+  expect(location.pathname).toBe("/overview");
 });

@@ -32,7 +32,7 @@ it.each(["en-GB", "es-ES"])(
   async (locale) => {
     const { app } = await mountReceiptApp({
       locale,
-      path: "/manage/venue-operations",
+      path: "/venue-operations",
       respond: (path) =>
         path === "/management-api/venue-service"
           ? Promise.resolve(
@@ -51,20 +51,20 @@ it.each(["en-GB", "es-ES"])(
     await expect
       .poll(() => departmentForm(app)?.shadowRoot?.querySelector("[name=course-mains-reminder]"))
       .toBeTruthy();
-    expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/tables");
+    expect(location.pathname).toBe("/venue-operations/department/bar/view/tables");
     expect(searchBox(app).value).toBe("");
     expect(
       pushed.mock.calls.some((call) => String(call[2]).includes("/department/bar/view/tables")),
     ).toBe(true);
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+    await expect.poll(() => location.pathname).toBe("/venue-operations");
     await expect.poll(() => departmentDialog(app)).toBeNull();
   },
 );
 it("retains the real same-department draft and protects a different department with Keep/Discard", async () => {
   await page.viewport(390, 800);
   const { app } = await mountReceiptApp({
-    path: "/manage/venue-operations/department/bar",
+    path: "/venue-operations/department/bar",
     departments: [
       { id: "bar", name: "Bar" },
       { id: "restaurant", name: "Restaurant" },
@@ -110,7 +110,7 @@ it("retains the real same-department draft and protects a different department w
     );
     await expect.poll(() => question.open).toBe(false);
     if (choice === "keep") {
-      expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/tables");
+      expect(location.pathname).toBe("/venue-operations/department/bar/view/tables");
       expect(name().value).toBe("Edited bar");
       expect(searchBox(app).value).toBe("remind");
       expect(app.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(
@@ -120,7 +120,7 @@ it("retains the real same-department draft and protects a different department w
   }
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/restaurant/view/tables");
+    .toBe("/venue-operations/department/restaurant/view/tables");
   expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   expect(searchBox(app).value).toBe("");
   expect(app.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);
@@ -128,18 +128,18 @@ it("retains the real same-department draft and protects a different department w
 
 it("Back closes the real chooser when leaving its containing page", async () => {
   const { app } = await mountReceiptApp({
-    path: "/manage/overview",
+    path: "/overview",
     departments: [
       { id: "bar", name: "Bar" },
       { id: "restaurant", name: "Restaurant" },
     ],
   });
-  await navigationGuardFor(window)!.write("/manage/venue-operations");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  await navigationGuardFor(window)!.write("/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/venue-operations");
   await searchSettings(app, "remind");
   await userEvent.click(searchResult(app, reminder)!);
   await expect.poll(() => settingChooser(app)?.querySelector("wt-combobox")).toBeTruthy();
   history.back();
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   await expect.poll(() => settingChooser(app)).toBeNull();
 });

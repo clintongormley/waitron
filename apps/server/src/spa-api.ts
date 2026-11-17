@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, isDashboardPath } from "@waitron/shared";
 import type { Context, Hono } from "hono";
 import { getMimeType } from "hono/utils/mime";
 import type { Logger } from "./logger.js";
@@ -14,10 +14,9 @@ import "./errors.js";
 export interface SpaDeps {
   /** Absolute path to the built SPA directory (holds index.html + assets/). */
   root: string;
-  /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/manage" (no trailing slash). */
+  /** URL prefix without a trailing slash; "" for the origin root. */
   basePath: string;
-  /** Absolute path prefix for browser navigation, e.g. /till/tabs or /manage. */
-  navigationPath?: string;
+  navigationPath?: string | ((path: string) => boolean);
 }
 
 /** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
@@ -67,7 +66,9 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
     const firstSegment = relPath.split("/")[1] ?? "";
     const isNavigation =
       navigation !== undefined &&
-      (c.req.path === navigation || c.req.path.startsWith(`${navigation}/`)) &&
+      (typeof navigation === "function"
+        ? navigation(c.req.path)
+        : c.req.path === navigation || c.req.path.startsWith(`${navigation}/`)) &&
       firstSegment !== "assets" &&
       !firstSegment.includes(".") &&
       (c.req.header("Accept") ?? "").includes("text/html");
@@ -103,14 +104,12 @@ export function mountBuiltApps(
 ): void {
   if (apps.tillAppDir !== undefined)
     mountSpa(app, { root: apps.tillAppDir, basePath: "/till", navigationPath: "/till/tabs" }, log);
-  if (apps.dashboardAppDir !== undefined) {
+  if (apps.dashboardAppDir !== undefined)
     mountSpa(
       app,
-      { root: apps.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
+      { root: apps.dashboardAppDir, basePath: "", navigationPath: isDashboardPath },
       log,
     );
-    mountSpa(app, { root: apps.dashboardAppDir, basePath: "" }, log);
-  }
 }
 
 /**

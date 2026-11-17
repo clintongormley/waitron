@@ -58,7 +58,7 @@ describe("destinationMatches", () => {
       label: "Staffing",
       pageLabel: "Calendar",
       heading: "Operations",
-      href: "/manage/opening-hours/view/staffing",
+      href: "/opening-hours/view/staffing",
     },
     {
       id: "rota",
@@ -66,7 +66,7 @@ describe("destinationMatches", () => {
       label: "Rota",
       pageLabel: "Calendar",
       heading: "Operations",
-      href: "/manage/opening-hours/view/rota",
+      href: "/opening-hours/view/rota",
     },
     {
       id: "routes",
@@ -74,7 +74,7 @@ describe("destinationMatches", () => {
       label: "Routes",
       pageLabel: "Prep stations",
       heading: "Operations",
-      href: "/manage/prep-stations/view/routing",
+      href: "/prep-stations/view/routing",
     },
   ];
   it("finds inner labels and words split with their containing page", () => {
@@ -129,7 +129,7 @@ it("matches a setting's localized tab as location after own-label matches", () =
       label: "Servicio",
       pageLabel: "Otro",
       heading: "",
-      href: "/manage/other",
+      href: "/other",
     },
   ];
   expect(destinationMatches("servicio", items).map((x) => x.id)).toEqual(["service", "reminder"]);

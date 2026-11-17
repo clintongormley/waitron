@@ -1989,7 +1989,7 @@ describe("profile confirmation delivery messages", () => {
     await click(el, "save");
     expect(
       el.shadowRoot!.querySelector("[data-test=email-settings-link]")?.getAttribute("href"),
-    ).toBe("/manage/email");
+    ).toBe("/email");
     expect(el.shadowRoot!.querySelector("[data-test=email-admin-sign-in]")).toBeNull();
     const reference = document.createElement("span");
     reference.style.color = "var(--wt-color-primary-text)";

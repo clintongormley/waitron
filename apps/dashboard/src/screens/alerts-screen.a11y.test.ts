@@ -47,7 +47,7 @@ const settle = async (el: AlertsScreen) => {
 
 describe.each(["light", "dark"] as const)("dashboard-alerts-screen a11y (%s theme)", (theme) => {
   it("the Open tab with alerts", async () => {
-    history.replaceState(null, "", "/manage/alerts/view/open");
+    history.replaceState(null, "", "/alerts/view/open");
     const { el, host } = await mountWidget<AlertsScreen>(
       "dashboard-alerts-screen",
       { api: api(), canOpen: () => true },
@@ -58,7 +58,7 @@ describe.each(["light", "dark"] as const)("dashboard-alerts-screen a11y (%s them
   });
 
   it("the Handled tab", async () => {
-    history.replaceState(null, "", "/manage/alerts/view/handled");
+    history.replaceState(null, "", "/alerts/view/handled");
     const { el, host } = await mountWidget<AlertsScreen>(
       "dashboard-alerts-screen",
       { api: api() },

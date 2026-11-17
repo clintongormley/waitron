@@ -25,7 +25,7 @@ export function mountReaderApp(
 ) {
   const answers = readerResponses(options.readers);
   return mountReceiptApp({
-    path: "/manage/payments",
+    path: "/payments",
     permissions: ["hardware.manage"],
     modules: [],
     ...options,

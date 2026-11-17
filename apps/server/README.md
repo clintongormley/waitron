@@ -308,9 +308,9 @@ matching `cloud/staff.key` and `cloud/staff.crt` before startup. An unset or emp
 opens no staff listener. For the current container, put these values in its `trading.env`;
 Compose does not forward host `WAITRON_STAFF_*` variables. This does not configure a tunnel or connect the box to Cloud.
 
-The separate HTTPS listener serves `/manage`, its management API, the dashboard's box and backup
-API groups, theme and content-language reads, and help pages. Other routes return 404, as does a
-request for another origin. Requests through it are remote even when the gateway connects over
+The separate HTTPS listener serves dashboard pages at `/` and their root paths directly from the built app.
+It forwards the management API, the dashboard's box and backup API groups, theme and content-language
+reads, and help pages to the main app. Till and setup paths return 404, as does a request for another origin. Requests through it are remote even when the gateway connects over
 loopback. Use your usual password; enrol passkeys separately for the staff hostname. The staff roster
 requires a signed-in session through this entrance. Dashboard images are served read-only;
 membership, mirror-bundle and promotion operations stay off it. Sign-in bodies are limited to
@@ -410,7 +410,7 @@ server seals the connection URL under `email.smtp` and saves the sender address 
 settings document in the same transaction. Missing settings answer `setup.email_required`, naming
 `email`; malformed settings name the offending field. Demo refuses supplied settings,
 and development provisioning may omit them. You can enter these settings in the Prepare or Live wizard
-or, as an admin, on the dashboard's **System → Email** page (`/manage/email`). Managers can view
+or, as an admin, on the dashboard's **System → Email** page (`/email`). Managers can view
 the redacted settings there. The dashboard shows the server and sender
 without returning the saved password; you enter fresh credentials to change an authenticated
 gateway, or explicitly switch authentication off.

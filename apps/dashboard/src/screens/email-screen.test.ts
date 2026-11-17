@@ -36,7 +36,7 @@ function api(inbox: EmailInbox = LOCAL): DashboardApi {
       to: LOCAL.messages[0]!.to,
       subject: LOCAL.messages[0]!.subject,
       date: LOCAL.messages[0]!.createdAt,
-      text: `Open ${window.location.origin}/manage/account?token=secret`,
+      text: `Open ${window.location.origin}/account?token=secret`,
     }),
   } as unknown as DashboardApi;
 }
@@ -185,28 +185,24 @@ describe("email-screen message and inbox edge cases", () => {
   });
 
   it("offers no account link to another origin", async () => {
-    const el = await openFirst(
-      withBody("Open https://attacker.example/manage/account?token=secret"),
-    );
+    const el = await openFirst(withBody("Open https://attacker.example/account?token=secret"));
 
     expect(q(el, "[data-test=message-body]")?.textContent).toContain("attacker.example");
     expect(q(el, "[data-test=message-link]")).toBeNull();
   });
 
   it("offers no account link when the URL cannot be parsed", async () => {
-    const el = await openFirst(withBody("Open http://[not-a-host/manage"));
+    const el = await openFirst(withBody("Open http://[not-a-host/"));
 
-    expect(q(el, "[data-test=message-body]")?.textContent).toContain("http://[not-a-host/manage");
+    expect(q(el, "[data-test=message-body]")?.textContent).toContain("http://[not-a-host/");
     expect(q(el, "[data-test=message-link]")).toBeNull();
   });
 
   it("links the same-origin account URL itself", async () => {
-    const el = await openFirst(
-      withBody(`Open ${window.location.origin}/manage/account?token=abc now`),
-    );
+    const el = await openFirst(withBody(`Open ${window.location.origin}/account?token=abc now`));
 
     expect(q(el, "[data-test=message-link]")?.getAttribute("href")).toBe(
-      `${window.location.origin}/manage/account?token=abc`,
+      `${window.location.origin}/account?token=abc`,
     );
   });
 

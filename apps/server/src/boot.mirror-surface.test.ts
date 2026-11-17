@@ -241,7 +241,7 @@ function walkTargets(app: Hono): { method: string; path: string }[] {
       add("OPTIONS", path);
     }
   }
-  for (const path of ["/", "/manage", "/manage/staff", "/handover/assets/app.js"]) add("GET", path);
+  for (const path of ["/", "/devices", "/staff", "/handover/assets/app.js"]) add("GET", path);
   return [...targets.values()].sort((a, b) =>
     a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
   );
@@ -288,9 +288,9 @@ const OPEN_READS: Record<string, Answer> = {
   "/api/node/main": { status: 200 },
   [`/api/node/handover/${MADE_UP}`]: { status: 404, code: "handover.operation_unknown" },
   "/": { status: 200 },
-  "/manage": { status: 200 },
-  "/manage/staff": { status: 200 },
-  "/manage/x": { status: 200 },
+  "/devices": { status: 200 },
+  "/staff": { status: 200 },
+  "/x": { status: 200 },
   "/setup/trust": { status: 200 },
   "/setup/connection": { status: 200 },
   "/ca.crt": { status: 200 },
@@ -438,7 +438,7 @@ describe("a spare's network surface", () => {
         { error: { code: "spare.settings_invalid", params: { reason: "envelope" } } },
       ]);
       expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
-      for (const path of ["/", "/manage", "/manage/staff"])
+      for (const path of ["/", "/devices", "/staff"])
         expect(await (await app.request(path)).text()).toContain(
           "Restaurant screens are closed here",
         );
@@ -544,7 +544,7 @@ describe("a spare's network surface", () => {
     const { server, app, stateDir } = await boot("latch", { fromBox: { current: false } });
     try {
       await walk(app, (method, path) => LATCH_ANSWERS[`${method} ${path}`] ?? { status: 404 });
-      for (const path of ["/", "/manage", "/api/node", "/management-api/menus"])
+      for (const path of ["/", "/devices", "/api/node", "/management-api/menus"])
         expect((await app.request(path)).status).toBe(404);
       expect(await (await app.request("/api/box/status")).json()).toEqual({ adoption: "pending" });
     } finally {

@@ -121,7 +121,7 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     setLocale(locale);
     const address = vi
       .spyOn(document, "URL", "get")
-      .mockReturnValue("https://box.example/manage/box-status");
+      .mockReturnValue("https://box.example/box-status");
     onTestFinished(() => address.mockRestore());
     const api = Object.assign(stubApi(health()), {
       getBoxNetwork: vi.fn().mockResolvedValue({

@@ -262,7 +262,7 @@ test("rows mixing links and buttons in one parent still draw one box", async () 
   await mount(`<div>
   <wt-choice-row heading="Till" href="/"></wt-choice-row>
   <wt-choice-row heading="Prepare">Two</wt-choice-row>
-  <wt-choice-row heading="Email" href="/manage/email"></wt-choice-row>
+  <wt-choice-row heading="Email" href="/email"></wt-choice-row>
 </div>`);
   host.style.setProperty("--wt-radius-lg", "7px");
   const rows = [...host.querySelectorAll<WtChoiceRow>("wt-choice-row")];

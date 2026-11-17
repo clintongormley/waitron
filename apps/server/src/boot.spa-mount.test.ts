@@ -45,10 +45,10 @@ describe("SPA mounting alongside API routes (boot order)", () => {
   });
 
   it.each([
-    ["/manage/staff", "dashboard"],
-    ["/manage/devices", "dashboard"],
-    ["/manage/floor/view/plano/zone/z1", "dashboard"],
-    ["/manage/canvas-editor/canvas/c1/tab/counter", "dashboard"],
+    ["/staff", "dashboard"],
+    ["/devices", "dashboard"],
+    ["/floor/view/plano/zone/z1", "dashboard"],
+    ["/canvas-editor/canvas/c1/tab/counter", "dashboard"],
     ["/till/tabs/counter/menu/lunch", "till"],
     ["/till/tabs/floor/zone/~", "till"],
   ])("serves the app when loading a saved navigation path %s", async (path, marker) => {
@@ -62,8 +62,8 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     "/api/typo",
     "/management-api/typo",
     "/assets/missing.js",
-    "/manage/assets/missing.js",
-    "/manage/favicon.ico",
+    "/sw-probe.js",
+    "/favicon.ico",
     "/till/tabs-other/counter",
   ])("keeps missing APIs and files as 404s: %s", async (path) => {
     const res = await build().request(path, { headers: { Accept: "text/html" } });
@@ -79,7 +79,6 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     const app = build();
     expect(await (await app.request("/")).text()).toContain("dashboard");
     expect(await (await app.request("/till/")).text()).toBe("<html>till</html>");
-    expect(await (await app.request("/manage/")).text()).toContain("dashboard");
-    expect(await (await app.request("/manage/assets/d-1.js")).text()).toContain("dashboard asset");
+    expect(await (await app.request("/assets/d-1.js")).text()).toContain("dashboard asset");
   });
 });

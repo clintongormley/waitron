@@ -240,14 +240,14 @@ function chooseShown(el: Screen, value: string) {
 
 describe("the Week at its address", () => {
   it("/view/week/week/2026-12-09 draws that week from December's read", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    const { el, months } = await mount("/opening-hours/view/week/week/2026-12-09");
     expect(months).toEqual(["2026-12"]);
     expect(week(el)!.date).toBe("2026-12-09");
     expect(painter(el)).toBeNull();
   });
 
   it("says when the week's month cannot be read", async () => {
-    history.replaceState(null, "", "/manage/opening-hours/view/week/week/2026-12-09");
+    history.replaceState(null, "", "/opening-hours/view/week/week/2026-12-09");
     const request = (async (path: string) => {
       if (path === "/management-api/stations") return [];
       if (/\/opening-hours\/month\?/.test(path)) throw { code: "connection.failed" };
@@ -265,16 +265,16 @@ describe("the Week at its address", () => {
   });
 
   it("/view/week alone draws the week holding the venue's today", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/week");
+    const { el, months } = await mount("/opening-hours/view/week");
     expect(week(el)!.date).toBe("2026-12-02");
     expect(months).toEqual(["2026-11"]);
-    expect(location.pathname).toBe("/manage/opening-hours/view/week");
+    expect(location.pathname).toBe("/opening-hours/view/week");
   });
 
   it.each(["2026-13-40", "abc", "0099-12-28", "0100-01-15", "9999-01-15"])(
     "/view/week/week/%s draws the week holding the venue's today and leaves the address as written",
     async (value) => {
-      const address = `/manage/opening-hours/view/week/week/${value}`;
+      const address = `/opening-hours/view/week/week/${value}`;
       const pushed = pushedPaths();
       const replaced = vi.spyOn(history, "replaceState");
       const { el } = await mount(address);
@@ -290,48 +290,46 @@ describe("the Week at its address", () => {
   );
 
   it("a week across two years reads the month of its Monday", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/week/week/2027-01-02");
+    const { el, months } = await mount("/opening-hours/view/week/week/2027-01-02");
     expect(week(el)!.date).toBe("2027-01-02");
     await el.updateComplete;
     expect(months).toEqual(["2026-12"]);
   });
 
   it("› pushes the next week", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/week/2026-12-09");
     const pushed = pushedPaths();
     week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
     await expect.poll(() => week(el)!.date).toBe("2026-12-16");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2026-12-16"]);
+    expect(pushed()).toEqual(["/opening-hours/view/week/week/2026-12-16"]);
     history.back();
     await expect.poll(() => week(el)?.date).toBe("2026-12-09");
-    expect(location.pathname).toBe("/manage/opening-hours/view/week/week/2026-12-09");
+    expect(location.pathname).toBe("/opening-hours/view/week/week/2026-12-09");
   });
 
   it("Show writes the department and keeps the week", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/week/2026-12-09");
     chooseShown(el, "bar");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/bar/week/2026-12-09");
+      .toBe("/opening-hours/view/week/department/bar/week/2026-12-09");
     await expect.poll(() => week(el)!.departmentId).toBe("bar");
     chooseShown(el, "all");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/week/2026-12-09");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/week/week/2026-12-09");
     await expect.poll(() => week(el)!.departmentId).toBe("");
   });
 
   it("a department the read does not carry draws All departments", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/department/gone/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/department/gone/week/2026-12-09");
     await week(el)!.updateComplete;
     expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("all");
     expect(painter(el)).toBeNull();
   });
 
   it.each([
-    "/manage/opening-hours/view/week/department/d3",
-    "/manage/opening-hours/view/week/department/d1/zone/z1/season/spring",
-    "/manage/opening-hours/view/week/department/all",
+    "/opening-hours/view/week/department/d3",
+    "/opening-hours/view/week/department/d1/zone/z1/season/spring",
+    "/opening-hours/view/week/department/all",
   ])("an old Week address %s opens the Week", async (address) => {
     const pushed = pushedPaths();
     const { el } = await mount(address);
@@ -343,14 +341,12 @@ describe("the Week at its address", () => {
   it("/view/week?station=s1 drops the query and draws the Week", async () => {
     const pushed = pushedPaths();
     const replaced = vi.spyOn(history, "replaceState");
-    const { el } = await mount("/manage/opening-hours/view/week?station=s1");
+    const { el } = await mount("/opening-hours/view/week?station=s1");
     expect(location.search).toBe("");
     expect(
-      replaced.mock.calls.some((call) =>
-        String(call[2]).endsWith("/manage/opening-hours/view/week"),
-      ),
+      replaced.mock.calls.some((call) => String(call[2]).endsWith("/opening-hours/view/week")),
     ).toBe(true);
-    expect(location.pathname).toBe("/manage/opening-hours/view/week");
+    expect(location.pathname).toBe("/opening-hours/view/week");
     expect(pushed()).toEqual([]);
     expect(week(el)).not.toBeNull();
   });
@@ -359,24 +355,24 @@ describe("the Week at its address", () => {
 describe("at a phone's width", () => {
   it("› pushes the next day", async () => {
     await toPhone();
-    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/week/2026-12-09");
     await toPhone(el);
     await week(el)!.updateComplete;
     expect(dayNames(el)).toEqual(["2026-12-09"]);
     const pushed = pushedPaths();
     week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
     await expect.poll(() => week(el)!.date).toBe("2026-12-10");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2026-12-10"]);
+    expect(pushed()).toEqual(["/opening-hours/view/week/week/2026-12-10"]);
   });
 
   it("a day crossing into the next month's read reads it", async () => {
     await toPhone();
-    const { el, months } = await mount("/manage/opening-hours/view/week/week/2027-01-03");
+    const { el, months } = await mount("/opening-hours/view/week/week/2027-01-03");
     await toPhone(el);
     const pushed = pushedPaths();
     week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
     await expect.poll(() => week(el)!.date).toBe("2027-01-04");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2027-01-04"]);
+    expect(pushed()).toEqual(["/opening-hours/view/week/week/2027-01-04"]);
     await expect.poll(() => months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
     await week(el)!.updateComplete;
     expect(months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
@@ -400,7 +396,7 @@ describe("the Calendar switch from the Week", () => {
   };
 
   it("a module view's switch from the Week carries the week's month", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/week/2027-01-02", {
+    const { el } = await mount("/opening-hours/view/week/week/2027-01-02", {
       ctx: { request: (async () => undefined) as DashboardRequest },
       views: [{ view: staffing, canWrite: true }],
     });
@@ -409,14 +405,12 @@ describe("the Calendar switch from the Week", () => {
         "[data-test=calendar-switch] input[value=staffing]",
       )!,
     );
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/staffing/month/2026-12");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/month/2026-12");
   });
 
   it("a module view's switch from a phone's day carries that day's month", async () => {
     await toPhone();
-    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-01", {
+    const { el } = await mount("/opening-hours/view/week/week/2026-12-01", {
       ctx: { request: (async () => undefined) as DashboardRequest },
       views: [{ view: staffing, canWrite: true }],
     });
@@ -426,9 +420,7 @@ describe("the Calendar switch from the Week", () => {
         "[data-test=calendar-switch] input[value=staffing]",
       )!,
     );
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/staffing/month/2026-12");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing/month/2026-12");
   });
 
   it("a module view chosen on the Week before the opening-hours read answers carries no month", async () => {
@@ -437,7 +429,7 @@ describe("the Calendar switch from the Week", () => {
     addEventListener("error", caught);
     onTestFinished(() => removeEventListener("error", caught));
     const { el } = await mount(
-      "/manage/opening-hours/view/week/week/2027-01-02",
+      "/opening-hours/view/week/week/2027-01-02",
       {
         ctx: { request: (async () => undefined) as DashboardRequest },
         views: [{ view: staffing, canWrite: true }],
@@ -449,20 +441,20 @@ describe("the Calendar switch from the Week", () => {
         "[data-test=calendar-switch] input[value=staffing]",
       )!,
     );
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/staffing");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/staffing");
     expect(errors).toEqual([]);
   });
 });
 
 describe("from the Week to the Month, the Year and the day box", () => {
-  const twoYears = "/manage/opening-hours/view/week/department/rest/week/2027-01-02";
+  const twoYears = "/opening-hours/view/week/department/rest/week/2027-01-02";
 
   it("a month link opens that Month, keeping the department", async () => {
     const { el } = await mount(twoYears);
     const pushed = pushedPaths();
     monthLink(el, "2027-01").click();
     await expect.poll(() => monthView(el)?.model?.month).toBe("2027-01");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/month/department/rest/month/2027-01"]);
+    expect(pushed()).toEqual(["/opening-hours/view/month/department/rest/month/2027-01"]);
     expect(week(el)).toBeNull();
   });
 
@@ -471,7 +463,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
     const pushed = pushedPaths();
     yearLink(el, 2026).click();
     await expect.poll(() => yearView(el)?.model?.year).toBe(2026);
-    expect(pushed()).toEqual(["/manage/opening-hours/view/year/department/rest/year/2026"]);
+    expect(pushed()).toEqual(["/opening-hours/view/year/department/rest/year/2026"]);
     expect(week(el)).toBeNull();
   });
 
@@ -487,7 +479,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
       await userEvent.keyboard("{Enter}");
       await expect
         .poll(() => location.pathname)
-        .toBe(`/manage/opening-hours/view/year/department/rest/year/${year}`);
+        .toBe(`/opening-hours/view/year/department/rest/year/${year}`);
       const name = () =>
         yearView(el)?.shadowRoot?.querySelector<HTMLElement>(
           `[data-month="${month}"] [data-test=month-name]`,
@@ -555,7 +547,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
   );
 
   it("a day's name opens the day box over the Week, with the Week's department", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/department/rest/week/2026-12-09");
     await week(el)!.updateComplete;
     const button = dayName(el, "2026-12-09");
     await userEvent.click(button);
@@ -584,7 +576,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
   });
 
   it("a painter opened from the Week's box closes back onto the Week", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/department/rest/week/2026-12-09");
     await week(el)!.updateComplete;
     await userEvent.click(dayName(el, "2026-12-09"));
     await expect.poll(() => boxOpen(el)).toBe(true);
@@ -603,7 +595,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
     await close;
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+      .toBe("/opening-hours/view/week/department/rest/week/2026-12-09");
     await expect.poll(() => painter(el)).toBeNull();
     expect(week(el)!.date).toBe("2026-12-09");
   });
@@ -647,7 +639,7 @@ describe("Open this week from the day box", () => {
 
   it("a show key alone retains the Year address and reads no station", async () => {
     const watched = vi.spyOn(OpeningHoursApi.prototype, "watchStations");
-    const address = "/manage/opening-hours/show/stations/year/2026";
+    const address = "/opening-hours/show/stations/year/2026";
     const el = await mountView(address);
     expect(yearView(el)).not.toBeNull();
     expect(location.pathname).toBe(address);
@@ -655,7 +647,7 @@ describe("Open this week from the day box", () => {
   });
 
   it("Open this week from the Month opens that date's week, keeping the department", async () => {
-    const el = await mountView("/manage/opening-hours/view/month/department/rest/month/2026-12");
+    const el = await mountView("/opening-hours/view/month/department/rest/month/2026-12");
     await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     const pushed = pushedPaths();
@@ -664,7 +656,7 @@ describe("Open this week from the day box", () => {
     await close;
     await expect
       .poll(() => pushed().at(-1))
-      .toBe("/manage/opening-hours/view/week/department/rest/week/2026-12-10");
+      .toBe("/opening-hours/view/week/department/rest/week/2026-12-10");
     await expect.poll(() => week(el)?.model).toBeDefined();
     await week(el)!.updateComplete;
     expect(
@@ -684,7 +676,7 @@ describe("Open this week from the day box", () => {
   });
 
   it("Open this week from the Year, while the box's month still loads", async () => {
-    const el = await mountView("/manage/opening-hours/view/year/year/2026", { holdMonths: true });
+    const el = await mountView("/opening-hours/view/year/year/2026", { holdMonths: true });
     await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe("Loading…");
@@ -693,9 +685,7 @@ describe("Open this week from the day box", () => {
     const close = closed(dayBox(el)!, "calendar-day-box-close");
     await userEvent.click(openWeek(el)!);
     await close;
-    await expect
-      .poll(() => pushed().at(-1))
-      .toBe("/manage/opening-hours/view/week/week/2026-12-10");
+    await expect.poll(() => pushed().at(-1)).toBe("/opening-hours/view/week/week/2026-12-10");
     await expect.poll(() => week(el)?.date).toBe("2026-12-10");
   });
 
@@ -711,7 +701,7 @@ describe("Open this week from the day box", () => {
   it("focus the user moves while the Week's month loads stays where they put it", async () => {
     let release!: () => void;
     const monthGate = new Promise<void>((resolve) => (release = resolve));
-    const el = await mountView("/manage/opening-hours/view/year/year/2026", { monthGate });
+    const el = await mountView("/opening-hours/view/year/year/2026", { monthGate });
     await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     const close = closed(dayBox(el)!, "calendar-day-box-close");
@@ -733,7 +723,7 @@ describe("Open this week from the day box", () => {
   it("Back while the Week's month loads drops the focus hand-off", async () => {
     let release!: () => void;
     const monthGate = new Promise<void>((resolve) => (release = resolve));
-    const el = await mountView("/manage/opening-hours/view/year/year/2026", { monthGate });
+    const el = await mountView("/opening-hours/view/year/year/2026", { monthGate });
     await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     const close = closed(dayBox(el)!, "calendar-day-box-close");
@@ -753,7 +743,7 @@ describe("Open this week from the day box", () => {
   });
 
   it("Open this week refused by unsaved changes drops its focus hand-off", async () => {
-    const el = await mountView("/manage/opening-hours/view/month/month/2026-12");
+    const el = await mountView("/opening-hours/view/month/month/2026-12");
     await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     let asked = 0;
@@ -770,10 +760,10 @@ describe("Open this week from the day box", () => {
     await close;
     await expect.poll(() => asked).toBe(1);
     await settled(el);
-    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+    expect(location.pathname).toBe("/opening-hours/view/month/month/2026-12");
     guard.dispose();
     // A later arrival at that week by another way must not take the refused hand-off's focus.
-    history.pushState(null, "", "/manage/opening-hours/view/week/week/2026-12-10");
+    history.pushState(null, "", "/opening-hours/view/week/week/2026-12-10");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => week(el)?.model).toBeDefined();
     await settled(el);
@@ -782,7 +772,7 @@ describe("Open this week from the day box", () => {
   });
 
   it("a viewer's box offers Open this week too", async () => {
-    const el = await mountView("/manage/opening-hours/view/month/month/2026-12", {
+    const el = await mountView("/opening-hours/view/month/month/2026-12", {
       readOnly: true,
     });
     await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
@@ -792,16 +782,14 @@ describe("Open this week from the day box", () => {
 
   it("Open this week from a Month box at a phone's width shows that day", async () => {
     await toPhone();
-    const el = await mountView("/manage/opening-hours/view/month/month/2026-12");
+    const el = await mountView("/opening-hours/view/month/month/2026-12");
     await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
     await expect.poll(() => boxOpen(el)).toBe(true);
     const pushed = pushedPaths();
     const close = closed(dayBox(el)!, "calendar-day-box-close");
     await userEvent.click(openWeek(el)!);
     await close;
-    await expect
-      .poll(() => pushed().at(-1))
-      .toBe("/manage/opening-hours/view/week/week/2026-12-10");
+    await expect.poll(() => pushed().at(-1)).toBe("/opening-hours/view/week/week/2026-12-10");
     await expect.poll(() => week(el)?.model).toBeDefined();
     await toPhone(el);
     await week(el)!.updateComplete;
@@ -811,7 +799,7 @@ describe("Open this week from the day box", () => {
 });
 
 describe("a prep station in the Calendar", () => {
-  const grillWeek = "/manage/opening-hours/view/week/station/s1/week/2026-12-09";
+  const grillWeek = "/opening-hours/view/week/station/s1/week/2026-12-09";
   const showValues = (el: Screen) =>
     week(el)!
       .shadowRoot!.querySelector("wt-combobox")!
@@ -877,7 +865,7 @@ describe("a prep station in the Calendar", () => {
   });
 
   it("choosing a station in the Week's Show writes it and draws its rows", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/week/2026-12-09");
     await expect.poll(() => showValues(el)).toContain("station:s1");
     chooseShown(el, "station:s1");
     await expect.poll(() => location.pathname).toBe(grillWeek);
@@ -893,7 +881,7 @@ describe("a prep station in the Calendar", () => {
     const pushed = pushedPaths();
     monthLink(el, "2026-12").click();
     await expect.poll(() => monthView(el)?.station?.state).toBe("ready");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/month/station/s1/month/2026-12"]);
+    expect(pushed()).toEqual(["/opening-hours/view/month/station/s1/month/2026-12"]);
     await monthView(el)!.updateComplete;
     expect(monthView(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
     expect(timesReads(paths)).toEqual([
@@ -907,15 +895,13 @@ describe("a prep station in the Calendar", () => {
     chooseShown(el, "bar");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/bar/week/2026-12-09");
+      .toBe("/opening-hours/view/week/department/bar/week/2026-12-09");
     await expect.poll(() => week(el)!.station).toBeUndefined();
     expect(week(el)!.departmentId).toBe("bar");
   });
 
   it("an unknown station shows All departments and is never read", async () => {
-    const { el, paths } = await mount(
-      "/manage/opening-hours/view/week/station/gone/week/2026-12-09",
-    );
+    const { el, paths } = await mount("/opening-hours/view/week/station/gone/week/2026-12-09");
     await expect.poll(() => showValues(el)).toContain("station:s1");
     await week(el)!.updateComplete;
     expect(week(el)!.station).toBeUndefined();
@@ -927,7 +913,7 @@ describe("a prep station in the Calendar", () => {
     ["a station", grillWeek],
     [
       "a station named beside a department",
-      "/manage/opening-hours/view/week/department/rest/show/stations/station/s1/week/2026-12-09",
+      "/opening-hours/view/week/department/rest/show/stations/station/s1/week/2026-12-09",
     ],
   ])(
     "the day box over %s lists its sending departments and identifies the station",
@@ -955,7 +941,7 @@ describe("a prep station in the Calendar", () => {
   });
 
   it("the default station draws its dated department demand", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/station/s2/week/2026-12-09");
+    const { el } = await mount("/opening-hours/view/week/station/s2/week/2026-12-09");
     await expect.poll(() => week(el)!.station?.state).toBe("ready");
     await week(el)!.updateComplete;
     expect(week(el)!.shadowRoot!.querySelector('[data-row="rest"] .block')).not.toBeNull();
@@ -979,12 +965,12 @@ describe("a prep station in the Calendar", () => {
     [
       "fails for All prep stations",
       { code: "connection.failed" },
-      "/manage/opening-hours/view/week/show/stations/week/2026-12-09",
+      "/opening-hours/view/week/show/stations/week/2026-12-09",
     ],
     [
       "fails for Show all",
       { code: "connection.failed" },
-      "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+      "/opening-hours/view/week/show/all/week/2026-12-09",
     ],
     ["is refused", REFUSED, grillWeek],
   ])(
@@ -1031,7 +1017,7 @@ describe("a prep station in the Calendar", () => {
         target.focus();
         await userEvent.keyboard("{Enter}");
       };
-      const combined = "/manage/opening-hours/view/week/show/all/week/2026-12-09";
+      const combined = "/opening-hours/view/week/show/all/week/2026-12-09";
       const { el } = await mount(combined);
       await expect.poll(() => week(el)!.station?.state).toBe("ready");
       await week(el)!.updateComplete;
@@ -1057,7 +1043,7 @@ describe("a prep station in the Calendar", () => {
 
   it("a station read for the next month, beside the last month's read, draws as loading", async () => {
     const { el, paths } = await mount(
-      "/manage/opening-hours/view/week/station/s1/week/2026-12-28",
+      "/opening-hours/view/week/station/s1/week/2026-12-28",
       undefined,
       false,
       { holdMonths: ["2027-01"], timesAsDecember: true },
@@ -1106,7 +1092,7 @@ describe("a prep station in the Calendar", () => {
   });
 
   it("a week across two months draws the station on every one of its days", async () => {
-    const { el } = await mount("/manage/opening-hours/view/week/station/s1/week/2026-12-28");
+    const { el } = await mount("/opening-hours/view/week/station/s1/week/2026-12-28");
     await expect.poll(() => week(el)!.station?.state).toBe("ready");
     await week(el)!.updateComplete;
     const dates = weekDates("2026-12-28");
@@ -1139,7 +1125,7 @@ describe("a prep station in the Calendar", () => {
 });
 
 it("Show all draws departments before stations, preserves department actions and remembers its address through Month", async () => {
-  const { el, paths } = await mount("/manage/opening-hours/view/week/show/all/week/2026-12-09");
+  const { el, paths } = await mount("/opening-hours/view/week/show/all/week/2026-12-09");
   await expect
     .poll(() => week(el)!.shadowRoot!.querySelector('[data-row="s1:rest"]'))
     .not.toBeNull();
@@ -1165,7 +1151,7 @@ it("Show all draws departments before stations, preserves department actions and
   dayName(el, "2026-12-09").click();
   await expect.poll(() => boxOpen(el)).toBe(true);
   expect(boxButtons(el)).toContain("Make a special day");
-  expect(dayBox(el)!.querySelector('a[href="/manage/periods"]')).toBeNull();
+  expect(dayBox(el)!.querySelector('a[href="/periods"]')).toBeNull();
   expect(
     dayBox(el)!
       .rows.filter((row) => row.station)
@@ -1190,7 +1176,7 @@ it("Show all draws departments before stations, preserves department actions and
 
 it("a viewer ignores combined station keys without station reads", async () => {
   const { el, paths } = await mount(
-    "/manage/opening-hours/view/week/show/stations/week/2026-12-09",
+    "/opening-hours/view/week/show/stations/week/2026-12-09",
     undefined,
     false,
     { readOnly: true },
@@ -1201,17 +1187,17 @@ it("a viewer ignores combined station keys without station reads", async () => {
 });
 
 it("choosing a group, station or department keeps only that choice in the address", async () => {
-  const { el } = await mount("/manage/opening-hours/view/week/show/all/week/2026-12-09");
+  const { el } = await mount("/opening-hours/view/week/show/all/week/2026-12-09");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   chooseShown(el, "bar");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/week/department/bar/week/2026-12-09");
+    .toBe("/opening-hours/view/week/department/bar/week/2026-12-09");
   expect(week(el)!.station).toBeUndefined();
   chooseShown(el, "show:stations");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/week/show/stations/week/2026-12-09");
+    .toBe("/opening-hours/view/week/show/stations/week/2026-12-09");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   expect(
     [
@@ -1223,14 +1209,14 @@ it("choosing a group, station or department keeps only that choice in the addres
   chooseShown(el, "station:s1");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/week/station/s1/week/2026-12-09");
+    .toBe("/opening-hours/view/week/station/s1/week/2026-12-09");
   await expect.poll(() => week(el)!.station?.id).toBe("s1");
 });
 
 it("keeps loaded departments visible when Show all's station times fail, then adds recovered stations", async () => {
   const answers: Answers = { timesFail: REFUSED };
   const { el } = await mount(
-    "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+    "/opening-hours/view/week/show/all/week/2026-12-09",
     undefined,
     false,
     answers,
@@ -1269,7 +1255,7 @@ it("keeps loaded departments visible when Show all's station times fail, then ad
 });
 
 it("keeps departments distinct from station orders on a closed phone day, and keeps every grouped station row", async () => {
-  const { el } = await mount("/manage/opening-hours/view/week/show/all/week/2026-12-25");
+  const { el } = await mount("/opening-hours/view/week/show/all/week/2026-12-25");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   await toPhone(el);
   const card = () => week(el)!.shadowRoot!.querySelector('[data-test="day-card"]')!;
@@ -1292,7 +1278,7 @@ it.each(["year", "month", "week"])(
   async (view) => {
     const suffix =
       view === "year" ? "year/2026" : view === "month" ? "month/2026-12" : "week/2026-12-09";
-    const { el, paths } = await mount(`/manage/opening-hours/view/${view}/${suffix}`);
+    const { el, paths } = await mount(`/opening-hours/view/${view}/${suffix}`);
     if (view === "year") expect(paths.filter((path) => path.includes("/stations"))).toEqual([]);
     await expect.poll(() => el.shadowRoot!.querySelector(`opening-hours-${view}`)).not.toBeNull();
     const calendar = el.shadowRoot!.querySelector(`opening-hours-${view}`)!;
@@ -1335,7 +1321,7 @@ it.each(["year", "month", "week"])(
 );
 
 it("a special station day retains its season link and special-day action without repeating the explanation", async () => {
-  const { el } = await mount("/manage/opening-hours/view/week/station/s1/week/2026-12-14");
+  const { el } = await mount("/opening-hours/view/week/station/s1/week/2026-12-14");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   await week(el)!.updateComplete;
   await userEvent.click(dayName(el, "2026-12-14"));
@@ -1355,7 +1341,7 @@ it("a special station day retains its season link and special-day action without
 });
 
 it("a fully closed station day opens its box from the closed stretch", async () => {
-  const { el } = await mount("/manage/opening-hours/view/week/station/s1/week/2026-12-25");
+  const { el } = await mount("/opening-hours/view/week/station/s1/week/2026-12-25");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   await week(el)!.updateComplete;
   const closed = dayName(el, "2026-12-25")
@@ -1374,7 +1360,7 @@ it("keeps a clicked station row anchored while its date heading is above a phone
     isDefault: index === 0,
   }));
   const { el } = await mount(
-    "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+    "/opening-hours/view/week/show/all/week/2026-12-09",
     undefined,
     false,
     { stations },
@@ -1398,16 +1384,16 @@ it("keeps a clicked station row anchored while its date heading is above a phone
 });
 
 it.each([
-  "/manage/opening-hours/view/week/station/s1/week/2026-12-09",
-  "/manage/opening-hours/view/week/week/2026-12-09?station=s1",
+  "/opening-hours/view/week/station/s1/week/2026-12-09",
+  "/opening-hours/view/week/week/2026-12-09?station=s1",
 ])("Year drops a station filter from %s", async (address) => {
   const { el } = await mount(address);
   const pushed = pushedPaths();
   await userEvent.click(yearLink(el, 2026));
   await expect.poll(() => yearView(el)?.model).toBeDefined();
-  expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+  expect(location.pathname).toBe("/opening-hours/view/year/year/2026");
   expect(location.search).toBe("");
-  expect(pushed().at(-1)).toBe("/manage/opening-hours/view/year/year/2026");
+  expect(pushed().at(-1)).toBe("/opening-hours/view/year/year/2026");
   history.back();
   await expect.poll(() => week(el)?.model).toBeDefined();
   history.forward();
@@ -1421,5 +1407,5 @@ it.each([
   );
   await expect.poll(() => monthView(el)?.model).toBeDefined();
   expect(monthView(el)!.station).toBeUndefined();
-  expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+  expect(location.pathname).toBe("/opening-hours/view/month/month/2026-12");
 });

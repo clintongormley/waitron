@@ -50,7 +50,7 @@ describe("createMailpitClient", () => {
         To: [address("", "alex@example.test")],
         Subject: "Reset your password",
         Date: "2026-09-09T18:00:00Z",
-        Text: "Open https://waitron.local/manage/account?token=secret",
+        Text: "Open https://waitron.local/account?token=secret",
         HTML: '<script>throw new Error("must not escape")</script>',
       }),
     );
@@ -64,7 +64,7 @@ describe("createMailpitClient", () => {
       to: [{ name: "", address: "alex@example.test" }],
       subject: "Reset your password",
       date: "2026-09-09T18:00:00Z",
-      text: "Open https://waitron.local/manage/account?token=secret",
+      text: "Open https://waitron.local/account?token=secret",
     });
     expect(result).not.toHaveProperty("html");
   });

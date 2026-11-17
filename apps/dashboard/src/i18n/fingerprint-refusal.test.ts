@@ -45,7 +45,7 @@ it.each(
 )("shows the incident at $width in $locale/$theme", async ({ locale, theme, width }) => {
   await page.viewport(width, 900);
   setLocale(locale);
-  history.replaceState(null, "", "/manage/alerts");
+  history.replaceState(null, "", "/alerts");
   for (const key of ["waitron.alerts.open.table", "waitron.alerts.handled.table"]) {
     sessionStorage.removeItem(key);
     localStorage.removeItem(`${key}:columns`);

@@ -9,6 +9,7 @@ import {
   navigationGuardFor,
 } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { isDashboardPath } from "@waitron/shared";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import "./venue-departments-shell.js";
@@ -44,7 +45,7 @@ class App extends LitElement {
   model = model;
   readonly leave = new LeaveController(this);
   readonly url = new UrlStateController(this, () => {}, {
-    basePath: "/manage",
+    basePath: "",
     primary: "dashboard",
     children: {},
     leave: {
@@ -65,7 +66,7 @@ class App extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this, "/manage");
+    this.releaseLinks = captureAppLinks(this, isDashboardPath);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -88,7 +89,7 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations/department/d1") {
+async function mount(path = "/venue-operations/department/d1") {
   setLocale("en");
   history.replaceState(null, "", path);
   app = document.createElement("a10-shell-leave-app") as App;
@@ -149,7 +150,7 @@ it("the real differing-zone link keeps the edited department until Discard accep
   )!;
   await userEvent.click(page.elementLocator(link));
   await choose("keep");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(location.pathname).toBe("/venue-operations/department/d1");
   expect(
     (settings.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Draft");
@@ -157,12 +158,12 @@ it("the real differing-zone link keeps the edited department until Discard accep
   await userEvent.click(page.elementLocator(link));
   await choose("discard");
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z1");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/z1");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("browser Back restores the edited page while Keep is chosen, then Discard returns to the list", async () => {
-  const { shell, settings } = await mount("/manage/venue-operations");
-  await navigationGuardFor(window)!.write("/manage/venue-operations/department/d1");
+  const { shell, settings } = await mount("/venue-operations");
+  await navigationGuardFor(window)!.write("/venue-operations/department/d1");
   await shell.updateComplete;
   const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
@@ -172,13 +173,13 @@ it("browser Back restores the edited page while Keep is chosen, then Discard ret
   const push = vi.spyOn(history, "pushState");
   history.back();
   await choose("keep");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(location.pathname).toBe("/venue-operations/department/d1");
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBe(page);
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(push).not.toHaveBeenCalled();
   history.back();
   await choose("discard");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/venue-operations");
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(push).not.toHaveBeenCalled();
@@ -187,11 +188,11 @@ it("browser Back restores the edited page while Keep is chosen, then Discard ret
 it("an accepted external department route recreates the form and its baseline", async () => {
   const { shell, settings } = await mount();
   await edit(settings);
-  const pending = navigationGuardFor(window)!.write("/manage/venue-operations/department/gone");
+  const pending = navigationGuardFor(window)!.write("/venue-operations/department/gone");
   await choose("keep");
   await pending;
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
-  const accepted = navigationGuardFor(window)!.write("/manage/venue-operations/department/gone");
+  const accepted = navigationGuardFor(window)!.write("/venue-operations/department/gone");
   await choose("discard");
   await accepted;
   await shell.updateComplete;
@@ -203,7 +204,7 @@ it("an accepted external department route recreates the form and its baseline", 
 });
 
 it("leaving a dirty zone editor for another page waits for the draft decision before navigation", async () => {
-  const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  const { shell } = await mount("/venue-operations/department/d1/view/zones/zone/z1");
   const zone = shell.shadowRoot!.querySelector("zone-edit-dialog")!;
   await zone.updateComplete;
   const fields = zone.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
@@ -220,11 +221,11 @@ it("leaving a dirty zone editor for another page waits for the draft decision be
     }),
   );
   await zone.updateComplete;
-  const away = "/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1";
+  const away = "/opening-hours/view/season/season/autumn/department/d1/zone/z1";
   const kept = navigationGuardFor(window)!.write(away);
   await choose("keep");
   await kept;
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/z1");
   expect(fields.value).toMatchObject(draft);
   expect(app.leave.coordinator.isDirty()).toBe(true);
   void navigationGuardFor(window)!.write(away);
@@ -242,8 +243,8 @@ it.each(["department", "zone"] as const)(
   async (kind) => {
     const { shell } = await mount(
       kind === "zone"
-        ? "/manage/venue-operations/department/d1/view/zones/zone/z1"
-        : "/manage/venue-operations/department/d1",
+        ? "/venue-operations/department/d1/view/zones/zone/z1"
+        : "/venue-operations/department/d1",
     );
     const request = vi.spyOn(shell.api, "saveDepartmentSettings");
     const zoneWrite = vi.spyOn(shell.api, "saveZoneSettings");
@@ -279,7 +280,7 @@ it.each(["department", "zone"] as const)(
   },
 );
 it("dirty native Escape keeps the department edit, then Discard returns focus to its row menu", async () => {
-  const { shell } = await mount("/manage/venue-operations");
+  const { shell } = await mount("/venue-operations");
   const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(async () => ({
     id: "unexpected-write",
   }));
@@ -318,7 +319,7 @@ it("dirty native Escape keeps the department edit, then Discard returns focus to
 });
 
 it("keeping a requested zone switch retains the department editor's originating menu", async () => {
-  const { shell } = await mount("/manage/venue-operations");
+  const { shell } = await mount("/venue-operations");
   const next = structuredClone(model);
   next.salePolicies.zones = [
     {
@@ -359,7 +360,7 @@ it("keeping a requested zone switch retains the department editor's originating 
   )!;
   await userEvent.click(page.elementLocator(link));
   await choose("keep");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(location.pathname).toBe("/venue-operations/department/d1");
   await userEvent.keyboard("{Escape}");
   await choose("discard");
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();

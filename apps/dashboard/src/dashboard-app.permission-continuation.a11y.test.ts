@@ -84,7 +84,7 @@ describe.each(["light", "dark"] as const)("permission continuation in %s", (them
         listAlerts: async () => ({ visible: false, alerts: [] }),
         getDiskStop: async () => ({ stopped: false, deleted: null }),
       } as unknown as DashboardApi;
-      history.replaceState(null, "", "/manage/test-evidence");
+      history.replaceState(null, "", "/test-evidence");
       const { el: app, host } = await mountWidget<DashboardApp>(
         "dashboard-app",
         { api, request: async () => ({}) as never },

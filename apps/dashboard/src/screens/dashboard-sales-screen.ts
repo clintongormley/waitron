@@ -756,7 +756,7 @@ export class SalesScreen extends LitElement {
     return this.canManagePrinters
       ? html`<div class="muted" data-test="no-printers">
           <p data-test="no-printers-text">${t("sales.no_printers_manage")}</p>
-          <a data-test="no-printers-link" href="/manage/printers">${t("nav.printers")}</a>
+          <a data-test="no-printers-link" href="/printers">${t("nav.printers")}</a>
         </div>`
       : html`<div class="muted" data-test="no-printers">
           <p data-test="no-printers-text">${t("sales.no_printers_sign_in")}</p>

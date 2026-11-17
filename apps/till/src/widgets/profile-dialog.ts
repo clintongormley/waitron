@@ -129,7 +129,7 @@ export class TillProfileDialog extends LitElement {
         ></wt-combobox>
       </div>
       <wt-form-actions slot="footer" .error=${this.#bottomMessage()}>
-        ${recoveryLink(typeof this.notice === "object" && this.notice?.code === "device.payment_in_progress" ? { code: this.notice.code, recoveryUrl: "/manage/check-card-payments" } : null)}
+        ${recoveryLink(typeof this.notice === "object" && this.notice?.code === "device.payment_in_progress" ? { code: this.notice.code, recoveryUrl: "/check-card-payments" } : null)}
         <wt-button
           slot="cancel"
           data-test="profile-cancel"
