@@ -47,10 +47,39 @@ describe("till-stale-since", () => {
     expect(text(el)).toBe("No updates since 10:19, 2 minutes ago");
   });
 
-  it("reads a long outage in minutes", async () => {
+  it("reads a long outage in whole hours", async () => {
     const since = new Date(2026, 7, 17, 7, 4, 0);
     const { el } = await mountWidget<TillStaleSince>("till-stale-since", { since });
-    expect(text(el)).toBe("No updates since 07:04, 195 minutes ago");
+    expect(text(el)).toBe("No updates since 07:04, 3 hours ago");
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "No updates since 10:19, 59 minutes ago",
+      "No updates since 10:19, 1 hour ago",
+      "No updates since 10:19, 2 hours ago",
+    ],
+    [
+      "es-ES",
+      "Sin actualizaciones desde las 10:19, hace 59 minutos",
+      "Sin actualizaciones desde las 10:19, hace 1 hora",
+      "Sin actualizaciones desde las 10:19, hace 2 horas",
+    ],
+  ])("switches to whole hours at the hour boundary in %s", async (locale, minutes, one, two) => {
+    setLocale(locale);
+    const since = new Date();
+    vi.setSystemTime(since.getTime() + 59 * 60_000);
+    const { el } = await mountWidget<TillStaleSince>("till-stale-since", { since });
+    expect(text(el)).toBe(minutes);
+    await pass(el, 59_999);
+    expect(text(el)).toBe(minutes);
+    await pass(el, 1);
+    expect(text(el)).toBe(one);
+    await pass(el, 60 * 60_000 - 1);
+    expect(text(el)).toBe(one);
+    await pass(el, 1);
+    expect(text(el)).toBe(two);
   });
 
   it("a `since` ahead of the clock reads less than a minute, until a minute after it", async () => {

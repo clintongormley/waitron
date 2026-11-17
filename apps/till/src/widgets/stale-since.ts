@@ -46,7 +46,13 @@ export class TillStaleSince extends LitElement {
     const ago =
       minutes === 0
         ? t("station.stale_ago_under_minute")
-        : countText(minutes, "station.stale_ago", "station.stale_ago_one");
+        : minutes < 60
+          ? countText(minutes, "station.stale_ago", "station.stale_ago_one")
+          : countText(
+              Math.floor(minutes / 60),
+              "station.stale_ago_hours",
+              "station.stale_ago_hours_one",
+            );
     return t("station.stale")
       .replace("{time}", () => time)
       .replace("{ago}", () => ago);
