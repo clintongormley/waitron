@@ -113,3 +113,54 @@ it("keeps unshown refusals in order and adds one correction for marked fields", 
     "",
   );
 });
+
+it("renews only the named dismissals and still renews every one when none is named", async () => {
+  const host = await mountFeedback();
+  host.errors = { refusal: "Request refused", field: "Name taken", other: "Try again" };
+  await host.updateComplete;
+  const root = host.shadowRoot!;
+  host.feedback.dismiss("refusal", "field", "other");
+  host.feedback.newRefusal("refusal");
+  await host.updateComplete;
+  expect(root.querySelector("p")!.textContent).toBe("Request refused");
+  expect(host.feedback.shows("field")).toBe(false);
+  expect(host.feedback.shows("other")).toBe(false);
+
+  host.feedback.dismiss("refusal");
+  host.feedback.newRefusal("field", "other");
+  await host.updateComplete;
+  expect(root.querySelector("p")!.textContent).toBe("Name taken | Try again");
+  expect(host.feedback.shows("refusal")).toBe(false);
+
+  host.feedback.dismiss("field", "other");
+  host.feedback.newRefusal();
+  await host.updateComplete;
+  expect(root.querySelector("p")!.textContent).toBe("Request refused | Name taken | Try again");
+});
+
+it("repaints when a named renewal brings a dismissal back", async () => {
+  const host = await mountFeedback();
+  host.errors = { refusal: "Request refused" };
+  await host.updateComplete;
+  host.feedback.dismiss("refusal");
+  await host.updateComplete;
+  expect(host.shadowRoot!.querySelector("p")!.textContent).toBe("");
+  host.feedback.newRefusal("refusal");
+  await host.updateComplete;
+  expect(host.shadowRoot!.querySelector("p")!.textContent).toBe("Request refused");
+});
+
+it("answers whether a key is shown, through dismissal, pressing and renewal", async () => {
+  const { feedback } = await mountFeedback();
+  expect(feedback.shows("refusal")).toBe(true);
+  feedback.dismiss("refusal");
+  expect(feedback.shows("refusal")).toBe(false);
+  expect(feedback.shows("field")).toBe(true);
+  feedback.press("field");
+  expect(feedback.shows("field")).toBe(false);
+  feedback.newRefusal("field");
+  expect(feedback.shows("field")).toBe(true);
+  expect(feedback.shows("refusal")).toBe(false);
+  feedback.reset();
+  expect(feedback.shows("refusal")).toBe(true);
+});

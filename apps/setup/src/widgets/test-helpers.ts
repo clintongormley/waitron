@@ -141,6 +141,23 @@ export async function reviewBackup(
   await copy().updateComplete;
   const entry = copy().shadowRoot!.querySelector<Updating>("setup-recovery-allocation")!;
   await entry.updateComplete;
+  const { binding, input } = REVIEWED_CREDENTIALS.recoveryOperation;
+  await enterRecoveryDetails(entry, {
+    binding: { ...binding, sourceId: preview.sourceId, targetNodeId: preview.nodeId },
+    input,
+  });
+  await (screen as Updating).updateComplete;
+}
+
+/**
+ * Enters `record` and `nodeKey` on a `setup-recovery-allocation` and ticks both of its
+ * confirmations.
+ */
+export async function enterRecoveryDetails(
+  entry: HTMLElement,
+  record: object = REVIEWED_CREDENTIALS.recoveryOperation,
+  nodeKey: string = REVIEWED_CREDENTIALS.nodeRecoverySecret,
+): Promise<void> {
   const change = (field: string, value: string) =>
     entry
       .shadowRoot!.querySelector(`[data-test=${field}]`)!
@@ -150,17 +167,9 @@ export async function reviewBackup(
     input.checked = true;
     input.dispatchEvent(new Event("change"));
   };
-  const { binding, input } = REVIEWED_CREDENTIALS.recoveryOperation;
-  change(
-    "record",
-    JSON.stringify({
-      binding: { ...binding, sourceId: preview.sourceId, targetNodeId: preview.nodeId },
-      input,
-    }),
-  );
-  change("node-key", REVIEWED_CREDENTIALS.nodeRecoverySecret);
+  change("record", JSON.stringify(record));
+  change("node-key", nodeKey);
   tick("isolated");
   tick("retained");
-  await entry.updateComplete;
-  await (screen as Updating).updateComplete;
+  await (entry as Updating).updateComplete;
 }

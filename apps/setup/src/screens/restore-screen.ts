@@ -28,7 +28,6 @@ import { oldBoxQuestion } from "./old-box-question.js";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
-import { refusalShown, renewRefusal } from "./restore-feedback.js";
 
 interface RestoreForm {
   artifact?: File;
@@ -127,7 +126,8 @@ export class SetupRestoreScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    renewRefusal(this.feedback, changed.has("errorMessage"), changed.has("invalidField"));
+    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
       this.recoveryKey = this.request.recoveryKey;
@@ -141,16 +141,21 @@ export class SetupRestoreScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
-    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+    if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
   }
 
-  /** The field showing the server's refusal, if any. */
-  #refusalUnder(): RestoreField | undefined {
-    return this.errorMessage === undefined || !refusalShown(this.feedback, "refusal", "field")
-      ? undefined
-      : this.invalidField;
+  /** The server's refusal, unless the owner has dismissed it. */
+  get #shownRefusal(): string | undefined {
+    return this.feedback.shows("refusal") && this.feedback.shows("field")
+      ? this.errorMessage
+      : undefined;
+  }
+
+  /** The field showing `refusal`, if any. */
+  #refusalUnder(refusal: string | undefined): RestoreField | undefined {
+    return refusal === undefined ? undefined : this.invalidField;
   }
 
   #edited(field: RestoreField): void {
@@ -163,9 +168,10 @@ export class SetupRestoreScreen extends LitElement {
   #fieldError(
     field: "artifact" | "recoveryKey" | "environment",
     missing: string | undefined,
+    refused: RestoreField | undefined,
   ): string | undefined {
     if (missing !== undefined) return missing;
-    if (this.#refusalUnder() === field) return this.errorMessage;
+    if (refused === field) return this.errorMessage;
     if (this.previewRefusal === field) {
       const messages = {
         artifact: "restore.preview_file_error",
@@ -227,35 +233,30 @@ export class SetupRestoreScreen extends LitElement {
 
   override render(): TemplateResult {
     const fieldsInvalid = this.feedback.attempted && this.#incomplete;
-    const refused = this.#refusalUnder();
+    const shownRefusal = this.#shownRefusal;
+    const refused = this.#refusalUnder(shownRefusal);
     const artifactError = this.#fieldError(
       "artifact",
       this.feedback.attempted && this.artifact === undefined
         ? t("restore.backup_file_missing")
         : undefined,
+      refused,
     );
     const keyError = this.#fieldError(
       "recoveryKey",
       this.feedback.attempted && this.recoveryKey === ""
         ? t("restore.recovery_key_missing")
         : undefined,
+      refused,
     );
-    const environmentError = this.#fieldError("environment", undefined);
+    const environmentError = this.#fieldError("environment", undefined, refused);
     const bottom = bottomMessage(
-      this.feedback.message(
-        {
-          refusal:
-            refusalShown(this.feedback, "refusal") && this.invalidField === undefined
-              ? this.errorMessage
-              : undefined,
-        },
-        new Set(
-          fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
-            ? ["fields"]
-            : [],
-        ),
-        t("restore.fix_fields"),
-      ),
+      this.feedback.shows("refusal") && this.invalidField === undefined
+        ? (this.errorMessage ?? null)
+        : null,
+      fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
+        ? t("restore.fix_fields")
+        : null,
       this.reviewNeeded ? t("restore.review_first") : null,
     );
     return html`
@@ -356,7 +357,7 @@ export class SetupRestoreScreen extends LitElement {
           event.stopPropagation();
           this.reviewNeeded = true;
         }}
-        .errorMessage=${refusalShown(this.feedback, "refusal", "field") ? this.errorMessage : undefined}
+        .errorMessage=${shownRefusal}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
           event.stopPropagation();

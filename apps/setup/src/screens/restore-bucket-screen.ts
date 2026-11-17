@@ -23,7 +23,6 @@ import {
 import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
-import { refusalShown, renewRefusal } from "./restore-feedback.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { currentLocale, t, format } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -149,7 +148,8 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    renewRefusal(this.feedback, changed.has("errorMessage"), changed.has("invalidField"));
+    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;
       this.environment = this.request.environment;
@@ -166,18 +166,21 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
-    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+    if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
   }
 
-  /** The field showing the server's refusal, if any. */
-  #refusalUnder(): BucketField | undefined {
-    return this.errorMessage === undefined ||
-      !refusalShown(this.feedback, "refusal", "field") ||
-      !this.#shows(this.invalidField)
-      ? undefined
-      : this.invalidField;
+  /** The server's refusal, unless the owner has dismissed it. */
+  get #shownRefusal(): string | undefined {
+    return this.feedback.shows("refusal") && this.feedback.shows("field")
+      ? this.errorMessage
+      : undefined;
+  }
+
+  /** The field showing `refusal`, if any. */
+  #refusalUnder(refusal: string | undefined): BucketField | undefined {
+    return refusal === undefined || !this.#shows(this.invalidField) ? undefined : this.invalidField;
   }
 
   /** Whether `field` is on the screen. */
@@ -294,13 +297,13 @@ export class SetupRestoreBucketScreen extends LitElement {
     else this.#setKit(chosen.text);
   }
 
-  #renderVenue(): TemplateResult | typeof nothing {
+  #renderVenue(refused: BucketField | undefined): TemplateResult | typeof nothing {
     const venue = this.#venue;
     if (venue === undefined) return nothing;
     const error =
       this.feedback.attempted && this.#venueUnconfirmed
         ? t("restore_bucket.venue_missing")
-        : this.#refusalUnder() === "venueConfirmed"
+        : refused === "venueConfirmed"
           ? this.errorMessage
           : undefined;
     return html`<p data-test="venue">
@@ -327,7 +330,8 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const refused = this.#refusalUnder();
+    const shownRefusal = this.#shownRefusal;
+    const refused = this.#refusalUnder(shownRefusal);
     const kitError =
       this.feedback.attempted && this.#kitMissing
         ? t("restore_bucket.kit_missing")
@@ -347,20 +351,10 @@ export class SetupRestoreBucketScreen extends LitElement {
     const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
     const fieldsInvalid = this.feedback.attempted && this.#incomplete;
     const bottom = bottomMessage(
-      this.feedback.message(
-        {
-          refusal:
-            refusalShown(this.feedback, "refusal", "field") && !this.#shows(this.invalidField)
-              ? this.errorMessage
-              : undefined,
-        },
-        new Set(
-          fieldsInvalid || refused !== undefined || this.previewField !== undefined
-            ? ["fields"]
-            : [],
-        ),
-        t("restore_bucket.fix_fields"),
-      ),
+      this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
+      fieldsInvalid || refused !== undefined || this.previewField !== undefined
+        ? t("restore_bucket.fix_fields")
+        : null,
       this.reviewNeeded ? t("restore.review_first") : null,
     );
     return html`
@@ -470,7 +464,7 @@ export class SetupRestoreBucketScreen extends LitElement {
                 };
           this.venueConfirmed = false;
         }}
-        .errorMessage=${refusalShown(this.feedback, "refusal", "field") ? this.errorMessage : undefined}
+        .errorMessage=${shownRefusal}
         .refusedField=${this.invalidField}
         @recovery-field-edited=${(event: CustomEvent<{ field: RecoveryEntryField }>) => {
           event.stopPropagation();
@@ -502,7 +496,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           if (error?.code === "restore.stream_source_unchecked") this.previewLiveUnknown = true;
         }}
       ></setup-recovery-copy>
-      ${this.#renderVenue()}
+      ${this.#renderVenue(refused)}
       <wt-form-actions .error=${bottom}>
         <wt-button
           variant="ghost"

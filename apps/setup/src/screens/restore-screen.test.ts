@@ -464,6 +464,35 @@ describe("SetupRestoreScreen", () => {
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
     });
 
+    it("keeps a field's refusal away once the owner edits the field, through a new message about it", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        errorMessage: "Check the environment.",
+        invalidField: "environment",
+      });
+      expect(fieldMessages(el)).toEqual(["Check the environment."]);
+      await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+      el.errorMessage = "Still the wrong environment.";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+    });
+
+    it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
+      const refusal = "The backup could not be staged. Check the connection and try again.";
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        errorMessage: refusal,
+      });
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      const pressed = fieldMessages(el);
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      el.invalidField = "environment";
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual(pressed);
+      expect(fieldMessages(el)).not.toContain(refusal);
+    });
+
     it("rings a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");

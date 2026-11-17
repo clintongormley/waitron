@@ -6,7 +6,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
-import { refusalShown, renewRefusal } from "./restore-feedback.js";
 import type { CloudRecoveryView, RecoveryBackupPreview } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
@@ -84,7 +83,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    renewRefusal(this.feedback, changed.has("errorMessage"), changed.has("invalidField"));
+    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("invalidField")) this.feedback.newRefusal("field");
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
       const confirmation =
@@ -102,18 +102,21 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+    if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
   }
 
-  /** The field showing the server's refusal, if any. */
-  #refusalUnder(): CloudField | undefined {
-    return this.errorMessage === undefined ||
-      !refusalShown(this.feedback, "refusal", "field") ||
-      !this.#shows(this.invalidField)
-      ? undefined
-      : this.invalidField;
+  /** The server's refusal, unless the owner has dismissed it. */
+  get #shownRefusal(): string | undefined {
+    return this.feedback.shows("refusal") && this.feedback.shows("field")
+      ? this.errorMessage
+      : undefined;
+  }
+
+  /** The field showing `refusal`, if any. */
+  #refusalUnder(refusal: string | undefined): CloudField | undefined {
+    return refusal === undefined || !this.#shows(this.invalidField) ? undefined : this.invalidField;
   }
 
   /** Whether `field` is on the screen. */
@@ -160,7 +163,7 @@ export class SetupCloudRestoreScreen extends LitElement {
             { cloudPointId: this.view?.point?.id, selectionId: this.#currentApprovalBinding() },
           )
         : undefined;
-    if (credentials === null || (action === "restore" && credentials === undefined)) return;
+    if (action === "restore" && !credentials) return;
     this.feedback.dismiss("refusal");
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", {
@@ -181,18 +184,11 @@ export class SetupCloudRestoreScreen extends LitElement {
     const approved = this.view?.state === "approved" && this.view.point;
     const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
     const fieldsInvalid = Boolean(approved) && this.feedback.attempted && this.#incomplete;
-    const refused = this.#refusalUnder();
+    const shownRefusal = this.#shownRefusal;
+    const refused = this.#refusalUnder(shownRefusal);
     const bottom = bottomMessage(
-      this.feedback.message(
-        {
-          refusal:
-            refusalShown(this.feedback, "refusal", "field") && !this.#shows(this.invalidField)
-              ? this.errorMessage
-              : undefined,
-        },
-        new Set(fieldsInvalid || refused !== undefined ? ["fields"] : []),
-        t("cloud_restore.fix_fields"),
-      ),
+      this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
+      fieldsInvalid || refused !== undefined ? t("cloud_restore.fix_fields") : null,
       approved && this.reviewNeeded ? t("restore.review_first") : null,
     );
     return html`
@@ -256,7 +252,7 @@ export class SetupCloudRestoreScreen extends LitElement {
                           >
                         </p>
                         <setup-recovery-copy
-                          .errorMessage=${refusalShown(this.feedback, "refusal", "field") ? this.errorMessage : undefined}
+                          .errorMessage=${shownRefusal}
                           .refusedField=${this.invalidField}
                           @recovery-field-edited=${(
                             event: CustomEvent<{ field: RecoveryEntryField }>,
