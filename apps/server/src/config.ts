@@ -330,6 +330,8 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
   return environment;
 }
 
+/** {@link deploymentEnvironment} maps `dev` to `preproduction`, so a host is never both
+ * production and dev mode. */
 export function isDevMode(env: Env): boolean {
   return env.WAITRON_ENV === "dev";
 }

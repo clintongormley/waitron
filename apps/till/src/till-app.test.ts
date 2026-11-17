@@ -3591,7 +3591,7 @@ describe("till-app", () => {
     }
   });
 
-  it("keeps the join screen for an unknown device outside development, even with a remembered id", async () => {
+  it("keeps the join screen when the chooser is unavailable, even with a remembered id", async () => {
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
     try {
       const { el } = await mountApp({
@@ -3629,9 +3629,6 @@ describe("till-app", () => {
   });
 
   it("the login screen offers a Choose another device link that clears the tab device and returns to the chooser", async () => {
-    // This tab adopted a device (dev), so boot lands on the login screen WITH the switch affordance.
-    // Switching clears the tab device and re-boots; with no tab device the re-boot re-detects dev mode
-    // (getDevDevices resolves) and shows the chooser.
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "adopted-1");
     try {
       const { el } = await mountApp({
@@ -3654,8 +3651,8 @@ describe("till-app", () => {
     }
   });
 
-  it("the login screen has NO Switch device affordance for a non-dev enrolled device", async () => {
-    const { el } = await mountApp(); // default enrolled till, no tab device, not dev
+  it("the login screen offers no device choice when the chooser is unavailable", async () => {
+    const { el } = await mountApp();
     await flush(el);
     expect(lock(el)).not.toBeNull();
     expect(lock(el)!.canChooseDevice).toBe(false);

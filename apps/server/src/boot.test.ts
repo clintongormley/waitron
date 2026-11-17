@@ -3590,7 +3590,7 @@ describe("the chooser header reaches device routes through development boot", ()
     }
   }, 60_000);
 
-  it("a boot NOT in devMode ignores the header (401 with no cookie)", async () => {
+  it("a non-development boot without Demo refuses the chooser header", async () => {
     const port = await freePort();
     const server = await startServer(
       {

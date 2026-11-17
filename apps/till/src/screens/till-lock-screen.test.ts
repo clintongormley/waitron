@@ -634,7 +634,7 @@ describe("till-lock-screen", () => {
     expect(api.getLocales).toHaveBeenCalledTimes(1);
   });
 
-  it("offers no Switch device control outside dev mode", async () => {
+  it("offers no device choice when the chooser is unavailable", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-switch-device]")).toBeNull();

@@ -55,7 +55,7 @@ for (const path of ["/api/clock/state", "/api/attendance/inbox"]) {
     expect(response.status, JSON.stringify(await response.json())).toBe(200);
   });
 
-  it(`ignores the development header on ${path} outside development`, async () => {
+  it(`refuses the chooser header on ${path} when the chooser is disabled`, async () => {
     const response = await headerOnly(tillApp(false), path);
     expect({ status: response.status, body: await response.json() }).toEqual({
       status: 403,
