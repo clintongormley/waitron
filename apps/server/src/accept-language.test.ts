@@ -17,11 +17,16 @@ it.each([undefined, "", "en;q=2, es;q=-1, fr;q=0.1234, de;q=word, bad_tag, ca;fo
   },
 );
 
-it("rejects twenty 16 KiB malformed entries within a 500 ms budget", () => {
-  const header = "en" + " ".repeat(16 * 1024 - 3) + "x";
+it("rejects long malformed 16 KiB entries within a 500 ms budget", () => {
+  const headers = [
+    "en" + " ".repeat(16 * 1024 - 3) + "x",
+    "en" + " ".repeat(8190) + ";" + " ".repeat(8190) + "x",
+  ];
   const started = performance.now();
-  for (let index = 0; index < 20; index++) {
-    expect(parseAcceptLanguage(header)).toEqual([]);
+  for (const header of headers) {
+    for (let index = 0; index < 100; index++) {
+      expect(parseAcceptLanguage(header)).toEqual([]);
+    }
   }
   expect(performance.now() - started).toBeLessThan(500);
 });
