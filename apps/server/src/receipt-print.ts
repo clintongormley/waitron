@@ -1,4 +1,3 @@
-import { readReceiptSimulation } from "./receipt-presentation.js";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   deviceProfiles,
@@ -224,7 +223,7 @@ async function buildReceiptBytes(
     invoiceLocale: language ?? ticket.locale,
     namesLocale: ticket.namesLocale ?? ticket.locale,
     printer,
-    simulated: await readReceiptSimulation(tx, saleId, cfg.practiceMode === true),
+    simulated: cfg.practiceMode,
     duplicate,
     ...(guests === undefined ? {} : { guests }),
   });

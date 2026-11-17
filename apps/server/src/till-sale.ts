@@ -349,7 +349,6 @@ export interface BillTenderRefund {
 }
 
 export interface TillSaleResult extends ReceiptPresentation {
-  simulated: boolean;
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
   issuedOffsetMinutes?: number;
   invoiceType?: "F1" | "F2" | "R4" | "R5";
@@ -962,7 +961,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, workingOrderId)),
-    ...(await readReceiptPresentation(tx, issued.saleId, issued.locale, cfg.practiceMode === true)),
+    ...(await readReceiptPresentation(tx, issued.saleId, issued.locale)),
     locale: issued.locale,
     namesLocale: issued.invoiceLocales[0]!,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
@@ -1144,7 +1143,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-    ...(await readReceiptPresentation(tx, saleId, language.locale, cfg.practiceMode === true)),
+    ...(await readReceiptPresentation(tx, saleId, language.locale)),
     ...(await readReceiptOrder(tx, workingOrderId)),
     locale: language.locale,
     namesLocale: language.invoiceLocales[0]!,
@@ -1869,7 +1868,7 @@ async function finalizeCapture(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptPresentation(tx, saleId, language.locale, cfg.practiceMode === true)),
+        ...(await readReceiptPresentation(tx, saleId, language.locale)),
         ...(await readReceiptOrder(tx, req.id)),
         locale: language.locale,
         namesLocale: language.invoiceLocales[0]!,
@@ -2023,7 +2022,7 @@ async function finalizeRecovery(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptPresentation(tx, saleId, language.locale, cfg.practiceMode === true)),
+        ...(await readReceiptPresentation(tx, saleId, language.locale)),
         ...(await readReceiptOrder(tx, req.id)),
         locale: language.locale,
         namesLocale: language.invoiceLocales[0]!,

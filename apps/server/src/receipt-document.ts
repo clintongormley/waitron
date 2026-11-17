@@ -62,13 +62,14 @@ export interface ReceiptDocumentInput {
   /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
   paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
-  result: Omit<TillSaleResult, keyof ReceiptPresentation | "simulated">;
+  result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;
   venueAddress?: readonly string[];
   invoiceLocale: string;
   namesLocale?: string;
+  /** Marks a practice document, regardless of whether money moved. */
   simulated?: boolean;
   duplicate?: boolean;
   guests?: number;

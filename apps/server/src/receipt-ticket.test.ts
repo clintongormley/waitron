@@ -918,7 +918,7 @@ describe("the QR comes first on an invoice that carries one", () => {
       }),
     );
     expect(lines.slice(0, 6 + legal(PRINTER_80).length)).toEqual([
-      "PRUEBA - SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
       rule(PRINTER_80),
       centred(PRINTER_80, "QR tributario:"),
       "<QR>",
@@ -926,7 +926,7 @@ describe("the QR comes first on an invoice that carries one", () => {
       rule(PRINTER_80),
       ...legal(PRINTER_80),
     ]);
-    expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
+    expect(lines.at(-1)).toBe("DOCUMENTO DE PRUEBA");
   });
 
   it("prints a sale with no QR subtitle-first, and no legend anywhere: the footer follows the tender", () => {
@@ -1151,7 +1151,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
 
-    expect(s.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
+    expect(s.match(/DOCUMENTO DE PRUEBA/g)).toHaveLength(2);
     expect(s).toContain("VERI*FACTU");
   });
 
@@ -2714,7 +2714,7 @@ describe("the receipt's fixed words follow its language", () => {
     {
       locale: "ca-ES",
       words: {
-        practice: "PROVA - SENSE COBRAMENT REAL",
+        practice: "PROVA",
         duplicate: "DUPLICAT",
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
@@ -2749,7 +2749,7 @@ describe("the receipt's fixed words follow its language", () => {
     {
       locale: "gl-ES",
       words: {
-        practice: "PROBA - SEN COBRO REAL",
+        practice: "PROBA",
         duplicate: "DUPLICADO",
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
@@ -2784,7 +2784,7 @@ describe("the receipt's fixed words follow its language", () => {
     {
       locale: "eu-ES",
       words: {
-        practice: "PROBA - BENETAKO KOBRANTZARIK GABE",
+        practice: "PROBA",
         duplicate: "BIKOIZKARIA",
         name: "Charcutería La Buena",
         nif: "IFZ: B12345678",
@@ -3260,7 +3260,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
     expect(lines.slice(-3)).toEqual([
       centred(PRINTER_80, TRIM.footerMessage!),
       rule(PRINTER_80),
-      "PRUEBA - SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     ]);
   });
 

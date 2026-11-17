@@ -83,7 +83,7 @@ describe("A4 invoice PDF", () => {
       expect(page.text).toContain(text);
     expect(page.text).not.toContain("Current mutable");
     expect(page.text).not.toContain("DUPLICADO");
-    expect(page.text).not.toContain("PRUEBA - SIN COBRO REAL");
+    expect(page.text).not.toContain("DOCUMENTO DE PRUEBA");
     expect((await rendered()).bytes).toEqual((await rendered()).bytes);
   });
 
@@ -186,7 +186,7 @@ describe("A4 invoice PDF", () => {
       result: { ...fixture.result, qr: "" },
     });
     expect(pages[0]!.text).toContain("DUPLICADO");
-    expect(pages[0]!.text).toContain("PRUEBA - SIN COBRO REAL");
+    expect(pages[0]!.text).toContain("DOCUMENTO DE PRUEBA");
     expect(pages[0]!.text).not.toContain("VERI*FACTU");
     expect(pages[0]!.qr).toBeNull();
   });

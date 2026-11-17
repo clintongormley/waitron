@@ -415,7 +415,7 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
       receipt: { ...FULL_INVOICE_DOCUMENT_FIXTURE.receipt, footerMessage: undefined },
       result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
     });
-    expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "PRUEBA - SIN COBRO REAL"]);
+    expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "DOCUMENTO DE PRUEBA"]);
   });
 
   const withAddresses = (venueAddress: string[], domicile: string) =>

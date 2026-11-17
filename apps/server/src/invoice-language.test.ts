@@ -21,7 +21,7 @@ const languages = [
       "Cash €20.00",
       "Change €0.31",
       "DUPLICATE",
-      "PRACTICE - NO REAL CHARGE",
+      "TEST DOCUMENT",
     ],
   },
   {
@@ -37,7 +37,7 @@ const languages = [
       "Efectivo 20,00 €",
       "Cambio 0,31 €",
       "DUPLICADO",
-      "PRUEBA - SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     ],
   },
   {
@@ -53,7 +53,7 @@ const languages = [
       "Efectiu 20,00 €",
       "Canvi 0,31 €",
       "DUPLICAT",
-      "PROVA - SENSE COBRAMENT REAL",
+      "PROVA",
     ],
   },
   {
@@ -69,7 +69,7 @@ const languages = [
       "Efectivo 20,00 €",
       "Cambio 0,31 €",
       "DUPLICADO",
-      "PROBA - SEN COBRO REAL",
+      "PROBA",
     ],
   },
   {
@@ -85,7 +85,7 @@ const languages = [
       "Eskudirua 20,00 €",
       "Itzulia 0,31 €",
       "BIKOIZKARIA",
-      "PROBA - BENETAKO KOBRANTZARIK GABE",
+      "PROBA",
     ],
   },
 ];

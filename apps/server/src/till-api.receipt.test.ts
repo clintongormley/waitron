@@ -516,7 +516,6 @@ it.each(["cash", "card"] as const)(
 describe("GET /api/sales/:id (filed ticket recovery)", () => {
   it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    cfg.practiceMode = true;
     const printerId = await makePrinter();
     await configureReceipt({ printerId });
     const app = new Hono();
@@ -553,7 +552,6 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({
         invoiceType: "F2",
-        simulated: true,
         invoiceNumber: "A/1",
         locale: "es-ES",
         issuedAt: new Date(before.sales[0]!.issuedAt).toISOString(),

@@ -716,7 +716,7 @@ describe("till-ticket-view", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });
 
-  it("marks a practice receipt as a simulated payment with no real charge", async () => {
+  it("marks a practice receipt without claiming whether money moved", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result,
       issuer,
@@ -724,7 +724,7 @@ describe("till-ticket-view", () => {
       simulated: true,
     });
     expect(el.shadowRoot!.querySelector("[data-test=simulation-notice]")?.textContent).toContain(
-      "SIN COBRO REAL",
+      "DOCUMENTO DE PRUEBA",
     );
   });
 
@@ -2066,8 +2066,8 @@ describe("till-ticket-view: the sale's own language", () => {
     const notice = (el: TillTicketView) =>
       el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!.trim();
 
-    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA — SENSE COBRAMENT REAL");
-    expect(notice((await practice({})).el)).toBe("PRUEBA — SIN COBRO REAL");
+    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA");
+    expect(notice((await practice({})).el)).toBe("DOCUMENTO DE PRUEBA");
   });
 
   it("falls back to the till's boot language when the result names none", async () => {

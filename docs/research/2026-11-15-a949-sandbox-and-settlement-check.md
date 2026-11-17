@@ -202,3 +202,5 @@ Waitron omits a SumUp battery percentage when its activity time is missing, inva
 or over ten minutes old at the status read. The existing alert cache can retain an accepted reading
 for another five minutes. An idle reader may therefore show no percentage or low-battery alert;
 check its charge on the reader. These are Waitron limits, not a provider freshness guarantee.
+
+Practice customer documents keep a neutral test-document mark. It does not say whether money moved; a provider sandbox and a live provider use the same practice-document wording. The dashboard’s no-charge notice identifies only Waitron’s built-in simulator.

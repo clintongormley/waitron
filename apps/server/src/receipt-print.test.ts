@@ -1173,6 +1173,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     )!;
     expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("TOTAL");
     expect(decodeTicket(new Uint8Array(receipt.payload))).not.toContain("SIN COBRO REAL");
+    expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("DOCUMENTO DE PRUEBA");
   });
 
   it("marks an explicitly printed practice sale as simulated", async () => {
@@ -1203,7 +1204,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
           jobs.find((job) => decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"))!.payload,
         ),
       ),
-    ).toContain("PRUEBA - SIN COBRO REAL");
+    ).toContain("DOCUMENTO DE PRUEBA");
   });
 
   it("auto + printer + hand-keyed CARD: the receipt carries NO kick; a separate drawer job opens the drawer for the card slip", async () => {

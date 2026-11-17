@@ -416,7 +416,7 @@ describe("stored invoice document projection", () => {
       tradingName: "Dining room",
       printTradingName: true,
     });
-    expect(document.simulated).toBe(false);
+    expect(document.simulated).toBe(venue.cfg.practiceMode);
   });
 
   it.each(["cash", "card"] as const)(
@@ -1328,7 +1328,7 @@ describe("the simplified receipt's A4 tax table", () => {
   );
 });
 
-it("does not put a no-charge heading on a provider-paid Prepare invoice", async () => {
+it("keeps a neutral test-document mark on a provider-paid Prepare invoice", async () => {
   const backend = none();
   const sale = await issue(backend);
   const order = await seedWorkingOrder(suite.db);
@@ -1344,17 +1344,11 @@ it("does not put a no-charge heading on a provider-paid Prepare invoice", async 
   const document = await withTransaction(suite.db, (tx) =>
     readInvoiceDocument(backend, tx, { ...venue.cfg, practiceMode: true }, sale.saleId),
   );
-  expect(document.simulated).toBe(false);
+  expect(document.simulated).toBe(true);
   expect(buildReceiptDocument(document).elements).not.toContainEqual(
     expect.objectContaining({ kind: "text", text: "PRUEBA - SIN COBRO REAL" }),
   );
-});
-
-it("preserves the practice flag when reading a historical unpaid invoice", async () => {
-  const backend = none();
-  const sale = await issue(backend);
-  const receipt = await withTransaction(suite.db, (tx) =>
-    readTransactionReceipt(backend, tx, { ...venue.cfg, practiceMode: true }, sale.saleId),
+  expect(buildReceiptDocument(document).elements).toContainEqual(
+    expect.objectContaining({ kind: "text", text: "DOCUMENTO DE PRUEBA" }),
   );
-  expect(receipt.simulated).toBe(true);
 });

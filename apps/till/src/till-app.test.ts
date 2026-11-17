@@ -6883,7 +6883,6 @@ describe("till-app", () => {
     const { el } = await mountWidget<TillApp>("till-app", {
       api: stubApi({
         getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent: "prepare" }),
-        recordSale: vi.fn().mockResolvedValue({ ...saleResult, simulated: true }),
       }),
     });
     const c = await toCounter(el);

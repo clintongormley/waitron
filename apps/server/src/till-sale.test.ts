@@ -3158,7 +3158,6 @@ describe("receipt presentation sources", () => {
       readReceiptPresentation(tx, randomUUID(), "en-GB"),
     );
     expect(absent).toEqual({
-      simulated: false,
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
@@ -3204,7 +3203,6 @@ describe("receipt presentation sources", () => {
     expect(
       await withTransaction(suite.db, (tx) => readReceiptPresentation(tx, randomUUID(), "en-GB")),
     ).toEqual({
-      simulated: false,
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],

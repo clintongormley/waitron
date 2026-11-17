@@ -37,7 +37,6 @@ import type { TillSaleResult } from "./till-sale.js";
 // `captured` arm runs.
 
 const TICKET: TillSaleResult = {
-  simulated: false,
   receiptTrim: {},
   venueAddress: [],
   receiptSettings: { printAddress: false },
