@@ -921,7 +921,7 @@ project reads 99.71/95.18/100/100 with it — still green, but 0.18 over its bra
 So the include is unchanged. What naming the file would COST is 0.89 of the root project's branch
 margin — 1.07 down to 0.18 — in exchange for one test that asserts nothing (`resolve`) and one that
 must either write into the box's state directory or exercise a copy of the module. The config
-comment now carries that reason instead of the claim it used to make. The obvious
+comment now points to that reason instead of the claim it used to make. The obvious
 alternative nobody has taken: `isAbsolute(configured) ? configured : resolve(configured)` has no
 observable effect at all, so deleting it would remove the unassertable branch outright — a change to
 dev tooling rather than to a coverage bar, which is why T3 did not make it. The alternative worth
