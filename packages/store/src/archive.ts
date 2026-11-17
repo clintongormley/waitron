@@ -23,13 +23,22 @@ const workingName = (path: string) => `${path}.partial`;
  * store routes the statement to the read connection, where the copy holds the committed state.
  */
 export async function archiveTo(target: StatementTarget, path: string): Promise<void> {
+  await withArchiveFile(path, (working) => {
+    target.run(sql`vacuum into ${working}`);
+  });
+}
+
+export async function withArchiveFile(
+  path: string,
+  write: (working: string) => void | Promise<void>,
+): Promise<void> {
   const working = workingName(path);
   await rm(working, { force: true });
   try {
     // A copy holds the whole database. The engine creates a missing target 644 under a mask of 022;
     // an empty file it finds, it fills and leaves at the mode it has.
     closeSync(openSync(working, "a", 0o600));
-    target.run(sql`vacuum into ${working}`);
+    await write(working);
     await rename(working, path);
   } catch (error) {
     await rm(working, { force: true });

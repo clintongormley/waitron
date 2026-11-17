@@ -17,6 +17,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import * as store from "@waitron/store";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,7 +54,10 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 vi.mock("node:fs/promises", { spy: true });
-afterEach(() => vi.mocked(fs.rename).mockReset());
+afterEach(() => {
+  vi.mocked(fs.rename).mockReset();
+  vi.restoreAllMocks();
+});
 
 // Migrated once and COPIED per test: the sweep only reads the database and copies the file.
 let templateDir: string;
@@ -224,6 +228,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
   }, 60_000);
 
   it("enable from off writes an archive whose db.dump opens as the venue database", async () => {
+    const workerCopy = vi.spyOn(store, "archiveInWorker");
     const dest = await makeDestDir();
     const refs: Refs = {
       config: localFsConfig([dest], STRONG_KEY_1),
@@ -237,6 +242,11 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       const [name] = await waitForArchive(dest);
       await waitForArchiveUnderCurrentKey(sup);
       expect(sup.current().enabled).toBe(true);
+      expect(workerCopy).toHaveBeenCalledWith(
+        join(refs.venueDir, store.VENUE_FILE),
+        expect.any(String),
+        expect.any(AbortSignal),
+      );
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_1));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(true);
 
@@ -264,8 +274,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
   }, 60_000);
 
   it("archives while a write transaction is held on another handle", async () => {
-    // Shows the archive lands while a transaction is held, not which handle the supervisor opened:
-    // the store routes it to the read connection either way (`packages/store/src/index.test.ts`).
     const dest = await makeDestDir();
     const venueDir = await makeVenueDir();
     const boot = await openVenueDatabase(venueDir);
@@ -417,16 +425,10 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       log: (level, event) => refs.logs.push({ level, event }),
       // Only the copy fails, so the tick reaches it.
       openVenue: async (dir) => {
-        const opened = await openVenueDatabase(dir);
-        const venue = Object.assign(
-          Object.create(Object.getPrototypeOf(opened.venue) as object),
-          opened.venue,
-          {
-            archiveTo: () =>
-              Promise.reject(new Error("the copy fails so the sweep stores nothing")),
-          },
-        ) as typeof opened.venue;
-        return { ...opened, venue };
+        vi.spyOn(store, "archiveInWorker").mockRejectedValue(
+          new Error("the copy fails so the sweep stores nothing"),
+        );
+        return openVenueDatabase(dir);
       },
     });
     try {
@@ -481,20 +483,13 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       log: (level, event) => refs.logs.push({ level, event }),
       stagingTurn: turn,
       openVenue: async (dir) => {
-        const opened = await openVenueDatabase(dir);
-        const realArchive = opened.venue.archiveTo.bind(opened.venue);
-        const venue = Object.assign(
-          Object.create(Object.getPrototypeOf(opened.venue) as object),
-          opened.venue,
-          {
-            archiveTo: async (outFile: string) => {
-              copyStarted();
-              await held;
-              await realArchive(outFile);
-            },
-          },
-        ) as typeof opened.venue;
-        return { ...opened, venue };
+        const realArchive = store.archiveInWorker;
+        vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, outFile, signal) => {
+          copyStarted();
+          await held;
+          await realArchive(source, outFile, signal);
+        });
+        return openVenueDatabase(dir);
       },
     });
     try {
@@ -553,19 +548,11 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       log: (level, event) => refs.logs.push({ level, event }),
       // The second sweep's copy fails, so nothing is ever stored under the new key.
       openVenue: async (dir) => {
-        const first = opens++ === 0;
-        const opened = await openVenueDatabase(dir);
-        const realArchive = opened.venue.archiveTo.bind(opened.venue);
-        const venue = Object.assign(
-          Object.create(Object.getPrototypeOf(opened.venue) as object),
-          opened.venue,
-          {
-            archiveTo: first
-              ? realArchive
-              : () => Promise.reject(new Error("the new sweep stores nothing")),
-          },
-        ) as typeof opened.venue;
-        return { ...opened, venue };
+        if (opens++ !== 0)
+          vi.spyOn(store, "archiveInWorker").mockRejectedValue(
+            new Error("the new sweep stores nothing"),
+          );
+        return openVenueDatabase(dir);
       },
     });
     try {
@@ -2123,14 +2110,13 @@ describe("scheduled backup passes", () => {
     const combinedSignals = vi.spyOn(AbortSignal, "any");
     const { sup, refs, dest } = await prepared({
       openVenue: async (dir) => {
-        const store = await openVenueDatabase(dir);
-        const archive = store.venue.archiveTo.bind(store.venue);
-        vi.spyOn(store.venue, "archiveTo").mockImplementation(async (file) => {
+        const archive = store.archiveInWorker;
+        vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, file, signal) => {
           entered();
           await held;
-          await archive(file);
+          await archive(source, file, signal);
         });
-        return store;
+        return openVenueDatabase(dir);
       },
     });
     let running: Promise<unknown> | undefined;
@@ -2150,6 +2136,40 @@ describe("scheduled backup passes", () => {
     } finally {
       release();
       await Promise.all([running, loading]);
+      await sup.stop();
+    }
+  });
+
+  it("a runner stop reaches the copy and prevents upload", async () => {
+    let entered!: (signal: AbortSignal) => void;
+    let release!: () => void;
+    const reached = new Promise<AbortSignal>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, target, signal) => {
+      entered(signal!);
+      await held;
+      await archive(source, target, signal);
+    });
+    const { sup, dest } = await prepared();
+    const controller = new AbortController();
+    let running: Promise<unknown> | undefined;
+    try {
+      await sup.reload();
+      running = sup.pass(new Date("2026-11-17T12:00:00Z"), controller.signal);
+      const copySignal = await reached;
+      controller.abort();
+      expect(copySignal.aborted).toBe(true);
+      release();
+      await running;
+      expect(await listArchives(dest)).toEqual([]);
+    } finally {
+      release();
+      await running;
       await sup.stop();
     }
   });

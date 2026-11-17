@@ -136,6 +136,9 @@ A big write gains nothing from a worker: the sale write on the main thread still
 yet tried through the real store, or on the reference micro PC. Today the backup copy runs on the main thread:
 `archiveTo` is one synchronous statement (`packages/store/src/archive.ts:24-34`). Measure 9 decides what actually moves.
 
+**2026-11-17:** Scheduled backups now use `archiveInWorker` for the venue copy; the
+main-thread source description above records the earlier implementation. Heavy reads remain separate.
+
 **What A1018 asks of the runner** (read, not run). Each job's
 record also says whether it stops at a stepdown or, if not, why it may keep running until the close. That is
 the `atStepdown` mark or the `reason` each closer already carries (`background-duties.ts:8-13`); the guard

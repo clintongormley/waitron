@@ -22,6 +22,24 @@ calls it. Writes stay on the main thread.
 README §7; CLAUDE.md §3 ("One process owns a venue folder at a time"; Litestream's
 `_litestream_seq`, `_litestream_lock` and `.venue.db-litestream/`). Slice rules apply.
 
+## 2026-11-17 cancellation amendment — watcher-cleared at 21:28
+
+The build's two Claude run-it reviews and the driver's 600 MB probe found that terminating the
+worker did not interrupt a running `VACUUM INTO`. A running copy finishes before an abort rejects,
+then its working file is removed and nothing is uploaded. Reload, close and stepdown can therefore
+wait for that copy. The Mac probes measured about 1–2 seconds per GB; this is not a time bound.
+
+This replaces the termination constraint, Review Focus 3 and Task 1's abort-test wording below.
+Remove `worker.terminate`; the abort test asserts completion followed by discard and cleanup.
+For Task 2, `runOnce` passes its actual sweep signal to `archive(outFile, signal)`, which the
+supervisor forwards to `archiveInWorker`, covering both reload and runner stops. Add the sweep
+module to the changed files for that forwarding and remove its two stale `archiveTo` comments.
+Keep the no-upload and cleanup assertions. No interruptible-copy design is part of this slice.
+
+The watcher also cleared the authority record: the A1308 programme and lane assignment, the earlier
+plan review as recorded in the queue, and the watcher's build and amendment clearances. No owner
+approval of this slice's design is claimed.
+
 ## What it builds
 
 `archiveInWorker`, its use by the backup sweep, and a test that the main thread keeps answering
@@ -73,15 +91,15 @@ jr8 and its measure 9 verdict.
   writer but leaves a file it creates itself at mode 644, which is why the pre-creation matters.
 - A copy is complete or absent: a worker that fails or is terminated leaves no `path`, and its
   working file is removed (the sweep's existing clean-up, `backup-sweep.ts:338-339`, removes `path`).
-- The worker is terminated on the sweep's abort signal.
+- **Replaced by the 21:28 amendment above:** a started copy finishes, then an aborted sweep discards it.
 
 ## Review Focus
 
 1. **A copy taken while a sale commits.** The copy is a consistent snapshot (`VACUUM INTO` reads in
    one transaction); the sale is not blocked. Task 1's "sales keep committing during a copy".
 2. **Litestream running.** The worker's connection must not checkpoint or touch Litestream's tables.
-3. **An abort mid-copy.** The worker ends, the partial file is removed, the main thread is not left
-   waiting. Task 1.
+3. **An abort mid-copy (21:28 amendment).** The worker finishes its statement before the partial
+   file is removed and the promise rejects; reload, close and stepdown can wait. Task 1.
 4. **The worker failing to start** (resource limit). The error reaches `runOnce`, which records the
    run stopped, as any copy failure does today.
 5. **Two copies at once.** Impossible through the staging turn (`backup-sweep.ts:501-516`); the
@@ -100,7 +118,8 @@ jr8 and its measure 9 verdict.
   (`archiveTo` on the same file: longest gap over 50 ms — if the control does not stall, the file is
   too small to prove anything; grow it); `"the copy is created owner-only and appears only when complete"`
   (mode 0600; no `path` while the working file exists); `"sales keep committing during a copy"`;
-  `"an abort ends the worker and leaves neither the target nor its working file"`;
+  `"waits for a running copy, then discards it on abort before answering"` (21:28 amendment; worker
+  exits normally before rejection, neither target nor working file remains);
   `"a worker that fails rejects with its error"`.
 - [ ] **Step 2–4:** FAIL; implement (worker file resolved with `new URL("./archive-worker-main.js", import.meta.url)` or an inline `eval: true` script, whichever the store's build ships; read its `tsconfig`/build first); PASS.
   Commit: "Copy the venue database for a backup on a worker thread".

@@ -1,6 +1,6 @@
 import { driveSchedule } from "./testing/backup-schedule.js";
 import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
-// Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
+// Each case injects the archive step; the supervisor supplies the worker copy.
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";

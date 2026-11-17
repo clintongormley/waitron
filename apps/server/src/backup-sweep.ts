@@ -117,9 +117,9 @@ export interface BackupSweepDeps {
   log: Logger;
   /**
    * Must leave either a whole copy at `outFile` or nothing, so a truncated copy is never encrypted
-   * as a good artifact; the store's `archiveTo` renames its working file into place when done.
+   * as a good artifact.
    */
-  archive: (outFile: string) => Promise<void>;
+  archive: (outFile: string, signal: AbortSignal) => Promise<void>;
   buildManifest?: ManifestBuilder;
   now?: () => Date;
   /**
@@ -261,9 +261,8 @@ export async function runOnce(
         });
       await room(2 * estimate + estimate * copies);
     }
-    await deps.archive(staged);
+    await deps.archive(staged, deps.signal);
     dumped = true;
-    // `archiveTo` already creates this plaintext copy 0600; an injected `archive` need not.
     await chmod(staged, 0o600);
     if (deps.stagingEstimateBytes) await checkStagingSpace(deps, (await stat(staged)).size);
     const metadata = assembleArchiveEntries(manifest, null, parts);
