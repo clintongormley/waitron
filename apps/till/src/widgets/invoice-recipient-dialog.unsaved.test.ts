@@ -186,6 +186,40 @@ it("an accepted recipient save commits only submitted fields; newer edits surviv
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
+async function offeringSimplified() {
+  const { app, form } = await mount();
+  form.offerSimplified = true;
+  await form.updateComplete;
+  return { app, form };
+}
+function chooseSimplified(form: TillInvoiceRecipientDialog) {
+  form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!.click();
+}
+it("an accepted Simplified invoice instead closes without asking, even after an earlier full-invoice save and newer edits", async () => {
+  const { app, form } = await offeringSimplified();
+  await valid(form);
+  submit(form);
+  await fill(form, "legalName", "Newer name");
+  let accepted!: () => boolean;
+  form.addEventListener("invoice-recipient-simplified", () => (accepted = completion(form)));
+  chooseSimplified(form);
+  await fill(form, "legalName", "Newest name");
+  expect(accepted()).toBe(true);
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
+  expect((await question(app)).open).toBe(false);
+  expect(unload()).toBe(false);
+});
+it("a departed form's Simplified invoice instead sends nothing", async () => {
+  const { form } = await offeringSimplified();
+  let sent = 0;
+  form.addEventListener("invoice-recipient-simplified", () => sent++);
+  const oldSimplified = form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!;
+  form.remove();
+  oldSimplified.click();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(sent).toBe(0);
+});
 it("a refused recipient choice remains dirty without a second submission on Keep", async () => {
   const { app, form } = await mount();
   await valid(form);

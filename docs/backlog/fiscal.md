@@ -52,11 +52,6 @@ See LIVA 75.Dos, RD 1619/2012 art. 2.1. The server (#721) holds such money with 
 bill is paid. Asked as
 [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
 
-## The till offers no way back to a simplified invoice for a bill already saved as a full one
-
-Left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the
-server accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
-
 ## Adviser confirmation: supplier invoice numbers by issue year
 
 Confirm the owner's A981

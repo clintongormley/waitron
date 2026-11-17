@@ -148,6 +148,29 @@ async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light"
 const sent = (): BillPaymentRequest[] =>
   vi.mocked(api.takeBillPayment).mock.calls.map(([, request]) => request);
 
+async function typeRecipient(
+  form: HTMLElementTagNameMap["till-invoice-recipient-dialog"],
+  fields: [string, string][],
+) {
+  for (const [name, value] of fields) {
+    const input = form
+      .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await form.updateComplete;
+  }
+}
+
+const anaGarcia: [string, string][] = [
+  ["taxId", "12345678Z"],
+  ["legalName", "Ana García"],
+  ["address", "1 Main Street"],
+  ["postalCode", "28013"],
+  ["locality", "Madrid"],
+  ["province", "Madrid"],
+];
+
 async function typeGuests(el: TillApp, value: string): Promise<void> {
   const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -689,21 +712,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
-    for (const [name, value] of [
-      ["taxId", "12345678Z"],
-      ["legalName", "Ana García"],
-      ["address", "1 Main Street"],
-      ["postalCode", "28013"],
-      ["locality", "Madrid"],
-      ["province", "Madrid"],
-    ]) {
-      const input = form
-        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
-        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
-      input.value = value!;
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await form.updateComplete;
-    }
+    await typeRecipient(form, anaGarcia);
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
@@ -801,21 +810,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .click();
     await flush(el);
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
-    for (const [name, value] of [
-      ["taxId", "12345678Z"],
-      ["legalName", "Ana García"],
-      ["address", "1 Main Street"],
-      ["postalCode", "28013"],
-      ["locality", "Madrid"],
-      ["province", "Madrid"],
-    ]) {
-      const input = form
-        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
-        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
-      input.value = value!;
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await form.updateComplete;
-    }
+    await typeRecipient(form, anaGarcia);
     form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     await flush(el);
     const name = form
@@ -906,6 +901,215 @@ describe("till-app: the three ways to pay part of a bill", () => {
       expect(unload.defaultPrevented).toBe(true);
     },
   );
+
+  describe("a bill saved as a full invoice goes back to a simplified one", () => {
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "1 Main Street, 28013 Madrid, Madrid",
+      countryCode: "ES",
+    };
+
+    async function openFullBill(setOrderInvoiceChoice: ReturnType<typeof vi.fn>) {
+      let full = true;
+      setOrderInvoiceChoice.mockImplementation(async (_id: string, request: unknown) => {
+        if ((request as { invoiceType: string }).invoiceType === "F2") full = false;
+        return { revision: 8 };
+      });
+      const getPartyBills = vi.fn().mockImplementation(async () => [
+        billOf({
+          revision: full ? 7 : 8,
+          outstanding: "80.00",
+          invoiceType: full ? "F1" : "F2",
+          recipient: full ? recipient : null,
+        }),
+      ]);
+      const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+      const order = await openTable(el);
+      expect(text(order.shadowRoot!.querySelector("[data-invoice-choice]"))).toContain(
+        "Ana García",
+      );
+      order
+        .shadowRoot!.querySelector<HTMLElement>(
+          "[data-choose-bill-invoice]:not([data-table-menu] *)",
+        )!
+        .click();
+      await flush(el);
+      const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      return { el, order, form };
+    }
+
+    it("sends a simplified invoice with no customer, once, and the bill no longer shows one", async () => {
+      const setOrderInvoiceChoice = vi.fn();
+      const { el, order, form } = await openFullBill(setOrderInvoiceChoice);
+      const action = form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!;
+
+      action.click();
+      action.click();
+      await flush(el);
+
+      expect(setOrderInvoiceChoice.mock.calls).toEqual([
+        [
+          "wo-4",
+          {
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            revision: 7,
+            invoiceType: "F2",
+            recipient: null,
+          },
+        ],
+      ]);
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+      expect(order.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+    });
+
+    it("keeps the window open with the server's wording once a payment has been received", async () => {
+      const setOrderInvoiceChoice = vi.fn();
+      const { el, form } = await openFullBill(setOrderInvoiceChoice);
+      setOrderInvoiceChoice.mockRejectedValueOnce({ code: "invoice.choice_locked" });
+
+      form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!.click();
+      await flush(el);
+
+      const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      expect(dialog).not.toBeNull();
+      expect(
+        dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+      ).toBe(codeMessage("invoice.choice_locked"));
+      for (const field of dialog.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>(
+        "wt-input, wt-combobox",
+      ))
+        expect(field.error ?? "").toBe("");
+    });
+
+    it("offers no way back on a bill that is already simplified", async () => {
+      const { el } = await mountApp({
+        ...fullInvoicesOn(),
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      });
+      const order = await openTable(el);
+      order
+        .shadowRoot!.querySelector<HTMLElement>(
+          "[data-choose-bill-invoice]:not([data-table-menu] *)",
+        )!
+        .click();
+      await flush(el);
+
+      const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      expect(form).not.toBeNull();
+      expect(form.shadowRoot!.querySelector("[data-invoice-simplified]")).toBeNull();
+    });
+
+    async function openSimplifiedBill(
+      setOrderInvoiceChoice: ReturnType<typeof vi.fn>,
+      answer: (request: { invoiceType: "F1" | "F2" }) => Promise<{ revision: number }>,
+    ) {
+      let invoiceType: "F1" | "F2" = "F2";
+      let saved: PartyBill["recipient"] = null;
+      let revision = 7;
+      setOrderInvoiceChoice.mockImplementation(
+        async (
+          _id: string,
+          request: { invoiceType: "F1" | "F2"; recipient: PartyBill["recipient"] },
+        ) => {
+          const answered = await answer(request);
+          invoiceType = request.invoiceType;
+          saved = request.recipient;
+          revision = answered.revision;
+          return answered;
+        },
+      );
+      const getPartyBills = vi
+        .fn()
+        .mockImplementation(async () => [
+          billOf({ revision, outstanding: "80.00", invoiceType, recipient: saved }),
+        ]);
+      const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
+      const order = await openTable(el);
+      const open = async () => {
+        const opener = () =>
+          order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+            "[data-choose-bill-invoice]:not([data-table-menu] *)",
+          )!;
+        await vi.waitFor(() => expect(opener().disabled).toBe(false));
+        opener().click();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull(),
+        );
+        await flush(el);
+        return el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+      };
+      return { el, order, open };
+    }
+
+    it("offers the way back in a window still open after its full invoice was saved", async () => {
+      let accept!: (value: { revision: number }) => void;
+      const setOrderInvoiceChoice = vi.fn();
+      const { el, open } = await openSimplifiedBill(
+        setOrderInvoiceChoice,
+        () => new Promise((resolve) => (accept = resolve)),
+      );
+      const form = await open();
+      expect(form.shadowRoot!.querySelector("[data-invoice-simplified]")).toBeNull();
+      await typeRecipient(form, anaGarcia);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      await flush(el);
+      await typeRecipient(form, [["legalName", "Newer name"]]);
+
+      accept({ revision: 8 });
+      await flush(el);
+
+      expect(setOrderInvoiceChoice.mock.calls[0]![1].invoiceType).toBe("F1");
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBe(form);
+      expect(form.shadowRoot!.querySelector("[data-invoice-simplified]")).not.toBeNull();
+
+      form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!.click();
+      await flush(el);
+      accept({ revision: 9 });
+      await flush(el);
+      expect(setOrderInvoiceChoice.mock.calls[1]).toEqual([
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 8,
+          invoiceType: "F2",
+          recipient: null,
+        },
+      ]);
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    });
+
+    it("saves a full invoice, then goes back to a simplified one that asks for the guests at Pay", async () => {
+      const setOrderInvoiceChoice = vi.fn();
+      const { el, order, open } = await openSimplifiedBill(setOrderInvoiceChoice, async () => ({
+        revision: 7 + setOrderInvoiceChoice.mock.calls.length,
+      }));
+      const form = await open();
+      await typeRecipient(form, anaGarcia);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      await flush(el);
+      expect(setOrderInvoiceChoice.mock.calls[0]![1].invoiceType).toBe("F1");
+      expect(text(order.shadowRoot!.querySelector("[data-invoice-choice]"))).toContain(
+        "Ana García",
+      );
+
+      (await open()).shadowRoot!.querySelector<HTMLElement>("[data-invoice-simplified]")!.click();
+      await flush(el);
+
+      expect(setOrderInvoiceChoice.mock.calls[1]).toEqual([
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 8,
+          invoiceType: "F2",
+          recipient: null,
+        },
+      ]);
+      expect(order.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
+      await openDialog(el, "rest");
+      expect(dialog(el)!.asksGuests).toBe(true);
+    });
+  });
 
   it("asks where to make a bill dish before previewing a payment", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({

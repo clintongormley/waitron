@@ -106,6 +106,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  /** Offers a simplified invoice instead, for a bill already saved as a full one. */
+  @property({ attribute: false }) offerSimplified = false;
   @state() private attempted = false;
   @state() private countryCode = "ES";
   @state() private identifierType: RecipientIdentifierType = "tax-number";
@@ -372,6 +374,17 @@ export class TillInvoiceRecipientDialog extends LitElement {
         bubbles: true,
         composed: true,
       }),
+    );
+  }
+
+  #chooseSimplified(): void {
+    if (!this.isConnected || !this.active) return;
+    // The fields an earlier Use full invoice sent would make writeCompletion keep the window open
+    // after this save whenever the form differs from them; a simplified invoice keeps no fields.
+    this.#submitted = undefined;
+    this.#cancelAddressSearch();
+    this.dispatchEvent(
+      new CustomEvent("invoice-recipient-simplified", { bubbles: true, composed: true }),
     );
   }
 
@@ -666,6 +679,17 @@ export class TillInvoiceRecipientDialog extends LitElement {
         <wt-button slot="cancel" variant="secondary" @click=${() => this.#cancel()}
           >${t("action.cancel")}</wt-button
         >
+        ${
+          this.offerSimplified
+            ? html`<wt-button
+                slot="secondary"
+                variant="secondary"
+                data-invoice-simplified
+                @click=${() => this.#chooseSimplified()}
+                >${t("invoice.simplified_instead")}</wt-button
+              >`
+            : nothing
+        }
         <wt-button
           data-invoice-save
           variant=${saveAction.variant}

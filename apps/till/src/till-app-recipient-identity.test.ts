@@ -258,3 +258,15 @@ it.each(["identifierType", "identifierCountryCode"])(
     expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   },
 );
+it("offers no way back to a simplified invoice in the Counter's own invoice window", async () => {
+  const el = await placeCounter({
+    setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 5 }),
+  });
+  await choice(el);
+  emit(counter(el), "choose-invoice");
+  await flush(el);
+
+  const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+  expect(form).not.toBeNull();
+  expect(form.shadowRoot!.querySelector("[data-invoice-simplified]")).toBeNull();
+});

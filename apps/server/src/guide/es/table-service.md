@@ -118,6 +118,10 @@ corrección. Cuando ya has elegido un cliente, su nombre y su identificador apar
 **Factura completa**, en la zona de cobro. Al juntar cuentas, o al mover todos los platos a otra
 cuenta, la caja pregunta antes de cambiar el cliente de una factura completa.
 
+¿Has guardado una factura completa por error? Vuelve a abrir **Factura completa** y elige
+**Factura simplificada en su lugar**. Cuando la cuenta ya tiene un pago, sigue siendo factura
+completa.
+
 En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 

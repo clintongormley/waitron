@@ -26,6 +26,7 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
     "saved-choice",
     "delivery-email",
     "email-invalid",
+    "simplified-offered",
   ] as const)("%s form has no violations", async (state) => {
     setLocale("es-ES");
     const withEmail = state === "delivery-email" || state === "email-invalid";
@@ -46,9 +47,13 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
               ? { savedDelivery: { medium: "email", recipient: "ana@example.com" } as const }
               : {}),
           }
-        : {},
+        : state === "simplified-offered"
+          ? { offerSimplified: true }
+          : {},
       theme,
     );
+    if (state === "simplified-offered")
+      expect(el.shadowRoot!.querySelector("[data-invoice-simplified]")).not.toBeNull();
     if (withPrinter) {
       const delivery = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         "wt-combobox[name=delivery]",
