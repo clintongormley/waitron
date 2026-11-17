@@ -6720,8 +6720,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Full invoice for a bill owing with no sale filed, and, as on the payment step, not while a
-   * whole payment's answer is unknown; Receipt copy and Cancel and credit as the bills list offers
-   * them. */
+   * whole payment's answer is unknown; Print the bill for a bill owing with no sale filed that was
+   * not left unpaid; Receipt copy for any bill with a sale filed, paid or not; Cancel and credit as
+   * the bills list offers it. */
   #billDocumentItems(bill: PartyBill): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
     return [
@@ -6738,7 +6739,12 @@ export class TillTableOrderScreen extends LitElement {
             ${t("invoice.full")}
           </wt-button>`
         : nothing,
-      bill.status === "settled" && bill.receiptAvailable
+      owing(bill) && bill.invoiceNumber === undefined && !bill.leftUnpaid
+        ? html`<wt-button data-print-bill @click=${() => this.#dispatch("end-meal", target)}>
+            ${t("bill.print")}
+          </wt-button>`
+        : nothing,
+      (bill.status === "settled" || bill.status === "placed") && bill.receiptAvailable
         ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
             ${t("table.bill_receipt")}
           </wt-button>`

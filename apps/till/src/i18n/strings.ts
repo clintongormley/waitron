@@ -1915,6 +1915,7 @@ export const en = {
     "The refund got no answer, so it may have been made. Check this bill's payments before trying again.",
   // Record unpaid departure
   "departure.record": "Record unpaid departure",
+  "bill.print": "Print the bill",
   "departure.title": "Record unpaid departure",
   "departure.left_unpaid": "Left unpaid",
   "departure.scope":
@@ -4031,6 +4032,7 @@ export const es: Record<StringKey, string> = {
   "bill_refund.unconfirmed":
     "La devolución no obtuvo respuesta, así que puede que se haya hecho. Revisa los pagos de esta cuenta antes de volver a intentarlo.",
   "departure.record": "Registrar salida sin pagar",
+  "bill.print": "Imprimir la cuenta",
   "departure.title": "Registrar salida sin pagar",
   "departure.left_unpaid": "Sin pagar",
   "departure.scope":

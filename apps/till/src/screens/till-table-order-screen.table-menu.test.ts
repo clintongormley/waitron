@@ -174,6 +174,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
           "Comp the bill",
           "Record unpaid departure",
           "Full invoice",
+          "Print the bill",
         ],
       },
       {
@@ -315,6 +316,71 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(credit).toEqual([{ workingOrderId: "wo-2" }]);
   });
 
+  it("Print the bill sends end-meal for the bill on screen", async () => {
+    const el = await mountScreen();
+    const printed = capture(el, "end-meal");
+
+    item(el, "[data-print-bill]")!.click();
+
+    expect(printed).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("offers Print the bill on a presented bill with no invoice number", async () => {
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed" });
+    const el = await mountScreen({ bills: [presented] });
+
+    expect(groups(el)[0]!.items).toContain("Print the bill");
+  });
+
+  it("names Print the bill in Spanish", async () => {
+    setLocale("es");
+    const el = await mountScreen();
+
+    expect(groups(el)[0]!.items).toContain("Imprimir la cuenta");
+  });
+
+  it.each([
+    [
+      "a printed bill",
+      partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        invoiceNumber: "F-0007",
+        receiptAvailable: true,
+      }),
+    ],
+    ["a bill left unpaid", partyBill("wo-2", 2, "54.00", { status: "placed", leftUnpaid: true })],
+    [
+      "a paid bill",
+      partyBill("wo-2", 2, "0.00", { status: "settled", total: "54.00", receiptAvailable: true }),
+    ],
+    ["an abandoned bill", partyBill("wo-2", 2, "0.00", { status: "abandoned" })],
+  ])("offers no Print the bill on %s", async (_name, bill) => {
+    const el = await mountScreen({ bills: [bill] });
+
+    expect(item(el, "[data-print-bill]")).toBeNull();
+  });
+
+  it("a printed bill not yet paid offers Receipt copy, sent for the bill on screen", async () => {
+    const printed = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      invoiceNumber: "F-0007",
+      receiptAvailable: true,
+    });
+    const el = await mountScreen({ bills: [printed] });
+    const reprint = capture(el, "reprint-bill");
+
+    expect(groups(el)[0]!.items).toContain("Receipt copy");
+    item(el, "[data-bill-receipt]")!.click();
+
+    expect(reprint).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("an open bill with no receipt offers no Receipt copy", async () => {
+    const el = await mountScreen();
+
+    expect(item(el, "[data-bill-receipt]")).toBeNull();
+  });
+
   it("choosing Merge bills shows its picker beside the order, and Back closes it", async () => {
     const el = await mountScreen();
     await userEvent.click(menu(el));
@@ -345,7 +411,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         await userEvent.click(trigger);
 
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(15);
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(16);
         const box = popup.getBoundingClientRect();
         const anchor = trigger.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
@@ -428,6 +494,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         "Move this bill",
         "Record unpaid departure",
         "Full invoice",
+        "Print the bill",
+        "Receipt copy",
         "Cancel and credit",
       ]);
     });
