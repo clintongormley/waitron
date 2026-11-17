@@ -56,7 +56,6 @@ it("allows deferred evaluated work only at its saved due instant", async () => {
     .update(attendanceDays)
     .set({
       evaluatedRevision: work!.dirtyRevision,
-      deferredShiftIds: ["overnight"],
       nextDueAt: "2026-01-06T05:00:00.000Z",
     })
     .where(eq(attendanceDays.id, work!.id));

@@ -475,7 +475,6 @@ export async function processAttendanceDay(
       .update(attendanceDays)
       .set({
         evaluatedRevision: work.dirtyRevision,
-        deferredShiftIds: deferred.map((d) => d.id).sort(),
         nextDueAt: deferred.map((d) => d.at).sort()[0] ?? endAt,
       })
       .where(eq(attendanceDays.id, work.id));

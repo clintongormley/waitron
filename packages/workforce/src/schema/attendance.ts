@@ -50,11 +50,11 @@ export const attendanceDays = table(
     dirtyRevision: count("dirty_revision").notNull().default(1),
     evaluatedRevision: count("evaluated_revision").notNull().default(0),
     nextDueAt: tsString("next_due_at").notNull(),
-    deferredShiftIds: json<string[]>("deferred_shift_ids").notNull().default([]),
   },
   (t) => [
     uniqueIndex("attendance_days_scope_uq").on(t.businessDay),
     index("attendance_days_due_idx").on(t.nextDueAt),
+    index("attendance_days_start_idx").on(t.startAt),
     check("attendance_days_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
     check(
       "attendance_days_revision_ck",

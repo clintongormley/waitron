@@ -56,7 +56,11 @@ describe("completed attendance day", () => {
     expect(await f.process()).toEqual({ automaticEntryIds: [], questionIds: first.questionIds });
     expect(await f.entries()).toEqual(before);
     const [work] = await f.suite.db.select().from(attendanceDays);
-    expect(work).toMatchObject({ dirtyRevision: 3, evaluatedRevision: 3, deferredShiftIds: [] });
+    expect(work).toMatchObject({
+      dirtyRevision: 3,
+      evaluatedRevision: 3,
+      nextDueAt: "2026-01-06T04:00:00.000Z",
+    });
     expect(verifyChain(await readChain(f.suite.db, { nodeId: f.nodeId }))).toEqual({ ok: true });
   });
   it.each([
@@ -299,7 +303,6 @@ describe("completed attendance day", () => {
       {
         evaluatedRevision: 1,
         nextDueAt: "2026-01-06T06:00:00.000Z",
-        deferredShiftIds: ["overnight"],
       },
     ]);
     const first = await f.process({ facts: [], planned, now: new Date("2026-01-06T06:00:00Z") });
@@ -313,7 +316,7 @@ describe("completed attendance day", () => {
     });
     expect(await attendanceMailRows(f.suite.db)).toHaveLength(1);
     expect(await f.suite.db.select().from(attendanceDays)).toMatchObject([
-      { deferredShiftIds: [] },
+      { nextDueAt: "2026-01-06T04:00:00.000Z" },
     ]);
   });
   it("creates nothing for an empty day and refuses an unfinished day without writes", async () => {

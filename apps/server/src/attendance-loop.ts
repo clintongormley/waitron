@@ -43,7 +43,7 @@ export async function runAttendancePass(
         and(
           sql`${attendanceDays.nextDueAt} <= ${now.toISOString()}`,
           sql`${attendanceDays.endAt} <= ${now.toISOString()}`,
-          sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or json_array_length(${attendanceDays.deferredShiftIds}) > 0)`,
+          sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or ${attendanceDays.nextDueAt} > ${attendanceDays.endAt})`,
         ),
       )
       .limit(1);

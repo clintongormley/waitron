@@ -84,6 +84,29 @@ const gate = () => {
 };
 
 describe("attendance duty pass", () => {
+  it("keeps a day due until evaluated past its deferred end without a stored shift list", async () => {
+    await suite.db.insert(attendanceDays).values({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T04:00:00.000Z",
+      endAt: "2026-01-06T04:00:00.000Z",
+      dirtyRevision: 1,
+      evaluatedRevision: 1,
+      nextDueAt: "2026-01-06T05:00:00.000Z",
+    });
+    const { runAttendancePass } = await import("./attendance-loop.js");
+    expect(
+      await runAttendancePass({ ...deps(), now: () => new Date("2026-01-06T04:59:59Z") }),
+    ).toEqual({ processed: false, more: false });
+    expect(
+      await runAttendancePass({ ...deps(), now: () => new Date("2026-01-06T05:00:00Z") }),
+    ).toEqual({ processed: true, more: false });
+    expect((await suite.db.select().from(attendanceDays))[0]!.nextDueAt).toBe(
+      "2026-01-06T04:00:00.000Z",
+    );
+    expect(
+      await runAttendancePass({ ...deps(), now: () => new Date("2026-01-06T05:00:00Z") }),
+    ).toEqual({ processed: false, more: false });
+  });
   it("retains overnight deferred work until its end without another source change", async () => {
     const [version] = await suite.db
       .insert(rosterVersions)
@@ -114,7 +137,7 @@ describe("attendance duty pass", () => {
     });
     expect((await snapshot()).questions).toEqual([]);
     expect((await snapshot()).work.filter((row) => row.businessDay === "2026-01-05")).toMatchObject(
-      [{ deferredShiftIds: [shift!.id], nextDueAt: "2026-01-06T05:00:00.000Z" }],
+      [{ nextDueAt: "2026-01-06T05:00:00.000Z" }],
     );
     const late = new Date("2026-01-06T05:00:00Z");
     expect(await runAttendancePass({ ...deps(), now: () => late })).toEqual({
@@ -125,7 +148,7 @@ describe("attendance duty pass", () => {
       { shiftKey: `rota:${shift!.id}`, missingKinds: ["in", "out"] },
     ]);
     expect((await snapshot()).work.filter((row) => row.businessDay === "2026-01-05")).toMatchObject(
-      [{ deferredShiftIds: [] }],
+      [{ nextDueAt: "2026-01-06T04:00:00.000Z" }],
     );
   });
   it("appends on this node while preserving an older node's open entry and chain", async () => {

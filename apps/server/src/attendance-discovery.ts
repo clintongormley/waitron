@@ -112,7 +112,7 @@ export async function nextAttendanceDay(
       and(
         sql`${attendanceDays.nextDueAt} <= ${scope.now.toISOString()}`,
         sql`${attendanceDays.endAt} <= ${scope.now.toISOString()}`,
-        sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or json_array_length(${attendanceDays.deferredShiftIds}) > 0)`,
+        sql`(${attendanceDays.dirtyRevision} > ${attendanceDays.evaluatedRevision} or ${attendanceDays.nextDueAt} > ${attendanceDays.endAt})`,
       ),
     )
     .orderBy(
