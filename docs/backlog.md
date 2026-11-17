@@ -853,12 +853,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - Each new group Ready command moves the party's revision, so a waiter's open table screen meets
     `party.out_of_date` after it and reads again.
 
-- A line outside any group that needs no kitchen, held, and first released after its bill was paid
-  could not be marked served (`group.line_held`), because `stampSent` wrote `sent_at` only on an
-  open bill. Since B21 (#969, core `0053`) `stampSent` writes on any bill but an abandoned one;
-  whether this case is now served was not measured. Left open by service Task 9 (#814, served by
-  quantity, release reminders, Current orders).
-
 - **Loose ends left by service Task 11 (#916, cancellations, comps and discounts; B11a–B11g).**
   The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
   rather than the reason, is why.
