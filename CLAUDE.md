@@ -312,7 +312,7 @@ called weaker than its name, the topic file lists what it does not see.
   text. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
-- **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or disabled-module combinations. [Detail](docs/developers/conventions-ui.md).
+- **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts`, weaker than its name: it checks declared names against the server's resources and refuses a non-empty inline `dependencies: [` by reading text; it misses missing SQL dependencies, disabled-module combinations and a list passed in by variable. [Detail](docs/developers/conventions-ui.md).
 - **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
   venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
   Nothing guards the second half. See [conventions-ui.md](docs/developers/conventions-ui.md).

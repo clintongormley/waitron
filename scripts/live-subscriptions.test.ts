@@ -1,5 +1,5 @@
 // The root gate checks every UI module even when package-scoped CI would omit its server owner.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
@@ -8,6 +8,13 @@ import { enabledModules, parseModuleConfig } from "../packages/module/src/index.
 import { QUERY_DEPENDENCIES } from "../apps/dashboard/src/api/live-queries.js";
 import { liveResourceTypesForModules } from "../apps/server/src/live-resources.js";
 import { TILL_LIVE_TYPES } from "../apps/till/src/api/live-connection.js";
+import { sourceFilesIn } from "./no-till-as-issuer.mjs";
+
+function inlineDependencyLines(text: string): number[] {
+  return [...text.matchAll(/\bdependencies\s*:\s*\[(?!\s*\])/g)].map(
+    (match) => text.slice(0, match.index).split("\n").length,
+  );
+}
 
 it.each([
   {},
@@ -53,6 +60,52 @@ it("every shipped dashboard query subscribes only to a declared server resource"
     ),
   );
   expect(unknown).toEqual([]);
+});
+
+it.each([
+  ["refuses a one-line list", 'x({ dependencies: [{ type: "x" }] })', [1]],
+  [
+    "refuses a list whose first element is on the next line",
+    'x({\n  dependencies: [\n    { type: "x" },\n  ],\n})',
+    [2],
+  ],
+  ["allows an empty list", "x({ dependencies: [] })", []],
+  ["allows an empty list with a space", "x({ dependencies: [ ] })", []],
+  ["allows an empty list across lines", "x({ dependencies: [\n] })", []],
+  [
+    "allows a list built from declarations",
+    "x({ dependencies: QUERY_DEPENDENCIES.x.map((type) => ({ type })) })",
+    [],
+  ],
+  [
+    "reports the line of a later match",
+    'a;\nb;\nc({ dependencies: [] });\nd({ dependencies: [{ type: "x" }] });',
+    [4],
+  ],
+])("inline dependency matcher %s", (_label, text, lines) => {
+  expect(inlineDependencyLines(text)).toEqual(lines);
+});
+
+// Reads text: an unquoted non-empty `dependencies: [` is refused even in a comment or string; a
+// quoted key or a list passed by variable escapes. `[]` never refreshes on a resource change.
+it("no shipped dashboard source subscribes through an inline dependency list", () => {
+  const root = join(import.meta.dirname, "..");
+  const trees = [
+    "apps/dashboard/src",
+    "packages/dashboard-kit/src",
+    "packages/dashboard-modules/src",
+    ...readdirSync(join(root, "packages"))
+      .map((name) => `packages/${name}/src/dashboard`)
+      .filter((dir) => existsSync(join(root, dir))),
+  ];
+  const files = trees
+    .flatMap((dir) => sourceFilesIn(root, dir))
+    .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path));
+  expect(files.length).toBeGreaterThan(0);
+  const inline = files.flatMap((path) =>
+    inlineDependencyLines(readFileSync(join(root, path), "utf8")).map((line) => `${path}:${line}`),
+  );
+  expect(inline).toEqual([]);
 });
 
 it("keeps the daily report's live interests admitted when payments is off", () => {

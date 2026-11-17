@@ -354,7 +354,7 @@ export class DepartmentReceiptEditor extends LitElement {
       "theme",
       {
         key: `department-receipt-editor-theme:${department.id}:${opening}`,
-        dependencies: [{ type: "custom_themes" }],
+        dependencies: QUERY_DEPENDENCIES.listThemes.map((type) => ({ type })),
         read: async () => ++themeReads,
       },
       (read) => {

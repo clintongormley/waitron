@@ -848,13 +848,19 @@ expires, and the hold is not renewed”).
 
 Core and contributed screens export `QUERY_DEPENDENCIES`; `scripts/live-subscriptions.test.ts`
 checks those names against shipped resources. A rejected subscription closes the whole tab's
-stream, so a misspelled name affects other screens too. The guard catches unknown names, not missing
+stream, so a misspelled name affects other screens too. Its first case catches unknown names among those declarations, not missing
 SQL dependencies or disabled-module combinations. Cost: the live-updates run-it review found this
 unguarded coupling.
 
-The dependency list belongs in `live-queries.ts`. The guard reads that menu and does not
-inspect an inline list in a client method. A585-7's review renamed such an inline dependency to an
-unknown name and the guard passed; moving the names into the menu made it refuse them.
+The dependency list belongs in `live-queries.ts`. A585-7's review renamed an inline dependency to
+an unknown name and the guard passed; moving the names into the menu made it refuse them. A second
+case in the same file now refuses any non-empty inline `dependencies: [` in every JS or TS file not named
+`*.test.*` (helpers in `testing/` folders included) under
+`apps/dashboard/src`, `packages/dashboard-kit/src`, `packages/dashboard-modules/src` and every
+`packages/*/src/dashboard`; an empty `[]` stays allowed, for a query that never refreshes on a
+resource change. It is weaker than its name: it reads text, so a list built elsewhere and passed in
+by variable escapes it, as does a quoted `"dependencies": [` key, while any unquoted
+`dependencies: [` text is refused, in a comment or string as well as code, subscription or not.
 The fix also registered the labour module's own change source. Its real subscription probe changed
 from HTTP 400 to 200, with a shifts-only 200 control. The warning read follows the rota's live
 observation once; a second independent observation had fetched the warnings twice per notice.
@@ -2464,8 +2470,9 @@ name or the wrong one. Which surface reads which: [products.md](products.md).
 
 **Dashboard subscription names travel with their server sources.** A rejected subscription closes
 the whole tab's stream, so a misspelled name breaks other screens too. Guard:
-`scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or
-disabled-module combinations.
+`scripts/live-subscriptions.test.ts`, weaker than its name: it checks declared names against the
+server's resources and refuses a non-empty inline `dependencies: [` by reading text; it misses
+missing SQL dependencies, disabled-module combinations and a list passed in by variable.
 
 
 ## Root receipts moved on 2026-10-31
