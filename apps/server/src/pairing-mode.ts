@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { steadyNow } from "@waitron/shared";
 
 /**
  * The venue-wide join window, held open by the dashboard dialogs that are open.
  *
  * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: a restart or a promotion forgets every hold
  * and claim, so the window starts shut. `boot.ts` builds ONE holder for the device, join and print
- * mounts.
+ * mounts. Holds lapse on the `steady` clock; the times answered, and `openSince`, are wall-clock.
  */
 export const PAIRING_HOLD_MS = 3 * 60 * 1000;
 
@@ -32,9 +33,21 @@ export interface PairingMode {
 }
 
 export function createPairingMode(
-  opts: { now?: () => number; holdMs?: number; newId?: () => string; changed?: () => void } = {},
+  opts: {
+    now?: () => number;
+    steady?: () => number;
+    holdMs?: number;
+    newId?: () => string;
+    changed?: () => void;
+  } = {},
 ): PairingMode {
-  const { now = Date.now, holdMs = PAIRING_HOLD_MS, newId = randomUUID, changed } = opts;
+  const {
+    now = Date.now,
+    steady = steadyNow,
+    holdMs = PAIRING_HOLD_MS,
+    newId = randomUUID,
+    changed,
+  } = opts;
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
   let openSinceMs: number | null = null;
@@ -48,16 +61,15 @@ export function createPairingMode(
         prune();
         arm();
       },
-      Math.max(0, Math.min(...holds.values()) - now()),
+      Math.max(0, Math.min(...holds.values()) - steady()),
     );
     lapse.unref();
   };
 
   const prune = (): void => {
-    const t = now();
+    const t = steady();
     const before = holds.size;
-    // A hold further ahead than its length was stamped before the clock stepped back: it has lapsed.
-    for (const [id, until] of holds) if (until <= t || until - t > holdMs) holds.delete(id);
+    for (const [id, until] of holds) if (until <= t) holds.delete(id);
     if (holds.size === 0) openSinceMs = null;
     if (holds.size !== before) {
       arm();
@@ -69,6 +81,7 @@ export function createPairingMode(
     return holds.has(holdId);
   };
   const iso = (ms: number): string => new Date(ms).toISOString();
+  const wallAt = (end: number): string => iso(now() + (end - steady()));
 
   return {
     open() {
@@ -76,18 +89,17 @@ export function createPairingMode(
       const t = now();
       if (openSinceMs === null) openSinceMs = t;
       const holdId = newId();
-      holds.set(holdId, t + holdMs);
+      holds.set(holdId, steady() + holdMs);
       arm();
       changed?.();
       return { holdId, openUntil: iso(t + holdMs) };
     },
     renew(holdId) {
       if (!live(holdId)) return null;
-      const until = now() + holdMs;
-      holds.set(holdId, until);
+      holds.set(holdId, steady() + holdMs);
       arm();
       changed?.();
-      return { openUntil: iso(until) };
+      return { openUntil: iso(now() + holdMs) };
     },
     release(holdId) {
       const removed = holds.delete(holdId);
@@ -104,7 +116,7 @@ export function createPairingMode(
     },
     openUntil() {
       prune();
-      return holds.size === 0 ? null : iso(Math.max(...holds.values()));
+      return holds.size === 0 ? null : wallAt(Math.max(...holds.values()));
     },
     openSince() {
       prune();

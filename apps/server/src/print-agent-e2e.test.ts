@@ -160,7 +160,7 @@ describe("print-agent end to end", () => {
     });
     try {
       const app = new Hono();
-      const pairingMode = createPairingMode({ holdMs: 1_000 });
+      const pairingMode = createPairingMode({ holdMs: 1_000, steady: () => now });
       pairingMode.open();
       mountPrintApi(
         app,

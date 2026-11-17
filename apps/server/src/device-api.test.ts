@@ -559,7 +559,10 @@ describe("POST /api/device/join", () => {
   it("does not count requests a shut window stranded against the cap", async () => {
     const venue = await setupVenue(suite.db);
     let offset = 0;
-    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const mode = createPairingMode({
+      now: () => Date.now() + offset,
+      steady: () => performance.now() + offset,
+    });
     const app = mountApp(venue.cfg, undefined, mode);
     const first = mode.open();
     for (let i = 0; i < PENDING_CAP; i++) {
@@ -622,7 +625,10 @@ describe("POST /api/device/join", () => {
     async ({ reopened }) => {
       const venue = await setupVenue(suite.db);
       let offset = 0;
-      const mode = createPairingMode({ now: () => Date.now() + offset });
+      const mode = createPairingMode({
+        now: () => Date.now() + offset,
+        steady: () => performance.now() + offset,
+      });
       const app = mountApp(venue.cfg, undefined, mode);
       const first = mode.open();
       const knock = withheldKnock(app);
