@@ -267,17 +267,6 @@ the 2026-09-30 folders design; what remains:
   that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this
   entry is deleted and the changes left without Undo (the plan's section 2) become their own entry.
 
-## A1375 — A353's Undo: two rare ways a refusal is never shown
-
-- **A1375 — A353's Undo: two rare ways a refusal is never shown (found by #2510's review, not
-  reproduced).** (1) If a fresh preview that drops the change arrives in the instant between the
-  refusal being placed beside its change and the screen redrawing, the refusal can be removed
-  before it is drawn. (2) If a content language is switched off and back on within one preview
-  reload, a stale refusal can survive. Both are in `apps/dashboard/src/screens/menus-screen.ts`
-  (`#undo`, and the refusal pruning after a refresh). Next step: a test that holds the refusal
-  and delivers the preview in that gap, then route a refusal whose bullet is not drawn after the
-  redraw to the error line.
-
 ## A1377 — A353's Undo: two wordings for the owner
 
 - **A1377 — A353's Undo: two wordings for the owner** (from #2510). (1) If a menu is deleted while

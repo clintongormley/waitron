@@ -542,10 +542,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   on shared and included changes. Left for later (PRs 2–5): includes, products, sections, order and shortcuts.
   [Detail](backlog/menu.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
 
-- **A1375 — A353's Undo: two rare ways a refusal is never shown** — a preview arriving between
-  placing a refusal and the redraw, or a language switched off and on within one reload.
-  [Detail](backlog/menu.md#a1375--a353s-undo-two-rare-ways-a-refusal-is-never-shown)
-
 - **A1377 — A353's Undo: two wordings for the owner** — a deleted menu's price Undo, and a
   success line with two colons.
   [Detail](backlog/menu.md#a1377--a353s-undo-two-wordings-for-the-owner)
