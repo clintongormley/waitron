@@ -82,7 +82,7 @@ import type {
   TillSaleResult,
 } from "./api/client.js";
 
-// A table's bill paid in parts through the bill payment dialog (plan Task 15, design §12): the
+// A table's bill paid in parts through the bill payment dialog (bill payments design §12): the
 // dialog asks the server for each allocation, shows it, takes it, and the bill's balance follows.
 
 let api: TillApi;

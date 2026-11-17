@@ -1263,7 +1263,7 @@ export class TillStationQueue extends LitElement {
     return word === undefined ? nothing : html`<span class="line-state">${word}</span>`;
   }
 
-  /** `members`: identical portions drawn as one row from its first (spec §3.1). */
+  /** `members`: identical portions drawn as one row from its first (A803 design §3.1). */
   #renderLine(
     card: KitchenCard,
     group: MergedQueueGroup,

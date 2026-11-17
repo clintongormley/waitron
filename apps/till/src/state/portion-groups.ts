@@ -3,7 +3,7 @@ import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
 
 /**
- * Rows of identical portions shown as one (spec §3.1): rows with the same key form one group at the
+ * Rows of identical portions shown as one (A803 design §3.1): rows with the same key form one group at the
  * place of the first one met, its members ordered by line number. A row whose key is null stands
  * alone.
  */

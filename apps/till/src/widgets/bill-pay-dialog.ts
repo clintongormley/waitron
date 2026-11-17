@@ -2249,7 +2249,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   /**
-   * The server's ways to pay for items that cost more than is left (design §3.3), each a button
+   * The server's ways to pay for items that cost more than is left (bill payments design §3.3), each a button
    * with its amounts; pressing one asks for its allocation. A venue that takes no tips is never
    * offered the full price with a tip; the server offers only that one while a card is at the
    * reader, so when it is all there is, the card in progress is what holds the items.

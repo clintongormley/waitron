@@ -75,7 +75,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
 before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
 was fixed only for the last 28 documents. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps ':!apps/till' ':!apps/dashboard' packages scripts bench`. Some hits point
 into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
 so check which document each one names before cutting it. One was left on purpose:
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
