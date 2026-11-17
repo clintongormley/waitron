@@ -12,6 +12,8 @@
 > At 15:57 the watcher cleared one additional read-only pending condition: unprocessed future
 > days whose saved bounds differ from `businessDayBounds` run the existing refresh/process pass.
 > `day_cutover_changes` wakes that check, preserving scheduled changes to an earlier day end.
+> At 16:10 the watcher also cleared `settings.business_day` as a wake source for the same check;
+> the Canary-to-Madrid settings case covers that existing venue-clock input.
 > A1308's design was approved on 4 November (backlog); this slice was reviewed by Claude and
 > cleared by the watcher. No owner approval of this slice's design is claimed.
 

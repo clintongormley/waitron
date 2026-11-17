@@ -59,7 +59,13 @@ export function attendanceJob(deps: AttendancePassDeps & { maxSleepMs: number })
   return {
     name: "attendance.end_of_day",
     applies: deps.isPrimary,
-    wakeOn: ["attendance_days", "time_entries", "workforce_chains", "day_cutover_changes"],
+    wakeOn: [
+      "attendance_days",
+      "time_entries",
+      "workforce_chains",
+      "day_cutover_changes",
+      "settings.business_day",
+    ],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },

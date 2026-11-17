@@ -8,7 +8,7 @@ import {
   installChangeFeed,
   withTransaction,
 } from "@waitron/db";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { jobOrigin } from "@waitron/shared";
@@ -647,48 +647,71 @@ describe("attendance runner job", () => {
 });
 
 describe("attendance job change feed", () => {
-  it("a scheduled earlier day end wakes and evaluates the day at its corrected end", async () => {
-    await suite.db.insert(attendanceDays).values({
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T04:00:00.000Z",
-      endAt: "2026-01-06T04:00:00.000Z",
-      nextDueAt: "2026-01-06T04:00:00.000Z",
-    });
-    await installChangeFeed(
-      suite.db,
-      CORE_CHANGE_SOURCES.filter((source) => source.table === "day_cutover_changes"),
-    );
-    const at = new Date("2026-01-06T02:00:00Z");
-    const { attendanceJob } = await import("./attendance-loop.js");
-    const asleep = gate();
-    const runner = createJobRunner({
-      now: () => at,
-      log: () => {},
-      delay: async (ms, signal) => {
-        asleep.release();
-        await realSleep(ms, signal);
-      },
-    });
-    runner.add(attendanceJob({ ...deps(), now: () => at, maxSleepMs: 60_000 }));
-    try {
-      await asleep.promise;
-      await withTransaction(suite.db, (tx) =>
-        tx
-          .insert(dayCutoverChanges)
-          .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "03:00:00" }),
+  it.each([
+    {
+      table: "day_cutover_changes",
+      zone: "Europe/Madrid",
+      oldStart: "2026-01-05T04:00:00.000Z",
+      oldEnd: "2026-01-06T04:00:00.000Z",
+      end: "2026-01-06T02:00:00.000Z",
+    },
+    {
+      table: "settings",
+      zone: "Atlantic/Canary",
+      oldStart: "2026-01-05T05:00:00.000Z",
+      oldEnd: "2026-01-06T05:00:00.000Z",
+      end: "2026-01-06T04:00:00.000Z",
+    },
+  ])(
+    "a changed day end via $table wakes and evaluates the day at its corrected end",
+    async ({ table, zone, oldStart, oldEnd, end }) => {
+      await seedBusinessDay(suite.db, { timeZone: zone });
+      await suite.db.insert(attendanceDays).values({
+        businessDay: "2026-01-05",
+        startAt: oldStart,
+        endAt: oldEnd,
+        nextDueAt: oldEnd,
+      });
+      await installChangeFeed(
+        suite.db,
+        CORE_CHANGE_SOURCES.filter((source) => source.table === table),
       );
-      await vi.waitFor(
-        async () => {
-          const [day] = await suite.db.select().from(attendanceDays);
-          expect(day!.endAt).toBe("2026-01-06T02:00:00.000Z");
-          expect(day!.evaluatedRevision).toBe(1);
+      // Only the write under test may wake the subscribed job.
+      await withTransaction(suite.db, async () => {});
+      const at = new Date(end);
+      const { attendanceJob } = await import("./attendance-loop.js");
+      const asleep = gate();
+      const runner = createJobRunner({
+        now: () => at,
+        log: () => {},
+        delay: async (ms, signal) => {
+          asleep.release();
+          await realSleep(ms, signal);
         },
-        { timeout: 2_000 },
-      );
-    } finally {
-      await runner.stopJobs();
-    }
-  });
+      });
+      runner.add(attendanceJob({ ...deps(), now: () => at, maxSleepMs: 60_000 }));
+      try {
+        await asleep.promise;
+        await withTransaction(suite.db, async (tx) => {
+          if (table === "settings") await seedBusinessDay(tx, { timeZone: "Europe/Madrid" });
+          else
+            await tx
+              .insert(dayCutoverChanges)
+              .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "03:00:00" });
+        });
+        await vi.waitFor(
+          async () => {
+            const [day] = await suite.db.select().from(attendanceDays);
+            expect(day!.endAt).toBe(end);
+            expect(day!.evaluatedRevision).toBe(1);
+          },
+          { timeout: 2_000 },
+        );
+      } finally {
+        await runner.stopJobs();
+      }
+    },
+  );
 
   it("a clock-out through the workforce chain wakes and evaluates its marked day", async () => {
     await suite.db.insert(attendanceDays).values({
@@ -703,6 +726,8 @@ describe("attendance job change feed", () => {
       suite.db,
       WORKFORCE_CHANGE_SOURCES.filter((source) => source.table === "time_entries"),
     );
+    // Only the write under test may wake the subscribed job.
+    await withTransaction(suite.db, async () => {});
     const { attendanceJob } = await import("./attendance-loop.js");
     const asleep = gate();
     const runner = createJobRunner({
