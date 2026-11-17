@@ -5,7 +5,8 @@ import wcPlugin from "eslint-plugin-wc";
 import { importX } from "eslint-plugin-import-x";
 import eslintConfigPrettier from "eslint-config-prettier";
 
-// Use absolute exception globs: leading globstars do not cross dot-prefixed checkout paths.
+// Exception globs must be absolute: a `./` form does not match, and a leading `**`
+// does not cross a dot-prefixed folder.
 export default tseslint.config(
   {
     // Interrupted mutation runs can leave mutated source in .stryker-tmp.

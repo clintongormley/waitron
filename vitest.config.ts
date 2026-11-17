@@ -14,6 +14,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
+      // scripts/**/*.ts stays unmeasured: ci-and-gates.md → "What the storage switch did to the bars".
       include: ["scripts/**/*.mjs", "packages/db/src/english-only.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
