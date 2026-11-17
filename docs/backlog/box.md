@@ -24,7 +24,9 @@ verification. Reproduce the source search with
 Multiple guards in one file share a row. The original first slice accounted for
 `pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`, and
 the printing slice for `printer-probes.ts`, `printer-bluetooth-commands.ts`,
-`apps/print-agent/src/server-ca.ts` and `linux-devices.ts`; their open rows have been removed. The tables account for the remaining matched files and exclusions.
+`apps/print-agent/src/server-ca.ts` and `linux-devices.ts`, and the pairing slice for
+`pairing-mode.ts`, `page-test-pages.ts` and the discovery window in `print-api.ts`; their open rows
+have been removed. The tables account for the remaining matched files and exclusions.
 This search does not discover every timer: split-line wording and guards with other words can be missed.
 
 Already-steady readers such as `apps/server/src/live-operation-rate-limit.ts` and
@@ -54,9 +56,6 @@ scope and preserve the rules shown here before proposing any conversion.
 | `apps/server/src/invoice-delivery.ts:181–207` (`latestNextAttempt`, `deliveryDue`, `claimLapsed`) | Persisted retries at/before now or more than ten minutes ahead are due. A claim at least 60 seconds old or more than 60 seconds ahead has lapsed. |
 | `apps/server/src/join-requests.ts:33–58` (`lapsedAt`, `sweepLapsed`) | Delete pending requests strictly older than 15 minutes or strictly more than 15 minutes ahead; endpoints survive. These are persisted request dates. |
 | `apps/server/src/order-drafts.ts:1397–1426` (`takenOverFrom`) | Find latest takeover by append-only event `rowid`, not `created_at`; a backward clock must not reorder ownership history. Ordering, not a timer. |
-| `apps/server/src/page-test-pages.ts:10–14,60–74` (`settle`) | Product office-printer test pages, not test harness code. Waiting pages fail after five minutes, claims become unknown after a 60-second lease, completed outcomes disappear after ten minutes. Each also expires when its stamp is more than its own limit ahead. |
-| `apps/server/src/pairing-mode.ts:10,56–71` (`prune`) | Drop a hold at/before its end or when its end is more than its duration ahead (default three minutes). Empty holds clear open-since state; changes rearm the timer and notify. Also exposes absolute ISO times to consumers. |
-| `apps/server/src/print-api.ts:535,552–558` (`openDiscoveryUntil`) | Treat a discovery end more than its three-minute window ahead as closed (zero); feeds freshness and Pair/Forget availability. The same file constructs an enrol limiter but this discovery rule is outside the slice. |
 | `packages/fiscal-verifactu/src/certificate-record.ts:39–66` (`recordInstall`, `installsOf`) | Persist installation time as the greater of writer time and previous installation plus one millisecond. Keeps latest-install order across steps and node changes; not a wait. |
 | `packages/fiscal-verifactu/src/clock-corrected-incident.ts:27–43` (`recordCorrected`) | Before recording the next clock alert, mark each earlier open alert handled no earlier than its own detection, using the maximum of its date and the new detection. Persisted incident chronology. |
 | `packages/fiscal-verifactu/src/drain.ts:87–99,460–468` (`retryDue`, `claimStale`, `readGate`) | Retry at/before now or beyond the one-hour maximum backoff. Abandon a claim strictly over five minutes old or strictly more than five minutes ahead. A flow-control gate beyond its declared AEAT wait is reset and stored as one full wait from now, not sent immediately. |

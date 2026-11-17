@@ -375,7 +375,10 @@ describe("a claim whose hold lapsed is forgotten only once its request's deletio
   async function lapsedClaim() {
     const venue = await setupVenue(suite.db);
     let offset = 0;
-    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const mode = createPairingMode({
+      now: () => Date.now() + offset,
+      steady: () => performance.now() + offset,
+    });
     const app = mountBoth(venue.cfg, mode);
     const holdA = await openWindow(app, venue);
     const device = await knock(app, "Bar till");

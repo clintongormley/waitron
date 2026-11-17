@@ -177,7 +177,7 @@ describe("the join window's holds", () => {
   it("taking a hold answers its id and lapse instant, and GET then reports the open window", async () => {
     const venue = await setupVenue(suite.db);
     const clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const app = mountApp(venue.cfg, mode);
     const taken = await send(app, "POST", "/management-api/pairing-mode/holds", {
       cookie: venue.managerCookie,
@@ -252,7 +252,7 @@ describe("the join window's holds", () => {
   it("renews a live hold and refuses an unknown one with device.pairing_hold_lapsed", async () => {
     const venue = await setupVenue(suite.db);
     let clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const app = mountApp(venue.cfg, mode);
     const { holdId } = mode.open();
     clock += 60_000;
@@ -276,7 +276,7 @@ describe("the join window's holds", () => {
   it("refuses to renew a hold that has lapsed on the clock", async () => {
     const venue = await setupVenue(suite.db);
     let clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const app = mountApp(venue.cfg, mode);
     const { holdId } = mode.open();
     clock += PAIRING_HOLD_MS;
@@ -304,7 +304,7 @@ describe("the join window's holds", () => {
     const venue = await setupVenue(suite.db);
     const token = venue.managerCookie.split("=")[1]!;
     let clock = Date.now();
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const app = mountApp(venue.cfg, mode);
     const { holdId } = mode.open();
     clock += 60_000;
@@ -337,7 +337,7 @@ describe("the join window's holds", () => {
     const venue = await setupVenue(suite.db);
     const token = venue.managerCookie.split("=")[1]!;
     let clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const app = mountApp(venue.cfg, mode);
     const { holdId, openUntil } = mode.open();
     clock += 60_000;
@@ -356,7 +356,7 @@ describe("the join window's holds", () => {
   it("refuses staff on every hold route before saying anything else, and holds are untouched", async () => {
     const venue = await setupVenue(suite.db);
     let clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
+    const mode = createPairingMode({ now: () => clock, steady: () => clock });
     const { holdId, openUntil } = mode.open();
     // A renewal or a new hold let through now would move the window's lapse by this second.
     clock += 1_000;
@@ -398,7 +398,10 @@ describe("the join window's holds", () => {
   it("reading the window, taking a hold and renewing one leave join requests alone", async () => {
     const venue = await setupVenue(suite.db);
     let offset = 0;
-    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const mode = createPairingMode({
+      now: () => Date.now() + offset,
+      steady: () => performance.now() + offset,
+    });
     const app = mountApp(venue.cfg, mode);
     const first = mode.open();
     await knock(venue, { kind: "device", label: "Stranded" });
@@ -1349,7 +1352,10 @@ describe("device pairing: check, claim, approve", () => {
   it("discards a request older than the window's opening even when nothing ran while it was shut", async () => {
     const venue = await setupVenue(suite.db);
     let offset = 0;
-    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const mode = createPairingMode({
+      now: () => Date.now() + offset,
+      steady: () => performance.now() + offset,
+    });
     const app = mountApp(venue.cfg, mode);
     const a = mode.open();
     const before = await knock(venue, { kind: "device", label: "Before" });
@@ -1415,7 +1421,10 @@ describe("device pairing: check, claim, approve", () => {
     let offset = 0;
     const { app, holdId: a } = await pairingApp(
       venue,
-      createPairingMode({ now: () => Date.now() + offset }),
+      createPairingMode({
+        now: () => Date.now() + offset,
+        steady: () => performance.now() + offset,
+      }),
     );
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId: a });
@@ -1449,7 +1458,10 @@ describe("device pairing: check, claim, approve", () => {
     let offset = 0;
     const { app, holdId } = await pairingApp(
       venue,
-      createPairingMode({ now: () => Date.now() + offset }),
+      createPairingMode({
+        now: () => Date.now() + offset,
+        steady: () => performance.now() + offset,
+      }),
     );
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     offset += PAIRING_HOLD_MS;

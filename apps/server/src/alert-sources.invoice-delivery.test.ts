@@ -200,7 +200,7 @@ async function secondPrinter(): Promise<string> {
 
 /** A store whose test page on `pagePrinterId` is printing and held for `hold`. */
 function heldTestPage(pagePrinterId: string, hold: A4HoldCode, now: Date): PageTestPages {
-  const pages = createPageTestPages(() => now);
+  const pages = createPageTestPages(() => now.getTime());
   pages.request(pagePrinterId, "es-ES");
   const job = pages.claim("agent", [
     {
@@ -215,7 +215,10 @@ function heldTestPage(pagePrinterId: string, hold: A4HoldCode, now: Date): PageT
   return pages;
 }
 
-function alerts(now: Date = LATER, testPages: PageTestPages = createPageTestPages(() => now)) {
+function alerts(
+  now: Date = LATER,
+  testPages: PageTestPages = createPageTestPages(() => now.getTime()),
+) {
   return withTransaction(suite.db, (tx) =>
     invoiceDeliveryAlertSource({ testPages }).read({ tx, now }),
   );
@@ -407,7 +410,7 @@ describe("invoiceDeliveryAlertSource", () => {
         officePrinters: new Map(),
         sendingHolds: new Map(),
         sendingPrinters: new Set(),
-        testPages: createPageTestPages(() => LATER),
+        testPages: createPageTestPages(() => LATER.getTime()),
       });
 
     expect(
@@ -458,7 +461,9 @@ describe("invoiceDeliveryAlertSource's database reads", () => {
           return (value as (...a: unknown[]) => unknown).bind(target);
         },
       });
-      return invoiceDeliveryAlertSource({ testPages: createPageTestPages(() => LATER) }).read({
+      return invoiceDeliveryAlertSource({
+        testPages: createPageTestPages(() => LATER.getTime()),
+      }).read({
         tx: counted,
         now: LATER,
       });

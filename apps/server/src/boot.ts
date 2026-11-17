@@ -3033,7 +3033,7 @@ async function bootServer(
     log,
   );
   // Outside the block below so the alert sources have it on every node.
-  const testPages = createPageTestPages(now);
+  const testPages = createPageTestPages();
   const mailController = new AbortController();
   let mailLoop: Promise<void> | undefined;
   const invoiceEmailController = new AbortController();

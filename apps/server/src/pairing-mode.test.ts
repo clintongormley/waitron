@@ -63,7 +63,7 @@ describe("createPairingMode", () => {
 
   it("a hold opens the window until it lapses", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     const { holdId, openUntil } = mode.open();
     expect(holdId).toBe("hold-1");
     expect(Date.parse(openUntil)).toBe(1_000 + PAIRING_HOLD_MS);
@@ -77,7 +77,7 @@ describe("createPairingMode", () => {
 
   it("renewing a live hold moves its lapse; an unknown or lapsed hold is refused", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     const { holdId } = mode.open();
     clock.advance(PAIRING_HOLD_MS - 10);
     expect(mode.renew(holdId)).toEqual({
@@ -107,7 +107,7 @@ describe("createPairingMode", () => {
 
   it("openSince stays at the start of an unbroken open period and restarts after a shut", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     const a = mode.open();
     clock.advance(1_000);
     mode.open();
@@ -121,7 +121,7 @@ describe("createPairingMode", () => {
 
   it("openUntil is the latest live hold's lapse", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     mode.open();
     clock.advance(5_000);
     const later = mode.open();
@@ -130,7 +130,7 @@ describe("createPairingMode", () => {
 
   it("a claim lives as long as its hold, then is orphaned until dropped", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     const { holdId } = mode.open();
     const claim = { holdId, sessionKey: "k", personName: "Anna" };
     mode.claim("r1", claim);
@@ -145,7 +145,7 @@ describe("createPairingMode", () => {
 
   it("a claim is orphaned once its hold lapses on the clock, with no other read first", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     const { holdId } = mode.open();
     mode.claim("r1", { holdId, sessionKey: "k", personName: "Anna" });
     clock.advance(PAIRING_HOLD_MS);
@@ -154,32 +154,42 @@ describe("createPairingMode", () => {
 
   it("openUntil is null when it is the first read after the last hold lapses", () => {
     const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
     mode.open();
     clock.advance(PAIRING_HOLD_MS);
     expect(mode.openUntil()).toBeNull();
   });
 
-  it("shuts when the clock steps back, leaving its hold further ahead than its length", () => {
-    const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
-    const { holdId } = mode.open();
-    mode.claim("r1", { holdId, sessionKey: "k", personName: "Anna" });
-    clock.advance(-400 * 24 * 60 * 60 * 1000);
-    expect(mode.isOpen()).toBe(false);
-    expect(mode.hasHold(holdId)).toBe(false);
-    expect(mode.openSince()).toBeNull();
-    expect(mode.orphanedClaims()).toEqual(["r1"]);
-    expect(mode.renew(holdId)).toBeNull();
-  });
-
-  it("stays open after a step back that leaves its hold no further ahead than its length", () => {
-    const clock = atClock();
-    const mode = createPairingMode({ now: clock.now, newId: ids() });
-    const { holdId } = mode.open();
-    clock.advance(30_000);
-    clock.advance(-30_000);
-    expect(mode.isOpen()).toBe(true);
-    expect(mode.hasHold(holdId)).toBe(true);
+  it("times holds on the steady clock, answers wall-clock times, and moves openSince back but never forward with the wall clock", () => {
+    const day = 86_400_000;
+    let steady = 1_000;
+    let wall = 400 * day;
+    vi.spyOn(performance, "now").mockImplementation(() => steady);
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    try {
+      const mode = createPairingMode({ newId: ids() });
+      const { holdId, openUntil } = mode.open();
+      expect(openUntil).toBe(new Date(400 * day + PAIRING_HOLD_MS).toISOString());
+      mode.claim("r1", { holdId, sessionKey: "k", personName: "Anna" });
+      for (const stepped of [0, 800 * day]) {
+        wall = stepped;
+        expect(mode.isOpen()).toBe(true);
+        expect(mode.openSince()).toBe(new Date(0).toISOString());
+        expect(mode.openUntil()).toBe(new Date(stepped + PAIRING_HOLD_MS).toISOString());
+        expect(mode.orphanedClaims()).toEqual([]);
+      }
+      steady += 60_000;
+      expect(mode.renew(holdId)).toEqual({
+        openUntil: new Date(800 * day + PAIRING_HOLD_MS).toISOString(),
+      });
+      steady += PAIRING_HOLD_MS - 1;
+      expect(mode.hasHold(holdId)).toBe(true);
+      steady += 1;
+      expect(mode.isOpen()).toBe(false);
+      expect(mode.openSince()).toBeNull();
+      expect(mode.orphanedClaims()).toEqual(["r1"]);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
