@@ -266,9 +266,8 @@ whole-file reads are separate work:
   deletion markers, including `venue.db`, `node.db` and their WALs. `fingerprintAgainst` avoids the
   read when the size differs; equal-size files are still hashed through a whole buffer. Preserve
   the same-size replacement refusal when streaming these hashes.
-- `apps/server/src/cloud-snapshot-archive.ts` snapshots `venue.db`, caps the copy at 512 MiB,
-  then reads it whole before packing and encrypting the archive. Cloud recovery downloads also
-  collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`). The unused archive branch
+- Cloud recovery downloads collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`).
+  The unused archive branch
   of `/recovery/preparation` and emergency handover still buffer archives within 256 MiB.
   Configuration transfer retains its separate buffer.
   These are transfer limits and buffers, not ordinary-start database admission.

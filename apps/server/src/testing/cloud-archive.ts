@@ -1,4 +1,3 @@
-import { BACKUP_STAGING_DIR } from "@waitron/store";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -15,6 +14,7 @@ export async function captureCloudArchive(
     modules: readonly WaitronModule[];
     environment: "preproduction" | "production";
     stateDir: string;
+    stagingDir?: string;
   },
   recoveryKey: string,
   at: Date,
@@ -93,7 +93,7 @@ export async function captureCloudArchive(
     },
     nodeId,
     resolvers: {},
-    stagingDir: join(deps.stateDir, BACKUP_STAGING_DIR),
+    stagingDir: deps.stagingDir ?? join(deps.stateDir, "staging"),
     recoveryKey,
     retain: 1,
     retainDays: 1,
