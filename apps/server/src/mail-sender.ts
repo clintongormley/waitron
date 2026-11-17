@@ -391,7 +391,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
   } else if (message !== undefined && delivery.mode !== "cloud") {
     let sent: SmtpSendOutcome;
     try {
-      const { accountEmail: _accountEmail, ...smtpMessage } = message;
+      const smtpMessage = { ...message };
+      delete smtpMessage.accountEmail;
       sent = await (deps.send ?? sendSmtpMessage)(delivery.smtp, {
         ...smtpMessage,
         to: mail.recipient!,
