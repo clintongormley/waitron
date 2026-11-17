@@ -141,7 +141,7 @@ A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not l
 ## Product folders, menus that include menus, and prep station routing: partly built (design approved 2026-09-30)
 
 The
-[design](../superpowers/specs/2026-09-30-menu-menus-routing-design.md) is built in slices. Slices
+[design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
 1, 2, 3a, 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)), 3c-1, 3c-2 (PF6,
 [#1046](https://github.com/clintongormley/waitron/pull/1046)) and 3c-3 (PF7,
 [#1068](https://github.com/clintongormley/waitron/pull/1068)) have landed. **Owner decision
@@ -154,10 +154,9 @@ nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. Status and remaining work:
 
-- **Deleting or moving a folder does not show which products change station** (slice 3a, approved
-  R6). The delete dialog counts the routing cells removed but lists no products whose
-  destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
-  preview before extending these operations during service.
+- **Dragging a product folder changes its ancestry without a routing preview.** Add the
+  changed-products preview to drag-and-drop moves before extending them during service.
+  Product-only **Move to…** also has no routing preview.
 - **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
   uses `ON DELETE CASCADE`
   (`packages/db/src/schema/venue-service/routing.ts`); follow CLAUDE.md §3's rebuild rule and add

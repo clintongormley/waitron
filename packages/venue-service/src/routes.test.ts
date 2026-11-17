@@ -11,6 +11,7 @@ import {
   floorZones,
   kitchenCourses,
   kitchenStations,
+  routingCells,
   saveVenueFields,
   serviceSteps,
   withTransaction,
@@ -4035,5 +4036,79 @@ it("A724: the station planning route returns last orders at its period's own end
         departments: [{ departmentId: expected.departmentId, ranges: expected.ranges }],
       },
     ],
+  });
+});
+
+describe("folder routing preview route", () => {
+  const path = "/management-api/venue-service/routing/product-items-preview";
+  it("lets a menu-only manager read a preview but cannot change routing", async () => {
+    const f = await fixture();
+    await db.run(
+      sql`update roles set permissions = ${JSON.stringify(["menu.manage"])} where built_in_key = 'manager'`,
+    );
+    const change = {
+      kind: "move",
+      selection: { productIds: [], categoryIds: [f.categoryId] },
+      to: null,
+    };
+    const before = await db.select().from(routingCells);
+    const lastSeen = new Date(Date.now() - 60_000).toISOString();
+    await db.run(sql`update dashboard_sessions set last_seen_at = ${lastSeen}`);
+    const response = await send(f.app, "POST", path, f.managerCookie, change);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      moves: [],
+      stations: [{ id: f.stationId, name: "Terrace bar" }],
+      periods: [],
+    });
+    expect(await db.all(sql`select distinct last_seen_at from dashboard_sessions`)).toEqual([
+      { last_seen_at: lastSeen },
+    ]);
+    const mutation = await send(f.app, "POST", path, f.managerCookie, {
+      ...change,
+      target: { kind: "no_preparation" },
+    });
+    expect(mutation.status).toBe(400);
+    expect(await mutation.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    const write = await send(
+      f.app,
+      "PUT",
+      "/management-api/venue-service/routing/cell",
+      f.managerCookie,
+      {
+        address: { row: { kind: "category", categoryId: f.categoryId }, zoneId: null },
+        target: { kind: "no_preparation" },
+      },
+    );
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await db.select().from(routingCells)).toEqual(before);
+  });
+  it("refuses missing authority and invalid folder-change bodies", async () => {
+    const f = await fixture();
+    const change = {
+      kind: "delete",
+      selection: { productIds: [], categoryIds: [f.categoryId] },
+      contents: "move_up",
+    };
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [f.staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(f.app, "POST", path, cookie, change);
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    for (const invalid of [
+      { ...change, contents: null },
+      { ...change, selection: { productIds: [], categoryIds: ["invalid"] } },
+      { ...change, kind: "cell" },
+    ]) {
+      const response = await send(f.app, "POST", path, f.managerCookie, invalid);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid" },
+      });
+    }
   });
 });

@@ -46,6 +46,23 @@ describe("DashboardApi", () => {
     ]);
     expect(fetchImpl.mock.calls[0]![1].method).toBe("GET");
   });
+  it("reads a folder routing preview through its dedicated read-only POST", async () => {
+    const answer = { moves: [], stations: [{ id: "s", name: "Kitchen" }], periods: [] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const onSuccess = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, onSuccess);
+    const change = {
+      kind: "move" as const,
+      selection: { productIds: [], categoryIds: ["f"] },
+      to: null,
+    };
+    expect(await api.previewProductItemsRouting(change)).toEqual(answer);
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/venue-service/routing/product-items-preview",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(change) }),
+    );
+  });
   it("moves a mixed folder selection through its dedicated route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

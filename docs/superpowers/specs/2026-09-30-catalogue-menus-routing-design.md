@@ -514,6 +514,8 @@ product/delivery-area tester; opening hours, fallbacks, watchers and extras foll
 Approved R6 leaves folder move/delete routing previews as a backlog gap: deletion counts rules
 removed, but neither action lists products whose station changes._
 
+_2026-11-17: folder Move to/delete previews are implemented by the [folder preview plan](../plans/2026-11-17-d-folder-routing-preview.md); dragging remains outside that change._
+
 **Prep Stations** replaces two things: the Kitchen screen's station list, and Venue operations ›
 Preparation routing. It holds:
 

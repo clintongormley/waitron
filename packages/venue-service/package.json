@@ -12,6 +12,7 @@
     "./holiday-types": "./src/holiday-types.ts",
     "./dashboard/calendar-grid": "./src/dashboard/calendar-grid.ts",
     "./dashboard/hours-view": "./src/dashboard/hours-view.ts",
+    "./dashboard/routing-preview": "./src/dashboard/routing-preview.ts",
     "./dashboard/season-tint": "./src/dashboard/season-tint.ts",
     "./dashboard/calendar-colours": "./src/dashboard/calendar-colours.ts",
     "./dashboard/period-colour-styles": "./src/dashboard/period-colour-styles.ts",

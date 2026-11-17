@@ -124,6 +124,22 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
         {
           products: PRODUCTS,
           api: {
+            previewProductItemsRouting: vi.fn().mockResolvedValue({
+              moves: [
+                {
+                  productId: "cola",
+                  productName: "Cola",
+                  zoneId: null,
+                  zoneName: null,
+                  from: { kind: "station", stationId: "bar" },
+                  to: { kind: "no_preparation" },
+                  toNoReplacement: false,
+                  periodIds: null,
+                },
+              ],
+              stations: [{ id: "bar", name: "Bar" }],
+              periods: [],
+            }),
             createCategory: vi.fn(),
             summariseFolders: vi
               .fn()

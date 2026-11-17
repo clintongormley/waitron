@@ -17,6 +17,8 @@ export type {
   GridProduct,
   GridRow,
   RoutingCell,
+  RoutingMove,
+  ProductItemsRoutingPreview,
   RoutingChange,
   RoutingDecision,
   RoutingModel,

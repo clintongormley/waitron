@@ -86,7 +86,8 @@ export interface NodeRecoveryPack {
  * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { LegalAbout, TimingBand } from "@waitron/shared";
-import type { RoutingView } from "@waitron/venue-service/routing";
+import type { ProductItemsChange } from "@waitron/menu";
+import type { ProductItemsRoutingPreview, RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
   LiveData,
@@ -3607,6 +3608,14 @@ export class DashboardApi {
     return this.#request<CategorySummary[]>("/management-api/categories", "GET");
   }
 
+  previewProductItemsRouting(change: ProductItemsChange): Promise<ProductItemsRoutingPreview> {
+    return this.#request(
+      "/management-api/venue-service/routing/product-items-preview",
+      "POST",
+      change,
+      { activity: "none" },
+    );
+  }
   moveProductItems(selection: ProductSelection, to: string | null): Promise<void> {
     return this.#request("/management-api/folders/move", "POST", { ...selection, to });
   }

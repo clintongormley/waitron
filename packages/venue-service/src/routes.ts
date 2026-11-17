@@ -1,3 +1,4 @@
+import type { ProductItemsChange } from "@waitron/menu";
 import { listDepartmentCourseSettings, type DepartmentCourseSetting } from "./release-reminders.js";
 import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
@@ -63,6 +64,7 @@ import {
   clearRoutingCell,
   routingModel,
   previewRoutingChange,
+  previewProductItemsRouting,
   setRoutingCell,
 } from "./routing-store.js";
 import type { RouteTarget } from "./routing.js";
@@ -119,6 +121,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.invalid": 400,
   "zone.name_taken": 409,
   "menu.not_found": 404,
+  "category.parent_cycle": 409,
+  "category.name_taken": 409,
   "route.subject_not_found": 400,
   "route.station_inactive": 400,
   "route.period_invalid": 409,
@@ -152,6 +156,7 @@ const runBodyZone = runBodyIds("service_zone.not_found");
 const runBodyDepartment = runBodyIds("department.not_found");
 const runBodyPaint = runBodyIds("department.not_found", "service_zone.not_found");
 const runBodyMenus = runBodyIds("menu.not_found");
+const runBodyFolders = runBodyIds("category.not_found", "product.not_found");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 const DINING_POLICY = new Set<unknown>(DINING_POLICIES);
@@ -364,6 +369,29 @@ function requireCellChange(body: Record<string, unknown>): Omit<RoutingChange, "
   const target = requireCellTarget(body);
   const periods = requireCellPeriods(body, target);
   return { address, target, ...(periods === undefined ? {} : { periods }) };
+}
+
+function requireProductItemsChange(body: Record<string, unknown>): ProductItemsChange {
+  const invalid = (field: string) => new AppError("management.request_invalid", { field });
+  if (body.kind !== "move" && body.kind !== "delete") throw invalid("kind");
+  onlyKeys(
+    body,
+    body.kind === "move" ? ["kind", "selection", "to"] : ["kind", "selection", "contents"],
+  );
+  if (!isRecord(body.selection) || !hasExactly(body.selection, ["productIds", "categoryIds"]))
+    throw invalid("selection");
+  const ids = (field: string): string[] => {
+    const value = (body.selection as Record<string, unknown>)[field];
+    if (!Array.isArray(value)) throw invalid(field);
+    const result = value.map((id) => requireBodyUuid(id, field));
+    if (new Set(result).size !== result.length) throw invalid(field);
+    return result;
+  };
+  const selection = { productIds: ids("productIds"), categoryIds: ids("categoryIds") };
+  if (body.kind === "move")
+    return { kind: "move", selection, to: requireNullableBodyUuid(body.to, "to") };
+  if (body.contents !== "move_up" && body.contents !== "delete") throw invalid("contents");
+  return { kind: "delete", selection, contents: body.contents };
 }
 
 function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
@@ -679,6 +707,23 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             })),
             canMakeDefault: holds(authority, "venue.configure"),
           })),
+        );
+      }),
+    );
+
+    app.post("/management-api/venue-service/routing/product-items-preview", (c) =>
+      runBodyFolders(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const change = requireProductItemsChange(await readJsonBody<Record<string, unknown>>(c));
+        return c.json(
+          await withTransaction(ctx.db, async (tx) => {
+            await authorizeManager(tx, {
+              managementSessionId: sessionId,
+              permission: "menu.manage",
+              touch: false,
+            });
+            return previewProductItemsRouting(tx, change);
+          }),
         );
       }),
     );

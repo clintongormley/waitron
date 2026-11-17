@@ -78,6 +78,7 @@ export const PRODUCTS = [
 ];
 export async function mountBrowser(overrides: Partial<ProductBrowser> = {}) {
   const api = {
+    previewProductItemsRouting: vi.fn().mockResolvedValue({ moves: [], stations: [], periods: [] }),
     moveProductItems: vi.fn().mockResolvedValue(undefined),
     deleteProductItems: vi.fn().mockResolvedValue(undefined),
     countProductMenus: vi.fn().mockResolvedValue(0),
@@ -2142,6 +2143,7 @@ it("moves products to the explicitly chosen top level", async () => {
       null,
     ),
   );
+  expect(el.api.previewProductItemsRouting).not.toHaveBeenCalled();
 });
 it("deletes only completely summarised empty folders without asking", async () => {
   const el = await mountBrowser();
@@ -2425,6 +2427,7 @@ it.each([
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
     const text = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")]
+      .filter((paragraph) => !paragraph.closest('[data-test="folder-routing-preview"]'))
       .map((paragraph) => paragraph.textContent!.trim())
       .filter((paragraph) => paragraph !== (locale === "es" ? es : en)["folders.deleting"]);
     expect(text).toEqual(rules ? [rules] : []);
@@ -3121,6 +3124,12 @@ it.each([
     await selectKeys(el, ["folder:d"]);
     await press(el, "delete");
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("fieldset")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!
+          .disabled,
+      ).toBe(false),
+    );
     const before = shownText();
     await press(el, "confirm");
     await vi.waitFor(() =>
@@ -3515,7 +3524,7 @@ it.each(["move", "delete"])(
     expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
       "Choose a parent outside this category and its descendants.",
     );
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.closest("[slot=footer]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.closest("[slot=footer]")).not.toBeNull();
     expect(count(el)).toBe("1 selected");
   },
 );
@@ -3615,7 +3624,11 @@ it("can move after cancelling a failed delete summary", async () => {
   await el.updateComplete;
   await press(el, "move");
   await destination(el, "f");
-  expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+    ).toBeNull(),
+  );
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.api.moveProductItems).toHaveBeenCalledWith(
@@ -4957,3 +4970,161 @@ it.each(
     }
   },
 );
+
+it("previews the current folder move, ignores replaced reads and waits before confirming", async () => {
+  const el = await mountBrowser();
+  const reads: ((
+    answer: Awaited<ReturnType<DashboardApi["previewProductItemsRouting"]>>,
+  ) => void)[] = [];
+  vi.mocked(el.api.previewProductItemsRouting).mockImplementation(
+    () => new Promise((resolve) => reads.push(resolve)),
+  );
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "move");
+  await destination(el, "f");
+  await vi.waitFor(() => expect(reads).toHaveLength(1));
+  const confirm = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!;
+  expect(confirm().disabled).toBe(true);
+  await destination(el, "top");
+  await vi.waitFor(() => expect(reads).toHaveLength(2));
+  reads[0]!({ moves: [], stations: [], periods: [] });
+  await el.updateComplete;
+  expect(confirm().disabled).toBe(true);
+  reads[1]!({
+    moves: [
+      {
+        productId: "cola",
+        productName: "Cola",
+        zoneId: "z",
+        zoneName: "Patio",
+        from: { kind: "station", stationId: "bar" },
+        to: { kind: "station", stationId: "kitchen" },
+        toNoReplacement: false,
+        periodIds: ["lunch"],
+      },
+    ],
+    stations: [
+      { id: "bar", name: "Bar" },
+      { id: "kitchen", name: "Kitchen" },
+    ],
+    periods: [{ id: "lunch", name: "Lunch", departmentName: "Dining" }],
+  });
+  await vi.waitFor(() => expect(confirm().disabled).toBe(false));
+  const preview = el.shadowRoot!.querySelector('[data-test="routing-preview-table"]')!;
+  expect(preview.textContent).toContain("Cola");
+  expect(preview.textContent).toContain("Lunch");
+  expect(preview.textContent).toContain("Patio");
+  expect(preview.textContent).toContain("Bar");
+  expect(preview.textContent).toContain("Kitchen");
+  el.routing = routingWith({ defaultStationId: null });
+  await vi.waitFor(() => expect(reads).toHaveLength(3));
+  expect(confirm().disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("size")).toBe("wide");
+  reads[2]!({ moves: [], stations: [], periods: [] });
+  await vi.waitFor(() => expect(confirm().disabled).toBe(false));
+  await userEvent.click(confirm());
+  await vi.waitFor(() =>
+    expect(el.api.moveProductItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      null,
+    ),
+  );
+});
+
+it("refreshes the folder delete preview for its choice and changed summary before saving", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.api.previewProductItemsRouting).toHaveBeenCalledWith({
+      kind: "delete",
+      selection: { productIds: [], categoryIds: ["d"] },
+      contents: "move_up",
+    }),
+  );
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('input[value="delete"]')!);
+  await vi.waitFor(() =>
+    expect(el.api.previewProductItemsRouting).toHaveBeenLastCalledWith({
+      kind: "delete",
+      selection: { productIds: [], categoryIds: ["d"] },
+      contents: "delete",
+    }),
+  );
+  const count = vi.mocked(el.api.previewProductItemsRouting).mock.calls.length;
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 1, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 },
+  ]);
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!,
+  );
+  await vi.waitFor(() =>
+    expect(vi.mocked(el.api.previewProductItemsRouting).mock.calls.length).toBeGreaterThan(count),
+  );
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!,
+  );
+  await vi.waitFor(() =>
+    expect(el.api.deleteProductItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "delete",
+      [{ id: "d", folders: 1, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
+    ),
+  );
+});
+
+it("retries a failed folder preview without saving and lets a refused destination change", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.previewProductItemsRouting).mockRejectedValueOnce(new Error("offline"));
+  vi.mocked(el.api.previewProductItemsRouting).mockResolvedValueOnce({
+    moves: [
+      {
+        productId: "cola",
+        productName: "Cola",
+        zoneId: null,
+        zoneName: null,
+        from: null,
+        to: { kind: "station", stationId: "kitchen" },
+        toNoReplacement: false,
+        periodIds: null,
+      },
+    ],
+    stations: [{ id: "kitchen", name: "Kitchen" }],
+    periods: [],
+  });
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "move");
+  await destination(el, "f");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[data-test="retry-routing-preview"]')).not.toBeNull(),
+  );
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="retry-routing-preview"]')!,
+  );
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!
+        .disabled,
+    ).toBe(false),
+  );
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
+  vi.mocked(el.api.previewProductItemsRouting).mockRejectedValueOnce({
+    code: "category.name_taken",
+    params: { field: "name" },
+  });
+  await destination(el, "top");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("category.name_taken")),
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="routing-preview-table"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector('[data-test="retry-routing-preview"]')).toBeNull();
+  await destination(el, "f");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!
+        .disabled,
+    ).toBe(false),
+  );
+});

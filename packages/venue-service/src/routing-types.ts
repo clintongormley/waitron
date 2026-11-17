@@ -72,6 +72,12 @@ export interface RoutingMove {
   periodIds: string[] | null;
 }
 
+export interface ProductItemsRoutingPreview {
+  moves: RoutingMove[];
+  stations: { id: string; name: string }[];
+  periods: { id: string; name: string; departmentName: string }[];
+}
+
 /** A period a routing line can name, with the products its menus reach, variants by parent. */
 export interface RoutingPeriod {
   id: string;

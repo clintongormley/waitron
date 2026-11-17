@@ -497,10 +497,11 @@ products up.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
-cascades. The dialog counts the routing rules each answer
-removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep stations' Routes tab after changing the category tree. A variant is routed by its product's
-category, and a variant still storing a deleted category has it cleared.
+cascades. The dialog counts the routing rules each answer removes. Before you confirm a folder
+move through **Move to…** or a deletion, its routing preview lists the surviving products whose
+station changes, with their old and new destinations, zones and periods. Change your choice to
+refresh it; a failed read offers Retry preview. Dragging still moves without that preview.
+A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API
 
