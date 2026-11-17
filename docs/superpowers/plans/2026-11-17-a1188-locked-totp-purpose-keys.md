@@ -42,3 +42,8 @@ The [developer entry/API](../../developers/cloud-connection.md#locked-emergency-
 implements that cut. The original text above records the proposal and its gates at publication;
 Cloud's launcher, 3b's page, part 4 activation and year-sized timing remain unqualified.
 The watcher cleared the build; no owner approval of the key amendment is claimed.
+
+
+| Source | Exact words | Effect |
+| --- | --- | --- |
+| [Cloud #1276, pinned agreement](https://github.com/waitron-io/waitron-cloud/blob/42b58657453af6f802c89580925090fe97ac9a28/docs/waitron-integration-contract.md#totp-purpose-key-input-amendment-17-november-2026) | “Cloud accepts Waitron’s published proposal and shared examples for the future locked reader.” | The input is agreed; Cloud’s launcher remains future work. |

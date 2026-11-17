@@ -22,6 +22,8 @@ import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { bindingFor, copyId, seedEmergencyCopySource } from "./testing/emergency-copy-source.js";
 import { sha } from "./testing/place-copy-box.js";
 
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS, NODE_MIGRATIONS] });
 let root: string;
 let venueDir: string;
@@ -87,21 +89,24 @@ function outsideLock() {
 
 async function snapshot() {
   const files: Record<string, string> = {};
-  for (const [prefix, dir] of [
-    ["venue", venueDir],
-    ["state", stateDir],
-  ]) {
-    for (const name of (await readdir(dir!)).sort()) {
+  async function visit(prefix: string, dir: string) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const name = entry.name;
       if (
-        name === "scratch" ||
-        name === "venue.lock" ||
-        name === "venue.lock-journal" ||
-        name === "venue.holder.json"
+        prefix === "venue" &&
+        ["venue.lock", "venue.lock-journal", "venue.holder.json"].includes(name)
       )
         continue;
-      files[`${prefix}/${name}`] = sha(join(dir!, name));
+      if (entry.isDirectory()) {
+        await visit(`${prefix}/${name}`, join(dir, name));
+        continue;
+      }
+      if (/-(wal|shm)$/.test(name)) throw new Error(`unexpected SQLite journal: ${name}`);
+      files[`${prefix}/${name}`] = sha(join(dir, name));
     }
   }
+  await visit("venue", venueDir);
+  await visit("state", stateDir);
   return files;
 }
 
@@ -315,7 +320,7 @@ it("serves only locked probes over TLS and stops on control failure or the origi
   }
 });
 
-it("closes at the copy deadline while a control renewal is still waiting for Cloud", async () => {
+it("closes at lease expiry while a control renewal is still waiting for Cloud", async () => {
   const deps = await placement();
   const f = await lockedCloudFixture(deps.binding);
   const certFile = join(root, "copy.crt"),
@@ -333,7 +338,7 @@ it("closes at the copy deadline while a control renewal is still waiting for Clo
     reached = resolve;
   });
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-  vi.setSystemTime(new Date("2026-11-17T10:29:50.000Z"));
+  vi.setSystemTime(new Date("2026-11-17T10:28:50.000Z"));
   f.expireAt(Date.parse("2026-11-17T10:29:59.000Z"));
   try {
     running = await startLockedCopy({
@@ -355,11 +360,23 @@ it("closes at the copy deadline while a control renewal is still waiting for Clo
     void running.closed.then(() => {
       stopped = true;
     });
-    await vi.advanceTimersByTimeAsync(9000);
+    await vi.advanceTimersByTimeAsync(60000);
     await entered;
     expect(outsideLock()).toBe("held");
-    await vi.advanceTimersByTimeAsync(1000);
-    await vi.waitFor(() => expect(stopped).toBe(true), { timeout: 3000 });
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(
+      await Promise.race([
+        running.closed.then(() => true),
+        new Promise<boolean>((resolve) => {
+          const timer = realSetTimeout(() => resolve(false), 3000);
+          void running!.closed.then(() => {
+            realClearTimeout(timer);
+            resolve(true);
+          });
+        }),
+      ]),
+    ).toBe(true);
+    expect(stopped).toBe(true);
     expect(outsideLock()).toBe("acquired");
     expect(f.requests.map((v) => v[2])).toEqual(["renew", "renew"]);
   } finally {

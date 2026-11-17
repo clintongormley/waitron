@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import "./errors.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
@@ -30,6 +31,11 @@ try {
       input.hostname,
       input.tls?.certFile,
       input.tls?.keyFile,
+      input.cloud?.origin,
+      input.cloud?.privateKey,
+      input.cloud?.publicKey,
+      input.cloud?.view?.registration?.venueId,
+      input.cloud?.view?.registration?.installationId,
     ].some((value) => typeof value !== "string" || value.trim() === "") ||
     !Number.isInteger(input.port) ||
     input.port < 1 ||
@@ -58,8 +64,7 @@ try {
       void running.close();
     });
   log("info", "cloud-locked.ready", { expiresAt: binding.expiresAt });
-  await running.closed;
-  process.exit(0);
+  process.exit(await running.closed);
 } catch (error) {
   process.stderr.write(`${codeOf(error)}\n`);
   process.exit(1);

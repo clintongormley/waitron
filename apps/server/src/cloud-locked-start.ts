@@ -10,7 +10,7 @@ import {
   mintSessionToken,
 } from "@waitron/identity";
 import type { KeyEntry } from "@waitron/credentials";
-import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import "./errors.js";
@@ -122,8 +122,9 @@ export async function startLockedCopy(
   let server: ServerType | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closing: Promise<void> | undefined;
-  let finish!: () => void;
-  const closed = new Promise<void>((resolve) => {
+  let exitCode: 0 | 1 = 0;
+  let finish!: (code: 0 | 1) => void;
+  const closed = new Promise<0 | 1>((resolve) => {
     finish = resolve;
   });
   function close(): Promise<void> {
@@ -137,12 +138,26 @@ export async function startLockedCopy(
         try {
           await copy?.close();
         } finally {
-          finish();
+          finish(exitCode);
         }
       }
     }));
   }
-  const stopTimer = setTimeout(() => abort.abort(), expiry - Date.now());
+  let stopTimer: ReturnType<typeof setTimeout>;
+  function armStop(end: number) {
+    clearTimeout(stopTimer);
+    stopTimer = setTimeout(
+      () => {
+        if (end < expiry) {
+          exitCode = 1;
+          deps.log("error", "cloud-locked.control_failed", { errorCode: "cloud.unavailable" });
+        }
+        abort.abort();
+      },
+      Math.max(0, end - Date.now()),
+    );
+  }
+  armStop(expiry);
   try {
     copy = await openLockedCopy({
       ...deps,
@@ -150,6 +165,7 @@ export async function startLockedCopy(
     });
     const control = createLockedCloudControl(deps.cloud, deps.binding);
     let leaseEnd = await control.check(abort.signal);
+    armStop(Math.min(expiry, leaseEnd));
     abort.signal.throwIfAborted();
     const app = new Hono();
     const health = createHealthState(new Date(deps.binding.startedAt));
@@ -245,8 +261,10 @@ export async function startLockedCopy(
         if (!token) throw new AppError("management_session.required", {});
         const hash = hashSessionToken(token);
         const session = sessions.get(hash);
-        if (!session || Date.parse(session.expiresAt) <= Date.now())
+        if (!session || Date.parse(session.expiresAt) <= Date.now()) {
+          sessions.delete(hash);
           throw new AppError("management_session.expired", {});
+        }
         if (c.req.method === "GET") return c.json(session);
         if (c.req.method === "DELETE") {
           sessions.delete(hash);
@@ -299,8 +317,15 @@ export async function startLockedCopy(
           return;
         }
         leaseEnd = await control.check(abort.signal);
-        if (!closing) schedule();
-      } catch {
+        if (!closing) {
+          armStop(Math.min(expiry, leaseEnd));
+          schedule();
+        }
+      } catch (error) {
+        if (!closing) {
+          exitCode = 1;
+          deps.log("error", "cloud-locked.control_failed", { errorCode: codeOf(error) });
+        }
         await close();
       }
     }

@@ -1012,8 +1012,8 @@ POST `/locked-api/session` from the emergency origin with `email`, `password` an
 or `recoveryCode`. An active person needs an enrolled authenticator and `node.manage`.
 The response names `personId`, `copyOperationId`, `signedInAt`, `expiresAt` and `copyExpiresAt`,
 and sets a Secure, HttpOnly, SameSite=Strict cookie. GET reads it; DELETE ends it. Sessions expire
-after ten minutes or at the original copy deadline, whichever comes first. Recovery-code use is
+after ten minutes, capped by the original copy deadline or TLS certificate expiry. Recovery-code use is
 remembered only in this process; it does not consume the stored row. Authentication, sessions and
 control renewals write neither database. Restarting keeps the original copy deadline and drops
 all sessions. The process closes its immutable readers and exits on shutdown, deadline or required
-control failure. Year-sized placement and start timing remain unqualified.
+control failure. A failed control check or expired control lease is logged and exits non-zero. Year-sized placement and start timing remain unqualified.
