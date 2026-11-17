@@ -26,6 +26,7 @@ import { endMeal } from "./meal-end.js";
 import { cancelLine, giveAway } from "./testing/cancel-line.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import {
+  fiscalRecordCount,
   inTx,
   placedCounterBillMovedTo,
   provisionBillVenue,
@@ -874,6 +875,84 @@ describe("Print the bill's receipt", () => {
 
     expect(await jobsOf(saleId)).toEqual([]);
     expect(await deliveriesOf(saleId)).toEqual([{ medium: "a4" }]);
+  });
+
+  async function stagedForA4(active: boolean) {
+    const pagePrinterId = randomUUID();
+    await inTx(venue, (tx) =>
+      tx.insert(pagePrinters).values({
+        id: pagePrinterId,
+        name: "Office",
+        host: pagePrinterId,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        active: true,
+      }),
+    );
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ invoiceDelivery: { medium: "a4", pagePrinterId, personId: venue.operatorId } })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await serveAll(party);
+    if (!active)
+      await inTx(venue, (tx) =>
+        tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, pagePrinterId)),
+      );
+    return party;
+  }
+
+  /** The refusal, and no record filed, the bill still open and the party's revision unmoved. */
+  async function refusedUndelivered(party: Party, medium: "a4" | "email") {
+    const records = fiscalRecordCount(venue, party.tabId);
+    const revision = revisionOf(party.partyId);
+
+    await refused(end(party), party.tabId, {
+      code: "meal_end.delivery_unavailable",
+      params: { workingOrderId: party.tabId, medium },
+    });
+
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(records);
+    expect(records).toBe(0);
+    expect(revisionOf(party.partyId)).toBe(revision);
+  }
+
+  it("refuses a full invoice staged for an A4 printer switched off since, issuing nothing", async () => {
+    await refusedUndelivered(await stagedForA4(false), "a4");
+  });
+
+  it("refuses a full invoice staged for email whose delivery cannot be queued, issuing nothing", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await choose(party.tabId, "F1")).status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.com",
+            personId: venue.operatorId,
+          },
+        })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await serveAll(party);
+    venue.db.run(
+      sql.raw(`create trigger meal_end_test_no_delivery before insert on invoice_deliveries
+        begin select raise(abort, 'meal-end test: delivery refused'); end`),
+    );
+    try {
+      await refusedUndelivered(party, "email");
+    } finally {
+      venue.db.run(sql.raw("drop trigger meal_end_test_no_delivery"));
+    }
   });
 
   it("refuses meal_end.no_printer when the device's receipts resolve to no printer, issuing nothing", async () => {

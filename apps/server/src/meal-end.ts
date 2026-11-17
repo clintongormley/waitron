@@ -1,5 +1,11 @@
 import { eq, inArray, and } from "drizzle-orm";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { staffPresentationName } from "@waitron/menu";
@@ -134,6 +140,7 @@ export async function endMeal(
         deps.admission,
         deps.log,
       );
+      if (!paper) await assertDeliveryQueued(tx, req.billId, saleId);
       if (bill.status === "open")
         await markOrderPlaced(tx, deps.clock, cfg, req.billId, operatorId, deps.attendance);
       if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, req.billId, saleId);
@@ -155,6 +162,32 @@ export async function endMeal(
       };
     },
   );
+}
+
+/**
+ * `issueUnpaidInvoice` reserves a staged A4 or email delivery as an optional document, so a
+ * destination switched off since staging, or a reservation that failed, still issues. Printing the
+ * bill exists to put it in front of the guest, so here either refuses and the issue rolls back.
+ */
+async function assertDeliveryQueued(tx: Transaction, billId: string, saleId: string) {
+  const [order] = await tx
+    .select({ delivery: workingOrders.invoiceDelivery })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  const [delivery] = await tx
+    .select({ status: invoiceDeliveries.status })
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.saleId, saleId),
+        eq(invoiceDeliveries.requestKey, `issuance:${saleId}`),
+      ),
+    );
+  if (delivery === undefined || delivery.status === "failed")
+    throw new AppError("meal_end.delivery_unavailable", {
+      workingOrderId: billId,
+      medium: order!.delivery!.medium as "a4" | "email",
+    });
 }
 
 /** A full invoice staged for A4 or email has its delivery reserved by `issueUnpaidInvoice`. */

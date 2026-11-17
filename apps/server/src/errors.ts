@@ -719,6 +719,12 @@ declare module "@waitron/shared" {
      */
     "meal_end.no_printer": { workingOrderId: string };
     /**
+     * Print the bill found the full invoice staged for A4 or email could not be handed to that
+     * destination (an A4 printer switched off since it was chosen, or the delivery not queued), so
+     * nothing was issued. Staff choose another destination and print again.
+     */
+    "meal_end.delivery_unavailable": { workingOrderId: string; medium: "a4" | "email" };
+    /**
      * Print the bill found dishes on the bill neither served in full nor cancelled, and was not told
      * to print anyway. `released` says whether the kitchen has the dish.
      */

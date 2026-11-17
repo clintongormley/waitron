@@ -624,6 +624,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "unpaid_departure.unfired_dishes": 409,
   "meal_end.already_issued": 409,
   "meal_end.no_printer": 409,
+  "meal_end.delivery_unavailable": 409,
   "meal_end.unserved_dishes": 409,
   "submission.id_reused": 409,
   "deferred_close.ineligible": 409,
