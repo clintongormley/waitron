@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readKitchenLanguage } from "./kitchen-language.js";
+import { kitchenLocaleFor, readKitchenLanguage } from "./kitchen-language.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 describe("A964 venue language", () => {
@@ -13,17 +13,17 @@ describe("A964 venue language", () => {
       await tx.execute(
         sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
       );
-      expect(await readKitchenLanguage(tx)).toBe("en");
+      expect(await readKitchenLanguage(tx)).toBe("en-GB");
     });
   });
   it.each([
-    ["en", "en"],
-    ["es", "es"],
-    ["es-MX", "es"],
-    ["ca-ES-valencia", "en"],
-    ["fr", "en"],
-    ["fr-FR", "en"],
-    ["ca", "en"],
+    ["en", "en-GB"],
+    ["es", "es-ES"],
+    ["es-MX", "es-ES"],
+    ["ca-ES-valencia", "en-GB"],
+    ["fr", "en-GB"],
+    ["fr-FR", "en-GB"],
+    ["ca", "en-GB"],
   ])("uses saved %s as %s without rewriting it", async (defaultLanguage, expected) => {
     await withTransaction(suite.db, async (tx) => {
       await seedVenueSettings(tx, {
@@ -40,4 +40,14 @@ describe("A964 venue language", () => {
       expect(rows).toEqual(before.rows);
     });
   });
+});
+
+it.each([
+  ["pt", "BR", "pt-BR"],
+  ["pt", "PT", "pt-PT"],
+  ["pt", "ES", "pt-PT"],
+  ["pt", null, "pt-PT"],
+  ["de", "BR", "en-GB"],
+] as const)("selects the supported locale for %s in %s", (language, country, expected) => {
+  expect(kitchenLocaleFor(language, country, ["pt-PT", "pt-BR"])).toBe(expected);
 });

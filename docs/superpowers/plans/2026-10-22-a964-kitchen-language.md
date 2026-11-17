@@ -1,5 +1,9 @@
 # A964 Kitchen Language Implementation Plan
 
+> **2026-11-17, ENGLISH-LIST-COMMA:** the reader's return value is now a supported regional locale.
+> Wording still selects by language; lists use the full locale. The bare-code return contract below
+> is historical. See [the regional-locale plan](2026-11-17-english-list-comma.md).
+
 > **2026-11-06, A1378:** kitchen tickets, reprints and correction, note-change and MOVED slips
 > now take the venue's saved time zone explicitly. Whole quantities print without `.000`;
 > fractional quantities retain their stored precision. The clock and quantity examples below

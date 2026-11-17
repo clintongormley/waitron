@@ -1510,14 +1510,12 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Bundle: The "Goes with" line
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **Should a counter order say "Goes with {stations}"? (question for the owner, left open by
   A773-2 PR D, its plan's D120).** A counter order has no groups, so a Bar drink on a counter order
   whose Grill burger waits for the pass prints no "Goes with Grill", and its station card shows
   none. The cue is worked out per group; a counter order would need its own rule.
-- **An English "Goes with" list of three stations gets a serial comma (left open by A773-2 PR D's
-  look).** "Grill, Fryer, and Pastry"; Spanish has none («Grill, Fryer y Pastry»).
 
 ## Bundle: Guest-facing QR, online ordering, delivery, online booking
 
