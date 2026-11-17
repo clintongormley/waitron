@@ -2,6 +2,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import {
@@ -128,6 +129,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
 
   it("resolving an abandoned attempt cancels its unpaid PaymentIntent at real Stripe", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
+    await seedPerson(suite.db, { id: MANAGER, displayName: "Manager" });
     const client = stripeClient(stripe);
     const provider = new StripeTerminalProvider({ captureAlerts, client, db: suite.db });
     const intent = await client.createPaymentIntent({
