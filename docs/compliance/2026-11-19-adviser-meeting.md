@@ -1,11 +1,12 @@
 # Adviser meeting, Thursday 19 November 2026
 
-Written 15 November 2026 for the owner; last updated 16 November. Nothing here has been sent.
+Written 15 November 2026 for the owner; last updated 17 November. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question can be read without the others. Questions
 1 and 2 need the adviser's judgement, questions 3 to 14 are confirmations, questions 15 to 21 follow
-up the adviser's answers of 15 November, and questions 22 and 23 ask about what is still missing.
+up the adviser's answers of 15 November, questions 22 and 23 ask about what is still missing, and question 24, added on 17 November, asks
+about duplicates.
 
 **Where the questions come from.** The adviser answered S1 to S16 and R1 to R6 of the October
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09) on 15 November; what those
@@ -18,7 +19,9 @@ for word, by a script, against the official texts: those of questions 13 and 14 
 list, the rest on 15 November 2026 (the BOE's consolidated texts, the DGT's PETETE database, and
 AEAT's developer FAQ v1.3 in [sources/](sources/)). The downloads are not committed. Every other word
 in « » is ours, and "where applicable" in question 19 is the adviser's own English. The annex is an
-example printed by the declaration's own code, not a law.
+example printed by the declaration's own code, not a law. Question 24's two quotations come from
+the BOE text of RD 1619/2012 art. 14 quoted in [verifactu-findings.md](verifactu-findings.md) §15.1,
+fetched 12 September 2026, and were not run through the script.
 
 ## Part 1: English (for the owner)
 
@@ -499,6 +502,39 @@ Note: ____________________________________________
 The full labour and privacy questions are in the [6 November list](2026-11-06-adviser-questions.md).
 P4 must be updated for A1404 (#2627, 9 November), which encrypts the bucket copy, before it is sent.
 
+### Added 17 November
+
+**24. Printing a duplicate when the customer asks, and what it shows (follows answer 2.1).**
+
+*The situation.* Only one original of each invoice may be issued, and a duplicate «únicamente será
+admisible» in two cases: several recipients of the same sale, or «pérdida del original» (RD
+1619/2012 art. 14.1 and 14.2). The adviser's answer 2.1 says any print made after the original was
+handed over says «duplicado». Today staff can reprint a ticket from the list of past receipts at any
+time. Waitron marks it «DUPLICADO» and records who printed it and when, but asks no reason.
+
+Following answer 1.3, a ticket will be issued when the meal ends, paid or not (the owner's
+decision D1). Waitron will print on every ticket the payments known at the moment it is printed: each
+payment, with the card's brand and last four digits, and the amount still owed, if any. A payment
+made after the original was printed will get a payment slip with no invoice number, no QR code and
+no amount owed. Answer 2.2 confirmed that such a slip, printed beside the ticket, is not an invoice;
+this one may be printed hours or days after the ticket.
+
+*Example.* A table's €60.00 ticket is issued at 22:00 and printed with «Pendiente: 60,00 €». The next
+morning the customer pays €60.00 by card, gets the payment slip, and asks for a ticket that shows the
+payment. Staff reprint it: marked «DUPLICADO», with the same number, lines, totals and QR code, plus
+«Visa ****4034 60,00 €» and no amount owed.
+
+*We ask:*
+
+- (a) May a duplicate be printed whenever the customer asks, even though the original was not lost?
+  If only when it was lost, must staff record that reason?
+- (b) May a duplicate show payments made after the original was printed, when it differs from the
+  original only in those payment lines?
+- (c) Is a payment slip printed hours or days after the ticket still not an invoice? May it name the
+  ticket number it pays, so the customer can match the two?
+
+Yes / No / Note: ____________________________________________
+
 ## Part 2: Español (para el asesor fiscal)
 
 Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un software de punto de
@@ -506,7 +542,8 @@ venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un
 en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta puede leerse por
 separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15 a
 la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
-1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta.
+1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta, y la 24, añadida el 17 de
+noviembre, trata de los duplicados.
 
 ### Requieren su criterio
 
@@ -1007,6 +1044,41 @@ fiscal:
 *Preguntamos:* ¿A quién nos recomienda para cada ámbito? ¿Puede responder usted alguna de ellas?
 
 Nota: ____________________________________________
+
+### Añadida el 17 de noviembre
+
+**24. Imprimir un duplicado a petición del cliente, y lo que muestra (a partir de su respuesta 2.1).**
+
+*Situación.* Solo puede expedirse un original de cada factura, y la expedición de duplicados
+«únicamente será admisible» en dos casos: varios destinatarios de una misma operación o la «pérdida
+del original» (RD 1619/2012, art. 14.1 y 14.2). Según su respuesta 2.1, toda impresión posterior a la
+entrega del original lleva «duplicado». Hoy el personal puede reimprimir un tique desde la lista de
+tiques anteriores en cualquier momento; Waitron lo marca «DUPLICADO» y registra quién lo imprimió y
+cuándo, pero no pide el motivo.
+
+A partir de su respuesta 1.3, el tique se expedirá al terminar la comida, esté pagado o no. Waitron
+imprimirá en cada tique los pagos que consten en el momento de imprimirlo: cada pago, con la marca y
+las cuatro últimas cifras de la tarjeta, y el importe pendiente, si lo hay. Un pago posterior a la
+impresión del original dará lugar a un justificante de pago sin número de factura, sin código QR y
+sin importe pendiente. Su respuesta 2.2 confirmó que un justificante así, impreso junto al tique, no
+es una factura; este puede imprimirse horas o días después del tique.
+
+*Ejemplo.* El tique de 60,00 € de una mesa se expide a las 22:00 y se imprime con «Pendiente: 60,00
+€». A la mañana siguiente el cliente paga 60,00 € con tarjeta, recibe el justificante de pago y pide
+un tique en el que conste el pago. El personal lo reimprime: lleva «DUPLICADO», el mismo número, las
+mismas líneas, los mismos importes y el mismo código QR, y además «Visa ****4034 60,00 €», sin
+importe pendiente.
+
+*Preguntamos:*
+
+- (a) ¿Puede imprimirse un duplicado siempre que el cliente lo pida, aunque no haya perdido el
+  original? Si solo cabe en caso de pérdida, ¿debe el personal registrar ese motivo?
+- (b) ¿Puede un duplicado mostrar los pagos hechos después de imprimir el original, si solo difiere
+  del original en esas líneas de pago?
+- (c) Un justificante de pago impreso horas o días después del tique, ¿sigue sin ser una factura?
+  ¿Puede indicar el número del tique que paga, para que el cliente pueda relacionarlos?
+
+Sí / No / Nota: ____________________________________________
 
 ### Anexo: ejemplo de declaración responsable
 
