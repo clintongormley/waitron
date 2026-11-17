@@ -30,10 +30,10 @@ export async function openBackupQuery(
   close(): Promise<void>;
 }> {
   const fromBytes = databasePath instanceof Uint8Array;
-  const database = new DatabaseSync(fromBytes ? ":memory:" : options.immutable === true ? immutableFileUrl(databasePath) : databasePath, {
-    readOnly: !fromBytes,
-    allowExtension: false,
-  });
+  let target: string | URL = ":memory:";
+  if (!fromBytes)
+    target = options.immutable === true ? immutableFileUrl(databasePath) : databasePath;
+  const database = new DatabaseSync(target, { readOnly: !fromBytes, allowExtension: false });
   const close = async () => {
     if (database.isOpen) database.close();
   };

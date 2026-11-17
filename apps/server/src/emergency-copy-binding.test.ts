@@ -130,7 +130,10 @@ describe("parseEmergencyCopyBinding", () => {
     expect(
       refusal({
         ...valid,
-        selectedStream: { ...valid.selectedStream, generation: `gen-3-${COPY_NODE}-20261117T101500Z` },
+        selectedStream: {
+          ...valid.selectedStream,
+          generation: `gen-3-${COPY_NODE}-20261117T101500Z`,
+        },
       }),
     ).toEqual(invalid("selectedStream.generation"));
   });
