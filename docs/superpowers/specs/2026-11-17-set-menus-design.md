@@ -110,12 +110,15 @@ as a set menu.
 mock-up; dishes first, then the rules). Its parts, in order:
 
 - **Name** and **price per set menu** (gross, with VAT).
-- **Dishes this set menu covers.** "Add products" adds products to the list. Every variant of a
-  listed product is offered at the product's surcharge, the à la carte price difference between
-  variants does not apply, and a variant can be left out or given its own surcharge (**my call**:
-  a set menu that includes a glass of wine but not a bottle is common, and per-variant prices
-  already exist for ordinary menus, `packages/db/src/schema/menu/variant-overrides.ts`). So the
-  list is held per product and variant. The list groups
+- **Dishes this set menu covers.** "Add products" adds products to the list. Adding a product
+  that has variants lets the person choose which of its variants the set menu includes, and the
+  choice can be changed later (**owner**, 17 November: "when we add products to a set menu we
+  should be able to add or exclude variants"; for example the glass of wine but not the bottle).
+  All variants start included (**my call**). An included variant costs the dish's surcharge, or
+  a surcharge of its own; the à la carte price difference between variants does not apply (**my
+  call**; per-variant prices already exist for ordinary menus,
+  `packages/db/src/schema/menu/variant-overrides.ts`). So the list is held per product and
+  variant, and the till's set-menu folder offers only the included variants. The list groups
   itself under each product's course (the dish's course is set on the product, as today). Beside
   each dish, a **surcharge**: empty means included, an amount means the dish costs that much on
   top of the set menu. **Copy dishes from another set menu** copies another set menu's list, with
@@ -364,8 +367,13 @@ code: at a table it is held until fired unless the department marks it Fire now
 steps (`apps/server/src/guide/en/table-service.md:358-367`). Today drinks have no course, and a
 line with no course is sent straight away. So:
 
-- The demo, and the guide's advice, make Drinks and Bread Fire now in every department; Coffee
-  stays held, since coffee comes at the end (**my call**).
+- The demo, and the guide's advice, make Drinks and Bread Fire now in every department (**my
+  call**).
+- Coffee is an ordinary course like Desserts, and needs nothing special. Ordered with the first
+  round it waits in its own group after the desserts; ordered later, once no earlier course is
+  still held, it is sent straight away (the till's `placeFor`,
+  `apps/till/src/state/draft-place.ts:62-73`, read, not run; the owner asked that coffee be
+  "fired straight away like desserts").
 - The builder checks what reminders and service steps do with a Fire now course and, if they fire
   for it, stops them (**my call**: a reminder to send the drinks would be noise).
 - Ticket headings naming DRINKS or BREAD are accepted (**my call**).
