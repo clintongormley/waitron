@@ -39,7 +39,6 @@ import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
-import "../src/components/wt-floor-plan-preview.js";
 import "../src/components/wt-floor-map.js";
 import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
@@ -176,7 +175,6 @@ const panel = (theme: "light" | "dark") => `
       </div>
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
-    <wt-floor-plan-preview label="Floor plan: Terrace" style="width: 240px; margin-top: 16px"></wt-floor-plan-preview>
     <wt-floor-map style="height: 240px; margin-top: 16px"></wt-floor-map>
     <wt-sheet heading="Tables" style="margin-top: 16px">
       <p>Table 1 · Table 2 · Table 3</p>
@@ -361,7 +359,6 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   plan.addEventListener("wt-table-select", (e) => {
     plan.selected = (e as CustomEvent<TableSelect>).detail.key;
   });
-  el.querySelector("wt-floor-plan-preview")!.tables = plan.tables;
   const floorMap = el.querySelector("wt-floor-map")!;
   const mapTable = (
     id: string,

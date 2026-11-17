@@ -74,9 +74,6 @@
   /* Default name-content sizing is wider than the minimum tap target. */
   --wt-cell-name-max-width: 140px;
 
-  /* The tallest wt-floor-plan-preview draws; a page or panel may set its own. */
-  --wt-floor-plan-preview-max-height: calc(4 * var(--wt-tap-min));
-
   /* The narrowest box: both buttons and room for a three-digit number between them. */
   --wt-stepper-field-width: 5.5rem;
   /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and

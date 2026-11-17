@@ -59,7 +59,6 @@ test("defines the structural contract", () => {
     "--wt-form-max-width",
     "--wt-field-max-width",
     "--wt-cell-name-max-width",
-    "--wt-floor-plan-preview-max-height",
     "--wt-stepper-field-width",
     "--wt-stepper-button-width",
     "--wt-slider-thumb-size",
