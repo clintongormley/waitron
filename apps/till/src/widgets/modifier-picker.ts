@@ -150,10 +150,8 @@ export class TillModifierPicker extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The per-list counter reads OUT the list's state; it is not another choice in it. A size down
-         and muted keeps the eye walking the item names from stopping on it. Without a rule of its own
-         a <p> also keeps the user agent's 1em margins, which is em-derived spacing no token governs. */
-      .selected-total {
+      .selected-total,
+      .minimum-picks {
         margin: 0 0 var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -175,6 +173,37 @@ export class TillModifierPicker extends LitElement {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-1) 0;
         cursor: pointer;
+      }
+
+      .extras-choices {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content max-content;
+        column-gap: var(--wt-space-2);
+      }
+
+      .extras-choices .option {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+      }
+
+      .extras-choices .option-label {
+        grid-column: 1;
+        grid-row: 1;
+        overflow-wrap: anywhere;
+      }
+
+      .extras-choices .option-delta {
+        grid-column: 2;
+        grid-row: 1;
+        text-align: end;
+      }
+
+      .extras-choices input,
+      .extras-choices .stepper {
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: center;
       }
 
       .option input:disabled {
@@ -1099,8 +1128,10 @@ export class TillModifierPicker extends LitElement {
 
   #renderExtras(list: OfferedExtrasList, total: number) {
     const atListMax = list.maxPicks !== null && total >= list.maxPicks;
+    const unmetMinimum = !this.product.setLunch && list.minPicks >= 1 && total < list.minPicks;
+    const hintId = `minimum-${list.id}`;
     return html`
-      <fieldset class="group">
+      <fieldset class="group" aria-describedby=${unmetMinimum ? hintId : nothing}>
         <legend class="group-name">
           ${list.name}${list.minPicks >= 1 && !this.product.setLunch ? " *" : ""}
         </legend>
@@ -1109,11 +1140,14 @@ export class TillModifierPicker extends LitElement {
           ${total}${list.maxPicks === null ? "" : ` / ${list.maxPicks}`}
         </p>
         ${this.product.setLunch && total < list.minPicks ? html`<p class="selected-total" data-lunch-open>${t("lunch.choose_later")}</p>` : nothing}
-        ${list.items.map((item) =>
-          item.maxQuantity === null || item.maxQuantity > 1
-            ? this.#renderStepper(list, item, atListMax)
-            : this.#renderPick(list, item, atListMax),
-        )}
+        ${unmetMinimum ? html`<p class="minimum-picks" id=${hintId}>${t("modifier.minimum_picks").replace("{count}", String(list.minPicks))}</p>` : nothing}
+        <div class="extras-choices">
+          ${list.items.map((item) =>
+            item.maxQuantity === null || item.maxQuantity > 1
+              ? this.#renderStepper(list, item, atListMax)
+              : this.#renderPick(list, item, atListMax),
+          )}
+        </div>
       </fieldset>
     `;
   }

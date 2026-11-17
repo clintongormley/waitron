@@ -264,7 +264,7 @@ export class TillBasket extends LitElement {
       :host([line-details][stacked]) .option .qty {
         grid-column: 1 / 3;
       }
-      @container (width < 360px) {
+      @container (width < 600px) {
         :host([line-details]) .order-lines {
           grid-template-columns: minmax(0, 1fr) auto max-content;
         }

@@ -2,7 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, measured, mountWidget } from "./test-helpers.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import {
@@ -422,6 +422,7 @@ describe("till-modifier-picker", () => {
       l.textContent!.trim(),
     );
     expect(legends).toEqual(["Extras", "Cooking *"]);
+    expect(picker.shadowRoot!.querySelector(".minimum-picks")).toBeNull();
     // The staff wording, never the diner's or the cook's.
     expect(picker.shadowRoot!.textContent).toContain("Bacon");
     expect(picker.shadowRoot!.textContent).not.toContain("Bacon carta");
@@ -454,11 +455,70 @@ describe("till-modifier-picker", () => {
     expect(addButton(picker).disabled).toBe(false);
   });
 
+  it.each([
+    ["en-GB", 1, "Choose at least 1."],
+    ["es-ES", 2, "Elige al menos 2."],
+  ] as const)(
+    "explains the unmet minimum in %s until %i picks",
+    async (locale, minimum, message) => {
+      const prior = currentLocale();
+      setLocale(locale);
+      try {
+        const { picker } = await openPicker(
+          { ...sandwich, offeredModifiers: [{ ...breadList, minPicks: minimum, maxPicks: 2 }] },
+          "Bocadillo",
+          new WorkingOrderStore(),
+        );
+        const group = picker.shadowRoot!.querySelector("fieldset")!;
+        const hint = () => picker.shadowRoot!.querySelector(".minimum-picks");
+        expect(hint()?.textContent?.trim()).toBe(message);
+        expect(group.getAttribute("aria-describedby")).toBe(hint()!.id);
+        expect(addButton(picker).disabled).toBe(true);
+        pickBox(picker, "list-bread", "p-white")!.click();
+        await picker.updateComplete;
+        if (minimum === 2) {
+          expect(hint()?.textContent?.trim()).toBe(message);
+          expect(addButton(picker).disabled).toBe(true);
+          pickBox(picker, "list-bread", "p-rye")!.click();
+          await picker.updateComplete;
+        }
+        expect(hint()).toBeNull();
+        expect(group.hasAttribute("aria-describedby")).toBe(false);
+        expect(addButton(picker).disabled).toBe(false);
+      } finally {
+        setLocale(prior);
+      }
+    },
+  );
+
+  it.each([390, 1024])(
+    "aligns mixed extras names and prices in shared columns at %i",
+    async (width) => {
+      await page.viewport(width, 768);
+      const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+      await measured();
+      const rows = [
+        ...picker.shadowRoot!.querySelectorAll<HTMLElement>("fieldset:first-of-type .option"),
+      ];
+      expect(rows).toHaveLength(2);
+      const names = rows.map((row) => row.querySelector(".option-name")!.getBoundingClientRect());
+      const prices = rows.map((row) => row.querySelector(".option-delta")!.getBoundingClientRect());
+      expect(Math.abs(names[0]!.left - names[1]!.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(prices[0]!.right - prices[1]!.right)).toBeLessThanOrEqual(1);
+      const group = picker.shadowRoot!.querySelector("fieldset")!.getBoundingClientRect();
+      for (const row of rows) {
+        expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(group.right);
+        expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+      }
+    },
+  );
+
   it("lets a lunch be added with a required choice left for later", async () => {
     const store = new WorkingOrderStore();
     const lunch = { ...sandwich, setLunch: true };
     const { picker } = await openPicker(lunch, "Bocadillo", store);
     expect(addButton(picker).disabled).toBe(false);
+    expect(picker.shadowRoot!.querySelector(".minimum-picks")).toBeNull();
     expect(picker.shadowRoot!.textContent).toContain(t("lunch.choose_later"));
     addButton(picker).click();
     await vi.waitFor(() => expect(store.lines).toHaveLength(1));

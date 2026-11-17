@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { OrderGroup } from "../api/client.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -114,4 +115,33 @@ it("Send all leaves blocked dishes out without losing a sendable group's held an
   expect(detail.lines).toEqual([{ menuItemId: "offer-flan", quantity: "1" }]);
   expect(detail.groups).toEqual([{ release: "hold", lineIndexes: [0], afterGroupId: "held" }]);
   expect(draft.lines.map((line) => line.quantity)).toEqual(["2", "1"]);
+});
+
+it.each([false, true])("draft names use the content language when locked=%s", async (locked) => {
+  const previous = currentContentLanguages();
+  const viewport = { width: innerWidth, height: innerHeight };
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await page.viewport(locked ? 1024 : 390, 844);
+  try {
+    const { el } = await mount({ courses: [main] });
+    const draft = store(el);
+    draft.addProduct(
+      { ...beer, name: "Extraordinarily long seasonal vegetables", courseId: "main" },
+      "2",
+    );
+    const release = locked ? draft.lockEdits() : undefined;
+    await el.updateComplete;
+    await showView(el, "order", { ifShown: true });
+    const lead = el.shadowRoot!.querySelector('[slot="lead-0"]')!;
+    const name = lead.querySelector<HTMLElement>("[lang]");
+    expect(name?.lang).toBe("en");
+    expect(name?.textContent).toBe("Extraordinarily long seasonal vegetables");
+    expect(getComputedStyle(name!).hyphens).toBe("auto");
+    expect(getComputedStyle(name!).hyphenateLimitChars).toBe("8");
+    expect(name?.textContent).not.toContain("×2");
+    release?.();
+  } finally {
+    setContentLanguages(previous);
+    await page.viewport(viewport.width, viewport.height);
+  }
 });

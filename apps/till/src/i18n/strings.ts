@@ -594,6 +594,7 @@ export const en = {
   "modifier.selection_changed":
     "A selected extra is no longer available. Cancel and reopen the product to choose again.",
   "modifier.selected_total": "Selected",
+  "modifier.minimum_picks": "Choose at least {count}.",
   "modifier.unavailable_choices": "No available choices. This product cannot be added.",
   // Theme choice. light/dark/device also name the icon-only buttons in the person's menu.
   "theme.label": "Theme",
@@ -2723,6 +2724,7 @@ export const es: Record<StringKey, string> = {
   "modifier.selection_changed":
     "Un extra seleccionado ya no está disponible. Cancela y vuelve a abrir el producto para elegir de nuevo.",
   "modifier.selected_total": "Seleccionados",
+  "modifier.minimum_picks": "Elige al menos {count}.",
   "modifier.unavailable_choices": "No hay opciones disponibles. No se puede añadir este producto.",
   "theme.label": "Tema",
   "theme.light": "Claro",

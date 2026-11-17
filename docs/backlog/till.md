@@ -502,37 +502,6 @@ Open:
   no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
   in the code, not reproduced.
 
-## Five measured till layout defects and one seen in a screenshot, all of them older than the extras-and-options work
-
-Found while looking at the real screens for B1 Task 12. **Next action:**
-take these six as
-one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
-reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
-which resizes the outer page and leaves the components' own iframe alone
-([testing-guide.md](../developers/testing-guide.md)).
-
-- **Within one extras list, prices are not a column and names are not a column**
-  (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
-  price edges and the name edges, at 1024 and at 390.
-- **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
-  top border**, so the required marker (appended as a plain space) can break onto a line of its own
-  sitting on the border rule.
-- **Nothing says WHY Add is disabled when a list's minimum is unmet.** The only cues are a `*` on the
-  legend and a dimmed Add — and that `*` is also the only thing telling `minPicks: 1` from
-  `minPicks: 2`. Wants a sentence beside the list stating the minimum in words.
-- **A long dish name pushes that line's remove control outside the basket**
-  (`apps/till/src/widgets/basket.ts`): the unstacked layout's `1fr` column bottoms out at the
-  longest word. Measured at phone width before A310. Since A310 a canvas tab's basket at 40rem or
-  less (`card-grid.ts`) puts the name on its own row; not re-measured there. Above 40rem the
-  unstacked layout and its `1fr` column are unchanged.
-- **A pick's money column sits right of the dish total it belongs under**, further right than the
-  dish row's own remove button, because `.line` and `.option` use different column templates.
-- **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
-  card's right border.** Seen in a screenshot, not measured. That widget was retired on 2026-09-27
-  for `till-menu-browser` (`apps/till/src/widgets/menu-browser.ts`), whose tiles wrap their text
-  inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
-  crossed a border. Looked at, not measured: close once someone measures it.
-
 ## Printer identity at enrolment
 
 Printer identity remains sub-project C of the
@@ -546,11 +515,7 @@ may predate that branch:
 
 - on the till at 390 px wide, the header makes the page wider than the screen (measured in
   C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
-- on the till's floor map at 390 px wide, tables overlap one another;
-- in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
-  canvases, see A182 below; fixed by A379 on 2026-10-08);
-- the till's browser console shows Lit's "scheduled an update … after an update completed"
-  warning.
+- on the till's floor map at 390 px wide, tables overlap one another.
 
 **Next action:** check each against `main`, then fix or file it on its own.
 
@@ -1186,28 +1151,6 @@ proposal 3, the same day), so a booking for 10 holds a group of tables, and the 
 show the group's name. A bar counter's one-person fixed seats are joined the same way.
 
 
-## Loose ends left by A526 (#1579).
-
-- With the service closed, a wide till's menu area shows nothing, and the "Service area" picker
-  and the "Keep … open later" button go with it. Seen once at 1280 wide. Read, not run: the
-  retired renderer hid controls with its menu card. Recheck the observation on fixed Counter
-  (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now.
-  (2026-10-24, A789 slice 2: the period's Keep open button is gone.)
-- In Spanish at 390 wide, the counter's basket line showed no product name in two screenshots of
-  the Collect step (light and dark): the row with quantity, price and Note is there, the name row
-  above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.
-  Seen once; cause not investigated.
-
-
-## A wider till gives the bill line's name less room.
-
-On a 1280 × 800 till the name shares its
-row with four controls and keeps 104 px at 100% and 86 px at 130%, while under 360 px of basket
-(a 1024 × 768 till) it takes a row of its own, 307 px wide (`@container (width < 360px)` in
-`apps/till/src/widgets/basket.ts`), so long names wrap to more lines than they need. Left open by
-A841 slice 10b.
-
-
 ## On a 390 px phone the floor map cuts table names short at every text size.
 
 It fits twelve
@@ -1487,32 +1430,12 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: One measuring pass over the till at 390 and 1024
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry remains outside the order-and-extras pass: the header belongs to its bar decision, and
+all floor-map and table-screen changes belong to the owner's redesign.
 
-- **The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495).**
-  [Detail](till.md#the-schedule-and-allergens-screens-draw-their-own-copy-of-the-cards-style-a414-1495)
-- **Five measured till layout defects and one seen in a screenshot, all of them older than the
-  extras-and-options work.** Found while looking at the real screens for B1 Task 12.
-  [Detail](till.md#five-measured-till-layout-defects-and-one-seen-in-a-screenshot-all-of-them-older-than-the-extras-and-options-work)
-- **Screen faults seen during menus Task 9's look on 2026-09-27.** **Next action:** check each
-  against `main`, then fix or file it on its own.
+- **Screen faults seen during menus Task 9's look on 2026-09-27.** Recheck the floor-map overlap;
+  the header observation stays with the top-bar bundle.
   [Detail](till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
-- **Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
-  quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
-  Inspect the real till before attributing them to W69 or changing quantity/money handling.
-- **A retained-course phone fixture clips the Back button's outline at the right edge.**
-  A435 step 5's 390 px captures show it with the real till app and icons. Reproduce it through
-  a normal till boot before changing layout; the fixture's cause and the base version are
-  unverified. The retained course label and active-only picker are visible in the same captures.
-- **Loose ends left by A526 (#1579).** Recheck the observation on fixed Counter
-  (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now.
-  [Detail](till.md#loose-ends-left-by-a526-1579)
-- **A table order's draft arrangement draws its line names without the content language's
-  `lang`**, so they do not hyphenate (A841 slice 10, D14). Give its `lead-<n>` names the same
-  `lang`, `hyphens: auto` and `hyphenate-limit-chars: 8 auto auto` as the bill's `.product-name`
-  (`apps/till/src/widgets/basket.ts`). Left open by A841 slice 10b.
-- **A wider till gives the bill line's name less room.** Left open by A841 slice 10b.
-  [Detail](till.md#a-wider-till-gives-the-bill-lines-name-less-room)
 
 ## Bundle: Service steps after a bill moves
 
@@ -3000,12 +2923,6 @@ plan editor's save refuses deleting a booked table (`table.booked`) but not maki
 booking stays, and seating it is refused `table.in_joined_table` once the reset applies, so staff
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
 refuses it, as a delete is refused, or only warns.
-
-## The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495)
-
-The Schedule and Allergens screens draw their own copy of the card's border and padding
-(`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
-reach them.
 
 ## Refresh the floor without a staff action in a zone's list view — OPEN (3d, W16)
 
