@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillStaleSince } from "./stale-since.js";
 
@@ -17,6 +18,7 @@ async function pass(el: TillStaleSince, ms: number): Promise<void> {
 }
 
 const text = (el: TillStaleSince) => el.textContent!.trim();
+const spanishBanner = es["station.stale"].replace("{time}", "10:19");
 
 describe("till-stale-since", () => {
   beforeEach(() => {
@@ -62,9 +64,9 @@ describe("till-stale-since", () => {
     ],
     [
       "es-ES",
-      "Sin actualizaciones desde las 10:19, hace 59 minutos",
-      "Sin actualizaciones desde las 10:19, hace 1 hora",
-      "Sin actualizaciones desde las 10:19, hace 2 horas",
+      spanishBanner.replace("{ago}", es["station.stale_ago"].replace("{n}", "59")),
+      spanishBanner.replace("{ago}", es["station.stale_ago_hours_one"]),
+      spanishBanner.replace("{ago}", es["station.stale_ago_hours"].replace("{n}", "2")),
     ],
   ])("switches to whole hours at the hour boundary in %s", async (locale, minutes, one, two) => {
     setLocale(locale);
