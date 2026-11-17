@@ -29,14 +29,38 @@ export function openText(
   purpose: string,
   stored: string,
 ): { value: string; keyVersion: number } | null {
+  return openSealedText(purpose, stored, (version) => {
+    const key = keyForVersion(ring, version);
+    return key === null ? null : purposeKey({ key, version }, purpose);
+  });
+}
+
+/** Keys supplied here are already restricted to the caller's purpose. */
+export function openTextWithPurposeKeys(
+  keys: readonly KeyEntry[],
+  purpose: string,
+  stored: string,
+): { value: string; keyVersion: number } | null {
+  return openSealedText(
+    purpose,
+    stored,
+    (version) => keys.find((entry) => entry.version === version)?.key ?? null,
+  );
+}
+
+function openSealedText(
+  purpose: string,
+  stored: string,
+  keyFor: (version: number) => Buffer | null,
+): { value: string; keyVersion: number } | null {
   const parts = stored.split(".");
   if (parts.length !== 5 || parts[0] !== "v2") return null;
   if (!/^[1-9]\d*$/.test(parts[1]!)) return null;
   const keyVersion = Number(parts[1]);
   if (!Number.isInteger(keyVersion)) return null;
-  const key = keyForVersion(ring, keyVersion);
+  const key = keyFor(keyVersion);
   if (key === null) return null;
-  const value = open(purposeKey({ key, version: keyVersion }, purpose), aadFor(purpose), {
+  const value = open(key, aadFor(purpose), {
     iv: Buffer.from(parts[2]!, "base64url"),
     authTag: Buffer.from(parts[3]!, "base64url"),
     ciphertext: Buffer.from(parts[4]!, "base64url"),

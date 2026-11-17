@@ -60,4 +60,10 @@ export {
   verifyBackupCredentials,
 } from "./backup-verification.js";
 
-export { purposeKey, purposeKeys, sealText, openText } from "./purpose-seal.js";
+export {
+  purposeKey,
+  purposeKeys,
+  sealText,
+  openText,
+  openTextWithPurposeKeys,
+} from "./purpose-seal.js";

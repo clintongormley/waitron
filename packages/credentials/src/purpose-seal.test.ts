@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as credentials from "./index.js";
-import type { KeyRing } from "./keyring.js";
+import type { KeyEntry, KeyRing } from "./keyring.js";
 
 const { purposeKey, purposeKeys, sealText, openText } = credentials;
 const previous = { version: 1, key: Buffer.alloc(32, 1) };
@@ -65,4 +65,50 @@ describe("text sealed for a purpose", () => {
     ]);
     expect(purposeKeys({ current }, "totp").map((key) => key.toString("hex"))).toEqual([secondKey]);
   });
+});
+
+describe("text opened with already derived purpose keys", () => {
+  const source: KeyRing = {
+    current: { version: 7, key: Buffer.alloc(32, 2) },
+    previous: { version: 3, key: Buffer.alloc(32, 1) },
+  };
+  const keys: KeyEntry[] = [source.current, source.previous!].map((entry) => ({
+    version: entry.version,
+    key: purposeKey(entry, "totp"),
+  }));
+  const reader = () => credentials.openTextWithPurposeKeys;
+
+  it("opens current and previous original versions without deriving the supplied keys again", () => {
+    const vectors = [
+      [7, "v2.7.gXWBJDSAdhLuvxpE.qmjCaN1x9i11ugMxhMTEBA.AjdnlO7_9cei9FScYL_ngA"],
+      [3, "v2.3.qwQzN_pSqIwkrqBP.ZJNoHtoL-FVvloeoEe3jvg.nTUvwNhi4m3XuILtrU2Qyg"],
+    ] as const;
+    for (const [keyVersion, stored] of vectors)
+      expect(reader()(keys, "totp", stored)).toEqual({ value: "JBSWY3DPEHPK3PXP", keyVersion });
+    expect(
+      reader()(
+        [{ version: 1, key: purposeKey(source.previous!, "totp") }],
+        "totp",
+        "v2.1.i5AiyWwbKPxP1T9s.nkXQF6k35i853zbrXbPj9w.qDLPH9WDL9XbHO5G7SPjwQ",
+      ),
+    ).toEqual({ value: "JBSWY3DPEHPK3PXP", keyVersion: 1 });
+  });
+  it("refuses absent, mismatched and raw vault keys, and another purpose", () => {
+    const stored = sealText(source, "totp", "synthetic-value");
+    for (const rejected of [
+      [],
+      [keys[1]!],
+      [{ ...keys[0]!, version: 1 }],
+      [source.current],
+      [{ ...keys[0]!, key: Buffer.alloc(32) }],
+    ])
+      expect(reader()(rejected, "totp", stored)).toBeNull();
+    expect(reader()(keys, "account-action-code", stored)).toBeNull();
+  });
+  it.each(["v1.7.a.b.c", "v2.07.a.b.c", "v2.7.a.b", "v2.7.a.b.c"])(
+    "refuses unusable ciphertext %s",
+    (stored) => {
+      expect(reader()(keys, "totp", stored)).toBeNull();
+    },
+  );
 });

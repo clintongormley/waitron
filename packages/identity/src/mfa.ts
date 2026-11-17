@@ -5,7 +5,7 @@ import { recoveryCodes } from "@waitron/db";
 
 const RECOVERY_CODE_COUNT = 10;
 
-function recoveryHash(code: string): string {
+export function recoveryHash(code: string): string {
   return createHash("sha256").update(code.replaceAll("-", "").toUpperCase(), "utf8").digest("hex");
 }
 

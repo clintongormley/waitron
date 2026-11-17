@@ -199,3 +199,5 @@ export { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 export { assertUsableAdminRemains } from "./admin-anchor.js";
 
 export { resealTwoStepSecrets } from "./reseal.js";
+
+export { checkLockedCopyLogin } from "./locked-copy-login.js";

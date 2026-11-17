@@ -28,6 +28,22 @@ export function buildServeOptions(base: ServeOptions, tls: TlsFiles | undefined)
   return { ...base, createServer: createHttpsServer, serverOptions: { key, cert } };
 }
 
+/** The name, validity interval and key pair must all match before a TLS identity is served. */
+export function validateTlsIdentity(
+  key: Buffer,
+  cert: Buffer,
+  hostname: string,
+  now = Date.now(),
+): number {
+  const leaf = new X509Certificate(cert);
+  const matches = isIP(hostname) ? leaf.checkIP(hostname) : leaf.checkHost(hostname);
+  const expiresAt = Date.parse(leaf.validTo);
+  if (matches !== hostname || Date.parse(leaf.validFrom) > now || expiresAt <= now)
+    throw new Error("TLS certificate invalid");
+  createSecureContext({ key, cert });
+  return expiresAt;
+}
+
 /** Refresh only future handshakes. A failed renewal leaves the last valid TLS context serving. */
 export function watchTlsFiles(
   server: HttpsServer,
@@ -46,15 +62,7 @@ export function watchTlsFiles(
         cert = readFileSync(files.certFile);
       const fingerprint = createHash("sha256").update(key).update(cert).digest("hex");
       if (fingerprint === accepted) return;
-      const leaf = new X509Certificate(cert);
-      const matches = isIP(hostname) ? leaf.checkIP(hostname) : leaf.checkHost(hostname);
-      if (
-        matches !== hostname ||
-        Date.parse(leaf.validFrom) > Date.now() ||
-        Date.parse(leaf.validTo) <= Date.now()
-      )
-        throw new Error("TLS certificate invalid");
-      createSecureContext({ key, cert });
+      validateTlsIdentity(key, cert, hostname);
       server.setSecureContext({ key, cert });
       accepted = fingerprint;
       lastFailure = undefined;
