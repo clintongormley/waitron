@@ -166,6 +166,18 @@ it("refuses a file whose hash is not the one Cloud chose", async () => {
   expect(await sha256(venuePath)).toBe(hash);
 });
 
+it("stops at an aborted signal before hashing finishes, rather than answering a mismatch", async () => {
+  const hash = await place();
+  const other = `${hash.slice(0, 63)}${hash.endsWith("0") ? "1" : "0"}`;
+  const stop = new AbortController();
+  stop.abort(new Error("stopping"));
+  await expect(check(bindingFor(other), { signal: stop.signal })).rejects.toThrow("stopping");
+});
+
+it("passes a failure to read the file on as its own error, not a stop", async () => {
+  await expect(check(bindingFor("0".repeat(64)))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("refuses a file that fails the integrity check", async () => {
   await writeFile(venuePath, "damaged");
   await expect(check(bindingFor(await sha256(venuePath)))).rejects.toMatchObject({

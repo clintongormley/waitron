@@ -18,9 +18,14 @@ import { isReadableChart } from "./membership-trust.js";
 import { assertVenueCopyNotAhead } from "./spare-copy.js";
 import "./errors.js";
 
-async function fileSha256(path: string): Promise<string> {
+async function fileSha256(path: string, signal: AbortSignal | undefined): Promise<string> {
   const hash = createHash("sha256");
-  await pipeline(createReadStream(path), hash);
+  try {
+    await pipeline(createReadStream(path), hash, { signal });
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  }
   return hash.digest("hex");
 }
 
@@ -48,7 +53,7 @@ export async function checkPlacedEmergencyCopy(deps: {
   if (existsSync(`${venuePath}${WAL_SUFFIX}`)) throw new AppError("emergency_copy.wal_present", {});
   if (existsSync(join(dirname(venuePath), NODE_FILE)))
     throw new AppError("emergency_copy.node_db_present", {});
-  if ((await fileSha256(venuePath)) !== binding.selectedStream.databaseSha256)
+  if ((await fileSha256(venuePath, deps.signal)) !== binding.selectedStream.databaseSha256)
     throw new AppError("emergency_copy.hash_mismatch", {});
   if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal, immutable: true })))
     throw new AppError("emergency_copy.integrity_failed", {});
