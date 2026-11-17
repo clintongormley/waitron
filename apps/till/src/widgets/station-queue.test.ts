@@ -9,7 +9,9 @@ import {
   namedIcons,
   pageAt,
   resetPage,
+  rgbContrast,
   textRects,
+  tokenColour,
 } from "./test-helpers.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText } from "../i18n/help-strings.js";
@@ -3044,6 +3046,42 @@ describe("the board's cards", () => {
     expect(flat(mixed!.querySelector(".ticket-head .age")!)).toBe(`7 ${t("station.min")}`);
   });
 
+  it.each(["light", "dark"] as const)(
+    "draws a held card's and its held dishes' dashes in the field-line colour, 3:1 against the card (%s)",
+    async (theme) => {
+      const { el, host } = await mountWidget<TillStationQueue>(
+        "till-station-queue",
+        {
+          groups: [
+            bill("wo-1", 5, [
+              dish("held-1", null, { group: sent("g-3", 3, "held") }),
+              dish("fired", "2026-08-17T10:00:00.000Z", { group: sent("g-4", 4) }),
+            ]),
+          ],
+          stationId: "st-1",
+          now: Date.parse("2026-08-17T10:07:00.000Z"),
+        },
+        theme,
+      );
+      const [mixed, held] = cardsIn(column(el, "queued"));
+      const line = tokenColour(host, "--wt-color-field-line");
+      const style = getComputedStyle(held!);
+      expect(style.borderTopStyle).toBe("dashed");
+      for (const side of ["Top", "Right", "Bottom", "Left"] as const)
+        expect(style[`border${side}Color`]).toBe(line);
+      expect(rgbContrast(line, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+      const heldDish = getComputedStyle(held!.querySelector('[data-item="held-1"]')!);
+      expect(heldDish.borderTopStyle).toBe("dashed");
+      expect(heldDish.borderTopColor).toBe(line);
+      expect(heldDish.borderLeftColor).not.toBe(line);
+      // The control: a timed card keeps its age band and its ordinary border.
+      expect(getComputedStyle(mixed!).borderTopColor).not.toBe(line);
+      expect(getComputedStyle(mixed!).borderRightColor).toBe(
+        tokenColour(host, "--wt-color-border"),
+      );
+    },
+  );
+
   // A recall un-fires a fired group's dishes; a bill taken to the counter then leaves its group.
   it("says a card is held whenever every dish on it is, in a fired group or in none", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -3412,6 +3450,7 @@ const paint = (el: TillStationQueue) => {
   el.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
   el.style.setProperty("--wt-color-danger-pulse-dim", "rgb(10, 11, 12)");
   el.style.setProperty("--wt-color-border", "rgb(13, 14, 15)");
+  el.style.setProperty("--wt-color-field-line", "rgb(16, 17, 18)");
 };
 
 describe("till-station-queue: a card's age band", () => {
@@ -3432,7 +3471,7 @@ describe("till-station-queue: a card's age band", () => {
     expect(getComputedStyle(cardOf(el, 2)).borderLeftColor).toBe("rgb(13, 14, 15)");
     expect(getComputedStyle(cardOf(el, 3)).borderTopColor).toBe("rgb(7, 8, 9)");
     expect(getComputedStyle(cardOf(el, 3)).borderLeftColor).toBe("rgb(7, 8, 9)");
-    expect(getComputedStyle(cardOf(el, 5)).borderTopColor).toBe("rgb(13, 14, 15)");
+    expect(getComputedStyle(cardOf(el, 5)).borderTopColor).toBe("rgb(16, 17, 18)");
   });
 
   it("a forgotten card's band pulses to the dim red at the fast pulse token", async () => {
