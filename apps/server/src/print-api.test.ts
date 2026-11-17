@@ -136,7 +136,7 @@ beforeEach(() => seedPrintRouteFixture(suite.db));
 /** Holds the wall clock (scan freshness) and the steady clock (command expiry) `ms` past now. */
 function holdClocks(): (ms: number) => void {
   const wall = Date.now();
-  const steady = performance.now();
+  const steady = Math.floor(performance.now());
   return (ms) => {
     vi.spyOn(Date, "now").mockReturnValue(wall + ms);
     vi.spyOn(performance, "now").mockReturnValue(steady + ms);
