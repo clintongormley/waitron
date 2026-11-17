@@ -1279,7 +1279,7 @@ describe("setup-app", () => {
     goto(el, "venue");
     patch(el, { mode: "live" });
     advance(el);
-    await el.updateComplete;
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
   });
 

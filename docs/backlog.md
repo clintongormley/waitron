@@ -427,8 +427,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
-- **A dev stack cannot finish a Live setup**: the wizard skips the owner flow in development
-  mode and the server refuses the plain provision with `setup.owner_required`.
+- **A dev stack cannot finish a Live setup**: it stops at the readiness step, which needs a second
+  clock nothing on a dev stack can be; the owner chooses the fix.
   [Detail](backlog/setup.md#a-dev-stack-cannot-finish-a-live-setup)
 
 - **Loose ends left by A496 (moving to a new tax ID).**

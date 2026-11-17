@@ -53,14 +53,38 @@ function resolvedStateDir(): string {
   return isAbsolute(configured) ? configured : resolve(configured);
 }
 
-/** Match the protocol selected by `startTradingListener`: a persisted box leaf enables HTTPS. */
+/**
+ * Match the protocol selected by `startTradingListener`: a persisted box leaf enables HTTPS.
+ * `target` and `secure` are getters because an onboarding box mints its leaf after Vite starts;
+ * Vite's http-proxy keeps this object and spreads it on every request, which reads them afresh.
+ */
 export function devServerProxy(
   options: { stateDir?: string } = {},
 ): ProxyOptions & { target: string } {
   const stateDir = options.stateDir ?? resolvedStateDir();
-  const hasLeaf = existsSync(join(stateDir, "tls", "server.pem"));
   const port = devPort("WAITRON_HTTP_PORT", 8080);
-  return hasLeaf
-    ? { target: `https://127.0.0.1:${port}`, secure: false }
-    : { target: `http://127.0.0.1:${port}` };
+  const hasLeaf = () => existsSync(join(stateDir, "tls", "server.pem"));
+  return {
+    get target() {
+      return hasLeaf() ? `https://127.0.0.1:${port}` : `http://127.0.0.1:${port}`;
+    },
+    get secure() {
+      return hasLeaf() ? false : undefined;
+    },
+    // The Vite page is plain HTTP on the same host the proxy forwards; the HTTPS box's own-page
+    // check compares Origin with its https URL, so a same-host page is presented as https.
+    configure(proxy) {
+      proxy.on("proxyReq", (proxyReq, request, _response, forwarded) => {
+        const target = forwarded.target;
+        const protocol = typeof target === "string" ? new URL(target).protocol : target?.protocol;
+        const host = request.headers.host;
+        if (
+          protocol === "https:" &&
+          host !== undefined &&
+          request.headers.origin === `http://${host}`
+        )
+          proxyReq.setHeader("origin", `https://${host}`);
+      });
+    },
+  };
 }

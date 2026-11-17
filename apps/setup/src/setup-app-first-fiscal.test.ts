@@ -115,13 +115,25 @@ it("skips the owner activation flow when the host offers none", async () => {
   expect(requests.filter((r) => r.path.endsWith("/offerings"))).toHaveLength(1);
   expect(requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
 });
-it("keeps development Live on the disposable setup path", async () => {
+it("claims development Live and goes from the owner step to readiness and activation with no certificate or email", async () => {
   const { app, requests } = await mount({ developmentMode: true });
   await liveVenue(app);
+  const allocation = await screen(app, "first-setup");
+  expect(requests.filter((r) => r.path.endsWith("/offerings"))).toHaveLength(1);
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
+  expect(app.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
+  expect(app.shadowRoot!.querySelector("[data-test=screen-email]")).toBeNull();
+  allocation.dispatchEvent(
+    new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
+  );
   await screen(app, "review");
-  expect(
-    requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/offerings")),
-  ).toEqual([]);
+  emit(app, "provision-requested");
+  await expect.poll(() => requests.filter((r) => r.path.endsWith("/provision"))).toHaveLength(1);
+  const body = requests.find((r) => r.path.endsWith("/provision"))!.body as Record<string, unknown>;
+  expect(body).toMatchObject({ mode: "live", firstSetup: { attemptId: initial.attemptId } });
+  expect(body.aeatCert).toBeUndefined();
+  expect(body.email).toBeUndefined();
+  expect(requests.filter((r) => r.path.endsWith("/fiscal-test"))).toEqual([]);
 });
 type Intercept = NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
 /** Claims in one tab, closes it, and opens a second tab holding the first one's saved key. */

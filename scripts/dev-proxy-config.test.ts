@@ -7,6 +7,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { createServer as createHttpServer, type Server } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { createRequire } from "node:module";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -77,11 +82,126 @@ describe("development server proxy", () => {
   it("uses HTTP without a box leaf and accepts the self-signed HTTPS leaf when present", () => {
     expect(devServerProxy({ stateDir: join(stateDir, "absent") })).toEqual({
       target: "http://127.0.0.1:8080",
+      configure: expect.any(Function),
     });
     expect(devServerProxy({ stateDir })).toEqual({
       target: "https://127.0.0.1:8080",
       secure: false,
+      configure: expect.any(Function),
     });
+  });
+
+  it("re-checks the box leaf each time the proxy target is read, so a leaf minted after Vite starts is followed", () => {
+    const lateState = join(stateDir, "late");
+    const proxy = devServerProxy({ stateDir: lateState });
+    expect(proxy.target).toBe("http://127.0.0.1:8080");
+    expect(proxy.secure).toBeUndefined();
+    expect({ ...proxy }).toEqual({
+      target: "http://127.0.0.1:8080",
+      configure: expect.any(Function),
+    });
+    mkdirSync(join(lateState, "tls"), { recursive: true });
+    writeFileSync(join(lateState, "tls", "server.pem"), "certificate");
+    try {
+      expect(proxy.target).toBe("https://127.0.0.1:8080");
+      expect(proxy.secure).toBe(false);
+      // http-proxy spreads the options object Vite hands it on every request.
+      expect({ ...proxy }).toEqual({
+        target: "https://127.0.0.1:8080",
+        secure: false,
+        configure: expect.any(Function),
+      });
+    } finally {
+      rmSync(lateState, { recursive: true, force: true });
+    }
+  });
+
+  it("sends each request by the protocol the box serves at that moment, through Vite's own proxy, presenting a same-host page's Origin as HTTPS to the HTTPS box", async () => {
+    const lateState = join(stateDir, "per-request");
+    const tlsDir = join(lateState, "tls");
+    const keyDir = mkdtempSync(join(import.meta.dirname, "dev-proxy-key-"));
+    const originalPort = process.env.WAITRON_HTTP_PORT;
+    const listen = (server: Server, port: number) =>
+      new Promise<number>((done, fail) => {
+        server.once("error", fail);
+        server.listen(port, "127.0.0.1", () => done((server.address() as AddressInfo).port));
+      });
+    const close = (server: Server) => new Promise((done) => server.close(done));
+    const answer =
+      (protocol: string) =>
+      (
+        request: import("node:http").IncomingMessage,
+        response: import("node:http").ServerResponse,
+      ) =>
+        response.end(`${protocol} ${request.headers.origin ?? "none"}`);
+    const plain = createHttpServer(answer("http"));
+    let secure: Server | undefined;
+    let vite: import("vite").ViteDevServer | undefined;
+    try {
+      const port = await listen(plain, 0);
+      process.env.WAITRON_HTTP_PORT = String(port);
+      const proxy = devServerProxy({ stateDir: lateState });
+      const viteUrl = pathToFileURL(
+        createRequire(join(REPO_ROOT, "apps", "setup", "package.json")).resolve("vite"),
+      ).href;
+      const { createServer } = (await import(viteUrl)) as typeof import("vite");
+      vite = await createServer({
+        configFile: false,
+        root: keyDir,
+        logLevel: "silent",
+        server: { host: "127.0.0.1", port: 0, proxy: { "/probe": proxy } },
+      });
+      await vite.listen();
+      const page = `http://127.0.0.1:${(vite.httpServer!.address() as AddressInfo).port}`;
+      const probe = `${page}/probe`;
+      const send = async (origin?: string) => {
+        const response = await fetch(probe, origin === undefined ? {} : { headers: { origin } });
+        expect(response.status).toBe(200);
+        return response.text();
+      };
+      expect(await send()).toBe("http none");
+      // A plain-HTTP box sees the page's own Origin as it was sent.
+      expect(await send(page)).toBe(`http ${page}`);
+
+      await close(plain);
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "rsa:2048",
+          "-nodes",
+          "-subj",
+          "/CN=127.0.0.1",
+          "-days",
+          "1",
+        ].concat(["-keyout", join(keyDir, "key.pem"), "-out", join(keyDir, "cert.pem")]),
+        { stdio: "ignore" },
+      );
+      secure = createHttpsServer(
+        {
+          key: readFileSync(join(keyDir, "key.pem")),
+          cert: readFileSync(join(keyDir, "cert.pem")),
+        },
+        answer("https"),
+      );
+      await listen(secure, port);
+      mkdirSync(tlsDir, { recursive: true });
+      writeFileSync(join(tlsDir, "server.pem"), readFileSync(join(keyDir, "cert.pem")));
+      expect(await send()).toBe("https none");
+      expect(await send(page)).toBe(`https ${page.replace("http://", "https://")}`);
+      expect(await send("http://localhost:1")).toBe("https http://localhost:1");
+      expect(await send(`https://127.0.0.1:1`)).toBe("https https://127.0.0.1:1");
+    } finally {
+      await vite?.close();
+      if (secure !== undefined) await close(secure);
+      if (plain.listening) await close(plain);
+      if (originalPort === undefined) delete process.env.WAITRON_HTTP_PORT;
+      else process.env.WAITRON_HTTP_PORT = originalPort;
+      rmSync(lateState, { recursive: true, force: true });
+      rmSync(keyDir, { recursive: true, force: true });
+    }
   });
 
   it("routes a shifted stack to its own server port and gives each app its assigned listener", async () => {

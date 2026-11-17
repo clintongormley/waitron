@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
+import { readBuildHourRelease } from "../../../scripts/generate-hour-release.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, "..");
@@ -66,9 +67,29 @@ const envFileFlags = [
   `--env-file-if-exists=${join(stateDir, "trading.env")}`,
 ];
 
-const server = spawn("tsx", ["watch", ...envFileFlags, "src/bin.ts"], {
+// A source run has no compiled-in release stamp, and the hour check refuses to confirm without one.
+// Dev only: the stamp is HEAD's, as a bundle built from this checkout would carry.
+let hourRelease = null;
+let noStampReason = "the checkout has no git metadata or build/hour-release.json";
+try {
+  hourRelease = readBuildHourRelease({ cwd: resolve(pkgRoot, "..", "..") });
+} catch (error) {
+  noStampReason = error instanceof Error ? error.message.split("\n")[0] : String(error);
+}
+const childEnv = { ...process.env, WAITRON_MIGRATIONS_DIR: migrationsDir };
+delete childEnv.WAITRON_DEV_HOUR_RELEASE;
+if (hourRelease === null) {
+  console.error(
+    `Starting without a release stamp (${noStampReason}): setup's hour check will stay unconfirmed.`,
+  );
+} else {
+  childEnv.WAITRON_DEV_HOUR_RELEASE = JSON.stringify(hourRelease);
+}
+
+const preload = `--import=${join(here, "dev-hour-release.mjs")}`;
+const server = spawn("tsx", ["watch", preload, ...envFileFlags, "src/bin.ts"], {
   cwd: pkgRoot,
   stdio: "inherit",
-  env: { ...process.env, WAITRON_MIGRATIONS_DIR: migrationsDir },
+  env: childEnv,
 });
 server.on("exit", (code) => process.exit(code ?? 0));
