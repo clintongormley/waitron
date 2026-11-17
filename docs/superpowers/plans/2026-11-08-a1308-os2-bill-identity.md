@@ -169,6 +169,8 @@ Watcher direction, 2026-11-17 19:00 (Lane H questions.md): default editor-row as
 
 Watcher clearance, 2026-11-17 18:43 (Lane H questions.md): retire only `bill-editing.test.ts`’s orphan-editor acceptance case; the planned person-key refusal owns rejection, and other invented-editor fixtures seed real people (U11).
 
+Watcher clearance, 2026-11-17 22:44 (Lane H questions.md): full bill-row checks in `collect-at-counter.test.ts` and `parties.test.ts` include the number clear and editor increment that moved onto the bill. Retire the corresponding orphan-editor save acceptance in `order-drafts.db.test.ts`. Keep the real-editor name and conflict checks, historical previous-editor lookup, and the database's missing-person refusal.
+
 - `packages/db/src/schema/orders.transition.test.ts:696, :720, :740` (Task 2 Step 2): the owner's
   five-column exception (README §10).
 - `scripts/behavioural-triggers.test.ts:657` `MOVABLE_ORDER_COLUMNS` gains `bill_number`, `bill_name`,

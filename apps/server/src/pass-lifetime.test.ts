@@ -205,7 +205,7 @@ describe("A773 lifetime", () => {
     const [bill] = await inTx(v, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
     );
-    expect(bill!.partyId).toBe(party.partyId);
+    expect(bill!.partyId).toBe(third.partyId);
     const [closed] = await inTx(v, (tx) =>
       tx.select().from(parties).where(eq(parties.id, party.partyId)),
     );

@@ -91,6 +91,7 @@ async function history(tx: Transaction, billId: string, count = 256, leaveOpen =
       id: id.bill,
       orderNumber: i + 100,
       partyId: null,
+      billNumber: null,
       status: "open" as const,
       settledAt: null,
       collectedAt: null,

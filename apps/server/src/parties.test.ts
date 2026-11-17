@@ -736,7 +736,7 @@ describe("a paid party (paying changes no table of the party)", () => {
     return { venue, table4, ...seated };
   }
 
-  it("moves from Table 4 to Table 7 on the same party, leaving the settled tab as it was", async () => {
+  it("moves a paid party to a free table and advances only the bill's editor version", async () => {
     const { venue, table4, partyId, tabId } = await paid();
     const table7 = await venue.table("Table 7");
     const command = await commandFor(suite, partyId);
@@ -757,7 +757,8 @@ describe("a paid party (paying changes no table of the party)", () => {
     const [settledAfter] = await inTx(suite, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
     );
-    expect(settledAfter).toEqual(settledBefore);
+    const editorVersion = settledBefore!.editorVersion + 1;
+    expect(settledAfter).toEqual({ ...settledBefore, editorVersion });
   });
 
   it("joins Table 5, and the next round opens the party's next tab on both tables", async () => {
@@ -984,14 +985,14 @@ describe("merge (D2)", () => {
     return { venue, table4, table6, t, s, settledId, openCheckId };
   }
 
-  it("absorbs the other party: its open check follows, its settled bill stays, and it closes", async () => {
+  it("absorbs the other party, takes its open and paid bills, and closes it", async () => {
     const { venue, t, s, settledId, openCheckId } = await mergePair();
 
     await merge(venue.cfg, t, s, true);
 
     expect(await partyIdOf(openCheckId)).toBe(t.partyId);
     expect(await statusOf(suite, openCheckId)).toBe("open");
-    expect(await partyIdOf(settledId)).toBe(s.partyId);
+    expect(await partyIdOf(settledId)).toBe(t.partyId);
     // Its open tab moves with it (P13) and merges into T's.
     expect(await partyIdOf(s.tabId)).toBe(t.partyId);
     expect(await statusOf(suite, s.tabId)).toBe("abandoned");
@@ -1138,9 +1139,8 @@ describe("merged parties keep their bills", () => {
         b.billNumber,
       ]),
     ).toEqual([
-      // The open tab and the presented bill moved to T when the parties combined (P13).
       [t.tabId, t.partyId, "open", "30.00", "30.00", 1],
-      [settledId, s.partyId, "settled", "20.00", "0.00", 3],
+      [settledId, t.partyId, "settled", "20.00", "0.00", 3],
       [placedId, t.partyId, "placed", "15.00", "15.00", 4],
       [s.tabId, t.partyId, "abandoned", "0.00", "0.00", null],
     ]);

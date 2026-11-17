@@ -659,28 +659,6 @@ describe("separate drafts (spec §12 item 1)", () => {
 });
 
 describe("saving a draft", () => {
-  it("names an owner with no person record as empty text, wherever the name is shown", async () => {
-    const v = await setupVenue();
-    const table4 = await seated(v);
-    const nobody = randomUUID();
-    const draft = await save(v, table4.partyId, nobody, null, 0, [item(v, "beer")]);
-    expect(draft).toMatchObject({ ownerId: nobody, ownerName: "" });
-    expect(await unsentDraftsAt(table4.tableId)).toEqual([
-      {
-        billId: draft.billId,
-        billNumber: 1,
-        ownerId: nobody,
-        ownerName: "",
-        savedAt: await savedAtOf(draft.id),
-        lineCount: 1,
-      },
-    ]);
-    await expect(save(v, table4.partyId, SAM, draft.id, 0, [])).rejects.toMatchObject({
-      code: "draft.taken_over",
-      params: { draftId: draft.id, ownerId: nobody, ownerName: null },
-    });
-  });
-
   it("creates the operator's draft at revision 0 with a created event", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
@@ -2321,12 +2299,14 @@ describe("who a draft was taken over from", () => {
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     const nobody = randomUUID();
+    await seedPersons(db, { id: nobody, displayName: "Nora" });
     const nobodys = await saveOnSeparateBill(v, partyId, nobody, null, 0, [item(v, "fish")]);
     const mia = randomUUID();
     await seedPersons(db, { id: mia, displayName: "Mia" });
     await saveOnSeparateBill(v, partyId, mia, null, 0, [item(v, "wine", { variantId: v.glass })]);
     await takeOver(v, partyId, alex.id, SAM, 0);
     await takeOver(v, partyId, nobodys.id, ALEX, 0);
+    await db.delete(persons).where(eq(persons.id, nobody));
 
     const read = byOwner(await draftsOf(v, partyId));
     expect(read.map(({ ownerId, takenOverFrom }) => ({ ownerId, takenOverFrom }))).toEqual([
@@ -3483,6 +3463,7 @@ describe("merging parties (D2)", () => {
     const table4 = await seated(v);
     const table5 = await seated(v, "Mesa 5");
     const mia = randomUUID();
+    await seedPersons(db, { id: mia, displayName: "Mia" });
     const miasSent = await save(v, table5.partyId, mia, null, 0, [item(v, "fish")]);
     await submit(v, table5.partyId, miasSent, mia, [
       { lineIds: lineIds(miasSent), release: "fire" },

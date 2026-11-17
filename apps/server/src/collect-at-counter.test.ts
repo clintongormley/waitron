@@ -368,7 +368,7 @@ async function paidFired(lines: { name: string; quantity?: string }[], amount: s
 }
 
 describe("moveSettledBillToCounter", () => {
-  it("moves a paid bill to the counter, changing only its party", async () => {
+  it("clears a paid bill's party number and advances its editor version at the counter", async () => {
     const p = await paidFired([{ name: "Burger" }], "12.00");
     const before = await orderRow(p.billId);
     const zone = await zoneOf(p.billId);
@@ -376,7 +376,9 @@ describe("moveSettledBillToCounter", () => {
 
     await toCounter(p);
 
-    expect(await orderRow(p.billId)).toEqual({ ...before, partyId: null });
+    const after = await orderRow(p.billId);
+    const editorVersion = before.editorVersion + 1;
+    expect(after).toEqual({ ...before, partyId: null, billNumber: null, editorVersion });
     expect(await zoneOf(p.billId)).toBe(zone);
   });
 
