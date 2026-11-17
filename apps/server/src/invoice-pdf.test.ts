@@ -1150,6 +1150,65 @@ it.each([
   expect(pages[0]!.text).not.toContain("NIF: Ab-09/xy");
 });
 
+describe("A4 tax table", () => {
+  /** A simplified invoice of `count` distinct one-euro-odd items at two rates, 21% first. */
+  const simplified = (count: number, headerFacts: number): ReceiptDocumentInput => {
+    const at21 = Math.ceil(count / 2);
+    const at10 = count - at21;
+    const { headerSubtitle, phone, email, ...rest } = fixture.receipt;
+    return {
+      ...fixture,
+      receipt: {
+        ...rest,
+        ...Object.fromEntries(
+          Object.entries({ headerSubtitle, phone, email }).slice(0, headerFacts),
+        ),
+      },
+      result: {
+        ...fixture.result,
+        invoiceType: "F2",
+        recipient: undefined,
+        total: (at21 * 1.21 + at10 * 1.1).toFixed(2),
+        vatBreakdown: [
+          { rate: "21", base: `${at21}.00`, tax: (at21 * 0.21).toFixed(2) },
+          { rate: "10", base: `${at10}.00`, tax: (at10 * 0.1).toFixed(2) },
+        ],
+        lines: Array.from({ length: count }, (_, at) => ({
+          descriptions: { "es-ES": `Artículo ${at + 1}` },
+          quantity: "1",
+          gross: at < at21 ? "1.21" : "1.10",
+          vatRate: at < at21 ? "21.00" : "10.00",
+        })),
+      },
+    };
+  };
+  const pageOf = (pages: InvoicePage[], text: string): number =>
+    pages.findIndex((page) =>
+      page.elements.some((element) => element.kind === "text" && element.text === text),
+    );
+
+  it("keeps every rate's row on the page of the table's heading, 29 items at two rates", () => {
+    const pages = layoutInvoicePages(simplified(29, 3));
+    expect(pages.length).toBeGreaterThan(1);
+    const heading = pageOf(pages, "Tipo");
+    expect(heading).toBeGreaterThanOrEqual(0);
+    expect([pageOf(pages, "A 21%"), pageOf(pages, "B 10%")]).toEqual([heading, heading]);
+  });
+
+  it("keeps the table whole on one page wherever the items end", () => {
+    let movedWhole = 0;
+    for (let count = 2; count <= 45; count++)
+      for (let headerFacts = 0; headerFacts <= 3; headerFacts++) {
+        const pages = layoutInvoicePages(simplified(count, headerFacts));
+        const heading = pageOf(pages, "Tipo");
+        const shape = `${count} items, ${headerFacts} header lines`;
+        expect([pageOf(pages, "A 21%"), pageOf(pages, "B 10%")], shape).toEqual([heading, heading]);
+        if (heading > pageOf(pages, "TOTAL")) movedWhole++;
+      }
+    expect(movedWhole, "inputs whose table started a page of its own").toBeGreaterThan(0);
+  });
+});
+
 describe("A4 remembered text widths", () => {
   /** A module copy whose remembered widths no earlier case has filled. */
   const freshModules = async () => {

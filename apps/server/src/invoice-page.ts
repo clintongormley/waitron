@@ -312,7 +312,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
           rights[at] = right;
           right -= widths[at]! + COLUMN_GAP;
         }
-        room(2 * LINE_HEIGHT);
+        // The table moves to the next page whole, unless it is taller than a page.
+        room(Math.min(rows.length + 1, linesPerPage) * LINE_HEIGHT);
         for (const [index, row] of [header, ...rows].entries()) {
           room(LINE_HEIGHT);
           const page = pages.at(-1)!;
