@@ -687,9 +687,9 @@ Hardware and inbox checks to complete in the owner session.
 - **No database check that a device sets at most one of its two invoice printer columns
   (2026-10-15, A661).** `devices.invoice_printer_id` names a receipt printer and
   `devices.invoice_page_printer_id` an A4 printer. A CHECK would make drizzle-kit rebuild `devices`,
-  and that rebuild deletes the rows of every table cascading from it. `selectDevicePrinter`
-  (`packages/layouts/src/device-equipment.ts`), the one path that stores a choice, sets one column
-  and clears the other.
+  and that rebuild deletes the rows of every table cascading from it. Every write that stores an
+  invoice choice takes its columns from `choiceColumns` (`packages/layouts/src/device-equipment.ts`),
+  which sets one and clears the other.
 
 ## Shared office-printer queues
 

@@ -402,18 +402,35 @@ export async function selectDeviceEquipment(
       ? await selectDeviceReader(tx, { deviceId, selection, via, takeOver })
       : await selectDevicePrinter(tx, { deviceId, role, selection, via, takeOver });
   if (result.ok) return;
+  throw await equipmentRefusal(tx, role, selection, result);
+}
+
+/** A refused equipment choice. */
+export type EquipmentRefusal =
+  | { refusal: "deleted" }
+  | { refusal: "not_permitted" }
+  | { refusal: "busy" }
+  | { refusal: "held"; holderDeviceId: string };
+
+/** The error a refused choice of `selection` for `role` is answered with. */
+export async function equipmentRefusal(
+  tx: Transaction,
+  role: EquipmentRole,
+  selection: "default" | { id: string },
+  result: EquipmentRefusal,
+): Promise<AppError> {
   const field = FIELD[role];
   if (result.refusal === "deleted") {
-    throw new AppError("reader.not_found", { id: (selection as { id: string }).id });
+    return new AppError("reader.not_found", { id: (selection as { id: string }).id });
   }
-  if (result.refusal === "not_permitted") throw new AppError("device.binding_invalid", { field });
+  if (result.refusal === "not_permitted") return new AppError("device.binding_invalid", { field });
   if (result.refusal === "busy") {
-    throw new AppError("reader.payment_in_progress", {
+    return new AppError("reader.payment_in_progress", {
       readerId: (selection as { id: string }).id,
     });
   }
   const holder = (await holdersByDevice(tx, [result.holderDeviceId])).get(result.holderDeviceId)!;
-  throw new AppError("device.equipment_held", {
+  return new AppError("device.equipment_held", {
     field,
     holderDeviceId: holder.deviceId,
     holderDeviceName: holder.deviceName,

@@ -17,12 +17,17 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, profilesAdmitting, tillSessions, sightingDue } from "@waitron/identity";
 import {
+  checkDevicePrinterChoice,
+  choicesClearedOnProfile,
   chosenPrinterOf,
   kindOfFormFactor,
   listDeviceProfiles,
   listDevices,
+  settleDevicePrinters,
+  type DevicePrinterChoices,
   type ProfilePrinterRole,
 } from "@waitron/layouts";
+import { readerChoiceClearedOnProfile } from "@waitron/payments";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -54,7 +59,9 @@ import {
 import {
   readDeviceEquipment,
   readDevicesEquipment,
+  equipmentRefusal,
   selectDeviceEquipment,
+  type EquipmentRefusal,
   type EquipmentRole,
   type EquipmentSelection,
   type EquipmentPickup,
@@ -838,6 +845,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
+            cashDrawerPrinterId: devices.cashDrawerPrinterId,
+            invoicePrinterId: devices.invoicePrinterId,
+            invoicePagePrinterId: devices.invoicePagePrinterId,
+            cardReaderId: devices.cardReaderId,
           })
           .from(devices)
           .where(ownDeviceById(id));
@@ -884,18 +895,47 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         await refuseDeletedPrinters(tx, Object.values(chosen));
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
-        const held = await updateDeviceSettings(tx, { id, ...device }, { label, profileId });
-        // Only a choice that differs from the stored one is applied: a new choice must be switched
-        // on, and a device may still hold a listed one since switched off.
+        // Unlisted choices are cleared in this write, so settleDevice finds none left to clear.
+        const cleared: Partial<DevicePrinterChoices> & { cardReaderId?: null } = switching
+          ? {
+              ...(await choicesClearedOnProfile(tx, device, profileId)),
+              ...(await readerChoiceClearedOnProfile(tx, device.cardReaderId, profileId)),
+            }
+          : {};
+        // Only a choice that differs from what the device would keep is checked: a new choice must
+        // be switched on, and a device may still hold a listed one since switched off.
+        const kept = { ...device, ...cleared };
+        let columns = cleared;
+        let refused:
+          | {
+              role: ProfilePrinterRole;
+              selection: "default" | { id: string };
+              result: EquipmentRefusal;
+            }
+          | undefined;
         for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
           const printerId = chosen[role];
-          if (printerId === undefined || printerId === chosenPrinterOf(held, role)) continue;
-          await selectDeviceEquipment(tx, {
+          if (printerId === undefined || printerId === chosenPrinterOf(kept, role)) continue;
+          const selection = printerId === null ? "default" : { id: printerId };
+          const check = await checkDevicePrinterChoice(tx, {
             deviceId: id,
+            profileId,
             role,
-            selection: printerId === null ? "default" : { id: printerId },
+            selection,
             via: "manage",
           });
+          if (!check.ok) {
+            refused = { role, selection, result: check };
+            break;
+          }
+          columns = { ...columns, ...check.columns };
+        }
+        await updateDeviceSettings(tx, { id }, { label, profileId }, refused ? {} : columns);
+        if (refused) {
+          throw await equipmentRefusal(tx, refused.role, refused.selection, refused.result);
+        }
+        if (!switching && Object.keys(columns).length > 0) {
+          await settleDevicePrinters(tx, id, { acquire: true });
         }
         if (madeHere !== undefined) {
           await setMadeHereStations(tx, id, madeHere as string[]);

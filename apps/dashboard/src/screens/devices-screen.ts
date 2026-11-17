@@ -503,10 +503,7 @@ export class DevicesScreen extends LitElement {
     })) === "proceeded";
 
   #pairPayload(): Parameters<DashboardApi["acceptDeviceJoinRequest"]>[1] {
-    return {
-      name: this.pairName.trim(),
-      profileId: this.chosenProfileId,
-    };
+    return this.#identityPayload({ name: this.pairName, profileId: this.chosenProfileId });
   }
 
   #registerPairDraft(): void {
@@ -623,8 +620,7 @@ export class DevicesScreen extends LitElement {
   #editPayload() {
     const form = this.editForm;
     return {
-      name: form.name.trim(),
-      profileId: form.profileId,
+      ...this.#identityPayload(form),
       ...(this.#sharedDisplay(form.profileId)
         ? {}
         : {
@@ -991,6 +987,14 @@ export class DevicesScreen extends LitElement {
       name: attempted && values.name.trim() === "" ? t("form.name_required") : "",
       profile: attempted && values.profileId === "" ? t("devices.join_pick_profile") : "",
     };
+  }
+
+  /** The name and profile Pair and Edit both send. */
+  #identityPayload(values: { name: string; profileId: string }): {
+    name: string;
+    profileId: string;
+  } {
+    return { name: values.name.trim(), profileId: values.profileId };
   }
 
   #ownErrors(): IdentityErrors {

@@ -23,6 +23,7 @@ import {
   readProfileReaderList,
   readReaderEquipment,
   readReaderRole,
+  readerChoiceClearedOnProfile,
   readerHeldBy,
   readerPaymentInProgress,
   releaseDeviceReader,
@@ -622,6 +623,44 @@ describe("a device's card reader", () => {
     );
     await inTx((tx) => clearUnlistedReaderChoice(tx, s.deviceC));
     expect(await chosen(s.deviceC)).toBeNull();
+  });
+
+  it("a profile with no readers leaves the row of a device with no reader chosen unwritten", async () => {
+    const s = await seed();
+    expect(await chosen(s.deviceC)).toBeNull();
+    suite.db.run(sql`create table probe_device_updates (id text)`);
+    try {
+      suite.db.run(
+        sql`create trigger probe_device_updated after update on devices
+          begin insert into probe_device_updates values (new.id); end`,
+      );
+      try {
+        await inTx((tx) => clearUnlistedReaderChoice(tx, s.deviceC));
+        const [row] = suite.db.all<{ n: number }>(
+          sql`select count(*) as n from probe_device_updates where id = ${s.deviceC}`,
+        );
+        expect(row!.n).toBe(0);
+      } finally {
+        suite.db.run(sql`drop trigger probe_device_updated`);
+      }
+    } finally {
+      suite.db.run(sql`drop table probe_device_updates`);
+    }
+    expect(await chosen(s.deviceC)).toBeNull();
+  });
+
+  it("the reader clear for a profile names an unlisted choice only, writing nothing", async () => {
+    const s = await seed();
+    await list(s, [s.r1]);
+    await inTx((tx) =>
+      tx.update(devices).set({ cardReaderId: s.r2 }).where(eq(devices.id, s.deviceA)),
+    );
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, s.r2, s.profileId))).toEqual({
+      cardReaderId: null,
+    });
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, s.r1, s.profileId))).toEqual({});
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, null, s.profileId))).toEqual({});
+    expect(await chosen(s.deviceA)).toBe(s.r2);
   });
 
   it("choosing another reader lets go of the one it held", async () => {

@@ -58,7 +58,7 @@ import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal, PERSON_HEADER } from "@waitron/shared";
 import { deviceProfileAdmissionRoles, loginWithPin, tillSessions } from "@waitron/identity";
-import { payments } from "@waitron/payments";
+import { cardReaders, payments, setProfileReaderList } from "@waitron/payments";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -1995,6 +1995,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     profileId: string;
     receiptPrinterId: string | null;
     paymentSlipPrinterId: string | null;
+    cashDrawerPrinterId?: string | null;
     invoicePrinterId?: string | null;
     madeHereStationIds: string[];
     kitchenScreens?: unknown;
@@ -2225,6 +2226,278 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       deviceProfileId: t.profileId,
       receiptPrinterId: t.counter,
       paymentSlipPrinterId: null,
+    });
+  });
+
+  /** How many times `action` updates the device's row, counted by a real trigger on `devices`. */
+  async function deviceRowUpdatesDuring(
+    deviceId: string,
+    action: () => Promise<void>,
+  ): Promise<number> {
+    suite.db.run(sql`create table probe_device_updates (id text)`);
+    try {
+      suite.db.run(
+        sql`create trigger probe_device_updated after update on devices
+          begin insert into probe_device_updates values (new.id); end`,
+      );
+      try {
+        await action();
+        const [row] = suite.db.all<{ n: number }>(
+          sql`select count(*) as n from probe_device_updates where id = ${deviceId}`,
+        );
+        return row!.n;
+      } finally {
+        suite.db.run(sql`drop trigger probe_device_updated`);
+      }
+    } finally {
+      suite.db.run(sql`drop table probe_device_updates`);
+    }
+  }
+
+  it("writes the device row once for a rename that also changes every printer choice", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, t.counter));
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        cashDrawerPrinterIds: [t.counter],
+        invoicePrinterIds: [t.counter],
+      }),
+    );
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        name: "Bar till 2",
+        receiptPrinterId: t.counter,
+        paymentSlipPrinterId: t.counter,
+        cashDrawerPrinterId: t.counter,
+        invoicePrinterId: t.counter,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    expect(await labelOf(t.deviceId)).toBe("Bar till 2");
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.counter,
+    });
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: t.counter,
+      invoicePagePrinterId: null,
+    });
+    const [drawer] = await suite.db
+      .select({ cashDrawerPrinterId: devices.cashDrawerPrinterId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(drawer!.cashDrawerPrinterId).toBe(t.counter);
+  });
+
+  it("writes the device row once for a profile switch that puts every choice on Use default", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, other, await readProfilePrinterLists(tx, t.profileId)),
+    );
+
+    // As the dashboard sends a save after a profile switch: every choice back on Use default.
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+        invoicePrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: other,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+    });
+  });
+
+  it("writes the device row once for a switch to a profile listing none of the device's printers", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, t.counter));
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        cashDrawerPrinterIds: [t.counter],
+        invoicePrinterIds: [t.counter],
+      }),
+    );
+    await suite.db
+      .update(devices)
+      .set({ cashDrawerPrinterId: t.counter, invoicePrinterId: t.counter })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+        invoicePrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({
+        deviceProfileId: devices.deviceProfileId,
+        receiptPrinterId: devices.receiptPrinterId,
+        paymentSlipPrinterId: devices.paymentSlipPrinterId,
+        cashDrawerPrinterId: devices.cashDrawerPrinterId,
+        invoicePrinterId: devices.invoicePrinterId,
+        invoicePagePrinterId: devices.invoicePagePrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row).toEqual({
+      deviceProfileId: other,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      cashDrawerPrinterId: null,
+      invoicePrinterId: null,
+      invoicePagePrinterId: null,
+    });
+  });
+
+  it("writes the device row once for a switch leaving out drawer and invoice choices the new profile does not list", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, t.counter));
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        cashDrawerPrinterIds: [t.counter],
+        invoicePrinterIds: [t.counter],
+      }),
+    );
+    await suite.db
+      .update(devices)
+      .set({ cashDrawerPrinterId: t.counter, invoicePrinterId: t.counter })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+
+    // No cashDrawerPrinterId or invoicePrinterId in the body: absent leaves them to the switch.
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({
+        cashDrawerPrinterId: devices.cashDrawerPrinterId,
+        invoicePrinterId: devices.invoicePrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row).toEqual({ cashDrawerPrinterId: null, invoicePrinterId: null });
+  });
+
+  it("writes the device row once for a switch to a profile listing no card reader, clearing the reader", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stub", providerRef: "ref-bar", name: "Bar reader" })
+      .returning({ id: cardReaders.id });
+    await suite.db
+      .update(devices)
+      .set({ cardReaderId: reader!.id })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, other, await readProfilePrinterLists(tx, t.profileId)),
+    );
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({ cardReaderId: devices.cardReaderId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row!.cardReaderId).toBeNull();
+  });
+
+  it("writes the device row once for a switch to a profile listing the device's card reader, keeping it", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stub", providerRef: "ref-terrace", name: "Terrace reader" })
+      .returning({ id: cardReaders.id });
+    await suite.db
+      .update(devices)
+      .set({ cardReaderId: reader!.id })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) => {
+      await setProfilePrinterLists(tx, other, await readProfilePrinterLists(tx, t.profileId));
+      expect(
+        await setProfileReaderList(tx, other, { readerIds: [reader!.id], defaultReaderId: null }),
+      ).toEqual({ ok: true });
+    });
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({ cardReaderId: devices.cardReaderId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row!.cardReaderId).toBe(reader!.id);
+  });
+
+  it("answers a taken name before a refused printer choice, changing nothing", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    await enrolTill(app, venue, "Bar till");
+    const t = await tillOnListedProfile(venue, app);
+    const [elsewhere] = await seedNamedPrinters(["Terrace"]);
+
+    const res = await edit(app, venue.managerCookie, t.deviceId, {
+      name: "Bar till",
+      receiptPrinterId: elsewhere,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.name_taken" } });
+    expect(await labelOf(t.deviceId)).toBe("Till");
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.bar,
+      paymentSlipPrinterId: t.bar,
     });
   });
 
