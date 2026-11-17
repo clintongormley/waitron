@@ -183,7 +183,7 @@ it("skips parsing sources with no possible menu ownership match", () => {
 it.each([
   ["css`:host { --wt-button-justif\\u0079: start; }`", ["reserved alignment"]],
   [
-    'html`<wt-row-\\u0061ctions><wt-button size="sm">Edit</wt-button></wt-row-actions>`',
+    'html`<wt-row-\\u0061ctions><wt-button size="sm">Edit</wt-button></wt-row-\\u0061ctions>`',
     ["menu size"],
   ],
   ["css`wt-menu-row a { padding: 0; }`", ["menu CSS"]],
