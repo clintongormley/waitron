@@ -844,6 +844,8 @@ export const en = {
   "station.stale_ago_under_minute": "less than a minute ago",
   "station.stale_ago_one": "1 minute ago",
   "station.stale_ago": "{n} minutes ago",
+  "station.stale_ago_hours_one": "1 hour ago",
+  "station.stale_ago_hours": "{n} hours ago",
   // Device join. `{number}` is substituted at the call site. A refused knock's error code resolves
   // through `i18n/codes.ts`, not a key here.
   "device.join_name_title": "Set up this device",
@@ -2959,6 +2961,8 @@ export const es: Record<StringKey, string> = {
   "station.stale_ago_under_minute": "hace menos de un minuto",
   "station.stale_ago_one": "hace 1 minuto",
   "station.stale_ago": "hace {n} minutos",
+  "station.stale_ago_hours_one": "hace 1 hora",
+  "station.stale_ago_hours": "hace {n} horas",
   "device.join_name_title": "Configurar este dispositivo",
   "device.join_name_hint":
     "Pon un nombre a este dispositivo y pide a un responsable que lo apruebe en el panel",

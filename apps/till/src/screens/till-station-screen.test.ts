@@ -4181,6 +4181,28 @@ describe("till-station-screen out-of-date banner", () => {
     expect(bannerText(el)).toBe("No updates since 10:19, 5 minutes ago");
   });
 
+  it("an initial station-list failure recovers on the next refresh", async () => {
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(stations),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    expect(banner(el)!.getAttribute("role")).toBe("status");
+    expect(el.shadowRoot!.querySelectorAll("[data-station]")).toHaveLength(0);
+    expect(queueWidget(el)).toBeNull();
+    expect(api.getStationQueue).not.toHaveBeenCalled();
+
+    await tick(el, 15_000);
+    expect(api.listStations).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelectorAll("[data-station]")).toHaveLength(2);
+    expect(api.getStationQueue).toHaveBeenCalledWith("st-1");
+    expect(queueWidget(el)!.groups).toEqual(kitchenQueue);
+    expect(banner(el)).toBeNull();
+  });
+
   it("a venue with no stations configured shows no banner", async () => {
     const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });

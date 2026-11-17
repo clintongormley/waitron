@@ -72,13 +72,11 @@ Left open:
 
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
 
-The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
-general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
-and a table's round sends and offer reloads, at 150 seconds). A refusal that lands after the tab
-is paid, or after a server switch, shows the ordinary unnamed message. The kitchen screen's list
-of stations is read only when the screen opens, so after that read fails the out-of-date banner
-stays, counting, until the screen is opened again; long outages are counted in minutes, never
-hours.
+The Counter still reads an unused kitchen queue; a failed read can show its retry notices,
+including after a hand-over, even though the Counter has no prep-queue card. The till's API client has no general request timeout
+(only the kitchen refresh and menu-state reads are bounded, at 25 seconds, and a table's round
+sends and offer reloads, at 150 seconds). A refusal that lands after the tab is paid, or after a
+server switch, shows the ordinary unnamed message.
 
 ## A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
 
