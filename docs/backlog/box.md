@@ -1325,7 +1325,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old
   Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
-- **A1187: the Backups card's reads and receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
+- **A1187: the Backups card's receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
 - **A1187: the Backups card after a real Live setup has not been looked at.** No dev stack can
   finish one ([why](setup.md#a-dev-stack-cannot-finish-a-live-setup)).
 
@@ -1952,10 +1952,7 @@ landed in pull requests from #2250 to setup's first pack (PR E). What their revi
 pull request that left it:
 
 - **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-- **#2274 (the Backups card).** The card and the fresh sign-in widget read the
-  pack status and the person's profile with their own read counters, and the Backups screen pokes
-  the card after each write, where the dashboard's live queries (`DashboardQueries`,
-  `apps/dashboard/src/api/live-queries.ts`) could keep both current. A pack whose receipt the box confirmed after the card left the page, or after the
+- **#2274 (the Backups card).** A pack whose receipt the box confirmed after the card left the page, or after the
   person lost `system.manage`, is counted received though no link to it was offered. So is an older
   pack whose receipt lands while a newer pack's link is on offer, unless it holds the newest server
   key the card was handed.
@@ -1970,3 +1967,4 @@ pull request that left it:
 - **What that costs.** The box can no longer test-open the packet (`apps/server/src/backup-verification-secrets.ts` does today). A1188's emergency start has no master key on the night, so it would need a second packet sealed for Waitron Cloud, made only when the owner switches emergency start on. `node_sealed_state`, which travels in the bucket copy, changes the same way.
 - **What goes.** "Paste my own key", because the key must be long and random; the backup key's "Show the current key"; the two restore codes shrink to bucket details.
 - **What stays separate.** Each person's sign-ins, outside-service logins (they come back from the backup), the export passphrase, the Cloud emergency code, and probably the disk key, which the installer makes first (not confirmed).
+- **The Backups card's live updates.** The card hears of a pack made or marked received through the change feed on `recovery_packs` in `venue.db` (since 2026-11-17). Moving the pack record into `node.db`, where no change feed is installed, would stop that, so the move has to keep the card informed some other way.

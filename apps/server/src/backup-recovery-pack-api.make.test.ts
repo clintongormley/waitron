@@ -16,10 +16,14 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import {
+  CORE_CHANGE_SOURCES,
   insertRecoveryPack,
+  installChangeFeed,
   readRecoveryPacks,
+  removeChangeFeed,
   setNodePublicKey,
   stampDeployment,
+  subscribeToChanges,
   withTransaction,
   withNodeTransaction,
 } from "@waitron/db";
@@ -38,7 +42,7 @@ import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
-import { AppError } from "@waitron/shared";
+import { AppError, type ResourceIdentity } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
@@ -1044,6 +1048,54 @@ describe("the received route", () => {
       params: { reason: "shape" },
     });
     expect(await receivedAt()).toBeNull();
+  });
+});
+
+describe("the live change", () => {
+  /** The `recovery_packs` changes the venue database's change feed delivers while `run` runs. */
+  async function packChanges(
+    run: (seen: readonly ResourceIdentity[]) => Promise<void>,
+  ): Promise<ResourceIdentity[]> {
+    await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
+    const heard: ResourceIdentity[] = [];
+    const unsubscribe = subscribeToChanges((change) =>
+      heard.push(...change.resources.filter((r) => r.type === "recovery_packs")),
+    );
+    // The reset between cases does not remove the feed's triggers, so this case does.
+    try {
+      await run(heard);
+      return heard;
+    } finally {
+      unsubscribe();
+      await removeChangeFeed(suite.db);
+      await suite.db.execute(sql`delete from change_log`);
+    }
+  }
+
+  it("comes from the table after a pack is made and again after it is marked received", async () => {
+    const f = fixture();
+    let afterMake: ResourceIdentity[] = [];
+    const heard = await packChanges(async (seen) => {
+      await (await f.make(true)).arrayBuffer();
+      afterMake = [...seen];
+      expect((await f.received(1)).status).toBe(204);
+    });
+    expect(afterMake).toEqual([{ type: "recovery_packs" }]);
+    // An update is announced as the row before and the row after.
+    expect(heard).toEqual(Array.from({ length: 3 }, () => ({ type: "recovery_packs" })));
+  });
+
+  it("does not come for a refused make or a refused receipt", async () => {
+    const f = fixture();
+    await (await f.make(true)).arrayBuffer();
+    const heard = await packChanges(async () => {
+      expect((await f.make(true, { tls: false })).status).toBe(403);
+      expect((await f.post("/api/backup/recovery-pack/1/received", { at: "now" })).status).toBe(
+        400,
+      );
+      expect((await f.received(2)).status).toBe(400);
+    });
+    expect(heard).toEqual([]);
   });
 });
 

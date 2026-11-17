@@ -461,7 +461,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
  * it would insert a row for every row it writes, and that row would trigger another.
  * Guard: `classification.test.ts`.
  */
-const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state", "recovery_packs"]);
+const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state"]);
 
 export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_OWN_CLASSIFICATION.filter(
   ({ table }) => !NOT_CHANGE_SOURCES.has(table),

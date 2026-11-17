@@ -1174,7 +1174,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
 
-- **Recovery pack defaults and the Backups card's reads and receipts** (bundle of 3, size S, needs the owner). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
+- **Recovery pack defaults and the Backups card's receipts** (bundle of 3, size S, needs the owner). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
 - **Backups screen leftovers** (bundle of 1, size S, needs the owner). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 

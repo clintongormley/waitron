@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -77,6 +78,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
           ? vi.fn().mockRejectedValue({ code: "connection.failed" })
           : vi.fn().mockResolvedValue(profile(own)),
       freshSignInPasskeyOptions: vi.fn(),
+      liveData: new LiveData(),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<FreshSignIn>(
       "dashboard-fresh-sign-in",

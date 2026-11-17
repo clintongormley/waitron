@@ -150,7 +150,7 @@ so they stay outside the runner, like the folder heartbeat.
 **Waking replaces most polling.** The change feed is in-process and generic. Every table a module classifies
 gets triggers that write a change row inside the writing transaction. `withTransaction` delivers those rows
 after the commit (`tenancy.ts:30-42`; `change-feed.ts:103-133`; `packages/db/src/classification.ts:281-289` excludes only
-`change_log`, `node_sealed_state` and `recovery_packs` from core). So `sales`, `invoice_deliveries`,
+`change_log`, `node_sealed_state` and `recovery_packs` from core; pointer, 2026-11-17: `recovery_packs` is a change source since `fix/pack-card-live-reads`). So `sales`, `invoice_deliveries`,
 `print_jobs`, `payments`, `payment_refunds` and the attendance tables already produce wake signals today; the
 background jobs just do not listen. The fiscal outbox wakes on a new `sales` row. Its own flow-control gate
 (`drain.ts:220-255`, `envio_flujo.proximo_envio_en` today, `verifactu_sending_state` in the target) still decides whether to send, so a wake can never

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
+import { LiveData } from "@waitron/dashboard-kit";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
@@ -58,6 +59,7 @@ function stubApi(own: OwnProfile) {
     freshSignInPasskeyOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "AQID" } }),
+    liveData: new LiveData(),
   };
 }
 
@@ -296,6 +298,27 @@ describe("the ways in", () => {
     expect(await el.signIn()).toBeNull();
     expect(await el.signIn("passkey")).toBeNull();
     expect(api.freshSignInPasskeyOptions).not.toHaveBeenCalled();
+  });
+
+  it("asks for the code once the live feed says the person changed, as after adding an authenticator elsewhere", async () => {
+    const api = stubApi(profile({ hasTotp: false }));
+    const { root } = await mount(profile({ hasTotp: false }), api);
+    expect(field(root, "totp")).toBeNull();
+    api.getProfile.mockResolvedValue(profile({ hasTotp: true }));
+    api.liveData.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(field(root, "totp")).not.toBeNull());
+  });
+
+  it("follows a new api handed to it while attached, and lets the old one go", async () => {
+    const old = stubApi(profile({ hasTotp: false }));
+    const { el, root } = await mount(profile({ hasTotp: false }), old);
+    const next = stubApi(profile({ hasTotp: false }));
+    el.api = next as unknown as DashboardApi;
+    await vi.waitFor(() => expect(next.getProfile).toHaveBeenCalledOnce());
+    expect(old.liveData.interests).toEqual([]);
+    next.getProfile.mockResolvedValue(profile({ hasTotp: true }));
+    next.liveData.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(field(root, "totp")).not.toBeNull());
   });
 
   it("announces its ways in once the profile is read", async () => {

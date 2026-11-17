@@ -511,6 +511,19 @@ it("refreshes the bucket copy's settings every ten seconds and on backup documen
   expect(query.refreshMs).toBe(10_000);
 });
 
+it("reads the recovery-pack status on pack, maker, backup and time-zone changes, and on its timer", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getRecoveryPackStatus", []);
+  expect(query.dependencies.map(({ type }) => type)).toEqual([
+    "recovery_packs",
+    "persons",
+    "backup_status",
+    "settings.backup",
+    "settings.business_day",
+  ]);
+  expect(query.quietWhileConnected).toBe(false);
+  expect(query.refreshMs).toBe(60_000);
+});
+
 it("reads the active course list on course changes alone", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "listCourses", []);
   expect(query.dependencies).toEqual([{ type: "kitchen_courses" }]);

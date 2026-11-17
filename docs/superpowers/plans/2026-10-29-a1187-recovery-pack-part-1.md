@@ -231,6 +231,9 @@ days), the interval default at `:47`; `keyFingerprint` at `apps/server/src/backu
    live-update source: it joins `NOT_CHANGE_SOURCES` (`packages/db/src/classification.ts:289`) with a
    case beside `classification.test.ts:48-51`, because no screen subscribes to it; the card re-reads
    after its own make and on load (open question 6).
+   **Pointer, 2026-11-17 (`fix/pack-card-live-reads`):** the Backups card now watches the pack table
+   through the dashboard's live queries, so `recovery_packs` was taken out of `NOT_CHANGE_SOURCES`
+   and is a change source.
 5. **Parts are a fixed, ordered list in the server's pack builder**: disk key, emergency start,
    bucket copy, archives, server key. Part 1 registers the last three. Pages are numbered from what
    the pack holds, so a part-1 pack is cover + three pages (open question 1).

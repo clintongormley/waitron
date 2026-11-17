@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -33,6 +34,7 @@ for (const theme of ["light", "dark"] as const)
             }),
             confirmFreshSignIn: vi.fn(),
             freshSignInPasskeyOptions: vi.fn(),
+            liveData: new LiveData(),
           } as unknown as DashboardApi,
         },
         theme,

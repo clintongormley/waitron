@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -33,6 +34,7 @@ async function open() {
     getProfile: vi.fn(async () => profile),
     freshSignInPasskeyOptions: vi.fn(),
     confirmFreshSignIn: vi.fn(async () => {}),
+    liveData: new LiveData(),
   };
   const { el } = await mountWidget<FreshSignInDialog>("dashboard-fresh-sign-in-dialog", {
     api: api as unknown as DashboardApi,
