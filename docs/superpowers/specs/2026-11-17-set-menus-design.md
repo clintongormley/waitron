@@ -144,7 +144,10 @@ included on the especial would clash. So a set-menu member carries its own dish 
 the set menu, beside the full menu's own offers and never combined with them.
 
 **Publishing.** A set menu is published like any menu. The full menu that holds it shows the set
-menu's live version, as it does for an included menu.
+menu's live version, so publishing the set menu is enough to change it on the tills. (Corrected
+18 November 2026: this first said "as it does for an included menu", but an included menu is
+copied in when the full menu is published, `packages/menu/src/menu-document.ts:258-292`; see
+decision 3 of the [piece 1 plan](../plans/2026-11-18-a1515-set-menu-dashboard.md).)
 
 **The product's Set lunch switch** is gone (removed by A1515-REMOVE, not by this work).
 
