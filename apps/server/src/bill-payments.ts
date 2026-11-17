@@ -1074,11 +1074,8 @@ async function requirePayableBill(
   if (order?.status === "placed") {
     const invoiced = await hasInvoice(tx, workingOrderId);
     if (order.partyId === null && !invoiced) return { payable: "placed" };
-    // With its invoice issued, only a received payment still holding money leaves a rest to take
-    // here; a bill left unpaid after its payments were given back is collected whole.
     if (invoiced) {
-      const held = await readPaymentMoney(tx, [workingOrderId]);
-      if (held.some(receivedHoldsMoney)) return { payable: "placed", held };
+      return { payable: "placed", held: await readPaymentMoney(tx, [workingOrderId]) };
     } else {
       const [part] = await tx
         .select({ id: billPayments.id })

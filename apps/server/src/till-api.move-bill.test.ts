@@ -647,7 +647,7 @@ describe("paying a moved bill, by its state", () => {
     expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
   });
 
-  it("refuses a presented bill moved into a party as a bill payment, collects it with its one sale, and the party then finishes", async () => {
+  it("takes a bill payment on a presented bill moved into a party, settling its one sale, and the party then finishes", async () => {
     const firstParty = await seatedWith(venue, "Caña");
     const beerPayment = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
       submissionId: randomUUID(),
@@ -685,13 +685,10 @@ describe("paying a moved bill, by its state", () => {
     expect(issued).toHaveLength(1);
     expect((await moveTo(id, firstParty.tableId)).status).toBe(200);
 
-    const asPayment = await cashContribution(id, "18.00");
     const refusedFinish = await post(`/api/parties/${firstParty.partyId}/finish`, {
       expectedPartyRevision: revisionOf(firstParty.partyId),
     });
-    const collected = await post(`/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "18.00" },
-    });
+    const asPayment = await cashContribution(id, "18.00");
     const unserved = await post(`/api/parties/${firstParty.partyId}/finish`, {
       expectedPartyRevision: revisionOf(firstParty.partyId),
     });
@@ -709,13 +706,14 @@ describe("paying a moved bill, by its state", () => {
       expectedPartyRevision: revisionOf(firstParty.partyId),
     });
 
-    expect([asPayment.status, asPayment.json.code]).toEqual([409, "working_order.not_open"]);
-    expect(await paymentRows(venue, id)).toEqual([]);
+    expect(asPayment.status, JSON.stringify(asPayment.json)).toBe(200);
+    expect(await paymentRows(venue, id)).toEqual([
+      expect.objectContaining({ applied: 1800, state: "received" }),
+    ]);
     expect([refusedFinish.status, refusedFinish.json.code]).toEqual([
       409,
       "party.bill_outstanding",
     ]);
-    expect(collected.status).toBe(200);
     expect(venue.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual(issued);
     expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");

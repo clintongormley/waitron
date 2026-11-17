@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import {
   invoiceDeliveries,
   invoiceSeries,
+  saleSettlements,
   sales,
   taxpayer,
   withTransaction,
@@ -130,7 +131,7 @@ describe("Counter payments through the bill window", () => {
   );
 });
 
-it("refuses preview and a first part payment after a placed Counter bill is invoiced", async () => {
+it("takes preview and a first part payment after a placed Counter bill is invoiced, holding it against the one sale", async () => {
   const venue = await provisionBillVenue(suite.db);
   const id = randomUUID();
   const deps = {
@@ -162,9 +163,16 @@ it("refuses preview and a first part payment after a placed Counter bill is invo
     applied: "10.00",
     tip: "0.00",
   });
-  expect(preview).toMatchObject({ status: 409, json: { code: "working_order.not_open" } });
-  expect(taken).toMatchObject({ status: 409, json: { code: "working_order.not_open" } });
+  expect(preview).toMatchObject({ status: 200, json: { applied: "10.00" } });
+  expect(taken).toMatchObject({ status: 200, json: { outcome: "received" } });
   expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
+  expect(
+    await suite.db
+      .select()
+      .from(saleSettlements)
+      .innerJoin(sales, eq(sales.id, saleSettlements.saleId))
+      .where(eq(sales.workingOrderId, id)),
+  ).toEqual([]);
 });
 
 describe("Counter full invoice through the bill window", () => {

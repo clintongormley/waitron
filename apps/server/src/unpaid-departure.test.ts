@@ -57,7 +57,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { markServed, readOrderRevision } from "./working-order.js";
+import { markServed, readInvoiceNumbers, readOrderRevision } from "./working-order.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -160,6 +160,16 @@ function revisionOf(partyId: string): number {
 function departuresOf(billId: string) {
   return inTx(venue, (tx) =>
     tx.select().from(unpaidDepartures).where(eq(unpaidDepartures.workingOrderId, billId)),
+  );
+}
+
+async function invoiceNumbersOf(billId: string) {
+  const issued = await salesOf(billId);
+  return inTx(venue, (tx) =>
+    readInvoiceNumbers(
+      tx,
+      issued.map((sale) => brandSaleId(sale.id)),
+    ),
   );
 }
 
@@ -1298,7 +1308,7 @@ describe("a departure sent together with a payment or Finish table on the same p
   ] as const;
 
   it.each(orders)(
-    "lands a part payment or the departure, never both, with %s",
+    "lands a part payment and the departure in either order, with %s",
     async (_, first) => {
       const party = await seatedWith(venue, "Red wine bottle");
       const body = { expectedPartyRevision: party.revision, reason: REASON };
@@ -1309,8 +1319,13 @@ describe("a departure sent together with a payment or Finish table on the same p
         () => payInCash(party.tabId, "5.00"),
       );
 
-      expect([departed.status, paid.status].sort()).toEqual([200, 409]);
-      if (paid.status === 200) {
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      if (departed.status === 200) {
+        await expectDepartureAlone(party);
+        expect(await paymentRows(venue, party.tabId)).toEqual([
+          expect.objectContaining({ applied: 500, state: "received" }),
+        ]);
+      } else {
         expect(departed.json).toMatchObject({
           code: "unpaid_departure.bill_holds_payment",
           params: { workingOrderId: party.tabId },
@@ -1320,19 +1335,12 @@ describe("a departure sent together with a payment or Finish table on the same p
         expect(await paymentRows(venue, party.tabId)).toEqual([
           expect.objectContaining({ applied: 500, state: "received" }),
         ]);
-      } else {
-        expect(paid.json).toMatchObject({
-          code: "working_order.not_open",
-          params: { workingOrderId: party.tabId },
-        });
-        await expectDepartureAlone(party);
-        expect(await paymentRows(venue, party.tabId)).toEqual([]);
       }
     },
   );
 
   it.each(orders)(
-    "lands a payment in full or the departure, never both, and invoices the bill once, with %s",
+    "lands a payment in full and the departure, invoicing the bill once, with %s",
     async (_, first) => {
       const party = await seatedWith(venue, "Red wine bottle");
       const body = { expectedPartyRevision: party.revision, reason: REASON };
@@ -1343,8 +1351,8 @@ describe("a departure sent together with a payment or Finish table on the same p
         () => payInCash(party.tabId, "30.00"),
       );
 
-      expect([departed.status, paid.status].sort()).toEqual([200, 409]);
-      if (paid.status === 200) {
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      if (departed.status !== 200) {
         expect(departed.json).toMatchObject({
           code: "unpaid_departure.nothing_outstanding",
           params: { partyId: party.partyId },
@@ -1360,12 +1368,21 @@ describe("a departure sent together with a payment or Finish table on the same p
           expect.objectContaining({ applied: 3000, state: "received" }),
         ]);
       } else {
-        expect(paid.json).toMatchObject({
-          code: "working_order.not_open",
-          params: { workingOrderId: party.tabId },
+        expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
+        expect(await salesOf(party.tabId)).toEqual([
+          { id: expect.any(String), total: 3000, settledAt: expect.any(String) },
+        ]);
+        expect(await statusOf(venue, party.tabId)).toBe("settled");
+        expect(await departuresOfParty(party.partyId)).toEqual([
+          expect.objectContaining({ workingOrderId: party.tabId, amount: 3000 }),
+        ]);
+        expect(await partyState(party.partyId)).toEqual({
+          state: "closed",
+          closedBy: supervisorId,
         });
-        await expectDepartureAlone(party);
-        expect(await paymentRows(venue, party.tabId)).toEqual([]);
+        expect(await paymentRows(venue, party.tabId)).toEqual([
+          expect.objectContaining({ applied: 3000, state: "received" }),
+        ]);
       }
     },
   );
@@ -1825,7 +1842,7 @@ describe("what is refused", () => {
     { label: "in cash", method: "cash" as const },
     { label: "by card at the reader", method: "card" as const },
   ])(
-    "refuses a new payment $label on the bill left unpaid after its card was given back, as on one never paid, writing nothing",
+    "holds a new part payment $label on the bill left unpaid after its card was given back, against the one ticket, the departure standing",
     async ({ method }) => {
       const party = await seatedWith(venue, "Red wine bottle");
       await payPartAndGiveItBack(party, "card");
@@ -1838,8 +1855,8 @@ describe("what is refused", () => {
         ).status,
       ).toBe(200);
       const sales = await salesOf(party.tabId);
-      const payments = await paymentRows(venue, party.tabId);
-      const calls = venue.card.collectCalls.length;
+      const numbers = await invoiceNumbersOf(party.tabId);
+      const departures = await departuresOf(party.tabId);
 
       const paid = await send(
         venue.app,
@@ -1857,13 +1874,16 @@ describe("what is refused", () => {
         },
       );
 
-      expect(paid).toEqual({
-        status: 409,
-        json: { code: "working_order.not_open", params: { workingOrderId: party.tabId } },
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      expect((await paymentRows(venue, party.tabId)).at(-1)).toMatchObject({
+        method,
+        applied: 1000,
+        state: "received",
       });
-      expect(venue.card.collectCalls).toHaveLength(calls);
-      expect(await paymentRows(venue, party.tabId)).toEqual(payments);
       expect(await salesOf(party.tabId)).toEqual(sales);
+      expect(await invoiceNumbersOf(party.tabId)).toEqual(numbers);
+      expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
+      expect(await departuresOf(party.tabId)).toEqual(departures);
       expect(await statusOf(venue, party.tabId)).toBe("placed");
     },
   );
@@ -2272,7 +2292,7 @@ describe("the guests its invoice's receipts print", () => {
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
   });
 
-  it("refuses a part payment on the departed bill, so its invoice is never filed again and the row stands", async () => {
+  it("holds a part payment on the departed bill against its one invoice, never filed again, and the row stands", async () => {
     const party = await seatedFor(4, "Red wine bottle");
     expect(
       (
@@ -2283,6 +2303,8 @@ describe("the guests its invoice's receipts print", () => {
       ).status,
     ).toBe(200);
     const before = await salesOf(party.tabId);
+    const numbers = await invoiceNumbersOf(party.tabId);
+    const departures = await departuresOf(party.tabId);
 
     const paid = await send(
       venue.app,
@@ -2301,13 +2323,15 @@ describe("the guests its invoice's receipts print", () => {
       },
     );
 
-    expect(paid).toEqual({
-      status: 409,
-      json: { code: "working_order.not_open", params: { workingOrderId: party.tabId } },
-    });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
     expect(await salesOf(party.tabId)).toEqual(before);
-    expect(await paymentRows(venue, party.tabId)).toEqual([]);
+    expect(await invoiceNumbersOf(party.tabId)).toEqual(numbers);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
+    expect(await departuresOf(party.tabId)).toEqual(departures);
+    expect(await paymentRows(venue, party.tabId)).toEqual([
+      expect.objectContaining({ applied: 1000, state: "received" }),
+    ]);
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
   });
 

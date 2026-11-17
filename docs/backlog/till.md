@@ -376,8 +376,6 @@ Open:
   holding money would have its invoice settled in part, and `settleSale`
   (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not add up to
   the amount due.
-- **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
-  full uses `POST /api/working-orders/:id/collect`.
 - **A dish never sent, on hold, or waiting for the pass and not fully served blocks the
   departure** (`unpaid_departure.unfired_dishes`); staff cancel it first.
 - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
