@@ -237,7 +237,7 @@ describe("till-ticket-view", () => {
     ["en-GB", "The printer was deleted, so this job will not be retried.", "Automatic retry"],
     [
       "es-ES",
-      "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+      "La impresora se eliminó, así que este trabajo no se volverá a intentar.",
       "reintento automático",
     ],
   ])(

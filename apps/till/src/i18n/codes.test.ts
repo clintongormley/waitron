@@ -624,7 +624,7 @@ it("says a printer was deleted, or no longer exists, in both languages", () => {
     "The printer was deleted, so this job will not be retried.",
   );
   expect(codeMessage("printer.deleted", "es")).toBe(
-    "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+    "La impresora se eliminó, así que este trabajo no se volverá a intentar.",
   );
   expect(codeMessage("printer.not_found", "en")).toBe(
     "That printer no longer exists. Choose another",

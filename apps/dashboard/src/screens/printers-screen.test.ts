@@ -11898,7 +11898,7 @@ describe("Deleting a printer", () => {
   });
 
   it.each([
-    ["es", "La impresora se eliminó, por lo que no se volverá a intentar este trabajo."],
+    ["es", "La impresora se eliminó, así que este trabajo no se volverá a intentar."],
     ["en", "The printer was deleted, so this job will not be retried."],
   ])(
     "a job a deletion ended keeps its printer's old name and says why, with no resend (%s)",
