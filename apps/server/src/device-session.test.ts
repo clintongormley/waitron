@@ -851,16 +851,31 @@ describe("assertTakesCash on a resolved device", () => {
 });
 
 describe("dev-override header (venue database)", () => {
-  it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
-    const { deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
+  it("never borrows the cookie when the chooser gate is closed", async () => {
+    const { deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
       { db: suite.db, devMode: false },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
-    expect(binding?.deviceId).toBe(deviceAId); // NOT deviceBId
+    expect(binding).toBeNull();
     expect(await lastSeenAt(deviceBId)).toBeNull();
     expect(lastDeviceSighting(suite.db, deviceBId, null)).toBeNull();
   });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ] as const)(
+    "uses the explicit chooser gate %s ahead of devMode %s",
+    async (deviceChooserEnabled, devMode) => {
+      const { deviceACookie, deviceBId } = await enrolDevDevices();
+      const binding = await readWithHeaders(
+        { db: suite.db, devMode, deviceChooserEnabled },
+        { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
+      );
+      expect(binding?.deviceId ?? null).toBe(deviceChooserEnabled ? deviceBId : null);
+    },
+  );
 
   it("is honoured when devMode is true — header wins over cookie, no token needed", async () => {
     const { deviceACookie, deviceBId } = await enrolDevDevices();

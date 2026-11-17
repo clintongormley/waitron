@@ -3127,17 +3127,9 @@ export class TillApp extends LitElement {
   @state() private deviceMode = false;
   /** An enrolled handheld: its menu browser shows the menu's handheld display. */
   @state() private handheldMode = false;
-  /**
-   * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
-   * dev mode when this tab has adopted no device or the device it adopted is refused
-   * `device.unauthorized`, `"enrol"` when the identity probe is refused `device.unauthorized` and no
-   * chooser is shown.
-   * `undefined` once enrolled.
-   */
   @state() private frontDoor?: "chooser" | "enrol";
-  /** Read by {@link #boot} in dev mode, so the chooser need not fetch it again. */
   @state() private devDevices?: DevDeviceList;
-  /** Whether this tab has adopted a dev device, which the "Switch device" affordance needs. */
+  /** This tab sends the chooser header instead of using the paired browser's device. */
   @state() private devTab = false;
   /** From the boot probe: the lock screen's heading, and the key for the remembered-operator default. */
   @state() private deviceName?: string;
@@ -5091,7 +5083,7 @@ export class TillApp extends LitElement {
   }
 
   /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
-  async #boot(from?: KitchenScreenKind): Promise<void> {
+  async #boot(from?: KitchenScreenKind, chooseDevice = false): Promise<void> {
     this.#forgetZoneOffers();
     this.#stopClocking();
     this.#stopDepartmentTransfers();
@@ -5163,18 +5155,19 @@ export class TillApp extends LitElement {
     const previousDeviceId = this.deviceId;
     this.deviceId = undefined;
     this.frontDoor = undefined;
-    this.devTab = readDevDeviceId() !== null;
+    this.devDevices = undefined;
+    try {
+      this.devTab = readDevDeviceId() !== null;
+    } catch {
+      this.errorKey = "boot.error";
+      return;
+    }
     this.#setScreen("lock");
-    // The till has no server flag for dev mode: the dev-only `GET /api/dev/devices` answers only there,
-    // and its list is also the chooser's data.
-    if (!this.devTab && (await this.#openDevChooser(overtaken))) return;
-    // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
-    // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
-    // gets the join screen (a dev tab whose remembered device is refused forgets it and gets the picker
-    // below, or the join screen if the device list fails to load), which is not a boot failure.
+    if (chooseDevice && (await this.#openDevChooser(overtaken))) return;
     try {
       const identity = await this.api.getDeviceIdentity();
       if (overtaken()) return;
+      if (!this.devTab && (await this.#openDevChooser(overtaken, false))) return;
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
         this.makeNow = [];
       this.deviceName = identity.name;
@@ -5279,13 +5272,16 @@ export class TillApp extends LitElement {
       // through to the login screen.
       if (overtaken()) return;
       if ((error as { code?: string }).code === "device.unauthorized") {
-        // A dev tab's remembered device can be gone (a venue reset deletes it). In dev mode the server
-        // reads the header instead of the device cookie, so joining from this tab could not recover it.
         if (this.devTab) {
-          clearDevDeviceId();
+          try {
+            clearDevDeviceId();
+          } catch {
+            this.errorKey = "boot.error";
+            return;
+          }
           this.devTab = false;
-          if (await this.#openDevChooser(overtaken)) return;
         }
+        if (await this.#openDevChooser(overtaken)) return;
         this.frontDoor = "enrol";
       }
     }
@@ -5322,17 +5318,18 @@ export class TillApp extends LitElement {
     return () => (this.kitchenScreenNotice = screen.notice);
   }
 
-  /** True when the boot stops here: dev mode answered, or the boot was overtaken. */
-  async #openDevChooser(overtaken: () => boolean): Promise<boolean> {
+  async #openDevChooser(overtaken: () => boolean, show = true): Promise<boolean> {
     try {
       const devices = await this.api.getDevDevices();
       if (overtaken()) return true;
       this.devDevices = devices;
-      this.frontDoor = "chooser";
+      if (show) this.frontDoor = "chooser";
+      return show;
+    } catch (error) {
+      if (overtaken()) return true;
+      if (!show || (error as { status?: number })?.status === 404) return false;
+      this.errorKey = "boot.error";
       return true;
-    } catch {
-      // Not dev mode, or a transient failure.
-      return overtaken();
     }
   }
 
@@ -9765,15 +9762,16 @@ export class TillApp extends LitElement {
   }
 
   async #onSwitchDevice(): Promise<void> {
+    try {
+      clearDevDeviceId();
+    } catch {
+      this.errorKey = "boot.error";
+      return;
+    }
     this.makeNow = [];
-    clearDevDeviceId();
-    await this.#boot();
+    await this.#boot(undefined, true);
   }
 
-  /**
-   * A refused device: re-boot, which routes it to the join screen (a dev tab with a remembered
-   * device forgets it and gets the picker, unless the device list fails to load).
-   */
   async #onDeviceUnauthorized(): Promise<void> {
     this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#pauseLive();
@@ -23740,12 +23738,6 @@ export class TillApp extends LitElement {
             : nothing
         }
         <till-problem-report .triggerVisible=${shellFormFactor === undefined}></till-problem-report>
-        <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
-             precedence over whatever screen the boot left set. The chooser is the dev-only device picker
-             (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);
-             the enrol screen is the join screen a browser whose device is refused shows (in dev, only
-             when the chooser's list failed), whose enrolled event (wired above) re-boots into the
-             matching shell. -->
         ${
           this.frontDoor === undefined && (this.attendancePage || this.clockPage)
             ? this.#renderNoticeStrip(
@@ -23863,6 +23855,7 @@ export class TillApp extends LitElement {
                             event: CustomEvent<{ tableId: string; held: boolean }>,
                           ) => this.#onOpenBarTable(event.detail)}
                           .kiosk=${this.deviceMode}
+                          .canChooseDevice=${this.deviceMode && (this.devTab || this.devDevices !== undefined)}
                           .canSwitchProfile=${this.approvedProfiles.length > 1}
                           .transferAvailable=${this.transferSnapshot !== undefined}
                           @open-transfers=${() => {
@@ -23920,7 +23913,7 @@ export class TillApp extends LitElement {
                           .deviceName=${this.deviceName}
                           .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}
-                          .devMode=${this.devTab}
+                          .canChooseDevice=${this.devTab || this.devDevices !== undefined}
                           .serverStatuses=${this.router?.statuses() ?? []}
                           .serverCurrent=${this.router?.current ?? ""}
                           .serverWaiting=${this.router?.waiting ?? false}

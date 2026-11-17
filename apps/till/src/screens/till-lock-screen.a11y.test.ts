@@ -42,7 +42,7 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
   it("has no violations on the staff-picker view", async () => {
     const { el, host } = await mountWidget<TillLockScreen>(
       "till-lock-screen",
-      { api: stubApi() },
+      { api: stubApi(), canChooseDevice: true },
       theme,
     );
     await flush(el);

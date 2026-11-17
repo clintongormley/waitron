@@ -123,10 +123,11 @@ function mount(devMode: boolean): Hono {
 }
 
 async function send(app: Hono, method: string, path: string, proof?: string, header?: string) {
+  const cookie = header === undefined ? sessionCookie : sessionCookie.replace("=", `_${header}=`);
   const response = await app.request(path, {
     method,
     headers: {
-      cookie: proof === undefined ? sessionCookie : `${sessionCookie}; ${proof}`,
+      cookie: proof === undefined ? cookie : `${cookie}; ${proof}`,
       "content-type": "application/json",
       ...(header === undefined ? {} : { [DEV_DEVICE_HEADER]: header }),
     },

@@ -4,9 +4,14 @@ import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { withTransaction, workingOrders } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import type { ProfileAction } from "@waitron/layouts";
-import { assertProfileAction, requireDevice, type DeviceBinding } from "./device-session.js";
+import {
+  assertProfileAction,
+  requireDevice,
+  type DeviceBinding,
+  type DeviceAuthDeps,
+} from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { asObject } from "./bill-payments-api.js";
 import { groupCommand, requirePartyParam } from "./till-api.js";
@@ -22,7 +27,7 @@ type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Res
 
 /** Serves kitchen displays only: a till keeps its session routes and their zone gate. */
 export async function requireKitchenDisplay(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   action: ProfileAction,
 ): Promise<DeviceBinding> {
@@ -50,7 +55,7 @@ async function orderZone(tx: Transaction, orderId: string): Promise<string | nul
 /** A kitchen display's Ready actions use its pass screen's zones. */
 export function mountDeviceLevers(
   app: Hono,
-  deps: { db: Database; cfg: TradingContext; devMode?: boolean },
+  deps: DeviceAuthDeps & { cfg: TradingContext },
   log: Logger,
   run: Run,
 ): void {

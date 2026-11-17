@@ -164,6 +164,7 @@ async function mount(
 ) {
   setLocale("en-GB");
   const api = {
+    getDevDevices: vi.fn().mockRejectedValue({ status: 404 }),
     getLocales: vi
       .fn()
       .mockResolvedValue({ locales: [{ code: "en-GB", label: "English" }], venueDefault: "en-GB" }),

@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { DEV_DEVICE_STORAGE_KEY } from "../api/dev-device.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillDeviceChooser } from "./till-device-chooser.js";
@@ -28,6 +28,7 @@ async function flush(el: TillDeviceChooser): Promise<void> {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanupWidgets();
   setLocale("en-GB");
   sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
@@ -114,6 +115,24 @@ describe("till-device-chooser", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-use="d1"]')!.click();
     expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("d1");
     expect(navigate).toHaveBeenCalledWith("/till/");
+  });
+
+  it("keeps the chooser on its existing error when tab storage is unavailable", async () => {
+    const navigate = vi.fn();
+    const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
+      api: stubApi(),
+      list: { devices: [{ id: "d1", kind: "till", label: "Front", active: true }] },
+      navigate,
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-use="d1"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-load-failed]")?.textContent).toContain(
+      t("boot.error"),
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("centres the chooser and right-aligns the Set up a new device action", async () => {
@@ -228,13 +247,20 @@ describe("till-device-chooser", () => {
     }
   });
 
-  it("renders a load-failure hint (with WAITRON_ENV=dev guidance) when getDevDevices rejects", async () => {
+  it("renders the existing failure message when devices cannot be read", async () => {
     const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain("Couldn't load devices");
-    expect(el.shadowRoot!.textContent).toContain("WAITRON_ENV=dev");
+    expect(el.shadowRoot!.textContent).toContain(t("boot.error"));
+    expect(el.shadowRoot!.textContent).not.toContain("WAITRON_ENV");
     expect(el.shadowRoot!.querySelector("[data-setup-new]")).toBeNull();
   });
+});
+
+it.each(["en-GB", "es-ES"])("localizes the device chooser in %s", async (locale) => {
+  setLocale(locale);
+  const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", { api: stubApi() });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("device.chooser.title"));
 });

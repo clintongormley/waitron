@@ -45,7 +45,7 @@ import {
   createEnrolRateLimiter,
   type EnrolRateLimiter,
 } from "./enrol-rate-limit.js";
-import { DEVICE_COOKIE } from "./device-session.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { PENDING_CAP, acceptDeviceJoinRequest, denyJoinRequest } from "./join-requests.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
@@ -3354,7 +3354,7 @@ describe("join rate limiter (spec §8)", () => {
   });
 });
 
-describe("GET /api/dev/devices (dev-only chooser list)", () => {
+describe("GET /api/dev/devices (development and Demo chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
@@ -3401,6 +3401,39 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     const ids = body.devices.map((d) => d.id);
     expect(ids).toContain(live.deviceId);
     expect(ids).not.toContain(doomed.deviceId);
+  });
+
+  it("offers the Demo device list without automatic pairing", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        devMode: false,
+        deviceChooserEnabled: true,
+        pairingMode: createPairingMode(),
+      },
+      noopLog,
+    );
+    const chosen = await enrolTill(mountApp(venue.cfg), venue, "Demo till");
+    const list = await send(app, "GET", "/api/dev/devices");
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({
+      devices: [expect.objectContaining({ id: chosen.deviceId })],
+    });
+    const identity = await app.request("/api/device/me", {
+      headers: { [DEV_DEVICE_HEADER]: chosen.deviceId },
+    });
+    expect(identity.status).toBe(200);
+    expect(await identity.json()).toMatchObject({ deviceId: chosen.deviceId });
+    const join = await send(app, "POST", "/api/device/join", {
+      body: { name: "Unpaired Demo till" },
+    });
+    expect(join.status).toBe(403);
+    expect(await join.json()).toMatchObject({ error: { code: "device.pairing_closed" } });
   });
 
   it("is absent (404) when devMode is false / omitted", async () => {

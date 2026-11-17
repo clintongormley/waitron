@@ -114,7 +114,7 @@ export async function clockApp(
       venueDefault: "en-GB",
       loginDefault: "en-GB",
     }),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "clock-device",
       name: "Clock till",

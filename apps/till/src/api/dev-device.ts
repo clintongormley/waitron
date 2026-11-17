@@ -1,40 +1,22 @@
-/**
- * Dev-only per-tab device identity: `sessionStorage` is per tab, so each tab can adopt a different
- * device (the sign-in cookie is still shared; see `till-device-chooser.ts`). The server honours the
- * header only in devMode.
- */
+/** A tab stores only its chosen device id; authentication stays in server-set cookies. */
 export const DEV_DEVICE_STORAGE_KEY = "waitron.devDeviceId";
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 
 export function readDevDeviceId(): string | null {
-  try {
-    const v = sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY);
-    return v === null || v === "" ? null : v;
-  } catch {
-    return null;
-  }
+  const value = sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY);
+  return value === null || value === "" ? null : value;
 }
 
 export function setDevDeviceId(id: string): void {
-  try {
-    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, id);
-  } catch {
-    /* blocked storage: the tab falls back to the cookie identity */
-  }
+  sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, id);
 }
 
-/** Clearing the cookie alone would leave this override in place, so the tab would keep adopting the
- * same device on its next request. */
 export function clearDevDeviceId(): void {
-  try {
-    sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
-  } catch {
-    /* blocked storage: nothing to clear */
-  }
+  sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
 }
 
 export function withDevDeviceHeader(fetchImpl: typeof fetch): typeof fetch {
-  return (input, init) => {
+  return async (input, init) => {
     const id = readDevDeviceId();
     if (id === null) return fetchImpl(input, init);
     const headers = new Headers(init?.headers);

@@ -634,16 +634,16 @@ describe("till-lock-screen", () => {
     expect(api.getLocales).toHaveBeenCalledTimes(1);
   });
 
-  it("offers no Switch device control outside dev mode", async () => {
+  it("offers no device choice when the chooser is unavailable", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-switch-device]")).toBeNull();
   });
 
-  it("in dev mode, Switch device emits a composed, bubbling switch-device event", async () => {
+  it("when available, Choose another device emits a composed, bubbling switch-device event", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
-      devMode: true,
+      canChooseDevice: true,
     });
     await flush(el);
     const button = el.shadowRoot!.querySelector<HTMLElement>("[data-switch-device]")!;
@@ -1099,7 +1099,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       legalName: LEGAL_NAME,
-      devMode: true,
+      canChooseDevice: true,
     });
     await flush(el);
     expect(currentVenueLogo().kind).toBe("none");
@@ -1177,7 +1177,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
 
   it("Powered by comes last in .screen, after the names and Switch device, 16 px below it, before the server status", async () => {
     startFrom(withLogo(LIGHT));
-    const { el } = await mountWithLogo({ devMode: true, serverStatuses: statuses });
+    const { el } = await mountWithLogo({ canChooseDevice: true, serverStatuses: statuses });
     expect(query(el, ".roster")).not.toBeNull();
     const switchDevice = query(el, "[data-switch-device]")!;
     expect(
@@ -1189,7 +1189,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
 
   it("Powered by comes last after the PIN pad and Switch device", async () => {
     startFrom(withLogo(LIGHT));
-    const { el } = await mountWithLogo({ devMode: true, serverStatuses: statuses });
+    const { el } = await mountWithLogo({ canChooseDevice: true, serverStatuses: statuses });
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     const pad = query(el, "till-numeric-pad")!;
@@ -1224,7 +1224,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
     await page.viewport(390, 844);
     await frame();
     startFrom(withLogo(WIDE));
-    const { el, img } = await mountWithLogo({ devMode: true });
+    const { el, img } = await mountWithLogo({ canChooseDevice: true });
     expect(img.getBoundingClientRect().width).toBeLessThanOrEqual(320);
     expect(img.getBoundingClientRect().width).toBeGreaterThan(200);
     const box = await lineBox(poweredBy(el)!);

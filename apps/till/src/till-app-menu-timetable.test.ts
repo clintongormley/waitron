@@ -202,7 +202,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     })),
     getTill: vi.fn().mockResolvedValue(till),
     getLocales: vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" }),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
       name: "Till 1",

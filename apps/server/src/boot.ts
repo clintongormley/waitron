@@ -2578,6 +2578,7 @@ async function bootServer(
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
+  const deviceChooserEnabled = config.devMode || config.onboardingIntent === "demo";
   const captureAccountEmail = config.devMode || config.onboardingIntent === "demo";
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
@@ -2838,6 +2839,7 @@ async function bootServer(
       bus: liveEvents,
       resourceTypes,
       devMode: config.devMode,
+      deviceChooserEnabled,
     },
     log,
   );
@@ -2925,6 +2927,7 @@ async function bootServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
+      deviceChooserEnabled,
       invoiceEmailAvailable,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
@@ -3172,6 +3175,7 @@ async function bootServer(
         secureCookies,
         pairingMode,
         devMode: config.devMode,
+        deviceChooserEnabled,
         venueDomain: config.venueDomain,
         disk: diskFull,
         notices: {
@@ -3486,6 +3490,7 @@ async function bootServer(
       cfg: { nodeId: dataNodeId },
       tradingContext,
       devMode: config.devMode,
+      deviceChooserEnabled,
       invoiceEmailAvailable,
     },
     log,
@@ -3538,7 +3543,11 @@ async function bootServer(
     }
     return descriptions;
   };
-  mountScheduleApi(app, { db, describeShifts, disk: diskFull, devMode: config.devMode }, log);
+  mountScheduleApi(
+    app,
+    { db, describeShifts, disk: diskFull, devMode: config.devMode, deviceChooserEnabled },
+    log,
+  );
   mountMeApi(
     app,
     {

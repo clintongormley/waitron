@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
   withDevDeviceHeader,
   readDevDeviceId,
@@ -9,6 +9,7 @@ import {
 } from "./dev-device.js";
 
 beforeEach(() => sessionStorage.clear());
+afterEach(() => vi.restoreAllMocks());
 
 describe("readDevDeviceId / setDevDeviceId", () => {
   it("round-trips a stored id under the documented key", () => {
@@ -26,19 +27,19 @@ describe("readDevDeviceId / setDevDeviceId", () => {
     expect(readDevDeviceId()).toBeNull();
   });
 
-  it("degrades to no override when getItem throws", () => {
+  it("reports a blocked choice read instead of borrowing a cookie", () => {
     const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    expect(readDevDeviceId()).toBeNull();
+    expect(() => readDevDeviceId()).toThrow("blocked");
     spy.mockRestore();
   });
 
-  it("swallows a throwing setItem (blocked/private-window storage)", () => {
+  it("reports a choice that could not be saved", () => {
     const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    expect(() => setDevDeviceId("dev-123")).not.toThrow();
+    expect(() => setDevDeviceId("dev-123")).toThrow("blocked");
     spy.mockRestore();
   });
 
@@ -49,11 +50,11 @@ describe("readDevDeviceId / setDevDeviceId", () => {
     expect(readDevDeviceId()).toBeNull();
   });
 
-  it("swallows a throwing removeItem (blocked/private-window storage)", () => {
+  it("reports a choice that could not be cleared", () => {
     const spy = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    expect(() => clearDevDeviceId()).not.toThrow();
+    expect(() => clearDevDeviceId()).toThrow("blocked");
     spy.mockRestore();
   });
 });
@@ -87,14 +88,15 @@ describe("withDevDeviceHeader", () => {
     expect(headers.get("x-waitron-dev-device")).toBe("dev-123");
   });
 
-  it("degrades to no header if sessionStorage throws", async () => {
+  it("refuses the request when its selected device cannot be read", async () => {
     const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
     const base = vi.fn<typeof fetch>(async () => new Response(null));
-    await expect(
-      withDevDeviceHeader(base as unknown as typeof fetch)("/x"),
-    ).resolves.toBeInstanceOf(Response);
+    await expect(withDevDeviceHeader(base as unknown as typeof fetch)("/x")).rejects.toThrow(
+      "blocked",
+    );
+    expect(base).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

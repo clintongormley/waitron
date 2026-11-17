@@ -21,6 +21,8 @@ import {
 } from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
 import {
+  DEV_DEVICE_HEADER,
+  type DeviceAuthDeps,
   deviceBindingColumns,
   assertProfileAction,
   deviceProfileJoin,
@@ -59,9 +61,20 @@ export function canonicaliseUuid(value: unknown): string | null {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function sessionCookieName(c: Context): string | null {
+  const device = c.req.header(DEV_DEVICE_HEADER);
+  return device === undefined
+    ? SESSION_COOKIE
+    : isUuid(device)
+      ? `${SESSION_COOKIE}_${device}`
+      : null;
+}
+
 /** `secure` comes from `TillApiDeps.secureCookies`: false when the host serves plain HTTP. */
 export function setSessionCookie(c: Context, token: string, secure: boolean): void {
-  setCookie(c, SESSION_COOKIE, token, {
+  const name = sessionCookieName(c);
+  if (name === null) throw new AppError("device.unauthorized", {});
+  setCookie(c, name, token, {
     httpOnly: true,
     secure,
     sameSite: "Strict",
@@ -71,11 +84,13 @@ export function setSessionCookie(c: Context, token: string, secure: boolean): vo
 
 /** `path` must match the one `setSessionCookie` wrote with, or the browser keeps the original. */
 export function clearSessionCookie(c: Context): void {
-  deleteCookie(c, SESSION_COOKIE, { path: "/" });
+  const name = sessionCookieName(c);
+  if (name !== null) deleteCookie(c, name, { path: "/" });
 }
 
 export function readSessionToken(c: Context): string | null {
-  return getCookie(c, SESSION_COOKIE) ?? null;
+  const name = sessionCookieName(c);
+  return name === null ? null : (getCookie(c, name) ?? null);
 }
 
 export function hasSessionCookie(c: Context): boolean {
@@ -194,10 +209,14 @@ export async function checkDeviceStillProven(
  * When a full disk refuses that transaction, the same checks run outside it and nothing is stamped.
  */
 export async function requireSession(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   options: { permission?: Permission; action?: ProfileAction; passive?: boolean } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
+  const chosen =
+    c.req.header(DEV_DEVICE_HEADER) === undefined
+      ? null
+      : await requireDeviceProof(deps, c, { passive: true });
   const token = readSessionToken(c);
   if (token === null) throw new AppError("session.required", {});
   const check = async (tx: Database | Transaction, stamp: boolean) => {
@@ -220,7 +239,9 @@ export async function requireSession(
     if (!diskFullIn(error)) throw error;
     row = await check(deps.db, false);
   }
-  if (options.action !== undefined) {
+  if (chosen !== null) {
+    if (chosen.device.deviceId !== row.deviceId) throw new AppError("device.unauthorized", {});
+  } else if (options.action !== undefined) {
     await assertRequestDevice(deps, c, row);
   }
   return {
@@ -232,7 +253,7 @@ export async function requireSession(
 }
 
 export async function assertRequestDevice(
-  deps: { db: Database; devMode?: boolean },
+  deps: DeviceAuthDeps,
   c: Context,
   session: { deviceId: string },
 ): Promise<void> {

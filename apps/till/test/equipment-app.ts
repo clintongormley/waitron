@@ -50,7 +50,7 @@ export async function mountEquipmentApp(
       loginDefault: "en-GB",
     }),
     getTill: vi.fn().mockResolvedValue(till),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "nfc-till",
       name: "Terrace handheld",
@@ -117,7 +117,7 @@ export async function mountEquipmentAppAsKitchen(
     getTill: vi
       .fn()
       .mockResolvedValue({ ...till, capabilities: ["act-as-kds"], formFactor: "kds" }),
-    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal", status: 404 }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "kd-1",
       name: "Kitchen screen",

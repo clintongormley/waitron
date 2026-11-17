@@ -132,11 +132,8 @@ export interface DeviceApiDeps {
    * See `enrol-rate-limit.ts` for why the limit is in-memory rather than in the database.
    */
   enrolRateLimiter?: EnrolRateLimiter;
-  /**
-   * When `true`, mounts the dev-only device switcher list (`GET /api/dev/devices`); otherwise that
-   * route does not exist.
-   */
   devMode?: boolean;
+  deviceChooserEnabled?: boolean;
   /**
    * Passed to `setDeviceCookie`, which resolves the cookie's `Domain` per request from it and the
    * host; absent, or a host outside it, gives a host-only cookie.
@@ -362,7 +359,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── Who am I? (DEVICE-GUARDED) ───────────────────────────────────────────────────────────────────────
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       const { approvedProfiles, kitchenScreens } = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId);
@@ -403,7 +400,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   app.get("/api/device/zones", (c) =>
     run(c, log, async () => {
-      const session = await requireSession({ db: deps.db }, c, { passive: true });
+      const session = await requireSession(deps, c, { passive: true });
       return c.json(
         await deps.db.withWriteLock(async () => {
           const tx = deps.db;
@@ -416,7 +413,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   app.put("/api/device/zones", (c) =>
     run(c, log, async () => {
-      const session = await requireSession({ db: deps.db }, c);
+      const session = await requireSession(deps, c);
       await assertRequestDevice(deps, c, session);
       const body = await readJsonBody<unknown>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body))
@@ -440,7 +437,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       // Read before `requireDevice`, so a wait behind the write lock is not counted as the device's
       // clock difference.
       const arrived = { wallMs: wall(), monoMs: monotonic() };
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       const deviceMs = deviceClockOf(c.req.header(DEVICE_CLOCK_HEADER));
       if (deviceMs !== undefined && !(deps.requestFromBox ?? requestFromBox)(c))
         deps.clockWitnesses?.noteDevice(device.deviceId, requestAddress(c), deviceMs, arrived);
@@ -476,7 +473,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // Any signed-in staff member may choose; a held item is taken by a scan or a confirmed list choice.
   app.put("/api/device/equipment", (c) =>
     run(c, log, async () => {
-      const session = await requireSession({ db: deps.db }, c);
+      const session = await requireSession(deps, c);
       await assertRequestDevice(deps, c, session);
       const { device, sessionId } = session;
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
@@ -498,7 +495,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // A signed-in person is required, so a shared display with nobody signed in cannot switch.
   app.post("/api/device/active-profile", (c) =>
     run(c, log, async () => {
-      const session = await requireSession({ db: deps.db }, c);
+      const session = await requireSession(deps, c);
       await assertRequestDevice(deps, c, session);
       const { personId, sessionId, device } = session;
       const body = await readJsonBody<{ profileId?: unknown }>(c);
@@ -513,7 +510,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── Report the device's battery (DEVICE-GUARDED) ─────────────────────────────────────────────
   app.put("/api/device/battery", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       const body = await readJsonBody<{ level?: unknown; charging?: unknown }>(c);
       const level = body.level;
       if (typeof level !== "number" || !Number.isInteger(level) || level < 0 || level > 100)
@@ -550,10 +547,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── The device's pass screen and pass monitor (DEVICE-GUARDED) ─────────────────────────────────────
   app.post("/api/device/pass-screen/release", (c) =>
     leverRun(c, log, async () => {
-      const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
+      const proof = await requireDeviceProof(deps, c);
       const { deviceId } = proof.device;
-      const session =
-        proof.device.formFactor === "kds" ? null : await requireSession({ db: deps.db }, c);
+      const session = proof.device.formFactor === "kds" ? null : await requireSession(deps, c);
       if (session !== null && session.deviceId !== deviceId)
         throw new AppError("device.unauthorized", {});
       const by: PassActor =
@@ -576,7 +572,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   app.get("/api/device/pass-board", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       return c.json(
         await deps.db.withWriteLock(async () => {
           const tx = deps.db;
@@ -592,7 +588,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   app.get("/api/device/pass-monitor-board", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       return c.json(
         await deps.db.withWriteLock(async () => {
           const tx = deps.db;
@@ -610,7 +606,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── The device's station screen (DEVICE-GUARDED) ──────────────────────────────────────────────────
   app.get("/api/device/station-screen", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       const stations = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         const screen = await stationScreenOf(tx, c, device);
@@ -662,7 +658,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // A notice at another station answers as an unknown one does: the display names only its own.
   app.post("/api/device/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       const id = c.req.param("id");
       await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, device);
@@ -683,7 +679,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── Bump an item at one of the screen's stations (DEVICE-GUARDED) ─────────────────────────────────────
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       assertProfileAction(device, "prepare-orders");
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does; the `text` id column has no
@@ -741,7 +737,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── Where a station screen may move a dish to (DEVICE-GUARDED, kitchen displays only) ─────────────
   app.get("/api/device/stations", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const device = await requireDevice(deps, c);
       if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
       return c.json(
         await deps.db.withWriteLock(async () => {
@@ -948,9 +944,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Dev-only per-tab device switcher list ─────────────────────────────────────────────────────
+  // ── Device chooser list ─────────────────────────────────────────────────────
   // Nothing here returns a token or reader credential.
-  if (deps.devMode) {
+  if (deps.deviceChooserEnabled ?? deps.devMode === true) {
     app.get("/api/dev/devices", (c) =>
       run(c, log, async () =>
         c.json(

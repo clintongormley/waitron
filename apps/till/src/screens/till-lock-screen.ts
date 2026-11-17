@@ -183,8 +183,7 @@ export class TillLockScreen extends LitElement {
   /** Absent → no remembered operator, read or written: there is nowhere venue-stable to keep one. */
   @property() deviceId?: string;
 
-  /** Whether THIS TAB has adopted a dev device; off in production. */
-  @property({ type: Boolean }) devMode = false;
+  @property({ type: Boolean }) canChooseDevice = false;
 
   /** From `ServerRouter.statuses()`; empty on a till with no router, which renders no status line. */
   @property({ attribute: false }) serverStatuses: ServerStatus[] = [];
@@ -417,7 +416,7 @@ export class TillLockScreen extends LitElement {
               </p>`
         }
         ${
-          this.devMode
+          this.canChooseDevice
             ? html`<wt-button
                 class="switch-device"
                 data-switch-device
