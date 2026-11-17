@@ -407,6 +407,16 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   setup page first can set up either; the owner accepted this when dropping the setup code
   (2026-10-26, B3 design §12.5). A production box offers neither (§12.1; A1384).
 
+- **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
+  19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
+  refuse to send without them, and the setup server refuses a restore without them unless the box
+  names a `WAITRON_RECOVERY_OPERATION_FILE`. Every venue setup can make holds a fiscal registration
+  that a restore cannot carry on without details (fiscal-verifactu's restore hook,
+  `packages/fiscal-verifactu/src/allocated-lifecycle.ts`). A country pack with no fiscal module
+  (today only the United Kingdom's, which is not offered for venue setup:
+  `availableForVenueSetup: false` in `packages/country-gb/src/united-kingdom.ts`) would need both
+  refusals revisited.
+
 - **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
   validated as a whole millisecond and never used. The acceptance may be removed once a check of
   shipped backups, and of each box's retained
