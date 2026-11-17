@@ -38,14 +38,12 @@ function pdf(): Blob {
 
 function stubApi() {
   return {
-    makeRecoveryPack: vi
-      .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
-      .mockResolvedValue({
-        pdf: pdf(),
-        number: 4,
-        key: "unchanged",
-        madeAt: "2026-10-30T09:00:00.000Z",
-      }),
+    makeRecoveryPack: vi.fn<(body: unknown) => Promise<MadeRecoveryPack>>().mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      key: "unchanged",
+      madeAt: "2026-10-30T09:00:00.000Z",
+    }),
     markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
     getRecoveryPackStatus: vi.fn<() => Promise<RecoveryPackStatus>>().mockResolvedValue(status()),
   };
