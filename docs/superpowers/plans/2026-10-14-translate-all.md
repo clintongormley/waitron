@@ -1,5 +1,7 @@
 # Translate all (Waitron side) Implementation Plan
 
+> **2026-11-17:** Submitted-item comparison and clarified-placeholder retries are described in [the followup plan](../plans/2026-11-17-translate-stale-placeholder.md).
+
 > **2026-10-20, A682:** The multilingual editor replaces the language-in-the-path translation routes and default-companion rules described below. See [the current translation contract](../../developers/products.md#the-translation-gap-report). This document retains its historical design.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

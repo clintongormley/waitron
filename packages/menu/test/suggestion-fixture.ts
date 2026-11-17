@@ -94,9 +94,13 @@ export async function allJobs(tx: Transaction): Promise<SuggestionJobRow[]> {
   return await tx.select().from(contentSuggestionJobs).orderBy(asc(contentSuggestionJobs.position));
 }
 
-export function sortedSent(sent: Record<string, string[]>): Record<string, string[]> {
+export function missingSent(sent: SuggestionJobRow["sent"]): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(sent).map(([key, { missing }]) => [key, missing]));
+}
+
+export function sortedSent(sent: SuggestionJobRow["sent"]): Record<string, string[]> {
   return Object.fromEntries(
-    Object.entries(sent).map(([key, languages]) => [key, [...languages].sort()]),
+    Object.entries(sent).map(([key, { missing }]) => [key, [...missing].sort()]),
   );
 }
 
@@ -130,8 +134,8 @@ export function result(
 }
 
 /** A result naming every language the job asked for. */
-export function translateAll(sent: Record<string, string[]>): SuggestionResult[] {
-  return Object.entries(sent).map(([key, missing]) =>
+export function translateAll(sent: SuggestionJobRow["sent"]): SuggestionResult[] {
+  return Object.entries(sent).map(([key, { missing }]) =>
     result(
       key,
       Object.fromEntries(missing.map((language) => [language, `${language.toUpperCase()} ${key}`])),

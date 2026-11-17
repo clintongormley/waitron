@@ -1,5 +1,12 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
-import { categories, contentSuggestions, products, taxpayer, type Transaction } from "@waitron/db";
+import {
+  categories,
+  contentSuggestions,
+  products,
+  taxpayer,
+  type SuggestionJobRow,
+  type Transaction,
+} from "@waitron/db";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -74,6 +81,14 @@ function fits(text: string): boolean {
 
 export function effectiveNames(entry: LiveTarget): Record<string, string> {
   return { ...entry.inheritedNames, ...entry.names };
+}
+
+export function suggestionSource(entry: LiveTarget): string {
+  return JSON.stringify({
+    staffName: entry.target.name,
+    owners: entry.target.owners,
+    structure: entry.structure,
+  });
 }
 
 /** The live items among `refs`, keyed by ref. */
@@ -332,7 +347,7 @@ async function readContextHeads(
 
 export interface SuggestionJobDraft {
   body: string;
-  sent: Record<string, string[]>;
+  sent: SuggestionJobRow["sent"];
   included: number;
   heads: number;
   remaining: number;
@@ -366,7 +381,7 @@ export async function buildSuggestionJob(
   // and its head can pass 1 MiB; Cloud refuses such a job with 400 ("languages.enabled holds 1 to
   // 20"), shown as cloud.request_invalid.
   let bytes = Buffer.byteLength(JSON.stringify(job));
-  const sent: Record<string, string[]> = {};
+  const sent: SuggestionJobRow["sent"] = {};
   const inJob = new Set<string>();
   let headCount = 0;
   let next = 0;
@@ -383,7 +398,7 @@ export async function buildSuggestionJob(
       job.items.push(entry);
       inJob.add(entry.ref);
     }
-    sent[item.ref] = item.missing;
+    sent[item.ref] = { missing: item.missing, source: suggestionSource(gaps.get(item.ref)!.entry) };
     headCount += adding.length - 1;
     bytes += size;
   }
@@ -410,6 +425,9 @@ export async function pruneSuggestions(
       itemId: contentSuggestions.itemId,
       language: contentSuggestions.language,
       text: contentSuggestions.text,
+      placeholder: contentSuggestions.placeholder,
+      expected: contentSuggestions.expected,
+      fixField: contentSuggestions.fixField,
     })
     .from(contentSuggestions);
   const notes = rows.filter((row) => row.text === null);
@@ -420,14 +438,31 @@ export async function pruneSuggestions(
     ]),
   );
   const liveNotes = await readLiveItems(tx, [...noteRefs.values()], gaps.settings);
+  const clarified: string[] = [];
   const gone = rows
     .filter((row) => {
       const gap = gaps.get(suggestionRef({ kind: row.kind, id: row.itemId }));
-      if (row.text === null)
-        return !liveNotes.has(suggestionRef({ kind: row.kind, id: row.itemId }));
+      if (row.text === null) {
+        const live = liveNotes.get(suggestionRef({ kind: row.kind, id: row.itemId }));
+        if (!live) return true;
+        if (
+          row.placeholder &&
+          (JSON.parse(row.expected ?? "null") as { staffName?: string } | null)?.staffName !==
+            live.entry.target.name
+        ) {
+          if (row.fixField === null) return true;
+          clarified.push(row.id);
+        }
+        return false;
+      }
       return !gap || !gap.missing.has(row.language!);
     })
     .map((row) => row.id);
   for (const batch of batches(gone))
     await tx.delete(contentSuggestions).where(inArray(contentSuggestions.id, batch));
+  for (const batch of batches(clarified))
+    await tx
+      .update(contentSuggestions)
+      .set({ placeholder: false, expected: null })
+      .where(inArray(contentSuggestions.id, batch));
 }

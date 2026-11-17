@@ -3,6 +3,7 @@ import { storedMenuParts } from "../test/menu-parts.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
+  contentSuggestionJobs,
   contentSuggestions,
   optionLabels,
   optionLists,
@@ -11,7 +12,7 @@ import {
   sections,
   units,
 } from "@waitron/db";
-import { addMember } from "./sections.js";
+import { addMember, createSectionIn } from "./sections.js";
 import { createMenu } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -31,6 +32,107 @@ import {
 } from "../test/suggestion-fixture.js";
 
 const { suite, app } = suggestionSuite();
+
+it.each(["unchanged", "staff name", "included-menu move"] as const)(
+  "compares collected suggestions with the submitted item: %s",
+  async (change) => {
+    const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
+    let kind = "product" as "product" | "included_menu";
+    let id = venue.bread;
+    let destination = "";
+    if (change === "included-menu move")
+      await app(async (tx) => {
+        const child = await createMenu(tx, {
+          name: "STAFF child",
+          names: { ca: "CLIENT-CA Bread" },
+        });
+        const parts = await storedMenuParts(tx);
+        const root = parts.find((row) => row.menuId === venue.menuId)!.rootSectionId;
+        const childRoot = parts.find((row) => row.menuId === child.id)!.rootSectionId;
+        id = (await addMember(tx, root, { kind: "section", sectionId: childRoot })).id;
+        await tx
+          .update(sectionMembers)
+          .set({ folderNames: { ca: "CLIENT-CA Bread" } })
+          .where(eq(sectionMembers.id, id));
+        destination = (
+          await createSectionIn(tx, root, { internalName: "Another section", names: {} })
+        ).id;
+        kind = "included_menu";
+      });
+    const job = await runningJob(suite.db);
+    await app(async (tx) => {
+      if (change === "unchanged") {
+        const sent = job.sent[`product:${id}`]!;
+        const source = JSON.parse(sent.source) as Record<string, unknown>;
+        source.owners = { parentId: null, kind: "product" };
+        await tx
+          .update(contentSuggestionJobs)
+          .set({
+            sent: {
+              ...job.sent,
+              [`product:${id}`]: {
+                ...sent,
+                source: JSON.stringify(Object.fromEntries(Object.entries(source).reverse())),
+              },
+            },
+          })
+          .where(eq(contentSuggestionJobs.id, job.id));
+      }
+      if (change === "staff name")
+        await tx.update(products).set({ name: "STAFF clarified bread" }).where(eq(products.id, id));
+      if (change === "included-menu move")
+        await tx
+          .update(sectionMembers)
+          .set({ sectionId: destination })
+          .where(eq(sectionMembers.id, id));
+      await storeSuggestionPage(
+        tx,
+        job.id,
+        {
+          state: "done",
+          cursor: 0,
+          nextCursor: null,
+          failed: Object.keys(job.sent).filter((key) => key !== `${kind}:${id}`),
+          results: [
+            result(
+              `${kind}:${id}`,
+              { en: "Suggested bread" },
+              {
+                corrections: [
+                  { field: "ca", wrong: "CLIENT-CA Bread", right: "Corrected bread" },
+                  { field: "internal", wrong: "Staff wording", right: "Clearer staff wording" },
+                ],
+              },
+            ),
+          ],
+        },
+        context,
+      );
+    });
+    const page = await app((tx) => listContentSuggestions(tx, {}, context));
+    const rows = page.suggestions.filter((row) => row.itemId === id);
+    expect(rows.filter((row) => row.text !== null)).toHaveLength(change === "unchanged" ? 1 : 0);
+    expect(rows.filter((row) => row.fix?.field === "ca")).toHaveLength(
+      change === "unchanged" ? 1 : 0,
+    );
+    expect(rows.find((row) => row.fix?.field === "internal")?.fix).toEqual({
+      field: "internal",
+      wrong: "Staff wording",
+      right: "Clearer staff wording",
+    });
+    expect(page.run?.waiting).toBe(change === "unchanged" ? 1 : 0);
+    const [stored] = await suite.db
+      .select()
+      .from(contentSuggestionJobs)
+      .where(eq(contentSuggestionJobs.id, job.id));
+    expect(stored).toMatchObject({
+      done: 1,
+      failed: Object.keys(job.sent).length - 1,
+      dropped: change === "unchanged" ? 0 : 2,
+    });
+  },
+);
+
 async function corrected(wrong = "CLIENT-CA Bread", field = "ca", label = false) {
   const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   let otherListId = "";
@@ -193,7 +295,13 @@ describe("language correction evidence", () => {
     const { cell } = await corrected();
     await app(async (tx) => {
       await tx.insert(contentSuggestions).values([
-        { kind: "product", itemId: cell.id, language: null, placeholder: true },
+        {
+          kind: "product",
+          itemId: cell.id,
+          language: null,
+          placeholder: true,
+          expected: JSON.stringify({ staffName: "STAFF Bread" }),
+        },
         {
           kind: "product",
           itemId: cell.id,

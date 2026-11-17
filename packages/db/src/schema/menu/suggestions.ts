@@ -53,7 +53,7 @@ export const contentSuggestionJobs = table(
     failure: failure("failure"),
     cloudJobId: id("cloud_job_id"),
     body: label("body"),
-    sent: json<Record<string, string[]>>("sent").notNull(),
+    sent: json<Record<string, { missing: string[]; source: string }>>("sent").notNull(),
     runTotal: count("run_total"),
     total: count("total").notNull().default(0),
     done: count("done").notNull().default(0),
@@ -94,6 +94,7 @@ export const contentSuggestions = table(
     // Null on the item's own row: a placeholder, or a spelling fix to the staff name.
     language: label("language"),
     text: label("text"),
+    // Name-cell evidence on a language row; submitted staff name on a placeholder's own row.
     expected: label("expected"),
     fixField: label("fix_field"),
     fixWrong: label("fix_wrong"),

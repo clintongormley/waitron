@@ -1690,7 +1690,10 @@ async function seedSuggestionJob(
     runId: randomUUID(),
     position: 1,
     state: "done",
-    sent: { "product:p0": ["en"], "product:p1": ["en"] },
+    sent: {
+      "product:p0": { missing: ["en"], source: "{}" },
+      "product:p1": { missing: ["en"], source: "{}" },
+    },
     runTotal: 2,
     total: 2,
     done: 2,
@@ -1856,13 +1859,21 @@ describe("contentSuggestionsAlertSource", () => {
 
   it("raises the notice for what an earlier job stored when the run's last job failed", async () => {
     const runId = randomUUID();
-    const sent = { "product:p0": ["en"], "product:p1": ["en"], "product:p2": ["en"] };
+    const sent = {
+      "product:p0": { missing: ["en"], source: "{}" },
+      "product:p1": { missing: ["en"], source: "{}" },
+      "product:p2": { missing: ["en"], source: "{}" },
+    };
     const first = await seedSuggestionJob({ runId, sent, runTotal: 6, total: 3, done: 3 });
     const second = await seedSuggestionJob({
       runId,
       position: 2,
       state: "running",
-      sent: { "product:p3": ["en"], "product:p4": ["en"], "product:p5": ["en"] },
+      sent: {
+        "product:p3": { missing: ["en"], source: "{}" },
+        "product:p4": { missing: ["en"], source: "{}" },
+        "product:p5": { missing: ["en"], source: "{}" },
+      },
       runTotal: null,
       total: 0,
       done: 0,
