@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { BUSY_COUNTER, cleanupWidgets, distance, mountWidget, paintedAt } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -13,6 +13,108 @@ const tabsOf = (el: TillShell) => [
 ];
 
 afterEach(cleanupWidgets);
+
+function expectUnclippedOutline(button: HTMLElement, horizontalRounding = 0.5): void {
+  const style = getComputedStyle(button);
+  expect(button.matches(":focus-visible")).toBe(true);
+  expect(style.outlineStyle).not.toBe("none");
+  expect(parseFloat(style.outlineWidth)).toBeGreaterThan(0);
+  const extent = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+  const box = button.getBoundingClientRect();
+  let ancestor: HTMLElement | null = button;
+  while (ancestor) {
+    const parent: HTMLElement | null =
+      ancestor.parentElement ??
+      ((ancestor.getRootNode() as ShadowRoot).host as HTMLElement | undefined) ??
+      null;
+    ancestor = parent;
+    if (!parent) break;
+    const clip = getComputedStyle(parent);
+    const bounds = parent.getBoundingClientRect();
+    const label = `${parent.tagName}.${parent.className}`;
+    if (clip.overflowX !== "visible") {
+      expect(box.left - extent, `${label} left`).toBeGreaterThanOrEqual(
+        bounds.left + parent.clientLeft - horizontalRounding,
+      );
+      expect(box.right + extent, `${label} right`).toBeLessThanOrEqual(
+        bounds.left + parent.clientLeft + parent.clientWidth + horizontalRounding,
+      );
+    }
+    if (clip.overflowY !== "visible") {
+      expect(box.top - extent, `${label} top`).toBeGreaterThanOrEqual(
+        bounds.top + parent.clientTop - 0.5,
+      );
+      expect(box.bottom + extent, `${label} bottom`).toBeLessThanOrEqual(
+        bounds.top + parent.clientTop + parent.clientHeight + 0.5,
+      );
+    }
+  }
+}
+
+it.each([
+  ["native", "ltr"],
+  ["zone menu", "ltr"],
+  ["zone menu", "rtl"],
+] as const)(
+  "keeps the counter's %s focus outline inside its scroll clippers in %s",
+  async (kind, dir) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el, host } = await mountWidget<TillShell>("till-shell", {
+        ...BUSY_COUNTER,
+        ...(kind === "native" ? { counterZones: [] } : {}),
+      });
+      host.dir = dir;
+      const root = el.shadowRoot!;
+      const first =
+        kind === "native"
+          ? root.querySelector<HTMLElement>(".tabs button")!
+          : root
+              .querySelector("[data-counter-zones]")!
+              .shadowRoot!.querySelector<HTMLElement>("button")!;
+      await userEvent.keyboard("{Tab}");
+      first.focus();
+      expectUnclippedOutline(first);
+      await page.viewport(390, 844);
+      const last = root
+        .querySelector(".till-strip .expo")!
+        .shadowRoot!.querySelector<HTMLElement>("button")!;
+      last.focus();
+      last.scrollIntoView({ block: "nearest", inline: "end" });
+      // Native scroll limits combine integer scroll/client sizes with fractional painted boxes.
+      expectUnclippedOutline(last, 1);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
+it.each(["light", "dark"] as const)(
+  "keeps Waiting's amber border visible under keyboard focus in %s",
+  async (theme) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el, host } = await mountWidget<TillShell>("till-shell", BUSY_COUNTER, theme);
+      const waiting = el.shadowRoot!.querySelector<HTMLElement>('[data-counter-orders="waiting"]')!;
+      waiting.style.animation = "none";
+      await userEvent.keyboard("{Tab}");
+      expect(waiting.matches(":focus-visible")).toBe(false);
+      const box = waiting.getBoundingClientRect();
+      const border = await paintedAt(host, box.left + box.width / 2, box.top + 0.25);
+      const fill = await paintedAt(host, box.left + 6, box.top + box.height / 2);
+      expect(distance(border, fill)).toBeGreaterThan(20);
+      waiting.focus();
+      expectUnclippedOutline(waiting);
+      expect(
+        distance(await paintedAt(host, box.left + box.width / 2, box.top + 0.25), border),
+      ).toBeLessThan(5);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
 
 it("puts only the selected handheld tab in the Tab sequence", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {

@@ -1118,27 +1118,6 @@ of the 62 px Fire and Send all buttons. The toasts' present lift, a tap target a
 moved to the top bar, so it does not bind the owner's choice of where the toast goes.
 
 
-## On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its left, top and bottom (found by A841 slice 14's look check, #2209).
-
-Seen on a busy English bar
-at 1280 × 800 with no venue logo: the Counter zone control ("Counter: Barra" in the look check; the shared `BUSY_COUNTER` fixture
-now names the zone "Bar") with focus shows its ring only down its right side. The
-control sits inside two sideways-scrolling boxes, the tab list (`.tabs`) and the strip
-(`.till-strip`), both `overflow-x: auto` in `apps/till/src/widgets/till-shell.ts`; which of them
-cuts the ring was not tested. Both predate slice 14.
-
-
-## A handheld's bar may start watching its size again after it has left the page (found by A841 slice 14's review, #2209).
-
-Read, not tested: `updated()` in `apps/till/src/widgets/till-shell.ts`
-calls `#observe()` for a handheld, and `disconnectedCallback()` clears its observer, so a render
-queued just before the shell is removed would make a new observer on the detached shell. Slice 14
-found and fixed the same shape on a cash register's bar, where a case reproduced it ("a render
-queued before the counter leaves the page does not observe it again" in
-`till-shell.counter-logo.test.ts`); `#observe()` and the lines in `disconnectedCallback()` that clear its observer are unchanged since
-before slice 14.
-
-
 ## A841 slice 6 wording to confirm (2026-10-23).
 
 For the owner: Advanced's heading and opening
@@ -1550,7 +1529,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: The till top bar fits at phone width, 1024 and 1280
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+7 entries, size M. The remaining overflow and owner decisions are below.
 
 - **A1082. At 390 px the counter till's top bar is cut off.** Seen, 2026-10-24 (A789 slice 2's look,
   `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the first tab, Counter
@@ -1579,23 +1558,21 @@ Printer identity is separate from the till route inventory.
   onto the bar, so when the count shrinks or goes away, items can stay in More although they
   would now fit, until the next resize or other change refits the bar.
   [Detail](till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
-- **On a cash register's bar, the keyboard focus ring of the first strip control is cut off on its
-  left, top and bottom (found by A841 slice 14's look check, #2209).** Seen on a busy English bar at
-  1280 × 800 with no venue logo: the Counter zone control ("Counter: Barra" in the look check; the
-  shared `BUSY_COUNTER` fixture now names the zone "Bar") with focus shows its ring only down its
-  right side.
-  [Detail](till.md#on-a-cash-registers-bar-the-keyboard-focus-ring-of-the-first-strip-control-is-cut-off-on-its-left-top-and-bottom-found-by-a841-slice-14s-look-check-2209)
-- **A handheld's bar may start watching its size again after it has left the page (found by A841
-  slice 14's review, #2209).** Read, not tested: `updated()` in
-  `apps/till/src/widgets/till-shell.ts` calls `#observe()` for a handheld, and
-  `disconnectedCallback()` clears its observer, so a render queued just before the shell is removed
-  would make a new observer on the detached shell.
-  [Detail](till.md#a-handhelds-bar-may-start-watching-its-size-again-after-it-has-left-the-page-found-by-a841-slice-14s-review-2209)
 - **The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look
   check).** The bar's middle strip scrolls sideways (`.till-strip`,
   `apps/till/src/widgets/till-shell.ts`) and More repeats its actions, so nothing is lost, but
   buttons are scrolled out of view.
   [Detail](till.md#the-counter-tills-top-bar-and-bill-window-at-130-measured-2026-10-27-a841-slice-11bs-look-check)
+
+Measured 2026-11-17 on `b7e7e5de0d`, normal till boot/sign-in in shared-Mac Chromium,
+using `page.viewport` with `innerWidth` checked, Waitron’s own typeface and Ana Fernández.
+With two counter zones (Bar/terrace, terrace selected), Pass and Transfers shown and zero counts:
+at 390 px, the strip has 109 px against Counter alone at 178/193 px EN/ES and all six controls
+at 674/739 px. At 1024 × 768, content is 682/747 px against 675 px at 100%, and 785/867 px
+against 650 px at 130%. The measured 1280 × 800 cases fit at both sizes. These are not box
+figures; the historical Serif 130% case above remains open. The permanent scrolling-strip
+contract stays in force (design-system.md, Till shell). For a future owner review: keep scrolling
+as designed, or revisit what stays on the bar? No collapse order is proposed.
 
 ## Bundle: Reopening a held order keeps its lines right
 
