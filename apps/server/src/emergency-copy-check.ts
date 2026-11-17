@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { pipeline } from "node:stream/promises";
 import { eq, inArray } from "drizzle-orm";
 import {
   deployment,
@@ -30,20 +28,20 @@ import {
   WAL_SUFFIX,
 } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
+import { digestFile } from "./handover-capture.js";
 import { checkCopyIntegrity } from "./handover-integrity.js";
 import { isReadableChart } from "./membership-trust.js";
 import { assertCopyNotAhead } from "./spare-copy.js";
 import "./errors.js";
 
+/** `digestFile`'s hash, rejecting a stop with the signal's own reason rather than an `AbortError`. */
 async function fileSha256(path: string, signal: AbortSignal | undefined): Promise<string> {
-  const hash = createHash("sha256");
   try {
-    await pipeline(createReadStream(path), hash, { signal });
+    return (await digestFile(path, signal)).sha256;
   } catch (error) {
     signal?.throwIfAborted();
     throw error;
   }
-  return hash.digest("hex");
 }
 
 /**

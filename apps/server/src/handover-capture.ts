@@ -205,7 +205,7 @@ async function describeCopy(
   };
 }
 
-async function digestFile(
+export async function digestFile(
   path: string,
   signal?: AbortSignal,
 ): Promise<{ sha256: string; bytes: number }> {
