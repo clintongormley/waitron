@@ -1,4 +1,4 @@
-import { persons } from "@waitron/db";
+import { persons, withFoldedPersonChanges } from "@waitron/db";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -29,7 +29,7 @@ beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
   await suite.db
     .update(persons)
-    .set({ displayName: "Original author", pinHash: "scrypt$00$00" })
+    .set(withFoldedPersonChanges({ displayName: "Original author", pinHash: "scrypt$00$00" }))
     .where(eq(persons.id, OPERATOR));
   await setBuiltInRoleForTest(suite.db, OPERATOR, "admin");
   const [person] = await seedPersons(suite.db, {

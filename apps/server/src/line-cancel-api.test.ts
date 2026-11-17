@@ -23,6 +23,7 @@ import {
   workingOrderLines,
   workingOrders,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPinThrottle, tillSessions, persons, setProfileAdmission } from "@waitron/identity";
@@ -1522,7 +1523,10 @@ describe("the public cancellation read and command", () => {
     const before = await frozen();
     try {
       await inTx(venue, (tx) =>
-        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, venue.staffId)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, venue.staffId)),
       );
       const answer = await send(
         venue.app,
@@ -1536,7 +1540,10 @@ describe("the public cancellation read and command", () => {
       expect(await frozen()).toEqual(before);
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(persons).set({ status: "active" }).where(eq(persons.id, venue.staffId)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "active" }))
+          .where(eq(persons.id, venue.staffId)),
       );
     }
   });

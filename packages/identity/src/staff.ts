@@ -17,6 +17,8 @@ import {
   signInChallenges,
   webauthnCredentials,
   recoveryCodes,
+  withFoldedPersonChanges,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -288,19 +290,21 @@ export async function updatePersonDetails(
   try {
     await tx
       .update(persons)
-      .set({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        firstNames,
-        lastNames,
-        telephone,
-        email,
-        emailFolded: foldForUniqueness(email),
-        emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
-        status: input.status,
-        locale,
-        ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
-      })
+      .set(
+        withFoldedPersonChanges({
+          displayName,
+          displayNameFolded: foldForUniqueness(displayName),
+          firstNames,
+          lastNames,
+          telephone,
+          email,
+          emailFolded: foldForUniqueness(email),
+          emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
+          status: input.status,
+          locale,
+          ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
+        }),
+      )
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
@@ -354,7 +358,11 @@ export async function deactivatePerson(
   const alreadySuspended = person.status === "suspended";
   await tx
     .update(persons)
-    .set(alreadySuspended ? NO_SIGN_IN_SECRETS : { status: "suspended", ...NO_SIGN_IN_SECRETS })
+    .set(
+      withFoldedPersonChanges(
+        alreadySuspended ? NO_SIGN_IN_SECRETS : { status: "suspended", ...NO_SIGN_IN_SECRETS },
+      ),
+    )
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   if (!alreadySuspended) await revokePersonAccess(tx, person.id, authorizedBy);
@@ -368,7 +376,7 @@ export async function clearPersonPin(
   await authorizePersonLoginChange(tx, input);
   const updated = await tx
     .update(persons)
-    .set({ pinHash: null })
+    .set(withFoldedPersonChanges({ pinHash: null }))
     .where(eq(persons.id, settleId(input.personId)))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
@@ -395,7 +403,9 @@ export async function resetPersonLogin(
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
   await tx
     .update(persons)
-    .set({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS })
+    .set(
+      withFoldedPersonChanges({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS }),
+    )
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   await revokePersonAccess(tx, person.id, authorizedBy);
@@ -427,7 +437,13 @@ export async function reactivatePersonForInvitation(
   try {
     await tx
       .update(persons)
-      .set({ status: "pending", emailVerifiedAt: null, ...NO_SIGN_IN_SECRETS })
+      .set(
+        withFoldedPersonChanges({
+          status: "pending",
+          emailVerifiedAt: null,
+          ...NO_SIGN_IN_SECRETS,
+        }),
+      )
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName: person.displayName });
@@ -465,18 +481,20 @@ export async function invitePerson(
   try {
     const [row] = await tx
       .insert(persons)
-      .values({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        firstNames,
-        lastNames,
-        telephone,
-        pinHash: null,
-        passwordHash: null,
-        status: "pending",
-        email,
-        emailFolded: foldForUniqueness(email),
-      })
+      .values(
+        withFoldedPersonKeys({
+          displayName,
+          displayNameFolded: foldForUniqueness(displayName),
+          firstNames,
+          lastNames,
+          telephone,
+          pinHash: null,
+          passwordHash: null,
+          status: "pending",
+          email,
+          emailFolded: foldForUniqueness(email),
+        }),
+      )
       .returning({ id: persons.id });
 
     await setPersonAccessRoles(tx, {
@@ -508,7 +526,7 @@ export async function setPersonLocale(
   const locale = assertSupportedLocale(input.locale);
   await tx
     .update(persons)
-    .set({ locale })
+    .set(withFoldedPersonChanges({ locale }))
     .where(eq(persons.id, settleId(input.personId)));
 }
 

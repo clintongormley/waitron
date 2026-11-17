@@ -3,7 +3,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -217,7 +217,7 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
       await withTransaction(suite.db, async (tx) => {
         await tx
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, session!.personId));
       });
       const stub = stubReader();

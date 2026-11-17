@@ -21,6 +21,7 @@ import {
   sales,
   saleLines,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -423,13 +424,19 @@ describe("department transfer till writes", () => {
     });
   it("refuses a suspended operator and a revoked device", async () => {
     const f = await ready();
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, personId));
     try {
       expect(
         await post(f.source.cookie, requestPath(f.tab), { destinationDepartmentId: f.b }),
       ).toMatchObject({ status: 403, body: { error: { code: "person.suspended" } } });
     } finally {
-      await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "active" }))
+        .where(eq(persons.id, personId));
     }
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, f.source.deviceId));
     expect(
@@ -777,7 +784,10 @@ describe("departmentless transfer monitoring", () => {
           }),
         );
       if (change === "suspended")
-        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+        await suite.db
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, personId));
       if (change === "revoked")
         await suite.db.update(devices).set({ active: false }).where(eq(devices.id, till.deviceId));
       try {
@@ -797,7 +807,10 @@ describe("departmentless transfer monitoring", () => {
           });
       } finally {
         if (change === "suspended")
-          await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+          await suite.db
+            .update(persons)
+            .set(withFoldedPersonChanges({ status: "active" }))
+            .where(eq(persons.id, personId));
       }
     });
 
@@ -1193,7 +1206,10 @@ describe("department transfer read boundaries", () => {
           .set({ active: false })
           .where(eq(devices.id, f.desk.deviceId));
       if (kind === "suspended")
-        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+        await suite.db
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, personId));
       if (kind === "action")
         await suite.db
           .update(deviceProfiles)
@@ -1219,7 +1235,10 @@ describe("department transfer read boundaries", () => {
           });
       } finally {
         if (kind === "suspended")
-          await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+          await suite.db
+            .update(persons)
+            .set(withFoldedPersonChanges({ status: "active" }))
+            .where(eq(persons.id, personId));
       }
     });
   it("refuses unknown and malformed request ids", async () => {

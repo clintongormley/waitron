@@ -28,6 +28,7 @@ import {
   workingOrders,
   products,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import {
   assignMenuToVenue,
@@ -1693,7 +1694,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
     if (kind === "suspended") {
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, supervisorId));
     }
     const override =
@@ -2637,7 +2638,10 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   function suspend(personId: string) {
     return () =>
       withTransaction(suite.db, (tx) =>
-        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, personId)),
       );
   }
 

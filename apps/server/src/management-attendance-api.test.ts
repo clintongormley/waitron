@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -245,7 +245,10 @@ it("rejects forged actors, extra scope, worker actions, malformed JSON and suspe
     body: "{",
   });
   expect(malformed.status).toBe(400);
-  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "suspended" }))
+    .where(eq(persons.id, managerId));
   for (const path of paths) {
     const response = await request(route(path), path === "commands" ? await proposal() : undefined);
     expect(response.status).toBe(403);

@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -33,7 +34,10 @@ describe("incident handlers", () => {
   });
 
   it("accepts a real person", async () => {
-    const [person] = await suite.db.insert(persons).values({ displayName: "Manager" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Manager" }))
+      .returning();
     const [incident] = await insert();
     const [handled] = await suite.db
       .update(incidents)
@@ -44,7 +48,10 @@ describe("incident handlers", () => {
   });
 
   it("refuses deleting a person who handled an incident", async () => {
-    const [person] = await suite.db.insert(persons).values({ displayName: "Manager" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Manager" }))
+      .returning();
     const [incident] = await insert();
     await suite.db
       .update(incidents)

@@ -9,6 +9,7 @@ import {
   roles,
   personRoles,
   webauthnCredentials,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { builtInRoleForTest } from "../test/person-rows.js";
@@ -269,7 +270,7 @@ describe("non-admin sign-in authority", () => {
       const target = await seedPerson(suite.db, role);
       await suite.db
         .update(persons)
-        .set({ email: "unchanged@example.test" })
+        .set(withFoldedPersonChanges({ email: "unchanged@example.test" }))
         .where(eq(persons.id, target));
       await run((tx) =>
         updatePersonDetails(tx, {
@@ -300,7 +301,7 @@ describe("non-admin sign-in authority", () => {
     const target = await seedPerson(suite.db, "admin", "suspended");
     await suite.db
       .update(persons)
-      .set({ email: "unchanged@example.test" })
+      .set(withFoldedPersonChanges({ email: "unchanged@example.test" }))
       .where(eq(persons.id, target));
     await suite.db
       .insert(webauthnCredentials)
@@ -372,7 +373,7 @@ describe("account links across admin role changes", () => {
       );
       await suite.db
         .update(persons)
-        .set({ email: "manager-controlled@example.test" })
+        .set(withFoldedPersonChanges({ email: "manager-controlled@example.test" }))
         .where(eq(persons.id, target));
       const issued = await run((tx) => issueAccountAction(tx, { personId: target, purpose }));
       await run((tx) =>
@@ -402,7 +403,7 @@ it("serves an invitation issued after an admin approves the promotion", async ()
   const target = await seedPerson(suite.db, "manager", "pending");
   await suite.db
     .update(persons)
-    .set({ email: "future-owner@example.test" })
+    .set(withFoldedPersonChanges({ email: "future-owner@example.test" }))
     .where(eq(persons.id, target));
   await run((tx) =>
     changeRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
@@ -431,7 +432,7 @@ it("preserves an unused reset when a non-admin becomes a manager", async () => {
   const target = await seedPerson(suite.db, "staff");
   await suite.db
     .update(persons)
-    .set({ email: "future-manager@example.test" })
+    .set(withFoldedPersonChanges({ email: "future-manager@example.test" }))
     .where(eq(persons.id, target));
   const issued = await run((tx) =>
     issueAccountAction(tx, { personId: target, purpose: "password_reset" }),
@@ -458,7 +459,7 @@ it.each(["access roles"] as const)(
     const target = await seedPerson(suite.db, "admin");
     await suite.db
       .update(persons)
-      .set({ email: "former-admin@example.test" })
+      .set(withFoldedPersonChanges({ email: "former-admin@example.test" }))
       .where(eq(persons.id, target));
     const issued = await run((tx) =>
       issueAccountAction(tx, { personId: target, purpose: "password_reset" }),
@@ -486,7 +487,7 @@ it.each(["role", "status"] as const)(
     const target = await seedPerson(suite.db, "staff");
     await suite.db
       .update(persons)
-      .set({ email: "unchanged@example.test" })
+      .set(withFoldedPersonChanges({ email: "unchanged@example.test" }))
       .where(eq(persons.id, target));
     const before = await row(target);
     await expect(
@@ -585,7 +586,9 @@ it("does not rewrite an unchanged built-in membership when saving details", asyn
   const personId = await seedPerson(suite.db, "staff");
   await suite.db
     .update(persons)
-    .set({ email: "target@example.test", emailFolded: "target@example.test" })
+    .set(
+      withFoldedPersonChanges({ email: "target@example.test", emailFolded: "target@example.test" }),
+    )
     .where(eq(persons.id, personId));
   const before = await row(personId);
   await run(async (tx) => {
@@ -619,7 +622,9 @@ it("recognises Admin membership when another built-in membership sorts first", a
   await suite.db.insert(personRoles).values({ personId, roleId: "z-admin" });
   await suite.db
     .update(persons)
-    .set({ email: "target@example.test", emailFolded: "target@example.test" })
+    .set(
+      withFoldedPersonChanges({ email: "target@example.test", emailFolded: "target@example.test" }),
+    )
     .where(eq(persons.id, personId));
   const before = await row(personId);
   await expect(

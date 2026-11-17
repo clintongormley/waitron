@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { incidents, withTransaction, type Database } from "@waitron/db";
+import { incidents, withTransaction, type Database, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncidentOnce } from "@waitron/core";
 import {
@@ -156,7 +156,10 @@ describe("GET /management-api/disk-stop", () => {
 
   it("refuses a suspended person", async () => {
     await withTransaction(suite.db, (tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, staff.id)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, staff.id)),
     );
     await expectRefused(await read(staff.cookie), 403, "person.suspended");
   });

@@ -2,7 +2,7 @@ import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
+import { readSettings, BUSINESS_DAY_SETTINGS, withFoldedPersonChanges } from "@waitron/db";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import Stripe from "stripe";
@@ -531,7 +531,10 @@ describe("startup zone admission", () => {
     async (state) => {
       await rawZone("Invalid/Zone");
       if (state === "suspended")
-        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager));
+        await suite.db
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, manager));
       else
         await suite.db
           .update(dashboardSessions)

@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -100,7 +100,7 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile"] as
     if (kind === "suspended")
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.personId));
     if (kind === "admission")
       await suite.db

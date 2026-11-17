@@ -12,6 +12,7 @@ import {
   drawerOpens,
   printJobs,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -252,7 +253,7 @@ it.each(["none", "staff", "expired", "suspended"] as const)(
     if (kind === "suspended") {
       await store.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.adminId));
       code = "person.suspended";
     }
@@ -459,7 +460,10 @@ it("derives the manager PIN outside the writer and rechecks suspension before re
     before = await snapshot();
   watchDerivationsAndLock(store.db, "1234", () =>
     withTransaction(store.db, (tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, venue.adminId)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, venue.adminId)),
     ),
   );
   expect(await attest(t.id)).toMatchObject({ status: 403, json: { code: "person.suspended" } });

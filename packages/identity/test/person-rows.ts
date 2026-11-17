@@ -1,6 +1,13 @@
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import type { Database, Transaction } from "@waitron/db";
-import { insertInChunks, personStaffRoles, persons, personRoles, roles } from "@waitron/db";
+import {
+  insertInChunks,
+  personStaffRoles,
+  persons,
+  personRoles,
+  roles,
+  withFoldedPersonKeys,
+} from "@waitron/db";
 import { ensureBuiltInRoles } from "../src/roles.js";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BuiltInRoleKey } from "../src/permissions.js";
@@ -16,12 +23,14 @@ export async function seedPersons(
   const rows = await db
     .insert(persons)
     .values(
-      seeds.map((seed) => {
-        const person = { ...seed };
-        delete person.role;
-        delete person.jobRoles;
-        return person;
-      }),
+      withFoldedPersonKeys(
+        seeds.map((seed) => {
+          const person = { ...seed };
+          delete person.role;
+          delete person.jobRoles;
+          return person;
+        }),
+      ),
     )
     .returning();
   for (const [index, row] of rows.entries())

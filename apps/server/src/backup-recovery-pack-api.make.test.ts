@@ -1,6 +1,6 @@
 import { storeArchivePart } from "./testing/backup-settings.js";
 import { nodeHandoverEvents } from "@waitron/node-db";
-import { ensureStreamId } from "@waitron/db";
+import { ensureStreamId, withFoldedPersonChanges } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
@@ -406,7 +406,7 @@ describe("the make route's refusals", () => {
         const manager = await openManagementSession(suite.db, "admin");
         await suite.db
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, manager.personId));
         token = manager.token;
       }

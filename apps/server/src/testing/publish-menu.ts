@@ -1,13 +1,19 @@
 import { eq } from "drizzle-orm";
 import { buildMenuDocument, menuDocumentHash, menuReleases, publishMenu } from "@waitron/menu";
-import { persons } from "@waitron/db";
+import { persons, withFoldedPersonKeys } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /** Publishes the menu's working state, as the dashboard's preview-then-publish does; the version id. */
 export async function publishWorkingMenu(tx: Transaction, menuId: string): Promise<string> {
   await tx
     .insert(persons)
-    .values({ id: "test-publisher", displayName: "Test publisher", status: "suspended" })
+    .values(
+      withFoldedPersonKeys({
+        id: "test-publisher",
+        displayName: "Test publisher",
+        status: "suspended",
+      }),
+    )
     .onConflictDoNothing({ target: persons.id });
   const { document } = await buildMenuDocument(tx, menuId);
   return (await publishMenu(tx, menuId, menuDocumentHash(document), "test-publisher")).versionId;

@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys, withFoldedPersonChanges } from "@waitron/db";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { eq, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core/query-builders/select";
@@ -115,7 +116,7 @@ describe("activity log", () => {
   beforeEach(async () => {
     const rows = await suite.db
       .insert(persons)
-      .values([{ displayName: "Actor" }, { displayName: "Other" }])
+      .values(withFoldedPersonKeys([{ displayName: "Actor" }, { displayName: "Other" }]))
       .returning();
     actor = rows[0]!.id;
     other = rows[1]!.id;
@@ -238,7 +239,10 @@ describe("activity log", () => {
       ["Actor", null],
       ["Actor", null],
     ]);
-    await suite.db.update(persons).set({ displayName: "Anonymised" }).where(eq(persons.id, actor));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ displayName: "Anonymised" }))
+      .where(eq(persons.id, actor));
     expect(
       (await readActivityForSubject(suite.db, { kind: "node", id: "node" })).map(
         (entry) => entry.personName,

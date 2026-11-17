@@ -12,6 +12,7 @@ import {
   persons,
   withTransaction,
   type Transaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { hashPin, hashSessionToken, tillSessions } from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
@@ -234,10 +235,16 @@ describe("POST /api/working-orders/:id/close-deferred, refusals", () => {
     });
     const allowed = await till(ALLOWED, person!.id);
     const { billId, body } = await counterBill();
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, person!.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, person!.id));
 
     await expectRefused(close(allowed.cookie, billId, body), billId, "device_profile.not_admitted");
-    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, person!.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "active" }))
+      .where(eq(persons.id, person!.id));
     await expectClosed(allowed.cookie, billId, body);
   });
 

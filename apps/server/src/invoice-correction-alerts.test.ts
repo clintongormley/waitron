@@ -2,7 +2,14 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { incidents, invoiceCorrections, sales, tenderRefunds, tenders } from "@waitron/db";
+import {
+  incidents,
+  invoiceCorrections,
+  sales,
+  tenderRefunds,
+  tenders,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -422,7 +429,10 @@ describe("automatic filing of a correction whose money is all back", () => {
     );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);
-    await v.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approver!.id));
+    await v.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, approver!.id));
 
     expect(await cardLeg(t, correctionId, "10.00")).toMatchObject({ state: "completed" });
 
@@ -479,7 +489,10 @@ describe("automatic filing of a correction whose money is all back", () => {
     );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);
-    await v.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approver!.id));
+    await v.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, approver!.id));
     expect(await cardLeg(t, correctionId, "10.00")).toMatchObject({ state: "completed" });
     expect(await alertsFor(t.saleId, FILING_REFUSED)).toHaveLength(1);
     // An hour before any case's first refund, so no correction is due the unfinished alert.
@@ -493,7 +506,10 @@ describe("automatic filing of a correction whose money is all back", () => {
       expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
 
       lock.mockRestore();
-      await v.db.update(persons).set({ status: "active" }).where(eq(persons.id, approver!.id));
+      await v.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "active" }))
+        .where(eq(persons.id, approver!.id));
       lock = vi.spyOn(v.db, "withWriteLock");
       at(2);
       await sweepInvoiceCorrections(v.deps, nothingDue);

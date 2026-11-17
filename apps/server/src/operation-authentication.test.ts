@@ -1,7 +1,12 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
-import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  stampDeployment,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
@@ -148,7 +153,10 @@ describe("host-issued authority after fresh operator authentication", () => {
   });
 
   it.each(["pending", "suspended"] as const)("refuses a %s administrator", async (status) => {
-    await suite.db.update(persons).set({ status }).where(eq(persons.id, ADMIN));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status }))
+      .where(eq(persons.id, ADMIN));
     let entered = false;
     await expect(
       perform(async () => {
@@ -185,7 +193,10 @@ describe("host-issued authority after fresh operator authentication", () => {
     const observed = await writerBesideRequest(suite.db, () =>
       perform(async () => {
         await withTransaction(suite.db, (tx) =>
-          tx.update(persons).set({ displayName: "Completed" }).where(eq(persons.id, ADMIN)),
+          tx
+            .update(persons)
+            .set(withFoldedPersonChanges({ displayName: "Completed" }))
+            .where(eq(persons.id, ADMIN)),
         );
         return "committed";
       }),
@@ -203,7 +214,10 @@ describe("host-issued authority after fresh operator authentication", () => {
       whileChangingOnLockRequest(
         suite.db,
         async (tx) => {
-          await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, ADMIN));
+          await tx
+            .update(persons)
+            .set(withFoldedPersonChanges({ status: "suspended" }))
+            .where(eq(persons.id, ADMIN));
         },
         () =>
           perform(async () => {

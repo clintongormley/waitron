@@ -15,6 +15,7 @@ import {
   units,
   withTransaction,
   type Transaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -40,7 +41,10 @@ beforeEach(() => seedVenueSettings(suite.db));
 describe("site content languages", () => {
   it("saves a normalized policy in the venue document, preserving its other fields and naming the saver", async () => {
     await seedVenueSettings(suite.db, { name: "Harbour" });
-    const [person] = await suite.db.insert(persons).values({ displayName: "Owner" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Owner" }))
+      .returning();
     await withTransaction(suite.db, (tx) =>
       writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }, [], person!.id),
     );

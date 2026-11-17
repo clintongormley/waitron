@@ -2,7 +2,12 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  type Transaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -485,7 +490,10 @@ describe("attendance_question queue owner", () => {
     "uses the saved %s preference ahead of venue %s",
     async (locale, venueLocale, expected) => {
       await seedMissing();
-      await suite.db.update(persons).set({ locale }).where(eq(persons.id, personId));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ locale }))
+        .where(eq(persons.id, personId));
       await pass({ venueLocale });
       expect(sent()[0]).toMatchObject(
         attendanceReminderMessage({
@@ -551,7 +559,10 @@ describe("attendance_question queue owner", () => {
     "leaves questions with unusable email=%s unclaimed and later uses the current email",
     async (email) => {
       await seedMissing();
-      await suite.db.update(persons).set({ email }).where(eq(persons.id, personId));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ email }))
+        .where(eq(persons.id, personId));
       const before = await mail();
       await pass();
       expect(await mail()).toEqual(
@@ -560,7 +571,7 @@ describe("attendance_question queue owner", () => {
       expect(send).not.toHaveBeenCalled();
       await suite.db
         .update(persons)
-        .set({ email: "added@example.test" })
+        .set(withFoldedPersonChanges({ email: "added@example.test" }))
         .where(eq(persons.id, personId));
       now = new Date("2026-01-08T06:15:00Z");
       await pass();
@@ -571,7 +582,10 @@ describe("attendance_question queue owner", () => {
     "does not claim for a %s worker and retains their question",
     async (status) => {
       await seedMissing();
-      await suite.db.update(persons).set({ status }).where(eq(persons.id, personId));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status }))
+        .where(eq(persons.id, personId));
       const before = await mail();
       await pass();
       expect(send).not.toHaveBeenCalled();
@@ -579,7 +593,10 @@ describe("attendance_question queue owner", () => {
         before.map((row) => ({ ...row, nextAttemptAt: "2026-01-08T06:15:00.000Z" })),
       );
       expect(await questions()).toHaveLength(1);
-      await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "active" }))
+        .where(eq(persons.id, personId));
       now = new Date("2026-01-08T06:15:00Z");
       await pass();
       expect(send).toHaveBeenCalledTimes(1);
@@ -587,7 +604,10 @@ describe("attendance_question queue owner", () => {
   );
   it.each([null, "fr"])("uses the venue fallback for locale=%s", async (locale) => {
     await seedMissing();
-    await suite.db.update(persons).set({ locale }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ locale }))
+      .where(eq(persons.id, personId));
     await pass();
     expect(sent()[0]).toMatchObject(
       attendanceReminderMessage({
@@ -600,7 +620,10 @@ describe("attendance_question queue owner", () => {
   });
   it("an unaddressed oldest question cannot starve a later eligible worker", async () => {
     await seedMissing();
-    await suite.db.update(persons).set({ email: null }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ email: null }))
+      .where(eq(persons.id, personId));
     const oldPerson = personId;
     const [person] = await seedPersons(suite.db, {
       displayName: "Second",
@@ -624,7 +647,7 @@ describe("attendance_question queue owner", () => {
         await run(async (tx) => {
           await tx
             .update(persons)
-            .set({ email: "new@example.test" })
+            .set(withFoldedPersonChanges({ email: "new@example.test" }))
             .where(eq(persons.id, personId));
         });
       },

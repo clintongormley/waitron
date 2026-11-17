@@ -1,4 +1,11 @@
-import { CORE_MIGRATIONS, enqueueMail, outgoingMail, persons, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  enqueueMail,
+  outgoingMail,
+  persons,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -103,7 +110,12 @@ it("uses the current address and venue language at claim, without sending to a s
   await withTransaction(suite.db, (tx) =>
     tx
       .update(persons)
-      .set({ email: "current@example.test", emailFolded: "current@example.test" })
+      .set(
+        withFoldedPersonChanges({
+          email: "current@example.test",
+          emailFolded: "current@example.test",
+        }),
+      )
       .where(eq(persons.id, f.personId)),
   );
   const send = await deliver("es-ES");
@@ -117,7 +129,10 @@ it("uses the current address and venue language at claim, without sending to a s
 it("cancels a notice with no current address", async () => {
   const f = await queue("password_changed");
   await withTransaction(suite.db, (tx) =>
-    tx.update(persons).set({ email: null, emailFolded: null }).where(eq(persons.id, f.personId)),
+    tx
+      .update(persons)
+      .set(withFoldedPersonChanges({ email: null, emailFolded: null }))
+      .where(eq(persons.id, f.personId)),
   );
   const send = await deliver();
   expect(send).not.toHaveBeenCalled();

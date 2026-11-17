@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashSessionToken,
@@ -165,7 +165,7 @@ describe("authenticated working-time downloads", () => {
       await setBuiltInRoleForTest(suite.db, fixture.managerId, role);
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, fixture.personId));
       const selections: Record<string, string>[] = [{}, { personId: fixture.personId }];
       for (const patch of selections) {
@@ -192,7 +192,7 @@ describe("authenticated working-time downloads", () => {
       if (kind === "suspended")
         await suite.db
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, fixture.personId));
       for (const path of [
         `${base("own")}?${query()}`,
@@ -481,7 +481,7 @@ describe("authenticated working-time downloads", () => {
           if (kind === "suspended")
             await tx
               .update(persons)
-              .set({ status: "suspended" })
+              .set(withFoldedPersonChanges({ status: "suspended" }))
               .where(eq(persons.id, fixture.managerId));
           if (kind === "demoted") await setBuiltInRoleForTest(tx, fixture.managerId, "staff");
         });

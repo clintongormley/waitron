@@ -4,7 +4,7 @@ import { Socket } from "node:net";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashSessionToken,
@@ -213,7 +213,10 @@ describe.each([
 
   it("refuses a suspended person", async () => {
     await withTransaction(suite.db, (tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, manager.id)),
     );
     await expectRefused(manager.cookie, 403, "person.suspended");
   });

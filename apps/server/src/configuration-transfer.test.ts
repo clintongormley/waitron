@@ -2,7 +2,7 @@ import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hash
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
-import { departmentCourses } from "@waitron/db";
+import { departmentCourses, withFoldedPersonChanges } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -8391,7 +8391,12 @@ it.each([false, true])(
       beforeCommit: async (tx) => {
         await tx
           .update(persons)
-          .set({ passwordHash: null, googleSubject: usable ? "google-only-admin" : null });
+          .set(
+            withFoldedPersonChanges({
+              passwordHash: null,
+              googleSubject: usable ? "google-only-admin" : null,
+            }),
+          );
         await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });

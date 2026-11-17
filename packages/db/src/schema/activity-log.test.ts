@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -22,7 +23,7 @@ describe("activity log storage", () => {
     ({ deviceId } = await seedDevice(suite.db));
     const [person] = await suite.db
       .insert(persons)
-      .values({ displayName: "P-" + randomUUID() })
+      .values(withFoldedPersonKeys({ displayName: "P-" + randomUUID() }))
       .returning();
     personId = person!.id;
   });

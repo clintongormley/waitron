@@ -10,6 +10,7 @@ import {
   sales,
   workingOrders,
   workingOrderLines,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -325,7 +326,10 @@ describe("Find a bill list routes", () => {
     const issued = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
     await inTx(venue, (tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, venue.supervisorId)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, venue.supervisorId)),
     );
     const page = await get("/api/bills");
     expect(page.status).toBe(200);

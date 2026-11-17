@@ -20,6 +20,7 @@ import {
   tenders,
   withTransaction,
   recordActivity,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -773,7 +774,10 @@ describe("a staff member's whole personal-data download", () => {
     "detects planted colleague values in every file of the %s download",
     async (audience) => {
       if (audience === "administrator")
-        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, marthaId));
+        await suite.db
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, marthaId));
       const files = await download(
         audience === "own" ? PATH : `/management-api/staff/${marthaId}/personal-data/export`,
         audience === "own" ? cookie : adminCookie,
@@ -934,7 +938,10 @@ describe("a staff member's whole personal-data download", () => {
   });
 
   it("is in Spanish when her saved language is Spanish", async () => {
-    await suite.db.update(persons).set({ locale: "es-ES" }).where(eq(persons.id, marthaId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ locale: "es-ES" }))
+      .where(eq(persons.id, marthaId));
     const files = await download();
     expect(new TextDecoder().decode(files["README.txt"])).toBe(readme("es"));
     const spanish = await existingExport("es");

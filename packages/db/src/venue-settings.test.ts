@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -220,7 +221,10 @@ describe("the venue document", () => {
   });
 
   it("keeps unspecified fields and records the saver and next revision", async () => {
-    const [person] = await suite.db.insert(persons).values({ displayName: "Owner" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Owner" }))
+      .returning();
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await withTransaction(suite.db, (tx) =>
       api.saveVenueFields(tx, { name: "New name" }, person!.id),

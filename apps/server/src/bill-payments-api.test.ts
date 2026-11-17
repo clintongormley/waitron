@@ -46,6 +46,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
@@ -5456,10 +5457,12 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     return withTransaction(suite.db, (tx) =>
       tx
         .update(persons)
-        .set({
-          ...(values.status === undefined ? {} : { status: values.status }),
-          ...(values.pin === undefined ? {} : { pinHash: fixturePinHash(values.pin) }),
-        })
+        .set(
+          withFoldedPersonChanges({
+            ...(values.status === undefined ? {} : { status: values.status }),
+            ...(values.pin === undefined ? {} : { pinHash: fixturePinHash(values.pin) }),
+          }),
+        )
         .where(eq(persons.id, venue.adminId)),
     );
   }

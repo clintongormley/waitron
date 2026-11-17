@@ -1,4 +1,11 @@
-import { CORE_MIGRATIONS, enqueueMail, outgoingMail, persons, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  enqueueMail,
+  outgoingMail,
+  persons,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
@@ -64,7 +71,7 @@ it.each([
     );
     await suite.db
       .update(persons)
-      .set({ email: "current@example.test" })
+      .set(withFoldedPersonChanges({ email: "current@example.test" }))
       .where(eq(persons.id, person!.id));
     const send = vi.fn(async () => ({ status: "sent" as const }));
     await runMailPass({
@@ -114,7 +121,10 @@ it("cancels delivery if the person no longer has an email", async () => {
       notAfter: new Date(now.getTime() + 86400000),
     }),
   );
-  await suite.db.update(persons).set({ email: null }).where(eq(persons.id, person!.id));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ email: null }))
+    .where(eq(persons.id, person!.id));
   const send = vi.fn(async () => ({ status: "sent" as const }));
   const result = await runMailPass({
     db: suite.db,

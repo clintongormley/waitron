@@ -21,6 +21,7 @@ import {
   workingOrderLines,
   workingOrders,
   type Transaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -210,15 +211,15 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
   const { offers, ids, reasons, anna } = await inTx(venue, async (tx) => {
     await tx
       .update(persons)
-      .set({ displayName: "Martha Lewis" })
+      .set(withFoldedPersonChanges({ displayName: "Martha Lewis" }))
       .where(eq(persons.id, venue.staffId));
     await tx
       .update(persons)
-      .set({ displayName: "Lewis Green" })
+      .set(withFoldedPersonChanges({ displayName: "Lewis Green" }))
       .where(eq(persons.id, venue.supervisorId));
     await tx
       .update(persons)
-      .set({ displayName: "Paul Gray" })
+      .set(withFoldedPersonChanges({ displayName: "Paul Gray" }))
       .where(eq(persons.id, venue.managerId));
     const [added] = await seedPersons(tx, { displayName: "Anna Smith", role: "staff" });
     const [olives] = await tx

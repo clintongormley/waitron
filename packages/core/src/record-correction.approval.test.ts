@@ -9,6 +9,7 @@ import {
   sales,
   tillSessions,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
@@ -230,6 +231,9 @@ it("refuses an approver who no longer holds sale.rectify", async () => {
 });
 it("refuses a suspended approver", async () => {
   const correctionId = await openCorrection();
-  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approverId));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "suspended" }))
+    .where(eq(persons.id, approverId));
   await expectRefused(correctionId, { code: "authorization.not_permitted" });
 });

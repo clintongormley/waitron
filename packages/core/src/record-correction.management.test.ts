@@ -1,7 +1,13 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceSeries,
+  sales,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -127,7 +133,10 @@ it("refuses an invalid management token without allocating a number", async () =
   expect(await snapshot()).toEqual(before);
 });
 it("rechecks a suspended manager before writing", async () => {
-  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "suspended" }))
+    .where(eq(persons.id, personId));
   const before = await snapshot();
   await expect(apply()).rejects.toMatchObject({ code: "person.suspended" });
   expect(await snapshot()).toEqual(before);

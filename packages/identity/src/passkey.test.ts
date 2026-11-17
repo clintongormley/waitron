@@ -9,6 +9,7 @@ import {
   persons,
   signInChallenges,
   webauthnCredentials,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -202,7 +203,12 @@ describe("passkey registration", () => {
 
   it("names the passkey's user by the display name when the person has no email", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
-    await run((tx) => tx.update(persons).set({ email: null }).where(eq(persons.id, personId)));
+    await run((tx) =>
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ email: null }))
+        .where(eq(persons.id, personId)),
+    );
     const [person] = await run((tx) =>
       tx.select({ displayName: persons.displayName }).from(persons).where(eq(persons.id, personId)),
     );
@@ -778,7 +784,10 @@ describe("passkey authentication", () => {
     const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     await run((tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, personId)),
     );
     // Verify is mocked to SUCCEED, so only the status gate stands between this ceremony and a session.
     mockVerifyAuth.mockResolvedValue(authVerified(1));
@@ -942,7 +951,9 @@ describe("checking the signed-in person's own passkey", () => {
     await run((tx) =>
       tx
         .update(persons)
-        .set({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) })
+        .set(
+          withFoldedPersonChanges({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) }),
+        )
         .where(eq(persons.id, personId)),
     );
     return run((tx) => replaceRecoveryCodes(tx, personId));

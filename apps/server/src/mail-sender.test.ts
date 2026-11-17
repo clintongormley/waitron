@@ -13,6 +13,7 @@ import {
   readMail,
   subscribeToChanges,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
@@ -135,7 +136,7 @@ describe("one mail sender", () => {
     deps.resolveDelivery = async (tx) => {
       await tx
         .update(persons)
-        .set({ displayName: "Resolved in claim" })
+        .set(withFoldedPersonChanges({ displayName: "Resolved in claim" }))
         .where(eq(persons.id, personId));
       return { mode: "smtp" as const, smtp: { url: "smtp://mail.test", from: "sender" } };
     };
@@ -276,7 +277,7 @@ describe("one mail sender", () => {
     deps.resolveDelivery = async (tx) => {
       await tx
         .update(persons)
-        .set({ displayName: "Delivery resolver write" })
+        .set(withFoldedPersonChanges({ displayName: "Delivery resolver write" }))
         .where(eq(persons.id, personId));
       return { mode: "smtp" as const, smtp: { url: "smtp://mail.test", from: "sender" } };
     };
@@ -284,7 +285,7 @@ describe("one mail sender", () => {
       if (mail.dedupeKey === "one") {
         await tx
           .update(persons)
-          .set({ displayName: "Rolled back" })
+          .set(withFoldedPersonChanges({ displayName: "Rolled back" }))
           .where(eq(persons.id, personId));
         throw new Error("private provider text");
       }

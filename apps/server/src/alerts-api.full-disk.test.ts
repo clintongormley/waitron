@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncident } from "@waitron/core";
 import {
@@ -158,7 +158,10 @@ describe("on a full disk", () => {
   it("the stand-in refuses a turn that stamps the session", async () => {
     await expect(
       withTransaction(writeRefusingDb(), (tx) =>
-        tx.update(persons).set({ displayName: "M" }).where(eq(persons.id, manager.id)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ displayName: "M" }))
+          .where(eq(persons.id, manager.id)),
       ),
     ).rejects.toMatchObject({ code: "storage.disk_full" });
   });
@@ -251,7 +254,10 @@ describe.each([
 
   it("refuses a suspended person", async () => {
     await withTransaction(suite.db, (tx) =>
-      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, manager.id)),
     );
     await expectRefused(manager.cookie, 403, "person.suspended");
   });

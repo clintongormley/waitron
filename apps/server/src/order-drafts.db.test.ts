@@ -30,6 +30,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1118,7 +1119,7 @@ describe("draft bill ownership", () => {
     const secondId = await otherBill(v, partyId, tabId);
     await db
       .update(persons)
-      .set({ displayName: "Alex", status: "suspended" })
+      .set(withFoldedPersonChanges({ displayName: "Alex", status: "suspended" }))
       .where(eq(persons.id, SAM));
     const onTab = await onBill(v, partyId, tabId);
     const onSecond = await onBill(v, partyId, secondId);

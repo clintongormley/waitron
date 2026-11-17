@@ -2,7 +2,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { eq, sql } from "drizzle-orm";
 import { generateSync } from "otplib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnPasskeyCheck,
@@ -57,7 +57,7 @@ const confirm = (token: string, body: unknown) =>
 async function enrolTotp(personId: string, token: string): Promise<string[]> {
   await suite.db
     .update(persons)
-    .set({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) })
+    .set(withFoldedPersonChanges({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) }))
     .where(eq(persons.id, personId));
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const { codes } = await withTransaction(suite.db, (tx) =>
@@ -232,7 +232,7 @@ describe("confirmFreshSignIn with a password", () => {
     const suspended = await openManagementSession(suite.db, "admin");
     await suite.db
       .update(persons)
-      .set({ status: "suspended" })
+      .set(withFoldedPersonChanges({ status: "suspended" }))
       .where(eq(persons.id, suspended.personId));
     expect(
       await codeOf(() =>
@@ -383,7 +383,10 @@ describe("confirmFreshSignIn with a passkey", () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     await withPasskey(personId, "cred-mine");
     const { challengeHandle } = await beginCheck(token);
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, personId));
     expect(
       await codeOf(() =>
         confirm(token, { method: "passkey", challengeHandle, response: { id: "cred-mine" } }),

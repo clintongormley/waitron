@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, persons, withTransaction, withFoldedPersonKeys } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
@@ -320,7 +320,9 @@ describe("an outcome recorded while a sweep fetches its report", () => {
     await x.fetching;
     const personId = "22222222-2222-4222-8222-222222222222";
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(persons).values({ id: personId, displayName: "Manager" });
+      await tx
+        .insert(persons)
+        .values(withFoldedPersonKeys({ id: personId, displayName: "Manager" }));
       await recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
         outcome: "kept",

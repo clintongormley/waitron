@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -53,7 +54,7 @@ describe("deferred_closures", () => {
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
     ({ deviceId } = await seedDevice(db));
-    await db.insert(persons).values({ id: ACTOR, displayName: "Server" });
+    await db.insert(persons).values(withFoldedPersonKeys({ id: ACTOR, displayName: "Server" }));
   });
 
   /** One bill and the invoice issued from it. */

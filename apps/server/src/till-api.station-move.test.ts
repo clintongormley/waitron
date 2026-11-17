@@ -11,6 +11,7 @@ import {
   workingOrderLines,
   workingOrders,
   printJobs,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { listStationQueues } from "./working-order.js";
@@ -510,7 +511,7 @@ describe("station queue move attribution", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(persons)
-        .set({ displayName: "Lewis" })
+        .set(withFoldedPersonChanges({ displayName: "Lewis" }))
         .where(eq(persons.id, venue.operatorId));
       await tx.update(devices).set({ label: "Till 2" }).where(eq(devices.id, venue.deviceId));
       await tx

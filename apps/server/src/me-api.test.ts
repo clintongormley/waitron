@@ -10,6 +10,7 @@ import {
   roles,
   withTransaction,
   writeNodeMembership,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -1509,7 +1510,10 @@ describe("mountMeApi — account request refusal ordering", () => {
     const personId = await personWithPassword();
     const app = mountApp();
     const cookie = await cookieFor(personId);
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, personId));
 
     const { result, order, outside } = await watchingDerivations(() =>
       send(app, "PUT", "/management-api/session/me/pin", {
@@ -1574,7 +1578,7 @@ describe("session proof routes", () => {
     const cookie = await cookieFor(manager);
     await suite.db
       .update(persons)
-      .set({ passwordHash: fixturePasswordHash("fresh password") })
+      .set(withFoldedPersonChanges({ passwordHash: fixturePasswordHash("fresh password") }))
       .where(eq(persons.id, manager));
     const app = mountApp();
     const path = "/management-api/session/me/fresh-sign-in";
@@ -1600,7 +1604,7 @@ describe("session proof routes", () => {
     const cookie = await cookieFor(manager);
     await suite.db
       .update(persons)
-      .set({ passwordHash: fixturePasswordHash("fresh password") })
+      .set(withFoldedPersonChanges({ passwordHash: fixturePasswordHash("fresh password") }))
       .where(eq(persons.id, manager));
     // A chart with no body: listing its servers throws, as any failed chart read would.
     await writeNodeMembership(suite.db, { body: null } as never);

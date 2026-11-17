@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, mediaBlobs } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, mediaBlobs, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, dashboardSessions, persons, startManagementSession } from "@waitron/identity";
@@ -92,7 +92,9 @@ it("commits names, replacement, upload basename and adjusted framing in one requ
   const rendered = vi.fn(async (bytes: Uint8Array) => {
     expect(await sharp(bytes).metadata()).toMatchObject({ width: 15, height: 10 });
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(persons).set({ firstNames: "Prepared outside lock" });
+      await tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ firstNames: "Prepared outside lock" }));
     });
     return rasters;
   });

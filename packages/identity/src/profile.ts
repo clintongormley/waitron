@@ -11,6 +11,7 @@ import {
   tillSessions,
   signInChallenges,
   recoveryCodes,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
@@ -216,7 +217,7 @@ export async function finishOwnTotpEnrollment(
     throw new AppError("totp.invalid", {});
   await tx
     .update(persons)
-    .set({ totpSecret: enrollment!.encryptedSecret })
+    .set(withFoldedPersonChanges({ totpSecret: enrollment!.encryptedSecret }))
     .where(eq(persons.id, person.id));
   await tx
     .delete(signInChallenges)
@@ -242,7 +243,10 @@ export async function regenerateOwnRecoveryCodes(
 export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
-  await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
+  await tx
+    .update(persons)
+    .set(withFoldedPersonChanges({ totpSecret: null }))
+    .where(eq(persons.id, person.id));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
   await tx
     .delete(signInChallenges)
@@ -256,7 +260,10 @@ export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
-  await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
+  await tx
+    .update(persons)
+    .set(withFoldedPersonChanges({ googleSubject: null }))
+    .where(eq(persons.id, person.id));
   await assertUsableAdminRemains(tx);
   if (person.googleSubject !== null)
     await queueSecurityChangeMail(tx, { personId: person.id, change: "google_disconnected" });
@@ -339,18 +346,20 @@ export async function saveOwnProfile(
   try {
     await tx
       .update(persons)
-      .set({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        firstNames,
-        lastNames,
-        telephone,
-        // Cleared together, always: a `pending_email` left with a stale folded value beside it
-        // would be read by the index as a request nobody made.
-        pendingEmail: changedEmail ? email : null,
-        pendingEmailFolded: changedEmail ? foldForUniqueness(email) : null,
-        locale,
-      })
+      .set(
+        withFoldedPersonChanges({
+          displayName,
+          displayNameFolded: foldForUniqueness(displayName),
+          firstNames,
+          lastNames,
+          telephone,
+          // Cleared together, always: a `pending_email` left with a stale folded value beside it
+          // would be read by the index as a request nobody made.
+          pendingEmail: changedEmail ? email : null,
+          pendingEmailFolded: changedEmail ? foldForUniqueness(email) : null,
+          locale,
+        }),
+      )
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
@@ -389,7 +398,7 @@ export async function changeOwnPin(
   assertPinLength(input.pin);
   await tx
     .update(persons)
-    .set({ pinHash: await hashPinAsync(input.pin) })
+    .set(withFoldedPersonChanges({ pinHash: await hashPinAsync(input.pin) }))
     .where(eq(persons.id, person.id));
   await tx
     .update(tillSessions)
@@ -406,7 +415,7 @@ export async function changeOwnPassword(
   assertPasswordLength(input.password);
   await tx
     .update(persons)
-    .set({ passwordHash: await hashPasswordAsync(input.password) })
+    .set(withFoldedPersonChanges({ passwordHash: await hashPasswordAsync(input.password) }))
     .where(eq(persons.id, person.id));
   await invalidateLinks(tx, person.id);
   const ended = await tx

@@ -19,6 +19,7 @@ import {
   recordActivity,
   loginEmailKey,
   persons,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { authorizePersonLoginChange } from "./staff.js";
@@ -234,13 +235,15 @@ export async function confirmEmailChangeByCode(
   try {
     const changed = await tx
       .update(persons)
-      .set({
-        email: action.pendingEmail,
-        emailFolded: foldForUniqueness(action.pendingEmail),
-        pendingEmail: null,
-        pendingEmailFolded: null,
-        emailVerifiedAt: nowIso,
-      })
+      .set(
+        withFoldedPersonChanges({
+          email: action.pendingEmail,
+          emailFolded: foldForUniqueness(action.pendingEmail),
+          pendingEmail: null,
+          pendingEmailFolded: null,
+          emailVerifiedAt: nowIso,
+        }),
+      )
       .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.pendingEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
@@ -327,13 +330,15 @@ async function finishClaimedAction(
   const passwordHash = await hashPasswordAsync(input.password);
   const updated = await tx
     .update(persons)
-    .set({
-      passwordHash,
-      emailVerifiedAt: nowIso,
-      ...(input.purpose === "invitation"
-        ? { pinHash: await hashPinAsync(input.pin!), status: "active" as const }
-        : {}),
-    })
+    .set(
+      withFoldedPersonChanges({
+        passwordHash,
+        emailVerifiedAt: nowIso,
+        ...(input.purpose === "invitation"
+          ? { pinHash: await hashPinAsync(input.pin!), status: "active" as const }
+          : {}),
+      }),
+    )
     .where(eq(persons.id, personId))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});

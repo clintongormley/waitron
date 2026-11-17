@@ -2,7 +2,12 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  type Transaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
@@ -120,7 +125,7 @@ describe("obsolete rota attendance obligations", () => {
     });
     await suite.db
       .update(persons)
-      .set({ email: "ana@example.test" })
+      .set(withFoldedPersonChanges({ email: "ana@example.test" }))
       .where(eq(persons.id, personId));
     await run(retire);
     expect(await own()).toEqual([]);

@@ -10,6 +10,7 @@ import {
   sales,
   readVenue,
   readVenueClock,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import {
   hashPin,
@@ -56,12 +57,14 @@ async function prepareSale(config: ServerConfig) {
     return await withTransaction(store.venue, async (tx) => {
       const [person] = await tx
         .insert(persons)
-        .values({
-          displayName: name,
-          displayNameFolded: foldForUniqueness(name),
-          pinHash,
-          status: "active",
-        })
+        .values(
+          withFoldedPersonKeys({
+            displayName: name,
+            displayNameFolded: foldForUniqueness(name),
+            pinHash,
+            status: "active",
+          }),
+        )
         .returning({ id: persons.id });
       await importAccessRoleMembership(tx, person!.id, (await ensureBuiltInRoles(tx))["admin"]);
       await verifyPersonCredential(tx, person!.id, pin);

@@ -9,7 +9,13 @@ import { serve } from "@hono/node-server";
 import { once } from "node:events";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, settings, taxpayer, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  settings,
+  taxpayer,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, dashboardSessions, startManagementSession } from "@waitron/identity";
@@ -266,7 +272,10 @@ describe("time-zone repair management boundary", () => {
         if (change === "expire")
           await suite.db.update(dashboardSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
         if (change === "suspend")
-          await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, actor));
+          await suite.db
+            .update(persons)
+            .set(withFoldedPersonChanges({ status: "suspended" }))
+            .where(eq(persons.id, actor));
         if (change === "demote") await setBuiltInRoleForTest(suite.db, actor, "staff");
         const before = rows();
         resume.resolve();

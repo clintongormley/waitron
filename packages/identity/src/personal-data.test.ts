@@ -11,6 +11,7 @@ import {
   tillSessions,
   dashboardSessions,
   accountActions,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
@@ -522,7 +523,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
     const active = await downloadParsed(marta.personId);
     await suite.db
       .update(persons)
-      .set({ status: "suspended" })
+      .set(withFoldedPersonChanges({ status: "suspended" }))
       .where(eq(persons.id, marta.personId));
     const suspended = await downloadParsed(marta.personId);
     expect(suspended.profile).toEqual({
