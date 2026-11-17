@@ -1,3 +1,5 @@
+import { supervisorWithJob } from "./testing/backup-supervisor.js";
+import { createJobRunner } from "./job-runner.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // The supervisor's lifecycle against a REAL migrated venue directory.
 import {
@@ -38,6 +40,7 @@ import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import {
   BackupSupervisor,
+  backupsJob,
   keyFingerprint,
   type BackupSupervisorDeps,
 } from "./backup-supervisor.js";
@@ -128,7 +131,7 @@ function makeSupervisor(
   stateDir: string,
   overrides: Partial<BackupSupervisorDeps> = {},
 ): BackupSupervisor {
-  return new BackupSupervisor({
+  return supervisorWithJob({
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () => refs.config,
 
@@ -400,7 +403,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       venueDir,
       logs: [],
     };
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
 
@@ -464,7 +467,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     const held = new Promise<void>((resolve) => {
       releaseCopy = resolve;
     });
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
 
@@ -536,7 +539,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       }
       return realList.apply(this, args);
     });
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
 
@@ -658,7 +661,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => {
         await gate;
@@ -693,7 +696,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       venueDir: await makeVenueDir(),
       logs: [],
     };
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
 
@@ -746,7 +749,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const dest = await makeDestDir();
     const reading = gate();
     let opens = 0;
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => {
         reading.entered();
@@ -782,7 +785,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const opening = gate();
     let closes = 0;
     const logs: LogLine[] = [];
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
 
@@ -816,11 +819,10 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     expect(logs).toEqual([]);
   });
 
-  it("logs a sweep that rejects as backup.worker_rejected, and stop() still settles when the handle will not close", async () => {
+  it("stop() settles after a completed copy even when the handle will not close", async () => {
     const dest = await makeDestDir();
-    const lines: Array<{ level: string; event: string; fields: unknown }> = [];
     let closes = 0;
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
 
@@ -831,7 +833,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
-      log: (level, event, fields) => lines.push({ level, event, fields }),
+      log: () => {},
       openVenue: async (dir) => {
         const store = await openVenueDatabase(dir);
         return {
@@ -844,20 +846,10 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
           },
         };
       },
-      // The sweep's wait between copies is outside its per-tick handling, so a failing wait rejects
-      // the whole sweep.
-      sleep: () => Promise.reject(new AppError("backup.reload_in_progress", {})),
     });
     try {
       await sup.reload();
-      await poll(async () =>
-        lines.some((l) => l.event === "backup.worker_rejected") ? true : undefined,
-      );
-      expect(lines.find((l) => l.event === "backup.worker_rejected")).toEqual({
-        level: "error",
-        event: "backup.worker_rejected",
-        fields: { errorCode: "backup.reload_in_progress" },
-      });
+      await waitForArchiveUnderCurrentKey(sup);
     } finally {
       await expect(sup.stop()).resolves.toBeUndefined();
     }
@@ -873,7 +865,7 @@ describe("BackupSupervisor when a destination fails to build", () => {
     const scheduled: Array<number | null> = [];
     let venueCloses = 0;
     let failing = true;
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config(),
 
@@ -996,7 +988,7 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
         venueDir: await makeVenueDir(),
         logs: [],
       };
-      const sup = new BackupSupervisor({
+      const sup = supervisorWithJob({
         nodeId: BACKUP_NODE_ID,
         buildConfig: async () => refs.config,
 
@@ -1033,7 +1025,7 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
     try {
       const [a, b] = [await makeDestDir(), await makeDestDir()];
       const logs: Array<{ level: string; event: string; fields: unknown }> = [];
-      const sup = new BackupSupervisor({
+      const sup = supervisorWithJob({
         nodeId: BACKUP_NODE_ID,
         buildConfig: async () => localFsConfig([a, b], STRONG_KEY_1),
 
@@ -1066,7 +1058,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
   const REVISION = "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10";
 
   function supervisorFor(config: BackupConfig, built: BackupDestination[], venueDir: string) {
-    return new BackupSupervisor({
+    return supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config,
 
@@ -1161,7 +1153,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     let load: BackupConfig | { loadErrorCode: string } = {
       loadErrorCode: "credentials.decrypt_failed",
     };
-    const sup = new BackupSupervisor({
+    const sup = supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => load,
 
@@ -1303,7 +1295,7 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     stateDir: string,
     extra: Partial<BackupSupervisorDeps>,
   ): BackupSupervisor {
-    return new BackupSupervisor({
+    return supervisorWithJob({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
 
@@ -1441,7 +1433,7 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     stateDir: string,
     extra: Partial<BackupSupervisorDeps> = {},
   ): BackupSupervisor {
-    return new BackupSupervisor({
+    return supervisorWithJob({
       buildConfig: async () => refs.config,
 
       readSingletonRole: () => refs.role,
@@ -2058,5 +2050,242 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
       lastCleanLoadAt: null,
       latestLoadFailed: false,
     });
+  });
+});
+
+describe("scheduled backup passes", () => {
+  async function prepared(overrides: Partial<BackupSupervisorDeps> = {}) {
+    const dest = await makeDestDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
+      buildConfig: async () => refs.config,
+      readSingletonRole: () => refs.role,
+      venueDir: refs.venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      now: () => new Date("2026-11-17T12:00:00Z"),
+      log: () => {},
+      ...overrides,
+    });
+    return { sup, refs, dest };
+  }
+
+  it("notifies after every reload, including disabled settings", async () => {
+    const onReloaded = vi.fn();
+    const { sup, refs } = await prepared({ onReloaded });
+    refs.config = undefined;
+    try {
+      await sup.reload();
+      await sup.reload();
+      expect(onReloaded).toHaveBeenCalledTimes(2);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("reload builds no loop; a due pass backs up and keeps its next fire time", async () => {
+    const { sup, dest } = await prepared();
+    try {
+      await sup.reload();
+      expect(await listArchives(dest)).toEqual([]);
+      const signal = new AbortController().signal;
+      expect(await sup.pass(new Date("2026-11-17T12:00:00Z"), signal)).toEqual({
+        nextDueAt: new Date("2026-11-17T13:00:00Z"),
+      });
+      expect(await listArchives(dest)).toHaveLength(1);
+      expect(await sup.pass(new Date("2026-11-17T12:30:00Z"), signal)).toEqual({
+        nextDueAt: new Date("2026-11-17T13:00:00Z"),
+      });
+      expect(await listArchives(dest)).toHaveLength(1);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("a reload aborts a copy before it can upload under the replaced settings", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>((r) => {
+      entered = r;
+    });
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const combinedSignals = vi.spyOn(AbortSignal, "any");
+    const { sup, refs, dest } = await prepared({
+      openVenue: async (dir) => {
+        const store = await openVenueDatabase(dir);
+        const archive = store.venue.archiveTo.bind(store.venue);
+        vi.spyOn(store.venue, "archiveTo").mockImplementation(async (file) => {
+          entered();
+          await held;
+          await archive(file);
+        });
+        return store;
+      },
+    });
+    let running: Promise<unknown> | undefined;
+    let loading: Promise<void> | undefined;
+    try {
+      await sup.reload();
+      running = sup.pass(new Date("2026-11-17T12:00:00Z"), new AbortController().signal);
+      await reached;
+      const combined = combinedSignals.mock.results[0]!.value as AbortSignal;
+      refs.config = undefined;
+      loading = sup.reload();
+      await vi.waitFor(() => expect(combined.aborted).toBe(true));
+      release();
+      await Promise.all([running, loading]);
+      expect(await listArchives(dest)).toEqual([]);
+      expect(sup.current().enabled).toBe(false);
+    } finally {
+      release();
+      await Promise.all([running, loading]);
+      await sup.stop();
+    }
+  });
+
+  it("a primary pass reloads settings last loaded while not primary", async () => {
+    const { sup, refs, dest } = await prepared();
+    refs.role = "secondary";
+    try {
+      await sup.reload();
+      expect(sup.current().enabled).toBe(false);
+      refs.role = "primary";
+      await sup.pass(new Date("2026-11-17T12:00:00Z"), new AbortController().signal);
+      expect(await listArchives(dest)).toHaveLength(1);
+      expect(sup.current().enabled).toBe(true);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("a pass during a reload retries in one minute", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const reached = new Promise<void>((r) => {
+      entered = r;
+    });
+    const waiting = new Promise<void>((r) => {
+      release = r;
+    });
+    const { sup } = await prepared({
+      buildConfig: async () => {
+        entered();
+        await waiting;
+        return undefined;
+      },
+    });
+    const loading = sup.reload();
+    try {
+      await reached;
+      expect(
+        await sup.pass(new Date("2026-11-17T12:00:00Z"), new AbortController().signal),
+      ).toEqual({ nextDueAt: new Date("2026-11-17T12:01:00Z") });
+    } finally {
+      release();
+      await loading;
+      await sup.stop();
+    }
+  });
+
+  it("a due job makes no backup after demotion and closes its supervisor", async () => {
+    let at = new Date("2026-11-17T12:00:00Z");
+    let closes = 0;
+    const { sup, refs, dest } = await prepared({
+      now: () => at,
+      openVenue: async (dir) => {
+        const store = await openVenueDatabase(dir);
+        const close = store.close.bind(store);
+        return {
+          ...store,
+          close: async () => {
+            closes++;
+            await close();
+          },
+        };
+      },
+    });
+    const runner = createJobRunner({ now: () => at, log: () => {}, subscribe: () => () => {} });
+    try {
+      await sup.reload();
+      runner.add(backupsJob(sup, () => refs.role === "primary"));
+      await vi.waitFor(() => expect(runner.views()["backups.scheduled"]?.state).toBe("waiting"), {
+        timeout: 5000,
+      });
+      expect(await listArchives(dest)).toHaveLength(1);
+      refs.role = "secondary";
+      at = new Date("2026-11-17T13:00:00Z");
+      runner.wake("backups.scheduled");
+      await vi.waitFor(
+        () => {
+          const view = runner.views()["backups.scheduled"]!;
+          expect(view.lastTurnAt).toBe(at.toISOString());
+          expect(view.state).not.toBe("running");
+        },
+        { timeout: 5000 },
+      );
+      await runner.stopJobs();
+      expect(await listArchives(dest)).toHaveLength(1);
+      expect(closes).toBe(1);
+    } finally {
+      await runner.stopJobs();
+      await sup.stop();
+    }
+  });
+
+  it("a settings reload wakes the job and uses the new key", async () => {
+    const runner = createJobRunner({
+      now: () => new Date("2026-11-17T12:00:00Z"),
+      log: () => {},
+      subscribe: () => () => {},
+    });
+    const { sup, refs, dest } = await prepared({
+      onReloaded: () => runner.wake("backups.scheduled"),
+    });
+    try {
+      await sup.reload();
+      runner.add(backupsJob(sup, () => refs.role === "primary"));
+      await vi.waitFor(async () => expect((await sup.status()).archiveUnderCurrentKey).toBe(true), {
+        timeout: 5000,
+      });
+      refs.config = localFsConfig([dest], STRONG_KEY_2);
+      await sup.reload();
+      await vi.waitFor(async () => expect((await sup.status()).archiveUnderCurrentKey).toBe(true), {
+        timeout: 5000,
+      });
+      const archives = await listArchives(dest);
+      expect(archives).toHaveLength(2);
+      const bodies = await Promise.all(archives.map((key) => readFile(join(dest, key))));
+      expect(
+        bodies.filter((body) => {
+          try {
+            decryptArtifact(body, STRONG_KEY_2);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      ).toHaveLength(1);
+      refs.role = "secondary";
+      runner.wake("backups.scheduled");
+      await vi.waitFor(
+        () => expect(runner.views()["backups.scheduled"]?.state).toBe("not_applicable"),
+        { timeout: 5000 },
+      );
+    } finally {
+      await runner.stopJobs();
+      await sup.stop();
+    }
+    expect(await listArchives(dest)).toHaveLength(2);
   });
 });

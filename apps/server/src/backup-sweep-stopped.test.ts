@@ -1,3 +1,4 @@
+import { driveSchedule } from "./testing/backup-schedule.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
@@ -8,7 +9,7 @@ import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
-import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
+import { type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -77,7 +78,7 @@ it("records the code a run stopped on before reaching any destination, with the 
     statfs: freeSpace(1999),
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(outcomes.runStopped).toEqual({
     code: "backup.staging_space_low",
@@ -115,7 +116,7 @@ it("clears the stopped run once a later run reaches its destinations", async () 
     },
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(seen).toEqual([
     {
@@ -141,7 +142,7 @@ it("records nothing for a run that throws because it was cancelled", async () =>
     },
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(outcomes.runStopped).toBeUndefined();
 });
@@ -156,7 +157,7 @@ it("records a failure that is not an AppError as unknown", async () => {
     },
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(outcomes.runStopped).toEqual({
     code: "unknown",
@@ -175,7 +176,7 @@ it("records no sizes for a run that stops on an AppError other than staging_spac
     },
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(outcomes.runStopped).toStrictEqual({
     code: "backup.archive_invalid",
@@ -215,7 +216,7 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
   });
   stagingDir = deps.stagingDir;
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   expect(seen).toEqual([
     {
@@ -269,7 +270,7 @@ it("a run keeps the earlier runStopped while its second check runs; a refusal th
   });
   stagingDir = deps.stagingDir;
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   const first = {
     code: "backup.staging_space_low",
@@ -317,7 +318,7 @@ it("a string of stops on one code keeps the first stop's time as since; a pass o
     },
   });
 
-  await runBackupSweep(deps);
+  await driveSchedule(deps);
 
   const minute = (n: number) => new Date(STAMP.getTime() + n * 60_000).toISOString();
   expect(after.map((stopped) => stopped && [stopped.code, stopped.at, stopped.since])).toEqual([

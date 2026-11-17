@@ -756,6 +756,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(listening.environment).toBe("production");
       expect(listening.port).toBe(port);
 
+      expect(server.health.readJobs?.()).toHaveProperty("backups.scheduled");
       expect(server.health.startedAt).toBeInstanceOf(Date);
       expect(server.health.lastPassAt).not.toBeNull();
       expect(

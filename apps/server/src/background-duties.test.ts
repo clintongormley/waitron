@@ -25,7 +25,6 @@ const CLOSERS = [
   "spareSettings",
   "liveEvents",
   "loop",
-  "backupSupervisor",
   "handoverDestinationDuty",
   "chartPost",
   "spareStore",
@@ -71,7 +70,6 @@ function recordingHandles(
     spareSettings: stopper("spareSettings"),
     liveEvents: { close: () => void calls.push("close liveEvents") },
     loop: awaited("loop"),
-    backupSupervisor: stopper("backupSupervisor"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
     chartPost: stopper("chartPost"),
     spareStore: stopper("spareStore"),
@@ -127,7 +125,6 @@ describe("background duties", () => {
       "stop spareSettings",
       "close liveEvents",
       "await loop",
-      "stop backupSupervisor",
       "stop handoverDestinationDuty",
       "stop chartPost",
       "stop spareStore",
@@ -277,7 +274,7 @@ describe("background duties", () => {
     const stopped = new Promise<void>((resolve) => (finish = resolve));
     const calls: string[] = [];
     const handles = recordingHandles(calls, {
-      backupSupervisor: {
+      handoverDestinationDuty: {
         stop: () => {
           stops += 1;
           return stopped;
@@ -285,7 +282,7 @@ describe("background duties", () => {
       },
     });
     const duties = backgroundDuties(handles);
-    const early = duties.closers.find((c) => c.name === "backupSupervisor")!;
+    const early = duties.closers.find((c) => c.name === "handoverDestinationDuty")!;
     expect(early.close()).toBe(stopped);
 
     let done = false;

@@ -1,3 +1,4 @@
+import { supervisorWithJob } from "./testing/backup-supervisor.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // What the supervisor's status says about each destination when one of them is slow or failing,
 // against a real migrated venue and real folder destinations.
@@ -93,7 +94,7 @@ async function supervisor(
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>,
   extra: Partial<BackupSupervisorDeps> = {},
 ): Promise<BackupSupervisor> {
-  return new BackupSupervisor({
+  return supervisorWithJob({
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () => cfg(),
 

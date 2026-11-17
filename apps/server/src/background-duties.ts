@@ -43,7 +43,6 @@ export interface BackgroundDutyHandles {
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
   liveEvents: { close(): unknown };
   loop: unknown;
-  backupSupervisor: Stopper;
   handoverDestinationDuty: Stopper | undefined;
   chartPost: Stopper;
   spareStore: Stopper | undefined;
@@ -138,11 +137,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       name: "loop",
       close: () => h.loop,
       reason: SIGNALLED_LOOP_WAIT,
-    },
-    {
-      name: "backupSupervisor",
-      close: () => h.backupSupervisor.stop(),
-      reason: "stops after the sending loop has finished",
     },
     {
       name: "handoverDestinationDuty",

@@ -1,3 +1,4 @@
+import { driveSchedule } from "./testing/backup-schedule.js";
 import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
@@ -20,7 +21,6 @@ import {
   type ManifestBuilder,
   clockStepHold,
   pruneBackend,
-  runBackupSweep,
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -469,7 +469,7 @@ describe("runOnce (fan-out)", () => {
   });
 });
 
-describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
+describe("createBackupSchedule (passes driven with injected archive + sleep)", () => {
   let staging: string;
   let stateDir: string;
   beforeEach(async () => {
@@ -511,7 +511,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const backend = new FakeBackend("only");
     const logged: Array<[string, string]> = [];
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event) => logged.push([level, event]),
@@ -538,7 +538,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 
     // `sleep` advances this clock by the chunk it is handed, so the next tick fires.
     let nowMs = Date.parse("2026-09-05T00:00:00Z");
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event) => logged.push([level, event]),
@@ -564,7 +564,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const backend = new FakeBackend("only");
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event, fields) => logged.push([level, event, fields]),
@@ -594,7 +594,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     })("only");
     const sleep = vi.fn();
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: vi.fn(),
@@ -612,7 +612,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const backend = new FakeBackend("only");
     const log = vi.fn();
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log,
@@ -634,7 +634,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       await writeFile(outFile, "DUMP-BYTES");
     });
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, { signal: AbortSignal.abort(), log, sleep: vi.fn(), archive }),
     );
 
@@ -650,7 +650,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       await writeFile(outFile, "DUMP-BYTES");
     });
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: vi.fn(),
@@ -675,7 +675,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     let dumpCalls = 0;
     let nowMs = Date.parse("2026-09-05T00:00:00Z");
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
@@ -708,7 +708,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const logged: Array<[string, string]> = [];
     let sleeps = 0;
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
@@ -740,7 +740,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     let edited = false;
     const archivedAt: string[] = [];
     const sleeps: number[] = [];
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         db: suite.db,
         node: suite.node,
@@ -783,7 +783,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const controller = new AbortController();
     const observed: Array<number | null> = [];
     const instant = Date.parse("2026-10-06T00:00:00Z");
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(new FakeBackend("preview"), {
         signal: controller.signal,
         log: vi.fn(),
@@ -803,7 +803,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const backend = new FakeBackend("only");
     let clockReads = 0;
 
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         log: vi.fn(),
@@ -831,7 +831,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const advertised: Array<number | null> = [];
     for (const stamp of ["2026-11-03T12:00:00Z", "2026-11-03T12:00:01Z"]) {
       const controller = new AbortController();
-      await runBackupSweep(
+      await driveSchedule(
         loopDeps(backend, {
           signal: controller.signal,
           now: () => new Date(stamp),
@@ -872,7 +872,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     const archived: string[] = [];
     const deadlines: Array<number | null> = [];
     let waits = 0;
-    await runBackupSweep(
+    await driveSchedule(
       loopDeps(backend, {
         signal: controller.signal,
         now: () => now,
@@ -921,7 +921,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       const archived: number[] = [];
       const deadlines: Array<number | null> = [];
       let waited = 0;
-      await runBackupSweep(
+      await driveSchedule(
         loopDeps(new FakeBackend("step"), {
           signal: controller.signal,
           now: () => new Date(now),
@@ -1032,7 +1032,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       const controller = new AbortController();
       let reads = 0;
       const sleeps: number[] = [];
-      await runBackupSweep(
+      await driveSchedule(
         loopDeps(new FakeBackend("troll"), {
           signal: controller.signal,
           now: () => new Date(now),
@@ -1067,7 +1067,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       const backend = new FakeBackend("only");
       const archive = archiveSpy();
       const log = vi.fn();
-      const sweep = runBackupSweep(
+      const sweep = driveSchedule(
         loopDeps(backend, {
           signal: controller.signal,
           log,
@@ -1098,7 +1098,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       const controller = new AbortController();
       const backend = new FakeBackend("only");
       const seen: Array<{ running: boolean; deletion: unknown }> = [];
-      await runBackupSweep(
+      await driveSchedule(
         loopDeps(backend, {
           signal: controller.signal,
           log: vi.fn(),
@@ -1130,7 +1130,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
       const turn = createStagingTurn();
       const controller = new AbortController();
       const logged: Array<[string, string]> = [];
-      await runBackupSweep(
+      await driveSchedule(
         loopDeps(new FakeBackend("only"), {
           signal: controller.signal,
           log: (level, event) => logged.push([level, event]),
