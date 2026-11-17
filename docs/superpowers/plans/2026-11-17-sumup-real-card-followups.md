@@ -1,56 +1,27 @@
-# SumUp real-card followups implementation plan
+# SumUp real-card followups
 
-**Finish line:** Truthful payment wording across dashboard/customer documents, no stale SumUp battery percentage or alert, and an explicit device-reader step in the check script.
-**Authority:** SUMUP-REAL-CARD-FOLLOWUPS in `~/waitron-campaign-f/queue.md`; owner findings in `~/waitron-campaign-f/questions.md:575–644`. No owner design approval recorded. Driver commits, obtains Claude plan review, then watcher clearance before building.
-**Reuse:** `buildCardProvider` (`boot.ts:614–616`), saved payment/sale links, receipt presentation/renderers, the existing reader-status contract, battery cache/alert source; existing TypeScript/SQLite/Lit/Vitest dependencies.
-**Excluded:** Global `practiceMode` changes, fiscal data/builders/numbering/hashes, email capture/demo printers, settlement matching, browser-device battery (#3676), new tables/jobs/protocols, key-prefix assumptions or merchant-authenticity claims. No A949 completion claim.
-**Execution:** Inline; read the TDD skill before code. Each task starts with an observed failing behavioural test, then minimal implementation and a green rerun. Commands below are future checks.
+**Finish line:** Prepare charges through real providers lose false “no real charge” labels across dashboard and documents; stale SumUp batteries show no percentage or alert; the check script includes device-reader selection.
+**Request:** Lane F `queue.md`, SUMUP-REAL-CARD-FOLLOWUPS; owner-session reproduction in `questions.md:575–644`. Separate Sol-high draft, driver corrected. Claude reviews, then watcher clears before building; no owner design approval is recorded.
+**Reuse/exclusions:** Saved payment/sale links, receipt presentation/renderers, actual simulator selection, reader-status/cache and existing guides. No table, job, payment, schema, fiscal-builder/hash/numbering change, browser-device battery change, or global change to `practiceMode` and its print/email capture policies. Provider keys do not establish merchant authenticity.
 
-## 1. Payment wording follows the relevant facts
+## Payment wording
 
-- [ ] Trace every simulation/practice-label consumer before editing, including prose. Configuration describes the current simulator; saved documents describe the recorded payment.
-- [ ] Expose `simulatedCardPayments: boolean` from `cardProvider?.provider === "simulator"` through authenticated `/management-api/me`; show no simulator banner until known.
-- [ ] Modify `apps/server/src/{boot,me-api}.ts` and `apps/dashboard/src/{api/client,dashboard-app,screens/payments-screen}.ts`. Replace mode-only banner gating; preserve mode identity chrome.
-- [ ] Add `readReceiptSimulation(tx: Transaction, saleId: string, practiceMode: boolean): Promise<boolean>` in `apps/server/src/receipt-presentation.ts`, using all saved payment links, including splits.
-- [ ] Any recorded non-simulator card charge suppresses no-real-charge wording; simulator-only charges retain it across configuration changes. Cash-only Demo/default Prepare stays practice. Ignore failed attempts; refunds do not erase a charge; outside-card records must not claim no charge.
-- [ ] Carry explicit `simulated` through fresh/replay/history responses: `apps/server/src/{receipt-presentation,till-sale,bill-payments,transaction-receipt}.ts`; extend both `TillSaleResult` declarations (`till-sale.ts`, `apps/till/src/api/client.ts`) with `simulated?: boolean`, always set by product responses.
-- [ ] Both bindings in `apps/till/src/till-app.ts` consume that flag. `apps/server/src/{receipt-print,invoice-document}.ts` use the same decision for original/copy, paper, A4 and email; retain country wording/renderers.
-- [ ] Audit `apps/server/src/{receipt-preview-api,sample-receipt,print-api,email-delivery,demo-printer}.ts`; sample previews and print/email routing retain their separate practice policies.
-- [ ] Server TDD: `receipt-presentation.test.ts` owns the above classification cases with `useVenueDb`, including changed configuration and cash+real split. `till-api.receipt.test.ts`/`transaction-receipt-api.test.ts` prove replay/history wiring; `receipt-print.test.ts`/`invoice-document.test.ts` prove header output and unchanged invoice facts. All under `apps/server/src/`.
-- [ ] Configuration TDD: `apps/server/src/me-api.test.ts` proves flag delivery; preserve `boot-card-provider.test.ts` selection controls. `apps/dashboard/src/screens/payments-screen.test.ts` covers Demo/default Prepare, provider-enabled Prepare, Live and unknown configuration.
-- [ ] Till TDD: `apps/till/src/till-app-settlement-documents.test.ts` proves both bindings use saved flags, including split/history results under a different current provider/mode.
+1. Expose `simulatedCardPayments` from actual `cardProvider?.provider === "simulator"` through authenticated `/management-api/me`; dashboard waits for that fact before showing the simulator banner. Files: `apps/server/src/{boot,me-api}.ts`, `apps/dashboard/src/{api/client,dashboard-app,screens/payments-screen}.ts`.
+2. Add `readReceiptSimulation(tx, saleId, practiceMode): Promise<boolean>` in `apps/server/src/receipt-presentation.ts`. Read saved payments: any successful non-simulator card charge, including manual/outside or a split, suppresses the no-charge claim; simulator-only retains it across configuration changes. Failed attempts do not count; refunds do not erase a charge. Cash-only Demo/default Prepare keeps practice wording. Preserve Payments-Off operation.
+3. Carry explicit optional `simulated?: boolean` in both `TillSaleResult` types, set by fresh/replay/history product responses. Wire `apps/server/src/{receipt-presentation,till-sale,bill-payments,transaction-receipt,receipt-print,invoice-document}.ts`, `apps/till/src/{api/client,till-app}.ts`. Both till bindings, thermal original/copy, A4 and email use saved facts. Audit sample/preview/print/email/demo-printer consumers; sample handling and routing policies keep their distinct meaning.
 
-## 2. Interpret the SumUp snapshot once, at use time
+## Reader battery
 
-| Provenance | Source words / evidence | Consequence |
-| --- | --- | --- |
-| Driver's 17 Nov [SumUp API reading](https://developer.sumup.com/api/readers/get-status/) | “Provides the last known status for a Reader.”; “Battery level percentage”, float 0–100; last_activity: “Timestamp of the last activity from the device” | Scale known; freshness not guaranteed. |
-| Owner session, questions.md:630–639 | 1.67/activity 15:22Z persisted through 17:31Z; 17:41Z returned 100.0/activity 17:36:33Z | Suppress old snapshots; do not rescale. |
+[SumUp status API](https://developer.sumup.com/api/readers/get-status/), read 17 November: “Provides the last known status for a Reader.”; “Battery level percentage”; “Timestamp of the last activity from the device”. Range is 0–100. Owner evidence: 1.67/activity15:22Z persisted while charging; a17:41Z read returned100/activity17:36:33Z. Scale is known; freshness is not guaranteed.
 
-- [ ] **Watcher choice proposed:** SumUp battery is usable only at activity age `0 <= age <= 10 minutes`; missing/invalid/future timestamps suppress it. This admits the observed five-minute reading; ten minutes is Waitron policy, not a provider guarantee.
-- [ ] Keep provider names out of shared code: add optional `batteryReportedAt?: string | null` to the existing reader-status contracts (`packages/payments/src/card-provider.ts`, SumUp dashboard client, dashboard API client). Absent preserves providers with no freshness contract; null means unknown and suppresses battery. SumUp sets it from `last_activity` or null. A browser-safe `packages/shared/src/reader-battery.ts`, exported by `src/index.ts`, owns `readerBatteryPercent(status, now): number | undefined` with the above age rule and finite whole 0–100 validation; it receives no provider id.
-- [ ] In `packages/payments-sumup/src/sumup-client.ts`, reject nonnumeric/nonfinite/out-of-range battery before rounding rather than clamping. Preserve zero, 99.6→100, absent battery and timestamps through `card-provider.ts`; trace every status consumer before adding the freshness field.
-- [ ] Use the helper in `apps/dashboard/src/screens/payments-screen.ts` and `apps/server/src/alert-sources.ts`, evaluating age at consumption even on cache hits. Preserve connectivity/pairing/unavailable alerts; reuse existing dashboard refreshes, without new timers or calls.
-- [ ] TDD: new `packages/shared/src/reader-battery.test.ts` owns freshness boundaries, missing/invalid/future timestamps and percent validation, plus absent-versus-null timestamp behavior. `packages/payments-sumup/src/sumup-client.test.ts` owns HTTP conversion; preserve `card-provider.test.ts`'s rounding/zero/absent/pass-through assertions without treating its old timestamp as fresh.
-- [ ] Consumer TDD: dashboard `payments-screen.test.ts` proves stale blank/fresh zero with connectivity retained; server `alert-sources.test.ts` proves cached expiry removes the alert without refetch and fresh low readings retain severity. Do not repeat the helper matrix.
+4. Proposed watcher policy: use battery only at timestamp age0–10minutes; suppress missing/invalid/future timestamps. Ten minutes is our choice, not SumUp's guarantee. SumUp adapter rejects nonnumeric/nonfinite/out-of-range levels before rounding; retain zero and99.6→100.
+5. Add `batteryReportedAt?: string | null` to existing status types in `packages/payments/src/card-provider.ts`, `packages/payments-sumup/src/dashboard/client.ts`, `apps/dashboard/src/api/client.ts`. SumUp maps last_activity or null in `sumup-client.ts`. Undefined preserves other providers; null suppresses unknown battery. Generic `readerBatteryPercent(status, now)` in new `packages/shared/src/reader-battery.ts` and its index export owns validation/freshness without provider names. Dashboard battery cell and server `alert-sources.ts` use it after cache retrieval; keep connectivity separate, reuse polling, add no timer.
 
-## 3. Instructions, qualification and branch gate
+## Tests and delivery
 
-- [ ] In `docs/research/2026-11-15-a949-sandbox-and-settlement-check.md`, add **Hardware → Devices → <device> → Edit → card reader → Save** before Pay, plus dated battery provenance; preserve history.
-- [ ] Update existing sections/IDs in `apps/server/src/guide/{en,es}/{printers,table-service}.md` for truthful wording, reader selection and checking charge on the reader when percentage is absent. Update `docs/backlog.md` and `docs/backlog/payments.md` with remaining qualification in the eventual code change.
-- [ ] **Hold:** no fresh provider GET/settings/reader interaction before **2026-11-18 00:00 UTC** (watcher 18:39). Afterwards driver qualifies read-only on the retained venue/reader: redacted battery, activity/read times, expected helper output, and authorised reader comparison. No checkout/payment/re-pairing. Unavailable evidence stays pending.
-- [ ] Run the corresponding commands for red/green cycles; expect the named regression failure then passing Tests counts. Check browser headroom and run browser packages sequentially.
+6. Inline TDD for each behavior: regression first, observed expected failure, minimal fix, passing rerun. Tests under `apps/server/src`: `receipt-presentation.test.ts` owns classification/replay/mixed/manual/failed/refunded cases; `till-api.receipt.test.ts` and `transaction-receipt-api.test.ts` own flag wiring; `receipt-print.test.ts`/`invoice-document.test.ts` own rendered headers; `me-api.test.ts` owns configuration delivery. Preserve `boot-card-provider.test.ts` and Payments-Off controls. Existing fixtures, `useVenueDb`, no new support framework.
+7. `packages/shared/src/reader-battery.test.ts` owns age boundaries/invalid readings/undefined-versus-null. SumUp `sumup-client.test.ts` owns HTTP conversion; retain `card-provider.test.ts` pass-through checks. Dashboard `screens/payments-screen.test.ts` owns simulator banner and stale-blank/fresh-zero rendering; server `alert-sources.test.ts` owns cached expiry/severity; till `till-app-settlement-documents.test.ts` owns both saved-result bindings. Run each named file via `pnpm --filter <package> exec vitest run <file>` with passing Tests counts. Run guide-content/guide-links and unchanged fiscal write-path/inmutabilidad checks.
+8. Add reader assignment before Pay in `docs/research/2026-11-15-a949-sandbox-and-settlement-check.md`; update existing EN/ES `guide/{printers,table-service}.md` sections and `docs/backlog{,/payments}.md`, preserving A949's remaining qualification. Inspect English/Spanish, both themes, desktop/phone. Normal hook/current-head CI, two Claude run-it angles and one fixes read.
 
-```sh
-pnpm --filter @waitron/shared exec vitest run src/reader-battery.test.ts
-pnpm --filter @waitron/payments-sumup exec vitest run src/sumup-client.test.ts src/card-provider.test.ts
-pnpm --filter @waitron/server exec vitest run src/receipt-presentation.test.ts src/till-api.receipt.test.ts src/transaction-receipt-api.test.ts src/receipt-print.test.ts src/invoice-document.test.ts src/me-api.test.ts src/boot-card-provider.test.ts src/alert-sources.test.ts src/receipt-preview-api.test.ts src/guide-content.test.ts
-pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.test.ts
-pnpm --filter @waitron/till exec vitest run src/till-app-settlement-documents.test.ts
-pnpm exec vitest run scripts/guide-links.test.ts
-pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
-```
-
-- [ ] Inspect both themes/phone width; screenshots stay outside git. Rebase overlaps as needed, without waiting merely for overlap. Normal hook/current-head CI supply remaining checks; no extra whole-workspace run.
-- [ ] **Expected added/removed lines:** production **+170/−40**, tests **+280/−25**, support/docs **+45/−15**, excluding this plan: about **575** changed lines. No migration; material growth beyond 1.5× returns to watcher.
-- [ ] **Review focus:** split/replay/history facts, all document paths, unchanged practice side effects, cached expiry. Finish-branch needs **two independent Claude run-it reviews**, then one fresh read of fixes. Author stops at this file; driver owns all subsequent steps.
+**Qualification hold:** No provider GET/settings/reader interaction before18November00:00UTC, per watcher18:39. Afterwards collect a redacted read-only battery/activity/time receipt from the retained venue; no checkout or re-pairing. Unavailable fresh evidence stays pending.
+**Size:** Production +170/−40; tests +280/−25; support/docs +45/−15, about575 changed lines excluding this plan. Growth beyond1.5× or material changes return to watcher. Review focus: saved split/history facts, all document paths, Payments-Off, unchanged practice effects and cached expiry.
