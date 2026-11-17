@@ -131,8 +131,9 @@ jr8 (and so jr3, which moved `runCloudWorker` onto the runner). If env6 has land
   `<state>/cloud-snapshots/archive.enc` (`cloud-snapshot-worker.ts:142`, written `:275`), beside its
   `state.json`, because a capture cut off after upload is published from it at the next run. It is
   not in the per-run staging folder. The room check before the copy (`backup-sweep.ts:228-247`)
-  counts one more ciphertext's worth of space when `cloud` is set, plus the size of an `archive.enc`
-  already waiting.
+  counts one more ciphertext's worth of space, plus the size of an `archive.enc` already waiting,
+  when the connection can take a capture and its estimated size fits the limit. The watcher cleared
+  this condition on 2026-11-17 at 23:56 so a Cloud refusal does not stop the local backup.
 - Waitron works with no Cloud at all: with `cloud: false` nothing Cloud-related runs and nothing fails.
 
 ## Review Focus

@@ -24,7 +24,7 @@ import {
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
-import type { CloudArchiveTarget } from "./cloud-archive-target.js";
+import { createCloudArchiveTarget, type CloudArchiveTarget } from "./cloud-archive-target.js";
 import type { BackupSchedule } from "./backup-config.js";
 import { longestFireAheadMs, nextFireMs } from "./backup-schedule.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
@@ -469,26 +469,36 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("stores the local backup and reports the refused Cloud destination on every run", async () => {
-    const local = new FakeBackend("local");
-    const store = vi.fn<CloudArchiveTarget["store"]>(async () => ({
-      stored: false,
-      errorCode: "cloud.unavailable",
-    }));
+    const dir = join(stateDir, "local-backups");
+    const local = new LocalFsBackend("local", dir);
     const onDestinationResult = vi.fn();
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
     const input = {
       ...deps([local]),
       cloud: {
-        target: { id: "cloud" as const, roomNeeded: async () => 0, store },
+        target: createCloudArchiveTarget({
+          stateDir,
+          connection: undefined,
+          sourceNodeId: BACKUP_NODE_ID,
+          isPrimary: () => true,
+          upload: vi.fn(),
+        }),
         readClock: async () => cloudClock,
       },
+      stagingEstimateBytes: async () => 100,
+      spaceFloorBytes: 0,
+      spaceAimBytes: 0,
+      statfs: vi
+        .fn()
+        .mockResolvedValueOnce({ bavail: 300, frsize: 1 })
+        .mockResolvedValue({ bavail: 1_000_000, frsize: 1 }),
       outcomes,
       onDestinationResult,
     };
     await runOnce(input);
+    expect(await readdir(dir)).toHaveLength(1);
     await runOnce(input);
-    expect(local.objects.size).toBe(2);
-    expect(store).toHaveBeenCalledTimes(2);
+    expect(await readdir(dir)).toHaveLength(2);
     expect(onDestinationResult.mock.calls.filter(([result]) => result.id === "cloud")).toEqual(
       Array(2).fill([
         {

@@ -150,6 +150,10 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
   return {
     id: "cloud",
     async roomNeeded(plaintextBytes) {
+      const ciphertextBytes = plaintextBytes + ARTIFACT_HEADER_BYTES;
+      if (ciphertextBytes > MAX_BYTES) return 0;
+      const status = await deps.connection?.status().catch(() => undefined);
+      if (!cloudArchiveAvailable(status)) return 0;
       let waiting = 0;
       try {
         const info = await lstat(file);
@@ -157,7 +161,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-      return plaintextBytes + ARTIFACT_HEADER_BYTES + waiting;
+      return ciphertextBytes + waiting;
     },
     async store(input) {
       const { connection } = deps;

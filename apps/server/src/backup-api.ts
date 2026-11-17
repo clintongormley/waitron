@@ -438,7 +438,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (cloud && !isAtLeastDaily(body.schedule)) {
           throw new AppError("backup.cloud_needs_daily", { field: "schedule" });
         }
-        if (cloud && (await deps.readCloudStatus?.())?.environment !== "test") {
+        if (body.cloud === true && (await deps.readCloudStatus?.())?.environment !== "test") {
           throw new AppError("backup.cloud_unavailable", { field: "cloud" });
         }
         const held = await readHeldKey(heldKey);

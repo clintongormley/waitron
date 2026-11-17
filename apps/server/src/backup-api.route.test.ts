@@ -1766,6 +1766,26 @@ describe("backup admin routes", () => {
       expect(await readSealed()).toBeNull();
     });
 
+    it("saves a local backup setting after the held Cloud connection changes", async () => {
+      let environment: "test" | "production" = "test";
+      const { post } = await primaryApp({
+        readCloudStatus: async () => ({ state: "complete", environment, code: "" }),
+      });
+      expect((await post("/api/backup/apply", cloudOnly)).status).toBe(200);
+      environment = "production";
+      const { cloud: _cloud, ...edit } = cloudOnly;
+      const dir = makeDestDir();
+      const response = await post("/api/backup/apply", {
+        ...edit,
+        destinations: [{ kind: "local-fs", dir }],
+      });
+      expect(response.status).toBe(200);
+      expect(await readSealed()).toMatchObject({
+        cloud: true,
+        destinations: [{ kind: "local-fs", dir }],
+      });
+    });
+
     const probeCalls = () => {
       const key = bucket.calls.find((c) => c.startsWith("put waitron-probe-"))?.slice(4);
       expect(key).toBeDefined();
