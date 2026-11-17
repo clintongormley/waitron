@@ -53,6 +53,7 @@ import {
 import {
   loadRoutingRules,
   previewRoutingChange,
+  previewProductItemsRouting,
   resolveMakers,
   resolveExtraMakers,
   routingAt,
@@ -3787,4 +3788,110 @@ it("A725 Routes station names use Spanish alphabetical order", async () => {
     routingModel(tx, new Date("2026-10-02T18:00:00Z")),
   );
   expect(model.stations.map(({ name }) => name)).toEqual(["Ásador", "Terrace Bar"]);
+});
+
+describe("folder routing previews", () => {
+  it("finds newly inherited period routes for products and variants without writing", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await addProductToMenu(tx, { menuId: f.menu, productId: f.mojito });
+      const lunch = (
+        await saveMenuPeriod(tx, f.department, { name: "Lunch", menuId: f.menu, staffMenuIds: [] })
+      ).id;
+      await setCategoryCell(tx, f.food, station(f.bar));
+      const [cell] = await tx
+        .select()
+        .from(routingCells)
+        .where(eq(routingCells.categoryId, f.food));
+      await tx
+        .insert(routingCellPeriods)
+        .values({ cellId: cell!.id, periodId: lunch, stationId: f.terraceBar });
+      const before = await loadRoutingRules(tx, null);
+      const preview = await previewProductItemsRouting(tx, {
+        kind: "move",
+        selection: { productIds: [], categoryIds: [f.cocktails] },
+        to: f.food,
+      });
+      expect(
+        preview.moves.map((move) => [
+          move.productId,
+          move.zoneId,
+          move.from,
+          move.to,
+          move.periodIds,
+        ]),
+      ).toEqual([
+        [f.variant, f.terrace, station(f.bar), station(f.terraceBar), [lunch]],
+        [f.mojito, f.terrace, station(f.bar), station(f.terraceBar), [lunch]],
+      ]);
+      expect(preview.moves[0]!.variantOf).toEqual({ productId: f.mojito, productName: "Mojito" });
+      expect(preview.periods).toEqual([{ id: lunch, name: "Lunch", departmentName: "Dining" }]);
+      expect(preview.stations).toContainEqual({ id: f.terraceBar, name: "Terrace Bar" });
+      expect(await loadRoutingRules(tx, null)).toEqual(before);
+    }));
+
+  it.each(["move_up", "delete"] as const)(
+    "deleting a top folder compares survivors and removes its rules only in memory (%s)",
+    async (contents) =>
+      scoped(async (tx) => {
+        const f = await fixture(tx);
+        await updateProduct(tx, f.mojito, { categoryId: f.drinks });
+        await setCategoryCell(tx, f.drinks, station(f.terraceBar));
+        await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, noPrep);
+        const before = await loadRoutingRules(tx, null);
+        const { moves } = await previewProductItemsRouting(tx, {
+          kind: "delete",
+          selection: { productIds: [], categoryIds: [f.drinks] },
+          contents,
+        });
+        expect(moves.map((move) => [move.productId, move.from, move.to])).toEqual(
+          contents === "delete"
+            ? []
+            : [
+                [f.variant, station(f.terraceBar), noPrep],
+                [f.mojito, station(f.terraceBar), noPrep],
+              ],
+        );
+        expect(await loadRoutingRules(tx, null)).toEqual(before);
+      }),
+  );
+
+  it("compares changed extra category facts beside an unchanged dish and a top-level product move", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const cheese = (
+        await createProduct(tx, {
+          name: "Cheese",
+          categoryId: f.food,
+          pricingUnit: "each",
+          unitPrice: "1",
+          vatClass: "general",
+        })
+      ).id;
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Extras",
+          minPicks: 0,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: cheese, price: "0.50" }],
+        },
+        "en",
+      );
+      await writeProductModifiers(tx, f.mojito, [{ kind: "extras", id: list.id }]);
+      await setCategoryCell(tx, f.food, station(f.terraceBar));
+      await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, noPrep);
+      const preview = await previewProductItemsRouting(tx, {
+        kind: "move",
+        selection: { productIds: [cheese], categoryIds: [f.beer] },
+        to: null,
+      });
+      expect(
+        preview.moves.map((move) => [move.productId, move.dish?.productId, move.from, move.to]),
+      ).toEqual([
+        [cheese, undefined, station(f.terraceBar), noPrep],
+        [cheese, f.mojito, station(f.terraceBar), station(f.bar)],
+      ]);
+    }));
 });

@@ -1,3 +1,10 @@
+import {
+  routingPreviewTable,
+  routingPreviewStyles,
+  previewFrom,
+  previewTo,
+  previewPeriodNames,
+} from "./routing-preview.js";
 import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -120,6 +127,7 @@ function screenDevices(devices: PrepStationsView["devices"], stationId: string) 
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    routingPreviewStyles,
     pageTitleStyles,
     css`
       :host {
@@ -1312,45 +1320,14 @@ export class PrepStationsScreen extends LitElement {
           ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
           : (model.products.find((p) => p.id === row.productId)?.name ?? row.productId);
   }
-  /** In the model's order; the department is added only where two periods share a name. */
   #periodNames(periodIds: readonly string[]): string {
-    const during = new Set(periodIds);
-    const periods = this.view!.routing.periods.filter((period) => during.has(period.id));
-    const names = periods.map((period) => period.name);
-    return periods
-      .map((period) =>
-        names.indexOf(period.name) === names.lastIndexOf(period.name)
-          ? period.name
-          : format("routing.period_in_department", {
-              period: period.name,
-              department: period.departmentName,
-            }),
-      )
-      .join(", ");
+    return previewPeriodNames(this.view!.routing.periods, periodIds);
   }
   #moveFrom(move: RoutingMove): string {
-    return move.from ? this.#targetName(move.from) : t("prep.no_station");
+    return previewFrom(move, (target) => this.#targetName(target));
   }
   #moveTo(move: RoutingMove): string {
-    return move.to
-      ? this.#targetName(move.to)
-      : t(move.toNoReplacement ? "prep.no_replacement" : "prep.no_station");
-  }
-  /** The moved product, its dish for an extra, and the periods during which it moves. */
-  #moveName(move: RoutingMove): string {
-    const name = move.dish
-      ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName })
-      : move.variantOf
-        ? format("prep.preview_variant", {
-            product: move.variantOf.productName,
-            variant: move.productName,
-          })
-        : move.productName;
-    if (move.periodIds === null || move.periodIds === undefined) return name;
-    return format("prep.preview_during", {
-      move: name,
-      periods: this.#periodNames(move.periodIds),
-    });
+    return previewTo(move, (target) => this.#targetName(target));
   }
   /**
    * One sentence per zone, periods, from and to, counting products: a variant counts as its
@@ -1425,35 +1402,7 @@ export class PrepStationsScreen extends LitElement {
                 (sentence) => html`<p data-test="preview-group">${sentence}</p>`,
               )}
               <wt-disclosure heading=${t("prep.preview_show_products")}>
-                <div class="table-wrap" tabindex="0">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>${t("prep.preview_product")}</th>
-                        <th>${t("prep.service_zone")}</th>
-                        <th>${t("prep.preview_from")}</th>
-                        <th>${t("prep.preview_to")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${[...pending.moves]
-                        .sort((a, b) =>
-                          (a.variantOf?.productName ?? a.productName).localeCompare(
-                            b.variantOf?.productName ?? b.productName,
-                          ),
-                        )
-                        .map(
-                          (move) =>
-                            html`<tr>
-                              <td>${this.#moveName(move)}</td>
-                              <td>${move.zoneName ?? t("routing.every_zone")}</td>
-                              <td>${this.#moveFrom(move)}</td>
-                              <td>${this.#moveTo(move)}</td>
-                            </tr>`,
-                        )}
-                    </tbody>
-                  </table>
-                </div>
+                ${routingPreviewTable({ moves: pending.moves, stations: [...this.view!.routing.stations, ...this.view!.stations], periods: this.view!.routing.periods })}
               </wt-disclosure>`
           : html`<p>${t("prep.preview_none")}</p>`
       }

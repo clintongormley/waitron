@@ -1,8 +1,19 @@
+import type { ProductItemsChange } from "@waitron/menu";
+import {
+  routingPreviewTable,
+  routingPreviewStyles,
+} from "@waitron/venue-service/dashboard/routing-preview";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  leaveCoordinatorFor,
+  FormFeedback,
+  formMessage,
+  formMessageStyles,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import type { RoutingModel } from "@waitron/venue-service/routing";
+import type { ProductItemsRoutingPreview, RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon-button.js";
@@ -49,6 +60,8 @@ export class ProductBrowser extends LitElement {
   }
   static override styles = [
     baseStyles,
+    routingPreviewStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -84,6 +97,9 @@ export class ProductBrowser extends LitElement {
       }
       .error {
         color: var(--wt-color-danger);
+      }
+      .operation-footer {
+        width: 100%;
       }
       .deleting {
         overflow-wrap: anywhere;
@@ -134,6 +150,13 @@ export class ProductBrowser extends LitElement {
   #archivingRead = 0;
   @state() private operationBusy = false;
   @state() private operationError = "";
+  @state() private routingPreview: ProductItemsRoutingPreview | null = null;
+  @state() private previewBusy = false;
+  @state() private previewError = "";
+  @state() private previewRetry = false;
+  #previewRead = 0;
+  readonly #operationFeedback = new FormFeedback(this);
+
   @state() private dropError = "";
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
@@ -215,7 +238,24 @@ export class ProductBrowser extends LitElement {
       this.#operationScope?.commit(this.#operationBaseline);
     }
     if (changed.has("summaries")) this.#operationScope?.changed();
+    if (changed.has("operationError")) this.#operationFeedback.newRefusal();
     if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
+    if (
+      [
+        "operation",
+        "destination",
+        "contents",
+        "summaries",
+        "operationSelection",
+        "categories",
+        "products",
+        "summaryLoading",
+        "summaryFailed",
+        "operationBusy",
+      ].some((key) => changed.has(key)) &&
+      !this.operationBusy
+    )
+      void this.#readRoutingPreview();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories"))
@@ -313,8 +353,62 @@ export class ProductBrowser extends LitElement {
       categoryIds: selection.categoryIds.filter((id) => !under(id, id)),
     };
   }
+  #routingChange(): ProductItemsChange | null {
+    if (
+      !this.operation ||
+      !this.operationSelection.categoryIds.length ||
+      this.summaryLoading ||
+      this.summaryFailed
+    )
+      return null;
+    if (this.operation === "move")
+      return this.destination
+        ? {
+            kind: "move",
+            selection: this.operationSelection,
+            to: this.destination === "top" ? null : this.destination,
+          }
+        : null;
+    return { kind: "delete", selection: this.operationSelection, contents: this.#contentsChoice() };
+  }
+  get #routingReady(): boolean {
+    return (
+      this.#routingChange() === null ||
+      (this.routingPreview !== null && !this.previewBusy && !this.previewError)
+    );
+  }
+  async #readRoutingPreview(): Promise<void> {
+    const read = ++this.#previewRead;
+    const change = this.#routingChange();
+    this.routingPreview = null;
+    this.previewError = "";
+    this.previewRetry = false;
+    this.previewBusy = change !== null;
+    if (change === null) return;
+    try {
+      const preview = await this.api.previewProductItemsRouting(change);
+      if (read === this.#previewRead) this.routingPreview = preview;
+    } catch (error) {
+      if (read !== this.#previewRead) return;
+      const code = codeOf(error, "");
+      this.previewRetry = ![
+        "category.name_taken",
+        "category.parent_cycle",
+        "category.not_found",
+        "product.not_found",
+        "management.request_invalid",
+      ].includes(code);
+      this.previewError = this.previewRetry
+        ? t("folders.preview_error")
+        : refusalText(code, (error as { params?: unknown }).params);
+    } finally {
+      if (read === this.#previewRead) this.previewBusy = false;
+    }
+  }
+
   #openMove(keys = this.selected): void {
     if (this.operationBusy || this.summaryLoading) return;
+    this.#operationFeedback.reset();
     this.summaryFailed = false;
     this.operationSelection = this.#outermost(this.#selection(keys));
     this.destination = "";
@@ -323,6 +417,7 @@ export class ProductBrowser extends LitElement {
   }
   async #openDelete(keys = this.selected): Promise<void> {
     if (this.operationBusy || this.summaryLoading) return;
+    this.#operationFeedback.reset();
     const selection = this.#selection(keys);
     this.operationSelection = selection;
     this.contents = "move_up";
@@ -377,6 +472,8 @@ export class ProductBrowser extends LitElement {
   }
   /** A confirmation from the dialog reads its counts again before deleting. */
   async #confirm(operation = this.operation, fromDialog = false): Promise<void> {
+    if (fromDialog) this.#operationFeedback.press();
+    if (fromDialog && !this.#routingReady) return;
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -601,9 +698,18 @@ export class ProductBrowser extends LitElement {
       count,
     );
     const blocked =
-      this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination);
+      this.summaryLoading ||
+      this.summaryFailed ||
+      !this.#routingReady ||
+      (this.operation === "move" && !this.destination);
+    const bottom = this.#operationFeedback.message(
+      { action: this.operationError, preview: this.previewError },
+      new Set(),
+      "",
+    );
     return html`<wt-modal
-      size="compact"
+      size=${this.routingPreview?.moves.length ? "wide" : "compact"}
+      .height=${this.routingPreview?.moves.length ? "medium" : undefined}
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}
@@ -754,31 +860,38 @@ export class ProductBrowser extends LitElement {
               )
             : nothing
         }
-        ${this.operationError ? html`<p role="alert" class="error">${this.operationError}</p>` : nothing}
+        <div data-test="folder-routing-preview">
+          ${this.previewBusy ? html`<p role="status">${t("folders.preview_loading")}</p>` : nothing}
+          ${this.routingPreview ? routingPreviewTable(this.routingPreview) : nothing}
+          ${this.previewRetry ? html`<wt-button data-test="retry-routing-preview" variant="secondary" @click=${() => void this.#readRoutingPreview()}>${t("folders.preview_retry")}</wt-button>` : nothing}
+        </div>
       </form>
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          .disabled=${this.operationBusy || this.summaryLoading}
-          @click=${(event: Event) => {
-            if (!(event.currentTarget as HTMLElement).isConnected) return;
-            this.#requestOperationClose();
-          }}
-          >${t("folders.cancel_selection")}</wt-button
-        >
-        <wt-button
-          data-test="confirm"
-          variant=${blocked ? "secondary" : this.operation === "delete" ? "danger" : "primary"}
-          .loading=${this.operationBusy}
-          .disabled=${this.operationBusy || blocked}
-          @click=${(event: Event) => {
-            if (!(event.currentTarget as HTMLElement).isConnected) return;
-            void this.#confirm(this.operation, true);
-          }}
-          >${this.operation === "delete" ? this.#deleteLabel(selection) : t("folders.move")}</wt-button
-        >
-      </wt-form-actions>
+      <div slot="footer" class="operation-footer">
+        ${formMessage(bottom)}
+        <wt-form-actions>
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            .disabled=${this.operationBusy || this.summaryLoading}
+            @click=${(event: Event) => {
+              if (!(event.currentTarget as HTMLElement).isConnected) return;
+              this.#requestOperationClose();
+            }}
+            >${t("folders.cancel_selection")}</wt-button
+          >
+          <wt-button
+            data-test="confirm"
+            variant=${blocked ? "secondary" : this.operation === "delete" ? "danger" : "primary"}
+            .loading=${this.operationBusy}
+            .disabled=${this.operationBusy || blocked}
+            @click=${(event: Event) => {
+              if (!(event.currentTarget as HTMLElement).isConnected) return;
+              void this.#confirm(this.operation, true);
+            }}
+            >${this.operation === "delete" ? this.#deleteLabel(selection) : t("folders.move")}</wt-button
+          >
+        </wt-form-actions>
+      </div>
     </wt-modal>`;
   }
 

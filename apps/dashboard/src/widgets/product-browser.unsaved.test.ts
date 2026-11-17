@@ -33,6 +33,7 @@ const counts = { id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1,
 async function fixture(operation: "move" | "delete", overrides: Partial<DashboardApi> = {}) {
   setLocale("en-GB");
   const api = {
+    previewProductItemsRouting: vi.fn().mockResolvedValue({ moves: [], stations: [], periods: [] }),
     moveProductItems: vi.fn().mockResolvedValue(undefined),
     deleteProductItems: vi.fn().mockResolvedValue(undefined),
     summariseFolders: vi.fn().mockResolvedValue([counts]),

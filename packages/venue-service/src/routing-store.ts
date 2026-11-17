@@ -12,6 +12,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  projectProductItems,
+  type ProductItemsChange,
   documentOffers,
   effectiveProductColumns,
   parentJoin,
@@ -47,6 +49,7 @@ import type {
   RoutingChange,
   RoutingModel,
   RoutingMove,
+  ProductItemsRoutingPreview,
 } from "./routing-types.js";
 import {
   inPeriodOrder,
@@ -456,9 +459,65 @@ export async function previewRoutingChange(
   else if (lines !== undefined)
     cellPeriods.set(key, new Map(lines.map((line) => [line.periodId, line.target])));
   const after: RoutingRules = { ...rules, cells: Object.freeze(cells), cellPeriods };
+  return compareRoutingChange(
+    tx,
+    rules,
+    after,
+    await activeProducts(tx),
+    changeReach(rules.parentOf, address),
+  );
+}
+
+export async function previewProductItemsRouting(
+  tx: Transaction,
+  change: ProductItemsChange,
+): Promise<ProductItemsRoutingPreview> {
+  const projected = await projectProductItems(tx, change);
+  const { rules, stations } = await snapshot(tx);
+  const remainingFolders = new Set(projected.categories.map(({ id }) => id));
+  const removedCellKeys = new Set(
+    rules.cells
+      .filter((cell) => cell.row.kind === "category" && !remainingFolders.has(cell.row.categoryId))
+      .map(cellKey),
+  );
+  const after: RoutingRules = {
+    ...rules,
+    parentOf: new Map(projected.categories.map(({ id, parentId }) => [id, parentId])),
+    cells: Object.freeze(rules.cells.filter((cell) => !removedCellKeys.has(cellKey(cell)))),
+    cellPeriods: new Map(
+      [...(rules.cellPeriods ?? [])].filter(([key]) => !removedCellKeys.has(key)),
+    ),
+  };
+  const compared = (await activeProducts(tx)).filter(
+    (row) => !projected.archivedProductIds.has(row.routedId),
+  );
+  const moves = await compareRoutingChange(
+    tx,
+    rules,
+    after,
+    compared,
+    { reachesZone: () => true, covers: () => true },
+    (row) => ({ ...rowFacts(row), categoryId: projected.categoryOf.get(row.routedId) ?? null }),
+  );
+  const periods = await readPeriods(tx, [
+    ...new Set(moves.flatMap((move) => move.periodIds ?? [])),
+  ]);
+  return {
+    moves,
+    stations: stations.map(({ id, name }) => ({ id, name })),
+    periods: periods.map(({ id, name, departmentName }) => ({ id, name, departmentName })),
+  };
+}
+
+async function compareRoutingChange(
+  tx: Transaction,
+  rules: RoutingRules,
+  after: RoutingRules,
+  productsToCheck: readonly PreviewProduct[],
+  reach: ChangeReach,
+  afterFacts: (row: PreviewProduct) => ProductFacts = rowFacts,
+): Promise<RoutingMove[]> {
   const zones = await activeZones(tx);
-  const productsToCheck = await activeProducts(tx);
-  const reach = changeReach(rules.parentOf, address);
   const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
     reach.reachesZone(zone.id),
   );
@@ -476,7 +535,7 @@ export async function previewRoutingChange(
       for (const zone of inZones) {
         const previous = chooseMaker(before, facts, zone.id, null);
         const from = previous.route;
-        const next = chooseMaker(after, facts, zone.id, null);
+        const next = chooseMaker(after, afterFacts(product), zone.id, null);
         const to = next.route;
         dishChoices.set(choiceKey(product.id, zone.id), { before: previous, after: next });
         if (!sameRoute(from, to) || previous.noReplacement !== next.noReplacement)
@@ -495,7 +554,15 @@ export async function previewRoutingChange(
       }
     }
     moves.push(
-      ...extraMoves({ before, after }, productsToCheck, offers, inZones, reach, dishChoices),
+      ...extraMoves(
+        { before, after },
+        productsToCheck,
+        offers,
+        inZones,
+        reach,
+        dishChoices,
+        afterFacts,
+      ),
     );
     return moves;
   };
@@ -503,12 +570,17 @@ export async function previewRoutingChange(
     ...move,
     periodIds: null,
   }));
-  const timedPeriods = await periodsDeciding(tx, [rules, after], {
-    productsToCheck,
-    offers,
-    zoneList,
-    reach,
-  });
+  const timedPeriods = await periodsDeciding(
+    tx,
+    [rules, after],
+    {
+      productsToCheck,
+      offers,
+      zoneList,
+      reach,
+    },
+    afterFacts,
+  );
   const sameKey = (move: Omit<RoutingMove, "periodIds">) =>
     JSON.stringify([
       move.productId,
@@ -560,6 +632,7 @@ async function periodsDeciding(
     zoneList: readonly { id: string | null; name: string | null }[];
     reach: ChangeReach;
   },
+  afterFacts: (row: PreviewProduct) => ProductFacts = rowFacts,
 ): Promise<{ id: string; inZones: { id: string | null; name: string | null }[] }[]> {
   if (!states.some((state) => state.cellPeriods !== undefined && state.cellPeriods.size > 0))
     return [];
@@ -586,12 +659,13 @@ async function periodsDeciding(
     const departmentId = zone.id === null ? undefined : zoneDepartment.get(zone.id);
     if (departmentId === undefined) continue;
     for (const facts of compared.values())
-      for (const state of states) {
+      for (const [index, state] of states.entries()) {
+        const inState = index === 0 ? facts : afterFacts(byId.get(facts.productId)!);
         const { decidedBy } = selectRoutingCell(
           state,
-          { kind: "product", productId: facts.routedProductId },
+          { kind: "product", productId: inState.routedProductId },
           zone.id,
-          facts.categoryId,
+          inState.categoryId,
         );
         if (decidedBy?.kind !== "cell") continue;
         for (const periodId of state.cellPeriods?.get(cellKey(decidedBy.address))?.keys() ?? [])
@@ -705,6 +779,7 @@ function extraMoves(
   zones: readonly { id: string | null; name: string | null }[],
   reach: ChangeReach,
   dishChoices: Map<string, { before: MakerChoice; after: MakerChoice }>,
+  afterFacts: (row: PreviewProduct) => ProductFacts = rowFacts,
 ): Omit<RoutingMove, "periodIds">[] {
   // Every Active product is a dish here, so an Inactive extra, which cannot be picked whatever a
   // published menu still lists, is not found.
@@ -747,7 +822,7 @@ function extraMoves(
         if (!inZones.has(zone.id)) continue;
         const dishChoice = choiceBeside(dishFacts, zone.id);
         const from = placeIn(rules.before, dishChoice.before, facts, zone.id);
-        const to = placeIn(rules.after, dishChoice.after, facts, zone.id);
+        const to = placeIn(rules.after, dishChoice.after, afterFacts(extra), zone.id);
         if ((from.follows && to.follows) || sameRoute(from.target, to.target)) continue;
         moves.push({
           productId: extra.id,

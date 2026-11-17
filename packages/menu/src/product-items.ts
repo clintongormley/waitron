@@ -113,6 +113,22 @@ export async function moveProductItems(
   to: string | null,
 ): Promise<void> {
   const tree = await readTree(tx, selection);
+  await validateMove(tx, tree, selection, to);
+  for (const batch of batches(selection.productIds))
+    await tx
+      .update(products)
+      .set({ categoryId: to, updatedAt: now() })
+      .where(inArray(products.id, batch));
+  for (const id of selection.categoryIds)
+    await tx.update(categories).set({ parentId: to }).where(eq(categories.id, id));
+}
+
+async function validateMove(
+  tx: Transaction,
+  tree: FolderTree,
+  selection: ProductSelection,
+  to: string | null,
+): Promise<void> {
   if (to !== null) tree.require(to);
   for (const id of selection.categoryIds) await validateParent(tx, id, to, tree.folders);
   const names = new Map(tree.folders.map((folder) => [folder.id, folder.name]));
@@ -121,13 +137,58 @@ export async function moveProductItems(
     [...new Set(selection.categoryIds)].map((id) => ({ id, name: names.get(id)!, parentId: to })),
     { snapshot: tree.folders },
   );
-  for (const batch of batches(selection.productIds))
-    await tx
-      .update(products)
-      .set({ categoryId: to, updatedAt: now() })
-      .where(inArray(products.id, batch));
-  for (const id of selection.categoryIds)
-    await tx.update(categories).set({ parentId: to }).where(eq(categories.id, id));
+}
+
+export type ProductItemsChange =
+  | { kind: "move"; selection: ProductSelection; to: string | null }
+  | { kind: "delete"; selection: ProductSelection; contents: FolderContents };
+
+export async function projectProductItems(tx: Transaction, change: ProductItemsChange) {
+  const { selection } = change;
+  const tree = await readTree(tx, selection);
+  if (change.kind === "move") await validateMove(tx, tree, selection, change.to);
+  else if (change.contents === "move_up")
+    await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
+  const removed = new Set(
+    change.kind === "delete"
+      ? selection.categoryIds.flatMap((id) =>
+          change.contents === "delete" ? tree.subtree(id) : [id],
+        )
+      : [],
+  );
+  const moved = new Set(selection.categoryIds);
+  const direct = new Set(selection.productIds);
+  const categoryOf = new Map<string, string | null>();
+  // Top-level ids exclude whole families when routing resolves variants through their parent.
+  const archivedProductIds = new Set(change.kind === "delete" ? selection.productIds : []);
+  for (const row of await tx
+    .select({ id: products.id, categoryId: products.categoryId })
+    .from(products)
+    .where(isTopLevelProduct)) {
+    let category = row.categoryId;
+    if (change.kind === "move") {
+      if (direct.has(row.id)) category = change.to;
+    } else if (category !== null && removed.has(category)) {
+      if (change.contents === "delete") archivedProductIds.add(row.id);
+      else category = tree.survivingParent(category, removed);
+    }
+    categoryOf.set(row.id, category);
+  }
+  return {
+    categories: tree.folders
+      .filter(({ id }) => !removed.has(id))
+      .map((folder) => ({
+        ...folder,
+        parentId:
+          change.kind === "move"
+            ? moved.has(folder.id)
+              ? change.to
+              : folder.parentId
+            : tree.survivingParent(folder.id, removed),
+      })),
+    categoryOf,
+    archivedProductIds,
+  };
 }
 
 export async function deleteProductItems(

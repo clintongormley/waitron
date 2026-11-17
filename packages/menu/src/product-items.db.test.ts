@@ -8,6 +8,7 @@ import { createMenu, createProduct, deactivateProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import {
   deleteProductItems,
+  projectProductItems,
   moveProductItems,
   summariseFolders,
   type FolderContents,
@@ -418,4 +419,66 @@ describe("summariseFolders", () => {
     expect((await product(cola)).active).toBe(true);
     expect(await app(listCategories)).toHaveLength(3);
   });
+});
+
+describe("folder routing projection", () => {
+  it("projects mixed nested moves without changing storage, including an inactive product", async () => {
+    await app((tx) => deactivateProduct(tx, lager));
+    const before = await app(listCategories);
+    const selection = { productIds: [cola], categoryIds: [d, b] };
+    const projected = await app((tx) =>
+      projectProductItems(tx, { kind: "move", selection, to: f }),
+    );
+    expect(projected.categoryOf).toEqual(
+      new Map([
+        [cola, f],
+        [lager, b],
+        [burger, f],
+      ]),
+    );
+    expect(new Map(projected.categories.map(({ id, parentId }) => [id, parentId]))).toEqual(
+      new Map([
+        [d, f],
+        [b, f],
+        [f, null],
+      ]),
+    );
+    expect(projected.archivedProductIds).toEqual(new Set());
+    expect(await app(listCategories)).toEqual(before);
+    expect(await product(cola)).toMatchObject({ categoryId: d, active: true });
+    expect(await product(lager)).toMatchObject({ categoryId: b, active: false });
+    await app((tx) => moveProductItems(tx, selection, f));
+    expect(await app(listCategories)).toEqual(projected.categories);
+    for (const id of [cola, lager, burger])
+      expect((await product(id)).categoryId).toBe(projected.categoryOf.get(id));
+  });
+
+  it.each<FolderContents>(["move_up", "delete"])(
+    "projects nested deletion and mixed product archival without writing (%s)",
+    async (contents) => {
+      const before = await app(listCategories);
+      const selection = { productIds: [burger], categoryIds: [b, d] };
+      const projected = await app((tx) =>
+        projectProductItems(tx, { kind: "delete", selection, contents }),
+      );
+      expect(projected.categories.map(({ id, parentId }) => [id, parentId])).toEqual([[f, null]]);
+      expect(projected.archivedProductIds).toEqual(
+        new Set(contents === "delete" ? [burger, cola, lager] : [burger]),
+      );
+      if (contents === "move_up") {
+        expect(projected.categoryOf.get(cola)).toBeNull();
+        expect(projected.categoryOf.get(lager)).toBeNull();
+      }
+      expect(await app(listCategories)).toEqual(before);
+      expect(await product(lager)).toMatchObject({ categoryId: b, active: true });
+      expect((await product(burger)).active).toBe(true);
+      await app((tx) => deleteProductItems(tx, selection, contents));
+      expect(await app(listCategories)).toEqual(projected.categories);
+      for (const id of [cola, lager, burger]) {
+        const stored = await product(id);
+        expect(stored.active).toBe(!projected.archivedProductIds.has(id));
+        if (stored.active) expect(stored.categoryId).toBe(projected.categoryOf.get(id));
+      }
+    },
+  );
 });

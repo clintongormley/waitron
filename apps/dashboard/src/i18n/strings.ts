@@ -577,6 +577,9 @@ export const en = {
   "folders.no_active_station": "No active station assigned",
   "folders.routing_unavailable":
     "Station routing unavailable: categories with no station are not marked. Try again later.",
+  "folders.preview_loading": "Checking which products change station…",
+  "folders.preview_error": "The routing preview could not be loaded. Retry the preview or cancel.",
+  "folders.preview_retry": "Retry preview",
   "folders.summary_error":
     "What these categories hold could not be read, so they cannot be deleted yet.",
   "folders.summary_changed":
@@ -5012,6 +5015,10 @@ export const es: Record<StringKey, string> = {
   "folders.no_active_station": "Ninguna estación activa asignada",
   "folders.routing_unavailable":
     "Envío a la estación no disponible: las categorías sin estación no se marcan. Inténtalo más tarde.",
+  "folders.preview_loading": "Comprobando qué productos cambian de puesto…",
+  "folders.preview_error":
+    "No se ha podido cargar la vista previa de los destinos. Vuelve a intentarlo o cancela.",
+  "folders.preview_retry": "Reintentar vista previa",
   "folders.summary_error":
     "No se pudo leer lo que contienen estas categorías, así que aún no se pueden eliminar.",
   "folders.summary_changed":
