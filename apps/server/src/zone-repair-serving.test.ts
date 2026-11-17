@@ -27,6 +27,7 @@ const allowed = [
   ["POST", "/management-api/venue-details/time-zone-repair"],
   ["GET", "/account?token=synthetic"],
   ["GET", "/assets/app.js"],
+  ["GET", "/favicon.svg"],
   ["GET", "/help/en/time-zone"],
   ["GET", "/health"],
   ["GET", "/api/node"],

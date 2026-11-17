@@ -1,3 +1,6 @@
+import type { Hono } from "hono";
+import { BUILD_HEADER } from "@waitron/shared";
+import * as handoverGates from "./handover-gate.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdir } from "node:fs/promises";
 import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -1802,4 +1805,73 @@ describe("pending card checks boot lifetime", () => {
       await server.close();
     }
   }, 60_000);
+});
+
+it("boot gives remote dashboard files the main handover stop and request metadata", async () => {
+  const venueDir = await seededVenueDir();
+  const state = await stateDir();
+  const dashboard = await tempDir("waitron-staff-dashboard-");
+  await writeFile(join(dashboard, "index.html"), "<html>dashboard</html>");
+  await mkdir(join(dashboard, "assets"));
+  await writeFile(join(dashboard, "assets/app.js"), "dashboard asset");
+  let local: Hono | undefined;
+  let staff: Hono | undefined;
+  let gate: ReturnType<typeof handoverGates.createHandoverGate> | undefined;
+  const createGate = handoverGates.createHandoverGate;
+  const capture = vi.spyOn(handoverGates, "createHandoverGate").mockImplementation((...args) => {
+    gate = createGate(...args);
+    return gate;
+  });
+  const { createStaffApp } = await import("./cloud-remote.js");
+  vi.mocked(startStaffListener).mockImplementationOnce((config, app, log, gates = []) => {
+    staff = createStaffApp(
+      app,
+      config.staff!.origin,
+      { root: config.dashboardAppDir!, gates },
+      log,
+    );
+    return { close: async () => {}, isListening: () => true };
+  });
+  let server: StartedServer | undefined;
+  try {
+    server = await startServer(
+      {
+        ...(await tradingEnv(venueDir, state)),
+        WAITRON_DASHBOARD_APP_DIR: dashboard,
+        WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      },
+      {},
+      {
+        observeApp: (app) => {
+          local = app;
+        },
+      },
+    );
+    const open = await staff!.request("https://staff.example.test/devices", {
+      headers: { accept: "text/html", "x-request-id": "remote-page" },
+    });
+    expect(open.status).toBe(200);
+    expect(await open.text()).toBe("<html>dashboard</html>");
+    const localOpen = await local!.request("/devices", { headers: { accept: "text/html" } });
+    const build = open.headers.get(BUILD_HEADER);
+    gate!.close({ allowed: () => false });
+    for (const path of ["/devices", "/assets/app.js"]) {
+      const stopped = await staff!.request(`https://staff.example.test${path}`, {
+        headers: { accept: "text/html" },
+      });
+      expect(stopped.status).toBe(503);
+      expect(await stopped.json()).toEqual({
+        error: { code: "handover.stepping_down", params: {} },
+      });
+    }
+    expect((await local!.request("/devices", { headers: { accept: "text/html" } })).status).toBe(
+      503,
+    );
+    expect(build).not.toBeNull();
+    expect(build).toBe(localOpen.headers.get(BUILD_HEADER));
+    expect(open.headers.get("x-request-id")).toBe("remote-page");
+  } finally {
+    await server?.close();
+    capture.mockRestore();
+  }
 });

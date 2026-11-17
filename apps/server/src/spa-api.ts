@@ -16,7 +16,6 @@ export interface SpaDeps {
   root: string;
   /** URL prefix without a trailing slash; "" for the origin root. */
   basePath: string;
-  /** Absolute path prefix for browser navigation, e.g. /till/tabs or /manage. */
   navigationPath?: string | ((path: string) => boolean);
 }
 

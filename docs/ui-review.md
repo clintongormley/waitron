@@ -130,6 +130,7 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   views/zones and saved canvas editor tabs.
   A requested destination still needs the current session's permissions and device canvas.
   Paths use `/manage/<section>` and `/tabs/<key>`, with nested selections as path segments.
+  2026-11-17: current paths are `/<section>` and `/till/tabs/<key>`; the addresses above record this historical walk.
 - Keep unsaved canvas tabs out of URL writes, including when you reselect them. Embedded station
   pickers keep their selection local; an enrolled kitchen display opens the kitchen screen its device chose.
 - Keep history for meaningful navigation. Payment and modifier steps do not add entries. Since A740

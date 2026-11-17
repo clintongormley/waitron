@@ -178,7 +178,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "at the venue's name, with the main server answering, pages say it is back and reload: %s",
   async (locale) => {
     const app = fixture(ANSWERING);
-    for (const path of ["/", "/", "/servers", "/till/tabs/counter"]) {
+    for (const path of ["/", "/devices", "/servers", "/till/tabs/counter"]) {
       const response = await app.request(`${VENUE}${path}`, {
         headers: { "accept-language": locale },
       });
@@ -216,7 +216,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "the closed page says for how long a silent main server has not answered and links to the switch: %s",
   async (locale) => {
     const app = fixture({ silentSinceMs: NOW - 65_000, reached: true, silent: true });
-    for (const path of ["/", "/", "/servers", "/till/tabs/counter"]) {
+    for (const path of ["/", "/devices", "/servers", "/till/tabs/counter"]) {
       const body = await (
         await app.request(`${OWN}${path}`, { headers: { "accept-language": locale } })
       ).text();

@@ -83,7 +83,7 @@ const html = { accept: "text/html,application/xhtml+xml" };
 const refused = { error: { code: "promotion.break_glass_invalid", params: {} } };
 
 describe("the restore's waiting app: pages", () => {
-  it.each(["/", "/", "/till/anything"])(
+  it.each(["/", "/devices", "/till/anything"])(
     "answers %s with the waiting page in English, asking for the key",
     async (path) => {
       const { app } = await waiting();
