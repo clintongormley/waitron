@@ -9,6 +9,7 @@ export interface PaintPot {
   name: string;
   colour?: CalendarColour;
   edit?: () => void;
+  testId?: string;
 }
 
 /** The row of paint chips above a painter's grid; the host also takes `periodColourStyles`. */
@@ -121,6 +122,9 @@ export function paintRow(options: {
   choose: (id: string | null) => void;
   /** Offers "+ New period" after the chips. */
   newPeriod?: () => void;
+  newLabel?: string;
+  newTestId?: string;
+  after?: TemplateResult;
   /** Nothing can be painted yet: every button is disabled and the chips are drawn quiet. */
   disabled?: boolean;
   slot?: string;
@@ -140,7 +144,7 @@ export function paintRow(options: {
           html`<span class="pot">
             <button
               type="button"
-              data-test=${pot.id === null ? "paint-closed" : `paint-${pot.id}`}
+              data-test=${pot.testId ?? (pot.id === null ? "paint-closed" : `paint-${pot.id}`)}
               aria-pressed=${chosen === pot.id ? "true" : "false"}
               ?disabled=${disabled}
               @click=${() => choose(pot.id)}
@@ -173,15 +177,15 @@ export function paintRow(options: {
           ? html`<button
               type="button"
               class="new"
-              data-test="new-period"
+              data-test=${options.newTestId ?? "new-period"}
               ?disabled=${disabled}
               @click=${newPeriod}
             >
-              ${t("painter.new_period")}
+              ${options.newLabel ?? t("painter.new_period")}
             </button>`
           : nothing
       }
     </div>
-    ${options.help ?? nothing}
+    ${options.help ?? nothing}${options.after ?? nothing}
   </div>`;
 }

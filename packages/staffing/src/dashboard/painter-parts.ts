@@ -9,6 +9,10 @@ import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { showHeadcount } from "./headcount-control.js";
 import { formatLocale } from "@waitron/venue-service/dashboard/hours-view";
+import {
+  paintRow as sharedPaintRow,
+  paintGridFill,
+} from "@waitron/venue-service/dashboard/painter-parts";
 import type { StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
 import "./staff-role-dialog.js";
@@ -88,10 +92,9 @@ export const painterStyles = css`
   .message[role="alert"] {
     color: var(--wt-color-danger);
   }
-  /* The days fill the grid's slot: less the heading row and its line, and the grid's two borders. */
   staffing-grid {
     container-type: size;
-    --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
+    --paint-grid-fill: ${paintGridFill(1)};
   }
 `;
 
@@ -179,59 +182,49 @@ export interface PaintRowOptions {
 /** The staff role chips, + New staff role and How many, in the frame's `row` slot. */
 export function paintRow(options: PaintRowOptions) {
   const { staffRoles, chosen, headcount, rolesError } = options;
-  return html`<div slot="row" class="paint" data-test="paint-row">
-    <div class="pots">
-      <span class="label">${t("staffing.painter.paint")}</span>
-      ${staffRoles.map(
-        (staffRole) =>
-          html`<span class="pot">
-            <button
-              type="button"
-              data-test=${`staff-role-${staffRole.id}`}
-              aria-pressed=${chosen === staffRole.id ? "true" : "false"}
-              @click=${() => options.choose(staffRole.id)}
-            >
-              <span class="swatch" data-colour=${staffRole.colour}></span>${staffRole.name}
-            </button>
-          </span>`,
-      )}
-      <button type="button" class="new" data-test="new-staff-role" @click=${options.newStaffRole}>
-        ${t("staffing.painter.new_staff_role")}
-      </button>
-    </div>
-    <wt-number-stepper
-      class="how-many"
-      name="headcount"
-      label=${t("staffing.grid.how_many")}
-      min="1"
-      max=${MAX_HEADCOUNT}
-      .value=${String(headcount())}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        // A blank waits for the field to be left, so it can be cleared and typed again.
-        if (event.detail.value === "") return;
-        const value = Number(event.detail.value);
-        const next = Number.isInteger(value)
-          ? Math.min(Math.max(value, 1), MAX_HEADCOUNT)
-          : headcount();
-        options.setHeadcount(next);
-        showHeadcount(event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"], next);
-      }}
-      @focusout=${(event: FocusEvent) => {
-        showHeadcount(
-          event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"],
-          headcount(),
-        );
-      }}
-    ></wt-number-stepper>
-    <span class="hint" data-test="hint">${catalogueText("painter.hint").split(" · ")[0]}</span>
-    <span class="hint" data-test="guide-hint">${options.guideText}</span>
-    ${
-      rolesError
-        ? html`<p class="message" role="alert" data-test="roles-error">${rolesError}</p>`
-        : nothing
-    }
-  </div>`;
+  return sharedPaintRow({
+    slot: "row",
+    pots: staffRoles.map((role) => ({ ...role, testId: `staff-role-${role.id}` })),
+    chosen: chosen ?? null,
+    choose: (id) => options.choose(id!),
+    newPeriod: options.newStaffRole,
+    newLabel: t("staffing.painter.new_staff_role"),
+    newTestId: "new-staff-role",
+    after: html`
+      <wt-number-stepper
+        class="how-many"
+        name="headcount"
+        label=${t("staffing.grid.how_many")}
+        min="1"
+        max=${MAX_HEADCOUNT}
+        .value=${String(headcount())}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          // A blank waits for the field to be left, so it can be cleared and typed again.
+          if (event.detail.value === "") return;
+          const value = Number(event.detail.value);
+          const next = Number.isInteger(value)
+            ? Math.min(Math.max(value, 1), MAX_HEADCOUNT)
+            : headcount();
+          options.setHeadcount(next);
+          showHeadcount(event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"], next);
+        }}
+        @focusout=${(event: FocusEvent) => {
+          showHeadcount(
+            event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"],
+            headcount(),
+          );
+        }}
+      ></wt-number-stepper>
+      <span class="hint" data-test="hint">${catalogueText("painter.hint").split(" · ")[0]}</span>
+      <span class="hint" data-test="guide-hint">${options.guideText}</span>
+      ${
+        rolesError
+          ? html`<p class="message" role="alert" data-test="roles-error">${rolesError}</p>`
+          : nothing
+      }
+    `,
+  });
 }
 
 /** The staff role dialog, a sibling after `<painter-frame>`; `saved` takes the staff role it saved. */

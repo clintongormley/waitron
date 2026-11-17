@@ -36,6 +36,7 @@ import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
+import { paintGridFill } from "./painter-parts.js";
 import { PeriodEditing } from "./period-editing.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { guideHref } from "./help-guide.js";
@@ -270,7 +271,7 @@ export class SpecialDayPainter extends LitElement {
         min-width: 0;
         min-height: 0;
         container-type: size;
-        --paint-grid-fill: calc(100cqb - var(--wt-tap-min) * 2 - 3px);
+        --paint-grid-fill: ${paintGridFill(2)};
       }
       @media (width < 720px) {
         .body {

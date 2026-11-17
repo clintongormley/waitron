@@ -32,6 +32,7 @@ import { clockChangeConflictText } from "./clock-change-conflict.js";
 import { refusalOf } from "./refusal.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
+import { seasonStepper, seasonStepperStyles, paintGridFill } from "./painter-parts.js";
 import {
   departmentOf,
   droppedNotice,
@@ -137,35 +138,14 @@ export class SeasonPainter extends LitElement {
     seasonTintStyles,
     periodColourStyles,
     paintRowStyles,
+    seasonStepperStyles,
     css`
       :host {
         display: contents;
       }
-      .season {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-      .chip {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        padding: var(--wt-space-1) var(--wt-space-3);
-        white-space: nowrap;
-      }
-      .chip[data-tint] {
-        background: var(--season-tint);
-        color: var(--season-on-tint);
-        border-color: var(--season-tint-line);
-      }
-      /* The day fills the grid's slot: less the heading row and its line, and the grid's two borders. */
       paint-grid {
         container-type: size;
-        --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
-      }
-      .covers {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+        --paint-grid-fill: ${paintGridFill(1)};
       }
     `,
   ];
@@ -592,31 +572,18 @@ export class SeasonPainter extends LitElement {
     const season = seasons.find(({ id }) => id === this.seasonId);
     if (!season) return nothing;
     const single = seasons.length < 2;
-    return html`<span slot="picker" class="season">
-      <wt-button
-        data-test="previous-season"
-        variant="ghost"
-        aria-label=${t("painter.previous_season")}
-        ?disabled=${single || this.saving}
-        @click=${() => void this.step(-1)}
-        >‹</wt-button
-      >
-      <span class="chip" data-test="season" data-tint=${seasonTints(seasons).get(season.id) ?? ""}
-        >${format("season.chip", {
-          name: season.name,
-          from: formatMonthDay(season.startsOn),
-          to: formatMonthDay(seasonLastDay(seasons, season.startsOn)),
-        })}</span
-      >
-      <wt-button
-        data-test="next-season"
-        variant="ghost"
-        aria-label=${t("painter.next_season")}
-        ?disabled=${single || this.saving}
-        @click=${() => void this.step(1)}
-        >›</wt-button
-      >
-    </span>`;
+    return seasonStepper({
+      label: format("season.chip", {
+        name: season.name,
+        from: formatMonthDay(season.startsOn),
+        to: formatMonthDay(seasonLastDay(seasons, season.startsOn)),
+      }),
+      tint: seasonTints(seasons).get(season.id) ?? "",
+      previousLabel: t("painter.previous_season"),
+      nextLabel: t("painter.next_season"),
+      disabled: single || this.saving,
+      step: (by) => void this.step(by),
+    });
   }
   private picker(department: Department) {
     const zone = this.zone(department);

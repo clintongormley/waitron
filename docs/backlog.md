@@ -1186,7 +1186,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Loose ends left by A585-7 (#1766).**
   [Detail](backlog/workforce.md#loose-ends-left-by-a585-7-1766).
 
-- **Staffing painter shared parts** (bundle of 2, size M). Holds A699 popup/navigation and A711 painter chrome/date-source sharing. [Detail](backlog/workforce.md#bundle-staffing-painter-shared-parts)
+- **A711. Special-day staffing dates come from the first area.** The read has no top-level date list. [Detail](backlog/workforce.md#a711-special-day-staffing-dates-come-from-the-first-area)
 
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
   that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
