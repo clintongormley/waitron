@@ -53,6 +53,7 @@ Found with `grep -rn -E "staff\.origin|WAITRON_STAFF_ORIGIN|staffHostname|config
 
    The entrance also needs an installed chain. A leftover certificate file alone opens nothing.
 4. **Closing:** the gate is re-checked after every Cloud job pass and after the remote-access switch saves, and the listener closes as soon as the gate fails.
+   - **Why closing on the switch adds no new reach rule:** the switch is the owner's A951-S Settings on/off ("Remote dashboard access, Settings on/off … are implemented in PR #2543", `docs/backlog/replication-cloud.md` A951, under the owner's 9 November 2026 decision). Switching it off already removes the tunnel peer (`apps/server/src/cloud-tunnel.ts:59` → `rm(peer.json)`), and the staff entrance listens on `WAITRON_STAFF_HOST`, which defaults to `127.0.0.1` (`apps/server/src/config.ts:136,482`). Closing the entrance keeps it shut on the condition that already cuts it off.
 5. **Switch gap closed:** on install, the holder adopts the new name and the listener's secure context is replaced in the same call, so no 10-second window remains.
 
 ## Review Focus
@@ -61,7 +62,7 @@ Found with `grep -rn -E "staff\.origin|WAITRON_STAFF_ORIGIN|staffHostname|config
 2. **A name Cloud sends that the box cannot use** (uppercase, an IP address, over 253 characters, missing): no CSR, no request, no log line, and the served name and certificate are unchanged. Test in Task 2.
 3. **A restart in the middle of a switch.** Cloud says the new name while the old chain is installed. After a restart the box serves the old name and resumes asking for the new one. Test in Task 6.
 4. **Production.** `WAITRON_ENV=production` with a staff chain present opens no entrance, sends no request and refuses no start. Test in Task 5.
-5. **Remote access withdrawn while the entrance is open.** Cloud withdraws `remote_access`, or the owner switches remote access off: the entrance closes, and it reopens only when the gate holds again. Test in Task 5.
+5. **Remote access withdrawn while the entrance is open.** Cloud withdraws `remote_access`, or the owner switches remote access off: the entrance closes, and it reopens only when the gate holds again. Closing on the switch matches what the switch already does to the tunnel (builder's call 4). Test in Task 5.
 
 ---
 
@@ -175,7 +176,7 @@ Depends on: Cloud plan PR 1 landed. Six tasks.
   - `boot.staff-entrance-gate.test.ts` (Cloud at `installationFixture`, a chain installed for `staff.example.test`):
     - `opens the entrance when Cloud lists remote access with a staff name and a chain is installed`;
     - `closes it when Cloud withdraws remote access` (the service becomes `unconfigured`; after the next pass the staff port refuses connections);
-    - `closes it when remote access is switched off` (the switch API; closed by the time the call returns);
+    - `closes it when remote access is switched off` (the switch API; closed by the time the call returns). This mirrors what the switch already does to the tunnel peer (`cloud-tunnel.ts:59`); see builder's call 4;
     - `a leftover certificate file alone keeps it closed` (no Cloud view, or no `remote_access`).
   - `boot.test.ts` (alongside its existing `WAITRON_ENV: "production"` starts at lines 732, 1337, 1365): `a production box with a staff chain opens no entrance and starts no certificate requests` (`startStaffListener` is not called; the staff step is never run; the start succeeds) (Review Focus 4).
   - `boot.failed-start.test.ts` (~570), `boot.management-origin.test.ts` (129-140, 335, 573) and `boot.mirror.test.ts` (~397): drop `WAITRON_STAFF_ORIGIN`; give the start a saved Cloud view listing `remote_access` with the staff name (through the suite's existing Cloud seam, or `installationFixture` where the suite has none); keep every assertion. `workerOptions?.staffHostname` becomes `await workerOptions?.staffCertificates?.()` being `true`.
