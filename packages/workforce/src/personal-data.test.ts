@@ -191,7 +191,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     startsOffsetMinutes: -120,
     endsAt: "2026-01-02T08:30:00Z",
     endsOffsetMinutes: -120,
-    rosterVersionId: null,
     createdAt: "2026-01-01T08:40:00.000Z",
   });
 
@@ -201,7 +200,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     startsOffsetMinutes: 60,
     endsAt: "2026-03-05T09:17:00Z",
     endsOffsetMinutes: 60,
-    rosterVersionId: null,
     createdAt: "2026-02-20T06:59:00.000Z",
   });
   const colleagueLate = await insertDraftShift(db, {
@@ -210,7 +208,6 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     startsOffsetMinutes: 120,
     endsAt: "2026-04-12T05:53:00Z",
     endsOffsetMinutes: 120,
-    rosterVersionId: null,
     createdAt: "2026-03-21T06:58:00.000Z",
   });
   const colleagueGiveAway = await insertDraftShift(db, {
@@ -296,7 +293,7 @@ const MARTA_ROTA = {
     {
       startsAt: "2026-01-01T22:30:00-02:00",
       endsAt: "2026-01-02T06:30:00-02:00",
-      rota: null,
+      rota: "draft",
       createdAt: "2026-01-01T08:40:00.000Z",
     },
     {

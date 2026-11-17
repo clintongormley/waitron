@@ -25,7 +25,6 @@ const OWNED = [
   // Staffing's tables, which live in this package's set.
   "staffing_days",
   "staffing_blocks",
-  "shift_assignments",
 ];
 
 /** Core tables: none may appear in this package's generated SQL. */

@@ -22,7 +22,7 @@ export interface PersonShiftRow {
   endsAt: string;
   endsOffsetMinutes: number;
   description: string | null;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 export type SwapDirection = "offered_to_me" | "requested_by_me";
@@ -60,7 +60,7 @@ export async function listShiftsForPerson(
     starts_offset_minutes: number;
     ends_at: string;
     ends_offset_minutes: number;
-    roster_version_id: string | null;
+    roster_version_id: string;
   }>(sql`
     select shifts.id, starts_at, starts_offset_minutes, ends_at,
       ends_offset_minutes, roster_version_id

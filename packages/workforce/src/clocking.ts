@@ -123,7 +123,7 @@ export interface ShiftRow {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  rosterVersionId: string | null;
+  rosterVersionId: string;
 }
 
 /** The week's roster snapshot for the authoring grid — the current draft (or, if none, the published
@@ -466,27 +466,25 @@ export class WorkforceBackend {
     await tx.execute(sql`delete from shifts where id = ${input.shiftId}`);
   }
 
-  /** A shift with a null `roster_version_id` is editable: there is no published version to protect. */
   private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
-    const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
+    const { rows } = await tx.execute<ShiftDbRow & { version_status: string }>(sql`
       select s.id, s.person_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
         s.ends_offset_minutes, s.roster_version_id, rv.status as version_status
       from shifts s
-      left join roster_versions rv on rv.id = s.roster_version_id
+      join roster_versions rv on rv.id = s.roster_version_id
       where s.id = ${shiftId}
       limit 1`);
     const row = rows[0];
     if (row === undefined) throw new AppError("shift.not_found", { shiftId });
-    if (row.version_status !== null && row.version_status !== "draft") {
-      throw new AppError("roster.not_draft", { rosterVersionId: row.roster_version_id! });
+    if (row.version_status !== "draft") {
+      throw new AppError("roster.not_draft", { rosterVersionId: row.roster_version_id });
     }
     return mapShift(row);
   }
 
   /**
    * Supersedes any incumbent published version for the same exact period FIRST, so it leaves
-   * `roster_versions_published_period_uq` before this one enters it; then publishes this version and
-   * attaches every unattached shift whose LOCAL date falls in the period.
+   * `roster_versions_published_period_uq` before this one enters it; then publishes this version.
    *
    * Throws `roster.not_found`, `roster.already_published` (a version is published once), and
    * `roster.period_already_published` when that unique index fires.
@@ -513,15 +511,6 @@ export class WorkforceBackend {
       }
       throw error;
     }
-    // Not aliased: SQLite refuses `update shifts s set …`, and `shiftLocalDate` qualifies its columns
-    // with `shifts`.
-    await tx.execute(sql`
-      update shifts
-      set roster_version_id = rv.id
-      from roster_versions rv
-      where rv.id = ${input.versionId}
-        and shifts.roster_version_id is null
-        and ${shiftLocalDate} between rv.period_start and rv.period_end`);
     if (input.ruleset === undefined) return [];
     return validateRoster(await this.attachedShifts(tx, input.versionId), input.ruleset);
   }
@@ -698,7 +687,7 @@ type ShiftDbRow = {
   starts_offset_minutes: number;
   ends_at: string;
   ends_offset_minutes: number;
-  roster_version_id: string | null;
+  roster_version_id: string;
 };
 
 function mapRosterVersion(r: RosterVersionDbRow): RosterVersionRow {

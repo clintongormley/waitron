@@ -1,9 +1,11 @@
+import { shifts } from "./schema/shifts.js";
+import { rosterVersions } from "./schema/roster-versions.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, departments, nodes, staffRoles, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
@@ -455,4 +457,34 @@ describe("complete captured workforce backup evidence", () => {
   it("rejects missing restored tables", async () => {
     invalid(await run(original.db, absent.db), "data");
   });
+});
+
+it("refuses a restore that loses a shift's role and area", async () => {
+  for (const { db } of [original, restored]) {
+    await db
+      .insert(departments)
+      .values({ id: "area", name: "Dining room", tradingName: "Dining room" });
+    await db.insert(staffRoles).values({ id: "role", name: "Waiter" });
+    await db
+      .insert(rosterVersions)
+      .values({ id: "week", periodStart: "2026-01-05", periodEnd: "2026-01-11", createdAt: at });
+    await db.insert(shifts).values({
+      id: "shift",
+      personId: person,
+      rosterVersionId: "week",
+      staffRoleId: "role",
+      departmentId: "area",
+      startsAt: at,
+      startsOffsetMinutes: 60,
+      endsAt: "2026-01-05T17:00:00.000Z",
+      endsOffsetMinutes: 60,
+      createdAt: at,
+    });
+  }
+  expect(await run()).toEqual(passed);
+  await restored.db
+    .update(shifts)
+    .set({ staffRoleId: null, departmentId: null, stationId: null })
+    .where(eq(shifts.id, "shift"));
+  invalid(await run(), "data");
 });

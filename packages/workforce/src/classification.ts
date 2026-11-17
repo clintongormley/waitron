@@ -34,7 +34,6 @@ export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ...WORKFORCE_OWN_CLASSIFICATION,
   classify("staffing_days", "state", "an area's painted staffing day"),
   classify("staffing_blocks", "state", "one painted staffing need"),
-  classify("shift_assignments", "state", "the area and staff role a shift fills"),
 ];
 
 export const WORKFORCE_CHANGE_SOURCES: readonly ChangeSource[] = WORKFORCE_OWN_CLASSIFICATION.map(

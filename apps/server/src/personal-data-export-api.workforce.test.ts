@@ -1,3 +1,4 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -320,7 +321,7 @@ beforeEach(async () => {
         startsOffsetMinutes: COLLEAGUE.shift.offsetMinutes,
         endsAt: "2026-03-05T09:17:00Z",
         endsOffsetMinutes: 60,
-        rosterVersionId: null,
+        rosterVersionId: await seedRosterWeek(suite.db, "2026-03-05"),
         createdAt: "2026-02-20T06:59:00.000Z",
       },
     ])
@@ -523,7 +524,7 @@ beforeEach(async () => {
     [colleagueShift!.id, cellar!.id, sommelier],
   ] as const)
     await suite.db.run(
-      sql`insert into shift_assignments (shift_id, department_id, staff_role_id) values (${shiftId}, ${departmentId}, ${roleId})`,
+      sql`update shifts set department_id=${departmentId}, staff_role_id=${roleId} where id=${shiftId}`,
     );
 
   await seedActions(colleagueId);

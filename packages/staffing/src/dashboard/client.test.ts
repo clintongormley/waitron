@@ -257,7 +257,7 @@ describe("the rota client", () => {
       live: "1",
     });
     fetchImpl.mockResolvedValue(jsonResponse({ week: "2026-11-30", shifts: [{ shiftId: "new" }] }));
-    live.invalidate([{ type: "shift_assignments" }]);
+    live.invalidate([{ type: "shifts" }]);
     await vi.waitFor(() =>
       expect(apply).toHaveBeenLastCalledWith({ week: "2026-11-30", shifts: [{ shiftId: "new" }] }),
     );

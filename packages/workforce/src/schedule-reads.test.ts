@@ -39,7 +39,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("listShiftsForPerson", () => {
-  it("shows only published shifts while drafts, unattached and superseded shifts stay hidden", async () => {
+  it("shows only published shifts while drafts and superseded shifts stay hidden", async () => {
     const personId = await seedPerson(suite.db, `publication-${crypto.randomUUID()}`);
     await seedFixtureVenue(suite.db);
     const published = publishedVersionId;
@@ -52,7 +52,7 @@ describe("listShiftsForPerson", () => {
       personId,
       rosterVersionId: published,
     });
-    for (const rosterVersionId of [draft, null, superseded]) {
+    for (const rosterVersionId of [draft, superseded]) {
       await insertDraftShift(suite.db, { personId, rosterVersionId });
     }
     const rows = await run((tx) =>

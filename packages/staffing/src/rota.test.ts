@@ -1,6 +1,7 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { dayCutoverChanges, personStaffRoles, staffRoles } from "@waitron/db";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -24,7 +25,6 @@ import {
   WorkforceBackend,
   absences,
   employments,
-  shiftAssignments,
   shifts,
   shiftSwaps,
   listShiftsForPerson,
@@ -123,7 +123,12 @@ async function rawShift(
         endsAt,
         startsOffsetMinutes: 60,
         endsOffsetMinutes: 60,
-        rosterVersionId: versionId,
+        rosterVersionId:
+          versionId ??
+          (await seedRosterWeek(
+            t,
+            new Date(Date.parse(startsAt) + 60 * 60000).toISOString().slice(0, 10),
+          )),
       })
       .returning();
     return s!.id;
@@ -272,17 +277,18 @@ describe("the rota week", () => {
       timeZone: "Europe/Madrid",
     });
   });
-  it("places a version's next-Monday shift on Sunday, keeps the previous Sunday's overflow visible and includes only local-date unattached shifts", async () => {
+  it("places a version's next-Monday shift on Sunday and keeps the previous Sunday's overflow visible in its selected week", async () => {
     const v = await venue();
     const version = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     const sunday = await rawShift(v, version, "2026-12-07T00:00:00Z", "2026-12-07T02:00:00Z");
     const outside = await rawShift(v, version, "2026-11-29T23:30:00Z", "2026-11-30T01:00:00Z");
-    const local = await rawShift(v, null, "2026-11-29T23:45:00Z", "2026-11-30T02:00:00Z");
+    const local = await rawShift(v, version, "2026-11-29T23:45:00Z", "2026-11-30T02:00:00Z");
     await rawShift(v, null, "2026-12-06T23:30:00Z", "2026-12-07T02:00:00Z");
     await tx((t) =>
       t
-        .insert(shiftAssignments)
-        .values({ shiftId: sunday, departmentId: v.departmentId, staffRoleId: v.staffRoleId }),
+        .update(shifts)
+        .set({ departmentId: v.departmentId, staffRoleId: v.staffRoleId })
+        .where(eq(shifts.id, sunday)),
     );
     const r = await read();
     expect(r.shifts.map((s) => s.shiftId).sort()).toEqual([sunday, outside, local].sort());
@@ -507,12 +513,10 @@ describe("the rota writes", () => {
     await expect(tx((t) => api.removeRotaShift(t, id))).rejects.toMatchObject({
       code: "roster.not_draft",
     });
-    const [assignment] = await tx((t) =>
-      t.select().from(shiftAssignments).where(eq(shiftAssignments.shiftId, id)),
-    );
+    const [assignment] = await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)));
     expect(assignment!.departmentId).toBe(v.departmentId);
   });
-  it("assigns an unlinked shift, edits its person and time and removes the draft shift", async () => {
+  it("assigns a draft shift, edits its person and time and removes it", async () => {
     const v = await venue();
     const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     expect(api.updateRotaShift).toBeTypeOf("function");
@@ -538,9 +542,7 @@ describe("the rota writes", () => {
     });
     await tx((t) => api.removeRotaShift(t, id));
     expect((await read()).shifts).toEqual([]);
-    expect(
-      await tx((t) => t.select().from(shiftAssignments).where(eq(shiftAssignments.shiftId, id))),
-    ).toEqual([]);
+    expect(await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)))).toEqual([]);
   });
   it("refuses an unknown role and an inactive area without leaving a draft", async () => {
     const v = await venue();
@@ -568,11 +570,11 @@ describe("the rota writes", () => {
 });
 
 describe("reviewed Rota boundaries", () => {
-  it("refuses both an edit and deletion of an unattached shift in a published week", async () => {
+  it("refuses both an edit and deletion of a shift in a published week", async () => {
     const v = await venue();
     const version = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     await tx((t) => backend.publishRoster(t, { versionId: version }));
-    const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
+    const id = await rawShift(v, version, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     expect((await read()).shifts.map((s) => s.shiftId)).toContain(id);
     await expect(
       tx((t) => api.updateRotaShift(t, id, { area: v.area, staffRoleId: v.staffRoleId })),
@@ -583,12 +585,13 @@ describe("reviewed Rota boundaries", () => {
     });
     expect((await read()).shifts.map((s) => s.shiftId)).toContain(id);
   });
-  it("leaves an empty patch unchanged without creating a roster version", async () => {
+  it("leaves an empty patch and its existing draft week unchanged", async () => {
     const v = await venue();
     const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     const before = await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)));
+    const version = (await read()).version;
     await tx((t) => api.updateRotaShift(t, id, {}));
-    expect((await read()).version).toBeNull();
+    expect((await read()).version).toEqual(version);
     expect(await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)))).toEqual(before);
     await tx((t) => api.removeRotaShift(t, id));
     expect((await read()).shifts).toEqual([]);
@@ -618,7 +621,7 @@ describe("reviewed Rota boundaries", () => {
 });
 
 describe("the approved calendar-week limit", () => {
-  it("keeps an edited unattached early-Monday shift visible as previous-week overflow in its calendar week", async () => {
+  it("keeps an edited draft early-Monday shift visible as previous-week overflow in its calendar week", async () => {
     const v = await venue();
     const id = await rawShift(v, null, "2026-12-06T23:30:00Z", "2026-12-07T02:00:00Z");
     await tx((t) => api.updateRotaShift(t, id, { area: v.area, staffRoleId: v.staffRoleId }));
@@ -707,10 +710,15 @@ describe("changing a published rota week", () => {
     const assignments = () =>
       tx((t) =>
         t
-          .select()
-          .from(shiftAssignments)
-          .innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId))
-          .then((rows) => Object.fromEntries(rows.map((r) => [r.shifts.id, r.shift_assignments]))),
+          .select({
+            shiftId: shifts.id,
+            staffRoleId: shifts.staffRoleId,
+            departmentId: shifts.departmentId,
+            stationId: shifts.stationId,
+          })
+          .from(shifts)
+          .where(isNotNull(shifts.staffRoleId))
+          .then((rows) => Object.fromEntries(rows.map((r) => [r.shiftId, r]))),
       );
     const before = await assignments();
     const callsFor = (week: string) =>
@@ -773,4 +781,51 @@ describe("copying an unassigned shift", () => {
       { shiftId: copied.shifts[0]!.shiftId, outsideWeek: false },
     ]);
   });
+});
+
+it("adding a shift to a slot writes its role and area on the shift", async () => {
+  const v = await venue();
+  const shiftId = await add(v);
+  expect(
+    await tx((t) =>
+      t
+        .select({
+          staffRoleId: shifts.staffRoleId,
+          departmentId: shifts.departmentId,
+          stationId: shifts.stationId,
+        })
+        .from(shifts)
+        .where(eq(shifts.id, shiftId)),
+    ),
+  ).toEqual([
+    {
+      staffRoleId: v.staffRoleId,
+      departmentId: v.departmentId,
+      stationId: null,
+    },
+  ]);
+});
+
+it("moving a shift from a department to a station clears the department", async () => {
+  const v = await venue();
+  const shiftId = await add(v);
+  await tx((t) => api.updateRotaShift(t, shiftId, { area: { kind: "station", id: v.stationId } }));
+  expect(
+    await tx((t) =>
+      t
+        .select({
+          staffRoleId: shifts.staffRoleId,
+          departmentId: shifts.departmentId,
+          stationId: shifts.stationId,
+        })
+        .from(shifts)
+        .where(eq(shifts.id, shiftId)),
+    ),
+  ).toEqual([
+    {
+      staffRoleId: v.staffRoleId,
+      departmentId: null,
+      stationId: v.stationId,
+    },
+  ]);
 });

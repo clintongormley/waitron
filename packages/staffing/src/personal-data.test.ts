@@ -1,9 +1,11 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
+import { eq } from "drizzle-orm";
 import { personStaffRoles, staffRoles } from "@waitron/db";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_PERSONAL_DATA } from "./personal-data.js";
 import * as staffing from "./index.js";
@@ -64,6 +66,7 @@ async function seedAll() {
     // different offsets.
     await tx.insert(shifts).values([
       {
+        rosterVersionId: await seedRosterWeek(tx, "2026-03-14"),
         id: NIGHT_SHIFT,
         personId: marta,
         startsAt: "2026-03-14T23:30:00Z",
@@ -72,6 +75,7 @@ async function seedAll() {
         endsOffsetMinutes: 60,
       },
       {
+        rosterVersionId: await seedRosterWeek(tx, "2026-03-10"),
         id: EVENING_SHIFT,
         personId: marta,
         startsAt: "2026-03-10T18:00:00Z",
@@ -81,6 +85,7 @@ async function seedAll() {
       },
     ]);
     await tx.insert(shifts).values({
+      rosterVersionId: await seedRosterWeek(tx, "2026-03-12"),
       personId: marta,
       startsAt: "2026-03-12T10:00:00Z",
       startsOffsetMinutes: 60,
@@ -90,6 +95,7 @@ async function seedAll() {
     const [colleagueShift] = await tx
       .insert(shifts)
       .values({
+        rosterVersionId: await seedRosterWeek(tx, "2026-03-11"),
         personId: colleague,
         startsAt: "2026-03-11T16:00:00Z",
         startsOffsetMinutes: 60,
@@ -97,11 +103,12 @@ async function seedAll() {
         endsOffsetMinutes: 60,
       })
       .returning({ id: shifts.id });
-    await tx.insert(shiftAssignments).values([
+    for (const { shiftId, ...slot } of [
       { shiftId: NIGHT_SHIFT, staffRoleId: WAITER, departmentId: venue.departmentId },
       { shiftId: EVENING_SHIFT, staffRoleId: BARTENDER, stationId: venue.stationId },
       { shiftId: colleagueShift!.id, staffRoleId: SOMMELIER, departmentId: terrace!.id },
-    ]);
+    ])
+      await tx.update(shifts).set(slot).where(eq(shifts.id, shiftId));
   });
   return { venue, marta, colleague };
 }
@@ -144,6 +151,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
       // The higher id is inserted first, so storage order is the reverse of id order.
       for (const id of [EVENING_SHIFT, NIGHT_SHIFT])
         await tx.insert(shifts).values({
+          rosterVersionId: await seedRosterWeek(tx, "2026-03-10"),
           id,
           personId: venue.marc,
           startsAt: "2026-03-10T18:00:00Z",
@@ -151,10 +159,11 @@ describe("STAFFING_PERSONAL_DATA", () => {
           endsAt: "2026-03-10T22:00:00Z",
           endsOffsetMinutes: 60,
         });
-      await tx.insert(shiftAssignments).values([
+      for (const { shiftId, ...slot } of [
         { shiftId: EVENING_SHIFT, staffRoleId: WAITER, stationId: venue.stationId },
         { shiftId: NIGHT_SHIFT, staffRoleId: WAITER, departmentId: venue.departmentId },
-      ]);
+      ])
+        await tx.update(shifts).set(slot).where(eq(shifts.id, shiftId));
     });
     const [file] = await download(venue.marc);
     const together = { startsAt: "2026-03-10T19:00:00+01:00", endsAt: "2026-03-10T23:00:00+01:00" };
@@ -182,6 +191,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   it("builds no file for a person with no role and no assigned shift", async () => {
     const venue = await seedVenueWithStaff(suite.db);
     await suite.db.insert(shifts).values({
+      rosterVersionId: await seedRosterWeek(suite.db, "2026-03-12"),
       personId: venue.marc,
       startsAt: "2026-03-12T10:00:00Z",
       startsOffsetMinutes: 60,
@@ -207,6 +217,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(staffRoles).values({ id: WAITER, name: "Waiter" });
       await tx.insert(shifts).values({
+        rosterVersionId: await seedRosterWeek(tx, "2026-03-14"),
         id: NIGHT_SHIFT,
         personId: venue.marc,
         startsAt: "2026-03-14T23:30:00Z",
@@ -215,8 +226,9 @@ describe("STAFFING_PERSONAL_DATA", () => {
         endsOffsetMinutes: 60,
       });
       await tx
-        .insert(shiftAssignments)
-        .values({ shiftId: NIGHT_SHIFT, staffRoleId: WAITER, departmentId: venue.departmentId });
+        .update(shifts)
+        .set({ staffRoleId: WAITER, departmentId: venue.departmentId })
+        .where(eq(shifts.id, NIGHT_SHIFT));
     });
     const files = await download(venue.marc);
     expect(files.map((f) => f.name)).toEqual(["staff-roles.json"]);

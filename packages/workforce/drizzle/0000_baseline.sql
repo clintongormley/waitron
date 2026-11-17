@@ -206,10 +206,18 @@ CREATE TABLE `shifts` (
 	`starts_offset_minutes` integer NOT NULL,
 	`ends_at` text NOT NULL,
 	`ends_offset_minutes` integer NOT NULL,
-	`roster_version_id` text,
+	`roster_version_id` text NOT NULL,
+	`staff_role_id` text,
+	`department_id` text,
+	`station_id` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`roster_version_id`) REFERENCES `roster_versions`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`roster_version_id`) REFERENCES `roster_versions`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "shifts_one_area_ck" CHECK(("shifts"."staff_role_id" is null and "shifts"."department_id" is null and "shifts"."station_id" is null) or
+        ("shifts"."staff_role_id" is not null and ("shifts"."department_id" is null) <> ("shifts"."station_id" is null))),
 	CONSTRAINT "shifts_starts_offset_ck" CHECK("shifts"."starts_offset_minutes" between -840 and 840),
 	CONSTRAINT "shifts_ends_offset_ck" CHECK("shifts"."ends_offset_minutes" between -840 and 840),
 	CONSTRAINT "shifts_interval_ck" CHECK("shifts"."ends_at" > "shifts"."starts_at")
@@ -316,18 +324,6 @@ CREATE INDEX `time_entries_person_event_idx` ON `time_entries` (`person_id`,`eve
 CREATE INDEX `time_entries_person_chain_idx` ON `time_entries` (`person_id`,`node_id`,`sequence_no`);--> statement-breakpoint
 CREATE INDEX `time_entries_corrects_entry_idx` ON `time_entries` (`corrects_entry_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `time_entries_chain_position_uq` ON `time_entries` (`node_id`,`sequence_no`);--> statement-breakpoint
-CREATE TABLE `shift_assignments` (
-	`shift_id` text PRIMARY KEY NOT NULL,
-	`department_id` text,
-	`station_id` text,
-	`staff_role_id` text NOT NULL,
-	FOREIGN KEY (`shift_id`) REFERENCES `shifts`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "shift_assignments_one_area_ck" CHECK(("shift_assignments"."department_id" is null) <> ("shift_assignments"."station_id" is null))
-);
---> statement-breakpoint
 CREATE TABLE `staffing_blocks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`day_id` text NOT NULL,

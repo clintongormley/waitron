@@ -900,6 +900,8 @@ also qualifies the historical operation-description references in this section.
   document, with only bucket keys sealed. The remaining environment slices stay open.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
+  Each shift now holds its own job role and area and belongs to a rota week; deleting a draft week
+  deletes its shifts.
   Authenticator secrets and emailed confirmation codes use purpose keys from the vault ring.
   The existing rotation command re-seals authenticator secrets and pending setups; codes issued
   before the change still work while the ring retains their previous key.

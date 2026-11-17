@@ -597,22 +597,19 @@ describe("mountMeApi — shifts", () => {
     ).toEqual([null, null]);
   });
 
-  it("keeps draft, unattached and superseded shifts out of the person's schedule", async () => {
+  it("keeps draft and superseded shifts out of the person's schedule", async () => {
     const visible = await insertShift(me, "2026-09-07T09:00:00Z", "2026-09-07T17:00:00Z");
-    for (const status of ["draft", "superseded", null] as const) {
-      let rosterVersionId: string | null = null;
-      if (status !== null) {
-        const [version] = await suite.db
-          .insert(rosterVersions)
-          .values({
-            periodStart: "2026-09-07",
-            periodEnd: "2026-09-13",
-            status,
-            publishedAt: status === "draft" ? null : "2026-09-01T00:00:00Z",
-          })
-          .returning({ id: rosterVersions.id });
-        rosterVersionId = version!.id;
-      }
+    for (const status of ["draft", "superseded"] as const) {
+      const [version] = await suite.db
+        .insert(rosterVersions)
+        .values({
+          periodStart: "2026-09-07",
+          periodEnd: "2026-09-13",
+          status,
+          publishedAt: status === "draft" ? null : "2026-09-01T00:00:00Z",
+        })
+        .returning({ id: rosterVersions.id });
+      const rosterVersionId = version!.id;
       await suite.db.insert(shifts).values({
         personId: me,
         rosterVersionId,

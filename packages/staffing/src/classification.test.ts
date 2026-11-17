@@ -7,7 +7,7 @@ const STAFFING_CLASSIFICATION = WORKFORCE_CLASSIFICATION.filter(({ table }) =>
   (STAFFING_TABLES as readonly string[]).includes(table),
 );
 
-const TABLES = ["staffing_days", "staffing_blocks", "shift_assignments"];
+const TABLES = ["staffing_days", "staffing_blocks"];
 
 describe("STAFFING_CLASSIFICATION", () => {
   it("classifies every staffing table as replicated state, none append-only", () => {

@@ -7,7 +7,6 @@ export const QUERY_DEPENDENCIES = {
   "staffing-month": [
     "shifts",
     "roster_versions",
-    "shift_assignments",
     "staffing_days",
     "staffing_blocks",
     "staff_roles",
@@ -21,7 +20,6 @@ export const QUERY_DEPENDENCIES = {
     "shift_swaps",
     "shifts",
     "roster_versions",
-    "shift_assignments",
     "staffing_days",
     "staffing_blocks",
     "staff_roles",

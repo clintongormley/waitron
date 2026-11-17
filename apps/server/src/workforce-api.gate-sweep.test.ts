@@ -1,3 +1,4 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -120,6 +121,7 @@ async function seedAcceptedSwap(personId: string): Promise<string> {
   const [shift] = await suite.db
     .insert(shifts)
     .values({
+      rosterVersionId: await seedRosterWeek(suite.db, "2026-03-02"),
       personId,
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,

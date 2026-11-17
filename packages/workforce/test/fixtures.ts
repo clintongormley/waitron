@@ -100,6 +100,27 @@ export async function insertRosterVersion(
   return row!.id;
 }
 
+export async function seedRosterWeek(
+  db: Database | Transaction,
+  periodStart: string,
+): Promise<string> {
+  const date = new Date(`${periodStart}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  const start = date.toISOString().slice(0, 10);
+  const [draft] = await db
+    .select({ id: rosterVersions.id })
+    .from(rosterVersions)
+    .where(and(eq(rosterVersions.periodStart, start), eq(rosterVersions.status, "draft")))
+    .limit(1);
+  return (
+    draft?.id ??
+    insertRosterVersion(db, {
+      periodStart: start,
+      periodEnd: new Date(date.getTime() + 6 * 86400000).toISOString().slice(0, 10),
+    })
+  );
+}
+
 /** `createdAt` behaves as on {@link insertAbsence}. */
 export async function insertDraftShift(
   db: Database | Transaction,
@@ -109,7 +130,7 @@ export async function insertDraftShift(
     startsOffsetMinutes?: number;
     endsAt?: string;
     endsOffsetMinutes?: number;
-    rosterVersionId?: string | null;
+    rosterVersionId?: string;
     createdAt?: string;
   },
 ): Promise<string> {
@@ -121,7 +142,17 @@ export async function insertDraftShift(
       startsOffsetMinutes: params.startsOffsetMinutes ?? 0,
       endsAt: params.endsAt ?? "2026-01-05T17:00:00Z",
       endsOffsetMinutes: params.endsOffsetMinutes ?? 0,
-      rosterVersionId: params.rosterVersionId ?? null,
+      rosterVersionId:
+        params.rosterVersionId ??
+        (await seedRosterWeek(
+          db,
+          new Date(
+            Date.parse(params.startsAt ?? "2026-01-05T09:00:00Z") +
+              (params.startsOffsetMinutes ?? 0) * 60000,
+          )
+            .toISOString()
+            .slice(0, 10),
+        )),
       ...(params.createdAt === undefined ? {} : { createdAt: params.createdAt }),
     })
     .returning({ id: shifts.id });

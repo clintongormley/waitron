@@ -74,7 +74,7 @@ for (const assigned of [true, false]) {
             sql`insert into staff_roles (id, name, colour, position) values (${staffRoleId}, 'Sous chef', 'green', 0)`,
           );
           await tx.execute(
-            sql`insert into shift_assignments (shift_id, department_id, staff_role_id) values (${shift!.id}, ${department!.id}, ${staffRoleId})`,
+            sql`update shifts set department_id=${department!.id}, staff_role_id=${staffRoleId} where id=${shift!.id}`,
           );
         }
         return shift!.id;

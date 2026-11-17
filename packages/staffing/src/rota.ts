@@ -1,16 +1,5 @@
-import { insertInChunks, staffRoles } from "@waitron/db";
-import {
-  and,
-  asc,
-  eq,
-  getTableColumns,
-  gte,
-  lte,
-  inArray,
-  or,
-  isNull,
-  isNotNull,
-} from "drizzle-orm";
+import { staffRoles } from "@waitron/db";
+import { and, asc, eq, gte, lte, inArray, or, isNull, isNotNull } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, cutoverForBusinessDay } from "@waitron/shared";
@@ -23,14 +12,7 @@ import {
   readSeasons,
   resolveDepartmentsDays,
 } from "@waitron/venue-service";
-import {
-  WorkforceBackend,
-  absences,
-  employments,
-  shiftAssignments,
-  shifts,
-  shiftSwaps,
-} from "@waitron/workforce";
+import { WorkforceBackend, absences, employments, shifts, shiftSwaps } from "@waitron/workforce";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { parseArea } from "./paint-rules.js";
 import { mondayOf, readRotaRows } from "./rota-data.js";
@@ -285,31 +267,17 @@ export async function addRotaShift(tx: Transaction, input: RotaShiftInput): Prom
     personId: input.personId,
   });
   await tx
-    .insert(shiftAssignments)
-    .values({ shiftId, ...assignment(input.area, input.staffRoleId) });
+    .update(shifts)
+    .set(assignment(input.area, input.staffRoleId))
+    .where(eq(shifts.id, shiftId));
   return shiftId;
 }
 async function writableShift(tx: Transaction, shiftId: string) {
   const [row] = await tx.select().from(shifts).where(eq(shifts.id, shiftId));
   if (!row) throw new AppError("shift.not_found", { shiftId });
-  if (row.rosterVersionId !== null) {
-    const v = await backend.getRosterVersion(tx, { versionId: row.rosterVersionId });
-    if (v.status !== "draft") throw new AppError("roster.not_draft", { rosterVersionId: v.id });
-  }
+  const v = await backend.getRosterVersion(tx, { versionId: row.rosterVersionId });
+  if (v.status !== "draft") throw new AppError("roster.not_draft", { rosterVersionId: v.id });
   return row;
-}
-async function unattachedWeek(
-  tx: Transaction,
-  row: Pick<typeof shifts.$inferSelect, "startsAt" | "startsOffsetMinutes">,
-) {
-  const localDate = new Date(Date.parse(row.startsAt) + row.startsOffsetMinutes * 60000)
-    .toISOString()
-    .slice(0, 10);
-  const week = mondayOf(localDate);
-  const { version } = await backend.getRoster(tx, { period: week });
-  if (version?.status === "published")
-    throw new AppError("roster.not_draft", { rosterVersionId: version.id });
-  return { week, version };
 }
 export async function updateRotaShift(
   tx: Transaction,
@@ -318,35 +286,23 @@ export async function updateRotaShift(
 ): Promise<void> {
   const row = await writableShift(tx, shiftId);
   if (Object.keys(patch).length === 0) return;
-  if (row.rosterVersionId === null) {
-    const { week, version } = await unattachedWeek(tx, row);
-    const versionId = version?.id ?? (await backend.createRosterVersion(tx, { period: week }));
-    await tx.update(shifts).set({ rosterVersionId: versionId }).where(eq(shifts.id, shiftId));
-  }
-  const [prior] = await tx
-    .select()
-    .from(shiftAssignments)
-    .where(eq(shiftAssignments.shiftId, shiftId));
   if (patch.area !== undefined || patch.staffRoleId !== undefined) {
     const area =
       patch.area ??
-      (prior?.departmentId
-        ? { kind: "department" as const, id: prior.departmentId }
-        : prior?.stationId
-          ? { kind: "station" as const, id: prior.stationId }
+      (row.departmentId
+        ? { kind: "department" as const, id: row.departmentId }
+        : row.stationId
+          ? { kind: "station" as const, id: row.stationId }
           : null);
-    const staffRoleId = patch.staffRoleId ?? prior?.staffRoleId;
+    const staffRoleId = patch.staffRoleId ?? row.staffRoleId;
     if (!area) throw invalid("area");
     if (!staffRoleId) throw invalid("staffRoleId");
-    await assignmentTargets(tx, area, staffRoleId, prior?.staffRoleId);
-    await tx
-      .insert(shiftAssignments)
-      .values({ shiftId, ...assignment(area, staffRoleId) })
-      .onConflictDoUpdate({ target: shiftAssignments.shiftId, set: assignment(area, staffRoleId) });
+    await assignmentTargets(tx, area, staffRoleId, row.staffRoleId ?? undefined);
+    await tx.update(shifts).set(assignment(area, staffRoleId)).where(eq(shifts.id, shiftId));
   }
   if (patch.personId !== undefined || patch.startsAt !== undefined || patch.endsAt !== undefined) {
     const clock = await readVenueClock(tx);
-    const placed = placeShift({ shiftId, area: null, staffRoleId: null, ...row }, (d) =>
+    const placed = placeShift({ ...row, shiftId, area: null }, (d) =>
       cutoverForBusinessDay(clock, d),
     );
     const wall = (at: string, offset: number) =>
@@ -368,8 +324,7 @@ export async function updateRotaShift(
   }
 }
 export async function removeRotaShift(tx: Transaction, shiftId: string): Promise<void> {
-  const row = await writableShift(tx, shiftId);
-  if (row.rosterVersionId === null) await unattachedWeek(tx, row);
+  await writableShift(tx, shiftId);
   await backend.removeShift(tx, { shiftId });
 }
 
@@ -379,16 +334,5 @@ export async function changeRotaWeek(tx: Transaction, week: string) {
   if (!version) throw invalid("week");
   if (version.status === "draft") throw new AppError("roster.draft_exists", {});
   const copied = await backend.copyPublishedToDraft(tx, { versionId: version.id });
-  const rows = await tx
-    .select(getTableColumns(shiftAssignments))
-    .from(shiftAssignments)
-    .innerJoin(shifts, eq(shifts.id, shiftAssignments.shiftId))
-    .where(eq(shifts.rosterVersionId, version.id));
-  // copyPublishedToDraft maps every shift of `version`, so every row's shift has a copy.
-  await insertInChunks(
-    tx,
-    shiftAssignments,
-    rows.map((row) => ({ ...row, shiftId: copied.shiftIds.get(row.shiftId)! })),
-  );
   return { versionId: copied.versionId, openSwaps: copied.openSwaps };
 }

@@ -48,7 +48,6 @@ describe("the public surface", () => {
         "shiftTemplates",
         "shiftSwaps",
         "shiftSwapStatus",
-        "shiftAssignments",
         "staffingBlocks",
         "staffingDays",
         "createAbsence",
@@ -153,14 +152,16 @@ describe("roster_versions constraint declarations (forces the lazy extraConfig c
 });
 
 describe("shifts constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares shifts' two foreign keys and its offset/interval checks", () => {
+  it("declares shifts' foreign keys and its offset/interval checks", () => {
     const config = getTableConfig(api.shifts);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
         "shifts_person_fk",
-        // SET NULL on delete: a discarded version detaches its shifts.
+        "shifts_role_fk",
+        "shifts_department_fk",
+        "shifts_station_fk",
         "shifts_roster_version_fk",
       ]),
     );
@@ -169,6 +170,7 @@ describe("shifts constraint declarations (forces the lazy extraConfig callback)"
     expect(checkNames).toContain("shifts_starts_offset_ck");
     expect(checkNames).toContain("shifts_ends_offset_ck");
     expect(checkNames).toContain("shifts_interval_ck");
+    expect(checkNames).toContain("shifts_one_area_ck");
   });
 });
 
@@ -283,17 +285,6 @@ describe("staffing's tables' constraint declarations (forces the lazy extraConfi
       primaryKeys: [],
       checks: ["staffing_blocks_headcount_ck", "staffing_blocks_step_ck"],
       indexes: ["staffing_blocks_day_idx"],
-    });
-    expect(names(api.shiftAssignments)).toEqual({
-      foreignKeys: [
-        "shift_assignments_department_fk",
-        "shift_assignments_role_fk",
-        "shift_assignments_shift_fk",
-        "shift_assignments_station_fk",
-      ],
-      primaryKeys: [],
-      checks: ["shift_assignments_one_area_ck"],
-      indexes: [],
     });
   });
 });

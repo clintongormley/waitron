@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, specialDayDates, specialDays } from "@waitron/venue-service";
-import { WorkforceBackend, WORKFORCE_MIGRATIONS, shiftAssignments } from "@waitron/workforce";
+import { WorkforceBackend, WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
@@ -259,8 +259,9 @@ describe("rota counts in the staffing month", () => {
       });
       const [role] = await tx.select().from(staffRoles);
       await tx
-        .insert(shiftAssignments)
-        .values({ shiftId, departmentId: v.departmentId, staffRoleId: role!.id });
+        .update(shifts)
+        .set({ departmentId: v.departmentId, staffRoleId: role!.id })
+        .where(eq(shifts.id, shiftId));
     });
     const { result: month, tables } = await tablesRead((tx) =>
       readStaffingMonth(tx, "2026-08", AT),

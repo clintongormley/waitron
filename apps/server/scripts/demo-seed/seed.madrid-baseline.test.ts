@@ -327,6 +327,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "shift_assignments",
   "webauthn_challenges",
   "google_oidc_states",
   "totp_enrollments",
@@ -1359,6 +1360,41 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      const shiftTable = expected[phase].tables.shifts!;
+      expect(shiftTable.rows, `${phase}/shifts captured rows`).toEqual({});
+      shiftTable.columns.find((column) => column.name === "roster_version_id")!.notnull = 1;
+      shiftTable.columns.splice(
+        shiftTable.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        ...["staff_role_id", "department_id", "station_id"].map((name) => ({
+          name,
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        })),
+      );
+      shiftTable.foreignKeys = [
+        ...[
+          ["station_id", "kitchen_stations"],
+          ["department_id", "departments"],
+          ["staff_role_id", "staff_roles"],
+        ].map(([from, table], id) => ({
+          id,
+          seq: 0,
+          table: table!,
+          from: from!,
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        })),
+        ...shiftTable.foreignKeys.map((key) => ({
+          ...key,
+          id: key.id + 3,
+          on_delete: key.from === "roster_version_id" ? "CASCADE" : key.on_delete,
+        })),
+      ];
       const live = expected[phase].tables.dining_tables!;
       const todayIds = new Set(
         Object.values(expected[phase].tables.floor_today_tables!.rows).map((row) => row.table_id),

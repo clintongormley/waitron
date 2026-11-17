@@ -1,6 +1,6 @@
-import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, gte, inArray, lte } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { rosterVersions, shiftAssignments, shifts } from "@waitron/workforce";
+import { rosterVersions, shifts } from "@waitron/workforce";
 import { addDays } from "@waitron/venue-service";
 import type { RotaShift } from "./slots.js";
 
@@ -24,7 +24,6 @@ export async function readRotaRows(tx: Transaction, first: string, last: string)
       selected.set(version.periodStart, version);
   }
   const ids = [...selected.values()].map((v) => v.id);
-  const localDate = sql<string>`date(${shifts.startsAt}, printf('%+d minutes', ${shifts.startsOffsetMinutes}))`;
   const rows = await tx
     .select({
       shiftId: shifts.id,
@@ -34,30 +33,16 @@ export async function readRotaRows(tx: Transaction, first: string, last: string)
       startsOffsetMinutes: shifts.startsOffsetMinutes,
       endsOffsetMinutes: shifts.endsOffsetMinutes,
       versionId: shifts.rosterVersionId,
-      localDate,
-      departmentId: shiftAssignments.departmentId,
-      stationId: shiftAssignments.stationId,
-      staffRoleId: shiftAssignments.staffRoleId,
+      departmentId: shifts.departmentId,
+      stationId: shifts.stationId,
+      staffRoleId: shifts.staffRoleId,
     })
     .from(shifts)
-    .leftJoin(shiftAssignments, eq(shiftAssignments.shiftId, shifts.id))
-    .where(
-      or(
-        inArray(shifts.rosterVersionId, ids),
-        and(
-          isNull(shifts.rosterVersionId),
-          gte(localDate, first),
-          lte(localDate, addDays(last, 6)),
-        ),
-      ),
-    )
+    .where(inArray(shifts.rosterVersionId, ids))
     .orderBy(asc(shifts.startsAt), asc(shifts.id));
   const byWeek = new Map<string, RotaShift[]>();
   for (const row of rows) {
-    const week =
-      row.versionId === null
-        ? mondayOf(row.localDate)
-        : versions.find((v) => v.id === row.versionId)!.periodStart;
+    const week = versions.find((v) => v.id === row.versionId)!.periodStart;
     const list = byWeek.get(week) ?? [];
     const area =
       row.departmentId !== null

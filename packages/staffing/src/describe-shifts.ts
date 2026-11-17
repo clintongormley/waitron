@@ -15,11 +15,11 @@ export async function describeShifts(
     area_name: string;
     staff_role_name: string;
   }>(sql`
-    select a.shift_id, coalesce(d.name, s.name) as area_name, r.name as staff_role_name
-    from shift_assignments a
+    select a.id as shift_id, coalesce(d.name, s.name) as area_name, r.name as staff_role_name
+    from shifts a
     join staff_roles r on r.id=a.staff_role_id
     left join departments d on d.id=a.department_id
     left join kitchen_stations s on s.id=a.station_id
-    where a.shift_id in (${ids})`);
+    where a.id in (${ids})`);
   return new Map(rows.map((row) => [row.shift_id, `${row.area_name} · ${row.staff_role_name}`]));
 }

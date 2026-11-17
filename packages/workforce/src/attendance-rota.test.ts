@@ -158,13 +158,11 @@ describe("obsolete rota attendance obligations", () => {
       });
     },
   );
-  it.each(["deleted", "detached", "draft", "before-day", "at-end"])(
+  it.each(["deleted", "draft", "before-day", "at-end"])(
     "retires a question when its shift becomes %s",
     async (change) => {
       await run((tx) => upsertAttendanceQuestion(tx, input(), now));
       if (change === "deleted") await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
-      else if (change === "detached")
-        await suite.db.update(shifts).set({ rosterVersionId: null }).where(eq(shifts.id, shiftId));
       else if (change === "draft")
         await suite.db
           .update(rosterVersions)

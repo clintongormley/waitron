@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, id, newId, nowIso, table, tsString } from "@waitron/db";
+import {
+  count,
+  departments,
+  id,
+  kitchenStations,
+  newId,
+  nowIso,
+  staffRoles,
+  table,
+  tsString,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -18,9 +28,10 @@ export const shifts = table(
     startsOffsetMinutes: count("starts_offset_minutes").notNull(),
     endsAt: tsString("ends_at").notNull(),
     endsOffsetMinutes: count("ends_offset_minutes").notNull(),
-    /** Null for a shift on no version (deleting its version sets it null); `publishRoster` attaches
-     * such shifts in its period. */
-    rosterVersionId: id("roster_version_id"),
+    rosterVersionId: id("roster_version_id").notNull(),
+    staffRoleId: id("staff_role_id"),
+    departmentId: id("department_id"),
+    stationId: id("station_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
@@ -33,7 +44,27 @@ export const shifts = table(
       columns: [t.rosterVersionId],
       foreignColumns: [rosterVersions.id],
       name: "shifts_roster_version_fk",
-    }).onDelete("set null"),
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.staffRoleId],
+      foreignColumns: [staffRoles.id],
+      name: "shifts_role_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+      name: "shifts_department_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.stationId],
+      foreignColumns: [kitchenStations.id],
+      name: "shifts_station_fk",
+    }).onDelete("restrict"),
+    check(
+      "shifts_one_area_ck",
+      sql`(${t.staffRoleId} is null and ${t.departmentId} is null and ${t.stationId} is null) or
+        (${t.staffRoleId} is not null and (${t.departmentId} is null) <> (${t.stationId} is null))`,
+    ),
     index("shifts_person_starts_idx").on(t.personId, t.startsAt),
     index("shifts_roster_version_idx").on(t.rosterVersionId),
     // ±14h, the wall-offset domain `sales` and `time_entries` use.

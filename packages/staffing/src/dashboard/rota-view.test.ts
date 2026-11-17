@@ -308,7 +308,7 @@ describe("the Rota by area", () => {
     const live = new LiveData();
     const { api, request } = rotaApi(undefined, live);
     const el = await mount(api);
-    expect(live.interests.map((i) => i.type)).toContain("shift_assignments");
+    expect(live.interests.map((i) => i.type)).toContain("shifts");
     request.mockRejectedValueOnce({ code: "connection.failed" });
     live.invalidate([{ type: "shifts" }]);
     await vi.waitFor(() =>

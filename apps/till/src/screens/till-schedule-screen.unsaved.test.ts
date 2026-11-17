@@ -35,7 +35,7 @@ const shift: MyShift = {
   endsAt: "2026-10-10T17:00:00Z",
   endsOffsetMinutes: 0,
   description: "bar",
-  rosterVersionId: null,
+  rosterVersionId: "rota-week",
 };
 async function mount(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   const api = {

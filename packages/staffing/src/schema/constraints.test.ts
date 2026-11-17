@@ -1,6 +1,7 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -8,13 +9,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 
 import { departments, seasons, specialDayDates, specialDays } from "@waitron/venue-service";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
-import {
-  WORKFORCE_MIGRATIONS,
-  shiftAssignments,
-  shifts,
-  staffingBlocks,
-  staffingDays,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts, staffingBlocks, staffingDays } from "@waitron/workforce";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -192,6 +187,7 @@ async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
     const [shift] = await tx
       .insert(shifts)
       .values({
+        rosterVersionId: await seedRosterWeek(tx, "2026-10-14"),
         personId: person!.id,
         startsAt: "2026-10-14T08:00:00Z",
         startsOffsetMinutes: 120,
@@ -200,24 +196,108 @@ async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
       })
       .returning({ id: shifts.id });
     await tx
-      .insert(shiftAssignments)
-      .values({ shiftId: shift!.id, departmentId: v.departmentId, staffRoleId: v.roleId });
+      .update(shifts)
+      .set({ departmentId: v.departmentId, staffRoleId: v.roleId })
+      .where(eq(shifts.id, shift!.id));
     return shift!.id;
   });
 }
 
-it("deleting a shift deletes its assignment", async () => {
+it("deleting a shift removes its slot", async () => {
   const v = await venue();
   const shiftId = await assignedShift(v);
   await withTransaction(suite.db, (tx) => tx.delete(shifts).where(eq(shifts.id, shiftId)));
-  expect(await suite.db.select().from(shiftAssignments)).toEqual([]);
+  expect(await suite.db.select().from(shifts)).toEqual([]);
 });
 
-it("refuses to delete a staff role a shift assignment names", async () => {
+it("refuses to delete a staff role a shift uses", async () => {
   const v = await venue();
   await assignedShift(v);
   await expect(
     withTransaction(suite.db, (tx) => tx.delete(staffRoles).where(eq(staffRoles.id, v.roleId))),
   ).rejects.toThrow("FOREIGN KEY constraint failed");
   expect(await suite.db.select({ id: staffRoles.id }).from(staffRoles)).toEqual([{ id: v.roleId }]);
+});
+
+it.each([
+  ["no slot", false, false, false],
+  ["a role in a department", true, true, false],
+  ["a role in a station", true, false, true],
+] as const)("accepts a shift with %s", async (_name, role, department, station) => {
+  const v = await venue();
+  const shiftId = await assignedShift(v);
+  await withTransaction(suite.db, (tx) =>
+    tx.execute(sql`
+    update shifts set staff_role_id=${role ? v.roleId : null},
+      department_id=${department ? v.departmentId : null},
+      station_id=${station ? v.stationId : null} where id=${shiftId}`),
+  );
+  const result = await suite.db.execute(sql`
+    select staff_role_id, department_id, station_id from shifts where id=${shiftId}`);
+  expect(result.rows).toEqual([
+    {
+      staff_role_id: role ? v.roleId : null,
+      department_id: department ? v.departmentId : null,
+      station_id: station ? v.stationId : null,
+    },
+  ]);
+});
+
+it.each([
+  ["a role with no area", true, false, false],
+  ["a role in both areas", true, true, true],
+  ["a department with no role", false, true, false],
+  ["a station with no role", false, false, true],
+  ["both areas with no role", false, true, true],
+] as const)("refuses a shift with %s", async (_name, role, department, station) => {
+  const v = await venue();
+  const shiftId = await assignedShift(v);
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+    update shifts set staff_role_id=${role ? v.roleId : null},
+      department_id=${department ? v.departmentId : null},
+      station_id=${station ? v.stationId : null} where id=${shiftId}`),
+    ),
+  ).rejects.toThrow("CHECK constraint failed: shifts_one_area_ck");
+});
+
+it("refuses a shift's missing role or area, and keeps used areas from being deleted", async () => {
+  const v = await venue();
+  const shiftId = await assignedShift(v);
+  for (const slot of [
+    { role: "missing", department: v.departmentId, station: null },
+    { role: v.roleId, department: "missing", station: null },
+    { role: v.roleId, department: null, station: "missing" },
+  ]) {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        tx.execute(sql`
+      update shifts set staff_role_id=${slot.role}, department_id=${slot.department},
+        station_id=${slot.station} where id=${shiftId}`),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+  }
+  await withTransaction(suite.db, (tx) =>
+    tx.execute(sql`
+    update shifts set staff_role_id=${v.roleId}, department_id=${v.departmentId}
+    where id=${shiftId}`),
+  );
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      tx.delete(departments).where(eq(departments.id, v.departmentId)),
+    ),
+  ).rejects.toThrow("FOREIGN KEY constraint failed");
+  await withTransaction(suite.db, (tx) =>
+    tx.execute(sql`
+    update shifts set department_id=null, station_id=${v.stationId} where id=${shiftId}`),
+  );
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      tx.delete(kitchenStations).where(eq(kitchenStations.id, v.stationId)),
+    ),
+  ).rejects.toThrow("FOREIGN KEY constraint failed");
+  await expect(
+    withTransaction(suite.db, (tx) => tx.delete(staffRoles).where(eq(staffRoles.id, v.roleId))),
+  ).rejects.toThrow("FOREIGN KEY constraint failed");
 });

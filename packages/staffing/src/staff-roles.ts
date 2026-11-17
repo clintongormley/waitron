@@ -11,7 +11,7 @@ import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, createLabelComparator } from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
-import { shiftAssignments, staffingBlocks } from "@waitron/workforce";
+import { shifts, staffingBlocks } from "@waitron/workforce";
 import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
 
@@ -285,9 +285,9 @@ export async function deleteStaffRole(
 ): Promise<{ outcome: "deleted" | "hidden"; removedFrom: number }> {
   await assertStaffRoleExists(tx, staffRoleId);
   const [used] = await tx
-    .select({ id: shiftAssignments.shiftId })
-    .from(shiftAssignments)
-    .where(eq(shiftAssignments.staffRoleId, staffRoleId))
+    .select({ id: shifts.id })
+    .from(shifts)
+    .where(eq(shifts.staffRoleId, staffRoleId))
     .limit(1);
   const previous = await readStaffRole(tx, staffRoleId);
   await setStaffRoleHolders(tx, staffRoleId, [], actor);

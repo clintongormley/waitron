@@ -1,7 +1,8 @@
+import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { personStaffRoles, staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, kitchenStations, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,7 +12,6 @@ import { validateBackupVerificationContribution } from "@waitron/module";
 import { departments, seasons, specialDays, specialDayDates } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
-  shiftAssignments,
   shifts,
   staffingBlocks,
   staffingDays,
@@ -70,6 +70,7 @@ beforeEach(async () => {
       endsAt: "16:00:00",
     });
     await db.insert(shifts).values({
+      rosterVersionId: await seedRosterWeek(db, "2026-10-20"),
       id: "shift",
       personId: "person",
       startsAt: "2026-10-20T12:00:00.000Z",
@@ -79,8 +80,9 @@ beforeEach(async () => {
       createdAt: "2026-10-20T08:00:00.000Z",
     });
     await db
-      .insert(shiftAssignments)
-      .values({ shiftId: "shift", departmentId: "department", staffRoleId: "role" });
+      .update(shifts)
+      .set({ departmentId: "department", staffRoleId: "role" })
+      .where(eq(shifts.id, "shift"));
   }
 });
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
@@ -170,23 +172,19 @@ describe("staffing backup evidence", () => {
       owner.targetOnly,
     ]).toEqual([[], [], [], null, "absent_tables_and_entries", "empty_after_migration"]);
   });
-  it.each([
-    "update staffing_days set weekday=2",
-    "update staffing_blocks set headcount=3",
-    "delete from shift_assignments",
-  ])("preserves every staffing table: %s", async (statement) => {
-    expect(await run()).toEqual(passed);
-    await corrupt(restored.db, statement);
-    expect((await run()).status).toBe("invalid");
-  });
+  it.each(["update staffing_days set weekday=2", "update staffing_blocks set headcount=3"])(
+    "preserves every staffing table: %s",
+    async (statement) => {
+      expect(await run()).toEqual(passed);
+      await corrupt(restored.db, statement);
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it.each([
     "update staffing_days set department_id='missing'",
     "update staffing_days set season_id='missing'",
     "update staffing_blocks set day_id='missing'",
     "update staffing_blocks set staff_role_id='missing'",
-    "update shift_assignments set shift_id='missing'",
-    "update shift_assignments set staff_role_id='missing'",
-    "update shift_assignments set department_id='missing'",
   ])("checks assignment role area and person references: %s", async (statement) => {
     for (const db of [original.db, restored.db]) await corrupt(db, statement);
     expect((await run()).status).toBe("invalid");
@@ -201,7 +199,6 @@ describe("staffing backup evidence", () => {
     "update staffing_blocks set starts_at='25:00:00'",
     "update staffing_blocks set ends_at='12:01:00'",
     "update staffing_blocks set starts_at='16:00:00'",
-    "update shift_assignments set department_id=null",
   ])("checks stored staffing shapes on both copies: %s", async (statement) => {
     for (const db of [original.db, restored.db]) await corrupt(db, statement);
     expect((await run()).status).toBe("invalid");
@@ -220,7 +217,6 @@ describe("staffing backup evidence", () => {
   });
   it("accepts empty and unassigned state with missing optional parents", async () => {
     for (const db of [original.db, restored.db]) {
-      db.run(sql`delete from shift_assignments`);
       db.run(sql`delete from staffing_blocks`);
     }
     expect(await run({ wrap: hideTable("staff_roles") })).toEqual(passed);
@@ -237,7 +233,6 @@ describe("staffing backup evidence", () => {
         db,
         "update staffing_days set department_id=null,station_id='station',season_id=null,weekday=null,special_day_date_id='date'",
       );
-      await corrupt(db, "update shift_assignments set department_id=null,station_id='station'");
       await corrupt(db, "update staffing_blocks set starts_at='22:00:00',ends_at='02:00:00'");
     }
     expect(await run()).toEqual(passed);
@@ -246,7 +241,7 @@ describe("staffing backup evidence", () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts honest zero and refuses invented target data", async () => {
-    for (const table of ["shift_assignments", "staffing_blocks", "staffing_days"])
+    for (const table of ["staffing_blocks", "staffing_days"])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     await restored.db

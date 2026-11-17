@@ -22,6 +22,7 @@ import {
   insertAvailability,
   insertDraftShift,
   insertRosterVersion,
+  seedRosterWeek,
   insertShiftSwap,
   insertShiftTemplate,
   seedFixtureVenue,
@@ -321,12 +322,12 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     expect(rows.rows[0]!.n).toBe(2);
   });
 
-  it("stores a draft shift with a null roster_version_id", async () => {
+  it("stores a draft shift on its rota week", async () => {
     const { personId } = await seedWorkforcePerson();
     const shiftId = await insertDraftShift(suite.db, { personId });
     const rows = await suite.db.execute<{ roster_version_id: string | null }>(sql`
       select roster_version_id from shifts where id = ${shiftId}`);
-    expect(rows.rows[0]!.roster_version_id).toBeNull();
+    expect(rows.rows[0]!.roster_version_id).toBe(await seedRosterWeek(suite.db, "2026-01-05"));
   });
 
   it("rejects a shift whose ends_at is not after its starts_at", async () => {

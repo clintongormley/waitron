@@ -37,7 +37,7 @@ const shift: MyShift = {
   startsOffsetMinutes: 0,
   endsOffsetMinutes: 0,
   description: "bar",
-  rosterVersionId: null,
+  rosterVersionId: "rota-week",
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;

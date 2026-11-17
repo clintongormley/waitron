@@ -59,7 +59,7 @@ const CLASSIFIED: Record<string, Classification> = {
       "roster_version_id",
       "created_at",
     ],
-    out: ["id", "person_id"],
+    out: ["id", "person_id", "staff_role_id", "department_id", "station_id"],
   },
   roster_versions: {
     in: ["status"],
