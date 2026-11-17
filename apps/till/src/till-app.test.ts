@@ -2,7 +2,7 @@ import { liveReadFixture } from "../test/live-connection.js";
 import { balanceOf } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
-import { passBoard } from "../test/pass-board-fixtures.js";
+import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import {
@@ -2505,6 +2505,87 @@ describe("till-app", () => {
         }
       } finally {
         releaseRead?.();
+        vi.useRealTimers();
+        setLocale(previousLocale);
+        await page.viewport(previousSize.width, previousSize.height);
+      }
+    },
+  );
+
+  it.each(["pass", "pass_monitor"] as const)(
+    "keeps the latest %s board across Spanish and English switches",
+    async (kind) => {
+      const previousLocale = currentLocale();
+      const previousSize = { width: innerWidth, height: innerHeight };
+      await page.viewport(1280, 900);
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const answer = (numbers: number[]) => ({
+          board: passBoard({
+            inProgress: numbers.map((number) =>
+              passCard({
+                key: `bill:order-${number}`,
+                target: { kind: "bill", workingOrderId: `order-${number}` },
+                orders: [
+                  {
+                    orderId: `order-${number}`,
+                    orderNumber: number,
+                    tableLabel: `T${number}`,
+                    kitchenNote: null,
+                    dining: "eat_in",
+                  },
+                ],
+                items: [
+                  passItem({
+                    id: `item-${number}`,
+                    orderId: `order-${number}`,
+                    lineId: `line-${number}`,
+                  }),
+                ],
+              }),
+            ),
+          }),
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        });
+        const read = vi.fn().mockResolvedValue(answer([2, 4]));
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            locale: "en-GB",
+            formFactor: kdsFormFactor,
+            capabilities: ["act-as-kds"],
+          }),
+          getDeviceIdentity: vi.fn().mockResolvedValue({
+            deviceId: "display",
+            formFactor: "kds",
+            kitchenScreens: [{ kind, available: true, stations: [], zones: null }],
+          }),
+          [kind === "pass" ? "getDevicePassBoard" : "getDevicePassMonitorBoard"]: read,
+        });
+        const shown = () => {
+          const screen = el.shadowRoot!.querySelector("till-pass-screen")!;
+          const board = screen.shadowRoot!.querySelector("till-pass-board")!;
+          return [...board.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]")]
+            .map((card) => card.dataset.card)
+            .sort();
+        };
+        await flush(el);
+        expect(shown()).toEqual(["bill:order-2", "bill:order-4"]);
+        read.mockResolvedValue(answer([1, 2, 7]));
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        expect(shown()).toEqual(["bill:order-1", "bill:order-2", "bill:order-7"]);
+        for (const code of ["es-ES", "en-GB"]) {
+          const reads = read.mock.calls.length;
+          emit(shell(el)!, "wt-locale-selected", { code });
+          await flush(el);
+          expect(currentLocale()).toBe(code);
+          expect(shown()).toEqual(["bill:order-1", "bill:order-2", "bill:order-7"]);
+          expect(read).toHaveBeenCalledTimes(reads);
+        }
+      } finally {
         vi.useRealTimers();
         setLocale(previousLocale);
         await page.viewport(previousSize.width, previousSize.height);

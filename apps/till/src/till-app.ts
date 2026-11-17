@@ -22810,6 +22810,9 @@ export class TillApp extends LitElement {
         .deviceId=${this.deviceId}
         .serverOrigin=${this.#serverOrigin()}
         .initialBoard=${this.initialDevicePassMonitor}
+        @pass-board-snapshot=${(event: CustomEvent<DevicePassBoard>) => {
+          this.initialDevicePassMonitor = event.detail;
+        }}
       ></till-pass-screen>`;
     return this.initialDevicePass
       ? html`<till-pass-screen
@@ -22823,6 +22826,9 @@ export class TillApp extends LitElement {
           .deviceId=${this.deviceId}
           .serverOrigin=${this.#serverOrigin()}
           .initialBoard=${this.initialDevicePass}
+          @pass-board-snapshot=${(event: CustomEvent<DevicePassBoard>) => {
+            this.initialDevicePass = event.detail;
+          }}
         ></till-pass-screen>`
       : html`<till-station-screen
           .operatorSession=${this.#operatorSession}
