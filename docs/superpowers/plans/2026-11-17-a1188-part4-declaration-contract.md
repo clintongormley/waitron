@@ -6,6 +6,8 @@ When the venue's box has died, a staff member must be able to declare the emerge
 **Clearance:** WATCHER, Lane J `questions.md`, 2026-11-17 21:52: "Yes: draft the Waitron side of the part 4 declaration-confirmation contract (design §11, §9 item 8) as a short proposal with examples, publish it to lane G in its questions.md as you did for the purpose-key input, and settle it together; no executable activation plan until G agrees. Shipped locked page and fiscal gates unchanged."
 WATCHER 22:10 cleared the correction: "one confirmed answer, no mail-provider gate, no redundant fields; Waitron owns actor freshness" and publication to G, including G qualifying source access/write withdrawal (Lane J `questions.md`, 17 November). Neither G's agreement nor owner approval of these proposed values is claimed.
 
+On 17 November at 23:10, the watcher limited the agreement to the confirmation request, replies, expiry and replay. Effective withdrawal of the source's remote access and backup write authority remains a condition of a confirmed reply.
+
 ## One stored declaration, one Cloud command
 
 Use machine-v1 POST `/api/installations/emergency-copy-confirm`, action `emergency-copy-confirm`, with the existing authenticated `{payload,signature}` transport. Only the fresh copy installation named in the stored copy operation may call it. Browser Origin requests, source installations and other copies cannot confirm or read its result. Reuse part 3's authentication, post-lock checks, errors, shared budgets and size/time bounds unchanged. The request body remains capped at 4,096 code units; actor-name/reason bounds below are proposed wire bounds, not a claim about existing staff-name validation.
@@ -60,7 +62,7 @@ These are illustrative fixtures, not tested vectors. `O` is `d706194d-c1bc-4f48-
    200 {version:1,copyOperationId:O,commandSha256:Q,confirmedAt:"2026-11-17T21:22:00.000Z",writerGeneration:{streamId:S,generation:G}}
    S is the stored source stream; G is a fresh generation naming the copy node.
 2. Confirmation at 21:29:59.999, reply lost; identical POST with fresh proof at 21:30:01.
-   Return the original 200/Q/confirmedAt/generation. No new charge or copy; recover that confirmed operation as specified below.
+   Return the original 200/Q/confirmedAt/generation without a second charge.
 3. No confirmation yet; decision time is exactly 21:30:00.000.
    409 {version:1,copyOperationId:O,reason:"copy_expired",closedReason:null}; no charge or generation reservation.
 4. After example 1, change D.actor.personId, F, reason or another declaration field.
@@ -72,13 +74,7 @@ These are illustrative fixtures, not tested vectors. `O` is `d706194d-c1bc-4f48-
 
 ## Agreement boundary and sources
 
-G is asked to agree this single-confirmation boundary, exact fields, refusal order and replay, subject to identifying the actual source-withdrawal consumers. Pin both revisions and exact shared vectors after agreement. This document gives neither an executable activation plan nor permission to build.
-
-**Concrete part 3 amendment proposed for G:** before confirmation, allow only `control`, `emergency-copy-status` and the new `emergency-copy-confirm`; retain the original deadline/lease cap and stop for an unconfirmed operation. After durable confirmation, cancel that operation's 30-minute disposal; permit the same three actions for resolution with normally renewed control leases of at most one hour, without the old copy-deadline cap. Other serving actions remain unavailable until later activation. Expired leases never become valid merely because a command was confirmed.
-
-Cloud's launcher may recover a lost reply or crash by reading its durable confirmation and relaunching **only that confirmed operation**, with the same identities, placed databases, original declaration and selected copy. It must reconcile whether activation already occurred, never overwrite a potentially activated database by placing again. An expired unconfirmed operation never relaunches. A code submission while a confirmed operation is unresolved reuses it and creates no second copy or launch allowance; after activation it goes to that operation's result. The copy cannot trust an expired binding on its own: future entry changes must resolve Cloud's stored confirmation before overriding a locked-only expiry refusal. These are contract requirements for a future build; the shipped hard stop/entry behavior is unchanged.
-
-Existing clock, membership and fiscal gates apply; current house clock rules supersede the historical AEAT-time checks in design §§6/10. Activation, return query/item 10, hosted enrolment and money collection remain outside this contract. For G: which existing authorised hosting stop/cancellation path ends a confirmed operation that cannot activate? This proposal supplies no automatic refund or re-enabling of the source.
+G is asked to agree the request and reply fields, expiry, refusal order, replay and examples. To agree what a confirmed reply means, identify where Cloud enforces the source's remote access and backup write authority and how it establishes that both have been withdrawn before returning HTTP 200. Pin both revisions and the shared examples after agreement.
 
 Source inspection only: Waitron `132e62ae5384c040392aee914dce1830d03e24bc`; Cloud contract/source pin `620db37b0692fcf236870023fd684b647f823722`, read locally from `~/workspace/repos/waitron-cloud`. No runtime checks were run.
 
@@ -87,7 +83,5 @@ Source inspection only: Waitron `132e62ae5384c040392aee914dce1830d03e24bc`; Clou
 | Ask and watcher clearance quoted above | "no executable activation plan until G agrees" | Draft/publication only; joint agreement and build clearance remain. |
 | [Design §9 item 8](../specs/2026-10-29-a1188-cloud-emergency-start-design.md#9-what-waitron-needs-cloud-to-agree) | "the same id and inputs return the stored result" | Retry requirement; the fields above are proposed. |
 | [Cloud pinned contract, A1188 disposition](https://github.com/waitron-io/waitron-cloud/blob/620db37b0692fcf236870023fd684b647f823722/docs/waitron-integration-contract.md#disposition-of-a1188s-remaining-cloud-requests), lines 2423–2425 | "Bind one durable operation to the actor, selected copy and exact declaration." | Agreed direction, not this message or implemented effects. |
-| Same pin, part 3 and A1018 answers, lines 2452–2461 and 2573–2601 | "only lease renewal (`control`) and `emergency-copy-status`"; "without adding Cloud fields to that local binding" | Allowlist needs amendment; local binding stays unchanged. |
+| Same pin, A1018 answer, lines 2573–2601 | "without adding Cloud fields to that local binding" | The proposed request carries a fingerprint of the local binding. |
 | [Local declaration](../../../apps/server/src/handover-emergency-api.ts), lines 96–108, 552–633; [envelope](../../../packages/handover/src/envelope.ts) | `provider: null`; `purpose !== purposeOf(kind)` | Local schema/purpose are distinct; local retry comparison omits actor. |
-| [Locked entry](../../../apps/server/src/cloud-locked-start.ts), lines 121–171; [copy binding](../../../apps/server/src/emergency-copy-binding.ts) | `armStop(expiry)`; `expires - Date.parse(startedAt) !== LIFETIME_MS` | Shipped stop and immutable thirty-minute binding are not cancelled by this document. |
-| [Clock rules](../../developers/conventions-data.md#an-installation-names-minute-waits-refusals-and-repeats) | "we should never just accept another device's match automatically" | Protected confirmation supersedes the historical clock proposal. |

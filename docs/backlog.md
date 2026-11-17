@@ -1426,7 +1426,7 @@ Not in any track until the standalone primary is done.
   [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
   [Part 2 plan](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
   Cloud agreed the [part 3 proposal](superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November and its purpose-key input on 17 November (Cloud #1276). Part 3a provides a separate locked HTTPS process with read-only sign-in and memory-only sessions; its [developer API](developers/cloud-connection.md#locked-emergency-copy-api) reuses A1425 placement. Part 3b adds the separate English/Spanish sign-in and actor/expiry page. Cloud launcher, declaration/activation (part 4) and production qualification remain open. The watcher cleared this API cut on 17 November; no owner approval of the key amendment is claimed.
-  The [part 4 declaration-confirmation proposal](superpowers/plans/2026-11-17-a1188-part4-declaration-contract.md) awaits joint Cloud agreement before an executable activation plan.
+  The [part 4 confirmation request and replies](superpowers/plans/2026-11-17-a1188-part4-declaration-contract.md) await joint agreement. Cloud must establish that it has withdrawn the source's remote access and backup write authority before replying confirmed. An executable activation plan waits for that agreement.
   Qualify with a current-baseline year copy before go-live.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
