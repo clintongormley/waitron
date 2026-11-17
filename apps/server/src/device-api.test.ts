@@ -58,7 +58,7 @@ import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal, PERSON_HEADER } from "@waitron/shared";
 import { deviceProfileAdmissionRoles, loginWithPin, tillSessions } from "@waitron/identity";
-import { cardReaders, payments } from "@waitron/payments";
+import { cardReaders, payments, setProfileReaderList } from "@waitron/payments";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -2373,6 +2373,44 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     });
   });
 
+  it("writes the device row once for a switch leaving out drawer and invoice choices the new profile does not list", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, t.counter));
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        cashDrawerPrinterIds: [t.counter],
+        invoicePrinterIds: [t.counter],
+      }),
+    );
+    await suite.db
+      .update(devices)
+      .set({ cashDrawerPrinterId: t.counter, invoicePrinterId: t.counter })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+
+    // No cashDrawerPrinterId or invoicePrinterId in the body: absent leaves them to the switch.
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({
+        cashDrawerPrinterId: devices.cashDrawerPrinterId,
+        invoicePrinterId: devices.invoicePrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row).toEqual({ cashDrawerPrinterId: null, invoicePrinterId: null });
+  });
+
   it("writes the device row once for a switch to a profile listing no card reader, clearing the reader", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -2404,6 +2442,42 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       .from(devices)
       .where(eq(devices.id, t.deviceId));
     expect(row!.cardReaderId).toBeNull();
+  });
+
+  it("writes the device row once for a switch to a profile listing the device's card reader, keeping it", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stub", providerRef: "ref-terrace", name: "Terrace reader" })
+      .returning({ id: cardReaders.id });
+    await suite.db
+      .update(devices)
+      .set({ cardReaderId: reader!.id })
+      .where(eq(devices.id, t.deviceId));
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) => {
+      await setProfilePrinterLists(tx, other, await readProfilePrinterLists(tx, t.profileId));
+      expect(
+        await setProfileReaderList(tx, other, { readerIds: [reader!.id], defaultReaderId: null }),
+      ).toEqual({ ok: true });
+    });
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    const [row] = await suite.db
+      .select({ cardReaderId: devices.cardReaderId })
+      .from(devices)
+      .where(eq(devices.id, t.deviceId));
+    expect(row!.cardReaderId).toBe(reader!.id);
   });
 
   it("answers a taken name before a refused printer choice, changing nothing", async () => {

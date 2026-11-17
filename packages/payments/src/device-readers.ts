@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { mayTakeOver } from "@waitron/shared";
@@ -351,21 +351,30 @@ export async function releaseDeviceReader(tx: Transaction, deviceId: string): Pr
     .where(eq(cardReaders.heldByDeviceId, deviceId));
 }
 
+/**
+ * The reader column a device choosing `cardReaderId` would put back on Use default on
+ * `profileId`, writing nothing: its choice, when that profile does not list it.
+ */
+export async function readerChoiceClearedOnProfile(
+  tx: Transaction,
+  cardReaderId: string | null,
+  profileId: string,
+): Promise<{ cardReaderId?: null }> {
+  if (cardReaderId === null) return {};
+  const { readerIds } = await readProfileReaderList(tx, profileId);
+  return readerIds.includes(cardReaderId) ? {} : { cardReaderId: null };
+}
+
 export async function clearUnlistedReaderChoice(tx: Transaction, deviceId: string): Promise<void> {
   const [device] = await tx
-    .select({ profileId: devices.deviceProfileId })
+    .select({ profileId: devices.deviceProfileId, cardReaderId: devices.cardReaderId })
     .from(devices)
     .where(eq(devices.id, deviceId));
   if (device === undefined) return;
-  const list = (await readProfileReaderList(tx, device.profileId)).readerIds;
-  await tx
-    .update(devices)
-    .set({ cardReaderId: null })
-    .where(
-      list.length === 0
-        ? and(eq(devices.id, deviceId), isNotNull(devices.cardReaderId))
-        : and(eq(devices.id, deviceId), notInArray(devices.cardReaderId, list)),
-    );
+  const cleared = await readerChoiceClearedOnProfile(tx, device.cardReaderId, device.profileId);
+  if (Object.keys(cleared).length > 0) {
+    await tx.update(devices).set(cleared).where(eq(devices.id, deviceId));
+  }
 }
 
 export async function settleProfileReaderDevices(

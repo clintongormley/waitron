@@ -55,7 +55,7 @@ export {
 export {
   PRINTER_ROLE_COLUMNS,
   checkDevicePrinterChoice,
-  choicesKeptOnProfile,
+  choicesClearedOnProfile,
   chosenPrinterOf,
   clearDeletedPagePrinter,
   clearDeletedPrinter,

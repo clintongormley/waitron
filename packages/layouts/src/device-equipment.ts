@@ -629,15 +629,15 @@ function unlistedColumns(device: Choices, listed: Listed[]): Partial<Choices> {
 }
 
 /**
- * The choices a device holding `stored` would keep on moving to `profileId`, writing nothing: each
- * choice that profile does not list goes back to Use default.
+ * The choice columns a device holding `stored` would put back on Use default on moving to
+ * `profileId`, writing nothing: those of each choice that profile does not list.
  */
-export async function choicesKeptOnProfile(
+export async function choicesClearedOnProfile(
   tx: Transaction,
   stored: Choices,
   profileId: string,
-): Promise<Choices> {
-  return { ...stored, ...unlistedColumns(stored, await listedAt(tx, profileId)) };
+): Promise<Partial<Choices>> {
+  return unlistedColumns(stored, await listedAt(tx, profileId));
 }
 
 /** Returns the device's choices as they stand afterwards. */

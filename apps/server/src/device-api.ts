@@ -18,7 +18,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, profilesAdmitting, tillSessions, sightingDue } from "@waitron/identity";
 import {
   checkDevicePrinterChoice,
-  choicesKeptOnProfile,
+  choicesClearedOnProfile,
   chosenPrinterOf,
   kindOfFormFactor,
   listDeviceProfiles,
@@ -27,7 +27,7 @@ import {
   type DevicePrinterChoices,
   type ProfilePrinterRole,
 } from "@waitron/layouts";
-import { readProfileReaderList } from "@waitron/payments";
+import { readerChoiceClearedOnProfile } from "@waitron/payments";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -233,14 +233,6 @@ export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
   ...STATUS,
   "kitchen_screen.zone_not_allowed": 403,
 };
-
-const CHOICE_COLUMN_NAMES = [
-  "receiptPrinterId",
-  "paymentSlipPrinterId",
-  "cashDrawerPrinterId",
-  "invoicePrinterId",
-  "invoicePagePrinterId",
-] as const satisfies readonly (keyof DevicePrinterChoices)[];
 
 const run = createErrorBoundary(STATUS, "device.failed");
 /** A device's edit names its profiles and made-here stations only in the body
@@ -903,23 +895,17 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         await refuseDeletedPrinters(tx, Object.values(chosen));
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
+        // Unlisted choices are cleared in this write, so settleDevice finds none left to clear.
+        const cleared: Partial<DevicePrinterChoices> & { cardReaderId?: null } = switching
+          ? {
+              ...(await choicesClearedOnProfile(tx, device, profileId)),
+              ...(await readerChoiceClearedOnProfile(tx, device.cardReaderId, profileId)),
+            }
+          : {};
         // Only a choice that differs from what the device would keep is checked: a new choice must
         // be switched on, and a device may still hold a listed one since switched off.
-        const kept = switching ? await choicesKeptOnProfile(tx, device, profileId) : device;
-        let columns: Partial<DevicePrinterChoices & { cardReaderId: null }> = {};
-        if (switching) {
-          // Cleared here, the switch's clean-up (`settleDevice`) has nothing left to write.
-          for (const column of CHOICE_COLUMN_NAMES) {
-            if (kept[column] !== device[column]) columns = { ...columns, [column]: kept[column] };
-          }
-          const readerId = device.cardReaderId;
-          if (
-            readerId !== null &&
-            !(await readProfileReaderList(tx, profileId)).readerIds.includes(readerId)
-          ) {
-            columns = { ...columns, cardReaderId: null };
-          }
-        }
+        const kept = { ...device, ...cleared };
+        let columns = cleared;
         let refused:
           | {
               role: ProfilePrinterRole;

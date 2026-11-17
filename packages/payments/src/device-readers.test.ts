@@ -23,6 +23,7 @@ import {
   readProfileReaderList,
   readReaderEquipment,
   readReaderRole,
+  readerChoiceClearedOnProfile,
   readerHeldBy,
   readerPaymentInProgress,
   releaseDeviceReader,
@@ -646,6 +647,20 @@ describe("a device's card reader", () => {
       suite.db.run(sql`drop table probe_device_updates`);
     }
     expect(await chosen(s.deviceC)).toBeNull();
+  });
+
+  it("the reader clear for a profile names an unlisted choice only, writing nothing", async () => {
+    const s = await seed();
+    await list(s, [s.r1]);
+    await inTx((tx) =>
+      tx.update(devices).set({ cardReaderId: s.r2 }).where(eq(devices.id, s.deviceA)),
+    );
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, s.r2, s.profileId))).toEqual({
+      cardReaderId: null,
+    });
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, s.r1, s.profileId))).toEqual({});
+    expect(await inTx((tx) => readerChoiceClearedOnProfile(tx, null, s.profileId))).toEqual({});
+    expect(await chosen(s.deviceA)).toBe(s.r2);
   });
 
   it("choosing another reader lets go of the one it held", async () => {

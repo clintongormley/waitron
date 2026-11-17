@@ -18,7 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
   checkDevicePrinterChoice,
-  choicesKeptOnProfile,
+  choicesClearedOnProfile,
   clearDeletedPagePrinter,
   clearDeletedPrinter,
   clearUnlistedPrinterChoices,
@@ -1511,8 +1511,8 @@ describe("checkDevicePrinterChoice", () => {
   });
 });
 
-describe("choicesKeptOnProfile", () => {
-  it("keeps each choice the profile lists, puts the rest on Use default, and writes nothing", async () => {
+describe("choicesClearedOnProfile", () => {
+  it("returns the columns of each choice the profile does not list, cleared, and writes nothing", async () => {
     await seedFixtureVenue("Here");
     const { deviceId } = await seedDevice(suite.db, { label: "Till A" });
     const bar = await seedPrinter("Bar");
@@ -1540,14 +1540,8 @@ describe("choicesKeptOnProfile", () => {
       ),
     );
 
-    const kept = await inTx((tx) => choicesKeptOnProfile(tx, stored, other));
-    expect(kept).toEqual({
-      receiptPrinterId: bar,
-      paymentSlipPrinterId: null,
-      cashDrawerPrinterId: null,
-      invoicePrinterId: null,
-      invoicePagePrinterId: page,
-    });
+    const cleared = await inTx((tx) => choicesClearedOnProfile(tx, stored, other));
+    expect(cleared).toEqual({ paymentSlipPrinterId: null, cashDrawerPrinterId: null });
     expect(await columns(deviceId)).toEqual({ receipt: bar, slip: counter, drawer });
     expect(await invoiceColumns(deviceId)).toEqual({ printer: null, page });
   });

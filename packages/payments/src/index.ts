@@ -76,6 +76,7 @@ export {
   appendReaderToProfiles,
   isKnownReader,
   clearUnlistedReaderChoice,
+  readerChoiceClearedOnProfile,
   readProfileReaderList,
   readReaderEquipment,
   readReaderRole,
