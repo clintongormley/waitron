@@ -5324,6 +5324,33 @@ describe("A773 held column", () => {
     }
   });
 
+  const lineName = (el: TillStationQueue, id: string) => {
+    const name = shadow(el).querySelector(`[data-item="${id}"] .line-name`);
+    return name === null ? undefined : flat(name);
+  };
+  it.each([
+    { first: "Requested", card: "in Held holding both" },
+    { first: "held", card: "in Held holding both" },
+    { first: "Requested", card: "released" },
+    { first: "held", card: "released" },
+  ])(
+    "on a card $card, two identical dishes, one Requested and one held, are two rows with their own words ($first first)",
+    async ({ first, card }) => {
+      const whole = { unitName: null, unitPrecision: 0, soldInEach: true };
+      const twins = [
+        { ...asked("twin-asked", "Burger"), ...whole },
+        { ...kept("twin-kept", "Burger"), ...whole },
+      ];
+      if (first === "held") twins.reverse();
+      const dishes = card === "released" ? [{ ...ageDish("sent", 18), name: "Octopus" }] : [];
+      const { el } = await mountBoard([ageBill(1, [...dishes, ...twins])], APART);
+      expect(lineName(el, "twin-asked")).toBe("1× Burger");
+      expect(lineName(el, "twin-kept")).toBe("1× Burger");
+      expect(lineWord(el, "twin-asked")).toBe(t("pass.waiting_for_pass"));
+      expect(lineWord(el, "twin-kept")).toBe(t("station.group_held"));
+    },
+  );
+
   it("Overview counts a Requested dish after the +, as it counts a held one", async () => {
     const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])], APART);
     const row = shadow(el).querySelector<HTMLElement>("[data-overview-row]")!;
