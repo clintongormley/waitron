@@ -1,3 +1,4 @@
+import { parseAcceptLanguage } from "./accept-language.js";
 import type { Hono } from "hono";
 import {
   readSettings,
@@ -65,7 +66,6 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
           languages.defaultLanguage,
           true,
           undefined,
-          "lang",
           live.since,
           zone.kind === "valid" ? zone.timeZone : "UTC",
         ),
@@ -239,8 +239,16 @@ export function mountPublicGuestMenu(
   app.all("/public/menu", async (c) => {
     const serving = deps.serving();
     const locale = serving ? (deps.venueLocale?.() ?? FALLBACK_LOCALE) : FALLBACK_LOCALE;
+    const explicit = c.req.query("lang");
+    const preferences =
+      explicit === undefined
+        ? parseAcceptLanguage(c.req.header("Accept-Language"))
+            .filter(({ range, weight }) => weight > 0 && range !== "*")
+            .map(({ range }) => range)
+        : [explicit];
     const response = await run(c, log, async () => {
       c.header("Cache-Control", "no-store");
+      c.header("Vary", "Accept-Language");
       if (c.req.method !== "GET" && c.req.method !== "HEAD") {
         c.header("Allow", "GET, HEAD");
         return c.body(null, 405);
@@ -253,7 +261,7 @@ export function mountPublicGuestMenu(
       const menu = publicGuestMenu(
         await hydrateDeclarationDocument(deps.db, live.document),
         languages,
-        c.req.query("language") ?? languages.defaultLanguage,
+        preferences,
       );
       return c.html(
         renderGuestMenuPage(menu, (await readVenue(deps.db)).name, languages.defaultLanguage, true),
@@ -262,7 +270,7 @@ export function mountPublicGuestMenu(
     if (response.ok) return response;
     const headers = new Headers(response.headers);
     headers.set("Content-Type", "text/html; charset=UTF-8");
-    return new Response(renderGuestMenuUnavailable(c.req.query("language") ?? locale, locale), {
+    return new Response(renderGuestMenuUnavailable(preferences, locale), {
       status: response.status,
       headers,
     });

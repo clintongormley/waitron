@@ -1,8 +1,5 @@
-import {
-  contentLanguageCode,
-  contentLanguageTag,
-  type ContentLanguages,
-} from "../content-languages.js";
+import type { ContentLanguages } from "../content-languages.js";
+import { matchLanguage } from "../language-match.js";
 import { ALLERGEN_CODES, type ProductAllergens } from "./allergens.js";
 import { DIETARY_LABELS, type DietaryLabel } from "./dietary-declarations.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
@@ -50,16 +47,13 @@ export interface PublicGuestMenu {
 export function publicGuestMenu(
   document: DeclarationDocument,
   config: ContentLanguages,
-  requested: string,
+  requested: string | readonly string[],
 ): PublicGuestMenu {
-  let language: string;
-  try {
-    language = contentLanguageTag(requested);
-  } catch {
-    language = config.defaultLanguage;
-  }
-  if (!config.languages.includes(language)) language = contentLanguageCode(language);
-  if (!config.languages.includes(language)) language = config.defaultLanguage;
+  const language =
+    matchLanguage(typeof requested === "string" ? [requested] : requested, [
+      config.defaultLanguage,
+      ...config.languages.filter((tag) => tag !== config.defaultLanguage),
+    ]) ?? config.defaultLanguage;
   const text = (map: Record<string, string> | null, staff: string | null) =>
     resolveMenuText(map, staff, { kind: "customer", language }, config).text;
   const declarations = (

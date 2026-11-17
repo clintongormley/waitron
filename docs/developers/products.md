@@ -1028,6 +1028,17 @@ The public `/public/menu` page resolves only the opted-in active default publica
 is serving. It uses the same projection and renderer as the protected preview. Sharing is a
 non-transferring menu settings document: configuration imports retain this box’s choice.
 
+On a plain `/public/menu` link, the box reads the phone's `Accept-Language` preferences in
+positive-weight order, preserving header order on ties. For each preference it tries the exact tag,
+then removes trailing tag parts one at a time, then takes a venue language with the same base.
+Matching ties try the main language first, then saved order; visible links keep saved order.
+For example, `ca,es` matches offered `ca-ES-valencia` before `es`. No match uses the main language.
+`?lang=en-US` supplies the sole preference, even when empty or invalid; `?language=` is ignored.
+Success and unavailable responses carry `Vary: Accept-Language` and `Cache-Control: no-store`.
+The page's fixed wording uses the shown language's registered bundle, then the main language's,
+then English, through the same matcher. Authored dish text resolves separately.
+Cloud receives pages in saved order; its phone-language selection is implemented separately.
+
 
 Cloud delivery reuses the existing connection job's one-minute passes. It rereads the opted-in
 publication and content languages, renders each public page with its publication date, and compares

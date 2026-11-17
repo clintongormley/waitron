@@ -1,3 +1,5 @@
+import { matchLanguage } from "../language-match.js";
+
 const languages = ["en", "es", "ca", "gl"];
 // Columns are the complete EN, ES, CA and GL bundles; content names resolve separately.
 const wording = `
@@ -46,13 +48,13 @@ note|Icons show declared allergens. No icon does not mean allergen-free. Tell st
   .split("\n")
   .map((row) => row.split("|"));
 export function guestMenuWords(
-  requested: string,
+  requested: string | readonly string[],
   fallback: string,
 ): { language: string; text: Record<string, string> } {
-  const base = (tag: string) => tag.split("-")[0]!;
-  const language = [base(requested), base(fallback), "en"].find((value) =>
-    languages.includes(value),
-  )!;
+  const language =
+    matchLanguage(typeof requested === "string" ? [requested] : requested, languages) ??
+    matchLanguage([fallback], languages) ??
+    "en";
   const index = languages.indexOf(language) + 1;
   return { language, text: Object.fromEntries(wording.map((row) => [row[0]!, row[index]!])) };
 }

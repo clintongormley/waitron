@@ -1,3 +1,4 @@
+import { parseAcceptLanguage } from "./accept-language.js";
 import {
   FALLBACK_LOCALE,
   SUPPORTED_LOCALE_CODES,
@@ -12,14 +13,7 @@ export function resolveLoginLocale(
   venueLocale: string,
 ): SupportedLocale {
   const fallback = isSupportedLocale(venueLocale) ? venueLocale : FALLBACK_LOCALE;
-  const preferences = (header ?? "").split(",").flatMap((entry, index) => {
-    const match =
-      /^\s*([a-z]{1,8}(?:-[a-z0-9]{1,8})*|\*)\s*(?:;\s*q=(0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?\s*$/i.exec(
-        entry,
-      );
-    if (!match) return [];
-    return [{ range: match[1]!.toLowerCase(), weight: Number(match[2] ?? 1), index }];
-  });
+  const preferences = parseAcceptLanguage(header);
   const candidates = [
     fallback,
     ...SUPPORTED_LOCALE_CODES.filter((code) => code !== fallback),
