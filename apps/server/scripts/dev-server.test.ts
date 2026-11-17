@@ -15,10 +15,14 @@ describe("dev-server", () => {
 
   beforeAll(async () => {
     workDir = await mkdtemp(join(tmpdir(), "waitron-dev-server-"));
-    // A `tsx` first on PATH that prints the arguments it was started with, one per line.
+    // A `tsx` first on PATH that prints the arguments it was started with, one per line, and the
+    // release stamp it was handed on stderr.
     stubBin = join(workDir, "bin");
     mkdirSync(stubBin);
-    writeFileSync(join(stubBin, "tsx"), "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 0\n");
+    writeFileSync(
+      join(stubBin, "tsx"),
+      "#!/bin/sh\nprintf '%s\\n' \"$@\"\nprintf '%s' \"$WAITRON_DEV_HOUR_RELEASE\" >&2\nexit 0\n",
+    );
     chmodSync(join(stubBin, "tsx"), 0o755);
     stateDir = join(workDir, "state");
     mkdirSync(stateDir);
@@ -53,7 +57,11 @@ describe("dev-server", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     const args = result.stdout.split("\n").filter((line) => line !== "");
-    return { args, envFileFlags: args.filter((arg) => arg.startsWith("--env-file")) };
+    return {
+      args,
+      envFileFlags: args.filter((arg) => arg.startsWith("--env-file")),
+      stamp: result.stderr,
+    };
   }
 
   function settingsFile(name: string, body: string): string {
@@ -153,5 +161,52 @@ describe("dev-server", () => {
       `--env-file=${file}`,
       ...stateFlags(join(pkgRoot, "src", "state")),
     ]);
+  });
+
+  it("hands a source run the checkout's release stamp through a preload, so readiness can confirm the hour", () => {
+    const file = settingsFile("stamp.env", "WAITRON_ENV=dev\n");
+    const { args, stamp } = launch({ WAITRON_DEV_ENV_FILE: file });
+    expect(args).toContain(`--import=${join(pkgRoot, "scripts", "dev-hour-release.mjs")}`);
+    expect(
+      args.indexOf(`--import=${join(pkgRoot, "scripts", "dev-hour-release.mjs")}`),
+    ).toBeLessThan(args.indexOf("src/bin.ts"));
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+    );
+    const head = spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+      cwd: pkgRoot,
+      encoding: "utf8",
+      env,
+    }).stdout.trim();
+    expect(head).toMatch(/^[a-f0-9]{40}$/);
+    expect(JSON.parse(stamp)).toMatchObject({
+      sourceCommit: head,
+      generator: "scripts/generate-hour-release.mjs:v1",
+    });
+  });
+
+  it("starts without a stamp, saying why, when the checkout's commit cannot be read", () => {
+    const file = settingsFile("no-git.env", "WAITRON_ENV=dev\n");
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env.WAITRON_STATE_DIR;
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("./dev-server.mjs", import.meta.url))],
+      {
+        cwd: pkgRoot,
+        encoding: "utf8",
+        timeout: 30_000,
+        env: {
+          ...env,
+          // No git on PATH: only the stub `tsx`.
+          PATH: stubBin,
+          WAITRON_DEV_ENV_FILE: file,
+          WAITRON_MIGRATIONS_DIR: join(workDir, "migrations"),
+        },
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.split("\n")).toContain("src/bin.ts");
+    expect(result.stderr).toMatch(/^Starting without a release stamp.*\n$/);
   });
 });

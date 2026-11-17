@@ -1237,7 +1237,7 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
-    if (this.draft.mode === "live" && !this.developmentMode) void this.#claimFirstSetup();
+    if (this.draft.mode === "live") void this.#claimFirstSetup();
     else this.#afterFirstOwner();
   }
 
@@ -1254,7 +1254,9 @@ export class SetupApp extends LitElement {
           : "email"
         : this.draft.mode === "prepare" && !this.developmentMode
           ? "email"
-          : "review";
+          : this.#firstSession && !this.firstReady
+            ? "first-setup"
+            : "review";
   }
 
   @state() private firstOwnerBusy = false;

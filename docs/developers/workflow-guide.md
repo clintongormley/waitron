@@ -389,6 +389,25 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+**A Live setup on a dev stack goes through the setup app's own page**, the stack's wizard address
+(`http://localhost:5192/setup/` on slot 0, `http://localhost:5392/setup/` on slot 2). The
+server's own HTTPS address serves only a "needs setup" placeholder from a source run, which names
+no built wizard (`WAITRON_SETUP_APP_DIR` unset). Two things in the dev scripts take a Live setup
+as far as its readiness step, where it stops: that step needs a second clock (see the owned flow
+below), and nothing on a dev stack can be one. The development
+servers' proxy (`scripts/dev-server-proxy.ts`) checks for the box's certificate on every request,
+so it switches to HTTPS once an onboarding box makes one during start-up; and when it forwards to
+that HTTPS box it presents the page's `Origin` as `https://` when it names the page's own host,
+so the server's check that a change came from its own page accepts it. That check itself is
+unchanged, and the proxy leaves any other `Origin` alone. And
+`apps/server/scripts/dev-server.mjs` gives the source-run server the release stamp a bundle
+built from this checkout would carry, made from the current commit, without which the setup's
+time check stays unconfirmed; it prints a warning and starts without one when it cannot read the
+commit. That stamp also changes the software version written into every fiscal record a dev stack makes
+(Demo included), from `0.0.0-dev` to `0.0.0-dev+<commit>` (`softwareVersion`,
+`packages/fiscal-verifactu/src/software-identity.ts`).
+Only the dev launcher does this: a server started from source any other way still has no stamp.
+
 ### The owner's dev stack and Claude's
 
 Since 2026-11-14 `wa-wt` keeps the owner's stack and Claude's apart (owner's request, after a
@@ -438,10 +457,11 @@ they honour `WAITRON_DEV_ENV_FILE`.
 
 Demo, Preparation and isolated readiness use the fiscal module's disposable preproduction
 preparation (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`), which names from the
-box's clock with no second clock and no history check. Through the setup page, Live on a
-development box (`config.devMode`) takes it too (`apps/server/src/setup-api.throwaway.test.ts`,
-"marks Live on a dev box, whose request is stamped preproduction"). Any other Live setup,
-and the terminal's, uses the owned flow: five symbols for the UTC minute, after the box's internet
+box's clock with no second clock and no history check. Where a fiscal module is offered for the
+venue's tax territory, the setup page's plain provision refuses Live with `setup.owner_required`,
+development box or not (`apps/server/src/setup-api.ts`; `apps/server/src/first-fiscal-hour-modes.test.ts`, "development
+Live requires owned hour selection"), and `apps/server/src/boot.ts` always hands those routes the
+first-setup host. Every other Live setup, and the terminal's, uses the owned flow: five symbols for the UTC minute, after the box's internet
 time service says it is synchronised (the terminal's only way;
 `packages/provisioning/src/first-setup-command.test.ts`, "names the series with no browser when the
 box's time service is synchronised"), or, on the setup page, a second clock on another machine

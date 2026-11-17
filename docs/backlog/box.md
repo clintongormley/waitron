@@ -1237,7 +1237,7 @@ client. No screen calls them yet.
   screen (the parent plan's "preserved action failure across read recovery"). When a real box
   refuses a join with `box_network.join_connection_insecure` (a box with no certificate, or a page
   not opened over HTTPS), the page says what happened and what each choice it offers does, per
-  CLAUDE.md's refusal rule. A dev stack served over plain HTTP answers every join with that code.
+  CLAUDE.md's refusal rule. A dev stack whose box has no certificate answers every join with that code.
 - The Linux and kiosk pull requests: the box's own screen must open Waitron over HTTPS with the
   box's certificate authority trusted, or its manager cannot join Wi-Fi from it (PR 9's D6).
   Measure what a connection over `MaxConnections=4` meets, and whether the client reads it as

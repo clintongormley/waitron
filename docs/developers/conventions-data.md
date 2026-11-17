@@ -4534,8 +4534,7 @@ holds none").
 
 The one allocation outside the clock rule is the preproduction throwaway
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
-it, as does a Live setup through the setup page on a development box (`throwawayMarker`,
-`apps/server/src/setup-api.ts`), and so does the readiness sample
+it (`throwawayMarker`, `apps/server/src/setup-api.ts`), and so does the readiness sample
 (`packages/provisioning/src/fiscal-readiness-runner.ts`). It names from the box's clock with no
 second clock and no history check, and is refused outside preproduction
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`).

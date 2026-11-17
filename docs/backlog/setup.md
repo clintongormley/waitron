@@ -163,15 +163,17 @@ browser's preferred supported language, falling back to English when none is sup
 
 ## A dev stack cannot finish a Live setup
 
-Seen while looking at the recovery-pack card (2026-11-17): on a `wa-wt onboarding`
-stack, Live → Start empty → owner → shop details → **Provision this server** answered "This server
-did not accept this request from this page" and logged `setup.owner_required`, from the setup app's
-dev server and from the server's own HTTPS address alike. In development mode the wizard skips the
-Live owner flow (`apps/setup/src/setup-app.ts`, `if (this.draft.mode === "live" &&
-!this.developmentMode)`) and sends a plain provision, which `apps/server/src/setup-api.ts` refuses
-with `setup.owner_required` whenever a fiscal module is offered for the venue's tax territory. So
-no dev stack reaches a Live venue whose setup recorded pack 1, and the Backups card has never been
-seen showing such a pack.
+A `wa-wt onboarding` stack's wizard, opened at the setup app's own page, now goes Live → Start
+empty → owner → shop details → the readiness step
+([how](../developers/workflow-guide.md#the-development-stack-from-a-worktree)), and stops there:
+**Proceed** waits for a second clock, and nothing on a dev stack can be one. A screen on the box
+itself does not count (`apps/server/src/request-from-box.ts`; the dev page reaches the server
+through a loopback proxy), the dev server listens on loopback only, so no phone can reach it, and
+a Mac has no internet time service the server can read. So the Backups card has still never been
+seen showing a Live setup's pack 1. Which way to close it, if at all, is the owner's (asked
+2026-11-17): let a development first setup take the box's clock alone, give a source run a
+stand-in time service that reports synchronised from the dev scripts, or serve a built wizard on
+the LAN so a real phone can be the second clock.
 
 ## Loose ends left by A496 (moving to a new tax ID).
 
