@@ -22800,7 +22800,6 @@ export class TillApp extends LitElement {
       ></till-kitchen-screen-notice>`;
     if (this.initialDevicePassMonitor)
       return html`<till-pass-screen
-        .operatorSession=${this.#operatorSession}
         embedded
         monitor
         .live=${this.#live}
@@ -22816,7 +22815,6 @@ export class TillApp extends LitElement {
       ></till-pass-screen>`;
     return this.initialDevicePass
       ? html`<till-pass-screen
-          .operatorSession=${this.#operatorSession}
           embedded
           .live=${this.#live}
           .api=${this.api}
@@ -22831,7 +22829,6 @@ export class TillApp extends LitElement {
           }}
         ></till-pass-screen>`
       : html`<till-station-screen
-          .operatorSession=${this.#operatorSession}
           embedded
           .live=${this.#live}
           .api=${this.api}
@@ -23077,7 +23074,6 @@ export class TillApp extends LitElement {
         ></till-schedule-screen>`;
       case "station":
         return html`<till-station-screen
-          .operatorSession=${this.#operatorSession}
           slot="drill"
           .live=${this.#live}
           .api=${this.api}
@@ -23091,7 +23087,6 @@ export class TillApp extends LitElement {
         ></till-station-screen>`;
       case "expo":
         return html`<till-pass-screen
-          .operatorSession=${this.#operatorSession}
           slot="drill"
           .live=${this.#live}
           .api=${this.api}

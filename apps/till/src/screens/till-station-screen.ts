@@ -216,7 +216,6 @@ export class TillStationScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
-  @property({ attribute: false }) operatorSession = 0;
   /**
    * An always-on ENROLLED display: no login, its kitchen screen's stations, no picker and no
    * Back-to-counter. A 401 on its probe emits `device-unauthorized` so the app re-boots through the

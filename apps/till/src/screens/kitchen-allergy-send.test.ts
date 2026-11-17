@@ -377,13 +377,12 @@ describe("A773 waiter authority — expo allergy boundary", () => {
       );
 
   for (const kind of ["group", "course"] as const)
-    it.each(["operator", "api", "reopen", "board"] as const)(
+    it.each(["api", "reopen", "board"] as const)(
       `${kind} cannot reopen allergy consideration after a %s change`,
       async (change) => {
         const { el, api } = await mount("expo", kind);
         await fire(el, kind);
-        if (change === "operator") el.operatorSession++;
-        else if (change === "api") el.api = fixture(kind) as unknown as TillApi;
+        if (change === "api") el.api = fixture(kind) as unknown as TillApi;
         else if (change === "reopen") {
           const parent = el.parentElement!;
           el.remove();
