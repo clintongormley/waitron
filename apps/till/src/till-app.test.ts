@@ -8144,6 +8144,27 @@ describe("till-app", () => {
     },
   );
 
+  it("asks to read the order again, not to choose again, when it cannot tell which lines were sent", async () => {
+    // Re-picking a renamed answer on a dish already sent recalls it, or is refused once started.
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
+    const renamed = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamed)),
+      getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamed]);
+    expect(el.shadowRoot!.textContent).toContain(t("held.reread_failed"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+  });
+
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
     // A lost-response retry, or the LOSER of a two-till concurrent pay on the same parked order, finds
     // the order ALREADY settled. The edit-gated re-sync then throws `working_order.not_open` — which must

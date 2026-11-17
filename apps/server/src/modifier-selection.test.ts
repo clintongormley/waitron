@@ -816,6 +816,20 @@ describe("asksNoNewAnswer", () => {
     expect(asksNoNewAnswer([cooked, twin], requested, both)).toBe(true);
     expect(asksNoNewAnswer([cooked, twin], requested, [both[0]!, both[0]!])).toBe(false);
   });
+
+  it("leaves a request naming one list twice to the validator, in any case", () => {
+    const twin: OptionList = { ...cooked, id: "list-cooked-twin" };
+    const held = [
+      { listId: cooked.id, labelId: mediumRare.id },
+      { listId: twin.id, labelId: mediumRare.id },
+    ];
+    const both = freeze({ options: [cooked, twin] }, { options: held }).optionSnapshots;
+    const twice = [
+      { listId: cooked.id, labelId: mediumRare.id },
+      { listId: cooked.id.toUpperCase(), labelId: mediumRare.id },
+    ];
+    expect(asksNoNewAnswer([cooked, twin], twice, both)).toBe(false);
+  });
 });
 
 describe("editLineExtras", () => {

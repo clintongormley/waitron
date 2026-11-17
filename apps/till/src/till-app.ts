@@ -10205,14 +10205,18 @@ export class TillApp extends LitElement {
       });
     }
     // One banner, so a DROPPED product is reported first: it has already changed what the basket
-    // will bill, where the other two change nothing until the operator edits the order.
+    // will bill, where the others change nothing until the operator edits the order. Without the
+    // stored lines the till cannot tell a sent line from one not sent, and choosing again on a sent
+    // dish would recall it or be refused, so the operator is asked to read the order again first.
     const banner: StringKey | undefined = droppedAProduct
       ? "held.product_gone"
-      : extraNotOffered
-        ? "held.extra_not_offered"
-        : mustChooseAgain
-          ? "held.options_changed"
-          : undefined;
+      : mustChooseAgain && listed === null
+        ? "held.reread_failed"
+        : extraNotOffered
+          ? "held.extra_not_offered"
+          : mustChooseAgain
+            ? "held.options_changed"
+            : undefined;
     return banner === undefined ? { lines } : { lines, banner };
   }
 

@@ -227,8 +227,8 @@ export function editLineOptions(
 /**
  * Whether every answer `requested` names is one `stored` holds, by the staff names of its list and
  * label: the till re-derives a stored answer by those names alone, and leaves out a list it cannot
- * match, so such a request asks for nothing new. A malformed request, or one naming an id `offered`
- * does not carry, answers false.
+ * match, so such a request asks for nothing new. A malformed request, one naming an id `offered`
+ * does not carry, or one naming a list twice (which the validator refuses) answers false.
  */
 export function asksNoNewAnswer(
   offered: readonly OptionList[],
@@ -237,9 +237,12 @@ export function asksNoNewAnswer(
 ): boolean {
   if (!Array.isArray(requested)) return false;
   const named: { list: string; label: string }[] = [];
+  const listIds = new Set<string>();
   for (const entry of requested as unknown[]) {
     const { listId, labelId } = (entry ?? {}) as { listId?: unknown; labelId?: unknown };
     if (typeof listId !== "string" || typeof labelId !== "string") return false;
+    if (listIds.has(listId.toLowerCase())) return false;
+    listIds.add(listId.toLowerCase());
     const list = offered.find((candidate) => candidate.id === listId.toLowerCase());
     const label = list?.labels.find((candidate) => candidate.id === labelId.toLowerCase());
     if (list === undefined || label === undefined) return false;
