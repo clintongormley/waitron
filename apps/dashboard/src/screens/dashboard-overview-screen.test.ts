@@ -224,6 +224,9 @@ describe("dashboard-overview-screen", () => {
     const card = el.shadowRoot!.querySelector("[data-test=top-sellers]")!;
     expect(card).not.toBeNull();
     expect(card.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
+    expect(card.querySelector("[data-test=top-sellers-table] thead th")!.textContent).toBe(
+      "Producto",
+    );
     const names = [...el.shadowRoot!.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );

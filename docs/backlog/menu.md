@@ -328,9 +328,7 @@ From **The product editor and menu (#345, #379, #387) — what is left open.**
 
 - **Smaller things #379 surfaced and did not take.** `wt-price-input` was built from scratch
   rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
-  ones. And three interface faults seen then: the products list heads its Name column "Description",
-  "Top sellers" is rendered
-  twice on the overview, and the login screen shows an error before anything is submitted.
+  ones.
 
 ## "May contain" survives in the data with no way to see or set it
 

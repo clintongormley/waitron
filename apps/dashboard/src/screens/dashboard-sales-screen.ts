@@ -939,7 +939,7 @@ export class SalesScreen extends LitElement {
    * not shared with the overview's `overview.*` keys). */
   #topSellerLabels(): TopSellersLabels {
     return {
-      title: t("sales.top_sellers_title"),
+      product: t("sales.top_sellers_product"),
       quantity: t("sales.quantity"),
       total: t("sales.total"),
       empty: t("sales.empty_sellers"),

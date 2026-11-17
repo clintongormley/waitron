@@ -22,7 +22,7 @@ it("renders a row's plain staff name verbatim, regardless of the active locale o
   try {
     render(
       renderTopSellers([{ name: "Oven bread", quantity: "2", total: "4.00", variants: [] }], {
-        title: "Product",
+        product: "Product",
         quantity: "Quantity",
         total: "Total",
         empty: "No sales",
@@ -41,7 +41,7 @@ it("renders a row's plain staff name verbatim, regardless of the active locale o
 });
 
 const labels = {
-  title: "Product",
+  product: "Product",
   quantity: "Quantity",
   total: "Total",
   empty: "No sales",
