@@ -282,12 +282,6 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector(".grid-body")).not.toBeNull();
   });
 
-  it("keeps the non-default prep-queue rail out of fixed Counter", async () => {
-    const { el } = await mount({ defaultStationId: "st-1" });
-    expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
-  });
-
   it("passes held orders to the rendered list", async () => {
     const heldOrders = [
       {

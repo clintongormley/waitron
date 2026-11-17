@@ -3261,26 +3261,6 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(placeOrder).not.toHaveBeenCalled();
   });
 
-  it("does not show the next operator an earlier collection refusal", async () => {
-    let refuse!: (reason: unknown) => void;
-    const { el } = await mountApp({
-      markCollected: vi.fn(() => new Promise<void>((_, reject) => (refuse = reject))),
-    });
-    const c = await toCounter(el);
-    emit(c, "mark-collected", { orderId: "wo-1" });
-    await flush(el);
-    expect(api.markCollected).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
-    await flush(el);
-    refuse({ code: "server.internal" });
-    await flush(el);
-
-    expect(banner(el)).toBeNull();
-  });
-
   it("does not start the waiting-list read when a hand-over's answer outlives sign-out", async () => {
     let answerHandOver!: () => void;
     const { el } = await mountApp({
@@ -3367,38 +3347,6 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    const stationReads = vi.mocked(api.listStations).mock.calls.length;
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerHeld([]);
-    await flush(el);
-
-    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not read waiting orders when a cash sale's held-orders read outlives sign-out", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn().mockResolvedValue({
-        ...zoneOffers(
-          { menus: [defaultMenu], products: [coffee] },
-          "zone-counter",
-          "ticket_then_pay",
-        ),
-        zones: [zone("zone-counter", "ticket_then_pay")],
-      }),
-    });
-    const c = await toCounter(el);
-    let answerHeld!: (rows: []) => void;
-    vi.mocked(api.listWorkingOrders).mockImplementationOnce(
-      () => new Promise((resolve) => (answerHeld = resolve)),
-    );
-    c.store.addProduct(c.products[0]!, "1");
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-    expect(answerHeld).toBeTypeOf("function");
-
-    emit(shell(el)!, "logout");
-    await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
     answerHeld([]);
     await flush(el);
@@ -3431,71 +3379,6 @@ describe("till-app logout while a request is waiting for the server", () => {
     await flush(el);
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
     answerHeld([]);
-    await flush(el);
-
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not read waiting orders when a place's answer outlives sign-out", async () => {
-    let answerPlace!: () => void;
-    const { el } = await mountApp({
-      parkOrder: vi.fn().mockResolvedValue(undefined),
-      placeOrder: vi.fn(() => new Promise<void>((resolve) => (answerPlace = resolve))),
-    });
-    const c = await toCounter(el);
-    c.store.addProduct(c.products[0]!, "1");
-    emit(c, "place-order");
-    await flush(el);
-    expect(api.placeOrder).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerPlace();
-    await flush(el);
-
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not read waiting orders when a found-bill payment's answer outlives sign-out", async () => {
-    let answerPayment!: (result: TillSaleResult) => void;
-    const { el } = await mountApp({
-      collectOrder: vi.fn(
-        () => new Promise<TillSaleResult>((resolve) => (answerPayment = resolve)),
-      ),
-    });
-    const c = await toCounter(el);
-    emit(c, "find-bill-pay", {
-      workingOrderId: "wo-1",
-      tender: { method: "cash", amount: "5" },
-      invoiced: true,
-    });
-    await flush(el);
-    expect(api.collectOrder).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerPayment(saleResult);
-    await flush(el);
-
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not read waiting orders when a collection's answer outlives sign-out", async () => {
-    let answerCollection!: () => void;
-    const { el } = await mountApp({
-      markCollected: vi.fn(() => new Promise<void>((resolve) => (answerCollection = resolve))),
-    });
-    const c = await toCounter(el);
-    emit(c, "mark-collected", { orderId: "wo-1" });
-    await flush(el);
-    expect(api.markCollected).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answerCollection();
     await flush(el);
 
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
@@ -3586,7 +3469,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(banner(el)?.textContent).toBe(before);
   });
 
-  it("does not reload station and waiting lists for a found bill payment answered after sign-out", async () => {
+  it("does not reload the waiting list for a found bill payment answered after sign-out", async () => {
     let answer!: (result: TillSaleResult) => void;
     const { el } = await mountApp({
       collectOrder: vi.fn(() => new Promise<TillSaleResult>((resolve) => (answer = resolve))),
@@ -3602,12 +3485,10 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    const stationReads = vi.mocked(api.listStations).mock.calls.length;
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
     answer(saleResult);
     await flush(el);
 
-    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
@@ -4017,7 +3898,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
-  it("does not reload station and waiting lists for a place answered after sign-out", async () => {
+  it("does not reload the waiting list for a place answered after sign-out", async () => {
     let answer!: () => void;
     const { el } = await mountApp({
       parkOrder: vi.fn().mockResolvedValue(undefined),
@@ -4031,12 +3912,10 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    const stationReads = vi.mocked(api.listStations).mock.calls.length;
     const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
     answer();
     await flush(el);
 
-    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
     expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
@@ -4058,46 +3937,6 @@ describe("till-app logout while a request is waiting for the server", () => {
     await flush(el);
 
     expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
-  });
-
-  it("does not reload station and waiting lists for a collection answered after sign-out", async () => {
-    let answer!: () => void;
-    const { el } = await mountApp({
-      markCollected: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
-    });
-    const c = await toCounter(el);
-    emit(c, "mark-collected", { orderId: "wo-1" });
-    await flush(el);
-    expect(api.markCollected).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const stationReads = vi.mocked(api.listStations).mock.calls.length;
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    answer();
-    await flush(el);
-
-    expect(api.listStations).toHaveBeenCalledTimes(stationReads);
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
-  });
-
-  it("does not start the waiting read after a collection's refusal outlives sign-out", async () => {
-    let refuse!: (reason: unknown) => void;
-    const { el } = await mountApp({
-      markCollected: vi.fn(() => new Promise<void>((_, reject) => (refuse = reject))),
-    });
-    const c = await toCounter(el);
-    emit(c, "mark-collected", { orderId: "wo-1" });
-    await flush(el);
-    expect(api.markCollected).toHaveBeenCalledOnce();
-
-    emit(shell(el)!, "logout");
-    await flush(el);
-    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
-    refuse({ code: "server.internal" });
-    await flush(el);
-
-    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
   });
 
   it("stays on the lock screen when a cash sale's answer arrives after the operator logged out", async () => {
@@ -5693,26 +5532,6 @@ describe("till-app when the server reports another build", () => {
       { reload, sessionActivity: activity as never },
     );
     emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
-    await flush(el);
-    expect(markCollected).toHaveBeenCalledOnce();
-    signOutIdle(activity);
-    await flush(el);
-    expect(lock(el)).not.toBeNull();
-    updated();
-    await flush(el);
-    expect(reload).not.toHaveBeenCalled();
-    expect(updateBar(el)).not.toBeNull();
-  });
-
-  it("shows the bar instead of reloading while a prep-queue Collect still waits for the server after an idle sign-out", async () => {
-    const activity = fakeSessionActivity();
-    const reload = vi.fn();
-    const markCollected = vi.fn(() => new Promise(() => {}));
-    const { el } = await mountApp(
-      { markCollected },
-      { reload, sessionActivity: activity as never },
-    );
-    emit(await toCounter(el), "mark-collected", { orderId: "wo-1" });
     await flush(el);
     expect(markCollected).toHaveBeenCalledOnce();
     signOutIdle(activity);

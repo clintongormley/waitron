@@ -76,7 +76,6 @@ import type {
   ResolvedKitchenScreen,
   RoleEquipment,
   ServiceZoneSummary,
-  StationQueue,
   TabLine,
   TableState,
   TillApi,
@@ -669,9 +668,6 @@ const tableOrder = (el: TillApp) =>
 const counterBody = (el: TillApp) => counter(el);
 const tenderPay = (el: TillApp) =>
   counterBody(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-
-const stationQueueWidget = (el: TillApp) =>
-  counterBody(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 function emit(source: Element, type: string, detail?: unknown): void {
   if (
@@ -2050,7 +2046,7 @@ describe("till-app", () => {
     expect(listZoneOffers).toHaveBeenCalledTimes(2);
   });
 
-  it("the counter never reads the default station's queue, so a queue that cannot be read puts no notice on it", async () => {
+  it("a Counter zone change loads the zone and reads the station list again, and no kitchen queue", async () => {
     const defaultZoneOffers = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     defaultZoneOffers.zones = [
       {
@@ -2079,12 +2075,10 @@ describe("till-app", () => {
       departmentId: "department-deli",
       serviceMode: "ticket_then_pay",
     };
-    const getStationQueue = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultZoneOffers)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultZoneOffers),
       listZoneOffers: vi.fn().mockResolvedValue(deliMenu),
-      getStationQueue,
     });
     const c = await toCounter(el);
     const stationReads = vi.mocked(currentApi.listStations).mock.calls.length;
@@ -2093,8 +2087,7 @@ describe("till-app", () => {
     emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
     await flush(el);
 
-    expect(getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
+    expect(currentApi.getStationQueue).not.toHaveBeenCalled();
     expect(c.selectedServiceZoneId).toBe("zone-deli");
     expect(c.selectedMenuId).toBe("menu-deli");
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "").not.toContain(
@@ -2963,7 +2956,6 @@ describe("till-app", () => {
       });
       afterEach(() => window.removeEventListener("unhandledrejection", onRejection));
 
-      /** Logs in on `device` with the counter's lists in view, in a zone that is not prepay. */
       async function logIn(
         device: "till" | "handheld",
         overrides: Record<string, unknown>,
@@ -3016,7 +3008,6 @@ describe("till-app", () => {
           await flush(el);
 
           expect(stationsOf(el)).toEqual([defaultStation]);
-          expect(currentApi.getStationQueue).not.toHaveBeenCalled();
           expect(currentApi.listCounterWaiting).toHaveBeenCalled();
           expect(currentApi.listStaff).toHaveBeenCalled();
           expect(notice(el, "held").hasAttribute("data-active")).toBe(true);
@@ -3028,18 +3019,14 @@ describe("till-app", () => {
       );
 
       it.each(["till", "handheld"] as const)(
-        "on a %s, a kitchen queue that cannot be read is never read, and the waiting orders and the roster load with no notice",
+        "on a %s, the waiting orders and the roster load at sign-in with no notice",
         async (device) => {
-          const el = await logIn(device, {
-            getStationQueue: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-          });
+          const el = await logIn(device, {});
           await flush(el);
 
-          expect(currentApi.getStationQueue).not.toHaveBeenCalled();
           expect(currentApi.listCounterWaiting).toHaveBeenCalled();
           expect(currentApi.listStaff).toHaveBeenCalled();
           expect(notice(el, "waiting").hasAttribute("data-active")).toBe(false);
-          expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
           expect(rejections).toEqual([]);
         },
       );
@@ -3055,7 +3042,6 @@ describe("till-app", () => {
 
         expect(currentApi.listCounterWaiting).toHaveBeenCalled();
         expect(currentApi.listStaff).toHaveBeenCalled();
-        expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
         expect(rejections).toEqual([]);
         expect(stationsOf(el)).toEqual([]);
 
@@ -10141,7 +10127,7 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(listStations).toHaveBeenCalledOnce();
-      expect(counter(el)!.defaultStationId).toBe(defaultStation.id);
+      expect(counter(el)!.makeAtStations).toEqual([defaultStation]);
       selectTab(el, "floor");
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t1", seated: false });
@@ -10151,7 +10137,7 @@ describe("till-app", () => {
       selectTab(el, "counter");
       await flush(el);
       expect(listStations).toHaveBeenCalledTimes(3);
-      expect(counter(el)!.defaultStationId).toBe(defaultStation.id);
+      expect(counter(el)!.makeAtStations).toEqual([defaultStation]);
     });
 
     it("keeps the newest station list when an earlier table read finishes last", async () => {
@@ -10177,10 +10163,10 @@ describe("till-app", () => {
       await flush(el);
       selectTab(el, "counter");
       await flush(el);
-      expect(counter(el)!.defaultStationId).toBe(newer.id);
+      expect(counter(el)!.makeAtStations).toEqual([newer]);
       finishTableRead([defaultStation]);
       await flush(el);
-      expect(counter(el)!.defaultStationId).toBe(newer.id);
+      expect(counter(el)!.makeAtStations).toEqual([newer]);
     });
 
     it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
@@ -12530,17 +12516,15 @@ describe("till-app", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // Prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation)
-  // and the prep queue rendered from fetched data.
+  // Prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation).
   // ---------------------------------------------------------------------------------------------
 
-  describe("per-mode pay control + station queue (KDS-1)", () => {
-    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow, no station queue fetched or rendered", async () => {
+  describe("per-mode pay control", () => {
+    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow and reads no kitchen queue", async () => {
       const { el } = await mountApp(); // the till fixture defaults orderFlow: "prepay"
       const c = await toCounter(el);
       expect(tenderPay(el).mode).toBe("prepay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(c.products).toEqual([
         expect.objectContaining({
@@ -12552,43 +12536,19 @@ describe("till-app", () => {
       ]);
     });
 
-    it("boots into ticket-then-pay with its order stage and the station list read, never the queue, without a prep rail", async () => {
+    it("boots into ticket-then-pay with its order stage and the station list read, and reads no kitchen queue", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.listStations).toHaveBeenCalledOnce();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
     });
 
-    it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
-      });
-      await toCounter(el);
-      expect(tenderPay(el).mode).toBe("ticket_then_pay");
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
-    it("no default station configured leaves the counter queue empty rather than throwing", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        listStations: vi.fn().mockResolvedValue([{ ...defaultStation, isDefault: false }]),
-      });
-      await toCounter(el);
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
-    it("place-order (fresh basket): parks then places and moves to the collect stage, never reading the prep queue", async () => {
+    it("place-order (fresh basket): parks then places and moves to the collect stage, and reads no kitchen queue", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
@@ -14136,206 +14096,6 @@ describe("till-app", () => {
       await flush(el);
 
       expect(tenderPay(el).stage).toBe("order");
-    });
-
-    it("advance-ticket-item: advances the line and reads no station queue", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-      });
-      const c = await toCounter(el);
-
-      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-2", to: "preparing" });
-      await flush(el);
-
-      expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
-    it.each([
-      [{ code: "storage.disk_full", status: 507 }, () => codeMessage("storage.disk_full")],
-      [{ code: "server.internal", status: 500 }, () => t("station.advance_error")],
-    ])("advance-ticket-item refused %o shows that refusal's sentence", async (refused, shown) => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        advanceTicketItem: vi.fn().mockRejectedValue(refused),
-      });
-      const c = await toCounter(el);
-
-      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
-      await flush(el);
-
-      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
-    });
-
-    it("a failed advance-ticket-item shows a non-fatal error and reads no station queue", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        advanceTicketItem: vi.fn().mockRejectedValue({ code: "ticket.invalid_transition" }),
-      });
-      const c = await toCounter(el);
-
-      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
-      await flush(el);
-
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("station.advance_error"));
-      expect(el.shadowRoot!.textContent).not.toContain("ticket.invalid_transition");
-    });
-
-    it("mark-collected: hands over the order via markCollected, then reads the waiting list again and no station queue", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-      });
-      const c = await toCounter(el);
-      const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
-
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      await flush(el);
-
-      expect(currentApi.markCollected).toHaveBeenCalledWith(
-        "wo-1",
-        expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
-        { signal: expect.any(AbortSignal) },
-      );
-      expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(stationQueueWidget(el)).toBeNull();
-    });
-
-    it("prep Collect resends a lost reply with the same wire submission id", async () => {
-      const fetch = vi
-        .fn()
-        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-        .mockResolvedValue(new Response(null, { status: 200 }));
-      const client = new CollectApi("", fetch);
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        getStationQueue: vi
-          .fn()
-          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
-          .mockResolvedValue({ items: [], notices: [] }),
-        markCollected: client.markCollected.bind(client),
-      });
-      const c = await toCounter(el);
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      try {
-        emit(c, "mark-collected", { orderId: "wo-1" });
-        await vi.advanceTimersByTimeAsync(0);
-        await el.updateComplete;
-        expect(fetch).toHaveBeenCalledTimes(1);
-        await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
-        await vi.advanceTimersByTimeAsync(0);
-        await el.updateComplete;
-        expect(fetch).toHaveBeenCalledTimes(2);
-        const [first, second] = fetch.mock.calls;
-        expect(first![0]).toBe("/api/orders/wo-1/collect");
-        const body = JSON.parse(first![1].body);
-        expect(body).toEqual({
-          submissionId: expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
-        });
-        expect(second![1].body).toBe(first![1].body);
-        expect(second![1].signal).toBe(first![1].signal);
-        expect(stationQueueWidget(el)).toBeNull();
-        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("a second prep Collect press while its handover is out sends nothing more", async () => {
-      let finish!: () => void;
-      const markCollected = vi.fn<(id: string, submissionId?: string) => Promise<void>>(
-        () =>
-          new Promise<void>((resolve) => {
-            finish = resolve;
-          }),
-      );
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        markCollected,
-      });
-      const c = await toCounter(el);
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      await flush(el);
-      expect(markCollected).toHaveBeenCalledTimes(1);
-      finish();
-      await flush(el);
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      await flush(el);
-      expect(markCollected).toHaveBeenCalledTimes(2);
-      expect(markCollected.mock.calls[1]![1]).not.toBe(markCollected.mock.calls[0]![1]);
-      finish();
-      await flush(el);
-    });
-
-    it("prep Collect does not resend after the operator signs out", async () => {
-      const markCollected = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        markCollected,
-      });
-      const c = await toCounter(el);
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      try {
-        emit(c, "mark-collected", { orderId: "wo-1" });
-        await vi.advanceTimersByTimeAsync(0);
-        emit(c, "logout");
-        await vi.advanceTimersByTimeAsync(0);
-        await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
-        await el.updateComplete;
-        expect(markCollected).toHaveBeenCalledTimes(1);
-        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("a full disk refuses prep Collect with its sentence, reads the waiting list again and no station queue", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        markCollected: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
-      });
-      const c = await toCounter(el);
-      const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
-
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      await flush(el);
-
-      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
-        codeMessage("storage.disk_full"),
-      );
-      expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-    });
-
-    it("a failed mark-collected reads the waiting list again, no station queue, and shows a non-fatal error", async () => {
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay" },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        markCollected: vi.fn().mockRejectedValue({ code: "working_order.already_collected" }),
-      });
-      const c = await toCounter(el);
-      const waitingReads = vi.mocked(currentApi.listCounterWaiting).mock.calls.length;
-
-      emit(c, "mark-collected", { orderId: "wo-1" });
-      await flush(el);
-
-      expect(currentApi.listCounterWaiting).toHaveBeenCalledTimes(waitingReads + 1);
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("station.collect_error"));
-      expect(el.shadowRoot!.textContent).not.toContain("working_order.already_collected");
     });
 
     it("show-station: the counter nav switches to the station-display screen (basket-preserving)", async () => {
@@ -17730,9 +17490,9 @@ describe("a failed list refresh after a successful write", () => {
     await el.updateComplete;
   }
 
-  const notice = (el: TillApp, list: "held") =>
+  const notice = (el: TillApp, list: "held" | "waiting") =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-refresh-notice="${list}"]`)!;
-  const message = (el: TillApp, list: "held") =>
+  const message = (el: TillApp, list: "held" | "waiting") =>
     notice(el, list).querySelector<HTMLElement>(".refresh-message")!.textContent!.trim();
   const countdown = (el: TillApp, list: "held") =>
     notice(el, list).querySelector<HTMLElement>(".refresh-countdown")?.textContent?.trim() ?? "";
@@ -18182,16 +17942,12 @@ describe("a failed list refresh after a successful write", () => {
     expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
   });
 
-  it("place: the collect stage stands, the kitchen queue is never read and no station notice appears", async () => {
-    const getStationQueue = failingAfterLogin<StationQueue>({
-      items: [],
-      notices: [],
-      printersDown: [],
-    });
+  it("place: the collect stage stands and the refresh failure never shows place.unconfirmed", async () => {
+    const listCounterWaiting = failingAfterLogin<CounterWaitingOrder[]>([]);
     const { el } = await mountApp({
       zonePolicy: { serviceMode: "ticket_then_pay" },
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-      getStationQueue,
+      listCounterWaiting,
     });
     const c = await toCounterFake(el);
     c.store.addProduct(coffee, "2");
@@ -18204,41 +17960,8 @@ describe("a failed list refresh after a successful write", () => {
     expect(tenderPay(el).stage).toBe("collect");
     expect(alertText(el)).not.toContain(t("place.unconfirmed"));
     expect(alertText(el)).not.toContain(t("place.error"));
-    expect(getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
+    expect(message(el, "waiting")).toBe(t("refresh.waiting_after_place"));
   });
-
-  it.each([
-    ["ticket_then_pay", "cash", "confirm-payment", { method: "cash", amount: "5" }],
-    ["ticket_then_pay", "an integrated card", "collect-card", {}],
-    ["ticket_then_pay", "cash", "confirm-payment", { method: "cash", amount: "5" }],
-    ["ticket_then_pay", "an integrated card", "collect-card", {}],
-  ] as const)(
-    "a kitchen queue that cannot be read is not read after an order in a %s zone is paid by %s at the order stage, and no station notice appears",
-    async (orderFlow, _method, event, detail) => {
-      const getStationQueue = failingAfterLogin<StationQueue>({
-        items: [],
-        notices: [],
-        printersDown: [],
-      });
-      const { el } = await mountApp({
-        zonePolicy: { serviceMode: orderFlow },
-        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
-        getStationQueue,
-      });
-      const c = await toCounterFake(el);
-      c.store.addProduct(coffee, "2");
-      await el.updateComplete;
-
-      emit(c, event, detail);
-      await settle(el);
-
-      expect(ticket(el)).not.toBeNull();
-      expect(alertText(el)).not.toContain(t("sale.unconfirmed"));
-      expect(getStationQueue).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
-    },
-  );
 
   describe("a list read after a write that never answers leaves the basket usable", () => {
     /** Like fetch, the read rejects only when its signal aborts. */
@@ -18498,35 +18221,30 @@ describe("a failed list refresh after a successful write", () => {
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
     });
 
-    it.each([
-      ["the waiting list", "waiting", "listCounterWaiting", "refresh.waiting_after_place"],
-    ] as const)(
-      "a read of %s after a place still out when the till's request limit passes is cancelled and said in the list's retry notice",
-      async (_read, list, method, key) => {
-        const { el } = await mountApp(ticketThenPay);
-        const c = await toCounterFake(el);
-        c.store.addProduct(coffee, "2");
-        await el.updateComplete;
-        const read = vi.mocked(currentApi[method] as (...args: unknown[]) => Promise<unknown>);
-        read.mockImplementation(unanswered);
-        const reads = read.mock.calls.length;
+    it("a read of the waiting list after a place still out when the till's request limit passes is cancelled and said in the list's retry notice", async () => {
+      const { el } = await mountApp(ticketThenPay);
+      const c = await toCounterFake(el);
+      c.store.addProduct(coffee, "2");
+      await el.updateComplete;
+      const read = vi.mocked(currentApi.listCounterWaiting);
+      read.mockImplementation(unanswered);
+      const reads = read.mock.calls.length;
 
-        emit(c, "place-order");
-        await settle(el);
-        expect(read).toHaveBeenCalledTimes(reads + 1);
-        const options = read.mock.lastCall!.at(-1) as { signal?: AbortSignal } | undefined;
-        const said = () =>
-          el.shadowRoot!.querySelector(`[data-refresh-notice="${list}"]`)?.textContent ?? "";
+      emit(c, "place-order");
+      await settle(el);
+      expect(read).toHaveBeenCalledTimes(reads + 1);
+      const options = read.mock.lastCall!.at(-1) as { signal?: AbortSignal } | undefined;
+      const said = () =>
+        el.shadowRoot!.querySelector('[data-refresh-notice="waiting"]')?.textContent ?? "";
 
-        // TABLE_REQUEST_LIMIT_MS in till-app.ts.
-        await tick(el, 149_999);
-        expect(options?.signal?.aborted).toBe(false);
-        expect(said()).not.toContain(t(key));
-        await tick(el, 1);
-        expect(options?.signal?.aborted).toBe(true);
-        expect(said()).toContain(t(key));
-      },
-    );
+      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+      await tick(el, 149_999);
+      expect(options?.signal?.aborted).toBe(false);
+      expect(said()).not.toContain(t("refresh.waiting_after_place"));
+      await tick(el, 1);
+      expect(options?.signal?.aborted).toBe(true);
+      expect(said()).toContain(t("refresh.waiting_after_place"));
+    });
   });
 });
 
@@ -19979,26 +19697,6 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     expect(getStationQueue).not.toHaveBeenCalled();
   });
 
-  it("a kitchen queue that cannot be read is not read after a waiting order is collected, and no station notice appears", async () => {
-    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
-    const { el } = await counterWaiting({
-      ...invoiceFirst,
-      getStationQueue,
-      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
-      retrievePlacedOrder: vi.fn().mockResolvedValue(placedRead("wo-sent")),
-    });
-    pressPay(el, "wo-sent");
-    await flush(el);
-    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
-
-    emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
-    await flush(el);
-
-    expect(currentApi.collectOrder).toHaveBeenCalledOnce();
-    expect(getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
-  });
-
   it.each([
     [
       "handed over",
@@ -20013,61 +19711,24 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       "refresh.waiting",
     ],
   ] as const)(
-    "a waiting list that cannot be read after the kitchen queue's Collect was %s says %s",
+    "a waiting list that cannot be read after a hand over was %s says %s",
     async (_how, _says, markCollected, key) => {
-      const { el, c } = await counterWaiting({
+      const { el } = await counterWaiting({
         ...invoiceFirst,
         markCollected: vi.fn(markCollected),
         listCounterWaiting: vi
           .fn()
-          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([paidOrder])
           .mockRejectedValue(new TypeError("Failed to fetch")),
       });
 
-      emit(c, "mark-collected", { orderId: "wo-paid" });
+      emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
       await flush(el);
 
       const notice = el.shadowRoot!.querySelector<HTMLElement>('[data-refresh-notice="waiting"]')!;
       expect(notice.textContent).toContain(t(key));
     },
   );
-
-  it("a waiting-list read after a refused Collect still out when the till's request limit passes is cancelled and said in the list's notice", async () => {
-    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
-    const { el, c } = await counterWaiting({
-      ...invoiceFirst,
-      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
-      listCounterWaiting,
-    });
-    const reads = listCounterWaiting.mock.calls.length;
-    listCounterWaiting.mockImplementation(
-      (options?: { signal?: AbortSignal }) =>
-        new Promise((_, reject) =>
-          options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
-        ),
-    );
-    const said = () =>
-      el.shadowRoot!.querySelector('[data-refresh-notice="waiting"]')?.textContent ?? "";
-    vi.useFakeTimers();
-    try {
-      emit(c, "mark-collected", { orderId: "wo-paid" });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
-      const [options] = listCounterWaiting.mock.lastCall as [{ signal?: AbortSignal }?];
-
-      // TABLE_REQUEST_LIMIT_MS in till-app.ts.
-      await vi.advanceTimersByTimeAsync(149_999);
-      await el.updateComplete;
-      expect(options?.signal?.aborted).toBe(false);
-      expect(said()).not.toContain(t("refresh.waiting"));
-      await vi.advanceTimersByTimeAsync(1);
-      await el.updateComplete;
-      expect(options?.signal?.aborted).toBe(true);
-      expect(said()).toContain(t("refresh.waiting"));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
   it("a waiting-list read after a refused hand over still out when the till's request limit passes is cancelled and said in the list's notice", async () => {
     const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
@@ -20105,26 +19766,6 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("the waiting list is read again after a Collect, and a kitchen queue that cannot be read is not read", async () => {
-    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
-    const listCounterWaiting = vi.fn().mockResolvedValueOnce([paidOrder]).mockResolvedValue([]);
-    const { el, c } = await counterWaiting({
-      ...invoiceFirst,
-      getStationQueue,
-      listCounterWaiting,
-    });
-    expect(waitingList(el)!.orders).toEqual([paidOrder]);
-    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
-
-    emit(c, "mark-collected", { orderId: "wo-paid" });
-    await flush(el);
-
-    expect(listCounterWaiting).toHaveBeenCalledTimes(2);
-    expect(waitingList(el)).toBeNull();
-    expect(getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
   });
 
   it("the basket takes no edit while Pay's read is out", async () => {
@@ -20173,63 +19814,6 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
     expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
     expect(getStationQueue).not.toHaveBeenCalled();
-  });
-
-  it("a kitchen queue that cannot be read is not read after a hand over, and no station notice appears", async () => {
-    const { el } = await counterWaiting({
-      ...invoiceFirst,
-      getStationQueue: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
-    });
-
-    emit(waitingList(el)!, "hand-over-order", { id: "wo-sent" });
-    await flush(el);
-
-    expect(currentApi.markCollected).toHaveBeenCalledOnce();
-    expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
-  });
-
-  it.each([
-    ["advanced", () => Promise.resolve(), null],
-    ["refused", () => Promise.reject({ code: "server.internal" }), "station.advance_error"],
-  ] as const)(
-    "a kitchen queue that cannot be read is not read after a dish is %s, and no station notice appears",
-    async (_how, advanceTicketItem, error) => {
-      const { el, c } = await counterWaiting({
-        ...invoiceFirst,
-        advanceTicketItem: vi.fn(advanceTicketItem),
-        getStationQueue: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-      });
-
-      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
-      await flush(el);
-
-      expect(currentApi.advanceTicketItem).toHaveBeenCalledOnce();
-      expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
-      if (error !== null) expect(alert(el)!.textContent).toContain(t(error));
-    },
-  );
-
-  it("a refused Collect reads the waiting list again, never a kitchen queue that cannot be read, and puts up no station notice", async () => {
-    const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
-    const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
-    const { el, c } = await counterWaiting({
-      ...invoiceFirst,
-      markCollected: vi.fn().mockRejectedValue({ code: "server.internal" }),
-      getStationQueue,
-      listCounterWaiting,
-    });
-    const reads = listCounterWaiting.mock.calls.length;
-    getStationQueue.mockRejectedValue(new TypeError("Failed to fetch"));
-
-    emit(c, "mark-collected", { orderId: "wo-paid" });
-    await flush(el);
-
-    expect(listCounterWaiting).toHaveBeenCalledTimes(reads + 1);
-    expect(getStationQueue).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-refresh-notice="station"]')).toBeNull();
   });
 
   it.each([
@@ -20355,8 +19939,12 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     expect(alert(el)).toBeNull();
   });
 
-  it("a second press while a hand over is out sends nothing more", async () => {
-    const markCollected = vi.fn(() => new Promise<void>(() => {}));
+  it("a second press while a hand over is out sends nothing more, and a press after it answers sends again under a new id", async () => {
+    let answer!: () => void;
+    const markCollected = vi
+      .fn<(id: string, submissionId: string) => Promise<void>>()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)))
+      .mockResolvedValue(undefined);
     const { el } = await counterWaiting({
       listCounterWaiting: vi.fn().mockResolvedValue([paidOrder]),
       markCollected,
@@ -20367,6 +19955,16 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     await flush(el);
 
     expect(markCollected).toHaveBeenCalledOnce();
+
+    answer();
+    await flush(el);
+    emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
+    await flush(el);
+
+    const calls = markCollected.mock.calls;
+    expect(calls.map(([id]) => id)).toEqual(["wo-paid", "wo-paid"]);
+    expect(calls[1]![1]).toMatch(UUID);
+    expect(calls[1]![1]).not.toBe(calls[0]![1]);
   });
 
   it("a hand over that got no answer is sent again under the SAME submission id", async () => {
@@ -20387,6 +19985,58 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     expect(first![1]).toMatch(UUID);
     expect(second![1]).toBe(first![1]);
     expect(alert(el)).toBeNull();
+  });
+
+  it("a hand over that got no answer is sent again with the same request body and signal on the wire", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const client = new CollectApi("", fetch);
+    const { el } = await counterWaiting({
+      listCounterWaiting: vi.fn().mockResolvedValue([paidOrder]),
+      markCollected: client.markCollected.bind(client),
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(fetch).toHaveBeenCalledTimes(2);
+      const [first, second] = fetch.mock.calls;
+      expect(first![0]).toBe("/api/orders/wo-paid/collect");
+      expect(JSON.parse(first![1].body)).toEqual({ submissionId: expect.stringMatching(UUID) });
+      expect(second![1].body).toBe(first![1].body);
+      expect(second![1].signal).toBe(first![1].signal);
+      expect(alert(el)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a hand over that got no answer is not sent again after the operator signs out", async () => {
+    const markCollected = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el, c } = await counterWaiting({
+      listCounterWaiting: vi.fn().mockResolvedValue([paidOrder]),
+      markCollected,
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(waitingList(el)!, "hand-over-order", { id: "wo-paid" });
+      await vi.advanceTimersByTimeAsync(0);
+      emit(c, "logout");
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+      await el.updateComplete;
+      expect(markCollected).toHaveBeenCalledTimes(1);
+      expect(alert(el)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([

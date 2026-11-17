@@ -15,7 +15,6 @@ import {
 } from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
-import { chooserStyles } from "../widgets/chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
@@ -55,7 +54,6 @@ export class TillCounterScreen extends LitElement {
   static override styles = [
     baseStyles,
     servicePeriodStyles,
-    chooserStyles,
     floorChipStyles,
     css`
       :host {
@@ -222,8 +220,6 @@ export class TillCounterScreen extends LitElement {
   /** The floor, which a held order's Move to table lists. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
-  /** Absent when the venue has no default station configured. */
-  @property({ attribute: false }) defaultStationId?: string;
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
   @property({ type: Boolean }) paymentWindow = false;

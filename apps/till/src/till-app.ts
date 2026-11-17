@@ -404,7 +404,6 @@ import type {
   TabLine,
   TableState,
   TableParty,
-  TicketState,
   TillActiveReader,
   TillCourse,
   TillInfo,
@@ -6517,10 +6516,6 @@ export class TillApp extends LitElement {
     </div>`;
   }
 
-  #defaultStationId(): string | undefined {
-    return this.stations.find((station) => station.isDefault)?.id;
-  }
-
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
     if (this.#tableMenuActive()) {
@@ -9655,60 +9650,6 @@ export class TillApp extends LitElement {
     }
     if (!collected || !current()) return;
     void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_sale"]]);
-  }
-
-  async #onAdvanceTicketItem(event: Event): Promise<void> {
-    const { itemId, stationId, to } = (
-      event as CustomEvent<{
-        itemId: string;
-        stationId: string;
-        to: Exclude<TicketState, "queued">;
-      }>
-    ).detail;
-    const session = this.#operatorSession;
-    this.errorKey = undefined;
-    try {
-      await this.api.advanceTicketItem(itemId, stationId, to);
-    } catch (error) {
-      if (session !== this.#operatorSession) return;
-      this.errorKey =
-        (error as { code?: string } | undefined)?.code === "storage.disk_full"
-          ? { code: "storage.disk_full" }
-          : "station.advance_error";
-    }
-  }
-
-  async #onMarkCollected(event: Event): Promise<void> {
-    const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
-    if (this.#handingOver.has(orderId)) return;
-    this.#handingOver.add(orderId);
-    const session = this.#operatorSession;
-    const submissionId = crypto.randomUUID();
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    this.errorKey = undefined;
-    let collected = false;
-    try {
-      await this.#resend(
-        (signal) => this.api.markCollected(orderId, submissionId, { signal }),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      collected = true;
-    } catch (error) {
-      if (session !== this.#operatorSession) return;
-      this.errorKey =
-        (error as { code?: string } | undefined)?.code === "storage.disk_full"
-          ? { code: "storage.disk_full" }
-          : "station.collect_error";
-    } finally {
-      limit.done();
-      this.#handingOver.delete(orderId);
-    }
-    if (session !== this.#operatorSession) return;
-    await this.#refreshAfterWrite(
-      "waiting",
-      collected ? "refresh.waiting_after_hand_over" : "refresh.waiting",
-    );
   }
 
   /**
@@ -22576,7 +22517,6 @@ export class TillApp extends LitElement {
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
         .zones=${this.zones}
-        .defaultStationId=${this.#defaultStationId()}
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
@@ -23181,8 +23121,6 @@ export class TillApp extends LitElement {
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
-        @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
-        @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @edit-waiting-kitchen-note=${(event: CustomEvent<{ id: string }>) => void this.#openWaitingKitchenNote(event)}
         @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
