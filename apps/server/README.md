@@ -15,7 +15,8 @@ This document is written for whoever deploys this process, not whoever reads its
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` with a `duties` object is a claim that
 the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
-payment-audit period is not in the status code, and the body's `parked` count shows it
+payment-audit period reaches the status code only when the duty has had no clean pass since this
+process started or within its budget, and the body's `parked` count shows it
 only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
 written by the pass that parks, is the signal to look for afterwards. It is **not** a claim that
 every individual fiscal record has actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
@@ -683,31 +684,39 @@ status code: the container's healthcheck reads it (`deploy/compose.yml`), and an
 waits for a healthy container (`deploy/waitron.sh`), so a bucket outage must not hold either. The
 dashboard's alerts report the bucket copy instead.
 
-**A `503` is the single most important signal this process can produce.** It means a duty has gone
-longer than its budget without a success, so it reads `stale: true` — one of two cases, one visible
-in the body above, one that needs the logs:
+**A `503` is the single most important signal this process can produce.** It means no pass has
+finished since this process started (`lastPassAt` is `null`), or a duty reads `stale: true`: it has
+not succeeded since this process started, or not within its budget. A duty goes stale in one of
+three ways, one visible in the body above, two that need the logs:
 
 - **`stale: true`, `consecutiveFailures` counting up** — a duty inside the pass is failing every
-  time it runs (a database blip, an unreachable AEAT endpoint), or skipping work (`skipped` > 0,
-  below). Otherwise check the logs (below) for the `errorCode` on the most recent `duty.failed`
-  line.
+  time it runs (a database blip, an unreachable AEAT endpoint), skipping work (`skipped` > 0) or
+  parking runs (`parked` > 0), both below. For a failure, check the logs (below) for the
+  `errorCode` on the most recent `duty.failed` line.
 - **`stale: true`, `consecutiveFailures` NOT counting up** — rarer, and the one that needs the logs
   to tell apart from the case above: `pass.threw` fired instead, meaning something escaped `runPass`
   itself rather than being contained per-duty. `onPass` (and therefore `recordPass`) never runs on
   that cycle, so `consecutiveFailures` does not increment even though the pass produced nothing —
   check `pass.threw`'s own `errorCode`, not `duty.failed`, which does not exist for this case.
+- **`stale: true`, `consecutiveFailures` NOT counting up, no `pass.threw`** — a pass has not
+  finished: neither `runPass` nor the loop sets a time limit on a pass (`src/loop.ts`,
+  `src/pass.ts`), so nothing is recorded until it does. Find the last `pass.complete` line and what
+  the running pass logged after it.
 
-**`skipped` > 0 answers `200` until the duty's budget passes.** It means this database's due fiscal
+**`skipped` > 0 is not a `503` by itself while the duty's last success is within its budget.** A
+duty that has skipped on every pass since this process started has no `lastOkAt`, so it reads stale
+and answers `503` at once. A skip means this database's due fiscal
 work (or, for `payments.reconcile.stripe`, one duty's sweep) could not be attempted THIS pass,
 even though the pass itself completed and the other duty was served. `consecutiveFailures`
 increments and `lastOkAt` does not advance for as long as anything is skipped. Find why
 via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
 common cause is a missing, unreadable, or stale-shaped credential.
 
-**`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself.** The pass that parks
-counts as a failure (`consecutiveFailures` goes up and `lastOkAt` does not advance), but the next
-clean pass clears it, so the status code turns `503` only when no clean pass comes within the
-duty's 26-hour budget. A park means a payment-audit run exhausted
+**`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself while the duty's last
+success is within its budget.** The pass that parks counts as a failure (`consecutiveFailures` goes
+up and `lastOkAt` does not advance), and the next clean pass clears it. The status code turns `503`
+when no clean pass comes within the duty's 26-hour budget, or at once if the duty has had no clean
+pass since this process started. A park means a payment-audit run exhausted
 `DEFAULT_DUTY_TIMINGS.scheduler.maxAttempts` (default 3) for that (duty, period), and a fresh run of the same
 period is queued for a day later (`retryParkedAfterMs`, `src/reconcile-duty.ts`), unlike a
 `skipped` pair (which retries within one

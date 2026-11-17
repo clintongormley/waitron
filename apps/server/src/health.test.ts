@@ -382,7 +382,7 @@ describe("healthApp", () => {
   });
 
   // The status CODE is what an uptime check reads, so these assert it, not only the body.
-  it("answers 503, not 200, when drain reports ok:true but skipped a taxpayer", async () => {
+  it("answers 503, not 200, when drain's first pass reports ok:true but skipped a taxpayer", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
     recordPass(
@@ -402,7 +402,7 @@ describe("healthApp", () => {
     expect(body.duties[DRAIN_DUTY]?.skipped).toBe(1);
   });
 
-  it("answers 503, not 200, when reconcile reports ok:true but skipped a pair", async () => {
+  it("answers 503, not 200, when reconcile's first pass reports ok:true but skipped a pair", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
     recordPass(
@@ -422,7 +422,7 @@ describe("healthApp", () => {
     expect(body.duties[RECONCILE_DUTY]?.skipped).toBe(3);
   });
 
-  it("answers 503, not 200, when reconcile reports ok:true but parked a run", async () => {
+  it("answers 503, not 200, when reconcile's first pass reports ok:true but parked a run", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
     recordPass(
