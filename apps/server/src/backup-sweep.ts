@@ -14,6 +14,7 @@ import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
+import type { CloudArchiveTarget } from "./cloud-archive-target.js";
 import type { BackupSchedule } from "./backup-config.js";
 import {
   MAX_SLEEP_MS,
@@ -70,6 +71,7 @@ export interface DestinationResult {
 export interface BackupSweepDeps {
   nodeId: string;
   backends: StorageBackend[];
+  cloud?: { target: CloudArchiveTarget; readClock: () => Promise<ScheduleClock> };
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
   /** Read for the manifest, and copied whole as the archive's `node.dump` through the state folder's scratch root. */
@@ -259,29 +261,39 @@ export async function runOnce(
           log: deps.log,
           onDeleted: reportDeleted,
         });
-      await room(2 * estimate + estimate * copies);
+      const boxCiphertext = deps.backends.length === 0 ? 0 : estimate;
+      await room(
+        estimate +
+          boxCiphertext +
+          estimate * copies +
+          ((await deps.cloud?.target.roomNeeded(estimate)) ?? 0),
+      );
     }
     await deps.archive(staged, deps.signal);
     dumped = true;
     await chmod(staged, 0o600);
-    if (deps.stagingEstimateBytes) await checkStagingSpace(deps, (await stat(staged)).size);
+    const stagedSize = deps.stagingEstimateBytes || deps.cloud ? (await stat(staged)).size : 0;
+    if (deps.stagingEstimateBytes) await checkStagingSpace(deps, stagedSize);
     const metadata = assembleArchiveEntries(manifest, null, parts);
     const entries: ArchiveInputEntry[] = [
       { kind: "bytes", entry: metadata[0] },
       { kind: "file", name: "db.dump", path: staged },
       ...metadata.slice(1).map((entry) => ({ kind: "bytes" as const, entry })),
     ];
-    encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
-    const ciphertext = join(encryptedDir, "artifact");
-    await encryptArtifactFile(
-      compressArchive(packArchiveStream(entries), deps.signal),
-      ciphertext,
-      deps.recoveryKey,
-      deps.signal,
-    );
-    // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
-    // whole before its rename.
-    if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
+    let ciphertext: string | undefined;
+    if (deps.backends.length > 0) {
+      encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
+      ciphertext = join(encryptedDir, "artifact");
+      await encryptArtifactFile(
+        compressArchive(packArchiveStream(entries), deps.signal),
+        ciphertext,
+        deps.recoveryKey,
+        deps.signal,
+      );
+      // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
+      // whole before its rename.
+      if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
+    }
     const key = backupArchiveKey(stamp, { nodeId: deps.nodeId });
     if (deps.outcomes?.runStopped) {
       delete deps.outcomes.runStopped;
@@ -294,7 +306,7 @@ export async function runOnce(
         let errorCode: string | null = null;
         try {
           await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
-            await backend.putFile(key, ciphertext, call);
+            await backend.putFile(key, ciphertext!, call);
             stored = true;
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
@@ -332,8 +344,50 @@ export async function runOnce(
         });
       }),
     );
+    if (deps.cloud && !deps.signal.aborted) {
+      const { target, readClock } = deps.cloud;
+      const result = await (async () => {
+        try {
+          // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
+          const plaintextBytes = entries.reduce(
+            (size, entry) =>
+              size +
+              12 +
+              (entry.kind === "file"
+                ? Buffer.byteLength(entry.name) + stagedSize
+                : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
+            9,
+          );
+          return await target.store({
+            entries: () => packArchiveStream(entries),
+            plaintextBytes,
+            modules: manifest.modules,
+            at: stamp,
+            clock: await readClock(),
+            signal: deps.signal,
+          });
+        } catch (error) {
+          return { stored: false, errorCode: codeOf(error) };
+        }
+      })();
+      if (result.stored || !deps.signal.aborted) {
+        if (deps.outcomes)
+          recordBackupOutcome(deps.outcomes, target.id, result.stored, stamp.toISOString());
+        deps.log(
+          result.stored ? "info" : "warn",
+          result.stored ? "backup.destination_completed" : "backup.destination_failed",
+          { destination: target.id, errorCode: result.errorCode },
+        );
+        deps.onDestinationResult?.({
+          id: target.id,
+          stored: result.stored,
+          uploadErrorCode: result.errorCode,
+          pruneErrorCode: null,
+        });
+      }
+    }
   } catch (err) {
-    // Only a step before the destination calls lands here: `Promise.allSettled` never rejects.
+    // Setup failures stop the run before it can store an archive.
     if (!deps.signal.aborted && deps.outcomes) {
       const code = codeOf(err);
       const at = stamp.toISOString();

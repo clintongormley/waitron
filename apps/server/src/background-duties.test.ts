@@ -9,7 +9,6 @@ import { createJobRunner } from "./job-runner.js";
 const ABORTS = [
   "controller",
   "pendingCardController",
-  "cloudController",
   "invoiceEmailController",
   "tenderRefundController",
   "jobRunner",
@@ -29,7 +28,6 @@ const CLOSERS = [
   "chartPost",
   "spareStore",
   "jobRunnerServices",
-  "cloudSnapshots",
 ];
 
 /** Every handle records its own name when the duty table touches it. */
@@ -49,14 +47,12 @@ function recordingHandles(
   return {
     controller: aborter("controller"),
     pendingCardController: aborter("pendingCardController"),
-    cloudController: aborter("cloudController"),
     invoiceEmailController: aborter("invoiceEmailController"),
     tenderRefundController: aborter("tenderRefundController"),
     pendingCardLoop: awaited("pendingCardLoop"),
     tenderRefundLoop: awaited("tenderRefundLoop"),
     certificateDiagnosis: stopper("certificateDiagnosis"),
     invoiceEmailLoop: awaited("invoiceEmailLoop"),
-    cloudSnapshots: awaited("cloudSnapshots"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     jobRunner: {
       signalStepdown: () => void calls.push("abort jobRunner"),
@@ -129,16 +125,11 @@ describe("background duties", () => {
       "stop chartPost",
       "stop spareStore",
       "stop jobRunnerServices",
-      "await cloudSnapshots",
     ]);
   });
 
-  it("gives the stream its final 4500ms before waiting for a slow Cloud snapshot", async () => {
+  it("gives the stream its final 4500ms after the venue writers stop", async () => {
     vi.useFakeTimers();
-    let release!: () => void;
-    const cloud = new Promise<void>((resolve) => {
-      release = resolve;
-    });
     const calls: string[] = [];
     const runner = createJobRunner({
       now: () => new Date(),
@@ -162,19 +153,19 @@ describe("background duties", () => {
         },
       });
       closing = stopBackgroundDuties(
-        backgroundDuties(recordingHandles(calls, { jobRunner: runner, cloudSnapshots: cloud })),
+        backgroundDuties(recordingHandles(calls, { jobRunner: runner })),
       ).then(() => {
         closed = true;
       });
-      await vi.advanceTimersByTimeAsync(7999);
+      await vi.advanceTimersByTimeAsync(4499);
+      expect(streamStopped).toBe(false);
+      expect(closed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
       expect(streamStopped).toBe(true);
       expect(calls.indexOf("await loop")).toBeLessThan(calls.indexOf("stop stream"));
-      expect(closed).toBe(false);
-      release();
       await closing;
       expect(closed).toBe(true);
     } finally {
-      release();
       await vi.runAllTimersAsync();
       await closing;
       await runner.stopJobs();
@@ -194,7 +185,7 @@ describe("background duties", () => {
     expect(calls).not.toContain("stop certificateDiagnosis");
     expect(calls).not.toContain("stop handoverDestinationDuty");
     expect(calls).not.toContain("stop spareStore");
-    expect(calls.at(-1)).toBe("await cloudSnapshots");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("stops a spare's store, which carries a reason, after the chart post and before the runner's services", async () => {
@@ -205,11 +196,10 @@ describe("background duties", () => {
     expect(closer?.reason).not.toBe("");
     expect(closer?.reason).toBeDefined();
     await stopBackgroundDuties(duties);
-    expect(calls.slice(-4)).toEqual([
+    expect(calls.slice(-3)).toEqual([
       "stop chartPost",
       "stop spareStore",
       "stop jobRunnerServices",
-      "await cloudSnapshots",
     ]);
   });
 
@@ -229,17 +219,17 @@ describe("background duties", () => {
       spareSettings: { stop: () => Promise.reject(new Error("box email failed")) },
     });
     await expect(stopBackgroundDuties(backgroundDuties(handles))).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("await cloudSnapshots");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
     expect(calls).toContain("stop handoverDestinationDuty");
   });
 
   it("carries on past a failing abort to every other abort and closer, then rejects with the first failure", async () => {
     const calls: string[] = [];
-    const first = new Error("cloud abort failed");
+    const first = new Error("pending-card abort failed");
     let finish!: () => void;
     const running = new Promise<void>((resolve) => (finish = resolve));
     const handles = recordingHandles(calls, {
-      cloudController: {
+      pendingCardController: {
         abort: () => {
           throw first;
         },
@@ -265,7 +255,7 @@ describe("background duties", () => {
 
     finish();
     await expect(stopping).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("await cloudSnapshots");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("awaits a stop called early in its place, without calling it again", async () => {
@@ -294,7 +284,7 @@ describe("background duties", () => {
     finish();
     await stopping;
     expect(stops).toBe(1);
-    expect(calls.at(-1)).toBe("await cloudSnapshots");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("rethrows a closer's first synchronous failure on a later call, without calling it again", () => {

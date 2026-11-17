@@ -847,7 +847,8 @@ also qualifies the historical operation-description references in this section.
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
   menu activation, scheduled archives, the sealed-key copy and public `/health` reports. Scheduled
-  archives copy the venue database on a worker thread. The bucket copy runs as a
+  archives copy the venue database on a worker thread. A test Cloud connection can receive the
+  same scheduled backup as the box-key destinations, using its own encryption key. The bucket copy runs as a
   service; close stops runner jobs first and the bucket copy last.
   [A1279](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself) owns immediate role wiring and the real promotion test, including a mirror, if its live-promotion path gains a production caller. Codex attached this to A1279 after the watcher deferred immediate wiring on 2026-11-11 at 05:18.
   The six watches (append-only protections, clock, free space, Cloud connection, translation

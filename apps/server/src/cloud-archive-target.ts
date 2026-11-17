@@ -9,7 +9,7 @@ import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata } from "./cloud-backup.js";
-import type { CloudConnection } from "./cloud-client.js";
+import type { CloudConnection, CloudConnectionStatus } from "./cloud-client.js";
 import { digestFile } from "./handover-capture.js";
 import "./errors.js";
 
@@ -128,6 +128,18 @@ const pendingExpired = (p: { createdAt: number }, t: number) => {
   const age = t - p.createdAt;
   return age >= 86400000 || age < -86400000;
 };
+export function cloudArchiveAvailable(status: CloudConnectionStatus | undefined): boolean {
+  return (
+    status?.state === "complete" &&
+    status.environment === "test" &&
+    status.registration !== undefined &&
+    status.installation?.state === "active" &&
+    status.installation.services.some(
+      (service) => service.service === "retained_snapshots" && service.state !== "unconfigured",
+    )
+  );
+}
+
 export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTarget {
   const dir = join(deps.stateDir, CLOUD_SNAPSHOTS_DIR);
   const file = join(dir, "archive.enc");
@@ -178,17 +190,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
           await rm(statePath, { force: true });
           saved = undefined;
         }
-        if (
-          status.state !== "complete" ||
-          status.environment !== "test" ||
-          !registration ||
-          status.installation?.state !== "active" ||
-          !status.installation.services.some(
-            (service) =>
-              service.service === "retained_snapshots" && service.state !== "unconfigured",
-          )
-        )
-          unavailable();
+        if (!registration || !cloudArchiveAvailable(status)) unavailable();
         const state: State = saved ?? {
           version: 1,
           installationId: registration.installationId,

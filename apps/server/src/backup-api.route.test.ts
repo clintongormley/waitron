@@ -1066,6 +1066,7 @@ describe("backup admin routes", () => {
       readRecord: async () => ({
         revision: "loaded-key",
         enabled: false,
+        cloud: false,
         destinations: [{ kind: "local-fs", id: "primary", dir: "/unused/backups" }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -1701,6 +1702,68 @@ describe("backup admin routes", () => {
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: DAILY_AT_0330,
       retention: RETENTION,
+    });
+
+    const weekly = { ...DAILY_AT_0330, days: [1] };
+    const cloudOnly = {
+      cloud: true,
+      destinations: [],
+      recoveryKey: KEY_1,
+      schedule: DAILY_AT_0330,
+      retention: RETENTION,
+    };
+
+    it("refuses Cloud with a weekly schedule, naming the schedule", async () => {
+      const { post } = await primaryApp({
+        readCloudStatus: async () => ({ state: "complete", environment: "test", code: "" }),
+      });
+      const response = await post("/api/backup/apply", { ...cloudOnly, schedule: weekly });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "backup.cloud_needs_daily", params: { field: "schedule" } },
+      });
+      expect(await readSealed()).toBeNull();
+    });
+
+    it("refuses a weekly schedule while Cloud is on without changing the saved schedule", async () => {
+      const { post } = await primaryApp({
+        readCloudStatus: async () => ({ state: "complete", environment: "test", code: "" }),
+      });
+      const saved = await post("/api/backup/apply", cloudOnly);
+      expect(saved.status).toBe(200);
+      const before = await readSealed();
+      const { cloud: _cloud, ...edit } = cloudOnly;
+      const response = await post("/api/backup/apply", { ...edit, schedule: weekly });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "backup.cloud_needs_daily", params: { field: "schedule" } },
+      });
+      expect(await readSealed()).toEqual(before);
+    });
+
+    it.each([
+      DAILY_AT_0330,
+      { ...DAILY_AT_0330, days: [0, 1, 2, 3, 4, 5, 6] },
+      { kind: "interval", ms: 86_400_000 },
+    ])("accepts Cloud-only backups on schedule %j", async (schedule) => {
+      const { post } = await primaryApp({
+        readCloudStatus: async () => ({ state: "complete", environment: "test", code: "" }),
+      });
+      const response = await post("/api/backup/apply", { ...cloudOnly, schedule });
+      expect(response.status).toBe(200);
+      expect(await readSealed()).toMatchObject({ destinations: [], cloud: true, schedule });
+    });
+
+    it("refuses Cloud on a box whose connection is not a test one", async () => {
+      const { post } = await primaryApp({
+        readCloudStatus: async () => ({ state: "complete", environment: "production", code: "" }),
+      });
+      const response = await post("/api/backup/apply", cloudOnly);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "backup.cloud_unavailable", params: { field: "cloud" } },
+      });
+      expect(await readSealed()).toBeNull();
     });
 
     const probeCalls = () => {

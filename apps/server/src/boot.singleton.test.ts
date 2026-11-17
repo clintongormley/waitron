@@ -20,8 +20,7 @@ import {
 } from "@waitron/db";
 import { setSingletonRole } from "@waitron/node-db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
-import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
+import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 
@@ -42,18 +41,12 @@ const { startServer } = ephemeralServerFixture();
  * while a server is up.
  */
 
-vi.mock("./cloud-snapshot-worker.js", async (original) => {
-  const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
-  return { ...actual, createCloudSnapshotWorker: vi.fn(actual.createCloudSnapshotWorker) };
+vi.mock("./cloud-archive-target.js", async (original) => {
+  const actual = await original<typeof import("./cloud-archive-target.js")>();
+  return { ...actual, createCloudArchiveTarget: vi.fn(actual.createCloudArchiveTarget) };
 });
-vi.mock("./cloud-snapshot-loop.js", async (original) => {
-  const actual = await original<typeof import("./cloud-snapshot-loop.js")>();
-  return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
-});
-
 beforeEach(() => {
-  vi.mocked(createCloudSnapshotWorker).mockClear();
-  vi.mocked(runCloudSnapshotLoop).mockClear();
+  vi.mocked(createCloudArchiveTarget).mockClear();
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
@@ -273,8 +266,8 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
       expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
-      expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(false);
+      expect(createCloudArchiveTarget).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createCloudArchiveTarget).mock.calls[0]![0].isPrimary()).toBe(false);
 
       // The secondary still sells: its fiscal pass runs empty, so /health still advances.
       await poll(() => server.health.lastPassAt ?? undefined);
@@ -282,7 +275,6 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
     } finally {
       await server.close();
     }
-    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 
   it("the singleton primary (primary, primary) of the same identity runs its singleton duties (control: the secondary's absence is real)", async () => {
@@ -302,12 +294,10 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
       // See `backupBase` for why this is the only backup assertion.
       expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
-      expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(true);
-      expect(runCloudSnapshotLoop).toHaveBeenCalledTimes(1);
+      expect(createCloudArchiveTarget).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createCloudArchiveTarget).mock.calls[0]![0].isPrimary()).toBe(true);
     } finally {
       await server.close();
     }
-    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 });

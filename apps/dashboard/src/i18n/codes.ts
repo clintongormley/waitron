@@ -1258,6 +1258,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the backup destination",
     es: "Revisa el destino de la copia de seguridad",
   },
+  "backup.cloud_needs_daily": {
+    en: "Waitron Cloud keeps one copy a day, so it needs a backup every day.",
+    es: "Waitron Cloud guarda una copia al día, así que necesita una copia de seguridad cada día.",
+  },
+  "backup.cloud_unavailable": {
+    en: "Waitron Cloud backups are not available on this box yet.",
+    es: "Las copias en Waitron Cloud aún no están disponibles en este equipo.",
+  },
   "backup.request_invalid": {
     en: "Check the backup settings and try again",
     es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",

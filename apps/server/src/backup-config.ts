@@ -21,7 +21,8 @@ export interface BackupConfig {
   revision: string | undefined;
   /** False only for a dashboard record stored switched off, which runs no sweep. */
   enabled: boolean;
-  /** Never empty; ids are unique, and so are local folders' resolved dirs. */
+  cloud?: boolean;
+  /** IDs are unique, and so are local folders' resolved directories. */
   destinations: BackupDestination[];
   /** The operator-held passphrase every backup artifact is encrypted under. `undefined` only on a
    * switched-off record whose box holds no usable key. */
@@ -103,6 +104,7 @@ export function resolveBackupConfig(input: {
   return {
     revision: sealed.revision,
     enabled: sealed.enabled,
+    ...(sealed.cloud ? { cloud: true } : {}),
     destinations: archiveDestinations(sealed),
     // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
     recoveryKey: sealed.enabled ? requiredKey(env) : heldUsableKey(env),

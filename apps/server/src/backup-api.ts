@@ -20,6 +20,7 @@ import {
   BUCKET_CHOICES,
   hasExactKeys,
   isRecord,
+  isAtLeastDaily,
   archiveRecord,
   parseSchedule,
   readHeldArchiveSettings,
@@ -57,6 +58,7 @@ import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { readStreamSettings, type StreamSettings } from "./stream-host.js";
 import type { StreamHost } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
+import type { CloudConnectionStatus } from "./cloud-client.js";
 import "./errors.js";
 
 /** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env`, which
@@ -76,6 +78,7 @@ export interface BackupApiDeps {
    * key. */
   sealedState: Pick<SealedStateRefresher, "refresh">;
   readStream: () => StreamView;
+  readCloudStatus?: () => Promise<CloudConnectionStatus>;
   stream: Pick<StreamHost, "reload">;
   /** Shared with the stream settings routes, which also read and then write the key in
    * `backup.env`. */
@@ -99,6 +102,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.recovery_key_too_short": 400,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,
+  "backup.cloud_needs_daily": 400,
+  "backup.cloud_unavailable": 400,
   "backup.effective_mismatch": 400,
   "backup.archive_namespace_overlap": 400,
   "backup.stream_not_configured": 409,
@@ -172,6 +177,7 @@ function readRetention(raw: unknown): { count: number; days: number } {
 }
 
 interface ApplyBody {
+  cloud: boolean | undefined;
   /** Resolved inside the write's turn, against the settings held then. */
   destinations: Record<string, unknown>[];
   /** `undefined` when absent, because a box that already holds a key reuses it. */
@@ -182,6 +188,7 @@ interface ApplyBody {
 }
 
 const APPLY_FIELDS = [
+  "cloud",
   "destinations",
   "recoveryKey",
   "schedule",
@@ -206,7 +213,9 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
   const body = await readJsonBody<unknown>(c);
   if (!isRecord(body)) throw requestInvalid("body");
   onlyKeys(body, APPLY_FIELDS, "body");
-  const destinations = checkArchiveChoiceList(body.destinations);
+  const { cloud } = body;
+  if ("cloud" in body && typeof cloud !== "boolean") throw requestInvalid("cloud");
+  const destinations = checkArchiveChoiceList(body.destinations, cloud !== false);
   const { recoveryKey, destinationTimeoutMs } = body;
   if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
     throw requestInvalid("recoveryKey");
@@ -220,6 +229,7 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
     throw requestInvalid("destinationTimeoutMs");
   }
   return {
+    cloud: typeof cloud === "boolean" ? cloud : undefined,
     destinations,
     recoveryKey: recoveryKey as string | undefined,
     schedule: readSchedule(body.schedule),
@@ -416,6 +426,21 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       const body = await readApplyBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
+        // A record that cannot be read is replaced, as if none were held, so nothing in it is
+        // reused; otherwise the owner could never repair it from the dashboard.
+        const read = await readHeldSettings();
+        if ("unreadable" in read) {
+          log("warn", "backup.archive_settings_unreadable", { reason: read.unreadable });
+        }
+        const heldSettings = "unreadable" in read ? null : read.settings;
+        const cloud = body.cloud ?? heldSettings?.cloud ?? false;
+        if (!cloud && body.destinations.length === 0) throw requestInvalid("destinations");
+        if (cloud && !isAtLeastDaily(body.schedule)) {
+          throw new AppError("backup.cloud_needs_daily", { field: "schedule" });
+        }
+        if (cloud && (await deps.readCloudStatus?.())?.environment !== "test") {
+          throw new AppError("backup.cloud_unavailable", { field: "cloud" });
+        }
         const held = await readHeldKey(heldKey);
         // A held key under the length floor is replaced, not kept: archives, the bucket copy and
         // sealed state all read the key through `loadRecoveryKey`, which refuses one this short.
@@ -435,13 +460,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
         assertStorableKey(recoveryKey);
 
-        // A record that cannot be read is replaced, as if none were held, so nothing in it is
-        // reused; otherwise the owner could never repair it from the dashboard.
-        const read = await readHeldSettings();
-        if ("unreadable" in read) {
-          log("warn", "backup.archive_settings_unreadable", { reason: read.unreadable });
-        }
-        const heldSettings = "unreadable" in read ? null : read.settings;
         // Only a bucket choice reads the bucket copy's settings, and an unreadable one refuses the
         // whole Save, a folder listed beside it included: one Save is one decision.
         const stream = body.destinations.some((d) => BUCKET_CHOICES.has(d.kind))
@@ -450,6 +468,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const destinations = resolveArchiveChoices(body.destinations, {
           stream,
           held: heldSettings,
+          cloud,
         });
         for (const destination of destinations) {
           if (destination.kind !== "local-fs") continue;
@@ -468,6 +487,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
         const settings: Omit<ArchiveSettings, "revision"> = {
           enabled: true,
+          cloud,
           destinations,
           schedule: body.schedule,
           retention: body.retention,

@@ -4,6 +4,7 @@ export interface StoredArchive {
   revision: string;
   writtenAt: string;
   enabled: boolean;
+  cloud?: boolean;
   destinations: unknown[];
   schedule: unknown;
   retention: { count: number; days: number };

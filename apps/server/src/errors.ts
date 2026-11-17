@@ -1596,6 +1596,8 @@ declare module "@waitron/shared" {
      * `disable` finds no stored archive record, or `rotate` finds no readable archive record, no
      * destination loaded and no key held. `field`
      * names the offending field, never the value, which could be the recovery key. */
+    "backup.cloud_needs_daily": { field: "schedule" };
+    "backup.cloud_unavailable": { field: "cloud" };
     "backup.request_invalid": { field: string; reason?: string; scratchRoot?: string };
     "backup.stream_test_failed": { reason: ProbeFailure };
     /** Archives in the stream's bucket were asked for while no bucket is configured. */

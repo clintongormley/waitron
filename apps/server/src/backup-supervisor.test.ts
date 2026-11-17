@@ -227,6 +227,43 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
+  it("shows a refused Cloud-only backup in status and alerts", async () => {
+    const refs: Refs = {
+      config: { ...localFsConfig([], STRONG_KEY_1), cloud: true },
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const sup = makeSupervisor(refs, await makeStateDir(), {
+      outcomes,
+      cloudTarget: {
+        id: "cloud",
+        roomNeeded: async (estimate) => estimate,
+        store: async () => ({ stored: false, errorCode: "cloud.unavailable" }),
+      },
+    });
+    try {
+      await sup.reload();
+      await waitForEvent(refs, "backup.destination_failed");
+      expect((await sup.status()).backupStatus).toMatchObject({
+        configured: true,
+        destinations: [{ id: "cloud", uploadErrorCode: "cloud.unavailable" }],
+      });
+      const source = backupAlertSource({
+        listStatus: async () => (await sup.status()).backupStatus,
+        outcomes,
+        now: () => new Date(),
+        readStream: () => ({ state: "off" }),
+      });
+      expect(await source.read({ tx: {} as never, now: new Date() })).toContainEqual(
+        expect.objectContaining({ key: "backup.destination_failed:cloud" }),
+      );
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("enable from off writes an archive whose db.dump opens as the venue database", async () => {
     const workerCopy = vi.spyOn(store, "archiveInWorker");
     const dest = await makeDestDir();

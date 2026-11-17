@@ -4,11 +4,12 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { BACKUP_STAGING_DIR } from "@waitron/store";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
-import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
+import { captureCloudArchive } from "./testing/cloud-archive.js";
 const db = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -29,7 +30,7 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   await mkdir(join(root, "cloud-tls"));
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
-  const result = await createCloudSnapshotArchive(
+  const result = await captureCloudArchive(
     {
       db: db.db,
       node: db.node,
@@ -58,23 +59,8 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   expect(
     [...entries.keys()].some((k) => k.includes("cloud-connection") || k.includes("cloud-tls")),
   ).toBe(false);
-  expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
-  const c = new AbortController();
-  c.abort();
-  await expect(
-    createCloudSnapshotArchive(
-      {
-        db: db.db,
-        node: db.node,
-        modules: ALL_MODULES,
-        environment: "preproduction",
-        stateDir: root,
-      },
-      "key",
-      at,
-      c.signal,
-    ),
-  ).rejects.toThrow();
+  expect(await readdir(join(root, "cloud/snapshots"))).toEqual(["state.json"]);
+  expect(await readdir(join(root, BACKUP_STAGING_DIR))).toEqual([]);
 });
 
 it("refuses an oversized SQLite copy and removes its plaintext staging", async () => {
@@ -95,7 +81,7 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
   });
   try {
     await expect(
-      createCloudSnapshotArchive(
+      captureCloudArchive(
         {
           db: db.db,
           node: db.node,
@@ -108,7 +94,7 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: "cloud.unavailable" });
-    expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
+    expect(await readdir(join(root, BACKUP_STAGING_DIR))).toEqual([]);
   } finally {
     archive.mockRestore();
   }
@@ -135,7 +121,7 @@ it("lets a node copy still writing into staging finish before it clears staging 
   });
   try {
     await expect(
-      createCloudSnapshotArchive(
+      captureCloudArchive(
         {
           db: db.db,
           node: db.node,
@@ -149,7 +135,7 @@ it("lets a node copy still writing into staging finish before it clears staging 
       ),
     ).rejects.toMatchObject({ code: "EISDIR" });
     expect(copyFinished).toBe(true);
-    expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
+    expect(await readdir(join(root, BACKUP_STAGING_DIR)).catch(() => [])).toEqual([]);
   } finally {
     copy.mockRestore();
   }

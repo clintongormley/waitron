@@ -25,7 +25,6 @@ import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { freeSpaceJob } from "./free-space-watch.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
-import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { withCapturedStdout, waitForEvent } from "./testing/boot-harness.js";
@@ -88,11 +87,6 @@ vi.mock("./free-space-watch.js", async (original) => {
   const actual = await original<typeof import("./free-space-watch.js")>();
   return { ...actual, freeSpaceJob: vi.fn(actual.freeSpaceJob) };
 });
-vi.mock("./cloud-snapshot-worker.js", async (original) => {
-  const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
-  return { ...actual, createCloudSnapshotWorker: vi.fn(actual.createCloudSnapshotWorker) };
-});
-
 // The loop lingers after its abort, so a close() that did not await it would resolve first.
 const loop = vi.hoisted(() => ({
   lingerMs: 500,
@@ -270,14 +264,12 @@ describe("boot's authority clock wiring", () => {
         { timeout: 10_000 },
       );
       expect(drain.calls.at(-1)?.observeAuthorityTime).toBeTypeOf("function");
-      const archiveClock = clocks.archive!.readClock;
-      const cloudClock = vi.mocked(createCloudSnapshotWorker).mock.calls.at(-1)![0].readClock;
-      for (const read of [archiveClock, cloudClock])
-        expect(await read()).toEqual({
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-          cutoverChanges: [],
-        });
+      expect(clocks.archive!.cloudTarget?.id).toBe("cloud");
+      expect(await clocks.archive!.readClock()).toEqual({
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        cutoverChanges: [],
+      });
       // Every backup run gets the room hooks, built over the ENABLED fiscal seat, not every
       // available fiscal module.
       expect(createBackupRoomHooks).toHaveBeenCalledOnce();
@@ -367,12 +359,11 @@ describe("boot's authority clock wiring", () => {
         },
       );
       expect(changed.status).toBe(200);
-      for (const read of [archiveClock, cloudClock])
-        expect(await read()).toEqual({
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-          cutoverChanges: [{ effectiveBusinessDay: "2026-10-14", dayCutover: "07:00" }],
-        });
+      expect(await clocks.archive!.readClock()).toEqual({
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        cutoverChanges: [{ effectiveBusinessDay: "2026-10-14", dayCutover: "07:00" }],
+      });
 
       const listed = await fetch(
         `http://127.0.0.1:${httpPort()}/management-api/content-suggestions`,
@@ -486,7 +477,6 @@ describe("boot's authority clock wiring", () => {
       clocks.order = [];
       vi.mocked(createBackupRoomHooks).mockClear();
       vi.mocked(recordStartDeletions).mockClear();
-      vi.mocked(createCloudSnapshotWorker).mockClear();
       vi.mocked(createContentSuggestionRunner).mockClear();
       vi.mocked(mountContentSuggestionsApi).mockClear();
       loop.ended = false;

@@ -20,7 +20,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { validateArtifactFile, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
-import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
+import { captureCloudArchive } from "./testing/cloud-archive.js";
 import { validateArtifact } from "./restore.js";
 import { runOnce } from "./backup-sweep.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
@@ -322,14 +322,14 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
   );
 });
 
-it("accepts the unchanged Cloud writer's raw artifact through staged upload validation", async () => {
+it("accepts the Cloud destination's raw artifact through staged upload validation", async () => {
   const f = await fixture();
   for (const rel of RECOVERY_FILES) {
     await mkdir(join(f.stateDir, rel, ".."), { recursive: true });
     await writeFile(join(f.stateDir, rel), `${rel}-content`);
   }
   await writeFile(join(f.stateDir, "trading.env"), `WAITRON_NODE_ID=${ids.node}\n`);
-  const captured = await createCloudSnapshotArchive(
+  const captured = await captureCloudArchive(
     {
       ...f,
       db: suite.db,

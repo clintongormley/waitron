@@ -7,7 +7,7 @@ import { syncsAndRenames, writtenDurably } from "./testing/durable-writes.js";
 import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
-import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
+import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 vi.mock("node:fs/promises", { spy: true });
 
 it("saves the connection under cloud with private permissions and both flushes", async () => {
@@ -35,27 +35,36 @@ it("saves the connection under cloud with private permissions and both flushes",
   }
 });
 
-it("flushes the Cloud parent when an unpaired snapshot tick precedes pairing", async () => {
+it("flushes the Cloud parent when an unpaired Cloud backup attempt precedes pairing", async () => {
   const f = await fixture();
   try {
     f.reject();
     const client = createCloudConnection(f.options);
     const never = async (): Promise<never> => {
-      throw new Error("unpaired worker must not capture");
+      throw new Error("unpaired target must not capture");
     };
-    const worker = createCloudSnapshotWorker({
+    const target = createCloudArchiveTarget({
       stateDir: f.stateDir,
       connection: client,
       sourceNodeId: randomUUID(),
       isPrimary: () => true,
-      readClock: never,
-      createArchive: never,
       upload: never,
     });
     const events = await syncsAndRenames(
       { mkdir: vi.mocked(fs.mkdir), open: vi.mocked(fs.open), rename: vi.mocked(fs.rename) },
       async () => {
-        await worker.tick(new AbortController().signal);
+        await expect(
+          target.store({
+            entries: async function* () {
+              await never();
+            },
+            plaintextBytes: 1,
+            modules: {},
+            at: new Date(),
+            clock: { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] },
+            signal: new AbortController().signal,
+          }),
+        ).resolves.toEqual({ stored: false, errorCode: "cloud.unavailable" });
         await expect(client.start()).rejects.toMatchObject({ code: "cloud.unavailable" });
       },
     );

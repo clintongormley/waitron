@@ -21,7 +21,7 @@ import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { runOnce } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
-import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
+import { captureCloudArchive } from "./testing/cloud-archive.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
 import { runRestore } from "./restore-command.js";
 import { restoreFromArtifactFile } from "./restore.js";
@@ -138,7 +138,7 @@ beforeAll(async () => {
       join(root, "trading.env"),
       formatEnvFile({ ...parseEnvFile(identity), WAITRON_ENV: "preproduction" }),
     );
-    const cloud = await createCloudSnapshotArchive(
+    const cloud = await captureCloudArchive(
       {
         db: suite.db,
         node: suite.node,

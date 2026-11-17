@@ -26,6 +26,7 @@ describe("resolveBackupConfig", () => {
   const sealed: ArchiveSettings = {
     revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
     enabled: true,
+    cloud: false,
     destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
     schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 4, minute: 15 } },
     retention: { count: 5, days: 12 },
@@ -102,6 +103,7 @@ describe("resolveBackupConfig with a held key under the length floor", () => {
       sealed: {
         revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
         enabled: false,
+        cloud: false,
         destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
         schedule: { kind: "interval", ms: 86_400_000 },
         retention: { count: 7, days: 30 },
@@ -116,6 +118,7 @@ describe("loadBackupSettings", () => {
   const sealed: ArchiveSettings = {
     revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
     enabled: true,
+    cloud: false,
     destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
     schedule: { kind: "interval", ms: 86_400_000 },
     retention: { count: 7, days: 30 },

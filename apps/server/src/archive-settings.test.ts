@@ -54,6 +54,7 @@ const custom = {
 function settingsWith(destinations: ArchiveSettings["destinations"]): ArchiveSettings {
   return {
     revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+    cloud: false,
     enabled: true,
     destinations,
     schedule: { kind: "interval", ms: 86_400_000 },
@@ -458,6 +459,17 @@ describe("parseArchiveSettings", () => {
       : raw.destinations;
     return parseArchiveSettings({ ...raw, destinations }, keys);
   }
+
+  it("defaults a previously saved archive record to cloud false", () => {
+    expect(parseFixture(without(valid, "cloud")).cloud).toBe(false);
+  });
+
+  it("allows no folder or bucket when Cloud is on", () => {
+    expect(parseFixture({ ...valid, destinations: [], cloud: true })).toMatchObject({
+      destinations: [],
+      cloud: true,
+    });
+  });
 
   it("reads back what it was given", () => {
     expect(parseFixture(valid)).toEqual(valid);

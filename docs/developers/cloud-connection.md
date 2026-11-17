@@ -500,11 +500,13 @@ Upload uses a conditional PUT. If a retry finds an existing object, publication 
 actual bytes; upload credentials do not need read permission. Publication starts pending
 verification. A trusted Cloud worker checks the restored archive separately.
 
-Retain the same UUID, archive bytes and metadata until publication succeeds. The scheduled
-worker keeps one encrypted archive in a durable local spool and retries publication after a
-restart. It schedules daily captures using the venue clock, with the first capture of each
-month retained as monthly. The transport methods remain callable separately. Managed capture
-refuses production installations; the local proof has not established production storage behavior.
+Keep the same UUID, archive bytes and metadata until publication succeeds. When you enable Cloud
+as a destination, it follows the venue's archive schedule, which must be at least daily. The
+backup run uses the same staged database copy for all destinations and encrypts the Cloud archive
+with the key from the upload grant. It keeps the encrypted archive on disk until publication
+succeeds. The next scheduled run first finishes a pending capture, then stores its fresh copy.
+The first capture of each month in the venue's time zone is labelled monthly. Cloud backups are
+available on test connections and have a 512 MiB upload limit.
 
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
 installed checkout. It needs a Cloud that supports `servicesVersion` 2 (see
@@ -516,8 +518,8 @@ The fixture is not an operator command for a real venue.
 The byte-array uploader accepts at most 512 MiB and has a 30-second request deadline.
 Scheduled captures use `uploadCloudCaptureFile`, which streams the saved archive with a
 deadline capped at fourteen minutes and the temporary credentials’ expiry. Each upload call
-makes one attempt; the scheduler retries from the durable spool with backoff. It checks its
-abort signal so deliberate shutdown does not record a service outage.
+makes one attempt. The next scheduled run retries from the saved file. The upload follows the
+backup job's stop signal so shutdown does not record an upload failure.
 
 ## A951 build intake
 

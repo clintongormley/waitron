@@ -41,7 +41,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "writes the note; its rename and unlink touch the note's own files",
   "apps/server/src/backup-verification.ts":
     "places a backup in a scratch folder and removes that folder",
-  "apps/server/src/cloud-snapshot-archive.ts": "removes its own staging folder",
   "apps/server/src/emergency-copy-placement.ts":
     "reads venue.db and never replaces or removes it; copies in and renames only node.db, and removes its scratch folder",
   "apps/server/src/finish-adoption.ts":

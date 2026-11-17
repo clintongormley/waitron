@@ -30,11 +30,13 @@ Slice rules apply.
 
 ## Measure 13 — 2026-11-17, watcher-cleared to continue at 21:34
 
-The existing 366-day bench fixture produced a **1,676,015,028-byte encrypted archive** from a
+The existing untrimmed 366-day bench fixture produced a **1,676,015,028-byte encrypted archive** from a
 12,318,072,832-byte database copy through the real `runOnce` path. It exceeds the current
 536,870,912-byte (512 MiB) Cloud ceiling by more than three times. The fixture used its matching
 `30c1c1c564` checkout on the 32-core bench stand-in; current main refuses its older schema. No new
-year was built. The archive-building functions are unchanged since that checkout.
+year was built. The archive-building functions were unchanged at the time of the measurement.
+The bench fixture retained the year's print payloads. The watcher noted on 2026-11-17 at 22:31
+that a venue applying its usual housekeeping would trim those payloads after a week.
 
 The watcher cleared this plan to build the test-only destination under the current ceiling and
 real-venue refusal. The owner chose a streaming ceiling increase, assigned to lanes J and G

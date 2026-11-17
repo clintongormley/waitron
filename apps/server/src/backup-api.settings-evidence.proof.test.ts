@@ -101,6 +101,7 @@ const destDir = () => mkdtempSync(join(tmpdir(), "settings-evidence-proof-dest-"
 function folderSettings(dir: string): Omit<ArchiveSettings, "revision"> {
   return {
     enabled: true,
+    cloud: false,
     destinations: [{ kind: "local-fs", id: "primary", dir }],
     schedule: DAILY,
     retention: RETENTION,
