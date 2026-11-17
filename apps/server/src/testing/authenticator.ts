@@ -1,10 +1,10 @@
+import type { KeyRing } from "@waitron/credentials";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { withTransaction, type Database } from "@waitron/db";
 import {
   beginOwnTotpEnrollment,
   finishOwnTotpEnrollment,
   startManagementSession,
-  type TotpKeyRing,
 } from "@waitron/identity";
 import { generateSync } from "otplib";
 
@@ -12,7 +12,7 @@ import { generateSync } from "otplib";
 export async function enrolAuthenticator(
   db: Database,
   personId: string,
-  keyRing: TotpKeyRing,
+  keyRing: KeyRing,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
     const { token } = await startManagementSession(tx, { method: "password", personId });
@@ -45,4 +45,4 @@ export function wrongTotpCode(secret: string): string {
   )!;
 }
 
-export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+export const TOTP_KEY_RING: KeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };

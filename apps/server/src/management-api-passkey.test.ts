@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -8,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { encryptTotpSecret, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -596,7 +597,7 @@ describe("passkey registration's own-credential check", () => {
       .update(persons)
       .set(
         withFoldedPersonChanges({
-          totpSecret: encryptTotpSecret(SECRET, { version: 1, key: TOTP_KEY }),
+          totpSecret: sealText({ current: { version: 1, key: TOTP_KEY } }, "totp", SECRET),
         }),
       )
       .where(eq(persons.id, managerId));

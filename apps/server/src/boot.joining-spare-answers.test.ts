@@ -196,7 +196,7 @@ async function joinedPair() {
     boxHostname: "waitron.local",
     advertisedOrigin: MAIN_URL,
     designated: { nodeId: mainId },
-    accountKey: Buffer.alloc(32, 9).toString("base64"),
+
     credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });

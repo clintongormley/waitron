@@ -1,7 +1,7 @@
+import type { KeyRing } from "@waitron/credentials";
 import { admitsInspector } from "./inspector-admission.js";
 import type { WaitronModule } from "@waitron/module";
 import type { Hono } from "hono";
-import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readTaxpayer, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -31,7 +31,6 @@ import {
   regenerateOwnRecoveryCodes,
   disableOwnTotp,
   unlinkOwnGoogle,
-  type TotpKeyRing,
 } from "@waitron/identity";
 import { SUPPORTED_LOCALES, AppError } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -71,10 +70,9 @@ export interface MeApiDeps {
   onboardingIntent?: OnboardingIntent;
   /** The enabled module names, `core` included. */
   modules: string[];
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing: KeyRing;
   rpId?: string;
   origin?: string;
-  accountActionCodeKey?: Buffer;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
   now?: () => Date;
@@ -126,7 +124,6 @@ const runPasskeyOptions = createErrorBoundary(
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing;
-  const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
@@ -255,7 +252,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         confirmOwnEmailChange(tx, {
           managementSessionId,
           code: textField(body, "code"),
-          codeKey: accountActionCodeKey,
+          keyRing: deps.credentialKeyRing,
         }),
       );
       if (email === null) throw new AppError("account_action.invalid", {});

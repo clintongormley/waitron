@@ -39,7 +39,6 @@ const cfg: TradingConfig = {
   nodeId: "node-3",
   environment: "production",
   onboardingIntent: "live",
-  accountKey: Buffer.alloc(32, 8).toString("base64"),
 };
 
 describe("writeTradingEnv", () => {
@@ -74,12 +73,7 @@ describe("writeTradingEnv", () => {
     // the venue directory is derived from the state root, not handed forward by setup.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
-      "WAITRON_NODE_ID=node-3\n" +
-        "WAITRON_ENV=production\n" +
-        "WAITRON_ONBOARDING_INTENT=live\n" +
-        "WAITRON_ACCOUNT_KEY=" +
-        Buffer.alloc(32, 8).toString("base64") +
-        "\n",
+      "WAITRON_NODE_ID=node-3\n" + "WAITRON_ENV=production\n" + "WAITRON_ONBOARDING_INTENT=live\n",
     );
   });
 
@@ -92,9 +86,9 @@ describe("writeTradingEnv", () => {
     expect(env).not.toContain("WAITRON_ONBOARDING_INTENT");
   });
 
-  it("writes no account key for a configuration that carries none", async () => {
+  it("writes no secret to the trading identity", async () => {
     const d = await newDir();
-    const env = await readFile(await writeTradingEnv(d, { ...cfg, accountKey: undefined }), "utf8");
+    const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
       "WAITRON_NODE_ID=node-3\n" + "WAITRON_ENV=production\n" + "WAITRON_ONBOARDING_INTENT=live\n",
     );

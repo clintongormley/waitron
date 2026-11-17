@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, readActivityForPerson, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -12,7 +13,6 @@ import {
 } from "./google-oidc.js";
 import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { hashSessionToken } from "./session-token.js";
-import { encryptTotpSecret } from "./mfa.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -118,10 +118,16 @@ describe("Google OpenID Connect state", () => {
 
   it("does not let Google bypass an enrolled Waitron authenticator", async () => {
     const personId = await seedPerson(suite.db, "staff");
-    const encrypted = encryptTotpSecret("JBSWY3DPEHPK3PXP", {
-      version: 1,
-      key: Buffer.alloc(32, 5),
-    });
+    const encrypted = sealText(
+      {
+        current: {
+          version: 1,
+          key: Buffer.alloc(32, 5),
+        },
+      },
+      "totp",
+      "JBSWY3DPEHPK3PXP",
+    );
     await suite.db.execute(
       sql`update persons set google_subject = 'google-mfa', totp_secret = ${encrypted} where id = ${personId}`,
     );

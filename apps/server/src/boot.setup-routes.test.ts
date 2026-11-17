@@ -145,7 +145,7 @@ function bundleFor(overrides: {
     environment: "preproduction",
     boxHostname: "waitron.local",
     ...PAIR_BUNDLE_FIELDS,
-    accountKey: Buffer.alloc(32, 9).toString("base64"),
+
     reservedIdentity: { modules: {}, series: [], endorsement },
     credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
     backupSettings: null,

@@ -59,12 +59,6 @@ export interface PairStoreKey {
   venueId: string;
 }
 
-/**
- * Five secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
- * `credentialsRing` (the key ring every sealed row on the main box opens with), `boxCaKeyPem`
- * (the private key of the main box's certificate authority), `store.secretAccessKey` (the pair's
- * key to the spare's store) and the backup recovery key in `backupSettings`.
- */
 export interface MirrorBundle {
   designated: AdoptResult;
   /** The venue's taxpayer identity, for the mirror's foreign-taxpayer guard (one taxpayer per database). */
@@ -77,8 +71,7 @@ export interface MirrorBundle {
   /** The main box's own contact URL. */
   primaryUrl: string;
   store: PairStoreKey;
-  /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
-  accountKey: string;
+
   reservedIdentity: ReservedIdentity;
   /** The primary's module overrides, read at mint time; `{}` when nothing is disabled. */
   moduleOverrides: Record<string, boolean>;
@@ -104,7 +97,7 @@ export interface AssembleDeps {
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
-  accountKey: string;
+
   wireguardPublicKey?: string;
   moduleOperations?: ModuleOperations;
   /** module settings as the caller read it for this request; read here when absent. */
@@ -239,7 +232,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     boxCaPem,
     primaryUrl: deps.primaryUrl,
     store: deps.store,
-    accountKey: deps.accountKey,
+
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,

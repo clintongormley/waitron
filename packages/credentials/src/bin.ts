@@ -1,10 +1,8 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { runCli, type CliIo } from "./cli.js";
+import { runCli, type CliIo, type Resealer } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
 
 const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
@@ -20,7 +18,12 @@ const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
  * The vault is in the venue file; a node handle also type-checks there, so `bin.test.ts`'s set/list
  * round trip is what holds it. `rotate` also re-seals the signing key in the node file.
  */
-export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
+export async function runBin(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+  io: CliIo,
+  resealers: readonly Resealer[],
+): Promise<number> {
   const venueDir = env[VENUE_DIR_VARIABLE];
   if (venueDir === undefined || venueDir === "") {
     io.stderr(`${VENUE_DIR_VARIABLE} is not set`);
@@ -38,6 +41,7 @@ export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo):
       db: store.venue,
       node: store.node,
       ring,
+      resealers,
       io,
       readFile: (path) => readFile(path, "utf8"),
     });
@@ -79,13 +83,4 @@ export function processIo(proc: {
       return Buffer.concat(chunks).toString("utf8");
     },
   };
-}
-
-// Run only when invoked directly: an import would otherwise run the command with the importing
-// process's argv and environment.
-if (
-  process.argv[1] !== undefined &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-) {
-  process.exitCode = await runBin(process.argv.slice(2), process.env, processIo(process));
 }

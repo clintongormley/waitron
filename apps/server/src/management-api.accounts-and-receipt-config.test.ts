@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import {
   builtInRoleForTest,
@@ -33,7 +34,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  encryptTotpSecret,
   loginWithPin,
   ensureBuiltInRoles,
   defaultPermissionsFor,
@@ -425,10 +425,16 @@ describe("Management API staff + session routes", () => {
         pinHash: fixturePinHash("1234"),
         passwordHash: fixturePasswordHash(PASSWORD),
         role: "manager",
-        totpSecret: encryptTotpSecret("JBSWY3DPEHPK3PXP", {
-          version: 1,
-          key: TOTP_KEY,
-        }),
+        totpSecret: sealText(
+          {
+            current: {
+              version: 1,
+              key: TOTP_KEY,
+            },
+          },
+          "totp",
+          "JBSWY3DPEHPK3PXP",
+        ),
       });
     });
     const finish = vi.fn();

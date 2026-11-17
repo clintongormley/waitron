@@ -10,8 +10,6 @@ import { openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loadKeyRing } from "@waitron/credentials";
-import { resolveAccountKey } from "./account-key.js";
 import { loadBoxEnv } from "./box-env.js";
 import type { StartedServer } from "./boot.js";
 import { readActivatedFrom } from "./start-peer-check.js";
@@ -335,7 +333,6 @@ describe("a box killed while activating, then a real start with its old box swit
       tradingEnv = await writeTradingEnv(spareState, {
         nodeId: standby.nodeId,
         environment: "preproduction",
-        accountKey: resolveAccountKey({}, loadKeyRing(await spareEnv())).toString("base64"),
       });
       joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
     });

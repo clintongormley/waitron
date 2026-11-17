@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { admitsInspector } from "./inspector-admission.js";
 import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 import { passkeyVerifySite, venuePasskeyOrigins } from "./passkey-origins.js";
@@ -83,7 +84,6 @@ import {
   readProfileAdmissions,
   setProfileAdmission,
   type ProfileAdmission,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
 import {
@@ -169,7 +169,7 @@ export interface ManagementApiDeps {
     passwordReset: AccountActionRateLimiter;
     completion: AccountActionRateLimiter;
   };
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing: KeyRing;
   googleOidc?: GoogleOidcConfig;
   googleCodeExchange?: typeof exchangeGoogleCode;
   /** Each enabled module's part in removing a live table a floor-plan save deletes. */

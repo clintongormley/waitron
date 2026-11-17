@@ -55,7 +55,6 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
       "boxHostname",
       "boxCaPem",
       "primaryUrl",
-      "accountKey",
       "primaryPublicKey",
       "boxCaKeyPem",
     ]) ||

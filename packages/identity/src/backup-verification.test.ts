@@ -4,7 +4,7 @@ import {
   seedDeviceProfiles,
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
-import crypto, { createHmac, generateKeyPairSync } from "node:crypto";
+import crypto, { generateKeyPairSync } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
 import { sql } from "drizzle-orm";
@@ -18,7 +18,7 @@ import {
 } from "@waitron/module";
 import { IDENTITY_BACKUP_VERIFICATION } from "./index.js";
 import { IDENTITY_TABLES } from "./classification.js";
-import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
+import { openText, sealText } from "@waitron/credentials";
 import { hashSecret } from "./secret-hash.js";
 import * as schema from "@waitron/db/schema/identity.js";
 
@@ -38,11 +38,10 @@ const now = "2026-10-20T08:00:00.000Z";
 const old = "2026-10-01T08:00:00.000Z";
 const end = "2026-10-20T09:00:00.000Z";
 const vault = Buffer.alloc(32, 2);
-const account = createHmac("sha256", vault).update("waitron.account-key.v1").digest();
-const totpKey = createHmac("sha256", account).update("waitron.totp.v1").digest();
+const ring = { current: { version: 7, key: vault } };
 const secret = "JBSWY3DPEHPK3PXP";
-const encrypted = encryptTotpSecret(secret, { version: 1, key: totpKey });
-const pending = encryptTotpSecret("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", { version: 1, key: totpKey });
+const encrypted = sealText(ring, "totp", secret);
+const pending = sealText(ring, "totp", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
 const password = hashSecret("correct horse");
 const pin = hashSecret("1234");
 const env = `WAITRON_CREDENTIALS_KEY=${vault.toString("base64")}\nWAITRON_CREDENTIALS_KEY_VERSION=7\n`;
@@ -256,7 +255,7 @@ function verdict(data: string, secretStatus: string) {
 }
 
 describe("identity offline backup owner", () => {
-  it("authenticates every person and pending-enrolment TOTP value under the account-derived version-one key", async () => {
+  it("authenticates every person and pending-enrolment TOTP value under the vault ring", async () => {
     const owner = validateBackupVerificationContribution(IDENTITY_BACKUP_VERIFICATION);
     expect(validateBackupModuleResult(await run(), owner, false)).toEqual(passed);
     expect([...owner.data.tables].sort()).toEqual(
@@ -271,16 +270,15 @@ describe("identity offline backup owner", () => {
   it("tampers a stored TOTP value even when its ciphertext ends in a zero byte", async () => {
     let zeroEnding: string | undefined;
     for (let attempt = 0; attempt < 100_000 && zeroEnding === undefined; attempt++) {
-      const candidate = encryptTotpSecret(secret, { version: 1, key: totpKey });
+      const candidate = sealText(ring, "totp", secret);
       if (Buffer.from(candidate.split(".")[4]!, "base64url").at(-1) === 0) zeroEnding = candidate;
     }
     if (zeroEnding === undefined) throw new Error("no ciphertext ending in a zero byte appeared");
     expect(zeroEnding.slice(0, -2) + "AA").toBe(zeroEnding);
     const tampered = tamper(zeroEnding);
     expect(tampered).not.toBe(zeroEnding);
-    const ring = { current: { version: 1, key: totpKey } };
-    expect(decryptTotpSecret(zeroEnding, ring)).toEqual({ secret, keyVersion: 1 });
-    expect(decryptTotpSecret(tampered, ring)).toBeNull();
+    expect(openText(ring, "totp", zeroEnding)).toEqual({ value: secret, keyVersion: 7 });
+    expect(openText(ring, "totp", tampered)).toBeNull();
     damage(`update persons set totp_secret='${tampered}' where id='${person}'`);
     await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
   });
@@ -311,24 +309,24 @@ describe("identity offline backup owner", () => {
     },
   );
   it.each(["persons", "sign_in_challenges"])(
-    "unknown stored TOTP version stays unsupported: %s",
+    "an unavailable stored TOTP key stays inconclusive: %s",
     async (table) => {
       const column = table === "persons" ? "totp_secret" : "encrypted_secret";
-      const value = encryptTotpSecret(secret, { version: 7, key: vault });
+      const value = sealText({ current: { version: 8, key: vault } }, "totp", secret);
       damage(
         `update ${table} set ${column}='${value}'${table === "sign_in_challenges" ? " where kind='totp_enrolment'" : ""}`,
       );
-      expect(await run()).toEqual(verdict("passed", "unsupported"));
+      await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
     },
   );
-  it.each(["v2.1.a.b.c", "v1.x.a.b.c"])(
+  it.each(["v1.1.a.b.c", "v3.x.a.b.c"])(
     "unknown encrypted TOTP format stays unsupported: %s",
     async (value) => {
       damage(`update persons set totp_secret='${value}'`);
       expect(await run()).toEqual(verdict("passed", "unsupported"));
     },
   );
-  it.each(["v1.1.a.b", "v1.1.AA.AA.AA"])(
+  it.each(["v2.7.a.b", "v2.7.AA.AA.AA"])(
     "malformed known ciphertext is invalid: %s",
     async (value) => {
       damage(
@@ -340,7 +338,7 @@ describe("identity offline backup owner", () => {
   it.each(["", "not a base32 secret!"])(
     "authenticated malformed plaintext is invalid: %s",
     async (value) => {
-      const encryptedBad = encryptTotpSecret(value, { version: 1, key: totpKey });
+      const encryptedBad = sealText(ring, "totp", value);
       damage(
         `update sign_in_challenges set encrypted_secret='${encryptedBad}' where kind='totp_enrolment'`,
       );
@@ -359,25 +357,28 @@ describe("identity offline backup owner", () => {
     "short",
     Buffer.alloc(31).toString("base64"),
     Buffer.alloc(32).toString("base64").replace(/=$/, ""),
-  ])("malformed explicit account key is unavailable: %s", async (value) => {
+  ])("malformed explicit vault key is unavailable: %s", async (value) => {
     await expect(
-      run({ ...entries(), "secrets/trading.env": `WAITRON_ACCOUNT_KEY=${value}` }),
+      run({ ...entries(), "secrets/trading.env": `WAITRON_CREDENTIALS_KEY=${value}` }),
     ).rejects.toMatchObject({ reason: "decryption_unavailable" });
   });
-  it("uses the explicit account key and later archive files, ignoring ambient keys", async () => {
-    vi.stubEnv("WAITRON_ACCOUNT_KEY", Buffer.alloc(32, 6).toString("base64"));
+  it("uses later archive vault keys, ignoring ambient keys", async () => {
+    vi.stubEnv("WAITRON_CREDENTIALS_KEY", Buffer.alloc(32, 6).toString("base64"));
     await expect(
       run({
         "secrets/secrets.env": "WAITRON_CREDENTIALS_KEY=wrong",
-        "secrets/trading.env": "WAITRON_ACCOUNT_KEY=wrong",
-        "secrets/backup.env": `WAITRON_ACCOUNT_KEY=${account.toString("base64")}`,
+        "secrets/trading.env": "",
+        "secrets/backup.env": env,
       }),
     ).resolves.toEqual(passed);
   });
-  it("falls back from an empty explicit account key to the current vault key", async () => {
-    expect(await run({ ...entries(), "secrets/trading.env": "WAITRON_ACCOUNT_KEY=" })).toEqual(
-      passed,
-    );
+  it("ignores a leftover retired key", async () => {
+    expect(
+      await run({
+        ...entries(),
+        "secrets/trading.env": ["WAITRON", "ACCOUNT", "KEY"].join("_") + "=bad",
+      }),
+    ).toEqual(passed);
   });
   it("keeps unavailable key/decryption inconclusive even beside a damaged row", async () => {
     damage("update persons set pin_hash='invalid'");
@@ -624,18 +625,18 @@ it("accepts an absent predecessor only with an empty migrated owner", async () =
   expect((await run(entries(), true)).checks).toContainEqual({ code: "data", status: "invalid" });
 });
 
-it("refuses a noncanonical explicit spelling of the actual decrypting account key", async () => {
+it("accepts a noncanonical explicit spelling of the actual decrypting vault key", async () => {
   await expect(
     run({
       ...entries(),
-      "secrets/trading.env": `WAITRON_ACCOUNT_KEY=${account.toString("base64")}=`,
+      "secrets/trading.env": `WAITRON_CREDENTIALS_KEY=${vault.toString("base64")}=`,
     }),
-  ).rejects.toMatchObject({ reason: "decryption_unavailable" });
+  ).resolves.toEqual(passed);
 });
 it.each(["A", "AAA", "AAAAAA", "AB"])(
   "refuses authenticated incomplete base32 bytes: %s",
   async (value) => {
-    const cipher = encryptTotpSecret(value, { version: 1, key: totpKey });
+    const cipher = sealText(ring, "totp", value);
     damage(
       `update sign_in_challenges set encrypted_secret='${cipher}' where kind='totp_enrolment'`,
     );

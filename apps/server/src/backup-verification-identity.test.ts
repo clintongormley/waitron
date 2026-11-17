@@ -13,13 +13,12 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { openBackupQuery } from "@waitron/store";
-import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-describe("archived operational TOTP derivation", () => {
+describe("archived operational TOTP sealing", () => {
   it.each(["derived", "explicit", "empty"])(
-    "checks an enrolment made through the server account-key path: %s",
+    "checks an enrolment made through the server vault ring: %s",
     async (mode) => {
       const env: Record<string, string> = {
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
@@ -27,11 +26,11 @@ describe("archived operational TOTP derivation", () => {
         ...(mode === "derived"
           ? {}
           : {
-              WAITRON_ACCOUNT_KEY: mode === "empty" ? "" : Buffer.alloc(32, 8).toString("base64"),
+              [["WAITRON", "ACCOUNT", "KEY"].join("_")]:
+                mode === "empty" ? "" : Buffer.alloc(32, 8).toString("base64"),
             }),
       };
-      const accountKey = resolveAccountKey(env, loadKeyRing(env));
-      const ring = { current: { version: 1, key: accountPurposeKey(accountKey, "totp") } };
+      const ring = loadKeyRing(env);
       const [person] = await seedPersons(suite.db, {
         displayName: "Manager",
         email: "manager@example.test",

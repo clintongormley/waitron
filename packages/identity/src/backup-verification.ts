@@ -1,8 +1,8 @@
 import { CALENDAR_COLOURS } from "@waitron/shared";
-import { createHmac, createPublicKey } from "node:crypto";
+import { createPublicKey } from "node:crypto";
 import { decodeCredentialPublicKey } from "@simplewebauthn/server/helpers";
 import { compareBackupTables } from "@waitron/db";
-import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
+import { loadKeyRing, resolveBackupKeyInputs, openText, type KeyRing } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import {
   BackupCheckUnavailable,
@@ -10,7 +10,6 @@ import {
   type BackupVerificationContribution,
 } from "@waitron/module";
 import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
-import { decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
 import { IDENTITY_TABLES } from "./classification.js";
 
 export const IDENTITY_BACKUP_VERIFICATION: BackupVerificationContribution = {
@@ -66,26 +65,13 @@ function merge(...statuses: BackupModuleStatus[]): BackupModuleStatus {
   return statuses.includes("invalid") ? "invalid" : "passed";
 }
 
-function totpRing(inputs: Readonly<Record<string, string>>): TotpKeyRing {
-  const encoded = inputs.WAITRON_ACCOUNT_KEY;
-  let account: Buffer;
-  if (encoded === undefined || encoded === "") {
-    try {
-      account = createHmac("sha256", loadKeyRing(inputs).current.key)
-        .update("waitron.account-key.v1")
-        .digest();
-    } catch (error) {
-      if (!isAppError(error)) throw error;
-      throw new BackupCheckUnavailable("decryption_unavailable");
-    }
-  } else {
-    account = Buffer.from(encoded, "base64");
-    if (account.length !== 32 || account.toString("base64") !== encoded)
-      throw new BackupCheckUnavailable("decryption_unavailable");
+function totpRing(inputs: Readonly<Record<string, string>>): KeyRing {
+  try {
+    return loadKeyRing(inputs);
+  } catch (error) {
+    if (!isAppError(error)) throw error;
+    throw new BackupCheckUnavailable("decryption_unavailable");
   }
-  return {
-    current: { version: 1, key: createHmac("sha256", account).update("waitron.totp.v1").digest() },
-  };
 }
 
 function base64url(value: BackupValue | undefined): Buffer | null {
@@ -102,12 +88,13 @@ function password(value: BackupValue | undefined): BackupModuleStatus {
   if (!value.startsWith("scrypt$") && value.includes("$")) return "unsupported";
   return /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(value) ? "passed" : "invalid";
 }
-function totp(value: BackupValue | undefined, ring: TotpKeyRing): BackupModuleStatus {
+function totp(value: BackupValue | undefined, ring: KeyRing): BackupModuleStatus {
   if (value === null) return "passed";
   if (typeof value !== "string") return "invalid";
   const [format, version, iv, tag, ciphertext, ...extra] = value.split(".");
-  if (format !== "v1" || version !== "1") return "unsupported";
+  if (format !== "v2") return "unsupported";
   if (
+    !Number.isInteger(Number(version)) ||
     extra.length !== 0 ||
     base64url(iv)?.length !== 12 ||
     base64url(tag)?.length !== 16 ||
@@ -115,11 +102,11 @@ function totp(value: BackupValue | undefined, ring: TotpKeyRing): BackupModuleSt
     (ciphertext !== "" && base64url(ciphertext) === null)
   )
     return "invalid";
-  const decrypted = decryptTotpSecret(value, ring);
+  const decrypted = openText(ring, "totp", value);
   if (decrypted === null) throw new BackupCheckUnavailable("decryption_unavailable");
   const base32 =
     /^(?:[A-Z2-7]{8})*(?:[A-Z2-7][AEIMQUY4]|[A-Z2-7]{3}[AQ]|[A-Z2-7]{4}[ACEGIKMOQSUWY246]|[A-Z2-7]{6}[AIQY])?$/;
-  return decrypted.secret !== "" && base32.test(decrypted.secret) ? "passed" : "invalid";
+  return decrypted.value !== "" && base32.test(decrypted.value) ? "passed" : "invalid";
 }
 function passkey(row: BackupRow): BackupModuleStatus {
   if (
@@ -171,7 +158,7 @@ function passkey(row: BackupRow): BackupModuleStatus {
   return "passed";
 }
 
-async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
+async function checkIdentity(query: BackupQuery, ring: KeyRing) {
   const tables = new Set<string>();
   for await (const row of query.rows("select name from sqlite_schema where type='table'"))
     tables.add(String(row.name));

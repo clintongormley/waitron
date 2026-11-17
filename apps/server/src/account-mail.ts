@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import {
   issueQueuedAccountAction,
   readPersonAccessRoles,
@@ -8,7 +9,7 @@ import { composeAccountEmail, type AccountEmail } from "./account-email.js";
 import type { MailKindOwner } from "./mail-sender.js";
 
 export function accountActionMail(deps: {
-  codeKey?: Buffer;
+  keyRing?: KeyRing;
   emailChangeUrl: string;
   venueLocale: string;
   readTimeZone: () => Promise<string>;
@@ -28,7 +29,7 @@ export function accountActionMail(deps: {
       const issued = await issueQueuedAccountAction(
         tx,
         { personId: mail.personId!, params },
-        { codeKey: deps.codeKey, now },
+        { keyRing: deps.keyRing, now },
       );
       if (issued === null) return null;
       const roles =

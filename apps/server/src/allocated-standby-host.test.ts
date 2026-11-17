@@ -213,7 +213,7 @@ async function reserve(standby = generateStandbyIdentity()) {
         stateDir: stateDir!,
         ...PAIR_BUNDLE_FIELDS,
         boxHostname: "waitron.local",
-        accountKey: "test-account-key",
+
         designated: { nodeId: PRIMARY },
         standby,
         moduleOperations: new Map([
@@ -485,7 +485,7 @@ it("a refused public adoption retains its independently signed reservation witho
               ...PAIR_BUNDLE_FIELDS,
               stateDir: stateDir!,
               boxHostname: "waitron.local",
-              accountKey: "test-account-key",
+
               designated: { nodeId: PRIMARY },
               standby,
               moduleOperations: new Map([

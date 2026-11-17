@@ -1,10 +1,14 @@
 import { saveSmtpSettings } from "./mail-settings.js";
 import { SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
-import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
-import { establishNodeSigningKey, loadKeyRing, readNodeIdentity } from "@waitron/credentials";
+import {
+  establishNodeSigningKey,
+  loadKeyRing,
+  readNodeIdentity,
+  type KeyRing,
+} from "@waitron/credentials";
 import {
   applicationVersion,
   readNodeMembershipRow,
@@ -44,7 +48,7 @@ import { venueFiscalSelection } from "./venue-fiscal.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput } from "./fiscal-readiness-input.js";
 import { parseFirstSetupSettings, readFirstSetupSettings } from "./first-setup-settings.js";
-import type { KeyRing } from "@waitron/credentials";
+
 import type { TrustedClock } from "@waitron/fiscal";
 import type { FirstSetupState } from "./first-setup-state.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
@@ -225,14 +229,10 @@ export function createFirstSetupCommandDeployment(options: {
               await withTransaction(db, (tx) => saveSmtpSettings(tx, ring, settings.email!, null));
           },
           persistTrading: async (result, current) => {
-            const accountKey = createHmac("sha256", ring.current.key)
-              .update("waitron.account-key.v1")
-              .digest("base64");
             const entries = {
               WAITRON_NODE_ID: result.nodeId,
               WAITRON_ENV: environment.WAITRON_ENV === "dev" ? "dev" : current.frozen.environment,
               WAITRON_ONBOARDING_INTENT: "live",
-              WAITRON_ACCOUNT_KEY: accountKey,
             };
             await writeFileDurable(
               join(current.stateDir, TRADING_ENV_FILE),

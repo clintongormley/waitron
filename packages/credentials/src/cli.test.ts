@@ -1,4 +1,4 @@
-import { putCredential } from "./store.js";
+import { getCredential, putCredential } from "./store.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -59,6 +59,7 @@ function harness(stdin = "", files: Record<string, string> = {}, ring: KeyRing =
     out,
     err,
     deps: {
+      resealers: [],
       db: suite.db,
       node: suite.node,
       ring,
@@ -336,6 +337,34 @@ describe("waitron-credentials delete", () => {
 });
 
 describe("waitron-credentials rotate", () => {
+  it("runs each resealer after the vault and adds its counts", async () => {
+    await runCli(["set", "--purpose", "payments.stripe"], harness(STRIPE_JSON).deps);
+    const h = harness("", {}, ROTATED_RING);
+    const order: number[] = [];
+    h.deps.resealers = [
+      async (db, ring) => {
+        expect(
+          await withTransaction(db, (tx) =>
+            getCredential(
+              tx,
+              { current: ring.current },
+              { purpose: "payments.stripe" },
+            ),
+          ),
+        ).toMatchObject({ secretKey: "sk_test_cli" });
+        order.push(1);
+        return { rotated: 2, alreadyCurrent: 3, unopened: 4 };
+      },
+      async () => {
+        order.push(2);
+        return { rotated: 5, alreadyCurrent: 6, unopened: 7 };
+      },
+    ];
+    expect(await runCli(["rotate"], h.deps)).toBe(0);
+    expect(order).toEqual([1, 2]);
+    expect(h.out).toEqual(["rotated 8, already current 9, unopened 11"]);
+    expect(h.err).toEqual([]);
+  });
   it("reports what it did and never a value", async () => {
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--purpose", "payments.stripe"], set.deps);
@@ -346,7 +375,7 @@ describe("waitron-credentials rotate", () => {
     const code = await runCli(["rotate"], h.deps);
     expect(code).toBe(0);
     const printed = [...h.out, ...h.err].join("\n");
-    const match = /^rotated (\d+), already current (\d+)$/m.exec(printed);
+    const match = /^rotated (\d+), already current (\d+), unopened 0$/m.exec(printed);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBeGreaterThanOrEqual(1);
     expect(printed).not.toContain("sk_test_cli");
@@ -465,7 +494,7 @@ describe("waitron-credentials rotate", () => {
       const code = await runCli(["rotate"], h.deps);
 
       expect(code).toBe(0);
-      expect(h.out).toEqual(["rotated 2, already current 0"]);
+      expect(h.out).toEqual(["rotated 2, already current 0, unopened 0"]);
       expect(keyVersions()).toEqual([{ key_version: 2 }, { key_version: 2 }]);
     });
   });

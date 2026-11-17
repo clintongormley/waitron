@@ -61,7 +61,6 @@ import { writeAllocationInput } from "./testing/allocation-input.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
-import { resolveAccountKey } from "./account-key.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -401,7 +400,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const tradingEnv = await writeTradingEnv(stateDir, {
       nodeId: seed.nodeId,
       environment: "production",
-      accountKey: resolveAccountKey({}, RING).toString("base64"),
     });
     const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
 

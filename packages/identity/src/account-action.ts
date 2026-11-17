@@ -1,3 +1,4 @@
+import { purposeKeys, type KeyRing } from "@waitron/credentials";
 import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import {
@@ -80,7 +81,7 @@ export async function issueAccountAction(
   input: {
     personId: string;
     purpose: AccountActionPurpose;
-    codeKey?: Buffer;
+    keyRing?: KeyRing;
     now?: Date;
   },
 ): Promise<IssuedAccountAction> {
@@ -125,7 +126,7 @@ export async function issueAccountAction(
 
   const token = randomBytes(32).toString("base64url");
   const code =
-    input.purpose !== "email_change" || input.codeKey === undefined
+    input.purpose !== "email_change" || input.keyRing === undefined
       ? undefined
       : String(randomInt(1_000_000)).padStart(6, "0");
   const expiresAt = new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS[input.purpose]).toISOString();
@@ -140,7 +141,14 @@ export async function issueAccountAction(
       purpose: input.purpose,
       tokenHash: hashToken(token),
       codeHash:
-        code === undefined ? null : hashCode(input.codeKey!, deliveryEmail, input.purpose, code),
+        code === undefined
+          ? null
+          : hashCode(
+              purposeKeys(input.keyRing!, "account-action-code")[0]!,
+              deliveryEmail,
+              input.purpose,
+              code,
+            ),
       codeExpiresAt: codeExpiresAt ?? null,
       createdAt: nowIso,
       expiresAt,
@@ -189,7 +197,7 @@ interface CompletionInput {
 
 export async function confirmEmailChangeByCode(
   tx: Transaction,
-  input: { personId: string; code: string; codeKey: Buffer; now?: Date },
+  input: { personId: string; code: string; keyRing: KeyRing; now?: Date },
 ): Promise<string | null> {
   const nowIso = (input.now ?? new Date()).toISOString();
   const [action] = await tx
@@ -215,12 +223,15 @@ export async function confirmEmailChangeByCode(
     .limit(1);
   if (action?.codeHash === null || action?.pendingEmail === null || action === undefined)
     return null;
-  const supplied = Buffer.from(
-    hashCode(input.codeKey, action.pendingEmail, "email_change", input.code),
-    "hex",
-  );
   const stored = Buffer.from(action.codeHash, "hex");
-  if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) {
+  const matches = purposeKeys(input.keyRing, "account-action-code").some((key) => {
+    const supplied = Buffer.from(
+      hashCode(key, action.pendingEmail!, "email_change", input.code),
+      "hex",
+    );
+    return stored.length === supplied.length && timingSafeEqual(stored, supplied);
+  });
+  if (!matches) {
     await tx
       .update(accountActions)
       .set({ codeAttempts: sql`${accountActions.codeAttempts} + 1` })
@@ -459,7 +470,7 @@ export async function queueInvitation(
 export async function issueQueuedAccountAction(
   tx: Transaction,
   mail: { personId: string; params: AccountMailParams },
-  input: { codeKey?: Buffer; now: Date },
+  input: { keyRing?: KeyRing; now: Date },
 ): Promise<IssuedAccountAction | null> {
   try {
     const [person] = await tx

@@ -407,7 +407,6 @@ import {
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
-import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
@@ -1566,12 +1565,8 @@ async function bootServer(
     // trading start merges it: an environment key wins, or what setup seals would not open there.
     const ring = loadKeyRing(await loadBoxEnv(base, config.stateDir));
     setupKeyRing = ring;
-    const accountKey = resolveAccountKey({}, ring);
     const persistTrading = async (cfg: TradingConfig): Promise<void> => {
-      await writeTradingEnv(config.stateDir, {
-        ...cfg,
-        accountKey: cfg.accountKey ?? accountKey.toString("base64"),
-      });
+      await writeTradingEnv(config.stateDir, cfg);
     };
     // What `provisioning.foreign_taxpayer` names: operator-typed configuration rather than a secret,
     // which is why it may be echoed.
@@ -1949,10 +1944,6 @@ async function bootServer(
   // The env straight through: `loadKeyRing` owns the WAITRON_CREDENTIALS_KEY* names and their
   // validation. Loaded here rather than in the shared prefix, so an unprovisioned box needs no key.
   const ring = loadKeyRing(env);
-  const accountKey = resolveAccountKey(env, ring);
-  const totpKeyRing = {
-    current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
-  };
 
   // Joining start: while the adoption latch exists, each start tries to finish joining
   // (`runFinishAdoption`). In this mode boot serves `/health` and a minimal
@@ -2243,7 +2234,7 @@ async function bootServer(
         namesOf: (ids) => readPeerNames(db, ids),
         carryOn: {
           db,
-          credentialKeyRing: totpKeyRing,
+          credentialKeyRing: ring,
           readNewerMain: () =>
             readNewerBucketMain({
               db,
@@ -2634,7 +2625,7 @@ async function bootServer(
         origin: config.managementOrigin,
         googleOidc: config.googleOidc,
         venueLocale,
-        credentialKeyRing: totpKeyRing,
+        credentialKeyRing: ring,
         accountMailMode,
         assertAccountMailPrimary,
       },
@@ -2652,10 +2643,9 @@ async function bootServer(
         venueLocale,
         onboardingIntent: config.onboardingIntent,
         modules: enabledAtStart.map((module) => module.name),
-        credentialKeyRing: totpKeyRing,
+        credentialKeyRing: ring,
         rpId: config.managementRpId,
         origin: config.managementOrigin,
-        accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
         accountMailMode,
         assertAccountMailPrimary,
         readTradingAdmission: () => tradingAdmission.snapshot(),
@@ -2688,7 +2678,7 @@ async function bootServer(
     };
     if (!fencedOrMirror && holders.singletonRole.current === "primary") {
       const owner = accountActionMail({
-        codeKey: accountPurposeKey(accountKey, "account-action-code"),
+        keyRing: ring,
         emailChangeUrl: `${config.managementOrigin}/`,
         venueLocale,
         readTimeZone: () => readVenueTimeZone(db),
@@ -3122,7 +3112,7 @@ async function bootServer(
             ]
           : []),
         accountActionMail({
-          codeKey: accountPurposeKey(accountKey, "account-action-code"),
+          keyRing: ring,
           emailChangeUrl: `${config.managementOrigin}/`,
           venueLocale,
           readTimeZone: () => readVenueTimeZone(db),
@@ -3309,7 +3299,7 @@ async function bootServer(
       origin: config.managementOrigin,
       googleOidc: config.googleOidc,
       venueLocale,
-      credentialKeyRing: totpKeyRing,
+      credentialKeyRing: ring,
       tableRemovals,
       accountMailMode,
       assertAccountMailPrimary,
@@ -3394,7 +3384,7 @@ async function bootServer(
     nodeDb: store.node,
     node: { nodeId: tradingContext.nodeId },
     modules: enabledModules(ALL_MODULES, moduleConfig),
-    credentialKeyRing: totpKeyRing,
+    credentialKeyRing: ring,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     coordinator: firstSetupHost.coordinator,
@@ -3544,10 +3534,9 @@ async function bootServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: enabledAtStart.map((m) => m.name),
-      credentialKeyRing: totpKeyRing,
+      credentialKeyRing: ring,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
-      accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       accountMailMode,
       assertAccountMailPrimary,
     },
@@ -4226,8 +4215,7 @@ async function bootServer(
         boxHostname: BOX_HOSTNAME,
         advertisedOrigin: config.managementOrigin,
         designated: config.node,
-        accountKey: accountKey.toString("base64"),
-        credentialKeyRing: totpKeyRing,
+        credentialKeyRing: ring,
         wakeSpareJoin: () => spareJoin?.wake(),
       },
       log,
@@ -4310,7 +4298,7 @@ async function bootServer(
       appDb: db,
       nodeDb: store.node,
       nodeId: tradingContext.nodeId,
-      credentialKeyRing: totpKeyRing,
+      credentialKeyRing: ring,
       modules: enabledAtStart,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
@@ -4330,7 +4318,7 @@ async function bootServer(
       modules: enabledModules(ALL_MODULES, moduleConfig),
       origin: config.managementOrigin,
       rpId: config.managementRpId,
-      credentialKeyRing: totpKeyRing,
+      credentialKeyRing: ring,
       passwordThrottle: handoverPasswordThrottle,
       ...(spareFollow === undefined
         ? {}

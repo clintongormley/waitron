@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { captureError, restrictRefused, readActivityForPerson } from "@waitron/db";
 import { randomUUID, scrypt } from "node:crypto";
 import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
@@ -16,7 +17,7 @@ import {
   completeAccountAction,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
-import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
+import { replaceRecoveryCodes } from "./mfa.js";
 import { issueCheck } from "./secret-check.js";
 import {
   requireEnrolledCode,
@@ -155,7 +156,7 @@ describe("your profile", () => {
     await suite.db.run(
       sql`update dashboard_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(f.managementSessionId)}`,
     );
-    const codeKey = Buffer.alloc(32, 19);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 19) } };
     const queued = await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
         ...f,
@@ -177,7 +178,7 @@ describe("your profile", () => {
       issueQueuedAccountAction(
         tx,
         { personId: f.personId, params: { purpose: "email_change" } },
-        { codeKey, now: new Date() },
+        { keyRing, now: new Date() },
       ),
     );
     expect(emailChange).toMatchObject({ email: "changed@example.com", code: expect.any(String) });
@@ -195,14 +196,14 @@ describe("your profile", () => {
         confirmOwnEmailChange(tx, {
           ...f,
           code: emailChange!.code === "000000" ? "111111" : "000000",
-          codeKey,
+          keyRing,
         }),
       ),
     ).resolves.toBeNull();
     expect(await securityNotices(f.personId)).toEqual([]);
     await expect(
       withTransaction(suite.db, (tx) =>
-        confirmOwnEmailChange(tx, { ...f, code: emailChange!.code!, codeKey }),
+        confirmOwnEmailChange(tx, { ...f, code: emailChange!.code!, keyRing }),
       ),
     ).resolves.toBe("changed@example.com");
     expect(await securityNotices(f.personId)).toEqual([
@@ -524,7 +525,7 @@ describe("your profile", () => {
     const g = await fixture();
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 4) } };
     await suite.db.execute(
-      sql`update persons set totp_secret=${encryptTotpSecret("JBSWY3DPEHPK3PXP", keyRing.current)} where id=${g.personId}`,
+      sql`update persons set totp_secret=${sealText({ current: keyRing.current }, "totp", "JBSWY3DPEHPK3PXP")} where id=${g.personId}`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -583,7 +584,7 @@ describe("your profile", () => {
     const stored = await suite.db.execute<{ totp_secret: string }>(
       sql`select totp_secret from persons where id=${f.personId}`,
     );
-    expect(stored.rows[0]!.totp_secret).toMatch(/^v1\./);
+    expect(stored.rows[0]!.totp_secret).toMatch(/^v2\./);
     expect(stored.rows[0]!.totp_secret).not.toContain(pending.secret);
 
     await expect(
@@ -626,7 +627,7 @@ describe("your profile", () => {
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 7) } };
     const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
     await suite.db.execute(
-      sql`update persons set totp_secret = ${encryptTotpSecret(secret, keyRing.current)} where id = ${f.personId}`,
+      sql`update persons set totp_secret = ${sealText({ current: keyRing.current }, "totp", secret)} where id = ${f.personId}`,
     );
     await withTransaction(suite.db, (tx) =>
       disableOwnTotp(tx, {
@@ -793,7 +794,7 @@ describe("a fresh sign-in by the signed-in person", () => {
   async function enrolled() {
     const f = await fixture();
     await suite.db.execute(
-      sql`update persons set totp_secret = ${encryptTotpSecret(secret, keyRing.current)} where id = ${f.personId}`,
+      sql`update persons set totp_secret = ${sealText({ current: keyRing.current }, "totp", secret)} where id = ${f.personId}`,
     );
     const codes = await withTransaction(suite.db, (tx) => replaceRecoveryCodes(tx, f.personId));
     return { ...f, codes };

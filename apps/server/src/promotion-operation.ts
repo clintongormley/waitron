@@ -1,6 +1,7 @@
+import type { KeyRing } from "@waitron/credentials";
 import "./errors.js";
 import { withTransaction, type Database, type NodeDatabase, type Transaction } from "@waitron/db";
-import type { TotpKeyRing } from "@waitron/identity";
+
 import {
   withPreparedModuleOperations,
   type OperationAuthority,
@@ -20,7 +21,7 @@ export async function withPromotionModuleOperation<T>(
     /** This box's node.db, which holds the recovery-key check. */
     readonly node: NodeDatabase;
     readonly nodeId: string;
-    readonly credentialKeyRing: TotpKeyRing;
+    readonly credentialKeyRing: KeyRing;
     readonly modules: readonly WaitronModule[];
   },
   operation: RecoveryOperationInput,

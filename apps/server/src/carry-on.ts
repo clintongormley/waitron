@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import {
@@ -18,7 +19,6 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManager,
-  type TotpKeyRing,
   withInspectorAdmitted,
 } from "@waitron/identity";
 import { appendHandoverEventTx } from "@waitron/node-db";
@@ -72,7 +72,7 @@ export interface CarryOnDeps {
   node: NodeDatabase;
   nodeId: string;
   /** Unlocks a stored authenticator secret, so a person who has one can sign in. */
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing: KeyRing;
   /** Whether a request reached the box over HTTPS from this page; tests replace it. */
   secure?: (c: Context) => boolean;
   /** The boxes the latest check waited on. */

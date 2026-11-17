@@ -121,7 +121,6 @@ function baseDeps() {
     stateDir,
     ...PAIR_BUNDLE_FIELDS,
     boxHostname: "waitron.local",
-    accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
 }
 
@@ -163,6 +162,7 @@ describe("assembleMirrorBundle (primary side)", () => {
 
     expect(bundle.designated).toEqual(designated);
     expect(bundle.environment).toBe("preproduction");
+    expect(bundle).not.toHaveProperty(["account", "Key"].join(""));
     expect(bundle.boxHostname).toBe("waitron.local");
     expect(bundle.boxCaPem).toContain("BEGIN CERTIFICATE");
     expect("rows" in bundle).toBe(false);

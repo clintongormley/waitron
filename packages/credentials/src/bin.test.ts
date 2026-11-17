@@ -16,8 +16,11 @@ import {
   venueCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, box } from "@waitron/node-db";
-import { processIo, runBin } from "./bin.js";
+import { processIo, runBin as runBaseBin } from "./bin.js";
 import type { CliIo } from "./cli.js";
+function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo) {
+  return runBaseBin(argv, env, io, []);
+}
 import { loadKeyRing } from "./keyring.js";
 import { sealNodeSigningKeyTx } from "./node-signing-key.js";
 

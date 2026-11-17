@@ -74,7 +74,7 @@ async function makePending(personId: string): Promise<void> {
 describe("management account actions", () => {
   it("refuses A's code when the pending address changed underneath it", async () => {
     const personId = await seedManager(suite.db, { email: "hash-original@x.com" });
-    const codeKey = Buffer.alloc(32, 17);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 17) } };
     await suite.db.execute(
       sql`update persons set pending_email='hash-a@x.com', pending_email_folded = 'hash-a@x.com' where id=${personId}`,
     );
@@ -82,14 +82,14 @@ describe("management account actions", () => {
       issueQueuedAccountAction(
         tx,
         { personId, params: { purpose: "email_change" } },
-        { codeKey, now: new Date() },
+        { keyRing, now: new Date() },
       ),
     );
     await suite.db.execute(
       sql`update persons set pending_email='hash-b@x.com', pending_email_folded = 'hash-b@x.com' where id=${personId}`,
     );
     expect(
-      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: issued!.code! })),
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, keyRing, code: issued!.code! })),
     ).toBeNull();
     expect(
       suite.db.get(sql`select email, pending_email from persons where id=${personId}`),
@@ -101,7 +101,7 @@ describe("management account actions", () => {
 
   it("refuses A's code after a newer address was asked for, then confirms B", async () => {
     const personId = await seedManager(suite.db, { email: "newer-original@x.com" });
-    const codeKey = Buffer.alloc(32, 18);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 18) } };
     vi.mocked(randomInt)
       .mockImplementationOnce(() => 123456)
       .mockImplementationOnce(() => 654321);
@@ -112,7 +112,7 @@ describe("management account actions", () => {
       issueQueuedAccountAction(
         tx,
         { personId, params: { purpose: "email_change" } },
-        { codeKey, now: new Date() },
+        { keyRing, now: new Date() },
       ),
     );
     await suite.db.execute(
@@ -122,17 +122,17 @@ describe("management account actions", () => {
       issueQueuedAccountAction(
         tx,
         { personId, params: { purpose: "email_change" } },
-        { codeKey, now: new Date() },
+        { keyRing, now: new Date() },
       ),
     );
     expect(
-      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: a!.code! })),
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, keyRing, code: a!.code! })),
     ).toBeNull();
     expect(suite.db.get(sql`select email from persons where id=${personId}`)).toEqual({
       email: "newer-original@x.com",
     });
     expect(
-      await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: b!.code! })),
+      await run((tx) => confirmEmailChangeByCode(tx, { personId, keyRing, code: b!.code! })),
     ).toBe("newer-b@x.com");
   });
 
@@ -176,7 +176,7 @@ describe("management account actions", () => {
       issueAccountAction(tx, {
         personId,
         purpose: "invitation",
-        codeKey: Buffer.alloc(32, 19),
+        keyRing: { current: { version: 1, key: Buffer.alloc(32, 19) } },
       }),
     );
     expect(issued.code).toBeUndefined();
@@ -208,7 +208,7 @@ describe("management account actions", () => {
   });
 
   it("accepts the email-change code once and counts wrong guesses", async () => {
-    const codeKey = Buffer.alloc(32, 7);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 7) } };
     const personId = await seedManager(suite.db, { email: "code@x.com" });
     await suite.db.execute(
       sql`update persons set pending_email = 'changed@x.com', pending_email_folded = 'changed@x.com' where id = ${personId}`,
@@ -217,7 +217,7 @@ describe("management account actions", () => {
       issueAccountAction(tx, {
         personId,
         purpose: "email_change",
-        codeKey,
+        keyRing,
       }),
     );
     expect(issued.code).toMatch(/^\d{6}$/);
@@ -227,7 +227,7 @@ describe("management account actions", () => {
         confirmEmailChangeByCode(tx, {
           personId,
           code: issued.code === "000000" ? "111111" : "000000",
-          codeKey,
+          keyRing,
         }),
       ),
     ).resolves.toBeNull();
@@ -241,7 +241,7 @@ describe("management account actions", () => {
         confirmEmailChangeByCode(tx, {
           personId,
           code: issued.code!,
-          codeKey,
+          keyRing,
         }),
       ),
     ).resolves.toBe("changed@x.com");
@@ -250,7 +250,7 @@ describe("management account actions", () => {
         confirmEmailChangeByCode(tx, {
           personId,
           code: issued.code!,
-          codeKey,
+          keyRing,
         }),
       ),
     ).resolves.toBeNull();
@@ -1129,7 +1129,7 @@ describe("completing an account action whose person changed after it was issued"
 });
 
 describe("confirming an email change by code when the account moved on", () => {
-  const codeKey = Buffer.alloc(32, 23);
+  const keyRing = { current: { version: 1, key: Buffer.alloc(32, 23) } };
 
   async function requestChange(email: string, target: string) {
     const personId = await seedManager(suite.db, { email });
@@ -1137,7 +1137,7 @@ describe("confirming an email change by code when the account moved on", () => {
       sql`update persons set pending_email = ${target}, pending_email_folded = ${target} where id = ${personId}`,
     );
     const issued = await run((tx) =>
-      issueAccountAction(tx, { personId, purpose: "email_change", codeKey }),
+      issueAccountAction(tx, { personId, purpose: "email_change", keyRing }),
     );
     return { personId, issued };
   }
@@ -1160,7 +1160,7 @@ describe("confirming an email change by code when the account moved on", () => {
     );
     try {
       await expect(
-        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, keyRing })),
       ).resolves.toBeNull();
     } finally {
       await suite.db.execute(sql`drop trigger tmp_skip_claim`);
@@ -1177,7 +1177,7 @@ describe("confirming an email change by code when the account moved on", () => {
       sql`update persons set pending_email = null, pending_email_folded = null where id = ${personId}`,
     );
     await expect(
-      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, keyRing })),
     ).resolves.toBeNull();
     expect(await emailsOf(personId)).toEqual({ email: "withdrawn@x.com", pending_email: null });
     const action = await suite.db.execute<{ used_at: string | null }>(
@@ -1190,7 +1190,7 @@ describe("confirming an email change by code when the account moved on", () => {
     const { personId, issued } = await requestChange("race-a@x.com", "race-target@x.com");
     await seedManager(suite.db, { email: "race-target@x.com" });
     await expect(
-      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, keyRing })),
     ).rejects.toMatchObject({
       code: "person.email_taken",
       params: { email: "race-target@x.com" },
@@ -1213,7 +1213,7 @@ describe("confirming an email change by code when the account moved on", () => {
     );
     try {
       const error = await captureError(() =>
-        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, keyRing })),
       );
       expect(isAppError(error)).toBe(false);
       expect(triggerRaised(error, "refused by test trigger")).toBe(true);
@@ -1289,7 +1289,7 @@ describe("an account action issued before a backward clock step", () => {
   });
 
   it("refuses an email-change code whose link lies more than its lifetime ahead of the clock", async () => {
-    const codeKey = Buffer.alloc(32, 11);
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 11) } };
     const personId = await seedManager(suite.db, { email: "step-code@x.com" });
     await suite.db.execute(
       sql`update persons set pending_email = 'step-changed@x.com', pending_email_folded = 'step-changed@x.com' where id = ${personId}`,
@@ -1299,18 +1299,18 @@ describe("an account action issued before a backward clock step", () => {
         issueAccountAction(tx, {
           personId,
           purpose: "email_change",
-          codeKey,
+          keyRing,
           now,
         }),
       );
     const ahead = await issue(later(1));
     await expect(
-      run((tx) => confirmEmailChangeByCode(tx, { personId, code: ahead.code!, codeKey, now: NOW })),
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: ahead.code!, keyRing, now: NOW })),
     ).resolves.toBeNull();
     const atClock = await issue(NOW);
     await expect(
       run((tx) =>
-        confirmEmailChangeByCode(tx, { personId, code: atClock.code!, codeKey, now: NOW }),
+        confirmEmailChangeByCode(tx, { personId, code: atClock.code!, keyRing, now: NOW }),
       ),
     ).resolves.toBe("step-changed@x.com");
   });

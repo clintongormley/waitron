@@ -40,7 +40,6 @@ import { writeAllocationInput } from "./testing/allocation-input.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
-import { resolveAccountKey } from "./account-key.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
@@ -439,7 +438,6 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
     const tradingEnv = await writeTradingEnv(stateDir, {
       nodeId: seed.nodeId,
       environment: "production",
-      accountKey: resolveAccountKey({}, loadKeyRing(KEY_ENV)).toString("base64"),
     });
     const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
 

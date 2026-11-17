@@ -1349,6 +1349,12 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      '@waitron/node-db':
+        specifier: workspace:*
+        version: link:../node-db
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       typescript:
         specifier: ^7.0.0
         version: 7.0.2

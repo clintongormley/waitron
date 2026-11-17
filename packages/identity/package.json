@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build": "node ../../scripts/bundle-node.mjs src/credentials-bin.ts=dist/credentials-bin.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.1.0",
@@ -26,6 +27,13 @@
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "@waitron/node-db": "workspace:*",
+    "esbuild": "^0.28.2"
+  },
+  "waitron": {
+    "commands": {
+      "waitron-credentials": "./dist/credentials-bin.js"
+    }
   }
 }

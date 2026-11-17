@@ -914,6 +914,9 @@ also qualifies the historical operation-description references in this section.
   document, with only bucket keys sealed. The remaining environment slices stay open.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
+  Authenticator secrets and emailed confirmation codes use purpose keys from the vault ring.
+  The existing rotation command re-seals authenticator secrets and pending setups; codes issued
+  before the change still work while the ring retains their previous key.
 
   Department sale rules, receipt trading-name choices and receiving profiles live on the department row.
   Menus hold their own display settings and categories their own parent and colour. Root and Home

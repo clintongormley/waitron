@@ -26,6 +26,7 @@ import {
   putCredential,
   readNodeSigningKey,
   readPairSecret,
+  keyRingEnv,
 } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import {
@@ -40,7 +41,7 @@ import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { StandbyIdentity } from "./reserved-identity.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
-import { keyRingEnv } from "@waitron/credentials";
+
 import { writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
@@ -113,7 +114,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
     ...PAIR_BUNDLE_FIELDS,
-    accountKey: Buffer.alloc(32, 9).toString("base64"),
+
     reservedIdentity: RESERVED,
     moduleOverrides: {},
     primaryPublicKey: PRIMARY_KEYS.publicKey,

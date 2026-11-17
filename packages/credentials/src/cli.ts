@@ -21,7 +21,13 @@ export interface CliIo {
   readStdin(): Promise<string>;
 }
 
+export interface ResealResult extends RotationResult {
+  unopened: number;
+}
+export type Resealer = (db: Database, ring: KeyRing) => Promise<ResealResult>;
+
 export interface CliDeps {
+  resealers: readonly Resealer[];
   db: Database;
   /** The box's own file; `rotate` re-seals its signing key there. */
   node: NodeDatabase;
@@ -215,9 +221,15 @@ const SPARE_JOINED: Record<PairLinkRole, string> = {
 };
 
 async function rotate(deps: CliDeps): Promise<number> {
-  let result: RotationResult;
+  let result: ResealResult;
   try {
-    result = await rotateCredentials(deps.db, deps.ring, deps.node);
+    result = { ...(await rotateCredentials(deps.db, deps.ring, deps.node)), unopened: 0 };
+    for (const reseal of deps.resealers) {
+      const extra = await reseal(deps.db, deps.ring);
+      result.rotated += extra.rotated;
+      result.alreadyCurrent += extra.alreadyCurrent;
+      result.unopened += extra.unopened;
+    }
   } catch (error) {
     const exit = reportFailure(error, deps);
     // `reportFailure` returns only for an AppError; it throws anything else.
@@ -227,7 +239,9 @@ async function rotate(deps: CliDeps): Promise<number> {
     }
     return exit;
   }
-  deps.io.stdout(`rotated ${result.rotated}, already current ${result.alreadyCurrent}`);
+  deps.io.stdout(
+    `rotated ${result.rotated}, already current ${result.alreadyCurrent}, unopened ${result.unopened}`,
+  );
   return 0;
 }
 

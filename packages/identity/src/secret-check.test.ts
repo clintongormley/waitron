@@ -1,3 +1,4 @@
+import { sealText } from "@waitron/credentials";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,7 +14,7 @@ import { hashPassword, verifyPassword } from "./verify-password.js";
 import { checkManagerPassword, loginManager, loginManagerById } from "./manager-login.js";
 import { checkOwnPassword, verifyOwnFreshSignIn } from "./profile.js";
 import { startManagementSession } from "./management-session.js";
-import { encryptTotpSecret } from "./mfa.js";
+
 import {
   codeOf,
   openSession,
@@ -441,7 +442,7 @@ describe("loginManager and loginManagerById with a check", () => {
     const { personId, email } = await manager();
     await run((tx) =>
       tx.execute(
-        sql`update persons set totp_secret = ${encryptTotpSecret("JBSWY3DPEHPK3PXP", TOTP_KEY_RING.current)} where id = ${personId}`,
+        sql`update persons set totp_secret = ${sealText({ current: TOTP_KEY_RING.current }, "totp", "JBSWY3DPEHPK3PXP")} where id = ${personId}`,
       ),
     );
     const checked = await checkManagerPassword(suite.db, { email }, "correct horse");

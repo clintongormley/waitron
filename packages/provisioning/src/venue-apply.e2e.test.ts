@@ -1,3 +1,4 @@
+import type { KeyRing } from "@waitron/credentials";
 import { eq } from "drizzle-orm";
 import { settings, readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
@@ -9,7 +10,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
+import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import { deviceOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { applyVenue as applyDirectVenue } from "./venue-apply.js";
@@ -18,7 +19,7 @@ import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+const TOTP_KEY_RING: KeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /**
  * "Sellable": a venue provisioned by the real `applyVenue` can immediately chain a sale through the
