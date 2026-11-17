@@ -120,6 +120,14 @@ function absent(kind: Kind): BuiltPart {
   return { part: { kind, state: "absent" }, record: { part: kind, state: "absent" }, file: {} };
 }
 
+function notSetUp(kind: Kind): BuiltPart {
+  return {
+    part: { kind, state: "not-set-up" },
+    record: { part: kind, state: "not-set-up" },
+    file: {},
+  };
+}
+
 function refusal(error: unknown): { code: string; params: Readonly<Record<string, unknown>> } {
   return isAppError(error)
     ? { code: error.code, params: (error.params ?? {}) as Record<string, unknown> }
@@ -358,21 +366,20 @@ export async function buildServerKeyPart(
   if (seat === null) return absent("server-key");
   const words = PART_WORDS[context.locale];
   const { keyInForce, newKey } = input;
+  if (keyInForce === null) return notSetUp("server-key");
   const failed = (cause: PartFailure, failedWith: string): BuiltPart => {
     const lines = [cause.todo];
     if (newKey !== undefined) lines.push(words.keyNotReplaced);
-    if (keyInForce !== null) {
-      const { holder } = keyInForce;
-      const day = packDates(context.locale, context.timeZone).longDay(holder.madeOn);
-      lines.push(
-        holder.kind === "sheet"
-          ? words.currentKeyOnSheet(holder.keyName, day)
-          : (holder.received ? words.currentKeyOnPack : words.currentKeyOnUnreceivedPack)(
-              holder.number,
-              day,
-            ),
-      );
-    }
+    const { holder } = keyInForce;
+    const day = packDates(context.locale, context.timeZone).longDay(holder.madeOn);
+    lines.push(
+      holder.kind === "sheet"
+        ? words.currentKeyOnSheet(holder.keyName, day)
+        : (holder.received ? words.currentKeyOnPack : words.currentKeyOnUnreceivedPack)(
+            holder.number,
+            day,
+          ),
+    );
     return {
       part: {
         kind: "server-key",
@@ -382,17 +389,14 @@ export async function buildServerKeyPart(
       record: {
         part: "server-key",
         state: "failed",
-        ...(keyInForce === null ? {} : { keyName: keyInForce.name }),
+        keyName: keyInForce.name,
         carriedKey: false,
       },
-      file:
-        keyInForce === null
-          ? {}
-          : {
-              serverKey: null,
-              serverKeyName: keyInForce.name,
-              serverKeyHeldBy: heldBy(keyInForce.holder),
-            },
+      file: {
+        serverKey: null,
+        serverKeyName: keyInForce.name,
+        serverKeyHeldBy: heldBy(keyInForce.holder),
+      },
       failedWith,
     };
   };
@@ -400,7 +404,6 @@ export async function buildServerKeyPart(
     const { code, params } = refusal(error);
     return failed(partFailure(context.locale, code, params), code === "" ? "unexpected" : code);
   };
-  if (keyInForce === null) return failed(words.noServerKey, "no_server_key");
   if ("refused" in seat) return refused(seat.refused);
   let drawn: RecoveryPackPageResult;
   try {

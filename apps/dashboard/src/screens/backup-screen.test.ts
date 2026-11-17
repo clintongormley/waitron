@@ -178,6 +178,7 @@ const NO_PACK: RecoveryPackStatus = {
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
+  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 const PACK_UP_TO_DATE: RecoveryPackStatus = {

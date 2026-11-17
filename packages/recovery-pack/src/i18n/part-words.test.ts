@@ -61,18 +61,6 @@ describe("part failure words", () => {
     );
   });
 
-  it("words a box with no server key yet in both languages", () => {
-    expect(PART_WORDS.en.noServerKey).toEqual({
-      what: "This box has no server key yet.",
-      todo: "There is nothing to keep for this part until the box has one.",
-    });
-    const es = PART_WORDS.es.noServerKey;
-    expect(es.what).not.toBe("");
-    expect(es.todo).not.toBe("");
-    expect(es.what).not.toBe(PART_WORDS.en.noServerKey.what);
-    expect(es.todo).not.toBe(PART_WORDS.en.noServerKey.todo);
-  });
-
   it("calls a module composition the page cannot use a fault in Waitron, not a reason to make a new pack", () => {
     expect(partFailure("en", "recovery.pack_invalid", { reason: "module_unsupported" })).toEqual({
       what: "This page could not be made. That is a fault in Waitron.",

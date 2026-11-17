@@ -450,11 +450,12 @@ export class RecoveryPackCard extends LitElement {
         holder.received ? "recovery_pack.server_key_on" : "recovery_pack.server_key_on_unreceived",
         { number: String(holder.number), date: this.#date(holder.madeAt) },
       );
-    const part = status.latest?.parts.find((p) => p.part === "server-key");
     return t(
-      part?.state === "absent"
+      status.serverKey === "none"
         ? "recovery_pack.server_key_none"
-        : "recovery_pack.server_key_elsewhere",
+        : status.serverKey === "not_yet"
+          ? "recovery_pack.server_key_not_yet"
+          : "recovery_pack.server_key_elsewhere",
     );
   }
 

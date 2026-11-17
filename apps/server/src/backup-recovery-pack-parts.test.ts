@@ -406,32 +406,35 @@ describe("the server key part", () => {
     ).rejects.toThrow("the server key seat returned no key file");
   });
 
-  it("with no key in force, fails without asking the module", async () => {
-    let asked = false;
-    const built = await inTx((tx) =>
-      buildServerKeyPart(
-        tx,
-        context,
-        server(
-          fiscal(async () => {
-            asked = true;
-            return { page };
-          }),
-          { keyInForce: null, newKey },
+  it.each([
+    ["with a new key ticked", { newKey }],
+    ["with no new key ticked", {}],
+  ])(
+    "with no key in force, counts the part as not set up without asking the module (%s)",
+    async (_label, ticked) => {
+      let asked = false;
+      const built = await inTx((tx) =>
+        buildServerKeyPart(
+          tx,
+          context,
+          server(
+            fiscal(async () => {
+              asked = true;
+              return { page };
+            }),
+            { keyInForce: null, ...ticked },
+          ),
         ),
-      ),
-    );
-    expect(asked).toBe(false);
-    const missing = PART_WORDS.en.noServerKey;
-    expect(built.part).toEqual({
-      kind: "server-key",
-      state: "failed",
-      failure: { what: missing.what, todo: `${missing.todo} ${PART_WORDS.en.keyNotReplaced}` },
-    });
-    expect(built.part.failure!.todo).not.toContain("still works");
-    expect(built.record).toEqual({ part: "server-key", state: "failed", carriedKey: false });
-    expect(built.failedWith).toBe("no_server_key");
-  });
+      );
+      expect(asked).toBe(false);
+      expect(built).toEqual({
+        part: { kind: "server-key", state: "not-set-up" },
+        record: { part: "server-key", state: "not-set-up" },
+        file: {},
+      });
+      expect("failedWith" in built).toBe(false);
+    },
+  );
 
   const refusing = fiscal(async () => {
     throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });

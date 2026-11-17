@@ -286,6 +286,11 @@ days), the interval default at `:47`; `keyFingerprint` at `apps/server/src/backu
 11. **No server key in force** (`readBreakGlassKeyName` null): the server-key part is `failed`
     ("this box has no server key yet"), ticked or not, and no key is made, as today's reissue
     refuses `key_missing` (`recovery-document-api.ts:96-97`).
+    *(Superseded 2026-11-17, PACK-NO-SERVER-KEY, the watcher's option (b): with no key in force
+    the part is `not-set-up`, the make route answers the key `unchanged`, and the pack is not
+    incomplete. The plan's later descriptions of a box with no key in force (the `no_server_key`
+    failure, the server-key part, and the "no key in force, ticked" test) describe the behaviour
+    before then.)*
 12. **Turn names.** The make route takes the turn `recovery-document:<nodeId>`, the one today's
     reissue takes (`recovery-document-api.ts:70`), so the two cannot interleave key replacements
     while both exist (PRs C and D); `recovery-pack:<nodeId>` is the node recovery pack's

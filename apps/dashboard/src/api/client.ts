@@ -2309,6 +2309,8 @@ export interface RecoveryPackStatus {
     why: "server_key" | "backup_key" | "replaced_server_key";
   }[];
   backupsUseOlderKey: boolean;
+  /** The box's server key now: `none` on a venue that files no invoices, `not_yet` when the box has no server key. */
+  serverKey: "none" | "not_yet" | "set";
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
 }

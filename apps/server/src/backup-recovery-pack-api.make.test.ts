@@ -663,14 +663,17 @@ describe("a made pack", () => {
     expect(record!.parts[3]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
   });
 
-  it("with no key in force and the box ticked, fails the page and writes no key", async () => {
+  it("with no key in force and the box ticked, counts the page as not set up and writes no key", async () => {
     suite.node.run(sql`delete from box`);
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
-    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
+    expect(await pdfText(await response.arrayBuffer())).toContain(
+      "This box has no server key yet.",
+    );
     expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
-    expect(record!.parts[3]).toEqual({ part: "server-key", state: "failed", carriedKey: false });
+    expect(record!.parts[3]).toEqual({ part: "server-key", state: "not-set-up" });
   });
 
   it("on a venue that files no invoices, has no server-key part and says the key is unchanged", async () => {
@@ -1052,6 +1055,7 @@ describe("the status route", () => {
     reasons: { part: string; kind: string }[];
     keep: { number: number; why: string }[];
     backupsUseOlderKey: boolean;
+    serverKey: string;
   };
   const read = async (f: ReturnType<typeof fixture>) => {
     const response = await f.status();
@@ -1081,6 +1085,13 @@ describe("the status route", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Olympus_Mons"}) where module = 'business_day'`,
     );
     expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
+  });
+
+  it("names the box's server key as set, not yet made, or not kept by this venue", async () => {
+    expect(await read(fixture())).toMatchObject({ serverKey: "set" });
+    expect(await read(fixture({ seat: null }))).toMatchObject({ serverKey: "none" });
+    suite.node.run(sql`delete from box`);
+    expect(await read(fixture())).toMatchObject({ serverKey: "not_yet" });
   });
 
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {

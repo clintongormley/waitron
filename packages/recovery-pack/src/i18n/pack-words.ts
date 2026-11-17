@@ -221,8 +221,6 @@ type PartWords = {
   failures: Record<string, PartFailure>;
   /** `sif.allocation_invalid` with reason `history_invalid`; its other reasons take `general`. */
   historyInvalid: PartFailure;
-  /** The server-key page of a box that has no server key yet; no refusal stands behind it. */
-  noServerKey: PartFailure;
   /** `recovery.pack_invalid` with reason `module_unsupported`: only a wrong module composition gives it. */
   moduleFault: PartFailure;
   general: PartFailure;
@@ -334,10 +332,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     historyInvalid: {
       what: "The box's record of its invoice series disagrees with what setup recorded.",
       todo: "Keep the pack or sheet that holds the current server key; the next pack tries this page again.",
-    },
-    noServerKey: {
-      what: "This box has no server key yet.",
-      todo: "There is nothing to keep for this part until the box has one.",
     },
     moduleFault: {
       what: "This page could not be made. That is a fault in Waitron.",
@@ -454,10 +448,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     historyInvalid: {
       what: "El registro del servidor de sus series de facturas no coincide con lo que registró la instalación.",
       todo: "Guarda el paquete o la hoja que tiene la clave del servidor actual; el próximo paquete volverá a intentar esta página.",
-    },
-    noServerKey: {
-      what: "Este servidor aún no tiene clave del servidor.",
-      todo: "No hay nada que guardar de esta parte hasta que el servidor tenga una.",
     },
     moduleFault: {
       what: "Esta página no se pudo hacer. Es un fallo de Waitron.",

@@ -19,6 +19,7 @@ const STATUS: RecoveryPackStatus = {
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
+  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 
