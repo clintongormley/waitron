@@ -517,7 +517,7 @@ till stays on your screen, marked **Paid**.
 
 Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
 the table's bills, and **Pay**. The bill's **Full invoice** choice and receipt language sit beside
-it when offered. A partly paid bill whose receipt is not yet issued also shows what has been
+it when offered. A partly paid bill whose invoice is not yet issued also shows what has been
 received and what remains. The foot has no **Park**: a table's bill already waits at its table. On a
 handheld, when a bill is paid with a simplified invoice and others are not, **Back to the table**
 opens the first unpaid bill.
