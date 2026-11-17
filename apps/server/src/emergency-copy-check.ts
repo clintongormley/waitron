@@ -64,6 +64,7 @@ export async function checkPlacedEmergencyCopy(deps: {
   if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal, immutable: true })))
     throw new AppError("emergency_copy.integrity_failed", {});
   await assertVenueCopyNotAhead(venuePath, deps.migrationsRoot, { immutable: true });
+  deps.signal?.throwIfAborted();
 
   const opened = await openBackupQuery(venuePath, { immutable: true });
   try {
@@ -127,6 +128,7 @@ export async function checkPlacedEmergencyCopy(deps: {
       throw new AppError("emergency_copy.copy_node_known", {});
 
     const checked = await checkHandoverCopy(deps.modules, query);
+    deps.signal?.throwIfAborted();
     if (!checked.ok) throw new AppError("emergency_copy.chain_broken", { module: checked.module });
   } finally {
     await opened.close();

@@ -358,3 +358,32 @@ it("keeps today's code for a chain check that fails to run", async () => {
     code: "handover.copy_check_failed",
   });
 });
+
+it.each([true, false])(
+  "a stop while a module's chain check runs rejects with its reason (stopped: %s)",
+  async (stopped) => {
+    const hash = await place();
+    const stop = new AbortController();
+    let entered!: () => void;
+    let release!: () => void;
+    const inCheck = new Promise<void>((resolve) => (entered = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const module = {
+      ...fakeSetlessModule("test-chain", "core"),
+      handover: {
+        summarise: async () => null,
+        checkCopy: async () => {
+          entered();
+          await released;
+          return "ok" as const;
+        },
+      },
+    };
+    const checking = check(bindingFor(hash), { signal: stop.signal, modules: [module] });
+    await inCheck;
+    if (stopped) stop.abort(new Error("stopping"));
+    release();
+    if (stopped) await expect(checking).rejects.toThrow("stopping");
+    else await expect(checking).resolves.toBeUndefined();
+  },
+);
