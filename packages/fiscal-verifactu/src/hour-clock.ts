@@ -1,6 +1,8 @@
 // Not the package index: setup/clock-wait.ts puts this file in the setup and dashboard bundles.
 import { AGREEMENT_MS } from "@waitron/module/src/device-clock.js";
 export { AGREEMENT_MS };
+/** How far the box's wall clock may drift against its steady clock before it counts as stepped. */
+export const STEP_MS = 1000;
 export interface SetupBrowserClockSample {
   readonly challengeId: string;
   readonly instantMs: number;

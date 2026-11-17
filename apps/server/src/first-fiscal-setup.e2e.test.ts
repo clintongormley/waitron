@@ -145,9 +145,18 @@ it.each([
   { newTaxpayer: false, change: "missing", launch: "direct" },
   { newTaxpayer: false, change: "none", launch: "direct", readinessAfterImport: true },
   { newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" },
+  { newTaxpayer: true, change: "none", launch: "direct", provisionAfterMs: 31_000 },
 ])(
-  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom",
-  async ({ newTaxpayer, change, launch, readinessAfterImport, claimFrom, staffLanguage }) => {
+  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom, provision after $provisionAfterMs ms",
+  async ({
+    newTaxpayer,
+    change,
+    launch,
+    readinessAfterImport,
+    claimFrom,
+    staffLanguage,
+    provisionAfterMs,
+  }) => {
     const artifact = await configurationArtifact();
     const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
     dirs.push(root);
@@ -411,6 +420,7 @@ it.each([
           body: { error: { code: "setup.email_required", params: { field: "email" } } },
         });
       }
+      time.clock.advance(provisionAfterMs ?? 0);
       const activated = await post("/setup-api/provision", live);
       if (change !== "none") {
         expect(activated).toMatchObject({

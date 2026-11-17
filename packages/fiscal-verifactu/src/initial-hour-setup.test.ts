@@ -1124,6 +1124,30 @@ const prepareSetup = (f: ReturnType<typeof configured>) =>
     ),
   );
 
+it.each([
+  [0, 1],
+  [20_001, 2],
+])(
+  "activation %i ms after the command's last check reads the time service %i time(s) in all",
+  async (laterMs, reads) => {
+    startEarly();
+    const f = configured();
+    await f.clock();
+    const saved = await f.select();
+    monotonicOffset += 31_000;
+    vi.setSystemTime(Date.now() + 31_000);
+    source.internet.mockClear();
+    const t = terminal(f, []);
+    expect(
+      await f.seat.commandBeforeActivation!({ ...context, request: saved }, t.actions),
+    ).toEqual({ status: "ready", input });
+    monotonicOffset += laterMs;
+    vi.setSystemTime(Date.now() + laterMs);
+    expect(await prepareSetup(f)).toBe("prepared");
+    expect(source.internet).toHaveBeenCalledTimes(reads);
+  },
+);
+
 it("a page's name is issued after another page's box-only re-check", async () => {
   startEarly();
   const f = configured();
@@ -1153,11 +1177,13 @@ it("issuing refuses when the only fresh reading is the box's alone", async () =>
   }
 });
 
-it("issuing refuses clock_stale when the only passing reading is older than thirty seconds", async () => {
+it("issuing refuses when the only passing reading is older than thirty seconds and no fresh second clock exists", async () => {
   startEarly();
   const f = configured();
   await f.clock();
   await f.select();
+  source.internet.mockReset();
+  source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
   const stale = vi.spyOn(performance, "now");
   const start = performance.now();
   stale.mockImplementation(() => start + 30_001);
@@ -1165,7 +1191,7 @@ it("issuing refuses clock_stale when the only passing reading is older than thir
   try {
     await expect(prepareSetup(f)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
-      params: { reason: "clock_stale" },
+      params: { reason: "second_clock_missing" },
     });
   } finally {
     stale.mockRestore();

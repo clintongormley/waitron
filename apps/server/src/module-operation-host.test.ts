@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readSetupFlowRecord } from "@waitron/provisioning";
+import { readModuleRecord, readSetupFlowRecord } from "@waitron/provisioning";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -23,7 +23,10 @@ import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { timeServiceReader } from "./clock-service-reading.js";
 import { bootReader } from "./boot-reader.js";
 import type { NodeId } from "@waitron/shared";
-const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
+const time = vi.hoisted(() => ({
+  clock: undefined as unknown as HourTestClock,
+  synchronised: true,
+}));
 const boxHost = vi.hoisted(() => ({
   status: vi.fn<() => Promise<unknown>>(),
 }));
@@ -35,22 +38,28 @@ vi.mock("./box-host-client.js", async (actual) => ({
   }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
-  observeTimeServiceHourClock: async () => ({
-    source: "internet",
-    result: "usable",
-    instantMs: time.clock.wall(),
-    uncertaintyMs: 500,
-    wallStartedMs: time.clock.wall(),
-    wallFinishedMs: time.clock.wall(),
-    monotonicStartedMs: time.clock.monotonic(),
-    monotonicFinishedMs: time.clock.monotonic(),
-  }),
+  observeTimeServiceHourClock: async () =>
+    time.synchronised
+      ? {
+          source: "internet",
+          result: "usable",
+          instantMs: time.clock.wall(),
+          uncertaintyMs: 500,
+          wallStartedMs: time.clock.wall(),
+          wallFinishedMs: time.clock.wall(),
+          monotonicStartedMs: time.clock.monotonic(),
+          monotonicFinishedMs: time.clock.monotonic(),
+        }
+      : { source: "internet", result: "unavailable", reason: "not_synchronised" },
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  time.synchronised = true;
+});
 it("takes an immutable environment snapshot and configures module copies without changing an already prepared seat", async () => {
   const env = { SENTINEL: "passed" };
   const host = createModuleOperationHost(env);
@@ -125,30 +134,78 @@ it("the bound runtime retains its recovery document after restart and prepares o
       { ...f.staged.ref, kept: true },
       fresh,
     );
-    await expect(attempt(restarted)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "clock_stale" },
-    });
-    await restarted.preparation.prepare(
-      f.ownerAttempt,
-      f.module,
-      {
-        action: "compare-clocks",
-        browser: null,
-      },
-      { onBox: true },
-    );
-    await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
-      f.ownerAttempt,
-      { ...f.staged.ref, kept: true },
-      await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
-    );
     await expect(attempt(restarted)).resolves.toBe("prepared");
     await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
   } finally {
     await f.dispose();
   }
 });
+
+it.each([
+  ["on the same start of the server", false],
+  ["not after the server restarts", true],
+])(
+  "a device time confirmed through the setup page counts at Provision two minutes later without the time service %s",
+  async (_label, restart) => {
+    const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime("2026-10-16T11:40:00Z");
+    time.clock = createFakeTimersHourClock();
+    const readBoot = () => ({ id: "box-boot", ms: time.clock.monotonic() + 5_000_000 });
+    time.synchronised = false;
+    const f = await hourFirstFiscalFixture({
+      database: () => venue.db,
+      clock: time.clock,
+      readBoot,
+    });
+    try {
+      const intents = (await readModuleRecord(f.stateDir, f.module)).prepared.flatMap(
+        (revision) =>
+          (revision as { value: { entries: { kind: string; boot?: { bootId: string } }[] } }).value
+            .entries,
+      );
+      expect(intents.find((entry) => entry.kind === "intent")?.boot).toMatchObject({
+        bootId: expect.stringMatching(/^box-boot /),
+        confirmed: true,
+      });
+      const runtime = restart
+        ? createFirstSetupModuleHost({
+            environment: {},
+            stateDir: f.stateDir,
+            venueDir: f.venueDir,
+            modules: f.modules,
+            database: () => venue.db,
+            readBoot,
+          })
+        : f.host;
+      const fresh = await runtime.owner.reconfirm(f.ownerAttempt, f.password, "activation");
+      await runtime.recoveryDelivery.confirmRecoveryDocumentKept(
+        f.ownerAttempt,
+        { ...f.staged.ref, kept: true },
+        fresh,
+      );
+      time.clock.advance(120_000);
+      const run = vi.fn(async () => "prepared");
+      const attempt = runtime.coordinator.run(async (hold) => {
+        await runtime.recoveryDelivery.consume(f.ownerAttempt, f.module, hold);
+        return withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+          runtime.modules
+            .find((m) => m.name === f.module)!
+            .operations!.prepare({ binding: f.context.binding, authority, input: f.input }, run),
+        );
+      });
+      if (restart) {
+        await expect(attempt).rejects.toMatchObject({
+          code: "sif.allocation_invalid",
+          params: { reason: "second_clock_missing" },
+        });
+        expect(run).not.toHaveBeenCalled();
+      } else await expect(attempt).resolves.toBe("prepared");
+    } finally {
+      await f.dispose();
+    }
+  },
+);
 
 it("freezes fresh planned identities and selected module versions before any public candidate export", async () => {
   const { firstFiscalFixture, request, MODULE } = await import("../test/first-fiscal.js");
@@ -386,6 +443,34 @@ describe("every host the server builds asks the box's time service, afresh at ea
     const boot = host().readBoot!();
     expect(boot.id).toBe(bootReader().readBoot().id);
     expect(Number.isFinite(boot.ms)).toBe(true);
+  });
+  it("the first setup's host reads the box's boot", () => {
+    const { module, host } = capturing();
+    builders["the first setup's"](module);
+    const boot = host().readBoot!();
+    expect(boot.id?.split(" ")[0] ?? null).toBe(bootReader().readBoot().id);
+    expect(Number.isFinite(boot.ms)).toBe(true);
+  });
+  it("the first setup's host handed a boot reader answers its uptime under an id each start of the server renews", () => {
+    const reading = { id: "handed-boot", ms: 4321 };
+    const started = () => {
+      const { module, host } = capturing();
+      createFirstSetupModuleHost({
+        environment: {},
+        stateDir: join(scratch, "state"),
+        venueDir: join(scratch, "venue"),
+        modules: [module],
+        readBoot: () => reading,
+      });
+      return host();
+    };
+    const first = started();
+    const again = started();
+    expect(first.readBoot!()).toEqual({ ms: 4321, id: expect.stringMatching(/^handed-boot \S+$/) });
+    expect(first.readBoot!()).toEqual(first.readBoot!());
+    expect(again.readBoot!().id).not.toBe(first.readBoot!().id);
+    reading.id = null as unknown as string;
+    expect(first.readBoot!()).toEqual({ ms: 4321, id: null });
   });
   it("a restore's host handed a boot reader answers that reader's reading", () => {
     const { module, host } = capturing();

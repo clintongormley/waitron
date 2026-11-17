@@ -77,8 +77,9 @@ export interface ModuleOperationHost {
   /** Whether the box's internet time service says its clock is synchronised; absent answers no. */
   timeServiceSynchronised?(): Promise<boolean>;
   /**
-   * `/proc/uptime` in milliseconds and the boot id, null when the uptime was not read there;
-   * absent, a restore's start carries no earlier choice.
+   * `/proc/uptime` in milliseconds and the boot id, null when the uptime was not read there; on
+   * the first setup's host the id also changes with each start of the server. Absent, nothing
+   * chosen earlier is carried forward.
    */
   readBoot?(): { ms: number; id: string | null };
   /** A confirmation the restore page's key holder made while the restore's start waits. */

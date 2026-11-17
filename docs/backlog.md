@@ -414,6 +414,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Audit](backlog/self-service-refusals.md#setup-reset).
 
 - **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1159 and A1161 list what still refuses. Start again (former A1158) and Recover from backup still have no warned way out when a damaged setup retains its installed box row, even without sales or fiscal records.
+  A refusal at Provision still leaves the setup page stuck, because the recovery pack's grant is used up before the module's checks run (`packages/provisioning/src/first-setup-activation.ts:116-120`); since SETUP-STALE-CLOCK a clock refusal there needs a reboot, a server restart or a clock step after the series step, or a time service that does not answer.
   [Audit](backlog/self-service-refusals.md#setup-state).
 
 - **A1159: some setup databases the box cannot read still refuse Start again.** A damaged one is

@@ -17,7 +17,12 @@ import {
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
-import { createSetupHourClock, setBoxClockFrom } from "./hour-setup-clock.js";
+import {
+  bootStanding,
+  createSetupHourClock,
+  selectionBoot,
+  setBoxClockFrom,
+} from "./hour-setup-clock.js";
 import "./errors.js";
 
 type SelectionOptions = Parameters<typeof createHourSelection>[0];
@@ -79,6 +84,11 @@ export function createHourPreparation(
       binding: ModuleOperationInput["binding"],
       comparisonId?: string,
     ) => Promise<HourSelectionFacts>;
+    /** Takes activation's own clock reading before `read` looks at the held ones. */
+    refreshClock?: (
+      binding: ModuleOperationInput["binding"],
+      state: Parameters<Parameters<HourSelectionStore>[1]>[0],
+    ) => Promise<void>;
   },
 ) {
   const engine = createHourSelection(options);
@@ -92,6 +102,7 @@ export function createHourPreparation(
         return refuse("malformed_allocation");
       }
       return options.withState(held.binding, async (state) => {
+        await options.refreshClock?.(held.binding, state);
         const facts = await options.read(held.binding);
         const selector = createHourSelection({
           ...options,
@@ -135,6 +146,7 @@ export function createHourPreparation(
 export function createHostedHourPreparation(
   host: ModuleOperationHost,
   options: {
+    /** Replaces the held readings, so activation takes no clock reading of its own. */
     readClock?(context: InitialSetupContext): Promise<{ clock: HourClockDecision }>;
     wall?(): number;
     monotonicNow?(): number;
@@ -148,9 +160,20 @@ export function createHostedHourPreparation(
     monotonic: monotonicNow,
     timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
   });
+  const kept = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
     monotonicNow,
+    readBoot: () => selectionBoot(host),
+    refreshClock: async (binding, state) => {
+      if (options.readClock !== undefined) return;
+      const { contextKey } = await host.readSetupFacts!(binding);
+      // Twenty seconds leaves a held reading ten of its thirty when `read` takes it.
+      if (clocks.admitsWithin(contextKey, 20_000)) return;
+      await clocks.compare(contextKey, null, { onBox: true }, () =>
+        kept.chosen(state, binding, true),
+      );
+    },
     read: async (binding, comparisonId) => {
       const facts = await host.readSetupFacts!(binding);
       const clock =

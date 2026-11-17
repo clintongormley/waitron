@@ -154,7 +154,7 @@ it("stores the boot reading in the intent but never hands it out", async () => {
     engine.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
   );
   expect(f.writes[0]).toMatchObject({
-    entries: [expect.objectContaining({ boot: { ...boot, wallMs: instant } })],
+    entries: [expect.objectContaining({ boot: { ...boot, wallMs: instant, confirmed: true } })],
   });
   expect(result).toMatchObject({ status: "selected" });
   expect(result).not.toHaveProperty("boot");
@@ -195,7 +195,7 @@ it("a repeated select keeps its chosen hour, and stores the boot reading it judg
     entries: [
       {
         ...(f.writes[0] as { entries: object[] }).entries[0],
-        boot: { bootId: "b2", uptimeMs: 5000, wallMs: instant + 60_000 },
+        boot: { bootId: "b2", uptimeMs: 5000, wallMs: instant + 60_000, confirmed: true },
       },
     ],
   });
@@ -226,14 +226,14 @@ it("a preview or a selected read after a restart leaves the stored boot reading 
 
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 
-const synchronised = (at = instant) =>
+const synchronised = (at = instant, browserAt = at) =>
   compareHourClocks(
     ["box", "browser", "internet"].map(
       (source) =>
         ({
           source,
           result: "usable",
-          instantMs: at,
+          instantMs: source === "browser" ? browserAt : at,
           uncertaintyMs: 0,
           wallStartedMs: at,
           wallFinishedMs: at,
@@ -252,6 +252,60 @@ it("a device's agreeing time selects only once the person confirms it", async ()
   expect(f.writes).toEqual([]);
   expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
 });
+it.each([
+  ["a device's time beside the time service, unconfirmed", synchronised(), undefined],
+  ["the time service beside a confirmed device that agrees", synchronised(), true],
+  [
+    "the time service beside a confirmed device ten minutes off",
+    synchronised(instant, instant + 10 * 60_000),
+    true,
+  ],
+  [
+    "the time service alone, though the request says confirmed",
+    compareHourClocks(
+      ["box", "internet"].map(
+        (source) =>
+          ({
+            source,
+            result: "usable",
+            instantMs: instant,
+            uncertaintyMs: 0,
+            wallStartedMs: instant,
+            wallFinishedMs: instant,
+            monotonicStartedMs: 0,
+            monotonicFinishedMs: 0,
+          }) as HourClockObservation,
+      ),
+      Date.parse("2026-10-15T00:00:00Z"),
+    ),
+    true,
+  ],
+] as const)(
+  "a select admitted by %s keeps no confirmation with its boot reading",
+  async (_case, admitted, confirmed) => {
+    const f = fixture();
+    f.facts = { ...f.facts, clock: admitted };
+    const engine = createHourSelection({
+      withState: f.store,
+      read: async () => f.facts,
+      monotonicNow: () => 0,
+      readBoot: () => ({ bootId: "b1", uptimeMs: 1000 }),
+    });
+    await withOperationAuthority(binding, "administrator", (authority) =>
+      engine.select({
+        binding,
+        authority,
+        comparisonId: "comparison",
+        ...(confirmed === undefined ? {} : { confirmed }),
+      }),
+    );
+    expect(f.writes[0]).toMatchObject({
+      entries: [
+        expect.objectContaining({ boot: { bootId: "b1", uptimeMs: 1000, wallMs: instant } }),
+      ],
+    });
+  },
+);
 it("the internet time service selects with no confirmation", async () => {
   const f = fixture();
   f.facts = { ...f.facts, clock: synchronised() };
@@ -715,6 +769,10 @@ it.each([
   ["no uptime", { bootId: "b1", uptimeMs: NaN, wallMs: instant }],
   ["a negative uptime", { bootId: "b1", uptimeMs: -1000, wallMs: instant }],
   ["no wall time", { bootId: "b1", uptimeMs: 1000, wallMs: Infinity }],
+  [
+    "a confirmation other than true",
+    { bootId: "b1", uptimeMs: 1000, wallMs: instant, confirmed: false },
+  ],
 ])("refuses a persisted intent whose boot reading has %s", async (_case, boot) => {
   const f = fixture();
   await f.run();

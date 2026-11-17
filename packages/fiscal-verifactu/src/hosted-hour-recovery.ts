@@ -11,19 +11,16 @@ import {
   recoveryHourOperator,
 } from "./hour-recovery-preparation.js";
 import {
+  bootStanding,
   createSetupHourClock,
+  selectionBoot,
   setBoxClockFrom,
   type SetupBrowserClockSample,
 } from "./hour-setup-clock.js";
 import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
-import {
-  chosenHourBoot,
-  chosenHourIssuedAtMs,
-  conflictPreparationStatus,
-} from "./hour-selection.js";
-import type { HourClockObservation } from "./hour-clock.js";
+import { chosenHourIssuedAtMs, conflictPreparationStatus } from "./hour-selection.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -58,12 +55,7 @@ function createHostedHourRecovery(
   const options: Parameters<typeof createHourRecoveryPreparation>[0] = {
     withState: host.withPreparationState,
     monotonicNow,
-    readBoot: () => {
-      const boot = host.readBoot?.();
-      return boot === undefined || boot.id === null || !(Number.isFinite(boot.ms) && boot.ms >= 0)
-        ? undefined
-        : { bootId: boot.id, uptimeMs: boot.ms };
-    },
+    readBoot: () => selectionBoot(host),
     readContext: async (binding) => {
       const current = await facts(binding);
       return {
@@ -83,43 +75,7 @@ function createHostedHourRecovery(
       };
     },
   };
-  /** A time kept with `kept`'s boot reading, still standing while the box ran on unstepped on the
-   * same boot: `offsetMs` from the box's clock, give or take `uncertaintyMs`. */
-  const standing = (
-    kept: { bootId: string | null; uptimeMs: number; wallMs: number } | undefined,
-    offsetMs: number,
-    uncertaintyMs: number,
-  ): HourClockObservation | undefined => {
-    const boot = host.readBoot?.();
-    if (
-      kept === undefined ||
-      kept.bootId === null ||
-      !(Number.isFinite(kept.uptimeMs) && kept.uptimeMs >= 0) ||
-      boot === undefined ||
-      boot.id !== kept.bootId ||
-      !(Number.isFinite(boot.ms) && boot.ms >= 0)
-    )
-      return undefined;
-    const wallMs = wall();
-    const measured = monotonicNow();
-    const instantMs = kept.wallMs + boot.ms - kept.uptimeMs;
-    // The 1-second figure `clock_corrected` uses for a stepped clock.
-    if (!(Math.abs(wallMs - instantMs) <= 1000)) return undefined;
-    return {
-      source: "browser",
-      result: "usable",
-      instantMs: instantMs + offsetMs,
-      uncertaintyMs,
-      wallStartedMs: wallMs,
-      wallFinishedMs: wallMs,
-      monotonicStartedMs: measured,
-      monotonicFinishedMs: measured,
-    };
-  };
-  const carried = (
-    state: Parameters<typeof chosenHourBoot>[0],
-    binding: ModuleOperationInput["binding"],
-  ) => standing(chosenHourBoot(state, binding), 0, 0);
+  const { standing, chosen } = bootStanding(host, wall, monotonicNow);
   const confirmed = () => {
     const kept = host.startClockConfirmation?.();
     if (kept == null || kept.reading.result !== "usable") return undefined;
@@ -227,7 +183,7 @@ function createHostedHourRecovery(
           current.contextKey,
           null,
           { onBox: true },
-          carried(state, held.binding) ?? confirmed(),
+          () => chosen(state, held.binding) ?? confirmed(),
         );
         operatorFor(held);
       });

@@ -563,6 +563,29 @@ it("a restore's start without an internet clock waits for a second clock when th
   ).rejects.toMatchObject(refusal("second_clock_missing"));
 });
 
+it("a restore's start without an internet clock waits for a second clock when the clock is stepped while it asks the time service", async () => {
+  const f = fixture();
+  let boot = { id: "b1", ms: 1000 };
+  f.host.readBoot = () => boot;
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const selected = await selectAfterWait(FISCAL_OPERATIONS.configure!(f.host), operation);
+    expect(selected.status).toBe("selected");
+    vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 5_000);
+      return { source: "internet", result: "unavailable", reason: "tls" };
+    });
+    boot = { id: "b1", ms: 61_000 };
+    vi.setSystemTime(Date.now() + 60_000);
+    monotonic = 500;
+    const restarted = FISCAL_OPERATIONS.configure!({ ...f.host });
+    await restarted.resumeRecovery!(operation);
+    await expect(
+      restarted.prepare({ ...operation, input: selected.input }, async () => "admitted"),
+    ).rejects.toMatchObject(refusal("second_clock_missing"));
+  });
+});
+
 it.each(["readRecoveryFacts", "withPreparationState"] as const)(
   "requires host capability %s before using recovery",
   async (missing) => {

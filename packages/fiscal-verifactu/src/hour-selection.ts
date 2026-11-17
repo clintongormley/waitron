@@ -8,7 +8,7 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { canSelectHour, clockRefusal, type HourClockDecision } from "./hour-clock.js";
+import { canSelectHour, clockRefusal, STEP_MS, type HourClockDecision } from "./hour-clock.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
 import {
   decodeMinuteIdentity,
@@ -58,6 +58,24 @@ export interface SelectBoot {
   bootId: string;
   uptimeMs: number;
   wallMs: number;
+  /** The reading `wallMs` came from held a device's time the person confirmed. */
+  confirmed?: true;
+}
+/** The box's time `kept` carries forward to `boot`'s uptime: none after a restart, or once the
+ * wall clock has moved against the uptime as a step does. */
+export function keptInstantMs(
+  kept: { bootId: string | null; uptimeMs: number; wallMs: number } | undefined,
+  boot: Omit<SelectBoot, "wallMs">,
+  wallMs: number,
+): number | undefined {
+  if (
+    kept === undefined ||
+    kept.bootId !== boot.bootId ||
+    !(Number.isFinite(kept.uptimeMs) && kept.uptimeMs >= 0)
+  )
+    return undefined;
+  const instantMs = kept.wallMs + boot.uptimeMs - kept.uptimeMs;
+  return Math.abs(wallMs - instantMs) <= STEP_MS ? instantMs : undefined;
 }
 interface Wait extends EntryBase {
   kind: "wait";
@@ -154,7 +172,8 @@ function parseState(value: unknown): Entry[] {
             text(entry.boot.bootId) &&
             Number.isFinite(entry.boot.uptimeMs) &&
             (entry.boot.uptimeMs as number) >= 0 &&
-            Number.isFinite(entry.boot.wallMs)
+            Number.isFinite(entry.boot.wallMs) &&
+            (entry.boot.confirmed === undefined || entry.boot.confirmed === true)
           ))
       )
         return refuse("history_invalid");
@@ -440,12 +459,9 @@ export function createHourSelection(options: {
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
       if (!canSelectHour(facts.clock)) return refuse(clockRefusal(facts.clock));
       // A device's time counts only once the person confirms it; the internet time service needs no one.
-      if (
-        persist &&
-        request.confirmed !== true &&
-        !facts.clock.usable.some((sample) => sample.source === "internet")
-      )
-        return refuse("confirmation_required");
+      // Without the time service, an admitted clock is a device's that agreed with the box.
+      const byDevice = !facts.clock.usable.some((sample) => sample.source === "internet");
+      if (persist && request.confirmed !== true && byDevice) return refuse("confirmation_required");
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
       const history = projectHourHistory({
         scope: facts.scope,
@@ -485,11 +501,29 @@ export function createHourSelection(options: {
         authorize();
         entries.push(entry);
       };
+      const readBoot = (): SelectBoot | undefined => {
+        const read = options.readBoot?.();
+        return read === undefined
+          ? undefined
+          : {
+              ...read,
+              wallMs: now,
+              ...(request.confirmed === true && byDevice ? { confirmed: true as const } : {}),
+            };
+      };
       if (intent !== undefined) {
-        const boot = persist ? options.readBoot?.() : undefined;
-        // A restart voids the stored reading. On the same boot it stays true, and is kept.
-        if (boot !== undefined && original!.boot?.bootId !== boot.bootId) {
-          const refreshed: Intent = { ...original!, boot: { ...boot, wallMs: now } };
+        const boot = persist ? readBoot() : undefined;
+        const kept = original!.boot;
+        // A restart voids the stored reading. On the same boot a restore keeps it; a setup
+        // replaces it once a clock step voids it, or with a confirmation it lacks.
+        if (
+          boot !== undefined &&
+          (kept?.bootId !== boot.bootId ||
+            (request.binding.action === "setup" &&
+              (keptInstantMs(kept, boot, now) === undefined ||
+                (boot.confirmed === true && kept!.confirmed !== true))))
+        ) {
+          const refreshed: Intent = { ...original!, boot };
           authorize();
           await state.replace(
             {
@@ -573,8 +607,8 @@ export function createHourSelection(options: {
         issuedAt: new Date(now).toISOString(),
       };
       if (!persist) return { ...material(selected), status: "preview" as const };
-      const boot = options.readBoot?.();
-      if (boot !== undefined) selected.boot = { ...boot, wallMs: now };
+      const boot = readBoot();
+      if (boot !== undefined) selected.boot = boot;
       await write(selected);
       options.onNewIntent?.(material(selected));
       return material(selected);
