@@ -422,7 +422,10 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     // Stated difference 1: today the cheaper part is numbered, and printed, after the Bread. Each
     // goods row as its count and its amount before the discount line under it.
     const countAndAmount = (blocks: string[][]) =>
-      blocks.map((block) => [block[0]!.split(" ")[0], block[0]!.split(" ").at(-1)]);
+      blocks.map((block) => {
+        const words = block[0]!.replace(/ [A-Z]$/u, "").split(" ");
+        return [words[0], words.at(-1)];
+      });
     expect(countAndAmount(grouped.blocks)).toEqual([
       ["2", "6,66"],
       ["1", "2,50"],

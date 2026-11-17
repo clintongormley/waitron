@@ -100,6 +100,7 @@ export const RECEIPT_LABEL_KEYS = [
   "guest",
   "guests",
   "perPerson",
+  "perUnit",
   "takeAway",
   "paymentHeading",
   "paymentNotice",

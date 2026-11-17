@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
+import { formatAmount } from "./receipt-money.js";
 import {
   bytesInclude,
   decodeTicket,
@@ -2357,17 +2358,19 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(ADJUSTED);
     const first = lines.indexOf(at80("1  Hamburguesa", "12,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 11)).toEqual([
+    expect(lines.slice(first, first + 13)).toEqual([
       at80("1  Hamburguesa", "12,00"),
       at80("  Descuento 100%", "-12,00"),
       at80("1  Tabla de quesos", "12,00"),
       at80("  Descuento 20%", "-2,40"),
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pizza margarita", "9,00"),
       // The comp covers the dish and its extras, so it prints after them.
       at80("  Aceitunas", "1,50"),
       at80("  Descuento 100%", "-10,50"),
       at80("3  Croquetas", "9,99"),
+      "   3,33 € por unidad",
       at80("  Descuento", "-0,99"),
       rule(PRINTER_80),
     ]);
@@ -2378,8 +2381,9 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(BILL_DISCOUNT);
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 8)).toEqual([
+    expect(lines.slice(first, first + 9)).toEqual([
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 12,5%", "-0,81"),
       rule(PRINTER_80),
@@ -2399,7 +2403,10 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(lines.filter((line) => line.includes("->"))).toEqual([]);
     const start = lines.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
     const end = lines.indexOf(rule(PRINTER_80), start);
-    const goods = lines.slice(start, end).map((line) => printedCents(line.trimEnd()));
+    const goods = lines
+      .slice(start, end)
+      .filter((line) => !line.endsWith(" por unidad"))
+      .map((line) => printedCents(line.trimEnd()));
     const total = lines.find((line) => line.startsWith("TOTAL"))!;
     expect(goods.reduce((sum, cents) => sum + cents, 0)).toBe(printedCents(total.trimEnd()));
   });
@@ -2490,14 +2497,17 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
             "1  Tabla de quesos       12,00",
             "  Descuento 20%          -2,40",
             "2  Agua mineral           4,00",
+            "   2,00 € por unidad",
             "1  Pizza margarita        9,00",
             "  Aceitunas               1,50",
             "  Descuento 100%        -10,50",
             "3  Croquetas              9,99",
+            "   3,33 € por unidad",
             "  Descuento              -0,99",
             "12  Chuletón de buey madurado",
             "    a la brasa con guarnición",
             "                       1234,56",
+            "    102,88 € por unidad",
             "  Descuento 10%        -123,45",
             "Descuento 12,5%       -1000,00",
           ]
@@ -2507,13 +2517,16 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
             "1  Tabla de quesos                   12,00",
             "  Descuento 20%                      -2,40",
             "2  Agua mineral                       4,00",
+            "   2,00 € por unidad",
             "1  Pizza margarita                    9,00",
             "  Aceitunas                           1,50",
             "  Descuento 100%                    -10,50",
             "3  Croquetas                          9,99",
+            "   3,33 € por unidad",
             "  Descuento                          -0,99",
             "12  Chuletón de buey madurado a la brasa",
             "    con guarnición                 1234,56",
+            "    102,88 € por unidad",
             "  Descuento 10%                    -123,45",
             "Descuento 12,5%                   -1000,00",
           ],
@@ -2533,8 +2546,9 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     });
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 4)).toEqual([
+    expect(lines.slice(first, first + 5)).toEqual([
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 100%", "-6,50"),
       rule(PRINTER_80),
@@ -3328,7 +3342,8 @@ describe("the roll's spacing and rule (A497)", () => {
       const { columns } = textGrid(printer.paperWidth, printer.resolution);
       const total = lines.findIndex((line) => line.startsWith("TOTAL"));
       expect(lines[total - 1]).toBe("-".repeat(columns));
-      expect(lines[total - 2]).toMatch(/^2 {2}Agua mineral +8,80$/u);
+      expect(lines[total - 2]).toBe("   4,40 € por unidad");
+      expect(lines[total - 3]).toMatch(/^2 {2}Agua mineral +8,80$/u);
     },
   );
 
@@ -3710,7 +3725,8 @@ describe("the simplified receipt's own layout (A663)", () => {
     ).filter((command) => command.text !== undefined && command.text.trim() !== "");
     const total = commands.findIndex((command) => command.text!.trim().startsWith("TOTAL"));
     expect(commands[total - 1]!.text!.trim()).toMatch(/^-+$/);
-    expect(commands[total - 2]!.text!.trim().replace(/\s+/g, " ")).toBe(
+    expect(commands[total - 2]!.text!.trim()).toBe("6,00 € por unidad");
+    expect(commands[total - 3]!.text!.trim().replace(/\s+/g, " ")).toBe(
       "4 Agua, pan y aceite 24,00",
     );
     const grid = esc(PRINTER_80).grid;
@@ -3967,4 +3983,144 @@ describe("a takeaway sale's printed receipt", () => {
       expect(takeaway).toEqual([...eatIn.slice(0, at + 1), words, ...eatIn.slice(at + 1)]);
     },
   );
+});
+
+describe("simplified receipt: price each and rate letters", () => {
+  const ONE_RATE = [{ rate: "10", base: "4.91", tax: "0.49" }];
+  const TWO_RATES = [
+    { rate: "10", base: "5.00", tax: "0.50" },
+    { rate: "21", base: "2.23", tax: "0.47" },
+  ];
+  const simplified = (
+    lines: TillSaleResult["lines"],
+    vatBreakdown: TillSaleResult["vatBreakdown"] = ONE_RATE,
+    extra: Partial<TillSaleResult> = {},
+  ): TillSaleResult => ({ ...FILED_SALE, invoiceType: "F2", lines, vatBreakdown, ...extra });
+  const print = (result: TillSaleResult, printer: EscSetting = PRINTER_80): string[] =>
+    printedLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", printer }),
+    );
+  const lineAfter = (lines: string[], name: string): string =>
+    lines[lines.findIndex((line) => line.includes(name)) + 1]!;
+  const lineWith = (lines: string[], text: string): string =>
+    lines.find((line) => line.includes(text))!;
+  const mahou = (quantity: string, gross: string): TillSaleResult["lines"][number] => ({
+    descriptions: { "es-ES": "Mahou caña" },
+    quantity,
+    gross,
+    parentLineNo: null,
+  });
+  const mixed: TillSaleResult["lines"] = [
+    {
+      descriptions: { "es-ES": "Tortilla" },
+      quantity: "1",
+      gross: "4.50",
+      listGross: "5.00",
+      vatRate: "10.00",
+      parentLineNo: null,
+      adjustments: [{ kind: "discount", percentBp: 1000, amount: "0.50" }],
+    },
+    {
+      descriptions: { "es-ES": "Extra queso" },
+      quantity: "1",
+      gross: "1.00",
+      vatRate: "10.00",
+      parentLineNo: 1,
+    },
+    { ...mahou("1", "2.70"), vatRate: "21.00" },
+  ];
+
+  it("prints the price each under a line of two", () => {
+    const after = lineAfter(print(simplified([mahou("2", "5.40")])), "Mahou caña");
+    expect(after).toMatch(/^ +2,70 € por unidad$/u);
+  });
+
+  it("prints a weighed line's price per its unit", () => {
+    const lines = print(
+      simplified([
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.5",
+          unitName: { "es-ES": "kg" },
+          gross: "12.00",
+          parentLineNo: null,
+        },
+      ]),
+    );
+    expect(lineAfter(lines, "Jamón")).toMatch(/^ +24,00 € \/ kg$/u);
+  });
+
+  it("prints a line counted in the each unit's name as a count", () => {
+    const lines = print(simplified([{ ...mahou("2", "5.40"), unitName: { es: "ud" } }]));
+    expect(lineAfter(lines, "Mahou caña")).toMatch(/^ +2,70 € por unidad$/u);
+  });
+
+  it("prints no price each when it does not divide exactly", () => {
+    expect(print(simplified([mahou("3", "10.00")])).join("\n")).not.toContain("por unidad");
+  });
+
+  it("prints no price each for one", () => {
+    expect(print(simplified([mahou("1", "2.70")])).join("\n")).not.toContain("por unidad");
+  });
+
+  it("uses the list price before a discount", () => {
+    const lines = print(
+      simplified([
+        {
+          ...mahou("2", "5.40"),
+          listGross: "6.00",
+          adjustments: [{ kind: "discount", amount: "0.60" }],
+        },
+      ]),
+    );
+    expect(lineAfter(lines, "Mahou caña")).toMatch(/^ +3,00 € por unidad$/u);
+  });
+
+  it("letters each line by its rate on a mixed-rate bill", () => {
+    const lines = print(simplified(mixed, TWO_RATES));
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 5,00 A$/u);
+    expect(lineWith(lines, "Extra queso")).toMatch(/ 1,00 A$/u);
+    expect(lineWith(lines, "Descuento 10%")).toMatch(/ -0,50 A$/u);
+    expect(lineWith(lines, "Mahou caña")).toMatch(/ 2,70 B$/u);
+  });
+
+  it("prints no letters on a single-rate bill", () => {
+    const lines = print(
+      simplified(
+        mixed.map((line) => ({ ...line, vatRate: "10.00" })),
+        ONE_RATE,
+      ),
+    );
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 5,00$/u);
+    expect(lineWith(lines, "Extra queso")).toMatch(/ 1,00$/u);
+    expect(lineWith(lines, "Descuento 10%")).toMatch(/ -0,50$/u);
+    expect(lineWith(lines, "Mahou caña")).toMatch(/ 2,70$/u);
+  });
+
+  it("prints no letter on a bill-wide discount", () => {
+    const lines = print(
+      simplified(
+        mixed.map((line) => {
+          const plain = { ...line };
+          delete plain.adjustments;
+          delete plain.listGross;
+          return plain;
+        }),
+        TWO_RATES,
+        { billAdjustments: [{ kind: "discount", amount: "0.80" }] },
+      ),
+    );
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 4,50 A$/u);
+    expect(lineWith(lines, "Descuento")).toMatch(/ -0,80$/u);
+  });
+
+  it("fits 58 mm", () => {
+    const lines = print(
+      simplified([{ ...mahou("1", "1234.56"), vatRate: "21.00" }, ...mixed.slice(0, 2)], TWO_RATES),
+      PRINTER_58,
+    );
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(32);
+    expect(lineWith(lines, formatAmount("1234.56", "es-ES"))).toMatch(/ 1\.?234,56 B$/u);
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 5,00 A$/u);
+  });
 });

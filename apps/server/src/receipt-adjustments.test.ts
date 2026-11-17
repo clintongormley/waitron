@@ -638,11 +638,11 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("1  Beef burger", "12,00"),
-      at80("  Descuento 100%", "-12,00"),
-      at80("1  Bottle of Rioja", "30,00"),
-      at80("  Descuento 20%", "-6,00"),
-      at80("1  Country bread", "2,50"),
+      at80("1  Beef burger", "12,00 A"),
+      at80("  Descuento 100%", "-12,00 A"),
+      at80("1  Bottle of Rioja", "30,00 A"),
+      at80("  Descuento 20%", "-6,00 A"),
+      at80("1  Country bread", "2,50 B"),
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
@@ -789,6 +789,7 @@ describe("receiptLines", () => {
       ]);
       expect(goods).toEqual([
         at80("2  Beef burger", "24,00"),
+        "   12,00 € por unidad",
         at80("1  Beef burger", "12,00"),
         at80("  Descuento 100%", "-12,00"),
       ]);
@@ -869,10 +870,11 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("2  Ham croquettes", "6,66"),
-      at80("  Descuento 10,01%", "-1,00"),
-      at80("1  Ham croquettes", "3,33"),
-      at80("1  Country bread", "2,50"),
+      at80("2  Ham croquettes", "6,66 A"),
+      "   3,33 € por unidad",
+      at80("  Descuento 10,01%", "-1,00 A"),
+      at80("1  Ham croquettes", "3,33 A"),
+      at80("1  Country bread", "2,50 B"),
     ]);
   });
 
