@@ -336,15 +336,15 @@ shift removes that side of the offer. The shift editor states those separate eff
 
 ### A585. A rota version and its business-day overflow
 
-The approved [part 6 plan](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
-settles the calendar-week/business-week difference: a week reads its version's shifts, then places
-each on its business day. A1308 pp7 requires every shift to belong to a rota week; editing a shift
-keeps that week. A local Monday 00:30 shift therefore appears under Not in a
-slot on Monday's week, labelled as belonging to the previous week; the preceding Sunday's slot
-remains unfilled. A shift filled from Sunday's slot instead attaches to that slot's authoring week.
-The approved plan retains this limit. Part 7's editor
-must retain the overflow label; changing membership to the business week requires changing that
-agreed rule. Published-week edits and deletion remain refused.
+The earlier [part 6 plan](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
+read both a version's shifts and unattached shifts by local calendar date.
+**2026-11-17, A1308 pp7:** every shift now belongs to a rota week; a week reads its selected
+version's shifts and places each on its business day. Editing a shift keeps that week. A local
+Monday 00:30 shift on Monday's week therefore appears under Not in a slot, labelled as belonging
+to the previous week; the preceding Sunday's slot remains unfilled. A shift filled from Sunday's
+slot instead belongs to that slot's authoring week. The editor keeps the overflow label;
+changing membership to the business week remains a separate decision. Published-week edits and
+deletion remain refused.
 
 
 ### Paid breaks and split warnings (A1406-2, owner 2026-11-08)
