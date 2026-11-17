@@ -14,6 +14,7 @@ import {
   mountWidget,
   mountWithLeave,
   REVIEWED_CREDENTIALS,
+  REVIEWED_PREVIEW,
   reviewBackup,
 } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail, KeptBucketRestoreRequest } from "../events.js";
@@ -957,3 +958,213 @@ it.each(["16px", "32px"])(
     }
   },
 );
+
+describe("SetupRestoreBucketScreen environment from Review backup", () => {
+  /** A bucket preview that refuses any environment but the copy's own, as `restore-gate.ts` does. */
+  function previewsAs(copyEnvironment: "production" | "preproduction", refusal?: object) {
+    const sent: string[] = [];
+    const api = new SetupApi("", async (_input, init) => {
+      const { environment } = JSON.parse(String(init!.body)) as { environment: string };
+      sent.push(environment);
+      if (refusal !== undefined) return Response.json({ error: refusal }, { status: 422 });
+      if (environment !== copyEnvironment)
+        return Response.json(
+          {
+            error: {
+              code: "restore.environment_mismatch",
+              params: { backup: copyEnvironment, target: environment },
+            },
+          },
+          { status: 409 },
+        );
+      return Response.json({ ...REVIEWED_PREVIEW, environment: copyEnvironment });
+    });
+    return { api, sent };
+  }
+
+  async function mountWith(api: SetupApi) {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+      api,
+    });
+    paste(el, "selected-private-kit");
+    await el.updateComplete;
+    const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "setup-recovery-copy")!;
+    await copy.updateComplete;
+    return { el, copy };
+  }
+
+  const environmentField = (el: SetupRestoreBucketScreen) =>
+    q<HTMLElement & { value: string; error: string }>(el, "[data-test=environment]")!;
+
+  it("takes a pre-production copy's environment from one Review press, with no error shown", async () => {
+    const { api, sent } = previewsAs("preproduction");
+    const { el, copy } = await mountWith(api);
+    expect(environmentField(el).value).toBe("production");
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() => expect(copy.shadowRoot!.textContent).toContain("Amber Hill"));
+    await el.updateComplete;
+    expect(sent).toEqual(["production", "preproduction"]);
+    expect(environmentField(el).value).toBe("preproduction");
+    expect(environmentField(el).error).toBe("");
+    expect(el.shadowRoot!.textContent).not.toContain("Check the backup environment.");
+    expect(copy.shadowRoot!.textContent).not.toContain("Check the backup environment.");
+  });
+
+  it("leaves the environment alone when Review is refused for another reason", async () => {
+    const { api, sent } = previewsAs("preproduction", { code: "backup.stream_kit_invalid" });
+    const { el, copy } = await mountWith(api);
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(q<HTMLElement & { error: string }>(el, "[data-test=kit]")!.error).toBe(
+        "Check the recovery pack or kit file.",
+      ),
+    );
+    expect(sent).toEqual(["production"]);
+    expect(environmentField(el).value).toBe("production");
+  });
+
+  it("shows the environment refusal when it does not name the copy's environment", async () => {
+    const { api, sent } = previewsAs("preproduction", { code: "restore.environment_mismatch" });
+    const { el, copy } = await mountWith(api);
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(environmentField(el).error).toBe("Check the backup environment."),
+    );
+    expect(sent).toEqual(["production"]);
+    expect(environmentField(el).value).toBe("production");
+  });
+
+  it("switches the environment once per edit, however the refusals disagree", async () => {
+    const sent: string[] = [];
+    const api = new SetupApi("", async (_input, init) => {
+      const { environment } = JSON.parse(String(init!.body)) as { environment: string };
+      sent.push(environment);
+      const backup = environment === "production" ? "preproduction" : "production";
+      return Response.json(
+        {
+          error: { code: "restore.environment_mismatch", params: { backup, target: environment } },
+        },
+        { status: 409 },
+      );
+    });
+    const { el, copy } = await mountWith(api);
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(environmentField(el).error).toBe("Check the backup environment."),
+    );
+    expect(sent).toEqual(["production", "preproduction"]);
+  });
+
+  const followedNote = (el: SetupRestoreBucketScreen) =>
+    q(el, "[data-test=environment-followed]")?.textContent?.trim();
+
+  async function reviewAndWait(el: SetupRestoreBucketScreen, copy: HTMLElement) {
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() => expect(copy.shadowRoot!.textContent).toContain("Amber Hill"));
+    await el.updateComplete;
+  }
+
+  it("says the environment now matches the copy once it has switched it", async () => {
+    const { api } = previewsAs("preproduction");
+    const { el, copy } = await mountWith(api);
+    await reviewAndWait(el, copy);
+    expect(followedNote(el)).toBe(
+      "This copy is from “Preparation”, so Environment now matches it.",
+    );
+    expect(q(el, "[data-test=environment-followed]")!.getAttribute("role")).toBe("status");
+    expect(q<HTMLElement>(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("keeps the note when the person confirms the business the copy names", async () => {
+    const { api } = previewsAs("preproduction");
+    const { el, copy } = await mountWith(api);
+    await reviewAndWait(el, copy);
+    tick(el, "[data-test=venue-confirmed]");
+    await el.updateComplete;
+    expect(followedNote(el)).toBe(
+      "This copy is from “Preparation”, so Environment now matches it.",
+    );
+  });
+
+  it("says nothing about the environment when the copy already matches it", async () => {
+    const { api, sent } = previewsAs("production");
+    const { el, copy } = await mountWith(api);
+    await reviewAndWait(el, copy);
+    expect(sent).toEqual(["production"]);
+    expect(followedNote(el)).toBeUndefined();
+  });
+
+  it("says nothing about the environment when Review is refused for another reason", async () => {
+    const { api } = previewsAs("preproduction", { code: "backup.stream_kit_invalid" });
+    const { el, copy } = await mountWith(api);
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(q<HTMLElement & { error: string }>(el, "[data-test=kit]")!.error).toBe(
+        "Check the recovery pack or kit file.",
+      ),
+    );
+    expect(followedNote(el)).toBeUndefined();
+  });
+
+  it("shows no note beside a second environment refusal", async () => {
+    const api = new SetupApi("", async (_input, init) => {
+      const { environment } = JSON.parse(String(init!.body)) as { environment: string };
+      const backup = environment === "production" ? "preproduction" : "production";
+      return Response.json(
+        {
+          error: { code: "restore.environment_mismatch", params: { backup, target: environment } },
+        },
+        { status: 409 },
+      );
+    });
+    const { el, copy } = await mountWith(api);
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(environmentField(el).error).toBe("Check the backup environment."),
+    );
+    expect(followedNote(el)).toBeUndefined();
+  });
+
+  it("drops the note when the person changes the environment", async () => {
+    const { api } = previewsAs("preproduction");
+    const { el, copy } = await mountWith(api);
+    await reviewAndWait(el, copy);
+    await chooseOption(environmentField(el), "production");
+    await el.updateComplete;
+    expect(followedNote(el)).toBeUndefined();
+  });
+
+  it("drops the note and switches again after the person changes the kit", async () => {
+    const sent: string[] = [];
+    let copyEnvironment = "preproduction";
+    const api = new SetupApi("", async (_input, init) => {
+      const { environment } = JSON.parse(String(init!.body)) as { environment: string };
+      sent.push(environment);
+      if (environment !== copyEnvironment)
+        return Response.json(
+          {
+            error: {
+              code: "restore.environment_mismatch",
+              params: { backup: copyEnvironment, target: environment },
+            },
+          },
+          { status: 409 },
+        );
+      return Response.json({ ...REVIEWED_PREVIEW, environment: copyEnvironment });
+    });
+    const { el, copy } = await mountWith(api);
+    await reviewAndWait(el, copy);
+    expect(environmentField(el).value).toBe("preproduction");
+
+    copyEnvironment = "production";
+    paste(el, "another-private-kit");
+    await el.updateComplete;
+    await copy.updateComplete;
+    expect(followedNote(el)).toBeUndefined();
+    await reviewAndWait(el, copy);
+    expect(sent).toEqual(["production", "preproduction", "preproduction", "production"]);
+    expect(environmentField(el).value).toBe("production");
+    expect(environmentField(el).error).toBe("");
+    expect(followedNote(el)).toBe("This copy is from “Live”, so Environment now matches it.");
+  });
+});

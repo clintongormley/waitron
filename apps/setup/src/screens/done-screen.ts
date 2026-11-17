@@ -37,6 +37,13 @@ type ClockNote =
 /** No answer to show: the key was refused, the request failed, or the screen left the page. */
 type ClockMiss = "key_refused" | "failed" | "gone";
 
+/** The JSON the page of a box whose start failed answers (`recovery-surface.ts`). */
+function isRecoveryAnswer(answer: unknown): boolean {
+  if (typeof answer !== "object" || answer === null) return false;
+  const { failures, level } = answer as { failures?: unknown; level?: unknown };
+  return typeof failures === "number" && typeof level === "string";
+}
+
 function isServerError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("status" in error)) return false;
   return typeof error.status === "number" && error.status >= 500;
@@ -146,6 +153,8 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private ready = false;
 
+  @state() private startFailed = false;
+
   @state() private waitingForClock = false;
 
   @state() private clockTimes?: { deviceMs: number; serverMs: number };
@@ -164,7 +173,10 @@ export class SetupDoneScreen extends LitElement {
 
   #compares = 0;
 
-  /** Moves on when the screen leaves the page, so work begun before then sends no keyed request. */
+  /**
+   * Moves on when the screen leaves the page or the start fails, so clock work begun before then
+   * sends no keyed request and its answer is dropped.
+   */
   #life = 0;
 
   #timer?: ReturnType<typeof setTimeout>;
@@ -197,10 +209,12 @@ export class SetupDoneScreen extends LitElement {
    * A resolved `getStatus` means the box has not restarted yet. A `TypeError` is `fetch` failing while
    * the box is down mid-restart: expected, never shown. A 5xx is read as not ready yet, so it waits
    * too. Any other rejection (a 404 once the setup route is gone, another non-2xx, or a body that is
-   * not JSON) is taken to mean the box is trading. A restore's start that is waiting to confirm
-   * its time answers `server.waiting_for_clock`, and this screen asks for the time itself: opening
-   * the waiting page would reload and lose the key held in memory. Its `confirmed` says whether the
-   * server still holds a confirmation; once a refused try drops it, this screen asks again.
+   * not JSON) is taken to mean the box is trading, unless `/recovery-api/status` answers the JSON
+   * of the page a failed start shows; that keeps polling, as Retry there may start it. A restore's
+   * start that is waiting to confirm its time answers `server.waiting_for_clock`, and this screen
+   * asks for the time itself: opening the waiting page would reload and lose the key held in
+   * memory. Its `confirmed` says whether the server still holds a confirmation; once a refused try
+   * drops it, this screen asks again.
    */
   async #pollOnce(): Promise<void> {
     const confirmationsBefore = this.#confirmations;
@@ -209,6 +223,7 @@ export class SetupDoneScreen extends LitElement {
     } catch (error) {
       const waiting = waitingForClock(error);
       if (waiting !== undefined && this.isConnected) {
+        this.startFailed = false;
         if (waiting.confirmed) {
           this.waitingForClock = true;
           this.confirmed = true;
@@ -226,8 +241,35 @@ export class SetupDoneScreen extends LitElement {
         return;
       }
       if (!this.isConnected) return;
+      const failed = await this.#startFailed();
+      if (failed === undefined || !this.isConnected) return;
+      if (failed) {
+        this.#failed();
+        return;
+      }
+      this.startFailed = false;
       this.ready = true;
       this.nodeRecoveryKey = undefined;
+    }
+  }
+
+  /** A later start that waits for its time again is compared afresh. */
+  #failed(): void {
+    this.#life += 1;
+    this.startFailed = true;
+    this.waitingForClock = false;
+    this.clockTimes = undefined;
+    this.confirmed = false;
+    this.clockNote = undefined;
+    this.#compareAgain = false;
+  }
+
+  /** Undefined when the box could not be reached, or answered 5xx, so the next poll asks again. */
+  async #startFailed(): Promise<boolean | undefined> {
+    try {
+      return isRecoveryAnswer(await this.api.getRecoveryStatus());
+    } catch (error) {
+      return error instanceof TypeError || isServerError(error) ? undefined : false;
     }
   }
 
@@ -409,34 +451,20 @@ export class SetupDoneScreen extends LitElement {
       <p class="intro" data-test="status" role="status">${t(this.#statusKey())}</p>
       ${this.#clockStep()}
       <div class="choices" data-test="links">
-        <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/"
-          >${t("done.description.dashboard")}</wt-choice-row
-        >
-        <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/till/"
-          >${t("done.description.till")}</wt-choice-row
-        >
-        ${
-          this.onboardingIntent === "demo"
-            ? html`<wt-choice-row
-                data-test="link-email"
-                heading=${t("done.link.email")}
-                href="/email"
-                >${t("done.description.email")}</wt-choice-row
-              >`
-            : nothing
-        }
+        ${this.startFailed ? this.#serverLink() : this.#appLinks()}
       </div>
       ${
-        this.openingHours === undefined
+        this.openingHours === undefined || this.startFailed
           ? nothing
           : html`<wt-card data-test="opening-hours">
               <p>${t("done.opening_hours")}</p>
               <a href="/opening-hours/view/year">${t("done.change_opening_hours")}</a>
             </wt-card>`
       }
-      ${this.restored === undefined ? nothing : this.#deviceSteps()} ${this.#breakGlass()}
+      ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
+      ${this.#breakGlass()}
       ${
-        this.onboardingIntent === "demo" || this.restored === "bucket"
+        this.onboardingIntent === "demo" || this.restored === "bucket" || this.startFailed
           ? nothing
           : html`<wt-card data-test="backup-nudge">
               <p>${t("done.backup_nudge")}</p>
@@ -446,9 +474,39 @@ export class SetupDoneScreen extends LitElement {
     `;
   }
 
+  #appLinks(): TemplateResult {
+    return html`<wt-choice-row
+        data-test="link-dashboard"
+        heading=${t("done.link.dashboard")}
+        href="/"
+        >${t("done.description.dashboard")}</wt-choice-row
+      >
+      <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/till/"
+        >${t("done.description.till")}</wt-choice-row
+      >
+      ${
+        this.onboardingIntent === "demo"
+          ? html`<wt-choice-row data-test="link-email" heading=${t("done.link.email")} href="/email"
+              >${t("done.description.email")}</wt-choice-row
+            >`
+          : nothing
+      }`;
+  }
+
+  #serverLink(): TemplateResult {
+    return html`<wt-choice-row data-test="link-server" heading=${t("done.link.server")} href="/"
+      >${t("done.description.server")}</wt-choice-row
+    >`;
+  }
+
   #statusKey():
-    "done.ready" | "done.waiting_for_clock" | "done.clock_confirmed" | "done.restarting" {
+    | "done.ready"
+    | "done.start_failed"
+    | "done.waiting_for_clock"
+    | "done.clock_confirmed"
+    | "done.restarting" {
     if (this.ready) return "done.ready";
+    if (this.startFailed) return "done.start_failed";
     if (!this.waitingForClock) return "done.restarting";
     return this.confirmed ? "done.clock_confirmed" : "done.waiting_for_clock";
   }

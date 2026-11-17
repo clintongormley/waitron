@@ -46,6 +46,8 @@ export const finishEn = {
   "done.heading_restored": "Restored from your backup",
   "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
   "done.ready": "The server is ready. Open it here:",
+  "done.start_failed":
+    "The server did not start. Open it to see what went wrong and what you can do:",
   "done.waiting_for_clock":
     "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.",
   "done.clock_confirmed": "Time confirmed. This page shows when the server is ready.",
@@ -65,8 +67,10 @@ export const finishEn = {
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
   "done.description.email": "Read Demo account emails, such as invitations and password resets.",
+  "done.description.server": "Its page has a button to try starting it again.",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
+  "done.link.server": "Server",
   "done.link.email": "Email inbox",
   "done.backup_nudge":
     "Your server is trading — but it has no backups yet, so there is no way back from a disk failure.",
@@ -142,6 +146,8 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.restarting":
     "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
   "done.ready": "El servidor está listo. Ábrelo desde aquí:",
+  "done.start_failed":
+    "El servidor no ha arrancado. Ábrelo para ver qué ha fallado y qué puedes hacer:",
   "done.waiting_for_clock":
     "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",
   "done.clock_confirmed": "Hora confirmada. Esta página te avisa cuando el servidor esté listo.",
@@ -162,8 +168,10 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.description.till": "Toma pedidos y cobra.",
   "done.description.email":
     "Lee los correos de cuentas de demostración, como invitaciones y restablecimientos de contraseña.",
+  "done.description.server": "Su página tiene un botón para intentar arrancarlo de nuevo.",
   "done.link.till": "Caja",
   "done.link.dashboard": "Panel",
+  "done.link.server": "Servidor",
   "done.link.email": "Bandeja de correo",
   "done.backup_nudge":
     "Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay forma de recuperarse de un fallo del disco.",

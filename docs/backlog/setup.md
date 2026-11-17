@@ -401,9 +401,11 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   address, the till it serves), the till's name and the bucket copy came back; press to serving
   6.1 s. A copy is downloaded again on every Review, Proceed and Restore (8 times in one restore),
   each 0.8-1.1 s for copies of 0.4-2 MB, and nothing timed out; that is kept as it is (lane B
-  ledger `a1420-ledger.md`, "BUCKET-RESTORE-RUN" and "re-run"). Two defects it found are fixed:
-  the failed-start recovery page now answers on the box's network address (#3682), and a restore
-  can no longer be sent before Review backup (#3691).
+  ledger `a1420-ledger.md`, "BUCKET-RESTORE-RUN" and "re-run"). Four defects it found are fixed:
+  the failed-start recovery page now answers on the box's network address (#3682), a restore
+  can no longer be sent before Review backup (#3691), the setup page no longer says the server is
+  ready when its start failed, and the restore forms take the copy's own environment from Review
+  (#3702).
 
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
   19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages

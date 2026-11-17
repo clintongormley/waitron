@@ -14,7 +14,7 @@ import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import {
   type KeptBucketRestoreRequest,
   dispatchBucketRestoreRequested,
@@ -22,7 +22,7 @@ import {
 } from "../events.js";
 import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
-import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { SetupRecoveryCopy, copyEnvironmentFrom } from "./recovery-copy.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { currentLocale, t, format } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -56,9 +56,13 @@ export class SetupRestoreBucketScreen extends LitElement {
     fieldStyles,
     errorStyles,
     actionsStyles,
+    statusStyles,
     css`
       :host {
         display: block;
+      }
+      .status {
+        margin-bottom: var(--wt-space-4);
       }
       .sensitive {
         font-weight: var(--wt-font-weight-bold);
@@ -97,10 +101,14 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
   @state() private kitFile?: File;
+  /** The environment Review switched the field to, until the person changes the kit or the field. */
+  @state() private followedEnvironment?: "production" | "preproduction";
   private readonly feedback = new FormFeedback(this);
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
+  /** Set once Review has switched the environment to the copy's, so it never switches back and forth. */
+  #followedCopy = false;
 
   #form(): BucketForm {
     return { kit: this.kit, environment: this.environment };
@@ -130,6 +138,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.packRefusal = undefined;
         this.kit = form.kit;
         this.environment = form.environment;
+        this.followedEnvironment = undefined;
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.venueConfirmed = false;
@@ -191,7 +200,9 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #edited(field: BucketField): void {
+    this.#followedCopy = false;
     if (field === "kit" || field === "environment") {
+      this.followedEnvironment = undefined;
       this.#scope?.changed();
       if (this.previewVenue !== undefined) {
         this.previewVenue = undefined;
@@ -200,6 +211,17 @@ export class SetupRestoreBucketScreen extends LitElement {
     }
     if (field === this.previewField) this.previewField = undefined;
     if (field === this.invalidField) this.feedback.dismiss("field");
+  }
+
+  async #followCopyEnvironment(environment: "production" | "preproduction"): Promise<void> {
+    this.environment = environment;
+    this.#edited("environment");
+    this.#followedCopy = true;
+    this.followedEnvironment = environment;
+    await this.updateComplete;
+    const copy = this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy");
+    await copy?.updateComplete;
+    await copy?.review();
   }
 
   /**
@@ -417,6 +439,19 @@ export class SetupRestoreBucketScreen extends LitElement {
           >${t("restore_bucket.environment_help")}</wt-help-tooltip
         >
       </wt-combobox>
+      ${
+        this.followedEnvironment !== undefined && environmentError === undefined
+          ? html`<p class="status" role="status" data-test="environment-followed">
+              ${format("restore_bucket.environment_followed", {
+                environment: t(
+                  this.followedEnvironment === "production"
+                    ? "restore_bucket.environment_live"
+                    : "restore_bucket.environment_preproduction",
+                ),
+              })}
+            </p>`
+          : nothing
+      }
       <label class="field">
         <input
           name="no-running-server"
@@ -481,6 +516,11 @@ export class SetupRestoreBucketScreen extends LitElement {
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
           event.stopPropagation();
           const error = event.detail.cause;
+          const copied = copyEnvironmentFrom(error, this.environment);
+          if (copied !== undefined && !this.#followedCopy) {
+            void this.#followCopyEnvironment(copied);
+            return;
+          }
           this.previewOldKit =
             error?.code === "backup.stream_kit_invalid" && error.params?.reason === "version";
           this.previewField =

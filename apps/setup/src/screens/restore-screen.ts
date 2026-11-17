@@ -15,15 +15,15 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import { type KeptRestoreRequest, dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
-import { SetupApi } from "../api/client.js";
+import { SetupApi, type ApiError } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
-import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { SetupRecoveryCopy, copyEnvironmentFrom } from "./recovery-copy.js";
 
 interface RestoreForm {
   artifact?: File;
@@ -40,9 +40,13 @@ export class SetupRestoreScreen extends LitElement {
     fieldStyles,
     errorStyles,
     actionsStyles,
+    statusStyles,
     css`
       :host {
         display: block;
+      }
+      .status {
+        margin-bottom: var(--wt-space-4);
       }
     `,
   ];
@@ -68,10 +72,14 @@ export class SetupRestoreScreen extends LitElement {
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   @state() private previewRefusal?: RestoreField;
+  /** The environment Review switched the field to, until the person changes the file or the field. */
+  @state() private followedEnvironment?: "production" | "preproduction";
 
   private readonly feedback = new FormFeedback(this);
   #baseline?: RestoreForm;
   #scope?: DraftScope<RestoreForm>;
+  /** Set once Review has switched the environment to the copy's, so it never switches back and forth. */
+  #followedCopy = false;
 
   #form(): RestoreForm {
     return {
@@ -106,6 +114,7 @@ export class SetupRestoreScreen extends LitElement {
         this.artifact = form.artifact;
         this.recoveryKey = form.recoveryKey;
         this.environment = form.environment;
+        this.followedEnvironment = undefined;
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.feedback.attempted = false;
@@ -155,9 +164,22 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   #edited(field: RestoreField): void {
+    this.#followedCopy = false;
+    if (field === "artifact" || field === "environment") this.followedEnvironment = undefined;
     this.#scope?.changed();
     if (field === this.invalidField) this.feedback.dismiss("field");
     this.previewRefusal = undefined;
+  }
+
+  async #followCopyEnvironment(environment: "production" | "preproduction"): Promise<void> {
+    this.environment = environment;
+    this.#edited("environment");
+    this.#followedCopy = true;
+    this.followedEnvironment = environment;
+    await this.updateComplete;
+    const copy = this.shadowRoot!.querySelector<SetupRecoveryCopy>("setup-recovery-copy");
+    await copy?.updateComplete;
+    await copy?.review();
   }
 
   /** The message under `field`: the client's own when it is missing, else a refusal about it. */
@@ -344,6 +366,19 @@ export class SetupRestoreScreen extends LitElement {
           >${t("restore.environment_help")}</wt-help-tooltip
         >
       </wt-combobox>
+      ${
+        this.followedEnvironment !== undefined && environmentError === undefined
+          ? html`<p class="status" role="status" data-test="environment-followed">
+              ${format("restore.environment_followed", {
+                environment: t(
+                  this.followedEnvironment === "production"
+                    ? "restore.environment_live"
+                    : "restore.environment_preproduction",
+                ),
+              })}
+            </p>`
+          : nothing
+      }
       <setup-recovery-copy
         @recovery-review-needed=${(event: CustomEvent<{ needed: boolean }>) => {
           event.stopPropagation();
@@ -364,8 +399,13 @@ export class SetupRestoreScreen extends LitElement {
         .artifact=${this.artifact}
         .recoveryKey=${this.recoveryKey}
         .environment=${this.environment}
-        @preview-refusal=${(event: CustomEvent<{ field?: RestoreField }>) => {
+        @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: RestoreField }>) => {
           event.stopPropagation();
+          const copied = copyEnvironmentFrom(event.detail.cause, this.environment);
+          if (copied !== undefined && !this.#followedCopy) {
+            void this.#followCopyEnvironment(copied);
+            return;
+          }
           this.previewRefusal = event.detail.field;
         }}
       ></setup-recovery-copy>
