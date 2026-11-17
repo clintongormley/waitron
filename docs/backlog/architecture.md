@@ -861,6 +861,10 @@ also qualifies the historical operation-description references in this section.
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
   complete job views. Attendance day processing, the outgoing-mail sender, certificate reminders
   and box-alert email decisions also run there; idle attendance checks take no write turn.
+  Daily housekeeping also removes expired sign-in challenges, ended or idle dashboard sessions
+  and photo bytes no image references, in separate batches. Command-answer cleanup is built but
+  stays off until the latest possible till retry is confirmed; its bill branch retains abandoned
+  bills because they have no closing timestamp.
   The remaining jobs still need moving onto the runner.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Floor splits now check the parties the till read, separately from the room layout revision;

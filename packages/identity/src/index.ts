@@ -28,6 +28,7 @@ export type { SecretCheck } from "./secret-check.js";
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endDeviceSessions, endSession, loginWithPin } from "./login.js";
+export { LONGEST_CHALLENGE_LIFETIME_MS } from "./sign-in-challenges.js";
 export {
   canUseDeviceProfile,
   listStaffAdmittedTo,

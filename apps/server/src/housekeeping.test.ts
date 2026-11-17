@@ -6,11 +6,24 @@ import {
   recordActivity,
   CORE_MIGRATIONS,
   printJobs,
+  signInChallenges,
+  dashboardSessions,
+  mediaBlobs,
+  mediaImages,
+  serviceCommands,
+  parties,
+  insertInChunks,
   withTransaction,
 } from "@waitron/db";
+import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
-import { clearOldActivityLog, clearOldPrintPayloads, housekeepingJob } from "./housekeeping.js";
+import {
+  clearOldActivityLog,
+  clearOldPrintPayloads,
+  housekeepingJob,
+  HOUSEKEEPING_STEPS,
+} from "./housekeeping.js";
 import { startClockState } from "./start-clock-check.js";
 import { startClockGateHolds } from "./start-clock-gate.js";
 import { createJobRunner } from "./job-runner.js";
@@ -48,6 +61,401 @@ const lengths = () =>
     sql`select length(payload) size, typeof(payload) storage from print_jobs order by rowid`,
   );
 
+function tidy(overrides: Partial<Parameters<typeof housekeepingJob>[0]> = {}) {
+  return housekeepingJob({
+    db: suite.db,
+    isPrimary: () => true,
+    clockUnconfirmed: () => false,
+    readClock: async () => ({ timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] }),
+    jitterSeed: "node",
+    now: () => now,
+    log: () => {},
+    maxWaitMs: 3600000,
+    ...overrides,
+  });
+}
+const pass = (duty = tidy(), signal = new AbortController().signal) => duty.pass({ now, signal });
+
+describe("daily housekeeping steps", () => {
+  it.each([-2, 2])(
+    "keeps live sign-ins during an unconfirmed clock %i hours away",
+    async (hours) => {
+      const personId = await seedPerson(suite.db);
+      await suite.db
+        .insert(dashboardSessions)
+        .values({ id: "live", personId, tokenHash: "a".repeat(64), lastSeenAt: now.toISOString() });
+      await suite.db.insert(signInChallenges).values({
+        id: "live",
+        kind: "passkey_login",
+        challenge: "live",
+        createdAt: now.toISOString(),
+        expiresAt: "2026-11-14T04:05:00.000Z",
+      });
+      await suite.db
+        .insert(mediaBlobs)
+        .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
+      let held = true;
+      let at = new Date(now.getTime() + hours * 3600000);
+      const duty = tidy({ clockUnconfirmed: () => held, now: () => at });
+      await duty.pass({ now: at, signal: new AbortController().signal });
+      expect((await suite.db.select().from(dashboardSessions)).map((row) => row.id)).toEqual([
+        "live",
+      ]);
+      expect((await suite.db.select().from(signInChallenges)).map((row) => row.id)).toEqual([
+        "live",
+      ]);
+      expect(await suite.db.select().from(mediaBlobs)).toEqual([]);
+      held = false;
+      at = new Date("2026-11-15T04:00:00.000Z");
+      await duty.pass({ now: at, signal: new AbortController().signal });
+      expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
+      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+    },
+  );
+
+  it("scans retained command answers once before fifty thousand deletable answers", async () => {
+    const began = performance.now();
+    const diagnostic = (stage: string, data = {}) =>
+      process.stderr.write(
+        JSON.stringify({ stage, elapsedMs: performance.now() - began, ...data }) + "\n",
+      );
+    diagnostic("command-fixture-start");
+    const personId = await seedPerson(suite.db);
+    const [party] = await suite.db
+      .insert(parties)
+      .values({ openedBy: personId, state: "closed", closedAt: old })
+      .returning();
+    await insertInChunks(
+      suite.db,
+      serviceCommands,
+      Array.from({ length: 250000 }, (_, index) => ({
+        id: String(index),
+        scopeKind: "party" as const,
+        scopeId: index < 200000 ? "missing" : party!.id,
+        submissionId: String(index),
+        kind: "finish",
+        fingerprint: "same",
+        result: {},
+      })),
+    );
+    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands")!;
+    diagnostic("command-fixture-seeded");
+    let scanned = 0,
+      largest = 0;
+    const controller = new AbortController();
+    await pass(
+      tidy({
+        steps: [
+          {
+            ...step,
+            enabled: true,
+            async deleteBatch(...args) {
+              const result = await step.deleteBatch(...args);
+              scanned += result.scanned;
+              largest = Math.max(largest, result.scanned);
+              if (scanned % 50000 === 0)
+                diagnostic("command-prune-progress", { scanned, cursor: result.cursor });
+              if (scanned > 250000) controller.abort();
+              return result;
+            },
+          },
+        ],
+      }),
+      controller.signal,
+    );
+    diagnostic("command-prune-complete", { scanned, largest });
+    expect(scanned).toBe(250000);
+    expect(largest).toBe(100);
+    expect(
+      suite.db.get(sql`select count(*) n from service_commands where scope_id = 'missing'`),
+    ).toEqual({ n: 200000 });
+    expect(
+      suite.db.get(sql`select count(*) n from service_commands where scope_id = ${party!.id}`),
+    ).toEqual({ n: 0 });
+  }, 120000);
+
+  it("keeps photo garbage on a secondary through the runner's startup and stop", async () => {
+    await suite.db
+      .insert(mediaBlobs)
+      .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
+    vi.useFakeTimers();
+    const runner = createJobRunner({ now: () => now, delay: fakeTimerDelay, log: () => {} });
+    try {
+      runner.add(tidy({ isPrimary: () => false }));
+      await vi.advanceTimersByTimeAsync(61000);
+    } finally {
+      await runner.stopJobs();
+      vi.useRealTimers();
+    }
+    expect(await suite.db.select().from(mediaBlobs)).toHaveLength(1);
+  });
+
+  it("honours a stop while a new step is waiting for the write turn", async () => {
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    await suite.db
+      .insert(mediaBlobs)
+      .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
+    const holding = withTransaction(suite.db, async () => {
+      entered();
+      await gate;
+    });
+    await started;
+    const controller = new AbortController();
+    let requested!: () => void;
+    const queued = new Promise<void>((resolve) => {
+      requested = resolve;
+    });
+    const original = suite.db.withWriteLock.bind(suite.db);
+    const lock = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockImplementation(<T>(body: () => Promise<T>) => {
+        requested();
+        return original(body);
+      });
+    let cleaning: Promise<unknown> | undefined;
+    try {
+      cleaning = pass(
+        tidy({
+          clockUnconfirmed: () => true,
+          steps: [HOUSEKEEPING_STEPS.find((step) => step.name === "media_blobs")!],
+        }),
+        controller.signal,
+      );
+      await queued;
+      controller.abort();
+    } finally {
+      release();
+      await holding;
+      await cleaning;
+      lock.mockRestore();
+    }
+    expect((await suite.db.select().from(mediaBlobs)).map((row) => row.hash)).toEqual([
+      "a".repeat(64),
+    ]);
+  });
+  it("commits short batches separately, yielding to a stop before another batch", async () => {
+    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "sign_in_challenges")!;
+    await insertInChunks(
+      suite.db,
+      signInChallenges,
+      Array.from({ length: 201 }, (_, index) => ({
+        id: String(index),
+        kind: "passkey_login" as const,
+        challenge: "test",
+        createdAt: old,
+        expiresAt: now.toISOString(),
+      })),
+    );
+    const controller = new AbortController();
+    const stop = turn().then(() => controller.abort());
+    const locks = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      await pass(tidy({ steps: [step] }), controller.signal);
+      await stop;
+      expect(await suite.db.select().from(signInChallenges)).toHaveLength(101);
+      expect(locks).toHaveBeenCalledTimes(2);
+      locks.mockClear();
+      await pass(tidy({ steps: [step] }));
+      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+      expect(locks).toHaveBeenCalledTimes(3);
+    } finally {
+      locks.mockRestore();
+    }
+  });
+
+  it("logs a failed step, runs the next step, then throws for the runner's failure alert", async () => {
+    const failure = new Error("prune refused");
+    await suite.db
+      .insert(mediaBlobs)
+      .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
+    const log = vi.fn();
+    const duty = tidy({
+      log,
+      steps: [
+        {
+          name: "sign_in_challenges",
+          enabled: true,
+          async deleteBatch() {
+            throw failure;
+          },
+        },
+        {
+          name: "media_blobs",
+          enabled: true,
+          async deleteBatch(tx) {
+            const deleted = (await tx.delete(mediaBlobs).returning()).length;
+            return { cursor: deleted, scanned: deleted, deleted };
+          },
+        },
+      ],
+    });
+    await expect(pass(duty)).rejects.toBe(failure);
+    expect(await suite.db.select().from(mediaBlobs)).toEqual([]);
+    expect(log).toHaveBeenCalledWith("error", "housekeeping.step_failed", {
+      step: "sign_in_challenges",
+      errorCode: "unknown",
+    });
+  });
+  it("deletes expired and far-future challenges while keeping live boundaries", async () => {
+    await suite.db.insert(signInChallenges).values(
+      [
+        ["expired", "2026-11-14T03:59:59.999Z"],
+        ["now", "2026-11-14T04:00:00.000Z"],
+        ["live", "2026-11-14T04:00:00.001Z"],
+        ["ten-minutes", "2026-11-14T04:10:00.000Z"],
+        ["clock-stepped", "2026-11-14T04:10:00.001Z"],
+      ].map(([id, expiresAt]) => ({
+        id: id!,
+        expiresAt: expiresAt!,
+        kind: "passkey_login" as const,
+        challenge: "challenge",
+        createdAt: old,
+      })),
+    );
+    await pass();
+    expect((await suite.db.select().from(signInChallenges)).map((row) => row.id).sort()).toEqual([
+      "live",
+      "ten-minutes",
+    ]);
+  });
+
+  it("deletes ended and idle sessions in either clock direction, keeping the thirty-minute boundaries", async () => {
+    const personId = await seedPerson(suite.db);
+    await suite.db.insert(dashboardSessions).values(
+      [
+        ["past", "2026-11-14T03:29:59.999Z", null],
+        ["past-boundary", "2026-11-14T03:30:00.000Z", null],
+        ["future-boundary", "2026-11-14T04:30:00.000Z", null],
+        ["future", "2026-11-14T04:30:00.001Z", null],
+        ["ten-ahead", "2026-11-14T04:10:00.000Z", null],
+        ["ended", "2026-11-14T04:00:00.000Z", "2026-11-14T04:00:00.000Z"],
+      ].map(([id, lastSeenAt, endedAt], index) => ({
+        id: id!,
+        personId,
+        tokenHash: index.toString(16).padStart(64, "0"),
+        lastSeenAt: lastSeenAt!,
+        endedAt,
+      })),
+    );
+    await pass();
+    expect((await suite.db.select().from(dashboardSessions)).map((row) => row.id).sort()).toEqual([
+      "future-boundary",
+      "past-boundary",
+      "ten-ahead",
+    ]);
+  });
+
+  it("deletes unnamed photo bytes and preserves both original and replacement bytes", async () => {
+    const [originalHash, sourceHash, garbage] = ["a", "b", "c"].map((char) => char.repeat(64));
+    await suite.db.insert(mediaBlobs).values(
+      [originalHash!, sourceHash!, garbage!].map((hash) => ({
+        hash,
+        format: "jpg" as const,
+        bytes: new Uint8Array([1, 2, 3]),
+      })),
+    );
+    await suite.db.insert(mediaImages).values({
+      filename: `${originalHash}.jpg`,
+      names: {},
+      originalHash: originalHash!,
+      sourceHash,
+    });
+    await pass();
+    expect((await suite.db.select().from(mediaBlobs)).map((row) => row.hash).sort()).toEqual([
+      originalHash,
+      sourceHash,
+    ]);
+  });
+
+  it("keeps command retry answers while the service-command step is disabled", async () => {
+    const personId = await seedPerson(suite.db);
+    const [party] = await suite.db
+      .insert(parties)
+      .values({ openedBy: personId, state: "closed", closedAt: old })
+      .returning();
+    await suite.db.insert(serviceCommands).values({
+      scopeKind: "party",
+      scopeId: party!.id,
+      submissionId: "retry",
+      kind: "finish",
+      fingerprint: "same",
+      result: { value: "answer" },
+    });
+    const before = await suite.db.select().from(serviceCommands);
+    await pass();
+    expect(await suite.db.select().from(serviceCommands)).toEqual(before);
+  });
+
+  it("deletes only command answers whose own party or bill finished over twenty-four hours ago", async () => {
+    const personId = await seedPerson(suite.db);
+    const scopes = [
+      ["old", "2026-11-13T03:59:59.999Z"],
+      ["boundary", "2026-11-13T04:00:00.000Z"],
+      ["recent", "2026-11-13T04:00:00.001Z"],
+      ["open", null],
+    ] as const;
+    for (const [id, closedAt] of scopes) {
+      await suite.db.insert(parties).values({
+        id: `party-${id}`,
+        openedBy: personId,
+        state: closedAt === null ? "open" : "closed",
+        closedAt,
+      });
+      await seedWorkingOrder(suite.db, {
+        id: `bill-${id}`,
+        status: closedAt === null ? "open" : "settled",
+        settledAt: closedAt,
+      });
+    }
+    await seedWorkingOrder(suite.db, { id: "bill-abandoned", status: "abandoned" });
+    for (const scopeKind of ["party", "bill"] as const) {
+      for (const id of [
+        "old",
+        "boundary",
+        "recent",
+        "open",
+        "missing",
+        ...(scopeKind === "bill" ? ["abandoned"] : []),
+      ]) {
+        await suite.db.insert(serviceCommands).values({
+          id: `${scopeKind}-${id}`,
+          scopeKind,
+          scopeId: `${scopeKind}-${id}`,
+          submissionId: "same",
+          kind: "finish",
+          fingerprint: "same",
+          result: {},
+        });
+      }
+    }
+    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands");
+    expect(step).toBeDefined();
+    const first = await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 1));
+    expect(first.deleted).toBe(1);
+    expect(
+      (await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 5, first.cursor)))
+        .deleted,
+    ).toBe(1);
+    expect((await suite.db.select().from(serviceCommands)).map((row) => row.id).sort()).toEqual([
+      "bill-abandoned",
+      "bill-boundary",
+      "bill-missing",
+      "bill-open",
+      "bill-recent",
+      "party-boundary",
+      "party-missing",
+      "party-open",
+      "party-recent",
+    ]);
+  });
+});
+
 describe("activity log housekeeping", () => {
   async function activity(at: string) {
     return withTransaction(suite.db, (tx) =>
@@ -60,6 +468,14 @@ describe("activity log housekeeping", () => {
       }),
     );
   }
+  it("checks the activity clock gate after print cleanup finishes", async () => {
+    const p = await printer();
+    await job(p.id);
+    const entry = await activity("2026-10-01T00:00:00.000Z");
+    await pass(tidy({ clockUnconfirmed: () => lengths()[0]!.size === 0 }));
+    expect(lengths()[0]!.size).toBe(0);
+    expect((await suite.db.select().from(activityLog)).map((row) => row.id)).toEqual([entry.id]);
+  });
   it("prunes the log at 30 days while print payloads keep their seven-day rule", async () => {
     const expired = await activity("2026-10-15T03:59:59.999Z");
     const boundary = await activity("2026-10-15T04:00:00.000Z");
