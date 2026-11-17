@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { ImageApi, LibraryImage } from "./client.js";
 import "./image-library.js";
 
@@ -514,3 +515,100 @@ it("conflict reload asks before discarding a photo's file draft and Keep retains
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(app.client.updateImage).toHaveBeenCalledTimes(1);
 });
+
+async function closeReportsDelivered(): Promise<void> {
+  const probe = document.createElement("dialog");
+  document.body.append(probe);
+  probe.show();
+  const reported = new Promise((resolve) =>
+    probe.addEventListener("close", resolve, { once: true }),
+  );
+  probe.close();
+  await reported;
+  probe.remove();
+}
+
+it.each([
+  ["upload", "saved"],
+  ["upload", "refused"],
+  ["edit", "saved"],
+  ["edit", "refused"],
+] as const)(
+  "keeps %s image save open through two delivered Escapes, then %s",
+  async (kind, outcome) => {
+    const library = await mount(kind === "upload");
+    const selected = new File(["bytes"], "bread.png", { type: "image/png" });
+    if (kind === "upload") file(library, selected);
+    await edit(library, "Edited bread");
+    let resolve!: (value: { image: LibraryImage; created: boolean }) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<{ image: LibraryImage; created: boolean }>((done, fail) => {
+      resolve = done;
+      reject = fail;
+    });
+    const write = kind === "upload" ? app.client.uploadImage : app.client.updateImage;
+    write.mockReturnValueOnce(pending);
+    const modal = library.shadowRoot!.querySelector("wt-modal")!;
+    const closed = vi.fn();
+    modal.addEventListener("wt-close", closed);
+    await userEvent.click(library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!);
+    await library.updateComplete;
+    if (kind === "upload")
+      expect(write).toHaveBeenCalledExactlyOnceWith(selected, { names: { es: "Edited bread" } });
+    else
+      expect(write).toHaveBeenCalledExactlyOnceWith("one", {
+        names: { es: "Edited bread", en: "Bread" },
+        framing: { x: 5000, y: 5000, zoom: 100 },
+        expectedRevision: 1,
+      });
+    expect(document.activeElement).toBe(document.body);
+    const native = modal.shadowRoot!.querySelector("dialog")!;
+    for (let press = 0; press < 2; press++) {
+      await userEvent.keyboard("{Escape}");
+      await closeReportsDelivered();
+      expect(native.open).toBe(true);
+      expect(closed).not.toHaveBeenCalled();
+      expect((await question()).open).toBe(false);
+      expect(
+        library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!
+          .value,
+      ).toBe("Edited bread");
+    }
+    if (outcome === "saved") {
+      resolve({ image: { ...image, names: { es: "Edited bread", en: "Bread" } }, created: true });
+      await vi.waitFor(() => expect(library.shadowRoot!.querySelector("wt-modal")).toBeNull());
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      expect(app.client.listImages).toHaveBeenCalledTimes(2);
+    } else {
+      reject({ code: "server.internal" });
+      await vi.waitFor(async () =>
+        expect(
+          (await formMessageOf(library.shadowRoot!.querySelector("wt-form-actions")!))?.textContent,
+        ).toContain("could not be saved"),
+      );
+      expect(native.open).toBe(true);
+      expect(
+        library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+          .disabled,
+      ).toBe(false);
+      expect(
+        library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!
+          .value,
+      ).toBe("Edited bread");
+      if (kind === "upload")
+        expect(
+          library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+            "wt-file-input[name=image-file]",
+          )!.files,
+        ).toEqual([selected]);
+      const delivered = editorClosed(library);
+      await userEvent.keyboard("{Escape}");
+      const q = await question();
+      await vi.waitFor(() => expect(q.open).toBe(true));
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await delivered;
+      expect(library.shadowRoot!.querySelector("wt-modal")).toBeNull();
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+    }
+  },
+);

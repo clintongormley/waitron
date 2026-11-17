@@ -1257,24 +1257,61 @@ it("sends one delete however often confirm is pressed while it is in flight", as
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
 });
 
-it("ignores Escape while a delete is in flight and closes once it completes", async () => {
-  const client = await mount();
-  const deletion = deferred<{ deleted: boolean; uses: [] }>();
-  client.deleteImage.mockReturnValueOnce(deletion.promise);
-  click("[data-test=delete-one]");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
-  );
-  click("[data-test=confirm-delete]");
-  await el.updateComplete;
-  (el.shadowRoot!.querySelector("wt-modal wt-button[slot=cancel]") as HTMLElement).focus();
-  await userEvent.keyboard("{Escape}");
-  await el.updateComplete;
-  expect(openDialog().open).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull();
-  deletion.resolve({ deleted: true, uses: [] });
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
-});
+it.each(["saved", "thrown", "used"] as const)(
+  "keeps image delete open through two delivered Escapes, then %s",
+  async (outcome) => {
+    const client = await mount();
+    const deletion = deferred<{ deleted: boolean; uses: ImageUsage[] }>();
+    client.deleteImage.mockReturnValueOnce(deletion.promise);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+    );
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    const closed = vi.fn();
+    modal.addEventListener("wt-close", closed);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!);
+    await el.updateComplete;
+    expect(client.deleteImage).toHaveBeenCalledExactlyOnceWith("one");
+    expect(document.activeElement).toBe(document.body);
+    for (let press = 0; press < 2; press++) {
+      await userEvent.keyboard("{Escape}");
+      await closeReportsDelivered();
+      expect(openDialog().open).toBe(true);
+      expect(modal.textContent).toContain("Pan");
+      expect(closed).not.toHaveBeenCalled();
+    }
+    if (outcome === "saved") {
+      deletion.resolve({ deleted: true, uses: [] });
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+      expect(client.listImages).toHaveBeenCalledTimes(2);
+    } else {
+      if (outcome === "thrown") {
+        deletion.reject({ code: "server.internal" });
+        await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be deleted"));
+        expect(
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            "[data-test=confirm-delete]",
+          )!.disabled,
+        ).toBe(false);
+      } else {
+        deletion.resolve({
+          deleted: false,
+          uses: [{ kind: "product", id: "p", menuId: "menu", name: "Toast", active: true }],
+        });
+        await vi.waitFor(() => expect(modal.textContent).toContain("Toast"));
+        expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
+      }
+      expect(openDialog().open).toBe(true);
+      expect(modal.textContent).toContain("Pan");
+      const delivered = dialogClosed(modal);
+      await userEvent.keyboard("{Escape}");
+      await delivered;
+      expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+      expect(client.deleteImage).toHaveBeenCalledOnce();
+    }
+  },
+);
 
 it("reports a failed usage lookup instead of opening the delete confirmation", async () => {
   const client = api();
@@ -2344,3 +2381,15 @@ it("keeps image name fields in main languages when regional versions are enabled
     ),
   ).toEqual(["name-en", "name-es"]);
 });
+
+async function closeReportsDelivered(): Promise<void> {
+  const probe = document.createElement("dialog");
+  document.body.append(probe);
+  probe.show();
+  const reported = new Promise((resolve) =>
+    probe.addEventListener("close", resolve, { once: true }),
+  );
+  probe.close();
+  await reported;
+  probe.remove();
+}

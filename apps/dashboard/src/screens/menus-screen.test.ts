@@ -7,6 +7,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
+  closeReportsDelivered,
   dialogClosed,
   documentProduct,
   documentSection,
@@ -4116,6 +4117,54 @@ describe("a row's own Delete section confirm and another menu", () => {
     return { el, client };
   }
 
+  it.each(["saved", "refused"] as const)(
+    "keeps row delete open through two delivered Escapes, then %s",
+    async (outcome) => {
+      const answer = deferred<void>();
+      const { el, client } = await confirmDrinksInLunch();
+      client.deleteSection.mockReturnValueOnce(answer.promise);
+      const dialog = modal(el, "delete-section");
+      const closed = vi.fn();
+      dialog.addEventListener("wt-close", closed);
+      await userEvent.click(inModal(el, "delete-section", '[data-test="delete-section-save"]'));
+      await el.updateComplete;
+      expect(client.deleteSection).toHaveBeenCalledExactlyOnceWith("s-drinks");
+      expect(document.activeElement).toBe(document.body);
+      const native = dialog.shadowRoot!.querySelector("dialog")!;
+      for (let press = 0; press < 2; press++) {
+        await userEvent.keyboard("{Escape}");
+        await closeReportsDelivered();
+        expect(native.open).toBe(true);
+        expect(closed).not.toHaveBeenCalled();
+        expect(text(dialog)).toContain("Drinks");
+      }
+      if (outcome === "saved") {
+        const delivered = dialogClosed(dialog);
+        answer.resolve();
+        await delivered;
+        expect(dialog.open).toBe(false);
+        expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
+      } else {
+        answer.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(() =>
+          expect(bottom(el, "delete-section")).resolves.toBe(codeMessage("menu_section.not_found")),
+        );
+        expect(native.open).toBe(true);
+        expect(
+          inModal<HTMLElementTagNameMap["wt-button"]>(
+            el,
+            "delete-section",
+            '[data-test="delete-section-save"]',
+          ).disabled,
+        ).toBe(false);
+        const delivered = dialogClosed(dialog);
+        await userEvent.keyboard("{Escape}");
+        await delivered;
+        expect(dialog.open).toBe(false);
+      }
+    },
+  );
+
   it("shows a refusal in the confirm while its menu is open, and nowhere else", async () => {
     const answer = deferred<void>();
     const { el } = await confirmDrinksInLunch(answer.promise);
@@ -5532,6 +5581,54 @@ describe("the Structure tree", () => {
         await openDelete(el);
         expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it"]);
       });
+
+      it.each(["saved", "refused"] as const)(
+        "keeps selected delete open through two delivered Escapes, then %s",
+        async (outcome) => {
+          const answer = deferred<void>();
+          const client = api({ deleteSections: vi.fn(() => answer.promise) });
+          const el = await mountLunch(client);
+          await pressSelect(el);
+          await tick(el, "m-drinks");
+          await openDelete(el);
+          const dialog = modal(el, "delete-selected");
+          const closed = vi.fn();
+          dialog.addEventListener("wt-close", closed);
+          await userEvent.click(confirmDelete(el));
+          await el.updateComplete;
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks"]);
+          expect(document.activeElement).toBe(document.body);
+          const native = dialog.shadowRoot!.querySelector("dialog")!;
+          for (let press = 0; press < 2; press++) {
+            await userEvent.keyboard("{Escape}");
+            await closeReportsDelivered();
+            expect(native.open).toBe(true);
+            expect(closed).not.toHaveBeenCalled();
+            expect(structure(el).selected).toEqual(["m-drinks"]);
+          }
+          if (outcome === "saved") {
+            const delivered = dialogClosed(dialog);
+            answer.resolve();
+            await delivered;
+            expect(dialog.open).toBe(false);
+            expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
+          } else {
+            answer.reject({ code: "menu_section.not_found" });
+            await vi.waitFor(() =>
+              expect(bottom(el, "delete-selected")).resolves.toBe(
+                codeMessage("menu_section.not_found"),
+              ),
+            );
+            expect(native.open).toBe(true);
+            expect(confirmDelete(el).disabled).toBe(false);
+            expect(structure(el).selected).toEqual(["m-drinks"]);
+            const delivered = dialogClosed(dialog);
+            await userEvent.keyboard("{Escape}");
+            await delivered;
+            expect(dialog.open).toBe(false);
+          }
+        },
+      );
 
       it("keeps the confirm open with the refusal's message and its Delete enabled", async () => {
         const deleting = deferred<void>();

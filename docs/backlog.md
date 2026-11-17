@@ -1054,7 +1054,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   A756 PR 8 Decision 10.
 
 
-- **Wt dialog lifecycle** (remaining: caret keys, menu/modifier/media repeated-key checks, covered-dialog reinsertion, wrappers, modifier picker and coverage leftovers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
+- **Wt dialog lifecycle** (remaining: caret keys, covered-dialog reinsertion, wrappers, modifier picker and coverage leftovers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
