@@ -1075,7 +1075,7 @@ describe("till-menu-browser", () => {
     describe("a product's customer name", () => {
       const original = currentContentLanguages();
       afterEach(() => setContentLanguages(original));
-      // Staff and customer names share no word, so a match proves which name was read.
+      // The special's staff and customer names share no word, so a match on it proves which name was read.
       const special = product("special", "Special seven", {
         customerName: { en: "Cod fritters", es: "Buñuelos de bacalao" },
       });
@@ -1107,6 +1107,12 @@ describe("till-menu-browser", () => {
         // the quail's customer name ("Codorniz carta") matches too.
         await search(el, "cod");
         expect(names(entries(el, "results"))).toEqual(["Codorniz", "Special seven"]);
+      });
+
+      it("falls back to the content default when the till's language has no customer name", async () => {
+        const { el } = await mountSpecial();
+        await search(el, "carta");
+        expect(names(entries(el, "results"))).toEqual(["Codorniz"]);
       });
     });
 
@@ -3105,6 +3111,7 @@ describe("A461 current-menu mixed search", () => {
       expect(names(entries(el, "results"))).toEqual(["Café français"]);
       await search(el, "private");
       expect(entries(el, "results")).toEqual([]);
+      // Spanish is not a content language now, so the espresso's Spanish-only customer name is not searched.
       await search(el, "espresso carta");
       expect(entries(el, "results")).toEqual([]);
       await search(el, "espresso KDS");

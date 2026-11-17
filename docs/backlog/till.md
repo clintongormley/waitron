@@ -638,7 +638,7 @@ later refinement.
 
 ## The till's home page (Task 9, #729)
 
-Search matches a product's staff name, its customer name in the till's language, and displayed section names (A461). Every `/api/menu-state` read from an enrolled device reads the device, once
+Every `/api/menu-state` read from an enrolled device reads the device, once
 per zone it polls (the counter's, and the open table's while its order shows), and each read also
 reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token check is one SHA-256 of the token on every read, with nothing
 remembered between reads.
