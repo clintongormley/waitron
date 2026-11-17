@@ -1545,7 +1545,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 
 
-- **CI incidents to watch.** One table keeps the remaining CI incidents, their evidence and what to retain on recurrence. [Detail](backlog/ci.md#ci-incidents-to-watch)
+- **CI incidents to watch.** The table groups retained CI sightings with their evidence and what to retain on recurrence. [Detail](backlog/ci.md#ci-incidents-to-watch)
 
 - **Finish qualifying CI's server routing and action setup** (bundle of 2, size M). Checked real-run records now cover tools/history/API, PR planner pickup, scheduled rescue, one no-op overflow, natural blind fallback and fresh-capacity route choices, including an idle-server choice followed by successful server jobs and natural agreeing-row stale-count acceptance followed by a successful hosted run. A1424/A1440 still need scheduled idle pickup, complete server/browser and coverage runs, an image guest, per-job/remaining-workflow evidence and the full-day queue measurement; the historical planner cause remains unproved. Planner recovery from short workflow lists still needs natural-run evidence; standalone `check` tolerates short queued lists with an explicit partial observation, while running/job lists and other health commands retain their rules. A935 waits for a natural setup-download stall before its [experiment proposal](superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is revisited; build no new guest capability now, and the job limit remains unqualified. The bundle remains open. [Detail](backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
 
