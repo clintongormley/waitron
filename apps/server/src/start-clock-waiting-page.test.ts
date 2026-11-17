@@ -99,6 +99,16 @@ const dateIn = (locale: string, ms: number) =>
 
 const words = START_CLOCK_WAITING_WORDS["en-GB"];
 
+/** Moves the page's clock on a second at a time until `done` holds: the page arms each later look
+ * only once it has read the last look's answer, which a single jump can pass. */
+async function runUntil(page: Page, done: () => boolean | Promise<boolean>) {
+  await expect
+    .poll(async () => (await done()) || (await page.clock.runFor(1_000), await done()), {
+      timeout: 10_000,
+    })
+    .toBe(true);
+}
+
 async function withPage(locale: string, run: (page: Page) => Promise<void>) {
   const page = await browser!.newPage({ locale });
   try {
@@ -181,20 +191,14 @@ it("asks again once the server no longer holds the confirmation, as after a refu
     await expect.poll(() => page.locator("#clock-confirmed").isVisible()).toBe(true);
     const requests: string[] = [];
     page.on("request", (request) => requests.push(new URL(request.url()).pathname));
-    for (const look of [1, 2]) {
-      const reply = page.waitForResponse(
-        (response) => new URL(response.url()).pathname === "/till/",
-      );
-      await page.clock.runFor(5_000);
-      await (await reply).finished();
-      await expect.poll(() => requests.filter((path) => path === "/till/").length).toBe(look);
-    }
+    for (const look of [1, 2])
+      await runUntil(page, () => requests.filter((path) => path === "/till/").length === look);
     expect(await page.locator("#clock-confirmed").isVisible()).toBe(true);
     expect(requests.filter((path) => path.endsWith("/compare"))).toEqual([]);
     box.dropConfirmation(box.confirmation()!);
-    await page.clock.runFor(5_000);
+    await runUntil(page, () => requests.filter((path) => path.endsWith("/compare")).length === 1);
     await expect.poll(() => page.locator("#clock-confirmed").isVisible()).toBe(false);
-    await expect.poll(() => requests.filter((path) => path.endsWith("/compare")).length).toBe(1);
+    expect(requests.filter((path) => path.endsWith("/compare"))).toHaveLength(1);
     expect(await page.locator("#clock-step").isVisible()).toBe(true);
   }));
 
@@ -286,7 +290,7 @@ it("leaves for the server once the wait ends without a confirmation, as when its
     await expect.poll(() => looks.filter((path) => path === "/till/").length).toBe(1);
     expect(await page.locator("#clock-step").isVisible()).toBe(true);
     box.control.finished = true;
-    await page.clock.runFor(5_000);
+    await runUntil(page, async () => (await page.locator("h1").innerText()) === "Trading");
     await leftWithKeyCleared(page);
   }));
 
@@ -311,7 +315,5 @@ it("gives up on a look that stalls and looks again, so a request hung across the
     box.control.stallLooks = false;
     box.control.finished = true;
     // The stalled look's deadline, then the next look.
-    await page.clock.runFor(5_000);
-    await page.clock.runFor(5_000);
-    await expect.poll(() => page.locator("h1").innerText()).toBe("Trading");
+    await runUntil(page, async () => (await page.locator("h1").innerText()) === "Trading");
   }));
