@@ -163,6 +163,16 @@ function goesWith(card: KitchenCard): TemplateResult | typeof nothing {
   </p>`;
 }
 
+/** A card with no dish released yet that holds both a Requested dish and a held one: each dish says its
+ * own state and the heading says none. */
+function mixedHeld(card: KitchenCard): boolean {
+  return (
+    card.since === null &&
+    card.items.some((item) => item.phase === "requested") &&
+    card.items.some((item) => item.phase !== "requested")
+  );
+}
+
 function afterPeriodWords(item: StationQueueItem & { afterPeriod: string }): string {
   return t(
     item.afterPeriodUnasked ? "station.after_period_unasked" : "station.after_period",
@@ -1167,7 +1177,7 @@ export class TillStationQueue extends LitElement {
     ${group === null ? nothing : html`<span class="group-name">${groupName(group)}</span>`}
     ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
     ${
-      group?.state === "held" || since === null
+      (group?.state === "held" || since === null) && !mixedHeld(card)
         ? html`<span class="held-note" data-group-held
             >${t(
               since === null && card.items.every((item) => item.phase === "requested")
@@ -1240,11 +1250,11 @@ export class TillStationQueue extends LitElement {
   }
 
   /** A dish at its card's column says nothing, the column does; one further on says its state, and a
-   * held dish on a card that is not itself held says so (D12). */
+   * held or Requested dish on a released card or a `mixedHeld` one says so (D12). */
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
     let word: string | undefined;
     if (item.firedAt === null) {
-      if (card.since !== null) {
+      if (card.since !== null || mixedHeld(card)) {
         word = t(item.phase === "requested" ? "pass.waiting_for_pass" : "station.group_held");
       }
     } else if (COLUMNS.indexOf(item.state) > COLUMNS.indexOf(card.column)) {

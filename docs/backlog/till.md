@@ -1570,13 +1570,10 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Bundle: Status words on the pass and beside it
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The pass's header does not say what the pass covers (left open by A773-2 B4a).** A797 §3.5 asks
   for a line naming the stations and zones a pass covers; it needs new words.
-- **A card holding both held dishes and dishes asked for says "Held, not released", and the
-  asked-for dish carries no mark (left open by A773-2 B4b, its plan's D78).** It can happen once a
-  station waits for the pass (PR C), when a waiter fires one held dish of a held group.
 - **The table screen's sent list puts "at the pass" under a "Fired" heading (seen in A773-2 B4b's
   review; the owner's call).** «en el pase» rows sit under «Marchado», and "at the pass" is lower
   case beside capitalised status words.
