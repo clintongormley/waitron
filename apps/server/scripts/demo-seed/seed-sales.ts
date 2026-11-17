@@ -11,11 +11,19 @@ import { withIssuanceTransaction } from "@waitron/core";
 // A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
 // the past.
 
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { prepareIssueClock, type FiscalBackend, type TrustedClock } from "@waitron/fiscal";
-import { readVenue, nodes, withTransaction, type Transaction } from "@waitron/db";
+import {
+  allocateOrderNumber,
+  readVenue,
+  nodes,
+  withTransaction,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
@@ -35,6 +43,7 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
+  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
@@ -264,10 +273,27 @@ export async function seedSales(
         on,
       );
 
+      const origin = jobOrigin("demo_seed");
+      // A bill of its own, settled at the sale's instant, because Bills closed counts settled
+      // working orders. Inserted directly: `createOpenOrder` re-prices from the live menu.
+      const workingOrderId = randomUUID();
+      await tx.insert(workingOrders).values({
+        id: workingOrderId,
+        source: origin.source,
+        deviceId: origin.deviceId,
+        nodeId,
+        orderNumber: await allocateOrderNumber(tx, nodeId),
+        status: "open",
+        invoiceType: "F2",
+        openedAt: instant.toISOString(),
+        dining: takeaway ? "takeaway" : "eat_in",
+      });
+
       const input: RecordSaleInput = {
         operationDescription: venue.operationDescription,
-        origin: jobOrigin("demo_seed"),
+        origin,
         nodeId,
+        workingOrderId: brandWorkingOrderId(workingOrderId),
         seriesId,
         locale: invoiceLocale,
         invoiceLocales: [invoiceLocale],
@@ -282,6 +308,10 @@ export async function seedSales(
       };
 
       await recordSale(tx, backend, input);
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: instant.toISOString() })
+        .where(eq(workingOrders.id, workingOrderId));
     });
   }
 

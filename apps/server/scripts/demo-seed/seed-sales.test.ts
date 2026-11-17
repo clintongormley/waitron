@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import type { TrustedClock } from "@waitron/fiscal";
-import { saleLines, sales, withTransaction } from "@waitron/db";
+import { saleLines, sales, withTransaction, workingOrders } from "@waitron/db";
 import { previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,6 +15,7 @@ import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   addDecimal,
+  centsToDecimal,
   compareDecimal,
   decimal,
   nodeId as brandNodeId,
@@ -190,6 +191,64 @@ describe("seedSales", () => {
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
     expect(read.close.cash.byOrigin.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
+  });
+
+  it("files each sale under a bill settled at its instant, so Bills closed equals the day's sales", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 83_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: "es-ES",
+    })();
+    const start = Date.now();
+    await seedSales(suite.db, {
+      venue: venueFor(venue),
+      invoiceLocale: "es-ES",
+      days: 2,
+      products: PRODUCTS,
+    });
+
+    const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
+    const read = await withTransaction(suite.db, async (tx) => {
+      const saleRows = await tx
+        .select({
+          issuedAt: sales.issuedAt,
+          total: sales.total,
+          status: workingOrders.status,
+          settledAt: workingOrders.settledAt,
+        })
+        .from(sales)
+        .leftJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId));
+      const close = await computeDailyClose(tx, {
+        cutoverChanges: [],
+        nodeIds: [brandNodeId(venue.nodeId)],
+        businessDay,
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+      });
+      return { saleRows, close };
+    });
+
+    expect(read.saleRows.length).toBeGreaterThan(0);
+    for (const row of read.saleRows) {
+      expect({ status: row.status, settledAt: row.settledAt }).toEqual({
+        status: "settled",
+        settledAt: row.issuedAt,
+      });
+    }
+
+    const daySales = read.saleRows.filter((row) => row.issuedAt.slice(0, 10) === businessDay);
+    expect(daySales.length).toBeGreaterThan(0);
+    const billsClosed = read.close.departmentTakings.map((row) => row.billsClosed);
+    expect(billsClosed.reduce((n, bills) => n + bills.count, 0)).toBe(daySales.length);
+    const billed = billsClosed.reduce(
+      (sum, bills) => addDecimal(sum, bills.total),
+      decimal("0.00"),
+    );
+    const sold = daySales.reduce(
+      (sum, row) => addDecimal(sum, centsToDecimal(row.total)),
+      decimal("0.00"),
+    );
+    expect(compareDecimal(billed, sold)).toBe(0);
   });
 
   it("rates a deli sale's lines at their takeaway class, or their served class when they have none", async () => {
