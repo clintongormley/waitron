@@ -1,6 +1,6 @@
 # Restore integrity test: check offloading without a timer race
 
-**Status:** Proposed by Codex; Claude read it once (217 seconds), and the corrections below incorporate its findings. Watcher cleared the corrected test-only plan and generic-index exception on 17 November 2026 at 06:09 CET (Lane I questions.md). The owner authorizes the queue item; no owner approval of this design is claimed. Execute inline with TDD after clearance.
+**Status:** Implemented by Codex. Claude reviewed the plan once (217 seconds); the watcher cleared the corrected test-only plan and generic-index exception on 17 November 2026 at 06:09 CET (Lane I questions.md). The owner authorizes the queue item; no owner approval of this design is claimed. Local verification below is complete; PR checks and landing follow the campaign workflow.
 
 **Ask:** RESTORE-TICKS-FLAKE in Lane I's queue: diagnose the twice-failing restore timer test on Linux under load, fix the cause, show a test-only repair still fails with main-thread checking, explain #3508, and delete the two backlog paragraphs. The exact item and measured traces are in `~/waitron-campaign-i/receipts/restore-ticks-flake-20261117/{item,diagnosis}.md`.
 
@@ -16,11 +16,13 @@
 
 **Implementation and proof:**
 
-- [ ] Retain the Linux loaded/unloaded injected reproduction and historical uncertainty in the PR. No separate spy/framework control is needed: the mutation must produce recorded main-thread calls.
-- [ ] In an installed disposable checkout, mutate each boundary separately: `isCopyIntact` in `handover-integrity.ts`, then restore’s `checkIntegrity` in `restore-stream.ts` bypassing `checkCopyIntegrity`. Each mutation first awaits `setImmediate`, then performs the real read-only main-thread integrity/foreign-key queries with the existing false-on-damage handling. Require the new case to fail with recorded preparation calls while the existing `setImmediate` case still passes; restore and require green. These mutations prove the new guard adds coverage beyond yielding once. No production mutation enters the feature checkout or PR.
-- [ ] Run the changed file and the unchanged integrity suite: `pnpm --filter @waitron/server exec vitest run src/restore-stream.test.ts src/handover-integrity.test.ts`. Also check the new case against Lane L’s current integrity change in a disposable candidate before landing; preserve its live worktree. Record test counts and results. Preserve every other assertion, including damaged files and missing parents.
-- [ ] Remove settled backlog text. Run `finish-branch`, the normal push hook, selected current-head CI and `land-branch` under the existing campaign rules.
+- [x] Retain the Linux loaded/unloaded injected reproduction and historical uncertainty in the PR. No separate spy/framework control is needed: the mutation must produce recorded main-thread calls.
+- [x] In an installed disposable checkout, mutate each boundary separately: `isCopyIntact` in `handover-integrity.ts`, then restore’s `checkIntegrity` in `restore-stream.ts` bypassing `checkCopyIntegrity`. Each mutation first awaits `setImmediate`, then performs the real read-only main-thread integrity/foreign-key queries with the existing false-on-damage handling. Require the new case to fail with recorded preparation calls while the existing `setImmediate` case still passes; restore and require green. These mutations prove the new guard adds coverage beyond yielding once. No production mutation enters the feature checkout or PR.
+- [x] Run the changed file and the unchanged integrity suite: `pnpm --filter @waitron/server exec vitest run src/restore-stream.test.ts src/handover-integrity.test.ts`. Also check the new case against Lane L’s current integrity change in a disposable candidate before landing; preserve its live worktree. Record test counts and results. Preserve every other assertion, including damaged files and missing parents.
+- Remove settled backlog text (done). Continue through `finish-branch`, the normal push hook, selected current-head CI and `land-branch` under the existing campaign rules.
 
 **Excluded:** Production changes, Lane L's read-only-open work, other test edits beyond that healthy-case merge, worker gates, new helpers, fixture-size thresholds, timer changes, retries and CI changes. A production finding returns to the watcher before editing.
 
 **Expected physical additions + deletions:** production 0; tests 50–65; docs 55–80; total 105–145. Reproduction scripts remain in local receipts. Ask the watcher before growth beyond 217 changed lines.
+
+**Local result (17 November 2026):** Both deferred-main-thread mutations failed the new assertion with two preparation calls while the existing yield case passed; restored controls passed. Both suites passed 96 cases, including with Lane L’s current three-file integrity/store overlay in a disposable checkout. Physical diff before this status update: production +0/−0; tests +7/−36; support 0; docs +27/−21; total 91 changed lines. The forecast above was an estimate.
