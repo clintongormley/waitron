@@ -92,7 +92,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   let p2: string;
   let p3: string;
 
-  // `useVenueDb` empties every table after each test.
+  // `useVenueDb` empties the data tables after each test.
   beforeEach(async () => {
     await seedFixtureVenue("Here");
     p1 = await seedPrinter("Bar");

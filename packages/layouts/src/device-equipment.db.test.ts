@@ -149,7 +149,7 @@ describe("which printer each of a device's roles resolves to", () => {
   let drawer: string;
   let away: string;
 
-  // `useVenueDb` empties every table after each test.
+  // `useVenueDb` empties the data tables after each test.
   beforeEach(async () => {
     await seedFixtureVenue("Here");
     const first = await seedDevice(suite.db, { label: "Till A" });

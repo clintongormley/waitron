@@ -26,15 +26,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
   checker and were left.
 
-## `apps/server/README.md`'s list of 503 causes, and test comments that say "empties every table"
-
-- #637's review read the README's list of `503` causes (near line 688) as naming one that answers
-  200 — read, not run. "Empties every table" in `packages/bookings/src/schema/bookings.test.ts`
-  (near line 65), `packages/db/src/schema/menu/migrations.test.ts` (near line 596),
-  `packages/layouts/src/device-equipment.db.test.ts` (near line 152) and
-  `packages/layouts/src/device-printers.db.test.ts` (near line 95) is wider than the reset, which
-  leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
-
 ## Payments test points and transfer lock cases left by the comment-pruning sweeps
 
 - The fake SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout
@@ -1038,7 +1029,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-15 entries, size M.
+14 entries, size M.
 
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
@@ -1068,9 +1059,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **`apps/server/README.md`'s list of 503 causes, and test comments that say "empties every
-  table"**
-  [Detail](architecture.md#appsserverreadmemds-list-of-503-causes-and-test-comments-that-say-empties-every-table)
 - **Payments test points and transfer lock cases left by the comment-pruning sweeps**
   [Detail](architecture.md#payments-test-points-and-transfer-lock-cases-left-by-the-comment-pruning-sweeps)
 - **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
