@@ -210,7 +210,8 @@ the full `/finish-branch` wave.
   "Bills closed 0 · €0.00" beside hundreds of euros in Tender total. The till's sale path always runs
   under a bill, minting one when the request names none (`till-sale.ts:2412–2415`; read, not run),
   so this is not a real-venue event; the seed is not changed, and the PR says so; it is listed in
-  `docs/backlog.md`'s Setup section.
+  `docs/backlog.md`'s Setup section. _2026-11-17: the demo seed now files each sale under a settled
+  bill (branch `fix/demo-bills-closed`), and that backlog entry is gone._
 - **New frozen-close race tests**: already tested in Tasks 0–3 (table above).
 - **Top sellers, categories, VAT and period reports**: they count invoices on the day they were
   issued (`business-day.ts:229–233`) and say nothing about money received; nothing to change.

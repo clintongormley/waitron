@@ -43,7 +43,6 @@ const SALES_COLUMNS = [
   "counterparty_country_code",
   "authorized_by",
   "operator_id",
-  "working_order_id",
   "counterparty_address",
   "taxpayer_domicile",
 ];
@@ -191,7 +190,9 @@ function columns(alias: string, names: readonly string[]): SQL {
 async function readPracticeSales() {
   const db = suite.db;
   const { rows: saleRows } = await db.execute(
-    sql`select ${columns("s", SALES_COLUMNS)} from sales s order by s.invoice_number`,
+    sql`select ${columns("s", SALES_COLUMNS)},
+          s.working_order_id is not null as has_working_order
+        from sales s order by s.invoice_number`,
   );
   const { rows: lineRows } = await db.execute(
     sql`select ${columns("l", SALE_LINES_COLUMNS)} from sale_lines l

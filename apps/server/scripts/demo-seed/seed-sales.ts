@@ -11,11 +11,21 @@ import { withIssuanceTransaction } from "@waitron/core";
 // A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
 // the past.
 
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { prepareIssueClock, type FiscalBackend, type TrustedClock } from "@waitron/fiscal";
-import { readVenue, nodes, withTransaction, type Transaction } from "@waitron/db";
+import {
+  allocateOrderNumber,
+  insertInChunks,
+  readVenue,
+  nodes,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
@@ -29,12 +39,15 @@ import type { GrossLine, VatClass } from "@waitron/menu";
 import {
   AppError,
   decimal,
+  decimalToCents,
+  stringToThousandths,
   sumDecimals,
   toScale,
   MONEY_SCALE,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
+  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
@@ -264,10 +277,43 @@ export async function seedSales(
         on,
       );
 
+      const origin = jobOrigin("demo_seed");
+      // Bills closed counts a sale on the day its bill was settled, and the Orders screen shows a
+      // bill's dishes from its lines, so each sale gets a bill with its lines, settled at its
+      // instant. Written directly: `createOpenOrder` re-prices from the live menu.
+      const workingOrderId = randomUUID();
+      await tx.insert(workingOrders).values({
+        id: workingOrderId,
+        source: origin.source,
+        deviceId: origin.deviceId,
+        nodeId,
+        orderNumber: await allocateOrderNumber(tx, nodeId),
+        status: "open",
+        invoiceType: "F2",
+        openedAt: instant.toISOString(),
+        dining: takeaway ? "takeaway" : "eat_in",
+      });
+      await insertInChunks(
+        tx,
+        workingOrderLines,
+        grossLines.map((line, i) => ({
+          workingOrderId,
+          lineNo: line.lineNo,
+          name: line.name,
+          descriptions: line.descriptions,
+          quantity: stringToThousandths(line.quantity),
+          unitPriceGross: decimalToCents(line.grossUnitPrice),
+          vatClass: chosen[i]!.vatClass,
+          takeawayVatClass: chosen[i]!.takeawayVatClass ?? chosen[i]!.vatClass,
+          lineTotal: decimalToCents(line.lineGross),
+        })),
+      );
+
       const input: RecordSaleInput = {
         operationDescription: venue.operationDescription,
-        origin: jobOrigin("demo_seed"),
+        origin,
         nodeId,
+        workingOrderId: brandWorkingOrderId(workingOrderId),
         seriesId,
         locale: invoiceLocale,
         invoiceLocales: [invoiceLocale],
@@ -282,6 +328,10 @@ export async function seedSales(
       };
 
       await recordSale(tx, backend, input);
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: instant.toISOString() })
+        .where(eq(workingOrders.id, workingOrderId));
     });
   }
 
