@@ -581,7 +581,7 @@ elige un responsable o encargado y pídele que introduzca su PIN.
 
 Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
 la estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
-pagado. La cuenta sigue pendiente por el importe completo. La mesa sigue abierta mientras quede
+pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. La mesa sigue abierta mientras quede
 otra cuenta por cerrar o comida pagada por servir. Sirve lo que queda y elige **Cerrar mesa**
 cuando todos hayan terminado.
 

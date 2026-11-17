@@ -137,9 +137,9 @@ describe("a printed bill", () => {
     expect(await salesOf(bill.tabId)).toEqual([
       { id: bill.saleId, total: 5500, settledAt: expect.any(String) },
     ]);
-    expect((await tendersOfBill(venue, bill.tabId)).map((row) => row.amount).sort()).toEqual([
-      1500, 1500, 2500,
-    ]);
+    expect(
+      (await tendersOfBill(venue, bill.tabId)).map((row) => row.amount).sort((a, b) => a - b),
+    ).toEqual([1500, 1500, 2500]);
   });
 
   it("a card part payment completed later settles the printed ticket", async () => {
@@ -188,9 +188,9 @@ describe("a printed bill", () => {
       { id: bill.saleId, total: 3000, settledAt: expect.any(String) },
     ]);
     expect(await statusOf(venue, bill.tabId)).toBe("settled");
-    expect((await tendersOfBill(venue, bill.tabId)).map((row) => row.amount).sort()).toEqual([
-      2500, 500,
-    ]);
+    expect(
+      (await tendersOfBill(venue, bill.tabId)).map((row) => row.amount).sort((a, b) => a - b),
+    ).toEqual([500, 2500]);
   });
 
   it("a part payment taken before printing is kept and counted", async () => {
@@ -205,9 +205,9 @@ describe("a printed bill", () => {
     expect(await salesOf(party.tabId)).toEqual([
       { id: sale!.id, total: 3000, settledAt: expect.any(String) },
     ]);
-    expect((await tendersOfBill(venue, party.tabId)).map((row) => row.amount).sort()).toEqual([
-      2500, 500,
-    ]);
+    expect(
+      (await tendersOfBill(venue, party.tabId)).map((row) => row.amount).sort((a, b) => a - b),
+    ).toEqual([500, 2500]);
   });
 
   it("a whole collect of a printed bill holding a part payment is still refused", async () => {

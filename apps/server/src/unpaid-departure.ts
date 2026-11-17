@@ -41,6 +41,8 @@ import {
   priceForIssuance,
   readInvoiceNumbers,
   refusePaymentInFlight,
+  refusePendingPartPayment,
+  refuseRefundInProgress,
 } from "./working-order.js";
 import "./errors.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
@@ -111,7 +113,11 @@ export async function recordUnpaidDeparture(
       throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
   }
   if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);
-  else await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
+  else {
+    await refuseRefundInProgress(tx, [req.billId]);
+    await refusePendingPartPayment(tx, [req.billId], "any");
+    await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
+  }
 
   let saleId = issued?.saleId;
   let due = issued?.amountDue;

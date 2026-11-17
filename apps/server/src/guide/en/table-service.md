@@ -540,7 +540,7 @@ departure** under that bill. Check its amount and give a reason. If approval is 
 supervisor or manager and ask them to enter their PIN.
 
 Only that bill’s unserved food is stopped, with cancellation slips for the station. The other
-bills keep their food, so you can still serve a paid guest’s dessert. The bill remains owed in full.
+bills keep their food, so you can still serve a paid guest’s dessert. What is still owed on the bill is recorded as unpaid; any amount already paid is kept.
 The table stays open while another bill needs closing or paid food still needs serving. Serve the
 remaining food, then choose **Finish table** when everyone has finished.
 
