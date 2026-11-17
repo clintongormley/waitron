@@ -2,9 +2,9 @@
 
 **Goal:** Keep the station chooser and its buttons still while staff choose a station; retire the four backlog observations once current evidence and watcher clearance settle them.
 **Authority:** Exact ask: `/Users/clintongormley/waitron-campaign-d/queue.md`, D-DIALOG-LOOSE-ENDS, “Ask”.
-The queue authorizes the outcome. This separately authored plan awaits Claude review and watcher clearance; no owner plan approval is claimed.
-**Scope decision for the watcher:** The reproduced station defect belongs to the till, despite the queue's dashboard heading.
-Clear that boundary and keeping the specified Back wording explicitly before building; do not substitute an unrelated dashboard station screen.
+The queue authorizes the outcome. Separate Sol-high draft checked by the driver; Claude reviewed it in `receipts/dialog-loose-ends/plan-review.md` (213 seconds), with all corrections taken.
+The watcher cleared the plan and both scope boundaries at `/Users/clintongormley/waitron-campaign-d/questions.md`, “WATCHER 2026-11-17 07:08 — D-DIALOG-LOOSE-ENDS: plan CLEARED, both boundaries”: “the station note is the till chooser (A331 batch 5, #1414), and its one local body-width fix is fine in this PR even though it is the till, since it is reproduced and small; the measured closures go docs-only in the same PR.”
+That clearance retains the theme dialog's specified Back wording. No owner approval of this design is recorded.
 **Execution:** Inline, using `superpowers:executing-plans` and TDD after clearance; no new helpers or framework.
 
 ## Evidence and smallest result

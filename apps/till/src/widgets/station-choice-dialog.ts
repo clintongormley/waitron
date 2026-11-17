@@ -44,6 +44,10 @@ export class TillStationChoiceDialog extends LitElement {
     baseStyles,
     css`
       .body {
+        width: min(
+          var(--wt-form-max-width),
+          calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
+        );
         display: grid;
         gap: var(--wt-space-3);
       }
