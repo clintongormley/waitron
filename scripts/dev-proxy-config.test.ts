@@ -20,13 +20,23 @@ const stateDir = mkdtempSync(join(import.meta.dirname, "dev-proxy-state-"));
 
 const EXPECTED_ROUTES: Record<string, string[]> = {
   dashboard: ["/api", "/help", "/legal", "/management-api", "/media"],
-  setup: ["/api/node/handover", "/legal", "/setup-api"],
+  setup: [
+    "/api/node/handover",
+    "/ca.crt",
+    "/help",
+    "/legal",
+    "/setup-api",
+    "/setup/connection",
+    "/setup/trust",
+  ],
   till: ["/api", "/help", "/legal", "/media"],
 };
 
 function staticConfig(config: UserConfigExport): UserConfig {
-  expect(config).toBeTypeOf("object");
-  return config as UserConfig;
+  const resolved =
+    typeof config === "function" ? config({ command: "serve", mode: "development" }) : config;
+  expect(resolved).toBeTypeOf("object");
+  return resolved as UserConfig;
 }
 
 function proxyFrontEnds(): { app: string; configPath: string }[] {
@@ -55,6 +65,15 @@ afterAll(() => {
 });
 
 describe("development server proxy", () => {
+  it("keeps the deployed setup base relative", async () => {
+    const { default: config } = (await import("../apps/setup/vite.config.js")) as {
+      default: UserConfigExport;
+    };
+    const resolved = await (typeof config === "function"
+      ? config({ command: "build", mode: "production" })
+      : config);
+    expect(resolved.base).toBe("./");
+  });
   it("uses HTTP without a box leaf and accepts the self-signed HTTPS leaf when present", () => {
     expect(devServerProxy({ stateDir: join(stateDir, "absent") })).toEqual({
       target: "http://127.0.0.1:8080",

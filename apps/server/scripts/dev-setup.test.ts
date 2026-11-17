@@ -500,6 +500,8 @@ describe("dev-setup run as a command", () => {
             ...process.env,
             WAITRON_ENV: "dev",
             WAITRON_SEED_SALES_DAYS: "0",
+            WAITRON_DASHBOARD_VITE_PORT: "5291",
+            WAITRON_SETUP_VITE_PORT: "5292",
             WAITRON_STATE_DIR: join(workDir, "state"),
             WAITRON_VENUE_DIR: join(workDir, "venue"),
             WAITRON_DEV_ENV_FILE: settingsFile,
@@ -521,6 +523,8 @@ describe("dev-setup run as a command", () => {
     }).toEqual({ exists: before !== null, sameBytes: true, sameTime: true });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(`dev-setup: wrote ${settingsFile}`);
+    expect(result.stdout).toContain("dashboard  http://localhost:5291/manage/");
+    expect(result.stdout).toContain("setup      http://localhost:5292/setup/");
     expect(parseEnvFile(readFileSync(settingsFile, "utf8")).WAITRON_VENUE_DIR).toBe(
       join(workDir, "venue"),
     );
