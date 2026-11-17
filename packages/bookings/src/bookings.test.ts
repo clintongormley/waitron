@@ -10,6 +10,7 @@ import {
   nowIso,
   withTransaction,
   diningTables,
+  floorZones,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
@@ -18,6 +19,7 @@ import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
+import { BOOKINGS_TABLE_REMOVAL } from "./table-removal.js";
 import {
   cancelBooking,
   completeBooking,
@@ -237,6 +239,67 @@ describe("createBooking + listBookings", () => {
   });
 });
 
+describe("the table name each listed booking carries", () => {
+  async function bookAt(createdBy: string, contactName: string, tableId?: string): Promise<string> {
+    const { id } = await scoped((tx) =>
+      createBooking(tx, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName,
+        createdBy,
+        ...(tableId === undefined ? {} : { tableId }),
+      }),
+    );
+    return id;
+  }
+
+  async function listedNames(): Promise<Record<string, string | null>> {
+    const listed = await scoped((tx) => listBookings(tx, { date: "2026-08-20" }));
+    return Object.fromEntries(listed.map((b) => [b.contactName, b.tableName]));
+  }
+
+  it("names an assigned table by its current label, after a rename", async () => {
+    const { createdBy } = await setupVenue();
+    const tableId = await insertDiningTable("Window");
+    await bookAt(createdBy, "Ana", tableId);
+    await db.update(diningTables).set({ label: "Bay window" }).where(eq(diningTables.id, tableId));
+    expect(await listedNames()).toEqual({ Ana: "Bay window" });
+  });
+
+  it("names an assigned table that is off today's floor or in a switched-off zone", async () => {
+    const { createdBy } = await setupVenue();
+    const offFloor = await insertDiningTable("Patio");
+    const zoneOff = await insertDiningTable("Garden");
+    await bookAt(createdBy, "Ana", offFloor);
+    await bookAt(createdBy, "Bea", zoneOff);
+    await db.update(diningTables).set({ onFloor: false }).where(eq(diningTables.id, offFloor));
+    const [garden] = await db
+      .select({ zoneId: diningTables.zoneId })
+      .from(diningTables)
+      .where(eq(diningTables.id, zoneOff));
+    await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, garden!.zoneId));
+    expect(await listedNames()).toEqual({ Ana: "Patio", Bea: "Garden" });
+  });
+
+  it("names a removed table by its kept name, and no table as null", async () => {
+    const { createdBy } = await setupVenue();
+    const tableId = await insertDiningTable("Terrace 7");
+    await bookAt(createdBy, "Ana", tableId);
+    await bookAt(createdBy, "Bea");
+    await scoped((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, tableId, "Terrace 7"));
+    expect(await listedNames()).toEqual({ Ana: "Terrace 7", Bea: null });
+  });
+
+  it("prefers the assigned table's current label over a kept name", async () => {
+    const { createdBy } = await setupVenue();
+    const tableId = await insertDiningTable("Window");
+    const id = await bookAt(createdBy, "Ana", tableId);
+    await db.update(bookings).set({ tableLabel: "Old name" }).where(eq(bookings.id, id));
+    expect(await listedNames()).toEqual({ Ana: "Window" });
+  });
+});
+
 describe("createBooking — optional table link", () => {
   it("accepts an ACTIVE table id", async () => {
     const { createdBy } = await setupVenue();
@@ -416,6 +479,47 @@ describe("updateBooking", () => {
     await expect(
       scoped((tx) => updateBooking(tx, id, { tableId: randomUUID() })),
     ).rejects.toMatchObject({ code: "table.not_found" });
+  });
+
+  describe("a removed table's kept name", () => {
+    async function bookingAtRemovedWindow(): Promise<string> {
+      const { createdBy } = await setupVenue();
+      const window = await insertDiningTable("Window");
+      const { id } = await scoped((tx) =>
+        createBooking(tx, {
+          bookingDate: "2026-08-20",
+          bookingTime: "20:00",
+          partySize: 4,
+          contactName: "Taylor",
+          tableId: window,
+          createdBy,
+        }),
+      );
+      await scoped((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, window, "Window"));
+      return id;
+    }
+
+    async function storedTable(id: string) {
+      const row = await scoped((tx) => getBooking(tx, id));
+      return { tableId: row!.tableId, tableLabel: row!.tableLabel };
+    }
+
+    it("is dropped when another table is assigned, and stays gone once that is cleared", async () => {
+      const id = await bookingAtRemovedWindow();
+      const terrace = await insertDiningTable("Terrace");
+      await scoped((tx) => updateBooking(tx, id, { tableId: terrace }));
+      expect(await storedTable(id)).toEqual({ tableId: terrace, tableLabel: null });
+      await scoped((tx) => updateBooking(tx, id, { tableId: null }));
+      expect(await storedTable(id)).toEqual({ tableId: null, tableLabel: null });
+    });
+
+    it("is kept by an edit of another field, whether or not it resends the empty table", async () => {
+      const id = await bookingAtRemovedWindow();
+      await scoped((tx) => updateBooking(tx, id, { partySize: 6, tableId: null }));
+      expect(await storedTable(id)).toEqual({ tableId: null, tableLabel: "Window" });
+      await scoped((tx) => updateBooking(tx, id, { notes: "Birthday" }));
+      expect(await storedTable(id)).toEqual({ tableId: null, tableLabel: "Window" });
+    });
   });
 });
 

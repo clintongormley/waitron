@@ -5,8 +5,6 @@ their full text.
 
 ## Loose ends left by A429 slice 1 (#1493).
 
-- The bookings list shows no table for any booking, and a past booking's kept table name
-  (`bookings.table_label`) is stored but shown nowhere.
 - Nothing at boot level tests that the till API receives the table-removal seats (each enabled
   module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
   API's wiring.
@@ -1003,6 +1001,10 @@ table the last reset's copy leaves off while placing a part; on any other date, 
 naming no set, every part and no joined table (`requireActiveTable`,
 `packages/bookings/src/bookings.ts`).
 Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
+A booking whose table is later taken off today's floor refuses every edit with `table.not_found`:
+the dashboard form resends the booking's own table and `updateBooking` checks any table it is sent
+(run against `updateBooking`, not the form; found reviewing the Bookings list's table names,
+2026-11-18).
 
 
 ## A1101. Short names on the floor map where a full name does not fit, and on printed kitchen tickets.

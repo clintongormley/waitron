@@ -16,6 +16,7 @@ export interface Booking {
   notes: string | null;
   tableId: string | null;
   tableLabel: string | null;
+  tableName: string | null;
   tabId: string | null;
   status: BookingStatus;
   createdBy: string;

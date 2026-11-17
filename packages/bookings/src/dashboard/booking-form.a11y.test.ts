@@ -34,6 +34,7 @@ describe.each(["light", "dark"] as const)("booking Save accessibility (%s)", (th
           notes: "Window",
           tableId: null,
           tableLabel: null,
+          tableName: null,
           tabId: null,
           status: "booked",
           createdBy: "manager",
