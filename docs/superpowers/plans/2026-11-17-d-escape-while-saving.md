@@ -11,8 +11,8 @@
 
   | File | Exact proposed test name and paths |
   | --- | --- |
-  | `apps/dashboard/src/screens/menus-screen.test.ts` | `keeps %s delete open through two delivered Escapes, then %s`: row `delete-section` / `deleteSection`, selection `delete-selected` / `deleteSections`; success and refusal. Reuse `api`, `deferred`, `mountLunch`, `rowAction`, `modal`, `inModal`, and selection helpers `pressSelect`, `tick`, `openDelete`, `confirmDelete`. |
-  | `apps/dashboard/src/screens/modifiers-screen.test.ts` | `keeps %s delete open through two delivered Escapes, then %s`: extras / `deleteExtraList` and options / `deleteOptionList`; success and refusal. Reuse `api`, `mount`, `selectTab`, `clickInTable`, `deleteDialog`, `confirmDelete` and the existing held-write pattern. |
+  | `apps/dashboard/src/screens/menus-screen.test.ts` | `keeps %s delete open through two delivered Escapes, then %s`: row `delete-section` / `deleteSection`, selection `delete-selected` / `deleteSections`; success and refusal. Reuse `api`, `deferred`, `mountLunch`, `rowAction`, `modal`, `inModal`, and selection helpers `pressSelect`, `tick`, `openDelete`, `confirmDelete` within their existing nested describe blocks; keep row/selection cases in their respective scopes. |
+  | `apps/dashboard/src/screens/modifiers-screen.test.ts` | `keeps %s delete open through two delivered Escapes, then %s`: extras / `deleteExtraList` and options / `deleteOptionList`; success and refusal, using the existing inline promise gate. Reuse `api`, `mount`, `selectTab`, `clickInTable`, `deleteDialog`, `confirmDelete` and the existing held-write pattern. |
   | `packages/media/src/dashboard/image-library.test.ts` | `keeps %s image save open through two delivered Escapes, then %s`: upload / `uploadImage`, edit / `updateImage`. Also `keeps image delete open through two delivered Escapes, then %s`: `deleteImage`. Reuse `mount`, `deferred`, `field`, `chooseFile`, `openDialog`, `dialogClosed`, `bottomOf`; strengthen existing single-Escape cases. |
 
   Import dashboard delivery/close helpers from `apps/dashboard/src/widgets/test-helpers.ts`; media gets only a local copy of the existing throwaway-dialog delivery helper, without an app dependency. Settle each promise: success asserts one correct payload, refreshed data and closure after the delivery barrier (media removes its window; do not await an event from a removed modal). Refusal asserts localized error, exact names/file/framing or deletion selection/target, native window open and retry enabled. Keep the media edit's real Escape dismissal after refusal, awaiting its existing `dialogClosed`.
@@ -24,7 +24,7 @@ From the checkout root, append `-t 'two delivered Escapes'` for reproduction, th
 
 ```sh
 pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts src/screens/modifiers-screen.test.ts
-pnpm --filter @waitron/media exec vitest run --project browser src/dashboard/image-library.test.ts
+pnpm --filter @waitron/media exec vitest run --project browser src/dashboard/image-library.test.ts src/dashboard/image-library.unsaved.test.ts
 ```
 
 If UI changes, also run `pnpm --filter @waitron/ui exec vitest run src/components/wt-dialog.test.ts`. Check machine headroom; run sequentially. No whole-package local suites; normal hook/current-head scoped CI through `finish-branch`.
