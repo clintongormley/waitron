@@ -1,8 +1,8 @@
 # English list comma
 
 **Scope:** ENGLISH-LIST-COMMA in `~/waitron-campaign-i/queue.md`. Smallest usable
-result: the till and printed kitchen cues say “Grill, Fryer and Pastry”, matching
-the dashboard. This is a plan only; the campaign driver owns review and execution.
+result: printed kitchen cues say “Grill, Fryer and Pastry”, matching the dashboard
+and the production till. The till already receives `en-GB`; its tests also use `en`.
 
 **Reuse and boundary:** Keep `conjunctionList(items: readonly string[], locale: string): string`
 in `packages/shared/src/list.ts`, its formatter cache and `Intl.ListFormat`.
@@ -18,7 +18,9 @@ English spelling is `en-GB` (`packages/shared/src/locales.ts:7`). Staffing's
 `packages/staffing/src/dashboard/staffing-season-painter.ts:280` passes the current locale;
 its `painter-parts.ts:101` already uses `formatLocale()`. Venue-service's
 `packages/venue-service/src/dashboard/floor-plan-set-delete-dialog.ts:21` already selects
-`en-GB` explicitly. Bare `en` is the only additional input these paths need normalized.
+`en-GB` explicitly. `readKitchenLanguage` (`apps/server/src/kitchen-language.ts:6–7`) supplies bare
+`en` in production; the till resolves `en-GB` (`apps/till/src/i18n/t.ts:6` and
+`apps/till/src/till-app.ts:6055`). Only printed kitchen output visibly changes.
 
 - [ ] In `packages/shared/src/list.test.ts`, add one `en` row expecting
   `Wine, Beer and Soup` to the existing “joins the items as an 'and' list in the locale
@@ -45,7 +47,7 @@ its `painter-parts.ts:101` already uses `formatLocale()`. Venue-service's
   `pnpm --filter @waitron/dashboard exec vitest run src/i18n/list.test.ts`.
   Require passing test counts; run browser packages sequentially with the house memory gate.
 - [ ] In `docs/backlog/till.md`, delete only the serial-comma entry under
-  `Bundle: The "Goes with" line` and change its count to 1. Change the matching
+  `Bundle: The "Goes with" line` and change its count to `1 entry, size S.`. Change the matching
   `docs/backlog.md` index count to 1. Leave the counter-order owner question intact.
 
 **Exclusions:** Spanish behavior, explicit region preferences, counter-order cue rules,
