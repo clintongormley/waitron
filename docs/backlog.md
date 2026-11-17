@@ -689,7 +689,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   from the ⋮ for a paid bill once something does.
   [Detail](backlog/till.md#a1261-a-full-invoice-for-a-bill-already-paid-from-the-tables-)
 
-
 - **Other till sentences still send the person to somebody else, against the refusal rule (left
   open by A1382, #3605 and #3604; fiscal and invoice wording remains).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
