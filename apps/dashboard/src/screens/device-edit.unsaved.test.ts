@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
+import { LiveData } from "@waitron/dashboard-kit";
 import { LeaveController, registerIcons, type WtModal } from "@waitron/ui";
 import type { DashboardApi, DeviceRow, DeviceProfile, Station } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -345,7 +346,9 @@ it("device success commits before reader failure without committing the reader",
 });
 it("successful writes clear drafts before a refused list refresh", async () => {
   let reads = 0;
+  const liveData = new LiveData();
   const { screen } = await mount({
+    liveData,
     listDevices: async () => {
       if (reads++) throw { code: "connection.failed" };
       return [device];

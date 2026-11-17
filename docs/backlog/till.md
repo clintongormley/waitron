@@ -555,16 +555,15 @@ below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a senten
 Review suggestions #1235 did not take, listed in its description: the edit
 route checks permission before the device id where revoke checks the id first; its body is the
 whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
-`rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
-Pair repeat some request-body building; seven unread `devices.*` strings.
+`rowClickable` and `rowActivation` could be one option; Edit and
+Pair repeat some request-body building. A save reading the device list twice is a decision, not
+open: [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## What W104 left open (#1225)
 
 Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were looked at only through the browser
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
-address has not been looked at; (3) a device's knock is refused if the window shut while its body was
-arriving, but open periods are told apart only by their start time, to the millisecond
-(`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
+address has not been looked at.
 
 ## Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268
 
@@ -1710,10 +1709,11 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
     disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
-  - W105 (#1235): review suggestions #1235 did not take.
+  - W105 (#1235): review suggestions #1235 did not take that are still open: the edit route's
+    checks, request body and repeated writes of the device row, two table options that could be one,
+    and repeated request building.
     [Detail](till.md#what-w105-left-open-1235)
-  - W104 (#1225), not acted on: the dialogs were never looked at on a box; a device's request to join that was still arriving
-    when the window shut is not refused if the window reopened within the same millisecond.
+  - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
   - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
     preview and the adjustments report should use `wt-relative-time`, and whether its inline
@@ -1729,6 +1729,17 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
 ## Decisions and deliberate limits
+
+- **Saving a device on Devices (Edit or Pair) reads the device list twice while the live connection
+  is up (watcher, 2026-11-17, lane B, not the owner; the owner may overrule).** "Follow
+  docs/developers/dashboard-live-updates.md:123-128 — call this.api.liveData?.invalidate([{ type:
+  "devices" }]) after the Edit save and the Pair accept, so a person always sees their own save
+  through the screen's watch." After the write the screen marks the list out of date, so its own watch reads it again, and the
+  server's change notice asks once more, so a person sees their own save even when the event stream
+  has gone silent ([why](../developers/dashboard-live-updates.md)). Measured in a browser test with
+  the notice stood in for after the screen's own read: one read from the save, a second from the
+  notice ("… with no live notice, read once, and once more on the notice" in
+  `apps/dashboard/src/screens/devices-screen.test.ts`).
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,

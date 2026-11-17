@@ -618,16 +618,19 @@ describe("POST /api/device/join", () => {
   }
 
   it.each([
-    { reopened: true, label: "shut and reopened" },
-    { reopened: false, label: "shut" },
+    { reopened: true, frozen: false, label: "shut and reopened" },
+    { reopened: true, frozen: true, label: "shut and reopened within the same millisecond" },
+    { reopened: false, frozen: false, label: "shut" },
   ])(
     "refuses a knock admitted before the window $label while its body arrived, and keeps no row",
-    async ({ reopened }) => {
+    async ({ reopened, frozen }) => {
       const venue = await setupVenue(suite.db);
       let offset = 0;
+      const wallAtStart = Date.now();
+      const steadyAtStart = performance.now();
       const mode = createPairingMode({
-        now: () => Date.now() + offset,
-        steady: () => performance.now() + offset,
+        now: () => (frozen ? wallAtStart : Date.now() + offset),
+        steady: () => (frozen ? steadyAtStart : performance.now() + offset),
       });
       const app = mountApp(venue.cfg, undefined, mode);
       const first = mode.open();
@@ -635,7 +638,7 @@ describe("POST /api/device/join", () => {
       await knock.reading;
       mode.release(first.holdId);
       if (reopened) {
-        offset += 1_000;
+        if (!frozen) offset += 1_000;
         mode.open();
       }
       knock.finish();
@@ -702,7 +705,7 @@ describe("POST /api/device/join", () => {
     }
   });
 
-  it("refuses once a knock in flight while the wall clock steps back, then admits the next", async () => {
+  it("admits a knock in flight while the wall clock steps back, and the next, keeping both", async () => {
     const venue = await setupVenue(suite.db);
     const wall = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -715,17 +718,17 @@ describe("POST /api/device/join", () => {
       await inFlight.reading;
       vi.setSystemTime(wall - 60_000);
       inFlight.finish();
-      const refused = await inFlight.response;
-      expect(refused.status).toBe(403);
-      expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
-        "device.pairing_closed",
-      );
+      expect((await inFlight.response).status).toBe(200);
+      vi.advanceTimersByTime(1);
       const next = await send(app, "POST", "/api/device/join", { body: { name: "Next till" } });
       expect(next.status).toBe(200);
-      const { rows } = await suite.db.execute<{ label: string }>(
-        sql`select label from join_requests `,
+      const { rows } = await suite.db.execute<{ label: string; created_at: string }>(
+        sql`select label, created_at from join_requests order by label`,
       );
-      expect(rows).toEqual([{ label: "Next till" }]);
+      expect(rows).toEqual([
+        { label: "Late till", created_at: new Date(wall - 60_000).toISOString() },
+        { label: "Next till", created_at: new Date(wall - 59_999).toISOString() },
+      ]);
     } finally {
       vi.useRealTimers();
     }
