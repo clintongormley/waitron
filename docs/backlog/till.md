@@ -1423,9 +1423,8 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 
 3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** A booking seated from
-  the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
-  smaller gaps. Left open by A429 slice 4 (#1526).
+- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out
+  its target the slow way, and smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 - **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
   plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part.
