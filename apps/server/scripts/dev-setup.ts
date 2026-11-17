@@ -449,14 +449,14 @@ async function main(): Promise<void> {
   const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
   const serverPort = process.env.WAITRON_HTTP_PORT?.trim() || result.env.WAITRON_HTTP_PORT;
   console.log(`  till       http://localhost:${tillPort}`);
-  console.log(`  dashboard  http://localhost:${dashboardPort}`);
+  console.log(`  dashboard  http://localhost:${dashboardPort}/manage/`);
   console.log(
     `  server     localhost:${serverPort}   (HTTP fresh; HTTPS with a preserved box leaf)`,
   );
   // A provisioned box boots in trading mode, which mounts no `/setup-api` route, so the wizard `pnpm
   // dev` starts does nothing.
   console.log(
-    `  setup      http://localhost:${setupPort}   (setup wizard — inactive in trading mode)`,
+    `  setup      http://localhost:${setupPort}/setup/   (setup wizard — inactive in trading mode)`,
   );
   console.log("");
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);

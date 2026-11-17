@@ -179,6 +179,28 @@ describe("dev-onboard run as a command", () => {
     if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
   });
 
+  it("prints the setup entry on its assigned development port", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", fileURLToPath(new URL("./dev-onboard.ts", import.meta.url))],
+      {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        encoding: "utf8",
+        timeout: 60_000,
+        env: {
+          ...process.env,
+          WAITRON_ENV: "dev",
+          WAITRON_SETUP_VITE_PORT: "5292",
+          WAITRON_STATE_DIR: join(workDir, "url-state"),
+          WAITRON_VENUE_DIR: join(workDir, "url-venue"),
+          WAITRON_DEV_ENV_FILE: join(workDir, "url-settings.env"),
+        },
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("wizard     http://localhost:5292/setup/");
+  }, 90_000);
+
   it("--reset under production refuses before removing the venue folder", () => {
     const venueDir = join(workDir, "venue");
     mkdirSync(venueDir);

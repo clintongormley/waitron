@@ -48,6 +48,9 @@ import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lock
 
 declare module "vitest/browser" {
   interface BrowserCommands {
+    followDevDeviceLink: (
+      href: string,
+    ) => Promise<{ url: string; tillOrigin: string; html: string }>;
     emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
   }
 }
@@ -6444,6 +6447,19 @@ describe("the banner's email inbox link", () => {
       "Panel",
     );
     expect(bar!.shadowRoot!.querySelector('a[href="/"]')).not.toBeNull();
+  });
+
+  it("opens the till through the development redirect from the Demo bar's Device link", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: withIntent(true, "demo"),
+    });
+    await flush(el);
+    const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
+    const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/"]')!;
+    expect(link).not.toBeNull();
+    const result = await commands.followDevDeviceLink(link.getAttribute("href")!);
+    expect(result.url).toBe(`${result.tillOrigin}/`);
+    expect(result.html).toContain("<title>Waitron Till</title>");
   });
 
   it("keeps the Live label in the banner without a Demo bar", async () => {

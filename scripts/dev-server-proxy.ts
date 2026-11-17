@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ProxyOptions } from "vite";
+import type { Plugin, ProxyOptions } from "vite";
 
 const DEFAULT_STATE_DIR = fileURLToPath(new URL("../apps/server/src/state", import.meta.url));
 
@@ -13,6 +14,37 @@ export function devPort(variable: string, fallback: number): number {
     throw new Error(`${variable} must be a port from 1 to 65535`);
   }
   return port;
+}
+
+export function devCrossAppLinks(app: "till" | "dashboard" | "setup"): Plugin {
+  return {
+    name: "waitron-dev-cross-app-links",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const url = request.url ?? "";
+        const pathname = url.split("?")[0]!;
+        const destination =
+          app !== "till" && pathname === "/"
+            ? devPort("WAITRON_TILL_VITE_PORT", 5190)
+            : app !== "dashboard" && /^\/manage(?:\/|$)/.test(pathname)
+              ? devPort("WAITRON_DASHBOARD_VITE_PORT", 5191)
+              : undefined;
+        if (destination !== undefined) {
+          response.writeHead(302, { location: `http://localhost:${destination}${url}` });
+          response.end();
+        } else if (app === "setup" && pathname.startsWith("/handover/")) {
+          void readFile(join(server.config.root, "index.html"), "utf8")
+            .then((html) => server.transformIndexHtml("/setup/index.html", html, url))
+            .then((html) => {
+              response.setHeader("content-type", "text/html; charset=utf-8");
+              response.end(html);
+            })
+            .catch(next);
+        } else next();
+      });
+    },
+  };
 }
 
 function resolvedStateDir(): string {

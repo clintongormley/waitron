@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   console.log("dev-onboard: migrated an UNPROVISIONED database — the box will boot in SETUP MODE.");
   console.log("");
   console.log(
-    `  wizard     http://localhost:${setupPort}   (the setup UI — apps/setup Vite dev server, open this)`,
+    `  wizard     http://localhost:${setupPort}/setup/   (the setup UI — apps/setup Vite dev server, open this)`,
   );
   console.log(
     `  server     https://localhost:${serverPort}   (self-signed cert — browser warning is expected)`,

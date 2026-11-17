@@ -1609,9 +1609,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
-- **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
-  [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
-
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**
   [Detail](backlog/ci.md#drizzle-kit-03111-left-out-on-delete-when-it-generated-an-alter-table--add--references-on-this-engine-while-its-snapshot-kept-it).
 
@@ -1927,7 +1924,7 @@ already paid for:
 - **Update this file as entries finish**, in the same PR (_How to keep this file honest_).
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
-<http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
+<http://localhost:5190>, dashboard <http://localhost:5191/manage/>, setup <http://localhost:5192/setup/>, server
 :8080 (the owner's stack; Claude's stacks get the ports `wa-wt ls` shows). The till enrols itself
 on first load in dev mode. Till PIN **5555**; dashboard **owner@demo.waitron.local / dashPass123**.
 `dev:setup` seeds three menus (~44 products with images), a floor plan (5 zones / ~16 tables),

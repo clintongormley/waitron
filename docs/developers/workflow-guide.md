@@ -301,6 +301,12 @@ venue is a directory of SQLite files on the host, not a container. There are eig
 slot _k_ serves the till, dashboard, setup, server and print agent on 5190, 5191, 5192, 8080 and
 9110 plus 100 × _k_, so the second slot is 5290, 5291, 5292, 8180 and 9210.
 
+Open the dashboard at `/manage/` on its port and the setup wizard at `/setup/` on its port.
+An existing cross-app link redirects you to that app's own port, where its API and live-reload
+requests use that app's development server. For example, `curl -I http://localhost:5290/manage/devices` returns `302` with
+`Location: http://localhost:5291/manage/devices`. The `WAITRON_*_VITE_PORT` values select
+your stack's destinations. The deployed setup build keeps its relative base.
+
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
 It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
