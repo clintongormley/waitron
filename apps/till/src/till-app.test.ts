@@ -15318,9 +15318,8 @@ describe("till-app", () => {
       expect(app.activeTabKey).toBe("counter"); // back to the first tab
     });
 
-    it("resets any leftover drill/active tab on login (Finding 2 — defense in depth)", async () => {
-      // Defense in depth: even a login that somehow followed a NON-logout teardown must not inherit a
-      // prior operator's drill or tab. Simulate that stale state directly, then log a fresh operator in.
+    it("resets any leftover drill/active tab on login", async () => {
+      // A login that followed a NON-logout teardown must not inherit a prior operator's drill or tab.
       const el = await toShellCounter();
       emit(shell(el)!, "logout");
       await flush(el);
@@ -15328,7 +15327,20 @@ describe("till-app", () => {
       // A `schedule` drill (renders cleanly from the empty roster) standing in for any stale drill.
       app.drill = { kind: "schedule" };
       app.activeTabKey = "floor";
+      // Restoring the address's destination at the end of login also empties the drill, so only a
+      // check while login still waits on its menu read sees whether login cleared it first.
+      let releaseOffers!: () => void;
+      const offers = vi.mocked(currentApi.listDefaultZoneOffers);
+      const answer = await offers();
+      offers.mockClear();
+      offers.mockImplementationOnce(
+        () => new Promise((resolve) => (releaseOffers = () => resolve(answer))),
+      );
       emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
+      expect(offers).toHaveBeenCalledOnce();
+      expect(app.drill).toBeUndefined();
+      releaseOffers();
       await flush(el);
       expect(app.drill).toBeUndefined();
       expect(shell(el)!.activeScreen).toBe("counter");

@@ -33,12 +33,9 @@ their full text.
   `orders.ts`). Stale test titles: "recordSale UNCHANGED" in `tabs.filing.test.ts`; many
   "(KDS-…)" and "(A1)"-style plan tags.
 
-## "resets any leftover drill/active tab on login" still passes with login's own clearing line deleted
+## Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still pending review?
 
-- Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
-  The review reported that "resets any
-  leftover drill/active tab on login" still passes with login's own clearing line deleted, because
-  logout clears the same state first (run in review, not re-run here). A question the prune moved
+- Found by #621 (the rest of `apps/till`). A question the prune moved
   here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
   dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
   known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
@@ -77,14 +74,6 @@ their full text.
   "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
   "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
   saying "opaque 500".
-
-## UI package notes left by the comments sweep
-
-- Found by #604, read from the code at the time, not rechecked by A429 slice 5.
-  `packages/ui/brand/README.md`'s table omits
-  `public/icon-192.png` and `public/icon-512.png`, which the generator writes. A reviewer believes the `demo/**` coverage exclusion matches nothing and
-  that `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md
-  §4's unanchored-include trap); neither was tested.
 
 ## The booking state refusal describes a state move even when editing
 

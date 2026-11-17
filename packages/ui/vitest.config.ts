@@ -175,11 +175,8 @@ export default defineConfig({
       // `exclude` replaces the default list rather than merging, so the spread keeps any future default.
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "demo/**",
+        // ui-core's own source, loaded by these tests, also matches `src/**/*.ts`.
         "**/ui-core/**",
-        // The hand-run icon generator's whole job is shelling out to Inkscape, which is not a
-        // workspace dependency.
-        "brand/**",
         // Helpers that exist only for *.test.ts files (mounting, axe, icon buttons).
         "src/test-helpers.ts",
         "src/a11y-helpers.ts",
