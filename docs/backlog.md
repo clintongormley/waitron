@@ -615,10 +615,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
 
-- **Compare computed station weeks with live routing on a painted special-day date without zone paint.**
-  The slice 4 review read the planning and zone-week paths but did not compare the real sale
-  resolver. Add a real-database comparison before claiming they agree on that case.
-
 - **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
   repeated-midnight clock choices still need checking.
   [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)

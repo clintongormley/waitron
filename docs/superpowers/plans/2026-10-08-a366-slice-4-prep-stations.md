@@ -1,5 +1,7 @@
 # Prep stations, slice 4 — combined tickets, period choices in routing, and no station hours (A366)
 
+> 2026-11-17: the comparison between the planning reader and live routing on an own-hours special day with no zone paint landed as a case in `apps/server/src/till-api.service-periods.test.ts` ("kitchen routing follows the period running…"); the backlog entry is gone.
+
 > 2026-11-16: the [routing-read cleanup](2026-11-16-routing-model-reads.md) removes the Opening hours model’s unused period weekdays and routing uses. The delete-impact read retains routing uses and shares row traversal with Routes.
 
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
