@@ -166,11 +166,10 @@ export class RecoveryPackCard extends LitElement {
   @property({ type: Boolean }) openRequested = false;
   @state() private status: Status | null = null;
   @state() private failed = false;
-  /** `arrivedAt` is the browser's time, used only until a status names the pack's own time. */
   @state() private made: {
     url: string;
     number: number;
-    arrivedAt: string;
+    madeAt: string;
   } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
 
@@ -265,7 +264,7 @@ export class RecoveryPackCard extends LitElement {
     this.made = {
       url: URL.createObjectURL(made.pdf),
       number: made.number,
-      arrivedAt: new Date().toISOString(),
+      madeAt: made.madeAt,
     };
     if (older || !this.dialog?.isOpen) this.reload();
   }
@@ -474,7 +473,7 @@ export class RecoveryPackCard extends LitElement {
       <p data-test="pack-ready">
         ${fill("recovery_pack.ready", {
           number: String(made.number),
-          date: this.#date(this.#madeAt(made.number) ?? made.arrivedAt),
+          date: this.#date(this.#madeAt(made.number) ?? made.madeAt),
         })}
       </p>
       <div class="actions">

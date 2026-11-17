@@ -2121,6 +2121,7 @@ describe("the recovery pack calls", () => {
         "Content-Type": "application/pdf",
         "X-Waitron-Recovery-Pack": "4",
         "X-Waitron-Recovery-Pack-Key": "replaced",
+        "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
       }),
     );
     const api = new DashboardApi("", fetchImpl);
@@ -2129,6 +2130,7 @@ describe("the recovery pack calls", () => {
 
     expect(made.number).toBe(4);
     expect(made.key).toBe("replaced");
+    expect(made.madeAt).toBe("2026-10-30T23:30:00.000Z");
     expect(await made.pdf.text()).toBe(MINIMAL_PDF);
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true }],
@@ -2166,7 +2168,26 @@ describe("the recovery pack calls", () => {
     const headers: Record<string, string> = { "Content-Type": type };
     if (number !== null) headers["X-Waitron-Recovery-Pack"] = number;
     headers["X-Waitron-Recovery-Pack-Key"] = key;
+    headers["X-Waitron-Recovery-Pack-Made-At"] = "2026-10-30T23:30:00.000Z";
     const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(body, headers)));
+
+    await expect(api.makeRecoveryPack({ locale: "en", newServerKey: false })).rejects.toEqual({
+      code: "recovery.pack_invalid",
+    });
+  });
+
+  it.each([
+    ["a missing made-at time", null],
+    ["a made-at time that is not a timestamp", "yesterday"],
+    ["a made-at time on no real day", "2026-13-45T25:00:00.000Z"],
+  ])("refuses %s as recovery.pack_invalid", async (_label, madeAt) => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/pdf",
+      "X-Waitron-Recovery-Pack": "4",
+      "X-Waitron-Recovery-Pack-Key": "unchanged",
+    };
+    if (madeAt !== null) headers["X-Waitron-Recovery-Pack-Made-At"] = madeAt;
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(MINIMAL_PDF, headers)));
 
     await expect(api.makeRecoveryPack({ locale: "en", newServerKey: false })).rejects.toEqual({
       code: "recovery.pack_invalid",
@@ -2181,6 +2202,7 @@ describe("the recovery pack calls", () => {
           "Content-Type": "application/pdf",
           "X-Waitron-Recovery-Pack": "1",
           "X-Waitron-Recovery-Pack-Key": "unchanged",
+          "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
         }),
       ),
     );
@@ -2203,6 +2225,7 @@ describe("the recovery pack calls", () => {
             "Content-Type": "application/pdf",
             "X-Waitron-Recovery-Pack": "4",
             "X-Waitron-Recovery-Pack-Key": "unchanged",
+            "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
           }),
         ),
       );

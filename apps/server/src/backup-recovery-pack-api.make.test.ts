@@ -459,6 +459,9 @@ describe("a made pack", () => {
     );
     expect(response.headers.get("x-waitron-recovery-pack")).toBe("1");
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
+    expect(response.headers.get("x-waitron-recovery-pack-made-at")).toBe(
+      "2026-10-30T09:00:00.000Z",
+    );
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(file.number).toBe(1);
     expect(file.madeAt).toBe("2026-10-30T09:00:00.000Z");

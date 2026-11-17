@@ -40,7 +40,12 @@ function stubApi() {
   return {
     makeRecoveryPack: vi
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
-      .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged" }),
+      .mockResolvedValue({
+        pdf: pdf(),
+        number: 4,
+        key: "unchanged",
+        madeAt: "2026-10-30T09:00:00.000Z",
+      }),
     markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
     getRecoveryPackStatus: vi.fn<() => Promise<RecoveryPackStatus>>().mockResolvedValue(status()),
   };
@@ -239,6 +244,7 @@ describe("a made pack", () => {
       pdf: expect.any(Blob),
       number: 4,
       key: "unchanged",
+      madeAt: "2026-10-30T09:00:00.000Z",
       received: true,
     });
     expect(seen[0]!.pdf.type).toBe("application/pdf");
@@ -257,7 +263,7 @@ describe("a made pack", () => {
     button(el, "make-pack")!.click();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
-    answer.resolve({ pdf: pdf(), number: 4, key: "unchanged" });
+    answer.resolve({ pdf: pdf(), number: 4, key: "unchanged", madeAt: "2026-10-30T09:00:00.000Z" });
     await expect.poll(() => seen.length).toBe(1);
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
   });
@@ -310,7 +316,7 @@ describe("closing", () => {
     const closed = dialogClosed(dialog);
     button(el, "cancel-pack")!.click();
     await closed;
-    answer.resolve({ pdf: pdf(), number: 4, key: "replaced" });
+    answer.resolve({ pdf: pdf(), number: 4, key: "replaced", madeAt: "2026-10-30T09:00:00.000Z" });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(seen).toEqual([]);
     expect(api.markRecoveryPackReceived).not.toHaveBeenCalled();
@@ -348,7 +354,12 @@ describe("closing", () => {
 describe("the server key was not replaced", () => {
   async function failedKey(at: RecoveryPackStatus) {
     const api = stubApi();
-    api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "failed" });
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      key: "failed",
+      madeAt: "2026-10-30T09:00:00.000Z",
+    });
     api.getRecoveryPackStatus.mockResolvedValue(at);
     const { el, dialog } = await open({ api, at: HELD });
     const seen = made(el);
@@ -399,7 +410,12 @@ describe("the server key was not replaced", () => {
 
   it("closes as a made pack when the box was not ticked", async () => {
     const api = stubApi();
-    api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "failed" });
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      key: "failed",
+      madeAt: "2026-10-30T09:00:00.000Z",
+    });
     const { el, dialog } = await open({ api });
     const seen = made(el);
     button(el, "make-pack")!.click();
@@ -494,7 +510,12 @@ describe("a lost answer", () => {
 
   it("Try again sends the request once more", async () => {
     const { el, api } = await lose({ ticked: false });
-    api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 5, key: "unchanged" });
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 5,
+      key: "unchanged",
+      madeAt: "2026-10-30T09:00:00.000Z",
+    });
     const seen = made(el);
     button(el, "retry-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);

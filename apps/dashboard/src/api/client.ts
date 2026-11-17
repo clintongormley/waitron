@@ -2263,6 +2263,14 @@ export interface MadeRecoveryPack {
   pdf: Blob;
   number: number;
   key: RecoveryPackKeyState;
+  /** The box's own time for the pack, the same instant its status read reports. */
+  madeAt: string;
+}
+
+/** True for a string spelled exactly as `Date#toISOString` spells a real instant. */
+function isInstant(value: string): boolean {
+  const at = new Date(value);
+  return !Number.isNaN(at.getTime()) && at.toISOString() === value;
 }
 
 type RecoveryPackPart = "bucket" | "archives" | "server-key" | "emergency";
@@ -5158,9 +5166,9 @@ export class DashboardApi {
   }
 
   /**
-   * Refuses, as `recovery.pack_invalid`, an answer without its pack headers or whose body does not
-   * start `%PDF-` and end `%%EOF` (whitespace after it allowed); nothing between is read. A non-2xx
-   * that is not the box's refusal rejects as `connection.failed`.
+   * Refuses, as `recovery.pack_invalid`, an answer without its pack headers (the made-at one an exact
+   * ISO instant) or whose body does not start `%PDF-` and end `%%EOF` (whitespace after it allowed);
+   * nothing between is read. A non-2xx that is not the box's refusal rejects as `connection.failed`.
    */
   async makeRecoveryPack(body: {
     locale: "en" | "es";
@@ -5168,23 +5176,29 @@ export class DashboardApi {
   }): Promise<MadeRecoveryPack> {
     const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
       as: "file",
-      headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+      headers: [
+        "X-Waitron-Recovery-Pack",
+        "X-Waitron-Recovery-Pack-Key",
+        "X-Waitron-Recovery-Pack-Made-At",
+      ],
       refusals: "envelope",
     });
     const pdf = file.blob;
     const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
     const key = file.headers?.["X-Waitron-Recovery-Pack-Key"];
+    const madeAt = file.headers?.["X-Waitron-Recovery-Pack-Made-At"] ?? "";
     if (
       pdf.type !== "application/pdf" ||
       pdf.size === 0 ||
       pdf.size > 8 * 1024 * 1024 ||
       !/^[1-9][0-9]*$/.test(number) ||
       (key !== "replaced" && key !== "unchanged" && key !== "failed") ||
+      !isInstant(madeAt) ||
       (await pdf.slice(0, 5).text()) !== "%PDF-" ||
       !/%%EOF\s*$/.test(await pdf.slice(-16).text())
     )
       throw { code: "recovery.pack_invalid" };
-    return { pdf, number: Number(number), key };
+    return { pdf, number: Number(number), key, madeAt };
   }
 
   getRecoveryPackStatus(): Promise<RecoveryPackStatus> {

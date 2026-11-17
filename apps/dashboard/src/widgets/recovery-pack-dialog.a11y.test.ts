@@ -33,6 +33,7 @@ function makeFor(state: State) {
     pdf: new Blob(["%PDF"], { type: "application/pdf" }),
     number: 4,
     key: "failed",
+    madeAt: "2026-10-30T09:00:00.000Z",
   });
 }
 
