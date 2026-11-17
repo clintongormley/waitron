@@ -10,12 +10,12 @@ import {
   compareDecimal,
   decimal,
   divideDecimal,
+  isZeroDecimal,
   MONEY_SCALE,
   multiplyDecimal,
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
-  toScale,
   type ReceiptLogoRaster,
   type ReceiptPaperWidth,
   type ReceiptPresentation,
@@ -210,13 +210,16 @@ export function buildReceiptDocument({
     elements.push({ kind: "align", alignment });
   };
   const letters = simplified ? rateLetters(result.vatBreakdown) : null;
-  // A line's rate is spelled as filed ("10.00"); the breakdown's may differ ("10").
   const letter = ({ vatRate }: TillSaleLine): string => {
     const found =
       letters === null || vatRate === undefined
         ? undefined
         : [...letters].find(([rate]) => compareDecimal(decimal(rate), decimal(vatRate)) === 0);
     return found === undefined ? "" : ` ${found[1]}`;
+  };
+  const sharedLetter = (covered: readonly TillSaleLine[]): string => {
+    const [first, ...rest] = covered.map(letter);
+    return rest.every((one) => one === first) ? first! : "";
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number, suffix = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
@@ -434,9 +437,14 @@ export function buildReceiptDocument({
       { after: quantity },
     );
     const sold = decimal(count);
-    if (simplified && compareDecimal(sold, decimal("1")) !== 0) {
+    if (
+      simplified &&
+      !result.corrects &&
+      !isZeroDecimal(amount) &&
+      compareDecimal(sold, decimal("1")) !== 0
+    ) {
       const unit = divideDecimal(amount, sold, MONEY_SCALE);
-      if (compareDecimal(toScale(multiplyDecimal(unit, sold), MONEY_SCALE), amount) === 0) {
+      if (compareDecimal(multiplyDecimal(unit, sold), amount) === 0) {
         const price = formatMoney(unit, locale);
         // Counted exactly when the quantity printed above carries no unit name.
         const each =
@@ -479,8 +487,11 @@ export function buildReceiptDocument({
               : "";
         text(`  ${name}${quantity}`, 2);
       }
+    // A dish's adjustment covers its extras too (`planAdjustment`); an extra's covers it alone.
     for (const line of [dish, ...options]) {
-      for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2, letter(line));
+      const covered = line === dish ? [dish, ...options] : [line];
+      for (const adjustment of line.adjustments ?? [])
+        takenOff(adjustment, 2, sharedLetter(covered));
     }
   };
   let nextFiled = 0;

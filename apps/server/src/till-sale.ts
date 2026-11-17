@@ -268,7 +268,7 @@ export interface TillSaleLine {
   soldInEach?: true;
   /** The filed quantity; weighted extra children retain the saved fractional scale for display. */
   quantity: string;
-  /** The filed line's VAT rate, spelled as `vatBreakdown[].rate`. */
+  /** The filed line's VAT rate, as a percentage. */
   vatRate?: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */
   gross: string;
