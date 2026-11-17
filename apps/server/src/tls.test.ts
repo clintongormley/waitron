@@ -7,7 +7,7 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { buildServeOptions, validateTlsIdentity } from "./tls.js";
+import { buildServeOptions, validateTlsIdentity, watchTlsFiles } from "./tls.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 describe("buildServeOptions", () => {
@@ -195,4 +195,73 @@ describe("validateTlsIdentity", () => {
       validateTlsIdentity(Buffer.from(other.serverKeyPem), cert, "localhost", during),
     ).toThrow(/key values mismatch/);
   });
+});
+
+it("accepts one exact staff DNS name together with its new TLS context and retains both on an invalid replacement", async () => {
+  const { Server } = await import("node:https");
+  const { mintSelfSignedServerCert } = await import("./self-signed-cert.js");
+  const first = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["staff.first.example.test"],
+    ipAddresses: [],
+  });
+  const next = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["staff.next.example.test"],
+    ipAddresses: [],
+  });
+  const root = await mkdtemp(join(tmpdir(), "waitron-staff-tls-"));
+  const files = { certFile: join(root, "cert.pem"), keyFile: join(root, "key.pem") };
+  const server = new Server({ key: first.serverKeyPem, cert: first.serverCertPem }, (_req, res) =>
+    res.end("staff"),
+  );
+  try {
+    await writeFile(files.keyFile, first.serverKeyPem);
+    await writeFile(files.certFile, first.serverCertPem);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const fingerprint = () =>
+      new Promise<string>((resolve, reject) => {
+        const request = httpsGet(
+          {
+            host: "127.0.0.1",
+            port: (server.address() as AddressInfo).port,
+            rejectUnauthorized: false,
+            agent: false,
+          },
+          (res) => {
+            const value = (res.socket as import("node:tls").TLSSocket).getPeerCertificate()
+              .fingerprint256;
+            res.resume();
+            res.on("end", () => resolve(value));
+          },
+        );
+        request.on("error", reject);
+      });
+    const watcher = watchTlsFiles(server, files, undefined, () => {}, 10000);
+    expect(watcher?.hostname()).toBe("staff.first.example.test");
+    const before = await fingerprint();
+    await writeFile(files.keyFile, next.serverKeyPem);
+    await writeFile(files.certFile, next.serverCertPem);
+    watcher.checkNow();
+    expect(watcher.hostname()).toBe("staff.next.example.test");
+    const accepted = await fingerprint();
+    expect(accepted).not.toBe(before);
+    const ambiguous = mintSelfSignedServerCert({
+      now: new Date(),
+      hostnames: ["staff.one.example.test", "staff.two.example.test"],
+      ipAddresses: [],
+    });
+    await writeFile(files.keyFile, ambiguous.serverKeyPem);
+    await writeFile(files.certFile, ambiguous.serverCertPem);
+    watcher.checkNow();
+    expect(watcher.hostname()).toBe("staff.next.example.test");
+    expect(await fingerprint()).toBe(accepted);
+    await writeFile(files.certFile, "broken");
+    watcher.checkNow();
+    expect(watcher.hostname()).toBe("staff.next.example.test");
+  } finally {
+    server.emit("close");
+    if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
 });

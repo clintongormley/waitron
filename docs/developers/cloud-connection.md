@@ -312,17 +312,23 @@ pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts install \
   /path/to/node-state staff-v-venue-id.example.com /tmp/staff-chain.pem
 ```
 
-For the A951-S entrance (6 November 2026), set `WAITRON_STAFF_ORIGIN` to the
-assigned HTTPS staff origin, `WAITRON_STAFF_HOST` to its tunnel bind address and
-`WAITRON_STAFF_PORT` to its receiving port (8443 by default). Keep the LAN listener's
-TLS files, management origin and passkey hostname configured for the LAN. Start
-with a connected test installation and `WAITRON_CLOUD_ORIGIN` set. The Cloud worker
-creates the staff key and requests its certificate through that signed connection.
-It opens the separate listener after the first certificate arrives. Existing matching
-staff keys and certificates in `WAITRON_STATE_DIR` also work at startup. The listener
-checks replacements every ten seconds and applies valid ones to new TLS connections
-without a restart. An invalid replacement keeps the loaded context
-and logs `cloud.certificate_reload_failed`.
+For the A951-S entrance, connect a test installation and turn on remote access. The signed Cloud
+exchange supplies `remote_access.configuration.staffHostname`; you do not set the name locally.
+Set `WAITRON_STAFF_HOST` to the tunnel bind address and `WAITRON_STAFF_PORT` to its receiving port
+(8443 by default). Keep the LAN listener's TLS files, management origin and passkey hostname
+configured for the LAN.
+
+The Cloud worker creates the staff key and requests its certificate for the current Cloud name.
+It opens the separate listener after the first valid chain arrives, or starts with the valid installed
+chain. A rename keeps the accepted name and chain while issuance is pending, including across a
+restart. Ready replies refresh the listener immediately; manual installations are checked every ten
+seconds. Only a valid replacement changes both the TLS context and accepted HTTP origin. An invalid
+replacement keeps the loaded context and logs `cloud.certificate_reload_failed`.
+
+Each staff request checks the local saved Cloud connection before reading its body or forwarding
+it. An off switch, withdrawn remote service, pending revocation, revoked connection or unreadable
+state returns 404. An existing listener still completes TLS while admission is off. A production
+box or mirror opens no staff listener. No Cloud network request runs on this admission path.
 
 The worker reads the existing request from Cloud, so a lost reply or a box restart
 resumes the accepted request with the retained staff key. It writes no local request
@@ -477,7 +483,7 @@ planned handover of the final writes and production recovery are not implemented
 A recovery archive deliberately excludes `cloud/staff.key` and `cloud/staff.crt`.
 If your LAN listener's TLS paths point at those missing files, Waitron refuses to start.
 Keep the LAN certificate and management origin configured for the LAN. For the separate staff
-entrance, reconnect the replacement to Cloud and set its assigned `WAITRON_STAFF_ORIGIN`;
+entrance, reconnect the replacement to Cloud and turn on remote access;
 the test-installation certificate worker creates a new staff key and opens that listener after
 issuance. You can also use the certificate commands above without a running server.
 

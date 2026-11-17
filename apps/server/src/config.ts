@@ -36,7 +36,7 @@ export interface ServerConfig {
   /** Lets a Prepare node exercise a configured payment provider with test credentials. */
   paymentTestProviders: boolean;
   httpPort: number;
-  staff?: { origin: string; host: string; port: number };
+  staff?: { host: string; port: number };
   /**
    * The plain-HTTP trust/landing listener's port; `0` disables it. A phone meets the browser's
    * interstitial for the untrusted self-signed leaf before any page runs, so the CA download is
@@ -460,26 +460,13 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
-  const staffOrigin = env.WAITRON_STAFF_ORIGIN;
-  let staff: ServerConfig["staff"];
-  if (!isUnset(staffOrigin)) {
-    if (!isBareOrigin(staffOrigin) || new URL(staffOrigin).protocol !== "https:")
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_STAFF_ORIGIN",
-        reason: "https_origin_required",
-      });
-    const port = listeningPort(env, "WAITRON_STAFF_PORT", 8443);
-    if ([httpPort, landingPort, spareStorePort, spareStoreLoopbackPort].includes(port))
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_STAFF_PORT",
-        reason: "listener_port_conflict",
-      });
-    staff = {
-      origin: staffOrigin,
-      host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
-      port,
-    };
-  }
+  const staff: ServerConfig["staff"] =
+    environment === "production"
+      ? undefined
+      : {
+          host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
+          port: listeningPort(env, "WAITRON_STAFF_PORT", 8443),
+        };
   return {
     ...(staff === undefined ? {} : { staff }),
     ...(installationOrigin === "usb" ? { installationOrigin } : {}),

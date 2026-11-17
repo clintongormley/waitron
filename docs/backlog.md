@@ -131,8 +131,7 @@ them only when a lane has nothing better.
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
 (A509) and delivery (A1012) all reach the box through the venue's Cloud instance. They come soon
-after go-live, not at it. This repository's part is **A951**, the box's lasting tunnel and
-public-certificate client. **A1175**, an Android app for venues run from Waitron Cloud, joins this
+after go-live, not at it. This repository's remaining part is **A951-S** provider qualification. **A1175**, an Android app for venues run from Waitron Cloud, joins this
 group (owner, 2026-10-28).
 
 ---

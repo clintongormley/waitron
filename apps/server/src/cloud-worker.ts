@@ -10,7 +10,6 @@ export function cloudConnectionJob(options: {
   onGuestMenu?: (signal: AbortSignal) => unknown;
   onGuestMenuError?: (error: unknown) => void;
   managementOrigin?: string;
-  staffHostname?: string;
   onStaffCertificate?: (signal: AbortSignal) => unknown;
 }): JobDefinition {
   return {
@@ -47,12 +46,12 @@ export function cloudConnectionJob(options: {
             }
           }
           if (
-            options.staffHostname &&
+            options.onStaffCertificate &&
             status.installation?.state === "active" &&
             !signal.aborted &&
             options.isPrimary()
           ) {
-            const ready = await options.connection.staffCertificate(options.staffHostname, signal);
+            const ready = await options.connection.staffCertificate(signal);
             if (ready && !signal.aborted && options.isPrimary())
               await options.onStaffCertificate?.(signal);
           }

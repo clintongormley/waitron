@@ -1109,7 +1109,7 @@ it("uses the staff origin for remote Cloud controls and refuses another origin",
       },
       () => {},
     );
-    const staff = createStaffApp(local, "https://staff.example.test");
+    const staff = createStaffApp(local, async () => "https://staff.example.test");
     const send = (path: string, origin: string) =>
       staff.request("https://staff.example.test/management-api/cloud/" + path, {
         method: "POST",
@@ -1141,7 +1141,7 @@ it("identifies the actual staff entrance in Cloud status and action replies", as
       },
       () => {},
     );
-    const staff = createStaffApp(local, "https://staff.example.test");
+    const staff = createStaffApp(local, async () => "https://staff.example.test");
     const headers = {
       cookie: manager.cookie,
       origin: "https://staff.example.test",

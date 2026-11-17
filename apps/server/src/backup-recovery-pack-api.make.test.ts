@@ -155,7 +155,9 @@ function fixture(
   } = {},
 ) {
   const local = new Hono();
-  const app = options.remote ? createStaffApp(local, "https://staff.example.test") : local;
+  const app = options.remote
+    ? createStaffApp(local, async () => "https://staff.example.test")
+    : local;
   const seat = options.seat === undefined ? drawingSeat : options.seat;
   const modules: WaitronModule[] =
     seat === null

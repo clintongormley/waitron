@@ -24,25 +24,23 @@ containers, volumes, network and tagged image. It checks the fixed staff destina
 another source and port, disconnection, reconnection and a container restart. It does not reboot
 the host, issue a certificate or touch a running Waitron installation.
 
-On a connected test installation, set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address
-Cloud assigned. The certificate worker opens that listener after installing its first certificate.
+On a connected test installation, turn on remote access. The box takes its staff name from Cloud.
+The certificate worker opens the listener after installing its first valid certificate.
 On a Linux box, bind it to Docker's bridge address so this container can reach it:
 
 ```sh
-export WAITRON_STAFF_ORIGIN=https://staff-v-your-assigned-venue.test.waitron.io
 export WAITRON_STAFF_HOST=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
 cat > /tmp/waitron-staff-listener.yml <<'YAML'
 services:
   app:
     environment:
-      WAITRON_STAFF_ORIGIN: ${WAITRON_STAFF_ORIGIN:?Set the assigned staff origin}
       WAITRON_STAFF_HOST: ${WAITRON_STAFF_HOST:?Set Docker's bridge address}
       WAITRON_STAFF_PORT: "8443"
 YAML
 docker compose -f deploy/compose.yml -f /tmp/waitron-staff-listener.yml --profile staff-tunnel up -d app tunnel
 ```
 
-Replace the example origin with your assigned address. The default `127.0.0.1` cannot be reached
+The default `127.0.0.1` cannot be reached
 from the peer. Keep the bridge bind: choosing `0.0.0.0` would also listen on the venue interfaces.
 The runtime's configured message reports local configuration, not a successful gateway handshake.
 

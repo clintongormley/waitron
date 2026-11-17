@@ -394,7 +394,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.mirror,
       WAITRON_HTTP_PORT: String(localPort),
-      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
       WAITRON_STAFF_PORT: String(staffPort),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     }).catch(async (error: unknown) => {

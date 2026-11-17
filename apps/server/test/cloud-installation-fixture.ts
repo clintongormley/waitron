@@ -20,6 +20,7 @@ export async function installationFixture(
     ownerRecovery?: MachineHandler;
     tunnel?: MachineHandler;
     translationState?: () => ServiceState;
+    remoteAccess?: () => { state: ServiceState; configuration: object };
   } = {},
 ) {
   const issuer = generateKeyPairSync("ed25519");
@@ -48,8 +49,14 @@ export async function installationFixture(
   const services = (four: boolean) => [
     ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
       service,
-      state: "unconfigured",
-      configuration: { secret: "adapter-only" },
+      state:
+        service === "remote_access"
+          ? (options.remoteAccess?.().state ?? "unconfigured")
+          : "unconfigured",
+      configuration:
+        service === "remote_access"
+          ? (options.remoteAccess?.().configuration ?? { secret: "adapter-only" })
+          : { secret: "adapter-only" },
       health: "unknown",
       failure: null,
       observedAt: null,

@@ -413,7 +413,7 @@ async function postFromStaffPage(app: Hono, path: string, cookie: string, body?:
 it("sets the clock for an administrator through the staff entrance, even from loopback", async () => {
   const start = startClockState();
   const box = await stoppedBox(0, { start, realSource: true });
-  const staff = createStaffApp(box.app, STAFF);
+  const staff = createStaffApp(box.app, async () => STAFF);
   const before = written(box);
 
   const asked = await postFromStaffPage(staff, "/api/box/clock-challenge", mario.cookie);
@@ -453,7 +453,7 @@ it("sets the clock for an administrator through the staff entrance, even from lo
 it("confirms the time for an administrator through the staff entrance, even from loopback", async () => {
   const start = startClockState();
   const box = await stoppedBox(0, { start, realSource: true });
-  const staff = createStaffApp(box.app, STAFF);
+  const staff = createStaffApp(box.app, async () => STAFF);
   const before = written(box);
 
   const asked = await postFromStaffPage(staff, "/api/box/clock-challenge", mario.cookie);

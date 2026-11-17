@@ -6,11 +6,18 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serve } from "@hono/node-server";
 import { Server as HttpsServer } from "node:https";
-import { buildServeOptions, watchTlsFiles } from "./tls.js";
+import {
+  buildServeOptions,
+  watchTlsFiles,
+  certificateHostname,
+  validateTlsIdentity,
+} from "./tls.js";
 import { closeListener } from "./close-listener.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import { generateKeyPair, X509Certificate, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { validStaffHostname } from "./cloud-tunnel.js";
 import { lstat, open, readFile, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import forge from "node-forge";
@@ -36,12 +43,7 @@ async function readStaffKey(stateDir: string): Promise<string> {
 
 /** Keep the staff key separate from venue.db and the recovery-file allowlist. Only the CSR leaves it. */
 export async function createStaffCsr(stateDir: string, hostname: string): Promise<string> {
-  if (
-    hostname.length > 253 ||
-    !hostname.includes(".") ||
-    /^\d+(\.\d+){3}$/.test(hostname) ||
-    !hostname.split(".").every((s) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))
-  )
+  if (!validStaffHostname(hostname))
     throw new Error("Invalid staff hostname; use the exact lowercase hostname assigned by Cloud");
   await mkdirDurable(join(stateDir, CLOUD_DIR), 0o700);
   const path = join(stateDir, CLOUD_STAFF_KEY_FILE);
@@ -110,7 +112,7 @@ export async function installStaffCertificate(
 /** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
 export function createStaffApp(
   app: Hono,
-  origin: string,
+  origin: () => Promise<string | undefined>,
   pages?: { root: string; gates?: readonly MiddlewareHandler[] },
   log: Logger = () => {},
 ): Hono {
@@ -120,6 +122,16 @@ export function createStaffApp(
     for (const gate of pages.gates ?? []) dashboard.use("*", gate);
     mountSpa(dashboard, { root: pages.root, basePath: "", navigationPath: isDashboardPath }, log);
   }
+  staff.use("*", async (c, next) => {
+    try {
+      const admittedOrigin = await origin();
+      if (admittedOrigin === undefined || new URL(c.req.url).origin !== admittedOrigin)
+        return c.notFound();
+    } catch {
+      return c.notFound();
+    }
+    return next();
+  });
   const limit = bodyLimit({ maxSize: 65536 });
   staff.use("/management-api/*", (c, next) =>
     /^\/management-api\/(?:session$|passkey\/|password-reset$|account-actions\/|google\/)/.test(
@@ -133,7 +145,7 @@ export function createStaffApp(
   staff.all("*", (c) => {
     const url = new URL(c.req.url);
     const path = url.pathname;
-    if (url.origin !== origin || /%2f|%5c|%00/i.test(path)) return c.notFound();
+    if (/%2f|%5c|%00/i.test(path)) return c.notFound();
     // These machine operations check a password outside the dashboard sign-in throttle.
     if (
       ["membership", "mirror-bundle", "promote"].some(
@@ -180,8 +192,9 @@ export function startStaffListener(
   config: Pick<ServerConfig, "staff" | "stateDir" | "dashboardAppDir">,
   app: Hono,
   log: Logger,
+  admitted: () => Promise<boolean>,
   pageGates: readonly MiddlewareHandler[] = [],
-): { close(): Promise<void>; isListening(): boolean } | undefined {
+): { close(): Promise<void>; isListening(): boolean; checkNow(): void } | undefined {
   const staff = config.staff;
   if (staff === undefined) return undefined;
   const failure = (error: unknown) =>
@@ -195,12 +208,16 @@ export function startStaffListener(
       keyFile: join(config.stateDir, CLOUD_STAFF_KEY_FILE),
       certFile: join(config.stateDir, CLOUD_STAFF_CERT_FILE),
     };
+    const key = readFileSync(tls.keyFile),
+      cert = readFileSync(tls.certFile);
+    validateTlsIdentity(key, cert, certificateHostname(cert));
+    let watcher: ReturnType<typeof watchTlsFiles>;
     const server = serve(
       buildServeOptions(
         {
           fetch: createStaffApp(
             app,
-            staff.origin,
+            async () => ((await admitted()) ? `https://${watcher.hostname()}` : undefined),
             config.dashboardAppDir === undefined
               ? undefined
               : { root: config.dashboardAppDir, gates: pageGates },
@@ -214,11 +231,15 @@ export function startStaffListener(
       (info) => log("info", "server.listening", { listener: "staff", port: info.port }),
     );
     server.on("error", failure);
-    if (server instanceof HttpsServer)
-      watchTlsFiles(server, tls, new URL(staff.origin).hostname, () =>
-        log("error", "cloud.certificate_reload_failed"),
-      );
-    return { close: () => closeListener(server), isListening: () => server.listening };
+    if (!(server instanceof HttpsServer)) throw new Error("Staff listener requires HTTPS");
+    watcher = watchTlsFiles(server, tls, undefined, () =>
+      log("error", "cloud.certificate_reload_failed"),
+    );
+    return {
+      close: () => closeListener(server),
+      isListening: () => server.listening,
+      checkNow: () => watcher.checkNow(),
+    };
   } catch (error) {
     failure(error);
     return undefined;

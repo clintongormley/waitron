@@ -1,7 +1,9 @@
 import { useTestProducer } from "./testing/test-producer.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { seedModuleSettings } from "../test/module-settings.js";
-import { mkdir } from "node:fs/promises";
+import * as cloudClient from "./cloud-client.js";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { mkdir, copyFile, symlink } from "node:fs/promises";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -12,7 +14,13 @@ import type { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { menus, withTransaction, workingOrderLines, ticketItems } from "@waitron/db";
+import {
+  menus,
+  saveCloudVenueId,
+  withTransaction,
+  workingOrderLines,
+  ticketItems,
+} from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -109,6 +117,8 @@ async function withServer(
   const [port] = await freePorts(1);
   let scratch: string | undefined;
   let server: StartedServer | undefined;
+  let cloud: Awaited<ReturnType<typeof installationFixture>> | undefined;
+  let origin: ReturnType<typeof vi.spyOn> | undefined;
   try {
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-management-origin-"));
     const migrationsRoot = join(scratch, "migrations");
@@ -128,16 +138,30 @@ async function withServer(
       WAITRON_MANAGEMENT_ORIGIN: TRUSTED,
       ...env,
     };
-    if (env.WAITRON_STAFF_ORIGIN) {
+    if (env.WAITRON_STAFF_PORT) {
+      cloud = await installationFixture(undefined, {
+        remoteAccess: () => ({
+          state: "ready",
+          configuration: { staffHostname: "staff.example.test" },
+        }),
+      });
+      await cloud.client.refresh();
+      await withTransaction(suite.db, (tx) => saveCloudVenueId(tx, cloud!.venueId));
+      origin = vi.spyOn(cloudClient, "loadCloudOrigin").mockReturnValue(cloud.options.origin);
+      Object.assign(full, { WAITRON_CLOUD_ORIGIN: cloud.options.origin });
       const material = mintSelfSignedServerCert({
         now: new Date(),
-        hostnames: [new URL(env.WAITRON_STAFF_ORIGIN).hostname],
+        hostnames: ["staff.example.test"],
         ipAddresses: [],
       });
       await mkdir(join(scratch, "cloud"), { recursive: true });
       await writeFile(join(scratch, "cloud/staff.key"), material.serverKeyPem);
       await mkdir(join(scratch, "cloud"), { recursive: true });
       await writeFile(join(scratch, "cloud/staff.crt"), material.serverCertPem);
+      const source = join(cloud.stateDir, "cloud/connection.json");
+      await copyFile(source, join(scratch, "cloud/connection.json"));
+      await rm(source);
+      await symlink(join(scratch, "cloud/connection.json"), source);
     }
     await beforeStart?.(venue);
     server = await startServer(full, full, seams);
@@ -148,6 +172,8 @@ async function withServer(
     await body({ venue, host, app: seen, restart });
   } finally {
     if (server !== undefined) await server.close();
+    origin?.mockRestore();
+    await cloud?.close();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   }
 }
@@ -354,46 +380,43 @@ it("every money or drawer write the restricted start refuses is a POST the full 
 
 it("boots and closes a separate staff entrance over the real dashboard API", async () => {
   const [port] = await freePorts(1);
-  await withServer(
-    { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: String(port) },
-    async ({ venue }) => {
-      expect(served.listeners).toHaveLength(2);
-      const remote = served.listeners[0]!;
-      const response = await remote.fetch(
-        new Request("https://staff.example.test/management-api/session/me", {
-          headers: { cookie: venue.managerCookie },
-        }),
-      );
-      expect(response.status).toBe(200);
-      const local = await served.listeners[1]!.fetch(
-        new Request("http://localhost/management-api/session/me", {
-          headers: { cookie: venue.managerCookie },
-        }),
-      );
-      const localBody = (await local.json()) as { personId: string };
-      expect(await response.json()).toMatchObject({
-        personId: localBody.personId,
-        roleIds: [
-          (
-            await suite.db.execute<{ id: string }>(
-              sql`select id from roles where built_in_key = 'manager'`,
-            )
-          ).rows[0]!.id,
-        ],
-      });
-      for (const path of [
-        "/setup-api/status",
-        "/api/session",
-        "/print-api/agent/jobs",
-        "/device-api/start",
-      ]) {
-        expect(
-          (await remote.fetch(new Request(`https://staff.example.test${path}`))).status,
-          path,
-        ).toBe(404);
-      }
-    },
-  );
+  await withServer({ WAITRON_STAFF_PORT: String(port) }, async ({ venue }) => {
+    expect(served.listeners).toHaveLength(2);
+    const remote = served.listeners[0]!;
+    const response = await remote.fetch(
+      new Request("https://staff.example.test/management-api/session/me", {
+        headers: { cookie: venue.managerCookie },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const local = await served.listeners[1]!.fetch(
+      new Request("http://localhost/management-api/session/me", {
+        headers: { cookie: venue.managerCookie },
+      }),
+    );
+    const localBody = (await local.json()) as { personId: string };
+    expect(await response.json()).toMatchObject({
+      personId: localBody.personId,
+      roleIds: [
+        (
+          await suite.db.execute<{ id: string }>(
+            sql`select id from roles where built_in_key = 'manager'`,
+          )
+        ).rows[0]!.id,
+      ],
+    });
+    for (const path of [
+      "/setup-api/status",
+      "/api/session",
+      "/print-api/agent/jobs",
+      "/device-api/start",
+    ]) {
+      expect(
+        (await remote.fetch(new Request(`https://staff.example.test${path}`))).status,
+        path,
+      ).toBe(404);
+    }
+  });
   expect(served.listeners.every(({ server }) => !server.listening)).toBe(true);
 });
 
@@ -593,7 +616,7 @@ describe("a session holding invoice.inspect alone, in the running server", () =>
     let inspector = "";
     const [port] = await freePorts(1);
     await withServer(
-      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: String(port) },
+      { WAITRON_STAFF_PORT: String(port) },
       async ({ venue }) => {
         const remote = served.listeners[0]!;
         const roster = (cookie: string) =>

@@ -99,7 +99,7 @@ Follow your password manager’s prompt to add it. To remove a passkey, choose *
 
 If your venue has a staff address for access from outside, sign in there with your usual email
 and password. To use a passkey at that address, open **Account settings** there and add one,
-even if you already use a passkey at the venue's local address.
+even if you already use a passkey at the venue's local address. If that staff address changes, sign in with your password at the new address and add a new passkey there.
 
 ## Download your data {#own-data}
 

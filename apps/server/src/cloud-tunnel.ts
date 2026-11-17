@@ -41,6 +41,38 @@ export async function readTunnelPublicKey(directory: string): Promise<string | u
   }
 }
 
+export function validStaffHostname(hostname: unknown): hostname is string {
+  return (
+    typeof hostname === "string" &&
+    hostname.length <= 253 &&
+    hostname.includes(".") &&
+    !/^\d+(\.\d+){3}$/.test(hostname) &&
+    hostname.split(".").every((s) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))
+  );
+}
+
+export function remoteAccessListed(state: SavedCloudState | undefined): boolean {
+  const service = state?.lifecycle?.view?.services.find((s) => s.service === "remote_access");
+  return (
+    !!state?.view?.registration &&
+    state.remoteAccessEnabled !== false &&
+    !state.lifecycle?.revoked &&
+    state.lifecycle?.pending?.action !== "revoke" &&
+    !!service &&
+    ["provisioning", "ready"].includes(service.state)
+  );
+}
+
+export function staffHostnameFrom(state: SavedCloudState | undefined): string | undefined {
+  if (state?.environment !== "test" || !remoteAccessListed(state)) return undefined;
+  const configuration = state.lifecycle?.view?.services.find(
+    (s) => s.service === "remote_access",
+  )?.configuration;
+  return object(configuration) && validStaffHostname(configuration.staffHostname)
+    ? configuration.staffHostname
+    : undefined;
+}
+
 export async function writeTunnelConfiguration(
   directory: string | undefined,
   state?: SavedCloudState,
@@ -54,14 +86,7 @@ export async function writeTunnelConfiguration(
   }
   const path = join(directory, "peer.json");
   const service = state?.lifecycle?.view?.services.find((s) => s.service === "remote_access");
-  if (
-    !state?.view?.registration ||
-    state.remoteAccessEnabled === false ||
-    state.lifecycle?.revoked ||
-    state.lifecycle?.pending?.action === "revoke" ||
-    !service ||
-    !["provisioning", "ready"].includes(service.state)
-  ) {
+  if (!state?.view?.registration || !remoteAccessListed(state)) {
     try {
       await rm(path, { force: true });
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -85,7 +110,7 @@ export async function writeTunnelConfiguration(
       await rm(path, { force: true });
       return;
     }
-    const p: unknown = service.configuration;
+    const p: unknown = service!.configuration;
     if (
       !object(p) ||
       p.version !== 1 ||

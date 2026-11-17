@@ -1115,7 +1115,7 @@ it("uses the staff origin for remote translation saves and refuses another origi
     },
     () => {},
   );
-  const staff = createStaffApp(local, "https://staff.example.test");
+  const staff = createStaffApp(local, async () => "https://staff.example.test");
   const request = (origin: string) =>
     staff.request("https://staff.example.test/management-api/content-translations", {
       method: "PUT",

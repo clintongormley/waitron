@@ -7,6 +7,7 @@ import type { SavedCloudState } from "./cloud-client.js";
 import { createStaffCsr, installStaffCertificate } from "./cloud-remote.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
+import { staffHostnameFrom } from "./cloud-tunnel.js";
 
 const uuid = (v: unknown): v is string =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
@@ -50,11 +51,12 @@ async function installedFresh(stateDir: string, hostname: string): Promise<boole
 export async function refreshStaffCertificate(
   state: SavedCloudState,
   stateDir: string,
-  hostname: string,
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
   isCurrent?: () => Promise<boolean>,
 ): Promise<boolean> {
+  const hostname = staffHostnameFrom(state);
+  if (hostname === undefined) return false;
   const deadline = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
     : AbortSignal.timeout(8000);

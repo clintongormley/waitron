@@ -50,7 +50,11 @@ import {
 import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
-import { readTunnelPublicKey, writeTunnelConfiguration } from "./cloud-tunnel.js";
+import {
+  readTunnelPublicKey,
+  writeTunnelConfiguration,
+  staffHostnameFrom,
+} from "./cloud-tunnel.js";
 import "./errors.js";
 import { refreshStaffCertificate } from "./cloud-staff-certificate.js";
 import {
@@ -745,26 +749,21 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         : AbortSignal.timeout(8000);
       return withdrawCloudGuestMenu(await leaseState(deadline), deadline, recordRefusal);
     },
-    async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
+    async staffAdmitted(): Promise<boolean> {
+      return staffHostnameFrom(await read()) !== undefined;
+    },
+    async staffCertificate(signal?: AbortSignal): Promise<boolean> {
+      if (staffHostnameFrom(await read()) === undefined) return false;
       const deadline = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
         : AbortSignal.timeout(8000);
       const state = await leaseState(deadline);
-      const registration = registrationOf(state);
-      return refreshStaffCertificate(
-        state,
-        options.stateDir,
-        hostname,
-        deadline,
-        recordRefusal,
-        async () => {
-          const current = await read();
-          return (
-            registrationOf(current) === registration &&
-            current?.lifecycle?.pending?.action !== "revoke"
-          );
-        },
-      );
+      const registration = registrationOf(state),
+        hostname = staffHostnameFrom(state);
+      return refreshStaffCertificate(state, options.stateDir, deadline, recordRefusal, async () => {
+        const current = await read();
+        return registrationOf(current) === registration && staffHostnameFrom(current) === hostname;
+      });
     },
     async billing(signal?: AbortSignal): Promise<BillingDisplay> {
       const registration = registrationOf(await read());
