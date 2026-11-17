@@ -133,6 +133,16 @@ async function seedPrintRouteFixture(db: Database) {
 
 beforeEach(() => seedPrintRouteFixture(suite.db));
 
+/** Holds the wall clock (scan freshness) and the steady clock (command expiry) `ms` past now. */
+function holdClocks(): (ms: number) => void {
+  const wall = Date.now();
+  const steady = performance.now();
+  return (ms) => {
+    vi.spyOn(Date, "now").mockReturnValue(wall + ms);
+    vi.spyOn(performance, "now").mockReturnValue(steady + ms);
+  };
+}
+
 function mountApp(
   opts: {
     bus?: LiveEvents;
@@ -4183,22 +4193,22 @@ describe("Bluetooth Pair and Forget commands", () => {
     const { agentId, token } = await joinAndAccept(app);
     const first = randomMac();
     const second = randomMac();
-    const start = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(start);
+    const at = holdClocks();
+    at(0);
     await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
     const res = await command(app, agentId, "pair", { address: second, pin: PIN });
     const { command: queued } = (await res.json()) as { command: { id: string } };
     await pull(app, token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
     await command(app, agentId, "pair", { address: first, pin: PIN });
 
-    vi.spyOn(Date, "now").mockReturnValue(start + 59_999);
+    at(59_999);
     await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
     let rows = await discoveredRows(app);
     expect(rows.find((r) => r.localKey === second)).toMatchObject({
       bluetoothCommand: { state: "succeeded" },
     });
 
-    vi.spyOn(Date, "now").mockReturnValue(start + 60_000);
+    at(60_000);
     await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
     rows = await discoveredRows(app);
     expect(rows.find((r) => r.localKey === second)).not.toHaveProperty("bluetoothCommand");
@@ -4206,7 +4216,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       bluetoothCommand: { state: "pending" },
     });
 
-    vi.spyOn(Date, "now").mockReturnValue(start + 120_000);
+    at(120_000);
     const reply = await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
     expect(reply.bluetoothCommands).toBeUndefined();
     rows = await discoveredRows(app);
@@ -4271,14 +4281,14 @@ describe("Bluetooth Pair and Forget commands", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
-    const start = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(start);
+    const at = holdClocks();
+    at(0);
     await pull(app, token, { scanned: [scannedMac(mac)] });
     const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
     const { command: queued } = (await res.json()) as { command: Record<string, unknown> };
     expect(queued).toMatchObject({ state: "pending", expiresInMs: 120_000 });
 
-    vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
+    at(10_000);
     await pull(app, token, { scanned: [scannedMac(mac)] });
     expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
       bluetoothCommand: { id: queued.id, state: "pending", expiresInMs: 110_000 },
@@ -4584,10 +4594,10 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      const start = Date.now();
-      vi.spyOn(Date, "now").mockReturnValue(start);
+      const at = holdClocks();
+      at(0);
       const id = await queueUnpair(app, agentId, token, mac);
-      vi.spyOn(Date, "now").mockReturnValue(start + 120_001);
+      at(120_001);
       await suite.db.execute(sql`create trigger fail_unpair_pull before update of active on printers
         begin select raise(abort, 'test unpair rollback'); end`);
       try {
@@ -4606,7 +4616,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const otherMac = randomMac();
       const otherId = await registerBluetooth(app, otherMac);
       const next = await queueUnpair(app, agentId, token, otherMac);
-      vi.spyOn(Date, "now").mockReturnValue(start + 240_002);
+      at(240_002);
       await pull(app, token, {
         pairedBluetooth: [null, { localKey: otherMac }],
         bluetoothOutcomes: [{ id: next, ok: true }],

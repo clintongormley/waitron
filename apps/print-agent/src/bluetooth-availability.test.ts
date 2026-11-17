@@ -96,7 +96,7 @@ function devices(listDeadlineMs = ANSWERING_DEADLINE_MS) {
 
     bluetoothListTimeoutMs: listDeadlineMs,
     log,
-    now: () => clock,
+    steadyNow: () => clock,
   });
 }
 
@@ -286,7 +286,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
         },
       },
 
-      now: () => clock,
+      steadyNow: () => clock,
     });
     const seen = d.visibleDevices();
     await vi.waitFor(() => expect(listings).toBe(1));
@@ -312,7 +312,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
           throw new Error("thrown before any promise");
         },
       },
-      now: () => clock,
+      steadyNow: () => clock,
     });
     await d.checkBluetooth();
     clock += 30_000;

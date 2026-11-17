@@ -35,7 +35,10 @@ export interface LinuxDeviceOptions {
    * starts, that BlueZ has not answered. */
   bluetoothListTimeoutMs?: number;
   log?: HostLog;
+  /** Wall clock, for the network scan's deadline only. */
   now?: () => number;
+  /** Elapsed time for the Bluetooth waits. */
+  steadyNow?: () => number;
 }
 
 /** An unavailable Bluetooth side is asked again this often rather than on every poll, because the
@@ -79,6 +82,8 @@ export function createLinuxDevices(
       ...(opts.log !== undefined ? { log: opts.log } : {}),
     });
   const now = opts.now ?? Date.now;
+  // This app does not depend on `@waitron/shared`, so it reads the steady clock itself.
+  const steadyNow = opts.steadyNow ?? ((): number => performance.now());
   const scanNetworkImpl =
     opts.scanNetwork ??
     ((deadline?: number) => scanNetwork(deadline, { ...opts.networkScanDeps, now }));
@@ -88,8 +93,7 @@ export function createLinuxDevices(
   let listingForgets = 0;
   let recentPaired:
     { startedAt: number; forgetsBefore: number; devices: BluetoothDevice[] } | undefined;
-  // Counted rather than timed, so a forget made after a backward step still follows every listing
-  // started before it.
+  // Counted rather than timed, so a listing started before a forget is never taken as after it.
   let forgets = 0;
   let lastScanFailure: string | undefined;
 
@@ -102,7 +106,7 @@ export function createLinuxDevices(
   };
 
   const listPaired = async (): Promise<BluetoothDevice[]> => {
-    const startedAt = now();
+    const startedAt = steadyNow();
     const forgetsBefore = forgets;
     listedAt = startedAt;
     try {
@@ -128,11 +132,7 @@ export function createLinuxDevices(
     }
     return listing;
   };
-  // Also due when the last listing started further ahead than the interval: the clock stepped back.
-  const recheckDue = (): boolean => {
-    const at = now();
-    return at - listedAt >= BLUETOOTH_RECHECK_MS || listedAt - at > BLUETOOTH_RECHECK_MS;
-  };
+  const recheckDue = (): boolean => steadyNow() - listedAt >= BLUETOOTH_RECHECK_MS;
 
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
@@ -150,13 +150,10 @@ export function createLinuxDevices(
   // runs a listing of its own rather than joining one already running.
   const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
     const recent = recentPaired;
-    const age = recent === undefined ? -1 : now() - recent.startedAt;
-    // A listing started ahead of the clock predates a backward step and is of unknown age.
     const reusable =
       recent !== undefined &&
       recent.forgetsBefore === forgets &&
-      age >= 0 &&
-      age < PAIRED_REUSE_MS &&
+      steadyNow() - recent.startedAt < PAIRED_REUSE_MS &&
       recent.devices.some((d) => d.mac === mac);
     return toLocal(reusable ? recent.devices : await listPaired());
   };
@@ -225,10 +222,9 @@ export function createLinuxDevices(
       const known = availability;
       if (known?.available === false && !recheckDue()) throw new Error(known.detail);
       // Runs before every job pull, so the listing and the kinds together get one deadline.
-      const startedAt = now();
+      const startedAt = steadyNow();
       const listed = await sharedListing();
-      const elapsed = now() - startedAt;
-      const left = elapsed < 0 ? 0 : Math.max(0, listTimeoutMs - elapsed);
+      const left = Math.max(0, listTimeoutMs - (steadyNow() - startedAt));
       const kinds = await bluetooth
         .printerKinds(listed.map((d) => d.mac).filter(isBluetoothAddress), left)
         .catch((error: unknown) => {

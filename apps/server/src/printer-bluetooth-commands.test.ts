@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BLUETOOTH_COMMAND_LIMIT, PIN_WITHHELD } from "@waitron/print-agent";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 
@@ -343,57 +343,80 @@ describe("printer Bluetooth commands", () => {
     expect(commands.agentsHeld()).toBe(0);
   });
 
-  // Queued at 1_000; a clock read earlier than that leaves the command's end further ahead than
-  // its 120 seconds and a result's further ahead than its 60.
-  it.each([
-    ["400 days back", 400 * 86_400_000, false],
-    ["its limit back exactly", 0, true],
-    ["a millisecond past its limit", 1, false],
-  ])("drops a pending command ending further ahead than its limit (%s)", (_case, back, kept) => {
-    const { clock, commands } = store();
-    commands.enqueue("agent-1", "pair", address(1), "0000");
-    clock.now -= back;
-    expect(commands.current("agent-1")).toHaveLength(kept ? 1 : 0);
-    if (!kept)
+  describe("on the default clock, a wall-clock step changes no wait", () => {
+    const DAY = 86_400_000;
+    let steady = 0;
+    let wall = 0;
+    beforeEach(() => {
+      steady = 1_000;
+      wall = 400 * DAY;
+      vi.spyOn(performance, "now").mockImplementation(() => steady);
+      vi.spyOn(Date, "now").mockImplementation(() => wall);
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it("keeps a pending command for its whole 120 seconds", () => {
+      const commands = createPrinterBluetoothCommands();
+      commands.enqueue("agent-1", "pair", address(1), "0000");
+      for (const stepped of [0, 800 * DAY]) {
+        wall = stepped;
+        expect(commands.current("agent-1")).toHaveLength(1);
+        expect(commands.latest("agent-1", address(1))).toMatchObject({ expiresInMs: 120_000 });
+      }
+      steady += 119_999;
+      wall = 0;
+      expect(commands.current("agent-1")).toHaveLength(1);
+      steady += 1;
+      expect(commands.current("agent-1")).toEqual([]);
       expect(
         commands.enqueue("agent-1", "forget", address(BLUETOOTH_COMMAND_LIMIT + 1)),
       ).toMatchObject({ state: "pending", expiresInMs: 120_000 });
+    });
+
+    it("keeps a result for its whole 60 seconds", () => {
+      const commands = createPrinterBluetoothCommands({ id: () => "c1" });
+      commands.enqueue("agent-1", "forget", A);
+      commands.accept("agent-1", [{ id: "c1", ok: true }]);
+      wall = 0;
+      expect(commands.latest("agent-1", A)).toMatchObject({ state: "succeeded" });
+      steady += 59_999;
+      wall = 800 * DAY;
+      expect(commands.latest("agent-1", A)).toMatchObject({ state: "succeeded" });
+      steady += 1;
+      expect(commands.latest("agent-1", A)).toBeUndefined();
+    });
+
+    it("sweeps an idle agent only a minute after the last sweep", () => {
+      const commands = createPrinterBluetoothCommands();
+      commands.enqueue("agent-idle", "forget", A);
+      steady += 120_000;
+      commands.current("agent-busy");
+      // The sweep above ran at 121_000; the idle command queued now ends at 241_000.
+      commands.enqueue("agent-idle", "forget", A);
+      wall = 0;
+      commands.current("agent-busy");
+      expect(commands.agentsHeld()).toBe(1);
+      steady = 240_999;
+      commands.current("agent-busy");
+      expect(commands.agentsHeld()).toBe(1);
+      // That sweep ran at 240_999, so the next is not due until 300_999.
+      steady = 241_000;
+      wall = 800 * DAY;
+      commands.current("agent-busy");
+      expect(commands.agentsHeld()).toBe(1);
+      steady = 300_999;
+      commands.current("agent-busy");
+      expect(commands.agentsHeld()).toBe(0);
+    });
   });
 
-  it.each([
-    ["400 days back", 400 * 86_400_000, false],
-    ["its limit back exactly", 0, true],
-    ["a millisecond past its limit", 1, false],
-  ])("drops a result ending further ahead than its limit (%s)", (_case, back, kept) => {
-    const { clock, commands } = store();
-    commands.enqueue("agent-1", "forget", A);
-    commands.accept("agent-1", [{ id: "c1", ok: true }]);
-    clock.now -= back;
-    expect(commands.latest("agent-1", A)).toEqual(
-      kept ? expect.objectContaining({ state: "succeeded" }) : undefined,
-    );
+  it("tells a pending status whole milliseconds left, rounded up, from a fractional clock", () => {
+    let steady = 0.25;
+    const commands = createPrinterBluetoothCommands({ now: () => steady });
+    expect(commands.enqueue("agent-1", "forget", A)).toMatchObject({ expiresInMs: 120_000 });
+    steady = 1000.5;
+    expect(commands.latest("agent-1", A)).toMatchObject({ expiresInMs: 119_000 });
   });
-
-  it.each([
-    ["400 days back", 400 * 86_400_000, 0],
-    ["the sweep's minute ahead exactly", 0, 1],
-    ["a millisecond past the sweep's minute", 1, 0],
-  ])(
-    "sweeps an idle agent when the next sweep lies further ahead than its minute (%s)",
-    (_case, back, held) => {
-      const { clock, commands } = store();
-      commands.enqueue("agent-idle", "forget", A);
-      clock.now += 120_000;
-      commands.current("agent-busy");
-      commands.enqueue("agent-idle", "forget", A);
-      // The sweep above ran at 121_000, so the next is due a minute ahead, at 181_000, and the idle
-      // command queued then ends at 241_000. Stepping back `back` leaves both that far past their
-      // limits; only a sweep reaches the idle agent.
-      clock.now -= back;
-      commands.current("agent-busy");
-      expect(commands.agentsHeld()).toBe(held);
-    },
-  );
 
   it("uses the real clock and random ids by default", () => {
     const commands = createPrinterBluetoothCommands();
@@ -405,14 +428,14 @@ describe("printer Bluetooth commands", () => {
     expect(commands.current("agent-2")).toHaveLength(1);
   });
 
-  it("reads Date.now at each call by default, so a replaced clock reaches it", () => {
+  it("reads performance.now at each call by default, so a replaced clock reaches it", () => {
     // Built before the clock is replaced, so a clock captured at construction would miss it.
     const commands = createPrinterBluetoothCommands();
-    const start = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(start);
+    const start = performance.now();
+    vi.spyOn(performance, "now").mockReturnValue(start);
     try {
       commands.enqueue("agent-1", "forget", A);
-      vi.spyOn(Date, "now").mockReturnValue(start + 120_000);
+      vi.spyOn(performance, "now").mockReturnValue(start + 120_000);
       expect(commands.current("agent-1")).toEqual([]);
     } finally {
       vi.restoreAllMocks();
