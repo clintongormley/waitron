@@ -330,7 +330,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       [data-pinned="end"]::before {
         content: "";
         position: absolute;
-        inset-block: -2px 0;
+        inset-block: calc(var(--wt-space-1) / -2) 0;
         inset-inline-start: 0;
         border-inline-start: 1px solid var(--wt-color-border);
       }
