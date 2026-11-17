@@ -16,7 +16,10 @@ export type MachineServiceAction =
   | "staff-certificate-status"
   | "guest-menu-status"
   | "guest-menu-publish"
-  | "guest-menu-withdraw";
+  | "guest-menu-withdraw"
+  | "owner-recovery-read"
+  | "owner-recovery-approve"
+  | "owner-recovery-refuse";
 
 export type TranslationAction =
   "translation-submit" | "translation-status" | "translation-collect" | "translation-release";
@@ -89,6 +92,9 @@ export type OnRefusal = (
   publicKey: string,
 ) => Promise<void>;
 const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
+  "owner-recovery-read": { reply: 65536, ms: 8000 },
+  "owner-recovery-approve": { reply: 65536, ms: 8000 },
+  "owner-recovery-refuse": { reply: 65536, ms: 8000 },
   "guest-menu-status": { reply: 16384, ms: 8000 },
   "guest-menu-publish": { reply: 16384, ms: 60000 },
   "guest-menu-withdraw": { reply: 16384, ms: 8000 },
@@ -137,6 +143,7 @@ export async function serviceExchange(
   extra: { body?: string },
   signal?: AbortSignal,
   onRefusal?: OnRefusal,
+  options: { requireVersion?: boolean; refusal?: typeof refusalOf } = {},
 ): Promise<Record<string, unknown>> {
   const lease = state.lifecycle?.lease;
   if (!state.view?.registration || state.lifecycle?.revoked || !lease)
@@ -168,9 +175,9 @@ export async function serviceExchange(
         await onRefusal?.("revoked", used, state.publicKey);
       if (response.status === 401 && code === "invalid_proof")
         await onRefusal?.("invalid_proof", used, state.publicKey);
-      throw refusalOf(response.status, value);
+      throw (options.refusal ?? refusalOf)(response.status, value);
     }
-    if (!object(value) || value.version !== 1) unavailable();
+    if (!object(value) || (options.requireVersion !== false && value.version !== 1)) unavailable();
     return value;
   } catch (error) {
     if (error instanceof AppError) throw error;
