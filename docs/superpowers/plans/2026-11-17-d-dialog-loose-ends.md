@@ -53,3 +53,18 @@ Keep `wt-dialog`, `trackDialog()`, combobox, footer slots, event payloads and dr
 Leave Back wording and already-correct dashboard source/tests alone. Exclude purchases/staff synthetic-event work, Bluetooth Pair, bill attestation, devices (#3636), A1517 renderer and unrelated station screens.
 No shared `wt-modal`/`wt-dialog`, API, payment, fiscal, migration, token or translation changes are proposed.
 Expected: code about +8; tests about +45; documentation about +50/−8 including this plan; under 150 changed lines overall. Material departure returns to the watcher before build.
+
+## Review correction cleared 2026-11-17 07:28
+
+The first run-it read reproduced point (2) with “Evening service look (copy)”:
+199.125px of text in 182px of native input room at 390/1280px. The original
+sample fitting by 5px did not settle the queued ordinary-name defect.
+The watcher cleared fixing it here in `questions.md`, “WATCHER 2026-11-17 07:28”:
+“fix it in this branch with the one local token-backed width on theme-name-dialog.ts .fields
+(the same min(form width, dialog width minus padding) rule) and the focused real-input
+name-fit and viewport checks at 390 and 1280, keeping Back and the rest.”
+This supersedes the theme-source exclusion above: change only that width in
+`apps/dashboard/src/widgets/theme-name-dialog.ts` and its widget regression test.
+Inspect EN/ES, light/dark, phone/desktop; run the widget, a11y and unsaved suites,
+then one fresh fixes read. Revised forecast: production +8; tests about +80;
+docs about +65/−8; under 190 changed lines, no generated files.

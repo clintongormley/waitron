@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { WtButton, WtDialog, WtFormActions, WtInput, WtSwitch } from "@waitron/ui";
 import {
   cleanupWidgets,
@@ -78,6 +79,29 @@ it("Make a copy opens savable with its proposal and the switch off", async () =>
   expect(submit).toHaveBeenCalledTimes(1);
   expect(submit).toHaveBeenCalledWith({ name: "Christmas", inUse: false });
   expect(dialog.open).toBe(false);
+});
+
+it.each([390, 1280])("shows an ordinary copy name whole at %ipx", async (width) => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  onTestFinished(() => page.viewport(...before));
+  await page.viewport(width, 900);
+  const name = "Evening service look (copy)";
+  const { dialog } = await open({ kind: "copy", name });
+  await input(dialog).updateComplete;
+  await document.fonts.ready;
+  const native = input(dialog).shadowRoot!.querySelector("input")!;
+  const style = getComputedStyle(native);
+  const canvas = document.createElement("canvas").getContext("2d")!;
+  canvas.font = style.font;
+  expect(native.value).toBe(name);
+  expect(canvas.measureText(native.value).width).toBeLessThanOrEqual(
+    native.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+  );
+  expect(window.innerWidth).toBe(width);
+  const box = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.right).toBeLessThanOrEqual(width);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
 });
 
 it("Save as new theme opens savable, its switch as asked", async () => {
