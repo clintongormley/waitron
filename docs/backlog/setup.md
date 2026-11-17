@@ -410,12 +410,9 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
   19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
   refuse to send without them, and the setup server refuses a restore without them unless the box
-  names a `WAITRON_RECOVERY_OPERATION_FILE`. Every venue setup can make holds a fiscal registration
-  that a restore cannot carry on without details (fiscal-verifactu's restore hook,
-  `packages/fiscal-verifactu/src/allocated-lifecycle.ts`). A country pack with no fiscal module
-  (today only the United Kingdom's, which is not offered for venue setup:
-  `availableForVenueSetup: false` in `packages/country-gb/src/united-kingdom.ts`) would need both
-  refusals revisited.
+  names a `WAITRON_RECOVERY_OPERATION_FILE`. Seen on the test box on 2026-11-17: a bucket restore
+  sent without them was placed and the start failed with `sif.allocation_invalid`. A country pack
+  offered for venue setup without a fiscal module would need both refusals revisited.
 
 - **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
   validated as a whole millisecond and never used. The acceptance may be removed once a check of

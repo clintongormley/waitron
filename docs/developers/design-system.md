@@ -2911,7 +2911,9 @@ When you change a form for another reason, move it onto `FormFeedback` in the sa
 
 `FormFeedback` from `@waitron/ui` shares attempt state, keyed refusal dismissal and
 render-before-focus work for forms that repeat it. Reset it when the form resets; call
-`newRefusal()` from the form's existing refusal-property change check. Preserve field mapping,
+`newRefusal()` from the form's existing refusal-property change check, or `newRefusal(key)` to
+bring back only that key's dismissal when the form has more than one refusal property, and ask
+`shows(key)` whether a key is still shown. Preserve field mapping,
 validation, message precedence and direct `updated()` focus behavior when adopting it.
 Use `message(errors, fieldKeys, fixFields)` to assemble the bottom message: give it the
 messages already selected by your form, the keys marked beside fields, and the translated
