@@ -115,7 +115,6 @@ describe("A964 venue language", () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
-      await tx.update(taxpayer).set({ country: "GB" });
       await updateStation(tx, v.stations.kitchen, { name: "Pastry" });
       for (const id of [v.stations.grill, v.stations.fryer, v.stations.kitchen])
         await updateStation(tx, id, { waitsForPass: true });
