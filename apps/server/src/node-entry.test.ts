@@ -384,6 +384,21 @@ describe("runEntry", () => {
     });
   });
 
+  it("serves the recovery page on the configured WAITRON_HTTP_HOST", async () => {
+    const serveRecovery = vi.fn<(app: Hono, opts: { httpHost?: string }) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const d = deps({
+      baseEnv: { WAITRON_HTTP_HOST: "0.0.0.0" },
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+      serveRecovery,
+    });
+    await runEntry(d);
+    expect(serveRecovery.mock.calls[0]![1].httpHost).toBe("0.0.0.0");
+  });
+
   it("builds the landing config without throwing on a malformed WAITRON_BOX_ADDRESSES", async () => {
     // Recovery never runs `loadConfig`, so a broken box-addresses knob (which `loadConfig` rejects)
     // must not crash the one path that serves the page — it falls back to enumerating interfaces.

@@ -28,6 +28,8 @@ Al cambiar la clave de recuperación, usa **Mostrar la clave actual** para guard
 
 ## Copia continua en tu bucket {#bucket-copy}
 
+Demostración no ofrece esta copia.
+
 En **Copia continua en tu bucket**, introduce los datos de conexión del bucket. Elige **Probar** y después **Guardar y activar**. Revisa **Última copia confirmada** y **Cambios que aún no están en el bucket** para saber cómo de reciente es tu copia.
 
 Usa **Cambiar de bucket** para actualizar la conexión. Si necesitas restaurar la copia en otro servidor, sigue [Elige tu copia](backup-recovery.md#source).

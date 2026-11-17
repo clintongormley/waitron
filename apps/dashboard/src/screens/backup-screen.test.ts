@@ -99,6 +99,37 @@ it.each([
   },
 );
 
+it.each([
+  ["prepare", true],
+  ["live", true],
+  [undefined, true],
+  ["demo", false],
+] as const)(
+  "offers the bucket copy for setup choice %s: %s, and otherwise says a Demo venue offers none",
+  async (onboardingIntent, offered) => {
+    const api = stubApi({}, OFF);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+      onboardingIntent,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-stream-settings") !== null).toBe(offered);
+    const line = el.shadowRoot!.querySelector<HTMLElement>("[data-test=stream-demo]");
+    expect(line !== null).toBe(!offered);
+    if (!offered) {
+      await expect.element(line!).toBeVisible();
+      expect(line!.textContent?.trim()).toBe(t("stream.demo"));
+      expect(api.getStreamSettings).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it("words the Demo venue's bucket-copy line in English and Spanish", () => {
+  expect(en["stream.demo"]).toBe("A Demo venue does not offer a copy to your bucket.");
+  expect(es["stream.demo"]).toBe("Un local en Demostración no ofrece copia en tu bucket.");
+});
+
 const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,

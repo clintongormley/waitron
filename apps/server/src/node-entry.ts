@@ -696,6 +696,7 @@ async function runAdmittedEntry(
       {
         stateDir: deps.stateDir,
         port: httpPort,
+        httpHost: transport.httpHost,
         log: deps.log,
         landing: landingConfigFrom(deps.baseEnv, deps.stateDir, httpPort),
         onRepaired: async () => {
