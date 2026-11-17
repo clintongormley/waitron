@@ -1561,6 +1561,14 @@ it("Stop and Continue keep the till when the venue's own address sent it to the 
   });
 });
 
+it("a switch at the venue address ignores a return to a sibling box", async () => {
+  expect(
+    await stopAndContinueLinks(
+      "https://waitron.local/handover/emergency?back=https%3A%2F%2Fbox-b.waitron.local%2Ftill%2F",
+    ),
+  ).toEqual({ stop: "/", proceed: "/" });
+});
+
 it.each([
   "https://evil.example/",
   "http://waitron.local/",
