@@ -168,6 +168,8 @@ export function createHostedHourPreparation(
     refreshClock: async (binding, state) => {
       if (options.readClock !== undefined) return;
       const { contextKey } = await host.readSetupFacts!(binding);
+      // Twenty seconds leaves a held reading ten of its thirty when `read` takes it.
+      if (clocks.admitsWithin(contextKey, 20_000)) return;
       await clocks.compare(contextKey, null, { onBox: true }, () =>
         kept.chosen(state, binding, true),
       );

@@ -234,6 +234,18 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       keep(state.readings, reading.id, reading);
       return { id: reading.id, clock };
     },
+    /** Whether a reading taken in the last `withinMs` still admits a name. */
+    admitsWithin(key: string, withinMs: number) {
+      const sample = box();
+      return [...session(key).readings.values()].some((held) => {
+        if (!(sample.monotonicFinishedMs - held.monotonic <= withinMs)) return false;
+        try {
+          return canSelectHour(current(held, sample));
+        } catch {
+          return false;
+        }
+      });
+    },
     /** With no `comparisonId`, the newest fresh reading that admits a name, else the newest's answer. */
     read(key: string, comparisonId?: string) {
       const state = session(key);

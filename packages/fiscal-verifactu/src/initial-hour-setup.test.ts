@@ -1124,6 +1124,30 @@ const prepareSetup = (f: ReturnType<typeof configured>) =>
     ),
   );
 
+it.each([
+  [0, 1],
+  [20_001, 2],
+])(
+  "activation %i ms after the command's last check reads the time service %i time(s) in all",
+  async (laterMs, reads) => {
+    startEarly();
+    const f = configured();
+    await f.clock();
+    const saved = await f.select();
+    monotonicOffset += 31_000;
+    vi.setSystemTime(Date.now() + 31_000);
+    source.internet.mockClear();
+    const t = terminal(f, []);
+    expect(
+      await f.seat.commandBeforeActivation!({ ...context, request: saved }, t.actions),
+    ).toEqual({ status: "ready", input });
+    monotonicOffset += laterMs;
+    vi.setSystemTime(Date.now() + laterMs);
+    expect(await prepareSetup(f)).toBe("prepared");
+    expect(source.internet).toHaveBeenCalledTimes(reads);
+  },
+);
+
 it("a page's name is issued after another page's box-only re-check", async () => {
   startEarly();
   const f = configured();
