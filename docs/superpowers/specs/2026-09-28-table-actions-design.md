@@ -1,5 +1,7 @@
 # Tables, parties and bills: the till's table actions — design
 
+> **2026-11-17, A1308 os2 Tasks 1–4:** Paid bills now move to the surviving party when parties combine; abandoned bills stay behind. See [the os2 plan](../plans/2026-11-08-a1308-os2-bill-identity.md).
+
 > **2026-10-19, A773-1:** for new table orders, the approved
 > [bill contract](2026-10-16-a773-courses-and-groups-design.md#4-bills) replaces the default-to-main-bill
 > and Send to choices below with ordering on the bill on screen. The
