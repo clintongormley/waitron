@@ -351,7 +351,7 @@ describe("purchases-screen", () => {
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
     await createThroughForm(el);
-    await pressSave(el);
+    emitFromChild(form(el), "create-purchase", createDetail());
     await el.updateComplete;
     expect(createPurchaseInvoice).toHaveBeenCalledTimes(1);
     resolve();
@@ -402,7 +402,7 @@ it("refreshes displayed invoices when their data changes elsewhere", async () =>
 });
 
 describe("purchases-screen — single-flight and dismissal", () => {
-  it("updates at most once when Save is pressed twice while the write is held", async () => {
+  it("drops a duplicate update event after Save starts the held write", async () => {
     let resolve!: () => void;
     const api = stubApi({
       updatePurchaseInvoice: vi.fn(
@@ -415,7 +415,10 @@ describe("purchases-screen — single-flight and dismissal", () => {
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
     await updateThroughForm(el, "corrected");
-    await pressSave(el);
+    emitFromChild(form(el), "update-purchase", {
+      id: "pi-1",
+      patch: { ...createDetail(), header: { ...createDetail().header, note: "corrected" } },
+    });
     await flush(el);
     expect(api.updatePurchaseInvoice).toHaveBeenCalledTimes(1);
     resolve();

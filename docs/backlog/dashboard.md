@@ -9,7 +9,7 @@ their full text.
 reading unless marked run:
 
 - Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null`
-  fallbacks in the printers, payments, backup and devices files. **Next action:** delete them
+  fallbacks in the printers, payments, backup and device files (including device profiles). **Next action:** delete them
   with a receipt each, or leave them as defensive code by decision.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
@@ -272,9 +272,8 @@ Size M.
 
 - **Dashboard empty-value fallbacks (D-DASHBOARD-TEST-LOOSE-ENDS, 2026-11-17):** keep the
   remaining `?? []` and `?? null` in `dashboard-app.ts`, `login-screen.ts`, `extra-list-form.ts`
-  and `option-list-form.ts`. Empty contributions and missing groups/selections keep an empty
-  value; form resets accept no current list, and login secret clearing tolerates no shadow root.
-  These remain deliberate defensive code, without a claim that every fallback has a test.
+  and `option-list-form.ts` as deliberate defensive code, without a claim that every fallback
+  has a test.
 
 - **Password-throttle saturation:** during an address spray, an address sharing a counter with
   sprayed addresses can inherit their failed-password count if it has no cache entry or live
