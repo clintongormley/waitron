@@ -67,6 +67,11 @@ it("draws each product's variants as rows beneath it, in the order the server se
     ),
     host,
   );
+  expect([...host.querySelectorAll("thead th")].map((th) => th.textContent!.trim())).toEqual([
+    "Product",
+    "Quantity",
+    "Total",
+  ]);
   const rows = [...host.querySelectorAll("tbody tr")].map((tr) => tr.getAttribute("data-test"));
   expect(rows).toEqual([
     "seller-row-0",
