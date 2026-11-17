@@ -274,14 +274,6 @@ export class RecoveryPackCard extends LitElement {
     this.dialog?.show(this.failed ? null : this.status);
   }
 
-  /** The box's own time for pack `number`, as the status names it. */
-  #madeAt(number: number): string | undefined {
-    const status = this.status;
-    return [status?.latest, status?.unreceived, ...(status?.keep ?? [])].find(
-      (pack) => pack?.number === number,
-    )?.madeAt;
-  }
-
   #date(iso: string): string {
     return packDate(iso, this.status?.timeZone);
   }
@@ -473,7 +465,7 @@ export class RecoveryPackCard extends LitElement {
       <p data-test="pack-ready">
         ${fill("recovery_pack.ready", {
           number: String(made.number),
-          date: this.#date(this.#madeAt(made.number) ?? made.madeAt),
+          date: this.#date(made.madeAt),
         })}
       </p>
       <div class="actions">

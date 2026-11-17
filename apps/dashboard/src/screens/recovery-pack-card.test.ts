@@ -699,6 +699,7 @@ describe("making a pack", () => {
     "dates the ready line from the box's own time for the pack, in the venue's zone (%s)",
     async (timeZone, madeAt, day) => {
       const api = stubApi(status({ timeZone }));
+      api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt });
       const el = await mount(api);
       api.getRecoveryPackStatus.mockResolvedValue(
         status({

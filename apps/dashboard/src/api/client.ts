@@ -2023,9 +2023,7 @@ function spareFollowView(value: unknown): SpareFollowView | null {
     clockAt: null,
   };
   const txid = (x: unknown) => x === null || (typeof x === "string" && /^[0-9a-f]{16}$/.test(x));
-  const date = (x: unknown) =>
-    x === null ||
-    (typeof x === "string" && Number.isFinite(Date.parse(x)) && new Date(x).toISOString() === x);
+  const date = (x: unknown) => x === null || (typeof x === "string" && isInstant(x));
   if (
     typeof v.peerNodeId !== "string" ||
     v.peerNodeId === "" ||
