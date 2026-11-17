@@ -1464,16 +1464,40 @@ function membersDeclaringTests() {
     .map((pkg) => pkg.name);
 }
 
+let browserMembers;
+/** Every workspace member that declares the Vitest browser provider, with its parsed package.json. */
+function browserManifests() {
+  browserMembers ??= workspaceListing()
+    .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
+    .map((pkg) => ({
+      name: pkg.name,
+      manifest: JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8")),
+    }))
+    .filter(
+      ({ manifest }) => manifest.devDependencies?.["@vitest/browser-playwright"] !== undefined,
+    );
+  return browserMembers;
+}
+
 /** Every workspace member that declares the Vitest browser provider. */
 function browserPackages() {
-  return workspaceListing()
-    .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
-    .filter((pkg) => {
-      const manifest = JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8"));
-      return manifest.devDependencies?.["@vitest/browser-playwright"] !== undefined;
-    })
-    .map((pkg) => pkg.name);
+  return browserManifests().map(({ name }) => name);
 }
+
+describe("the browser-mode packages' vite", () => {
+  it("every package that declares the browser provider declares packages/ui's vite range, compared as exact text", () => {
+    const uiManifest = JSON.parse(readFileSync(join(repoRoot, "packages/ui/package.json"), "utf8"));
+    const range = uiManifest.devDependencies?.vite;
+    expect(range).toEqual(expect.any(String));
+    const browser = browserManifests();
+    expect(browser.length).toBeGreaterThan(0);
+    const missing = browser
+      .filter(({ manifest }) => manifest.devDependencies?.vite !== range)
+      .map(({ name }) => name)
+      .sort();
+    expect(missing, `these browser-mode packages do not declare vite ${range}`).toEqual([]);
+  });
+});
 
 describe("pnpmLs (the subprocess guard)", () => {
   it("returns parsed stdout on a clean exit", () => {
