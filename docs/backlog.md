@@ -1606,9 +1606,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
-- **Cross-app links in the split Vite dev stack — OPEN, unqueued.**
-  [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack).
-
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**
   [Detail](backlog/ci.md#drizzle-kit-03111-left-out-on-delete-when-it-generated-an-alter-table--add--references-on-this-engine-while-its-snapshot-kept-it).
 

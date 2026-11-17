@@ -243,14 +243,6 @@ never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agen
 sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
 decides whether the rule covers every agent, then the two docs follow.
 
-## Cross-app links in the split Vite dev stack
-
-The deployed server serves both
-apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
-request for `/manage/devices` on 5190 returned the till HTML, while the same path on 5191 returned
-the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
-server without changing their deployed same-origin paths; this also affects setup's existing links.
-
 ## A668-5 normal-push recurrence, 2026-10-16
 
 2026-10-22: A994 reproduces the diagnostic failure cold and starts that fixture after self refresh,

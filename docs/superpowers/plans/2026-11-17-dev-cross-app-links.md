@@ -2,6 +2,8 @@
 
 **Status:** Separate Sol/high draft checked; Claude's first read completed (report in Lane I receipts/dev-cross-app-links-20261117/plan-review.md). This corrected smaller plan awaits watcher clearance. The watcher cleared dev-only /setup/ at 01:59; no owner design approval is claimed.
 
+**2026-11-17 04:07 update:** The watcher cleared this smaller plan at 02:11 CET in Lane I questions.md, including setup /help and repository /manage/ URL corrections. Claude reviewed the approach; the watcher cleared the build. Implementation and focused checks are complete; finish-branch reviews and current-head CI remain.
+
 **Ask, verbatim (Lane I queue, watcher-fed 2026-11-17 01:41):**
 > "Cross-app links in the split Vite dev stack" in `docs/backlog/ci.md`. `pnpm dev` runs the till on 5190, the dashboard on 5191 (base `/manage/`) and setup on 5192, so a link to `/manage/devices` from the till's dev server gets the till's page. Make each dev server pass the other apps' paths on to the right dev server (for example the till's Vite proxy sends `/manage` to the dashboard's), honouring the `WAITRON_*_VITE_PORT` overrides, with a test beside `scripts/dev-proxy-config.test.ts`. Show the wrong page first with `curl` against the running dev stack, then the right one after. Cover setup's existing links too. Delete the entry when done.
 
