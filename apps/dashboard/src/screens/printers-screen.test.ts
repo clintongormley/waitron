@@ -1330,7 +1330,7 @@ describe("printer configuration tabs", () => {
     await userEvent.click(trigger);
     await userEvent.keyboard("{Tab}{Enter}");
     await flush(el);
-    expect(location.pathname).toBe("/manage/printers/view/printers/printer/p9");
+    expect(location.pathname).toBe("/printers/view/printers/printer/p9");
     expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
   });
 
@@ -3584,7 +3584,7 @@ describe("printers-screen", () => {
 });
 
 it("Enter guards a pending details save and allows retry after rejection", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let reject!: (reason: unknown) => void;
   const pending = new Promise((_, fail) => {
     reject = fail;
@@ -3752,7 +3752,7 @@ it("keeps a successfully added printer registered when refreshing discovery fail
 });
 
 it("cancel discards printer name and connection edits and reopening restores saved values", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi();
   const { el } = await mountSharedPrinter(api);
   await flush(el);
@@ -4000,7 +4000,7 @@ it("opens the details form from a printer row's Edit action", async () => {
   await userEvent.click(trigger);
   await userEvent.keyboard("{Tab}{Enter}");
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
   expect(inputFocused(el, '[name="printer-detail-name"]')).toBe(true);
   expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
@@ -4132,7 +4132,7 @@ function selectedTab(el: PrintersScreen): string {
 }
 
 it("opens a printer's details in a window over the Printers tab, and closing returns to the tab", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers");
+  history.replaceState(null, "", "/printers/view/printers");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4142,15 +4142,15 @@ it("opens a printer's details in a window over the Printers tab, and closing ret
   expect(detailsOpen(el)).toBe(true);
   expect(q(el, "wt-tabs")).not.toBeNull();
   expect(selectedTab(el)).toBe("printers");
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   await closeDetails(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
   expect(detailsOpen(el)).toBe(false);
   expect(q(el, "[data-test=printer-row-p1]")!.matches(":focus-within")).toBe(true);
 });
 
 it("opens the details from the print queue and closes back to the queue", async () => {
-  history.replaceState(null, "", "/manage/printers/view/queue");
+  history.replaceState(null, "", "/printers/view/queue");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4162,12 +4162,12 @@ it("opens the details from the print queue and closes back to the queue", async 
   expect(q(el, "[data-test=job-printer-j1]")).not.toBeNull();
   await closeDetails(el);
   expect(selectedTab(el)).toBe("queue");
-  expect(location.pathname).toBe("/manage/printers/view/queue");
+  expect(location.pathname).toBe("/printers/view/queue");
   expect(q(el, "[data-test=job-printer-j1]")!.matches(":focus-within")).toBe(true);
 });
 
 it("opens the details from an address naming the printer", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4178,7 +4178,7 @@ it("opens the details from an address naming the printer", async () => {
 });
 
 it("says a printer named in the address does not exist, in the window", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/nope");
+  history.replaceState(null, "", "/printers/view/printers/printer/nope");
   let release: (rows: Printer[]) => void = () => {};
   const listing = new Promise<Printer[]>((resolve) => {
     release = resolve;
@@ -4197,7 +4197,7 @@ it("says a printer named in the address does not exist, in the window", async ()
 });
 
 it("closes the details of a printer deleted from another tab and says so", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const liveData = new LiveData();
   const api = stubApi({ liveData } as Partial<DashboardApi>);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -4213,7 +4213,7 @@ it("closes the details of a printer deleted from another tab and says so", async
 });
 
 it("closing the details returns to the tab they were opened from", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1?keep=yes");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4221,12 +4221,12 @@ it("closing the details returns to the tab they were opened from", async () => {
   expect(detailsHeading(el)).toContain("Kitchen");
   await closeDetails(el);
   expect(location.search).toBe("?keep=yes");
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
   expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
 });
 
 it("does not rewrite a route outside Printers while a name draft is open", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4234,15 +4234,15 @@ it("does not rewrite a route outside Printers while a name draft is open", async
   openDetailsEdit(el);
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Changed printer");
-  history.pushState(null, "", "/manage/devices");
+  history.pushState(null, "", "/devices");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(location.pathname).toBe("/manage/devices");
+  expect(location.pathname).toBe("/devices");
 });
 
 it("shows each fact once, label beside value, in Status, Connection, Paper and drawer, and Used by", async () => {
   await page.viewport(1280, 800);
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4282,7 +4282,7 @@ it.each(["en", "es-ES"] as const)(
     setLocale(locale);
     try {
       const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
-      history.replaceState(null, "", "/manage/printers/view/printers/printer/p3");
+      history.replaceState(null, "", "/printers/view/printers/printer/p3");
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(el);
       const row = q(el, "[data-test=printer-detail-connected-through]")!;
@@ -4295,7 +4295,7 @@ it.each(["en", "es-ES"] as const)(
       );
       vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([]);
       cleanupWidgets();
-      history.replaceState(null, "", "/manage/printers/view/printers/printer/p3");
+      history.replaceState(null, "", "/printers/view/printers/printer/p3");
       const again = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(again.el);
       expect(text(again.el, "[data-test=printer-detail-connected-through]")).toBe(
@@ -4308,7 +4308,7 @@ it.each(["en", "es-ES"] as const)(
 );
 
 it("says a network printer may print through any venue agent", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4325,7 +4325,7 @@ it("reads today's last print as Today and the time", async () => {
   const lastPrintAt = new Date(
     Math.max(Date.now() - 60 * 60 * 1000, midnight.getTime()),
   ).toISOString();
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({
       listPrinters: vi
@@ -4342,7 +4342,7 @@ it("reads today's last print as Today and the time", async () => {
 });
 
 it("starts calibration from printer details at the paper settings step", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4354,7 +4354,7 @@ it("starts calibration from printer details at the paper settings step", async (
 });
 
 it("offers detail edits and calibration without a second general printer editor", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4370,7 +4370,7 @@ it("offers detail edits and calibration without a second general printer editor"
 });
 
 it("closes calibration for the previous printer when browser navigation selects another", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4379,7 +4379,7 @@ it("closes calibration for the previous printer when browser navigation selects 
   await flush(el);
   expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
 
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
 
@@ -4388,7 +4388,7 @@ it("closes calibration for the previous printer when browser navigation selects 
 });
 
 it("edits a printer name on its details page without opening the calibration wizard", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let stored = { ...printers[0]! };
   const api = stubApi({
     listPrinters: vi.fn().mockImplementation(async () => [stored]),
@@ -4412,7 +4412,7 @@ it("edits a printer name on its details page without opening the calibration wiz
 });
 
 it("saves the details form when Enter is pressed in the name field", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
@@ -4430,7 +4430,7 @@ it("saves the details form when Enter is pressed in the name field", async () =>
 });
 
 it("saves the details form when Enter is pressed in the address field", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
@@ -4448,7 +4448,7 @@ it("saves the details form when Enter is pressed in the address field", async ()
 });
 
 it("focuses the printer name when Edit opens the details form", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4459,7 +4459,7 @@ it("focuses the printer name when Edit opens the details form", async () => {
 });
 
 it("marks the printer name as required in the details form", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4472,7 +4472,7 @@ it("marks the printer name as required in the details form", async () => {
 });
 
 it("shows a refused details save below the form and leaves Save available", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi({
     updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
   });
@@ -4492,7 +4492,7 @@ it("shows a refused details save below the form and leaves Save available", asyn
 });
 
 it("locks the details name while its save is pending and unlocks it on refusal", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let refuse!: (reason: unknown) => void;
   const api = stubApi({
     updatePrinter: vi.fn().mockReturnValue(
@@ -4516,7 +4516,7 @@ it("locks the details name while its save is pending and unlocks it on refusal",
 });
 
 it("keeps the next printer's name draft when an earlier save finishes", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let finishSave!: () => void;
   const api = stubApi({
     updatePrinter: vi.fn().mockReturnValueOnce(
@@ -4535,12 +4535,12 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Receipt desk" }),
   );
 
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(detailsHeading(el)).toContain("Kitchen");
   await choosePrinter(el, "discard");
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(detailsHeading(el)).toContain("Remote");
@@ -4556,7 +4556,7 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
 });
 
 it("asks before leaving a printer with an unsaved name through All printers", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   openDetailsEdit(el);
@@ -4564,17 +4564,17 @@ it("asks before leaving a printer with an unsaved name through All printers", as
   typeField(el, '[name="printer-detail-name"]', "Unsaved kitchen");
   pressCloseDetails(el);
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
   await expect.poll(() => questionOf(el).open).toBe(true);
   await choosePrinter(el, "discard");
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
 });
 
 it("keeps an unsaved printer name when browser Back first leaves its details", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers");
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers");
+  history.pushState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   openDetailsEdit(el);
@@ -4587,21 +4587,21 @@ it("keeps an unsaved printer name when browser Back first leaves its details", a
   history.back();
   await firstPop;
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
     "Unsaved kitchen",
   );
   await expect.poll(() => questionOf(el).open).toBe(true);
 
   await choosePrinter(el, "discard");
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/printers/view/printers"));
   await flush(el);
   expect(q(el, "[data-test=printer-status]")).toBeNull();
 });
 
 it("still asks on browser Back after keeping an unsaved name on Close", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers");
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers");
+  history.pushState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   openDetailsEdit(el);
@@ -4619,15 +4619,15 @@ it("still asks on browser Back after keeping an unsaved name on Close", async ()
   history.back();
   await firstPop;
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
     "Unsaved kitchen",
   );
 });
 
 it("keeps an unsaved printer connection when browser Back first leaves its details", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers");
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers");
+  history.pushState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   openDetailsEdit(el);
@@ -4640,20 +4640,20 @@ it("keeps an unsaved printer connection when browser Back first leaves its detai
   history.back();
   await firstPop;
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
     "10.0.0.88",
   );
   await expect.poll(() => questionOf(el).open).toBe(true);
 
   await choosePrinter(el, "discard");
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/printers/view/printers"));
   await flush(el);
   expect(q(el, "[data-test=printer-status]")).toBeNull();
 });
 
 it("explains an empty printer name beside its field", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
@@ -4670,7 +4670,7 @@ it("explains an empty printer name beside its field", async () => {
 });
 
 it("saves network connection edits from printer details", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let stored = { ...printers[0]! };
   const api = stubApi({
     listPrinters: vi.fn().mockImplementation(async () => [stored]),
@@ -4693,7 +4693,7 @@ it("saves network connection edits from printer details", async () => {
 });
 
 it("marks an invalid network port beside the field and keeps Save disabled", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
@@ -4709,7 +4709,7 @@ it("marks an invalid network port beside the field and keeps Save disabled", asy
 });
 
 it("keeps a refused network connection edit available to retry", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const api = stubApi({
     updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
   });
@@ -4730,7 +4730,7 @@ it("keeps a refused network connection edit available to retry", async () => {
 });
 
 it("locks network fields while their save is pending and unlocks them on refusal", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   let refuse!: (reason: unknown) => void;
   const api = stubApi({
     updatePrinter: vi.fn().mockReturnValue(
@@ -4759,7 +4759,7 @@ it("locks network fields while their save is pending and unlocks them on refusal
 });
 
 it("keeps the next printer's connection draft when an earlier save finishes", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const second = { ...printers[0]!, id: "p2", name: "Second network printer" };
   let finishFirst!: () => void;
   const api = stubApi({
@@ -4780,12 +4780,12 @@ it("keeps the next printer's connection draft when an earlier save finishes", as
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", { host: "10.0.0.88", port: 9100 }),
   );
 
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   await expect.poll(() => questionOf(el).open).toBe(true);
   await choosePrinter(el, "discard");
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   openDetailsEdit(el);
@@ -4804,7 +4804,7 @@ it("keeps the next printer's connection draft when an earlier save finishes", as
 });
 
 it("asks before leaving a printer with a changed network connection", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountSharedPrinter(stubApi());
   await flush(el);
   openDetailsEdit(el);
@@ -4816,14 +4816,14 @@ it("asks before leaving a printer with a changed network connection", async () =
   await expect.poll(() => questionOf(el).open).toBe(true);
   expect(questionOf(el).message).toBe(t("unsaved.message"));
   await choosePrinter(el, "keep");
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
   expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
     "10.0.0.88",
   );
   pressCloseDetails(el);
   await choosePrinter(el, "discard");
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
 });
 
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
@@ -4933,7 +4933,7 @@ async function openUsedBy(
   profiles: PrinterProfileOffer[] = usedByProfiles,
   stations: PrinterStationName[] = usedByStations,
 ): Promise<PrintersScreen> {
-  history.replaceState(null, "", "/manage/printers");
+  history.replaceState(null, "", "/printers");
   const api = stubApi({
     listPrinterProfiles: vi.fn().mockResolvedValue(profiles),
     listPrinterStationNames: vi.fn().mockResolvedValue(stations),
@@ -4984,7 +4984,7 @@ it("links each name to its screen only where the person may open it", async () =
   const section = q(el, "[data-test=printer-section-used-by]")!;
   const links = [...section.querySelectorAll("a")];
   expect(links.map((link) => [link.textContent!.trim(), link.getAttribute("href")])).toEqual([
-    ["Dining room", "/manage/venue-operations/department/d1"],
+    ["Dining room", "/venue-operations/department/d1"],
   ]);
   expect(text(el, "[data-test=printer-used-by-profile-dp1]")).toBe(
     fill("printers.used_by_profile", {
@@ -5002,11 +5002,11 @@ it("links each name to its screen only where the person may open it", async () =
       link.getAttribute("href"),
     ]),
   ).toEqual([
-    ["Waitstaff", "/manage/device-profiles/profile/dp1"],
-    ["Counter", "/manage/device-profiles/profile/dp2"],
-    ["Kitchen screen", "/manage/device-profiles/profile/dp3"],
-    ["Dining room", "/manage/venue-operations/department/d1"],
-    ["Bar", "/manage/prep-stations/view/stations/station/s1"],
+    ["Waitstaff", "/device-profiles/profile/dp1"],
+    ["Counter", "/device-profiles/profile/dp2"],
+    ["Kitchen screen", "/device-profiles/profile/dp3"],
+    ["Dining room", "/venue-operations/department/d1"],
+    ["Bar", "/prep-stations/view/stations/station/s1"],
   ]);
 });
 
@@ -5055,7 +5055,7 @@ it("says nothing uses a printer that no profile or station names", async () => {
 });
 
 async function openUsedByWith(api: DashboardApi): Promise<PrintersScreen> {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(q(el, "[data-test=printer-section-used-by]")).not.toBeNull();
@@ -5107,7 +5107,7 @@ it.each(["listPrinterProfiles", "listPrinterStationNames"] as const)(
 );
 
 it("reopens printer status from its URL and reflects a saved drawer choice", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1?keep=yes");
   let stored = { ...printers[0]! };
   const api = stubApi({
     listPrinters: vi.fn().mockImplementation(async () => [stored]),
@@ -5132,20 +5132,20 @@ it("reopens printer status from its URL and reflects a saved drawer choice", asy
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
   pressCloseDetails(el);
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
   expect(location.search).toBe("?keep=yes");
   expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
   q(el, "[data-test=printer-row-p1]")!.click();
   await flush(el);
-  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
-  history.replaceState(null, "", "/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   expect(q(el, "[data-test=printer-status]")).toBeNull();
 });
 
 it("keeps printer status live without replacing a name draft in the details form", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -5184,7 +5184,7 @@ it("keeps printer status live without replacing a name draft in the details form
 });
 
 it("explains an unknown printer URL and lets you return to the list", async () => {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/missing");
+  history.replaceState(null, "", "/printers/view/printers/printer/missing");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
   expect(text(el, '[role="status"]')).toContain(codeMessage("printer.not_found"));
@@ -5626,17 +5626,17 @@ it("lines a job's status text up with the text beside it in its row", async () =
 });
 
 it("restores printer tabs from the URL and browser navigation", async () => {
-  history.replaceState(null, "", "/manage/printers/view/agents?keep=yes");
+  history.replaceState(null, "", "/printers/view/agents?keep=yes");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
   expect(
     q(el, "wt-tabs")!.shadowRoot!.querySelector("[aria-selected=true]")?.getAttribute("data-key"),
   ).toBe("agents");
   await selectTab(el, "printers");
-  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.pathname).toBe("/printers/view/printers");
   expect(location.search).toBe("?keep=yes");
   history.back();
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/agents"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/printers/view/agents"));
   await flush(el);
   expect(
     q(el, "wt-tabs")!.shadowRoot!.querySelector("[aria-selected=true]")?.getAttribute("data-key"),
@@ -6267,32 +6267,32 @@ describe("printers-screen tabs, tables and refresh edges", () => {
   }
 
   it("records the chosen first tab in the address when the printers page opened without one", async () => {
-    history.replaceState(null, "", "/manage/printers");
+    history.replaceState(null, "", "/printers");
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),
     });
     await flush(el);
 
     expect(selectedTab(el)).toBe("queue");
-    expect(location.pathname).toBe("/manage/printers/view/queue");
+    expect(location.pathname).toBe("/printers/view/queue");
   });
 
   it("replaces an unknown tab in the address with the useful first tab, before and after loading", async () => {
-    history.replaceState(null, "", "/manage/printers/view/bogus");
+    history.replaceState(null, "", "/printers/view/bogus");
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     expect(selectedTab(el)).toBe("printers");
-    expect(location.pathname).toBe("/manage/printers/view/printers");
+    expect(location.pathname).toBe("/printers/view/printers");
 
     await selectTab(el, "agents");
-    history.pushState(null, "", "/manage/printers/view/other-bogus");
+    history.pushState(null, "", "/printers/view/other-bogus");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
 
     expect(selectedTab(el)).toBe("printers");
-    expect(location.pathname).toBe("/manage/printers/view/printers");
+    expect(location.pathname).toBe("/printers/view/printers");
   });
 
   it("shows the printers table loading, not 'No printers yet', while its list is read", async () => {
@@ -6300,7 +6300,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     try {
       for (const locale of ["en", "es-ES"] as const) {
         setLocale(locale);
-        history.replaceState(null, "", "/manage/printers/view/printers");
+        history.replaceState(null, "", "/printers/view/printers");
         let answer!: (rows: Printer[]) => void;
         const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
           api: stubApi({
@@ -6397,7 +6397,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
   });
 
   it("says a later failed read of an empty printers table once, in the page's alert, and shows its rows again once a read answers", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
       liveData: new LiveData(),
     });
@@ -6427,7 +6427,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
   });
 
   it("draws an empty printers table again once its read answers, while another list's read still fails", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
       liveData: new LiveData(),
     });
@@ -6450,7 +6450,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
   });
 
   it("leaves out an empty printers table whose read fails with the code the alert already shows", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const api = Object.assign(
       stubApi({
         listPrinters: vi.fn().mockResolvedValue([]),
@@ -6555,13 +6555,13 @@ describe("printers-screen tabs, tables and refresh edges", () => {
   });
 
   it("shows a failed list load once, in Add printer, when browser navigation opens a printer's details beneath it", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=open-add-printer]")!.click();
     await flush(el);
-    history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.pushState(null, "", "/printers/view/printers/printer/p1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(detailsHeading(el)).toContain("Kitchen");
@@ -6933,7 +6933,7 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("keeps a late change from a closed details form out of the next printer's draft", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -6942,7 +6942,7 @@ describe("printers-screen printer editor edges", () => {
     const staleName = q(el, '[name="printer-detail-name"]')!;
     cancelDetailsEdit(el);
     await flush(el);
-    history.pushState(null, "", "/manage/printers/view/printers/printer/p3");
+    history.pushState(null, "", "/printers/view/printers/printer/p3");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     openDetailsEdit(el);
@@ -6961,7 +6961,7 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("does nothing when Save from a closed details form is pressed", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -6981,7 +6981,7 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("refuses a port outside 1 to 65535", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -6998,7 +6998,7 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("refuses exponent notation in a network port on printer details", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -7023,7 +7023,7 @@ describe("printers-screen printer editor edges", () => {
   ] as const)(
     "refuses to calibrate a %s printer with no device identity",
     async (_transport, row, message) => {
-      history.replaceState(null, "", `/manage/printers/view/printers/printer/${row.id}`);
+      history.replaceState(null, "", `/printers/view/printers/printer/${row.id}`);
       const api = stubApi({
         listPrinters: vi.fn().mockResolvedValue([row as Printer]),
       });
@@ -7495,7 +7495,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
   });
 
   it("leaves the details Save working after a refusal that names no field", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const { el, api } = await mounted({
       updatePrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
@@ -7513,7 +7513,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
   });
 
   it("starts the details form afresh when it is reopened", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const { el } = await mountSharedPrinter(stubApi());
     await flush(el);
     openDetailsEdit(el);
@@ -11265,7 +11265,7 @@ describe("Deleting a printer", () => {
     [...el.shadowRoot!.querySelectorAll("p.error[role=alert]")].map((p) => p.textContent!.trim());
 
   beforeEach(() => {
-    history.replaceState(null, "", "/manage/printers");
+    history.replaceState(null, "", "/printers");
   });
 
   async function mounted(overrides: Partial<DashboardApi> = {}) {
@@ -13124,7 +13124,7 @@ describe("an A4 printer's details", () => {
   ];
 
   async function openA4(overrides: Partial<DashboardApi> = {}, canManage = true, id = "pp1") {
-    history.replaceState(null, "", `/manage/printers/view/printers/printer/${id}`);
+    history.replaceState(null, "", `/printers/view/printers/printer/${id}`);
     const api = stubApi({
       listPagePrinters: vi.fn().mockResolvedValue([pagePrinter]),
       listPrinterProfiles: vi.fn().mockResolvedValue(invoiceProfiles),
@@ -13725,7 +13725,7 @@ describe("the name dialogs open with the found name filled in and selected", () 
 describe("the printer details' footer and its one Edit form", () => {
   const footer = "[data-test=printer-details-modal] > wt-form-actions[slot=footer]";
   async function details(id = "p1", overrides: Partial<DashboardApi> = {}) {
-    history.replaceState(null, "", `/manage/printers/view/printers/printer/${id}`);
+    history.replaceState(null, "", `/printers/view/printers/printer/${id}`);
     const api = stubApi(overrides);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -13872,7 +13872,7 @@ describe("the printer details' footer and its one Edit form", () => {
     await selectTab(el, "printers");
     q(el, "[data-test=edit-printer-p1]")!.click();
     await flush(el);
-    expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+    expect(location.pathname).toBe("/printers/view/printers/printer/p1");
     expect(q(el, "[data-test=save-printer-details]")).not.toBeNull();
     expect(q(el, "[data-test=printer-section-status]")).toBeNull();
     expect(inputFocused(el, '[name="printer-detail-name"]')).toBe(true);
@@ -14267,14 +14267,14 @@ it("starts one stream with discovery before the printer lists arrive", async () 
 });
 
 it("chooses its default view after discovery fails and recovers without reloading printer lists", async () => {
-  history.replaceState(null, "", "/manage/printers");
+  history.replaceState(null, "", "/printers");
   const liveData = new LiveData();
   const api = stubApi({
     liveData,
     listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/queue"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/printers/view/queue"));
   await vi.waitFor(() =>
     expect(text(el, "[data-test=printer-refresh-error]")).toContain(
       codeMessage("connection.failed"),
@@ -14285,7 +14285,7 @@ it("chooses its default view after discovery fails and recovers without reloadin
   await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
   await flush(el);
   expect(api.listPrinters).toHaveBeenCalledOnce();
-  expect(location.pathname).toBe("/manage/printers/view/queue");
+  expect(location.pathname).toBe("/printers/view/queue");
 });
 
 describe("stable printer column inputs", () => {

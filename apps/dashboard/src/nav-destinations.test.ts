@@ -12,7 +12,7 @@ const declaration: DashboardSearchDestination = {
   id: "routes",
   screen: "prep-stations",
   labelKey: "routes",
-  path: "/manage/prep-stations/view/routing",
+  path: "/prep-stations/view/routing",
 };
 const input = () => ({
   pages,
@@ -34,7 +34,7 @@ describe("collectSearchDestinations", () => {
       label: "Routes",
       pageLabel: "Prep stations",
       heading: "Operations",
-      href: "/manage/prep-stations/view/routing",
+      href: "/prep-stations/view/routing",
     });
   });
   it("requires a readable parent and an explicitly gated child's write or read permission", () => {
@@ -67,7 +67,7 @@ describe("collectSearchDestinations", () => {
         label: "Tables",
         pageLabel: "Venue settings",
         heading: "Operations",
-        href: "/manage/venue-settings/view/tables",
+        href: "/venue-settings/view/tables",
       },
     ]);
   });
@@ -93,7 +93,7 @@ describe("collectSearchDestinations", () => {
         label: "Rota",
         pageLabel: "Calendar",
         heading: "Operations",
-        href: "/manage/opening-hours/view/rota",
+        href: "/opening-hours/view/rota",
       },
       {
         id: "calendar:rota:by-person",
@@ -101,7 +101,7 @@ describe("collectSearchDestinations", () => {
         label: "By person",
         pageLabel: "Calendar",
         heading: "Operations",
-        href: "/manage/opening-hours/view/rota/mode/person",
+        href: "/opening-hours/view/rota/mode/person",
       },
     ]);
     value.calendarViews = [];
@@ -111,10 +111,10 @@ describe("collectSearchDestinations", () => {
   });
   it("rejects duplicate ids, unknown parent screens and paths outside the declared screen", () => {
     for (const invalid of [
-      [{ ...declaration, id: "x", screen: "absent", path: "/manage/absent" }],
+      [{ ...declaration, id: "x", screen: "absent", path: "/absent" }],
       [declaration, declaration],
-      [{ ...declaration, path: "https://outside.example/manage/prep-stations" }],
-      [{ ...declaration, path: "/manage/printers" }],
+      [{ ...declaration, path: "https://outside.example/prep-stations" }],
+      [{ ...declaration, path: "/printers" }],
     ])
       expect(() => collectSearchDestinations({ ...input(), declarations: invalid })).toThrow();
   });
@@ -133,7 +133,7 @@ it("searches card providers under Modules without offering the removed Card paym
       label: "modules.providers",
       pageLabel: "Modules",
       heading: "Settings",
-      href: "/manage/modules/view/card-providers/state/all",
+      href: "/modules/view/card-providers/state/all",
     },
     {
       id: "payments:readers",
@@ -141,7 +141,7 @@ it("searches card providers under Modules without offering the removed Card paym
       label: "payments.readers_heading",
       pageLabel: "Card payments",
       heading: "Settings",
-      href: "/manage/payments",
+      href: "/payments",
     },
   ]);
 });

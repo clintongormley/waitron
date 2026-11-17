@@ -26,7 +26,7 @@ for (const locale of ["en", "es"] as const) {
       open: true,
       amount: "35.00",
       takesCash: true,
-      refusal: { code: "storage.disk_full", recoveryUrl: "/manage/check-card-payments" },
+      refusal: { code: "storage.disk_full", recoveryUrl: "/check-card-payments" },
     });
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
@@ -46,7 +46,7 @@ for (const locale of ["en", "es"] as const) {
       refusal: {
         code: "sale.charged_not_recorded",
         reason,
-        recoveryUrl: "/manage/check-card-payments",
+        recoveryUrl: "/check-card-payments",
       },
     });
     const actions = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
@@ -54,7 +54,7 @@ for (const locale of ["en", "es"] as const) {
     )!;
     expect(actions.error).toBe(`${t(key)} ${t("bill_pay.card_recovery")}`);
     const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]")!;
-    expect(link.getAttribute("href")).toBe("/manage/check-card-payments");
+    expect(link.getAttribute("href")).toBe("/check-card-payments");
     expect(link.textContent).toBe(t("bill_pay.card_recovery_open"));
     expect(link.target).toBe("_blank");
     expect(link.rel).toBe("noopener");
@@ -67,7 +67,7 @@ for (const locale of ["en", "es"] as const) {
       const refusal = refusalOf({
         code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
         reason: charged ? "issuance_refused" : "conflict_requires_administrator",
-        recoveryUrl: "/manage/recovery/fiscal-conflict",
+        recoveryUrl: "/recovery/fiscal-conflict",
       });
       const { el } = await mountWidget<TillPresentedPayDialog>("till-presented-pay-dialog", {
         open: true,
@@ -78,7 +78,7 @@ for (const locale of ["en", "es"] as const) {
       });
       const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]");
       expect(link).not.toBeNull();
-      expect(link!.getAttribute("href")).toBe("/manage/recovery/fiscal-conflict");
+      expect(link!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
       expect(link!.target).toBe("_blank");
       expect(link!.rel).toBe("noopener");
       expect(link!.textContent).toBe(t("recovery.open"));
@@ -93,12 +93,12 @@ for (const locale of ["en", "es"] as const) {
 
 it.each([
   "/api/secret",
-  "https://elsewhere.test/manage/recovery",
-  "//elsewhere.test/manage/recovery",
-  "/manage/../api/secret",
-  "/manage/recovery?key=secret",
+  "https://elsewhere.test/recovery",
+  "//elsewhere.test/recovery",
+  "/../api/secret",
+  "/recovery?key=secret",
   "javascript:alert(1)",
-  "\\\\elsewhere.test/manage/recovery",
+  "\\\\elsewhere.test/recovery",
 ])("does not turn an unsafe recovery destination into a link: %s", async (recoveryUrl) => {
   const { el } = await mountWidget<TillPresentedPayDialog>("till-presented-pay-dialog", {
     open: true,
@@ -179,11 +179,11 @@ it.each(dialogCases)("keeps recovery available for $tag", async ({ tag, props })
     open: true,
     refusal: refusalOf({
       code: "sif.allocation_invalid",
-      recoveryUrl: "/manage/recovery/fiscal-conflict",
+      recoveryUrl: "/recovery/fiscal-conflict",
     }),
   });
   expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
-    "/manage/recovery/fiscal-conflict",
+    "/recovery/fiscal-conflict",
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
@@ -194,7 +194,7 @@ it.each([
   null,
   undefined,
   "failure",
-  { code: 42, recoveryUrl: "/manage/recovery" },
+  { code: 42, recoveryUrl: "/recovery" },
   { code: "refused", recoveryUrl: false },
   { code: "refused", recoveryUrl: "/api/secret" },
 ])("ignores a malformed recovery refusal: %j", (value) => {

@@ -121,7 +121,7 @@ async function loaded(api = stubApi()) {
 
 beforeEach(() => {
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage/orders");
+  history.replaceState(null, "", "/orders");
   sessionStorage.removeItem("waitron.orders.table");
   localStorage.removeItem("waitron.orders.table:columns");
 });
@@ -217,7 +217,7 @@ describe("dashboard Orders", () => {
     choose("to", "2026-09-02");
     choose("status", "unpaid");
     await vi.waitFor(() =>
-      expect(location.pathname).toBe("/manage/orders/status/unpaid/from/2026-09-01/to/2026-09-02"),
+      expect(location.pathname).toBe("/orders/status/unpaid/from/2026-09-01/to/2026-09-02"),
     );
     expect(
       (api.background.listOrdersPage as ReturnType<typeof vi.fn>).mock.lastCall?.[0],
@@ -229,7 +229,7 @@ describe("dashboard Orders", () => {
   });
 
   it("does not send an empty date after one end of a range is cleared", async () => {
-    history.replaceState(null, "", "/manage/orders/from/2026-09-01/to/2026-09-02");
+    history.replaceState(null, "", "/orders/from/2026-09-01/to/2026-09-02");
     const { el, api } = await loaded();
     const choose = (name: string, value: string) =>
       el
@@ -250,7 +250,7 @@ describe("dashboard Orders", () => {
   });
 
   it("accepts a paid status from the address and asks the server to apply session scope", async () => {
-    history.replaceState(null, "", "/manage/orders/status/paid");
+    history.replaceState(null, "", "/orders/status/paid");
     const { el, api } = await loaded();
     const status = el.shadowRoot!.querySelector<
       HTMLElement & { options: { value: string }[]; value: string }
@@ -330,8 +330,8 @@ describe("dashboard Orders", () => {
   });
 
   it("drops a table edit still waiting to be sent when Back restores an earlier search", async () => {
-    history.replaceState(null, "", "/manage/orders/table/Restored");
-    history.pushState(null, "", "/manage/orders/table/Current");
+    history.replaceState(null, "", "/orders/table/Restored");
+    history.pushState(null, "", "/orders/table/Current");
     const { el, api } = await loaded();
     const read = vi.mocked(api.background.listOrdersPage);
     const table =
@@ -352,11 +352,11 @@ describe("dashboard Orders", () => {
     const reads = [...vi.mocked(api.listOrdersPage).mock.calls, ...read.mock.calls];
     expect(reads.map((call) => call[0].table)).toEqual(["Current", "Restored"]);
     expect(table.value).toBe("Restored");
-    expect(location.pathname).toBe("/manage/orders/table/Restored");
+    expect(location.pathname).toBe("/orders/table/Restored");
   });
 
   it("empties the Table field when Back changes only the status during the field's wait", async () => {
-    history.pushState(null, "", "/manage/orders/status/open");
+    history.pushState(null, "", "/orders/status/open");
     const { el, api } = await loaded();
     const read = vi.mocked(api.background.listOrdersPage);
     const table =
@@ -378,7 +378,7 @@ describe("dashboard Orders", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(location.pathname).toBe("/manage/orders");
+    expect(location.pathname).toBe("/orders");
     expect(table.value).toBe("");
     expect(input.value).toBe("");
     const reads = [...vi.mocked(api.listOrdersPage).mock.calls, ...read.mock.calls];
@@ -415,11 +415,11 @@ describe("dashboard Orders", () => {
     await vi.waitFor(() =>
       expect(read.mock.lastCall?.[0]).toMatchObject({ status: "open", table: "Terrace 4" }),
     );
-    expect(location.pathname).toBe("/manage/orders/status/open/table/Terrace%204");
+    expect(location.pathname).toBe("/orders/status/open/table/Terrace%204");
   });
 
   it("restarts an identical corrected date query after releasing a backwards range", async () => {
-    history.replaceState(null, "", "/manage/orders/from/2026-09-01/to/2026-09-02");
+    history.replaceState(null, "", "/orders/from/2026-09-01/to/2026-09-02");
     const { el, api } = await loaded();
     const choose = (value: string) =>
       el

@@ -211,7 +211,7 @@ const drawnView = (el: Screen) =>
 
 describe("the special-day painter's address", () => {
   it("opens a stored special day over the Year on a direct load, fed the screen's model and api, and closes to the Year", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const { el, writes } = await mount("/opening-hours/view/special-day/special-day/sd1");
     const painter = await shownPainter(el);
     expect(painter.open).toBe(true);
     expect(painter.specialDayId).toBe("sd1");
@@ -221,14 +221,14 @@ describe("the special-day painter's address", () => {
     expect(nameOf(painter)).toBe("Christmas dinners");
     expect(drawnView(el)).toBe("year");
     await cancel(painter);
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year");
     await expect.poll(() => painterOf(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
     expect(writes).toEqual([]);
   });
 
   it("opens a new empty special day when the address names none", async () => {
-    const { el } = await mount("/manage/opening-hours/view/special-day");
+    const { el } = await mount("/opening-hours/view/special-day");
     const painter = await shownPainter(el);
     expect([painter.specialDayId, painter.date]).toEqual([null, null]);
     expect(nameOf(painter)).toBe("");
@@ -236,7 +236,7 @@ describe("the special-day painter's address", () => {
   });
 
   it("opens a new special day on the address's date, pre-filled from that month's read when it is a public holiday", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/special-day/date/2027-01-08");
+    const { el, months } = await mount("/opening-hours/view/special-day/date/2027-01-08");
     const painter = await shownPainter(el);
     expect([painter.specialDayId, painter.date]).toEqual([null, "2027-01-08"]);
     expect(months).toEqual(["2027-01"]);
@@ -244,11 +244,11 @@ describe("the special-day painter's address", () => {
     expect(chips(painter)).toEqual(["2027-01-08"]);
     await cancel(painter);
     await expect.poll(() => painterOf(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(location.pathname).toBe("/opening-hours/view/year");
   });
 
   it("pre-fills a public holiday in the year it already reads without reading its month", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/special-day/date/2026-11-04");
+    const { el, months } = await mount("/opening-hours/view/special-day/date/2026-11-04");
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Town feast");
     expect(months).toEqual([]);
@@ -256,7 +256,7 @@ describe("the special-day painter's address", () => {
 
   it("opens a new special day unfilled when its month cannot be read", async () => {
     const { el, months } = await mount(
-      "/manage/opening-hours/view/special-day/date/2027-01-08",
+      "/opening-hours/view/special-day/date/2027-01-08",
       false,
       ["2027-01"],
     );
@@ -267,15 +267,15 @@ describe("the special-day painter's address", () => {
   });
 
   it("Back to a public holiday's address over the Month pre-fills it from the month already read", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const { el, months } = await mount("/opening-hours/view/month/month/2026-12");
     await expect
       .poll(() => el.shadowRoot!.querySelector("opening-hours-month")?.model?.month)
       .toBe("2026-12");
-    history.pushState(null, "", "/manage/opening-hours/view/special-day/special-day/sd1");
+    history.pushState(null, "", "/opening-hours/view/special-day/special-day/sd1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Christmas dinners");
-    history.replaceState(null, "", "/manage/opening-hours/view/special-day/date/2026-12-08");
+    history.replaceState(null, "", "/opening-hours/view/special-day/date/2026-12-08");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => nameOf(painter)).toBe("Immaculate Conception");
     expect(chips(painter)).toEqual(["2026-12-08"]);
@@ -284,7 +284,7 @@ describe("the special-day painter's address", () => {
 
   it("opens a stored special day with the address's date added to its draft, saving nothing", async () => {
     const { el, writes } = await mount(
-      "/manage/opening-hours/view/special-day/special-day/sd1/date/2026-12-20",
+      "/opening-hours/view/special-day/special-day/sd1/date/2026-12-20",
     );
     const painter = await shownPainter(el);
     expect([painter.specialDayId, painter.addDate]).toEqual(["sd1", "2026-12-20"]);
@@ -296,7 +296,7 @@ describe("the special-day painter's address", () => {
 
   it("opens a stored special day at once when the date to add is in a month it has not read", async () => {
     const { el } = await mount(
-      "/manage/opening-hours/view/special-day/special-day/sd1/date/2027-01-08",
+      "/opening-hours/view/special-day/special-day/sd1/date/2027-01-08",
     );
     const painter = await shownPainter(el);
     await expect
@@ -305,30 +305,30 @@ describe("the special-day painter's address", () => {
   });
 
   it("Back and Forward between two special days' addresses reseed the painter with the other day", async () => {
-    const { el } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const { el } = await mount("/opening-hours/view/special-day/special-day/sd1");
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Christmas dinners");
-    history.replaceState(null, "", "/manage/opening-hours/view/special-day/special-day/sd2");
+    history.replaceState(null, "", "/opening-hours/view/special-day/special-day/sd2");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => nameOf(painter)).toBe("Fair week");
     expect(chips(painter)).toEqual(["2027-04-20"]);
-    history.replaceState(null, "", "/manage/opening-hours/view/special-day/special-day/sd1");
+    history.replaceState(null, "", "/opening-hours/view/special-day/special-day/sd1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => nameOf(painter)).toBe("Christmas dinners");
     expect(painterOf(el)).toBe(painter);
   });
 
   it("gives a viewer a read-only painter", async () => {
-    const { el } = await mount("/manage/opening-hours/view/special-day/special-day/sd1", true);
+    const { el } = await mount("/opening-hours/view/special-day/special-day/sd1", true);
     expect((await shownPainter(el)).readOnly).toBe(true);
   });
 
   it.each([
     [
-      "/manage/opening-hours/view/date/date/2026-12-14",
-      "/manage/opening-hours/view/month/month/2026-12",
+      "/opening-hours/view/date/date/2026-12-14",
+      "/opening-hours/view/month/month/2026-12",
     ],
-    ["/manage/opening-hours/view/date", "/manage/opening-hours/view/month"],
+    ["/opening-hours/view/date", "/opening-hours/view/month"],
   ])("replaces an old date address %s with the Month view of its date", async (from, to) => {
     const { el } = await mount(from);
     await expect.poll(() => location.pathname).toBe(to);
@@ -344,7 +344,7 @@ class GuardedApp extends LitElement {
   private releaseLinks?: () => void;
   override connectedCallback() {
     super.connectedCallback();
-    this.releaseLinks = captureAppLinks(this, "/manage");
+    this.releaseLinks = captureAppLinks(this, "/");
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -359,7 +359,7 @@ customElements.define("special-day-guarded-test-app", GuardedApp);
 
 describe("Back and Forward under the app's leave guard", () => {
   const at = (date: string) =>
-    `/manage/opening-hours/view/special-day/special-day/sd1/date/${date}`;
+    `/opening-hours/view/special-day/special-day/sd1/date/${date}`;
   async function choose(app: GuardedApp, decision: "keep" | "discard") {
     await app.updateComplete;
     const question =
@@ -372,7 +372,7 @@ describe("Back and Forward under the app's leave guard", () => {
   }
 
   it("to the same day with another date to add asks first: Keep stays, Discard opens it with that date alone, and Save sends that date", async () => {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     let app: GuardedApp | undefined;
     const guard = new NavigationGuard(window, {
       isDirty: () => app?.leave.coordinator.isDirty() ?? false,
@@ -425,7 +425,7 @@ describe("a run picked on the Year", () => {
   const yearOf = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-year")!;
   const dayButton = (el: Screen, date: LocalDate) =>
     yearOf(el).shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
-  async function yearShown(address = "/manage/opening-hours/view/year") {
+  async function yearShown(address = "/opening-hours/view/year") {
     const mounted = await mount(address);
     await expect.poll(() => yearOf(mounted.el)?.model?.year).toBe(2026);
     await yearOf(mounted.el).updateComplete;
@@ -460,7 +460,7 @@ describe("a run picked on the Year", () => {
     watched.stop();
     expect(watched.seen).toEqual({ box: true, boxBesidePainter: false });
     expect(location.pathname).toBe(
-      "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
+      "/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
     );
     expect([painter.specialDayId, painter.date, painter.lastDate]).toEqual([
       null,
@@ -479,7 +479,7 @@ describe("a run picked on the Year", () => {
     await userEvent.dblClick(dayButton(el, "2026-12-14"));
     const painter = await shownPainter(el);
     expect(location.pathname).toBe(
-      "/manage/opening-hours/view/special-day/date/2026-12-12/to/2026-12-15",
+      "/opening-hours/view/special-day/date/2026-12-12/to/2026-12-15",
     );
     expect(painter.specialDayId).toBeNull();
     expect(chips(painter)).toEqual(["2026-12-12", "2026-12-13", "2026-12-14", "2026-12-15"]);
@@ -501,7 +501,7 @@ describe("a run picked on the Year", () => {
     );
     let painter = await shownPainter(el);
     const address =
-      "/manage/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-21%2C2026-10-22%2C2026-10-23%2C2026-10-27";
+      "/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-21%2C2026-10-22%2C2026-10-23%2C2026-10-27";
     expect(location.pathname).toBe(address);
     expect(chips(painter)).toEqual([
       "2026-10-20",
@@ -542,7 +542,7 @@ describe("a run picked on the Year", () => {
     "a directly loaded date list $label and takes precedence over a single date",
     async ({ dates, expected }) => {
       const { el, writes } = await mount(
-        `/manage/opening-hours/view/special-day/date/2026-10-20/dates/${encodeURIComponent(dates)}`,
+        `/opening-hours/view/special-day/date/2026-10-20/dates/${encodeURIComponent(dates)}`,
       );
       expect(chips(await shownPainter(el))).toEqual(expected);
       expect(writes).toEqual([]);
@@ -550,7 +550,7 @@ describe("a run picked on the Year", () => {
   );
 
   it("Back from the painter returns to the Year with the address it had", async () => {
-    const address = "/manage/opening-hours/view/year/year/2026";
+    const address = "/opening-hours/view/year/year/2026";
     const { el } = await yearShown(address);
     await drag(el, run);
     await userEvent.dblClick(dayButton(el, "2026-10-22"));
@@ -563,17 +563,17 @@ describe("a run picked on the Year", () => {
 
   it("a run of 366 dates read from an address opens whole, and a longer one opens on its first date alone", async () => {
     const whole = await mount(
-      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
+      "/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
     );
     const painter = await shownPainter(whole.el);
     expect(painter.lastDate).toBe("2027-01-01");
     expect(chips(painter)).toHaveLength(366);
     expect(location.pathname).toBe(
-      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
+      "/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
     );
     whole.el.remove();
     const longer = await mount(
-      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-03",
+      "/opening-hours/view/special-day/date/2026-01-01/to/2027-01-03",
     );
     const single = await shownPainter(longer.el);
     expect([single.date, single.lastDate]).toEqual(["2026-01-01", null]);
@@ -582,7 +582,7 @@ describe("a run picked on the Year", () => {
 
   it("a run of 367 dates read from an address opens on its first date alone", async () => {
     const { el } = await mount(
-      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-02",
+      "/opening-hours/view/special-day/date/2026-01-01/to/2027-01-02",
     );
     const painter = await shownPainter(el);
     expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
@@ -594,11 +594,11 @@ describe("a run picked on the Year", () => {
     async (to) => {
       const pushed = vi.spyOn(history, "pushState");
       const { el } = await mount(
-        `/manage/opening-hours/view/special-day/date/2026-01-01/to/${to}?keep=yes#dates`,
+        `/opening-hours/view/special-day/date/2026-01-01/to/${to}?keep=yes#dates`,
       );
       const painter = await shownPainter(el);
       expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
-      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect(location.pathname).toBe("/opening-hours/view/special-day/date/2026-01-01");
       expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
       expect(pushed).not.toHaveBeenCalled();
     },
@@ -606,7 +606,7 @@ describe("a run picked on the Year", () => {
 
   it("a run in the year 9999 read from an address opens whole", async () => {
     const { el } = await mount(
-      "/manage/opening-hours/view/special-day/date/9999-01-01/to/9999-01-03",
+      "/opening-hours/view/special-day/date/9999-01-01/to/9999-01-03",
     );
     const painter = await shownPainter(el);
     expect([painter.date, painter.lastDate]).toEqual(["9999-01-01", "9999-01-03"]);
@@ -615,7 +615,7 @@ describe("a run picked on the Year", () => {
 
   it("a run ending on 9999-12-31 read from an address opens whole", async () => {
     const { el } = await mount(
-      "/manage/opening-hours/view/special-day/date/9999-12-30/to/9999-12-31",
+      "/opening-hours/view/special-day/date/9999-12-30/to/9999-12-31",
     );
     const painter = await shownPainter(el);
     expect([painter.date, painter.lastDate]).toEqual(["9999-12-30", "9999-12-31"]);
@@ -624,7 +624,7 @@ describe("a run picked on the Year", () => {
 
   it("a direct load of a run's address opens it", async () => {
     const { el } = await mount(
-      "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
+      "/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
     );
     const painter = await shownPainter(el);
     expect([painter.date, painter.lastDate]).toEqual(["2026-10-20", "2026-10-23"]);
@@ -638,7 +638,7 @@ describe("a run picked on the Month", () => {
   const daySel = (date: LocalDate) => `opening-hours-month [data-date="${date}"] button`;
 
   it("a double-click on a run in the Month opens a new day holding it", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const { el, writes } = await mount("/opening-hours/view/month/month/2026-12");
     await expect.poll(() => monthOf(el)?.model?.month).toBe("2026-12");
     await monthOf(el).updateComplete;
     const run = ["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"];
@@ -649,7 +649,7 @@ describe("a run picked on the Month", () => {
     await userEvent.dblClick(button("2026-12-03"));
     const painter = await shownPainter(el);
     expect(location.pathname).toBe(
-      "/manage/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
+      "/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
     );
     expect(chips(painter)).toEqual(run);
     await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
@@ -657,7 +657,7 @@ describe("a run picked on the Month", () => {
   });
 
   it("a double-click on a special day's date in the Month opens that day", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const { el, writes } = await mount("/opening-hours/view/month/month/2026-12");
     await expect.poll(() => monthOf(el)?.model?.month).toBe("2026-12");
     await monthOf(el).updateComplete;
     const button = monthOf(el).shadowRoot!.querySelector<HTMLButtonElement>(
@@ -666,7 +666,7 @@ describe("a run picked on the Month", () => {
     button.scrollIntoView({ block: "center" });
     await userEvent.dblClick(button);
     const painter = await shownPainter(el);
-    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/company");
+    expect(location.pathname).toBe("/opening-hours/view/special-day/special-day/company");
     expect(painter.specialDayId).toBe("company");
     await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
     expect(writes).toEqual([]);
@@ -675,7 +675,7 @@ describe("a run picked on the Month", () => {
 
 describe("after the painter writes", () => {
   it("a new day once saved, with a paint made while the save is in flight, takes its own address without a new history entry", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/special-day/date/2026-12-10");
+    const { el, writes } = await mount("/opening-hours/view/special-day/date/2026-12-10");
     const painter = await shownPainter(el);
     painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -706,7 +706,7 @@ describe("after the painter writes", () => {
     succeed();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/special-day/sd-new");
+      .toBe("/opening-hours/view/special-day/special-day/sd-new");
     await expect.poll(() => frame(painter).busy).toBe(false);
     await settle(painter);
     expect(writes.map(([path, method]) => [path, method])).toEqual([
@@ -715,7 +715,7 @@ describe("after the painter writes", () => {
     expect(pushed()).toEqual([]);
     expect(
       replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
-    ).toEqual(["/manage/opening-hours/view/special-day/special-day/sd-new"]);
+    ).toEqual(["/opening-hours/view/special-day/special-day/sd-new"]);
     expect(back).not.toHaveBeenCalled();
     expect(painterOf(el)).toBe(painter);
     expect(painter.specialDayId).toBe("sd-new");
@@ -727,14 +727,14 @@ describe("after the painter writes", () => {
   });
 
   it("Add to the same-named day takes that day's address without a new history entry", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/special-day/date/2026-05-01");
+    const { el, writes } = await mount("/opening-hours/view/special-day/date/2026-05-01");
     const painter = await shownPainter(el);
     await expect.poll(() => painter.shadowRoot!.querySelector("[data-test=add-to]")).not.toBeNull();
     const pushed = pushedPaths();
     painter.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to]")!.click();
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/special-day/sd3");
+      .toBe("/opening-hours/view/special-day/special-day/sd3");
     expect(pushed()).toEqual([]);
     expect(painterOf(el)).toBe(painter);
     await expect.poll(() => chips(painter)).toEqual(["2025-05-01", "2026-05-01"]);
@@ -742,10 +742,10 @@ describe("after the painter writes", () => {
   });
 
   it("a deleted special day closes the painter once, back to the view it opened over", async () => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/view/year/year/2026");
+    history.replaceState(null, "", "/before");
+    history.pushState(null, "", "/opening-hours/view/year/year/2026");
     const { el, writes } = await mount(
-      "/manage/opening-hours/view/year/year/2026",
+      "/opening-hours/view/year/year/2026",
       false,
       [],
       ["2026-12"],
@@ -768,12 +768,12 @@ describe("after the painter writes", () => {
     await expect.poll(() => painterOf(el)).toBeNull();
     expect(back).toHaveBeenCalledTimes(1);
     expect(replaced).not.toHaveBeenCalled();
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2026");
     expect(writes.map(([path, method]) => [path, method])).toEqual([
       ["/management-api/venue-service/special-days/sd1", "DELETE"],
     ]);
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/before");
+    await expect.poll(() => location.pathname).toBe("/before");
   });
 });
 
@@ -808,13 +808,13 @@ describe("Save closes the special-day editor", () => {
       .filter((path) => path.includes("/special-day"));
 
   it("Save on a new special day picked on the Month closes the editor back to the Month, and Back does not reopen it", async () => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/view/month/month/2026-12");
-    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    history.replaceState(null, "", "/before");
+    history.pushState(null, "", "/opening-hours/view/month/month/2026-12");
+    const { el, writes } = await mount("/opening-hours/view/month/month/2026-12");
     const run = ["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"];
     const painter = await openRunOnMonth(el, run);
     expect(location.pathname).toBe(
-      "/manage/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
+      "/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
     );
     await rename(painter, "Staff party");
     const back = vi.spyOn(history, "back");
@@ -831,18 +831,18 @@ describe("Save closes the special-day editor", () => {
     expect(pushed()).toEqual([]);
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/month/month/2026-12");
+      .toBe("/opening-hours/view/month/month/2026-12");
     await expect.poll(() => drawnView(el)).toBe("month");
     back.mockRestore();
     history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/before");
+    await expect.poll(() => location.pathname).toBe("/before");
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(painterOf(el)).toBeNull();
     expect(pushed()).toEqual([]);
   });
 
   it("Save on a stored day closes the editor", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const { el, writes } = await mount("/opening-hours/view/special-day/special-day/sd1");
     const painter = await shownPainter(el);
     await rename(painter, "Staff dinners");
     const back = vi.spyOn(history, "back");
@@ -853,13 +853,13 @@ describe("Save closes the special-day editor", () => {
       ["/management-api/venue-service/special-days/sd1", "PUT"],
     ]);
     expect(back).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(location.pathname).toBe("/opening-hours/view/year");
     expect(drawnView(el)).toBe("year");
     expect(pushed()).toEqual([]);
   });
 
   it("a refused save keeps it open", async () => {
-    const { el } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const { el } = await mount("/opening-hours/view/special-day/special-day/sd1");
     const painter = await shownPainter(el);
     vi.spyOn(el.api.specialDays, "writeSpecialDay").mockRejectedValueOnce({
       code: "special_day.invalid",
@@ -875,11 +875,11 @@ describe("Save closes the special-day editor", () => {
     expect(frame(painter).dirty).toBe(true);
     expect(nameOf(painter)).toBe("Staff dinners");
     expect(back).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd1");
+    expect(location.pathname).toBe("/opening-hours/view/special-day/special-day/sd1");
   });
 
   async function mountGuarded(...addresses: string[]) {
-    history.replaceState(null, "", "/manage/before");
+    history.replaceState(null, "", "/before");
     const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
     const guard = new NavigationGuard(window, {
       isDirty: () => app.isConnected && app.leave.coordinator.isDirty(),
@@ -901,15 +901,15 @@ describe("Save closes the special-day editor", () => {
 
   it("with the app's guard, an ignored range end is replaced without adding history", async () => {
     const { app, el, guard } = await mountGuarded(
-      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2025-12-31?keep=yes#dates",
+      "/opening-hours/view/special-day/date/2026-01-01/to/2025-12-31?keep=yes#dates",
     );
     try {
       const painter = await shownPainter(el);
       expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
-      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-01-01");
+      expect(location.pathname).toBe("/opening-hours/view/special-day/date/2026-01-01");
       expect([location.search, location.hash]).toEqual(["?keep=yes", "#dates"]);
       history.back();
-      await expect.poll(() => location.pathname).toBe("/manage/before");
+      await expect.poll(() => location.pathname).toBe("/before");
     } finally {
       guard.dispose();
       app.remove();
@@ -918,19 +918,19 @@ describe("Save closes the special-day editor", () => {
 
   it("with the app's guard, Save closes a new day picked on the Month without asking", async () => {
     const { app, el, guard, question } = await mountGuarded(
-      "/manage/opening-hours/view/month/month/2026-12",
+      "/opening-hours/view/month/month/2026-12",
     );
     const asked: boolean[] = [];
     const sampler = setInterval(() => asked.push(question.open), 5);
     try {
       const painter = await openRunOnMonth(el, ["2026-12-03"]);
-      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-12-03");
+      expect(location.pathname).toBe("/opening-hours/view/special-day/date/2026-12-03");
       await rename(painter, "Staff party");
       saveButton(painter).click();
       await expect.poll(() => painterOf(el)).toBeNull();
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/month/month/2026-12");
+        .toBe("/opening-hours/view/month/month/2026-12");
       await new Promise((resolve) => setTimeout(resolve, 50));
       clearInterval(sampler);
       expect(asked.length).toBeGreaterThan(0);
@@ -940,7 +940,7 @@ describe("Save closes the special-day editor", () => {
         ["/management-api/venue-service/special-days", "POST"],
       ]);
       history.back();
-      await expect.poll(() => location.pathname).toBe("/manage/before");
+      await expect.poll(() => location.pathname).toBe("/before");
       expect(painterOf(el)).toBeNull();
     } finally {
       clearInterval(sampler);
@@ -950,8 +950,8 @@ describe("Save closes the special-day editor", () => {
 
   it("a save left in flight when Back moved to another day leaves the newer editor open", async () => {
     const { app, el, guard, question } = await mountGuarded(
-      "/manage/opening-hours/view/special-day/special-day/sd2",
-      "/manage/opening-hours/view/special-day/special-day/sd1",
+      "/opening-hours/view/special-day/special-day/sd2",
+      "/opening-hours/view/special-day/special-day/sd1",
     );
     try {
       const painter = await shownPainter(el);
@@ -982,7 +982,7 @@ describe("Save closes the special-day editor", () => {
       expect(painter.specialDayId).toBe("sd2");
       expect(nameOf(painter)).toBe("Fair week");
       expect(back).not.toHaveBeenCalled();
-      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd2");
+      expect(location.pathname).toBe("/opening-hours/view/special-day/special-day/sd2");
       expect(frame(painter).dirty).toBe(false);
       expect(saved).not.toHaveBeenCalled();
     } finally {
@@ -1022,24 +1022,24 @@ describe("links into the special-day painter", () => {
   }
 
   it("the Year's box's Edit special day on a special day's date opens the painter on it, and closing goes back to that year", async () => {
-    const { el } = await mount("/manage/opening-hours/view/year/year/2026", false, [], ["2026-12"]);
+    const { el } = await mount("/opening-hours/view/year/year/2026", false, [], ["2026-12"]);
     const pushed = pushedPaths();
     await yearBox(el, "2026-12-14", "special-edit");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/special-day/sd1");
-    expect(pushed()).toEqual(["/manage/opening-hours/view/special-day/special-day/sd1"]);
+      .toBe("/opening-hours/view/special-day/special-day/sd1");
+    expect(pushed()).toEqual(["/opening-hours/view/special-day/special-day/sd1"]);
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Christmas dinners");
     expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2026);
     await cancel(painter);
-    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+    await expect.poll(() => location.pathname).toBe("/opening-hours/view/year/year/2026");
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
   it("the Year's box's Make a special day on a public holiday opens a new day pre-filled from the holidays the box sent", async () => {
     const { el, months } = await mount(
-      "/manage/opening-hours/view/year/year/2026",
+      "/opening-hours/view/year/year/2026",
       false,
       [],
       ["2026-11"],
@@ -1047,36 +1047,36 @@ describe("links into the special-day painter", () => {
     await yearBox(el, "2026-11-04", "special-add");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/date/2026-11-04");
+      .toBe("/opening-hours/view/special-day/date/2026-11-04");
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Town feast");
     expect(months).toEqual(["2026-11"]);
   });
 
   it("the Month's special date opens the painter on its special day, and its public holiday a new day pre-filled", async () => {
-    const { el } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const { el } = await mount("/opening-hours/view/month/month/2026-12");
     await monthBox(el, "2026-12-14", "special-edit");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/special-day/company");
+      .toBe("/opening-hours/view/special-day/special-day/company");
     await cancel(await shownPainter(el));
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/month/month/2026-12");
+      .toBe("/opening-hours/view/month/month/2026-12");
     await expect.poll(() => painterOf(el)).toBeNull();
     await monthBox(el, "2026-12-08", "special-add");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/date/2026-12-08");
+      .toBe("/opening-hours/view/special-day/date/2026-12-08");
     expect(nameOf(await shownPainter(el))).toBe("Immaculate Conception");
   });
 
   it("an ordinary date's Make a special day opens a new day on that date", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const { el, writes } = await mount("/opening-hours/view/month/month/2026-12");
     await monthBox(el, "2026-12-10", "special-add");
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/date/2026-12-10");
+      .toBe("/opening-hours/view/special-day/date/2026-12-10");
     const painter = await shownPainter(el);
     expect(chips(painter)).toEqual(["2026-12-10"]);
     expect(nameOf(painter)).toBe("");
@@ -1116,13 +1116,13 @@ class AddingGuardedApp extends GuardedApp {
 customElements.define("special-day-adding-test-app", AddingGuardedApp);
 
 describe("period updates while painting a special day", () => {
-  const base = "/manage/opening-hours/view/special-day/special-day/sd1";
+  const base = "/opening-hours/view/special-day/special-day/sd1";
   it("a viewer closes a Painted in special day to the Periods page", async () => {
-    const { el } = await mount(`${base}?back=/manage/periods`, true);
+    const { el } = await mount(`${base}?back=/periods`, true);
     const painter = await shownPainter(el);
     expect(painter.readOnly).toBe(true);
     await userEvent.click(frame(painter).shadowRoot!.querySelector<HTMLElement>(".close")!);
-    await expect.poll(() => location.pathname).toBe("/manage/periods");
+    await expect.poll(() => location.pathname).toBe("/periods");
   });
 
   it("a newly stored period reaches the special-day painter, which keeps its unsaved day", async () => {

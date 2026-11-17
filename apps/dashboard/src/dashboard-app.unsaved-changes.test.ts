@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardApp["request"]) {
-  history.replaceState(null, "", "/manage/profile");
+  history.replaceState(null, "", "/profile");
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     ...(request ? { request } : {}),
     api: {
@@ -187,7 +187,7 @@ for (const action of ["logout", "locale"] as const) {
     expect(telephone(m)).toBe("123456");
     expect(departing?.input.value).toBe(action === "locale" ? "page edited" : undefined);
     expect(m.screen.isConnected).toBe(true);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(currentLocale()).toBe("en-GB");
     leave(m, action === "logout" ? "locale" : "logout");
     await choose(m, "keep");
@@ -204,13 +204,13 @@ for (const action of ["logout", "locale"] as const) {
         .not.toBeNull();
       expect(logout).toHaveBeenCalledTimes(1);
       expect(putLocale).not.toHaveBeenCalled();
-      expect(location.pathname).toBe("/manage/");
+      expect(location.pathname).toBe("/");
       expect(m.screen.isConnected).toBe(false);
     } else {
       await expect.poll(currentLocale).toBe("es-ES");
       expect(putLocale.mock.calls).toEqual([["es-ES"]]);
       expect(logout).not.toHaveBeenCalled();
-      expect(location.pathname).toBe("/manage/profile");
+      expect(location.pathname).toBe("/profile");
       expect(telephone(m)).toBe("123456");
       expect(departing!.input.value).toBe("page saved");
       expect(departing!.input.isConnected).toBe(false);
@@ -256,7 +256,7 @@ for (const action of ["logout", "locale"] as const) {
     expect(putLocale).not.toHaveBeenCalled();
     expect(m.question.open).toBe(false);
     expect(unload()).toBe(false);
-    expect(location.pathname).toBe("/manage/");
+    expect(location.pathname).toBe("/");
   });
   it(`${action} cannot proceed after a coordinator reset retires its pending question`, async () => {
     const logout = vi.fn(async () => {});
@@ -274,7 +274,7 @@ for (const action of ["logout", "locale"] as const) {
     oldDiscard.click();
     expect(logout).not.toHaveBeenCalled();
     expect(putLocale).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(telephone(m)).toBe("123456");
   });
 }
@@ -318,7 +318,7 @@ it("an accepted language write cannot repaint an expired session when its respon
   await m.app.updateComplete;
   await Promise.resolve();
   expect(currentLocale()).toBe("en-GB");
-  expect(location.pathname).toBe("/manage/");
+  expect(location.pathname).toBe("/");
   expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
   expect(unload()).toBe(false);
 });
@@ -340,7 +340,7 @@ for (const action of ["logout", "locale"] as const) {
     expect(putLocale).not.toHaveBeenCalled();
     expect(unload()).toBe(false);
     expect(m.screen.shadowRoot!.querySelector("wt-input[name=telephone]")).toBeNull();
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
   });
   it(`${action} cannot discard a successfully saved child from an older question`, async () => {
     let received: unknown;
@@ -376,7 +376,7 @@ for (const action of ["logout", "locale"] as const) {
     });
     expect(logout).not.toHaveBeenCalled();
     expect(putLocale.mock.calls).toEqual(action === "locale" ? [["es-ES"]] : []);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(unload()).toBe(false);
   });
 }
@@ -429,12 +429,12 @@ it("an old logout response cannot clear a newly authenticated session", async ()
     .shadowRoot!.querySelector("dashboard-login-screen")!
     .dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
   await expect.poll(() => m.app.shadowRoot!.querySelector("dashboard-login-screen")).toBeNull();
-  expect(location.pathname).toBe("/manage/my-schedule");
+  expect(location.pathname).toBe("/my-schedule");
   finish();
   await Promise.resolve();
   await m.app.updateComplete;
   expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).toBeNull();
-  expect(location.pathname).toBe("/manage/my-schedule");
+  expect(location.pathname).toBe("/my-schedule");
   expect(logout).toHaveBeenCalledTimes(1);
 });
 
@@ -461,17 +461,17 @@ it("sidebar navigation keeps the profile and URL until Discard accepts one desti
   const push = vi.spyOn(history, "pushState");
   selectOrders(m);
   await expect.poll(() => m.question.open).toBe(true);
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   expect(telephone(m)).toBe("123456");
   expect(m.screen.isConnected).toBe(true);
   await choose(m, "keep");
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   expect(push).not.toHaveBeenCalled();
   expect(telephone(m)).toBe("123456");
   selectOrders(m);
   await expect.poll(() => m.question.open).toBe(true);
   await choose(m, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/orders");
+  await expect.poll(() => location.pathname).toBe("/orders");
   await expect.poll(() => m.screen.isConnected).toBe(false);
   expect(unload()).toBe(false);
 });
@@ -481,7 +481,7 @@ it("reverted profile input lets sidebar navigation close the profile directly", 
   change(m, "123456");
   change(m, "");
   selectOrders(m);
-  await expect.poll(() => location.pathname).toBe("/manage/orders");
+  await expect.poll(() => location.pathname).toBe("/orders");
   await expect.poll(() => m.screen.isConnected).toBe(false);
   expect(m.question.open).toBe(false);
   expect(unload()).toBe(false);
@@ -499,10 +499,10 @@ it("forced expiry invalidates a pending sidebar destination before an old Discar
       detail: { code: "management_session.expired" },
     }),
   );
-  await expect.poll(() => location.pathname).toBe("/manage/");
+  await expect.poll(() => location.pathname).toBe("/");
   oldDiscard.click();
   await m.app.updateComplete;
-  expect(location.pathname).toBe("/manage/");
+  expect(location.pathname).toBe("/");
   expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
   expect(unload()).toBe(false);
 });
@@ -533,21 +533,21 @@ for (const direction of ["back", "forward"] as const) {
     } else {
       history.back();
     }
-    await expect.poll(() => location.pathname).toBe("/manage/profile");
+    await expect.poll(() => location.pathname).toBe("/profile");
     m = await reopenedProfile(m);
     change(m, "123456");
     await m.screen.updateComplete;
     history[direction]();
     await expect.poll(() => m.question.open).toBe(true);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(telephone(m)).toBe("123456");
     await choose(m, "keep");
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(m.screen.isConnected).toBe(true);
     history[direction]();
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/orders");
+    await expect.poll(() => location.pathname).toBe("/orders");
     await expect.poll(() => m.screen.isConnected).toBe(false);
     expect(unload()).toBe(false);
   });
@@ -557,10 +557,10 @@ it("opening and closing Account settings retains the edited main page without a 
   const m = await mount();
   const departing = pageDraft(m);
   m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  await expect.poll(() => location.pathname).toBe("/my-schedule");
   expect(m.question.open).toBe(false);
   m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=profile]")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/profile");
+  await expect.poll(() => location.pathname).toBe("/profile");
   expect(m.question.open).toBe(false);
   expect(departing.input.isConnected).toBe(true);
   expect(departing.input.value).toBe("page edited");
@@ -568,8 +568,8 @@ it("opening and closing Account settings retains the edited main page without a 
 });
 
 it.each([
-  ["/manage/orders?keep=1#orders", "/manage/orders"],
-  ["/manage?keep=1#orders", "/manage/my-schedule"],
+  ["/orders?keep=1#orders", "/orders"],
+  ["/?keep=1#orders", "/my-schedule"],
 ])(
   "an ordinary same-app anchor %s from a child shadow root asks before its default navigation",
   async (href, destination) => {
@@ -591,7 +591,7 @@ it.each([
     document.removeEventListener("click", blockDefault);
     expect(reachedBrowser).toBe(false);
     await expect.poll(() => m.question.open).toBe(true);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     await choose(m, "keep");
     expect(telephone(m)).toBe("123456");
     document.addEventListener("click", blockDefault, { once: true });
@@ -634,13 +634,13 @@ it("a guarded product deep link accepts the product and screen in one history st
     );
   request();
   await expect.poll(() => m.question.open).toBe(true);
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   await choose(m, "keep");
   expect(telephone(m)).toBe("123456");
   request();
   await expect.poll(() => m.question.open).toBe(true);
   await choose(m, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/products/product/product-1");
+  await expect.poll(() => location.pathname).toBe("/products/product/product-1");
   expect(pushed).toHaveBeenCalledTimes(1);
   expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   expect(unload()).toBe(false);
@@ -664,10 +664,10 @@ it.each([
     const anchor = document.createElement("a");
     anchor.href =
       kind === "external"
-        ? "https://example.invalid/manage/orders"
+        ? "https://example.invalid/orders"
         : kind === "other-app"
           ? "/setup/"
-          : "/manage/orders";
+          : "/orders";
     if (kind === "download") anchor.download = "orders";
     if (kind === "new-tab") anchor.target = "_blank";
     m.screen.shadowRoot!.append(anchor);
@@ -693,7 +693,7 @@ it.each([
     await m.app.updateComplete;
     expect(reachedBrowser).toBe(true);
     expect(m.question.open).toBe(false);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(telephone(m)).toBe("123456");
     expect(unload()).toBe(true);
   },
@@ -709,7 +709,7 @@ it.each([
     const cell = document.createElement("div");
     cell.attachShadow({ mode: "open" });
     const anchor = document.createElement("a");
-    anchor.href = "/manage/orders";
+    anchor.href = "/orders";
     cell.shadowRoot!.append(anchor);
     m.screen.shadowRoot!.append(cell);
     let reachedBrowser = false;
@@ -728,8 +728,8 @@ it.each([
     );
     document.removeEventListener("click", blockDefault);
     expect(reachedBrowser).toBe(toBrowser);
-    if (toBrowser) expect(location.pathname).toBe("/manage/profile");
-    else await expect.poll(() => location.pathname).toBe("/manage/orders");
+    if (toBrowser) expect(location.pathname).toBe("/profile");
+    else await expect.poll(() => location.pathname).toBe("/orders");
   },
 );
 
@@ -737,9 +737,9 @@ it("an encoded Account settings link retains the edited underlying page", async 
   const m = await mount();
   const departing = pageDraft(m);
   m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  await expect.poll(() => location.pathname).toBe("/my-schedule");
   const anchor = document.createElement("a");
-  anchor.href = "/manage/%70rofile";
+  anchor.href = "/%70rofile";
   (departing.input.getRootNode() as ShadowRoot).append(anchor);
   const blockDefault = (event: MouseEvent) => event.preventDefault();
   document.addEventListener("click", blockDefault, { once: true });
@@ -747,7 +747,7 @@ it("an encoded Account settings link retains the edited underlying page", async 
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
   document.removeEventListener("click", blockDefault);
-  await expect.poll(() => location.pathname).toBe("/manage/%70rofile");
+  await expect.poll(() => location.pathname).toBe("/%70rofile");
   expect(m.question.open).toBe(false);
   expect(departing.input.isConnected).toBe(true);
   expect(departing.input.value).toBe("page edited");
@@ -758,7 +758,7 @@ it("a malformed route segment still asks before discarding the profile and falls
   const m = await mount();
   change(m, "123456");
   const anchor = document.createElement("a");
-  anchor.href = "/manage/%ZZ";
+  anchor.href = "/%ZZ";
   m.screen.shadowRoot!.append(anchor);
   const blockDefault = (event: MouseEvent) => event.preventDefault();
   document.addEventListener("click", blockDefault, { once: true });
@@ -767,9 +767,9 @@ it("a malformed route segment still asks before discarding the profile and falls
   );
   document.removeEventListener("click", blockDefault);
   await expect.poll(() => m.question.open).toBe(true);
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   await choose(m, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
+  await expect.poll(() => location.pathname).toBe("/my-schedule");
   expect(m.screen.isConnected).toBe(false);
   expect(unload()).toBe(false);
 });
@@ -797,7 +797,7 @@ it.each(["same-app", "device"] as const)(
     const bar = m.app.shadowRoot!.querySelector("wt-demo-bar")!;
     await bar.updateComplete;
     const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>(
-      destination === "device" ? 'a[href="/till/"]' : 'a[href="/manage/email"]',
+      destination === "device" ? 'a[href="/till/"]' : 'a[href="/email"]',
     )!;
     expect(link).not.toBeNull();
     let browserDefault = false;
@@ -821,19 +821,19 @@ it.each(["same-app", "device"] as const)(
       expect(m.question.open).toBe(false);
       expect(telephone(m)).toBe("123456");
       expect(unload()).toBe(true);
-      expect(location.pathname).toBe("/manage/profile");
+      expect(location.pathname).toBe("/profile");
       return;
     }
     await expect.poll(() => m.question.open).toBe(true);
     expect(browserDefault).toBe(false);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     await choose(m, "keep");
     expect(telephone(m)).toBe("123456");
     expect(unload()).toBe(true);
     click();
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/email");
+    await expect.poll(() => location.pathname).toBe("/email");
     expect(m.screen.isConnected).toBe(false);
     expect(unload()).toBe(false);
   },
@@ -842,11 +842,11 @@ it.each(["same-app", "device"] as const)(
 it.each([
   {
     use: { kind: "department_receipt", id: "bar", name: "Restaurant", active: true },
-    path: "/manage/venue-operations/department/bar/view/receipt",
+    path: "/venue-operations/department/bar/view/receipt",
   },
   {
     use: { kind: "section", id: "section-one", internalName: "Lunch", ownerMenuId: "menu-one" },
-    path: "/manage/menus/menu/menu-one/view/structure",
+    path: "/menus/menu/menu-one/view/structure",
   },
   {
     use: {
@@ -856,11 +856,11 @@ it.each([
       name: "Staff bread",
       active: true,
     },
-    path: "/manage/products/product/product-one",
+    path: "/products/product/product-one",
   },
-  { use: { kind: "included-menu" }, path: "/manage/menus/menu/menu-two/view/structure" },
-  { use: { kind: "menu-preview" }, path: "/manage/menus/menu/menu-one/view/preview" },
-  { use: { kind: "routing-device" }, path: "/manage/devices/device/station-display" },
+  { use: { kind: "included-menu" }, path: "/menus/menu/menu-two/view/structure" },
+  { use: { kind: "menu-preview" }, path: "/menus/menu/menu-one/view/preview" },
+  { use: { kind: "routing-device" }, path: "/devices/device/station-display" },
 ] as const)(
   "the rendered $use.kind link asks before leaving actual edited profile input",
   async ({ use, path }) => {
@@ -1056,7 +1056,7 @@ it.each([
     );
     let link: HTMLAnchorElement;
     if (use.kind === "routing-device") {
-      await navigationGuardFor(window)!.write("/manage/prep-stations/view/stations");
+      await navigationGuardFor(window)!.write("/prep-stations/view/stations");
       const stations = () =>
         m.app
           .shadowRoot!.querySelector("dashboard-prep-stations-screen")
@@ -1067,7 +1067,7 @@ it.each([
       await expect.poll(() => table.shadowRoot!.querySelector(`a[href="${path}"]`)).not.toBeNull();
       link = table.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${path}"]`)!;
     } else if (use.kind === "included-menu") {
-      await navigationGuardFor(window)!.write("/manage/menus/menu/menu-one/view/structure");
+      await navigationGuardFor(window)!.write("/menus/menu/menu-one/view/structure");
       await expect
         .poll(() => m.app.shadowRoot!.querySelector("dashboard-menus-screen"))
         .not.toBeNull();
@@ -1076,7 +1076,7 @@ it.each([
       await expect.poll(() => menus.shadowRoot!.querySelector(selector)).not.toBeNull();
       link = menus.shadowRoot!.querySelector<HTMLAnchorElement>(selector)!;
     } else if (use.kind === "menu-preview") {
-      await navigationGuardFor(window)!.write("/manage/menus");
+      await navigationGuardFor(window)!.write("/menus");
       await expect
         .poll(() => m.app.shadowRoot!.querySelector("dashboard-menus-screen"))
         .not.toBeNull();
@@ -1088,7 +1088,7 @@ it.each([
       await expect.poll(changes).toBeTruthy();
       link = changes()!;
     } else {
-      await navigationGuardFor(window)!.write("/manage/images");
+      await navigationGuardFor(window)!.write("/images");
       await expect
         .poll(() => m.app.shadowRoot!.querySelector("dashboard-image-library"))
         .not.toBeNull();
@@ -1124,10 +1124,10 @@ it.each([
     await expect.poll(() => m.question.open).toBe(true);
     expect(location.pathname).toBe(
       use.kind === "included-menu"
-        ? "/manage/profile/view/structure"
+        ? "/profile/view/structure"
         : use.kind === "routing-device"
-          ? "/manage/profile/view/stations"
-          : "/manage/profile",
+          ? "/profile/view/stations"
+          : "/profile",
     );
     await choose(m, "keep");
     expect(field.value).toBe("654321");
@@ -1189,7 +1189,7 @@ describe("a product swatch link under the app's link router", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(leaked()).toBe(false);
     expect(write).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
   });
 
   it("opens the product's Edit in place when the list gives it a way to, without routing", async () => {
@@ -1199,7 +1199,7 @@ describe("a product swatch link under the app's link router", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(leaked()).toBe(false);
     expect(write).not.toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
   });
 
   it("is routed in the app to the product's Edit when nothing opens it in place", async () => {
@@ -1208,8 +1208,8 @@ describe("a product swatch link under the app's link router", () => {
     expect(leaked()).toBe(false);
     expect(write).toHaveBeenCalled();
     const url = new URL(String(write.mock.calls[0]![0]));
-    expect(`${url.pathname}${url.search}`).toBe("/manage/products/product/probe?field=image");
-    await expect.poll(() => location.pathname).toBe("/manage/products/product/probe");
+    expect(`${url.pathname}${url.search}`).toBe("/products/product/probe?field=image");
+    await expect.poll(() => location.pathname).toBe("/products/product/probe");
   });
 });
 
@@ -1306,9 +1306,9 @@ describe("a price override row's Edit product link under the app's link router",
     // The first write is the link's; the app then rewrites the same address in place.
     expect(write).toHaveBeenCalled();
     expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      `/manage/products/product/${id}`,
+      `/products/product/${id}`,
     );
-    await expect.poll(() => location.pathname).toBe(`/manage/products/product/${id}`);
+    await expect.poll(() => location.pathname).toBe(`/products/product/${id}`);
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 });
@@ -1357,9 +1357,9 @@ describe("a Structure tab product row's Edit product link under the app's link r
     expect(leaked).toBe(false);
     expect(write).toHaveBeenCalled();
     expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
-      "/manage/products/product/p-burger",
+      "/products/product/p-burger",
     );
-    await expect.poll(() => location.pathname).toBe("/manage/products/product/p-burger");
+    await expect.poll(() => location.pathname).toBe("/products/product/p-burger");
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 });
@@ -1434,19 +1434,19 @@ describe("allergen warning product links with a dirty schedule", () => {
     await panel.updateComplete;
     expect(schedule).not.toHaveBeenCalled();
     expect(unload()).toBe(true);
-    const link = q(`a[href="/manage/products/product/${id}"]`);
+    const link = q(`a[href="/products/product/${id}"]`);
     expect(link).not.toBeNull();
     const pushed = vi.spyOn(history, "pushState");
     await userEvent.click(link);
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "keep");
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(pushed).not.toHaveBeenCalled();
     expect((q('wt-input[name="date"]') as WtInput).value).toBe("2030-01-01");
     await userEvent.click(link);
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "discard");
-    await expect.poll(() => location.pathname).toBe(`/manage/products/product/${id}`);
+    await expect.poll(() => location.pathname).toBe(`/products/product/${id}`);
     expect(pushed).toHaveBeenCalledTimes(1);
     expect(schedule).not.toHaveBeenCalled();
     expect(unload()).toBe(false);

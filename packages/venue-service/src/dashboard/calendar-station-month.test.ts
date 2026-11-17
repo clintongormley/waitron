@@ -168,7 +168,7 @@ async function mount(
   history.replaceState(
     null,
     "",
-    `/manage/opening-hours/view/month/${props.show ? `show/${props.show}` : `station/${props.stationId ?? "grill"}`}/month/2026-12`,
+    `/opening-hours/view/month/${props.show ? `show/${props.show}` : `station/${props.stationId ?? "grill"}`}/month/2026-12`,
   );
   const el = document.createElement("dashboard-opening-hours-screen");
   el.api = h.api;
@@ -447,7 +447,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
       }),
     );
     await expect.poll(() => picker(el)!.value).toBe("station:pass");
-    expect(location.pathname).toBe("/manage/opening-hours/view/month/station/pass/month/2026-12");
+    expect(location.pathname).toBe("/opening-hours/view/month/station/pass/month/2026-12");
     expect(push).toHaveBeenCalledTimes(1);
     history.back();
     await expect.poll(() => picker(el)!.value).toBe("station:grill");
@@ -719,7 +719,7 @@ it("draws separate sender rows from one batch and keeps the default bounded on c
   ]);
   expect(box.querySelector('[data-test="special-add"]')).not.toBeNull();
   expect(box.querySelector('a[data-test="edit-week"]')).not.toBeNull();
-  expect(box.querySelector('a[href="/manage/periods"]')).toBeNull();
+  expect(box.querySelector('a[href="/periods"]')).toBeNull();
 });
 
 it("keeps batch loading and errors distinct from Closed and recovers on reread", async () => {

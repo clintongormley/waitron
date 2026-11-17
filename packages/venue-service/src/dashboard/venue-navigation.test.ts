@@ -52,12 +52,12 @@ async function mount(): Promise<VenueOperationsScreen> {
 
 describe("venue operations URL navigation", () => {
   it.each([
-    "/manage/venue-operations/view/departments",
-    "/manage/venue-operations/view/zones",
-    "/manage/venue-operations/view/status",
-    "/manage/venue-operations/view/missing",
-    "/manage/venue-operations/view/menus",
-    "/manage/venue-operations/view/kitchen",
+    "/venue-operations/view/departments",
+    "/venue-operations/view/zones",
+    "/venue-operations/view/status",
+    "/venue-operations/view/missing",
+    "/venue-operations/view/menus",
+    "/venue-operations/view/kitchen",
   ])("opens the old %s bookmark at the unified page without a new history entry", async (path) => {
     navigate(path);
     const query = location.search;
@@ -69,7 +69,7 @@ describe("venue operations URL navigation", () => {
         .shadowRoot!.querySelector("venue-departments-shell")!
         .shadowRoot!.querySelector("departments-list"),
     ).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(location.search).toBe(query);
     expect(push).not.toHaveBeenCalled();
     expect(replace).toHaveBeenCalledTimes(1);
@@ -79,7 +79,7 @@ describe("venue operations URL navigation", () => {
   });
 
   it("keeps the unified page URL when opened directly", async () => {
-    navigate("/manage/venue-operations");
+    navigate("/venue-operations");
     const before = location.href;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");

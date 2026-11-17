@@ -365,7 +365,7 @@ export class VenueDepartmentsShell extends LitElement {
     }
   }
   readonly #url = new UrlStateController(this, () => this.#restore(), {
-    basePath: "/manage",
+    basePath: "/",
     primary: "dashboard",
     children: { "venue-operations": { department: "department", view: "view", zone: "zone" } },
   });

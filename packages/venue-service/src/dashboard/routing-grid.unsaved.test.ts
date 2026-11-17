@@ -86,7 +86,7 @@ customElements.define("routing-cell-leave-test-app", CellLeaveApp);
 let app: CellLeaveApp;
 afterEach(() => {
   app?.remove();
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 function deferred() {
   let resolve!: () => void;
@@ -107,7 +107,7 @@ const move = {
 };
 /** `refresh` holds every read after the first until it settles; a rejected one fails them. */
 async function mount(write?: Promise<void>, refresh?: Promise<void>) {
-  history.replaceState(null, "", "/manage/prep-stations/view/routing");
+  history.replaceState(null, "", "/prep-stations/view/routing");
   const writes: unknown[] = [];
   let reads = 0;
   app = document.createElement("routing-cell-leave-test-app") as CellLeaveApp;

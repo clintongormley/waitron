@@ -380,7 +380,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     );
     mountSpa(
       source,
-      { root: join(root!, "dashboard"), basePath: "/manage", navigationPath: "/manage" },
+      { root: join(root!, "dashboard"), basePath: "/", navigationPath: "/" },
       log,
     );
     await context.addCookies([
@@ -388,7 +388,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     ]);
     await page.clock.install({ time: Date.now() });
     await page.clock.setFixedTime(Date.now());
-    await page.goto(`${sourceUrl}/manage/`);
+    await page.goto(`${sourceUrl}/`);
     await page
       .getByRole("button", {
         name: new RegExp(`^(Actions|Acciones): ${destinationUrl.replaceAll(".", "\\.")}$`),

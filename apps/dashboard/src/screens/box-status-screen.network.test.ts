@@ -31,7 +31,7 @@ async function mount(client = api()) {
 }
 const card = (el: BoxStatusScreen) => el.shadowRoot!.querySelector("[data-test=box-network]");
 beforeEach(() => {
-  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/box-status");
 });
 afterEach(() => {
   vi.restoreAllMocks();

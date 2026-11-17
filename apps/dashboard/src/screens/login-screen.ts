@@ -597,11 +597,11 @@ export class LoginScreen extends LitElement {
     if (new URLSearchParams(window.location.search).has("token")) {
       const guard = navigationGuardFor(window);
       if (guard) {
-        const outcome = await guard.write("/manage/", true);
+        const outcome = await guard.write("/", true);
         if (outcome === "proceeded") reset();
         return;
       }
-      history.replaceState(history.state, "", "/manage/");
+      history.replaceState(history.state, "", "/");
       reset();
       return;
     }

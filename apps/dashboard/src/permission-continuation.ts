@@ -3,7 +3,7 @@ import type { SessionEpoch } from "./session-signals.js";
 
 const RETURN_KEY = "waitron-permission-return";
 const surfacePath = (path: unknown): path is string =>
-  typeof path === "string" && path.startsWith("/manage/") && !/[?#]/.test(path);
+  typeof path === "string" && path.startsWith("/") && !/[?#]/.test(path);
 
 export function preparePermissionReturn(path: string): void {
   try {

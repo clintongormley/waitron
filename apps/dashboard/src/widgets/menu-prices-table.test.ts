@@ -3761,7 +3761,7 @@ it("puts Edit product in each row's ⋮, in a pinned actions column, and opens t
     expect(menus[0]!.getAttribute("data-test"), key).toBe(`actions-${key}`);
     const link = editLink(el, key);
     expect(text(link), key).toBe(t("product.edit"));
-    expect(link.getAttribute("href"), key).toBe(`/manage/products/product/${pages[key]}`);
+    expect(link.getAttribute("href"), key).toBe(`/products/product/${pages[key]}`);
   }
 
   const heard = vi.fn();

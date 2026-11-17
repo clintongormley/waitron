@@ -89,7 +89,7 @@ function identity(permissions = ["fiscal.view"], personId = "reader") {
     sessionIdleTimeoutSeconds: 1800,
   };
 }
-async function mount(path = "/manage/test-evidence") {
+async function mount(path = "/test-evidence") {
   let me = identity();
   const getMe = vi.fn<DashboardApi["getMe"]>(async () => me);
   const login = vi.fn<DashboardApi["login"]>(async () => ({
@@ -469,7 +469,7 @@ it.each(["management_session.expired", "management_session.required", "person.su
     );
     await h.app.updateComplete;
     expect(dialog(h.app)?.open).toBe(true);
-    expect(location.pathname).toBe("/manage/test-evidence");
+    expect(location.pathname).toBe("/test-evidence");
     expect(h.continuation.snapshot().authenticated).toBe(false);
     expect(h.app.shadowRoot!.querySelector("[data-test=evidence-surface]")).toBeNull();
     controller.abort();
@@ -581,11 +581,11 @@ it("Google carries only a nonsecret surface and returns to fresh server-derived 
     expect(navigate).toHaveBeenCalledWith("https://accounts.google.test/authorize"),
   );
   const marker = sessionStorage.getItem("waitron-permission-return");
-  expect(JSON.parse(marker!)).toEqual({ path: "/manage/test-evidence" });
+  expect(JSON.parse(marker!)).toEqual({ path: "/test-evidence" });
   cleanupWidgets();
   await expect(result).resolves.toBe("stopped");
-  const returned = await mount("/manage/?login=google");
-  expect(location.pathname).toBe("/manage/test-evidence");
+  const returned = await mount("/?login=google");
+  expect(location.pathname).toBe("/test-evidence");
   expect(location.search).toBe("");
   expect(sessionStorage.getItem("waitron-permission-return")).toBeNull();
   expect(dialog(returned.app)).toBeNull();

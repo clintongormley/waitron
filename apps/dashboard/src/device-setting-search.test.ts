@@ -42,7 +42,7 @@ it("resolves offered rows through passive lists and encodes device addresses", a
   expect(await resolve("name")).toContainEqual({
     id: "d/+",
     label: "Pass",
-    path: "/manage/devices/device/d%2F%2B",
+    path: "/devices/device/d%2F%2B",
   });
   expect((await resolve("madeHereStationIds")).map((row) => row.id)).toEqual(["d/+", "empty"]);
   expect((await resolve("name")).map((row) => row.id)).toEqual(["d/+", "kds", "gone", "empty"]);

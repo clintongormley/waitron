@@ -979,4 +979,4 @@ it("keeps the delete dialog on a phone, with its native Confirm visible", async 
   }
 });
 
-beforeEach(() => history.replaceState({}, "", "/manage/periods"));
+beforeEach(() => history.replaceState({}, "", "/periods"));

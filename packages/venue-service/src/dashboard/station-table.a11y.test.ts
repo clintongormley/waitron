@@ -50,7 +50,7 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
       el.outputs = {
         bar: {
           printedOn: "Epson",
-          shownOn: html`<a href="/manage/devices/device/bar">Bar display</a>`,
+          shownOn: html`<a href="/devices/device/bar">Bar display</a>`,
         },
         grill: { printedOn: "No printer", shownOn: "None" },
         old: { printedOn: "No printer", shownOn: "None" },

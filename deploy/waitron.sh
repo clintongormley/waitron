@@ -543,8 +543,8 @@ EOF
   On a box serving its own certificate, the guide's first step removes any old one.
   Once set up:
     Till         ${BOX_URL}
-    Dashboard    ${BOX_URL}/manage
-    Email inbox  ${BOX_URL}/manage/email
+    Dashboard    ${BOX_URL}/
+    Email inbox  ${BOX_URL}/email
 
 EOF
   if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "http://waitron.local/setup/trust"; echo; fi

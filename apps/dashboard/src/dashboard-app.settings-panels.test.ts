@@ -151,7 +151,7 @@ const tabKeys = (el: DashboardApp) =>
   ].map((tab) => tab.getAttribute("data-key"));
 
 it("puts a module's panels on their tab by their stated order, the core panels counting as 0", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+  const el = await mount("/venue-settings/view/venue-details", "manager", [
     "test.use",
     "test.details",
     "venue.view",
@@ -169,11 +169,11 @@ it("puts a module's panels on their tab by their stated order, the core panels c
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details");
+  const el = await mount("/venue-settings/view/venue-details");
   expect(tabKeys(el)).toEqual(["venue-details", "kitchen"]);
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
 });
 
 it("refuses to start when a module names an unknown settings tab", async () => {
@@ -229,9 +229,9 @@ it.each([
 ])(
   "mounts core venue details for %s using venue.configure for editing",
   async (role, permissions, readOnly) => {
-    const el = await mount("/manage/venue-settings", role, permissions);
+    const el = await mount("/venue-settings", role, permissions);
     expect(tabKeys(el)[0]).toBe("venue-details");
-    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(location.pathname).toBe("/venue-settings/view/venue-details");
     const panel = page(el).shadowRoot!.querySelector(
       "dashboard-venue-details-panel",
     ) as HTMLElement & { readOnly: boolean };
@@ -247,7 +247,7 @@ it.each([
 ])(
   "mounts the Privacy card for %s, editable only with venue.configure",
   async (role, permissions, readOnly) => {
-    const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
+    const el = await mount("/venue-settings/view/venue-details", role, permissions);
     const panel = () =>
       page(el).shadowRoot!.querySelector("dashboard-venue-privacy-panel") as
         (HTMLElement & { readOnly: boolean }) | null;
@@ -259,17 +259,17 @@ it.each([
   },
 );
 it("replaces a removed Receipts deep link with Venue details for a manager with venue access", async () => {
-  const el = await mount("/manage/venue-settings/view/receipts", "manager", [
+  const el = await mount("/venue-settings/view/receipts", "manager", [
     "venue.view",
     "venue.configure",
   ]);
   expect(tabKeys(el)[0]).toBe("venue-details");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("venue-details");
 });
 
 it("shows the VAT class for new products in the Defaults card to venue.configure without menu.manage", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+  const el = await mount("/venue-settings/view/venue-details", "manager", [
     "venue.view",
     "venue.configure",
   ]);
@@ -283,7 +283,7 @@ it("shows the VAT class for new products in the Defaults card to venue.configure
 });
 
 it("shows a supervisor the Defaults card's values with nothing to edit", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details", "supervisor", ["venue.view"]);
+  const el = await mount("/venue-settings/view/venue-details", "supervisor", ["venue.view"]);
   const defaults = () =>
     page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
   await expect
@@ -297,7 +297,7 @@ it("shows a supervisor the Defaults card's values with nothing to edit", async (
 });
 
 it("orders the Venue details cards Business, Venue, Business day, Defaults, Privacy", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+  const el = await mount("/venue-settings/view/venue-details", "manager", [
     "venue.view",
     "venue.configure",
   ]);

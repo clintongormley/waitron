@@ -95,7 +95,7 @@ interface StagedPlan {
   refusedText: boolean;
 }
 
-const HOME = "/manage";
+const HOME = "/";
 
 /** Below this width, measured inside the editor's modal, the side panel becomes a bottom sheet. */
 const NARROW_PX = 600;

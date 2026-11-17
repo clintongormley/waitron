@@ -269,7 +269,7 @@ export function mountHandoverEmergencyApi(
     )
       return;
     throw new AppError("handover.source_still_answering", {
-      sourceServersUrl: new URL("/manage/servers", originOf(source!.contactUrl)).href,
+      sourceServersUrl: new URL("/servers", originOf(source!.contactUrl)).href,
     });
   }
   async function authenticate(c: Context, signIn: SwitchSignInRequest, db: Database = deps.db) {
@@ -366,7 +366,7 @@ export function mountHandoverEmergencyApi(
     return {
       sourceNodeId,
       destinationNodeId: deps.nodeId,
-      sourceServersUrl: new URL("/manage/servers", originOf(source.contactUrl)).href,
+      sourceServersUrl: new URL("/servers", originOf(source.contactUrl)).href,
       copy,
       joinedAtMs:
         link?.role === "serves" && link.state === "copied" ? link.updatedAt.getTime() : null,

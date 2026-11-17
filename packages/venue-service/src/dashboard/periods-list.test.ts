@@ -260,9 +260,9 @@ it("Painted in lists the seasons in order, then the special days, each linking t
     "Company dinners",
   ]);
   expect(chips.map((chip) => chip.getAttribute("href"))).toEqual([
-    "/manage/opening-hours/view/season/season/summer/department/restaurant?back=/manage/periods",
-    "/manage/opening-hours/view/season/season/winter/department/restaurant?back=/manage/periods",
-    "/manage/opening-hours/view/special-day/special-day/sd1?back=/manage/periods",
+    "/opening-hours/view/season/season/summer/department/restaurant?back=/periods",
+    "/opening-hours/view/season/season/winter/department/restaurant?back=/periods",
+    "/opening-hours/view/special-day/special-day/sd1?back=/periods",
   ]);
   const winter = chips[1]!;
   expect(getComputedStyle(winter).backgroundColor).not.toBe(
@@ -762,7 +762,7 @@ it("a period naming the department's default set reads as the default, (default)
   expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("House");
 });
 
-beforeEach(() => history.replaceState({}, "", "/manage/periods"));
+beforeEach(() => history.replaceState({}, "", "/periods"));
 
 it("offers localized remembered column choices for waitron.periods.table", async () => {
   setLocale("es-ES");

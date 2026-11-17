@@ -265,7 +265,7 @@ export class TillEnrolScreen extends LitElement {
   #approvalGuide(): TemplateResult {
     return html`<p class="hint">
       ${t("device.join_approval_guide")}
-      <a data-approval-guide href="/manage/devices">${t("device.join_approval_link")}</a>.
+      <a data-approval-guide href="/devices">${t("device.join_approval_link")}</a>.
     </p>`;
   }
 

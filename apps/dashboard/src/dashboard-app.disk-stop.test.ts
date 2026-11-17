@@ -209,7 +209,7 @@ const signIn = (el: DashboardApp) =>
 
 const initialUrl = location.href;
 beforeEach(() => {
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
   setLocale("en-GB");
 });
 afterEach(() => {
@@ -438,7 +438,7 @@ describe("the full-disk bar's button", () => {
     await expect
       .poll(() => el.shadowRoot!.querySelector("dashboard-box-status-screen"))
       .not.toBeNull();
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
     await el.updateComplete;
     expect(diskBar(el)!.actionLabel).toBe("");
     await diskBar(el)!.updateComplete;
@@ -509,7 +509,7 @@ describe("the full-disk bar's button", () => {
       await expect.poll(() => login(el)).not.toBeNull();
       expect(logout).toHaveBeenCalledOnce();
       expect(diskBar(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/box-status");
+      expect(location.pathname).toBe("/box-status");
       signIn(el);
       await expect.poll(() => el.shadowRoot!.querySelector(landing)).not.toBeNull();
     },
@@ -538,11 +538,11 @@ describe("the full-disk bar's button", () => {
       await expect.poll(() => diskBar(el)).not.toBeNull();
       await pressButton(el);
       await expect.poll(() => login(el)).not.toBeNull();
-      expect(location.pathname).toBe("/manage/box-status");
+      expect(location.pathname).toBe("/box-status");
       vi.advanceTimersByTime(61_000);
       await flush(el);
       expect(background).toHaveBeenCalledOnce();
-      expect(location.pathname).toBe("/manage/box-status");
+      expect(location.pathname).toBe("/box-status");
     } finally {
       vi.useRealTimers();
     }
@@ -567,7 +567,7 @@ describe("the full-disk bar's button", () => {
     await diskBar(el)!.updateComplete;
     await pressButton(el);
     await expect.poll(() => login(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
     finish(
       new Response(JSON.stringify({ error: { code: "management_session.required" } }), {
         status: 401,
@@ -575,7 +575,7 @@ describe("the full-disk bar's button", () => {
     );
     await flush(el);
     await flush(el);
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
   });
 
   it("a refusal from a read that answers while Sign in as a manager is still signing out keeps Box status as the destination", async () => {
@@ -613,7 +613,7 @@ describe("the full-disk bar's button", () => {
     finishLogout(new Response(null, { status: 204 }));
     await expect.poll(() => login(el)).not.toBeNull();
     await flush(el);
-    expect(location.pathname).toBe("/manage/box-status");
+    expect(location.pathname).toBe("/box-status");
   });
 
   it("asks before Sign in as a manager signs out over unsaved changes", async () => {
@@ -627,7 +627,7 @@ describe("the full-disk bar's button", () => {
   });
 
   it("leaves the staff screen's administrator sign-in clearing the address as before", async () => {
-    history.replaceState(null, "", "/manage/staff");
+    history.replaceState(null, "", "/staff");
     const logout = vi.fn().mockResolvedValue(undefined);
     const { el } = await mountAs("manager", ["system.manage", "person.view", "venue.view"], {
       logout,

@@ -86,7 +86,7 @@ function request(state: string): DashboardRequest {
 describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
   test.each(["load-failed", "unreadable-viewer"])("%s", async (state) => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/year");
+    history.replaceState(null, "", "/opening-hours/view/year");
     // Assign the API before connecting: the screen attaches its passive model watch on connection.
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
@@ -110,8 +110,8 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
-    ["the switch on Opening hours", "/manage/opening-hours/view/year"],
-    ["the switch on a module view", "/manage/opening-hours/view/staffing"],
+    ["the switch on Opening hours", "/opening-hours/view/year"],
+    ["the switch on a module view", "/opening-hours/view/staffing"],
   ])("%s", async (_state, path) => {
     setLocale("en");
     registerCatalogue({ en: { "a11y.view.staffing": "Staffing" }, es: {} });
@@ -147,10 +147,10 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
-    ["the Year's head", "/manage/opening-hours/view/year", "opening-hours-year"],
+    ["the Year's head", "/opening-hours/view/year", "opening-hours-year"],
     [
       "the Month's head, its year a link",
-      "/manage/opening-hours/view/month/month/2026-12",
+      "/opening-hours/view/month/month/2026-12",
       "opening-hours-month",
     ],
   ] as const)("%s", async (_state, path, view) => {
@@ -182,7 +182,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     ["the day box over the Month, a special day", "2026-12-14", "special-edit"],
   ] as const)("%s", async (_state, date, button) => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+    history.replaceState(null, "", "/opening-hours/view/month/month/2026-12");
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");
@@ -223,7 +223,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     history.replaceState(
       null,
       "",
-      "/manage/opening-hours/view/week/department/rest/week/2026-12-09",
+      "/opening-hours/view/week/department/rest/week/2026-12-09",
     );
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
@@ -261,7 +261,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     ["the day box over the Year, while its month loads", false],
   ] as const)("%s", async (_state, answered) => {
     setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    history.replaceState(null, "", "/opening-hours/view/year/year/2026");
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");

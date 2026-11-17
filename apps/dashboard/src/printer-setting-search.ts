@@ -21,7 +21,7 @@ export function printerSettingSearchDestinations(
       ].map((row) => ({
         id: row.id,
         label: row.name,
-        path: `/manage/printers/view/printers/printer/${encodePathSegment(row.id)}/editor/${field.editor}${"step" in field ? `/step/${field.step}` : ""}`,
+        path: `/printers/view/printers/printer/${encodePathSegment(row.id)}/editor/${field.editor}${"step" in field ? `/step/${field.step}` : ""}`,
       }));
     },
   }));

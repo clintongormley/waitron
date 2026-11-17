@@ -14,7 +14,7 @@ import "./errors.js";
 export interface SpaDeps {
   /** Absolute path to the built SPA directory (holds index.html + assets/). */
   root: string;
-  /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/manage" (no trailing slash). */
+  /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/" (no trailing slash). */
   basePath: string;
   /** Absolute path prefix for browser navigation, e.g. /till/tabs or /manage. */
   navigationPath?: string;
@@ -106,7 +106,7 @@ export function mountBuiltApps(
   if (apps.dashboardAppDir !== undefined) {
     mountSpa(
       app,
-      { root: apps.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
+      { root: apps.dashboardAppDir, basePath: "/", navigationPath: "/" },
       log,
     );
     mountSpa(app, { root: apps.dashboardAppDir, basePath: "" }, log);

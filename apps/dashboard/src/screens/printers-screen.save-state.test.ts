@@ -19,7 +19,7 @@ afterEach(cleanupWidgets);
 beforeEach(() => {
   sessionStorage.removeItem("waitron.printers.agents.table");
   sessionStorage.removeItem("waitron.printers.table");
-  history.replaceState(null, "", "/manage/printers");
+  history.replaceState(null, "", "/printers");
 });
 
 const agent: PrintAgentRow = {
@@ -155,7 +155,7 @@ async function openAgent(api: DashboardApi = stubApi()) {
 }
 
 async function openDetail(api: DashboardApi = stubApi()) {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await vi.waitFor(() => expect(detailsEditButton(el, "edit")).not.toBeNull());
   openDetailsEdit(el);
@@ -390,7 +390,7 @@ const calibrated: Printer = {
 };
 
 async function openWizard(api: DashboardApi = stubApi()) {
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await vi.waitFor(() => expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull());
   q(el, "[data-test=calibrate-printer-details]")!.click();
@@ -568,7 +568,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
   };
 
   async function addFromDiscovery(device: DiscoveredPrinter) {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const api = stubApi({
       listPrinters: vi.fn().mockResolvedValue([printer, switchedOff]),
       listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
@@ -675,7 +675,7 @@ const pairCommand = {
 };
 
 async function openAddPrinter(devices: DiscoveredPrinter[], api: DashboardApi) {
-  history.replaceState(null, "", "/manage/printers/view/printers");
+  history.replaceState(null, "", "/printers/view/printers");
   vi.mocked(api.listDiscoveredPrinters).mockResolvedValue(devices);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await vi.waitFor(() => expect(q(el, "[data-test=open-add-printer]")).not.toBeNull());
@@ -859,7 +859,7 @@ describe("under the dashboard's leave coordinator", () => {
   });
 
   it("the details form opens quiet and wakes on a name or an address edit", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const el = await mountShared();
     await vi.waitFor(() => expect(detailsEditButton(el, "edit")).not.toBeNull());
     openDetailsEdit(el);
@@ -875,7 +875,7 @@ describe("under the dashboard's leave coordinator", () => {
   });
 
   it("the calibration wizard opens quiet and wakes on a change", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    history.replaceState(null, "", "/printers/view/printers/printer/p1");
     const el = await mountShared();
     await vi.waitFor(() => expect(q(el, "[data-test=calibrate-printer-details]")).not.toBeNull());
     q(el, "[data-test=calibrate-printer-details]")!.click();
@@ -887,7 +887,7 @@ describe("under the dashboard's leave coordinator", () => {
   });
 
   it("the Pair dialog opens quiet and wakes on a PIN, and the name dialog opens ready", async () => {
-    history.replaceState(null, "", "/manage/printers/view/printers");
+    history.replaceState(null, "", "/printers/view/printers");
     const { el: app } = await mountWidget<SharedLeaveFixture>(
       "printers-save-state-leave-fixture",
       {},

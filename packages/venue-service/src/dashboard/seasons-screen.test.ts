@@ -10,7 +10,7 @@ import "./seasons-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-seasons-screen"];
 beforeEach(() => {
   setLocale("en");
-  history.replaceState({}, "", "/manage/seasons");
+  history.replaceState({}, "", "/seasons");
 });
 afterEach(() => screen?.remove());
 async function mount(
@@ -46,7 +46,7 @@ it("lists seasons in January-first order with dates and Edit/Delete row menus", 
   expect(screen.shadowRoot!.querySelector("[data-test=save-seasons]")).toBeNull();
   expect(table.shadowRoot!.querySelectorAll("wt-row-actions")).toHaveLength(2);
   table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/seasons/season/winter");
+  await expect.poll(() => location.pathname).toBe("/seasons/season/winter");
   await expect.poll(() => screen.shadowRoot!.querySelector("seasons-window")).not.toBeNull();
   expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Winter");
   expect(screen.shadowRoot!.querySelector("nav[aria-label] a.parent")).not.toBeNull();
@@ -111,11 +111,11 @@ it.each(["new", "winter", "missing"])(
     history.replaceState(
       {},
       "",
-      id === "new" ? "/manage/seasons/view/new?keep=yes" : `/manage/seasons/season/${id}?keep=yes`,
+      id === "new" ? "/seasons/view/new?keep=yes" : `/seasons/season/${id}?keep=yes`,
     );
     await mount();
     if (id === "missing") {
-      await expect.poll(() => location.pathname).toBe("/manage/seasons");
+      await expect.poll(() => location.pathname).toBe("/seasons");
       expect(screen.shadowRoot!.querySelector("seasons-window")).toBeNull();
     } else
       expect(screen.shadowRoot!.querySelector("seasons-window")!.seasonId).toBe(
@@ -125,9 +125,9 @@ it.each(["new", "winter", "missing"])(
   },
 );
 it("a viewer has no actions and its direct season edit address returns to the list", async () => {
-  history.replaceState({}, "", "/manage/seasons/season/winter");
+  history.replaceState({}, "", "/seasons/season/winter");
   const table = await mount(undefined, true);
-  expect(location.pathname).toBe("/manage/seasons");
+  expect(location.pathname).toBe("/seasons");
   expect(table.columns.some((c) => c.key === "actions")).toBe(false);
   expect(screen.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
 });
@@ -182,7 +182,7 @@ it.each([
 it.each(["Save", "Cancel"])(
   "%s replaces the selected-season address with its list",
   async (action) => {
-    history.replaceState({}, "", "/manage/seasons/season/winter");
+    history.replaceState({}, "", "/seasons/season/winter");
     const writes: unknown[] = [];
     await mount((async (_path, method, body) => {
       if (method !== "GET") writes.push(body);
@@ -205,7 +205,7 @@ it.each(["Save", "Cancel"])(
         editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-seasons]")!.click();
       } else await editor.requestClose();
       await expect.poll(() => screen.shadowRoot!.querySelector("seasons-window")).toBeNull();
-      expect(location.pathname).toBe("/manage/seasons");
+      expect(location.pathname).toBe("/seasons");
       expect(replace).toHaveBeenCalledTimes(1);
       expect(push).not.toHaveBeenCalled();
       expect(writes).toEqual(
@@ -227,16 +227,16 @@ it.each(["Save", "Cancel"])(
 );
 
 it("returns an open season page to the list when it becomes view-only", async () => {
-  history.replaceState({}, "", "/manage/seasons/season/winter");
+  history.replaceState({}, "", "/seasons/season/winter");
   await mount();
   screen.readOnly = true;
   await screen.updateComplete;
-  await expect.poll(() => location.pathname).toBe("/manage/seasons");
+  await expect.poll(() => location.pathname).toBe("/seasons");
   expect(screen.shadowRoot!.querySelector("seasons-window")).toBeNull();
 });
 it("keeps a missing selected season marked with a useful heading until leaving", async () => {
   let data = { ...painterModel(), departments: [] };
-  history.replaceState({}, "", "/manage/seasons/season/winter");
+  history.replaceState({}, "", "/seasons/season/winter");
   await mount((async () => structuredClone(data)) as DashboardRequest);
   data = {
     ...data,

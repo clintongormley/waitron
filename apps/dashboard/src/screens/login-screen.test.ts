@@ -136,7 +136,7 @@ async function bottomOf(el: LoginScreen): Promise<string> {
 }
 
 async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
-  history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
+  history.replaceState(null, "", "/account?token=setup&purpose=invitation");
   const api = stubApi(overrides);
   const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
   await flush(el);
@@ -206,7 +206,7 @@ describe("login-screen", () => {
   it("keeps an opted-in account when cancelling someone else's setup link", async () => {
     const saved = JSON.stringify({ email: "saved@example.test", method: "password" });
     localStorage.setItem("waitron-login-preference", saved);
-    history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
+    history.replaceState(null, "", "/account?token=setup&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
@@ -244,7 +244,7 @@ describe("login-screen", () => {
 
   it("uses a reset heading and unified Spanish replacement confirmation for a reset link", async () => {
     expect(t("account.link_resent", "es-ES")).toContain("restablecer");
-    history.replaceState(null, "", "/manage/account?token=reset&purpose=password_reset");
+    history.replaceState(null, "", "/account?token=reset&purpose=password_reset");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(t("account.reset_title"));
@@ -402,7 +402,7 @@ describe("login-screen", () => {
 
   it("ignores account inspection after disconnect", async () => {
     let finish!: (value: { email: string; purpose: "invitation" }) => void;
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi({
         inspectAccountAction: vi.fn().mockImplementation(
@@ -420,7 +420,7 @@ describe("login-screen", () => {
   });
 
   it("offers a passkey after activation through the shared confirmation", async () => {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const api = stubApi({
       passkeyRegisterOptions: vi.fn().mockResolvedValue({
         challengeHandle: "register",
@@ -471,7 +471,7 @@ describe("login-screen", () => {
   });
 
   it("offers passkey setup after reset only once password and second factor succeed", async () => {
-    history.replaceState(null, "", "/manage/account?token=reset&purpose=password_reset");
+    history.replaceState(null, "", "/account?token=reset&purpose=password_reset");
     const api = stubApi({
       completeAccountAction: vi.fn().mockResolvedValue({ personId: "p1", authenticated: false }),
       login: vi
@@ -790,7 +790,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=password_reset#email=new%40example.test",
+      "/account?token=token-1&purpose=password_reset#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await flush(el);
@@ -815,7 +815,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=untrusted%40example.test",
+      "/account?token=token-1&purpose=invitation#email=untrusted%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
 
@@ -843,7 +843,7 @@ describe("login-screen", () => {
       history.replaceState(
         null,
         "",
-        `/manage/account?token=expired&purpose=${purpose}#email=pending%40example.test`,
+        `/account?token=expired&purpose=${purpose}#email=pending%40example.test`,
       );
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
       await flush(el);
@@ -862,7 +862,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+      "/account?token=token-1&purpose=invitation#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
@@ -1010,7 +1010,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+      "/account?token=token-1&purpose=invitation#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await el.updateComplete;
@@ -1055,7 +1055,7 @@ describe("login-screen", () => {
   });
 
   it("submits account setup with Enter from every field", async () => {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     const submit = el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!;
@@ -1092,7 +1092,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+      "/account?token=token-1&purpose=invitation#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=complete-account]")!.click();
@@ -1298,7 +1298,7 @@ describe("login-screen", () => {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+      "/account?token=token-1&purpose=invitation#email=new%40example.test",
     );
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     (el as unknown as { password: string }).password = "a replacement password";
@@ -1729,7 +1729,7 @@ describe("login-screen: remembering the account", () => {
 
 describe("login-screen: emailed account links", () => {
   it("cancels a link that is still being checked", async () => {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi({ inspectAccountAction: vi.fn(never) }),
     });
@@ -1741,21 +1741,21 @@ describe("login-screen: emailed account links", () => {
   });
 
   it("leaves the address alone when it no longer carries the cancelled link", async () => {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
-    history.replaceState(null, "", "/manage/elsewhere?keep=1");
+    history.replaceState(null, "", "/elsewhere?keep=1");
     click(el, "cancel-account-action");
     await el.updateComplete;
     expect(field(el, "email")).not.toBeNull();
-    expect(location.pathname + location.search).toBe("/manage/elsewhere?keep=1");
+    expect(location.pathname + location.search).toBe("/elsewhere?keep=1");
   });
 
   async function mountExpiredLink(overrides: Partial<DashboardApi> = {}) {
     history.replaceState(
       null,
       "",
-      "/manage/account?token=expired&purpose=invitation#email=pending%40example.test",
+      "/account?token=expired&purpose=invitation#email=pending%40example.test",
     );
     const api = stubApi({
       inspectAccountAction: vi
@@ -1804,7 +1804,7 @@ describe("login-screen: emailed account links", () => {
   });
 
   async function mountValidatedInvitation(overrides: Partial<DashboardApi> = {}) {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const api = stubApi(overrides);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await flush(el);
@@ -1885,7 +1885,7 @@ it.each(["password", "factor", "invitation"])(
   "keeps the %s username hidden and available even with no email",
   async (step) => {
     if (step === "invitation")
-      history.replaceState(null, "", "/manage/account?token=held&purpose=invitation");
+      history.replaceState(null, "", "/account?token=held&purpose=invitation");
     const api = stubApi({ inspectAccountAction: () => new Promise(() => {}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     if (step !== "invitation") {
@@ -2663,7 +2663,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
     {
       name: "account setup",
       open: async () => {
-        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
         const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
           api: stubApi({ completeAccountAction: vi.fn(never) }),
         });
@@ -2728,7 +2728,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
     {
       name: "a short new password",
       open: async () => {
-        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
         const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
           api: stubApi({
             completeAccountAction: vi.fn().mockRejectedValue({ code: "password.too_short" }),
@@ -2748,7 +2748,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
     {
       name: "a short new PIN",
       open: async () => {
-        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
         const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
           api: stubApi({
             completeAccountAction: vi
@@ -2807,7 +2807,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
 
   it("keeps the action waiting on a field emptied while a request was out, even when the refusal names it", async () => {
     const answer = deferred<{ personId: string; authenticated: boolean }>();
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi({ completeAccountAction: vi.fn().mockReturnValue(answer.promise) }),
     });
@@ -2861,7 +2861,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
   );
 
   it("leaves Set password working after a refusal that names no field", async () => {
-    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
       api: stubApi({
         completeAccountAction: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
@@ -3080,7 +3080,7 @@ describe("login-screen: the sign-in card", () => {
   }
 
   async function openAccountAction(purpose: "invitation" | "password_reset" = "invitation") {
-    history.replaceState(null, "", `/manage/account?token=setup&purpose=${purpose}`);
+    history.replaceState(null, "", `/account?token=setup&purpose=${purpose}`);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     return el;
@@ -3190,7 +3190,7 @@ describe("login-screen: the sign-in card", () => {
       history.replaceState(
         null,
         "",
-        "/manage/account?token=token-1&purpose=password_reset#email=new%40example.test",
+        "/account?token=token-1&purpose=password_reset#email=new%40example.test",
       );
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api }, theme);
       await flush(el);
@@ -4101,7 +4101,7 @@ describe("login-screen: the chosen email is a read-only field", () => {
   it.each(["invitation", "password_reset"])(
     "shows the %s page's address in the same read-only field, with no way to change it",
     async (purpose) => {
-      history.replaceState(null, "", `/manage/account?token=token-1&purpose=${purpose}`);
+      history.replaceState(null, "", `/account?token=token-1&purpose=${purpose}`);
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
       await flush(el);
       const chosen = chosenEmail(el);
@@ -4122,7 +4122,7 @@ it("account-link cancellation preserves the accepted history index and publishes
   history.replaceState(
     { marker: "retained" },
     "",
-    "/manage/account?token=token-1&purpose=invitation",
+    "/account?token=token-1&purpose=invitation",
   );
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
@@ -4139,7 +4139,7 @@ it("account-link cancellation preserves the accepted history index and publishes
     });
     click(el, "cancel-account-action");
     await el.updateComplete;
-    expect(new URL(guard.href).pathname).toBe("/manage/");
+    expect(new URL(guard.href).pathname).toBe("/");
     expect(new URL(guard.href).search).toBe("");
     expect(history.state).toEqual({ marker: "retained", __wtNavigation: index });
     expect(push).not.toHaveBeenCalled();
@@ -4158,7 +4158,7 @@ it.each(["keep", "discard"] as const)(
     history.replaceState(
       { marker: "retained" },
       "",
-      "/manage/account?token=token-1&purpose=invitation",
+      "/account?token=token-1&purpose=invitation",
     );
     let answer!: (decision: "keep" | "discard") => void;
     const guard = new NavigationGuard(window, {
@@ -4193,7 +4193,7 @@ it.each(["keep", "discard"] as const)(
         await expect
           .poll(() => el.shadowRoot!.querySelector('wt-input[name="email"]'))
           .not.toBeNull();
-        expect(location.pathname + location.search).toBe("/manage/");
+        expect(location.pathname + location.search).toBe("/");
         expect(el.shadowRoot!.querySelector('wt-input[name="new-password"]')).toBeNull();
       }
     } finally {

@@ -161,7 +161,7 @@ it("offers Edit product on a shared-product change and opens the product editor 
   el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
   const link = editLink(el, "shared-price")!;
   expect(text(link)).toBe("Edit product");
-  expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
+  expect(link.getAttribute("href")).toBe("/products/product/p-burger");
   expect(link.hasAttribute("data-own-click")).toBe(true);
   expect(click(link)).toBe(true);
   expect(heard.mock.calls).toEqual([[{ productId: "p-burger" }]]);
@@ -184,7 +184,7 @@ it("offers Edit {menu} on an included-menu change, to its Structure tab, as a pl
   el.addEventListener("wt-edit-product", heard);
   const link = editLink(el, "included-order")!;
   expect(text(link)).toBe("Edit Drinks");
-  expect(link.getAttribute("href")).toBe("/manage/menus/menu/m-drinks/view/structure");
+  expect(link.getAttribute("href")).toBe("/menus/menu/m-drinks/view/structure");
   expect(link.hasAttribute("data-own-click")).toBe(false);
   expect(click(link)).toBe(false);
   expect(click(link, { metaKey: true })).toBe(false);
@@ -194,7 +194,7 @@ it("offers Edit {menu} on an included-menu change, to its Structure tab, as a pl
 it("sends an included menu's price change to that menu's Price overrides tab", async () => {
   const el = await mount([includedPrice]);
   expect(editLink(el, "included-price")!.getAttribute("href")).toBe(
-    "/manage/menus/menu/m-drinks/view/prices",
+    "/menus/menu/m-drinks/view/prices",
   );
 });
 
@@ -202,7 +202,7 @@ it("sends an extras item's portion change to its extras list", async () => {
   const el = await mount([extraPortion]);
   const link = editLink(el, "extra-portion")!;
   expect(text(link)).toBe("Edit extras list");
-  expect(link.getAttribute("href")).toBe("/manage/modifiers/view/extras/list/x-toppings");
+  expect(link.getAttribute("href")).toBe("/modifiers/view/extras/list/x-toppings");
   expect(link.hasAttribute("data-own-click")).toBe(false);
 });
 

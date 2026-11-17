@@ -56,7 +56,7 @@ afterEach(() => {
 
 for (const theme of ["light", "dark"] as const) {
   it(`has an accessible Orders table and dialogs in ${theme} theme`, async () => {
-    history.replaceState(null, "", "/manage/orders");
+    history.replaceState(null, "", "/orders");
     const { el, host } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api }, theme);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
@@ -123,7 +123,7 @@ const fullDetail = await fullApi.getOrder(fullRow.id);
 for (const theme of ["light", "dark"] as const) {
   it(`has an accessible full invoice's printer list in ${theme} theme`, async () => {
     setLocale("en-GB");
-    history.replaceState(null, "", "/manage/orders");
+    history.replaceState(null, "", "/orders");
     const { el, host } = await mountWidget<OrdersScreen>(
       "dashboard-orders-screen",
       { api: fullApi },

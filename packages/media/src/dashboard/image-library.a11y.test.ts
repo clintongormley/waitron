@@ -163,7 +163,7 @@ it.each([
   );
   expect(uses[0]!.querySelector("a")).toBeNull();
   expect([...modal.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
-    "/manage/venue-operations/department/dining/view/receipt",
+    "/venue-operations/department/dining/view/receipt",
   ]);
   expect(modal.querySelector("[data-test=confirm-delete]")).toBeNull();
   await expectNoA11yViolations(host);

@@ -107,7 +107,7 @@ async function flush(el: FloorPlanEditor): Promise<void> {
 }
 
 async function open(api: DashboardApi): Promise<FloorPlanEditor> {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
   await flush(el);
   return el;
@@ -645,7 +645,7 @@ it("an accepted save whose answer lands after another zone opened changes nothin
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   await move(el, "m1", 9);
@@ -689,7 +689,7 @@ it("a refused save whose answer lands after another zone opened shows nothing, a
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
+  history.pushState(null, "", "/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   write.reject({ code: "server.internal" });

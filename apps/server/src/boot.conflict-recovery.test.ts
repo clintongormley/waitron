@@ -95,7 +95,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   cleanups.push(close);
   const port = httpPort();
   const origin = `https://127.0.0.1:${port}`;
-  const cold = await fetch(`${origin}/manage/recovery/fiscal-conflict`, {
+  const cold = await fetch(`${origin}/recovery/fiscal-conflict`, {
     ...via,
     headers: { accept: "text/html" },
   });

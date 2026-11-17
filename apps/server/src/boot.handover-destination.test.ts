@@ -350,7 +350,7 @@ describe("the spare's handover duty in a full start", () => {
     });
     // Failing case, with boot not passing `sells`: 404.
     expect(answer.status).toBe(302);
-    expect(answer.headers.get("location")).toBe("/manage/servers");
+    expect(answer.headers.get("location")).toBe("/servers");
   }, 120_000);
 
   it("shares the password delay across preparation and activation in a real TLS start", async () => {

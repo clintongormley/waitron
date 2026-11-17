@@ -14,7 +14,7 @@ import "./periods-list.js";
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
   setLocale("en");
-  history.replaceState({}, "", "/manage/periods");
+  history.replaceState({}, "", "/periods");
 });
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
@@ -151,7 +151,7 @@ async function edit(el: PeriodsList, existing?: string) {
   expect(dialog!.shadowRoot!.querySelector("wt-modal"), "list opens an individual page").toBeNull();
   expect(el.shadowRoot!.querySelector("nav[aria-label] a.parent")).not.toBeNull();
   expect(location.pathname).toBe(
-    existing ? `/manage/periods/period/${existing}` : "/manage/periods/view/new",
+    existing ? `/periods/period/${existing}` : "/periods/view/new",
   );
   return dialog!;
 }
@@ -448,7 +448,7 @@ it("switches between period page addresses and retires the previous editor", asy
   data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
   const el = await mount((async () => structuredClone(data)) as DashboardRequest);
   const old = await edit(el, "p1");
-  history.replaceState({}, "", "/manage/periods/period/p2");
+  history.replaceState({}, "", "/periods/period/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await expect.poll(() => dialogOf(el)?.period?.id).toBe("p2");
   expect(old.isConnected).toBe(false);
@@ -743,12 +743,12 @@ it("Opening a period shows Painted in as links from the list's own read, with no
     {
       text: "Winter",
       tag: "a",
-      href: "/manage/opening-hours/view/season/season/winter/department/restaurant?back=/manage/periods",
+      href: "/opening-hours/view/season/season/winter/department/restaurant?back=/periods",
     },
     {
       text: "Company dinners",
       tag: "a",
-      href: "/manage/opening-hours/view/special-day/special-day/sd1?back=/manage/periods",
+      href: "/opening-hours/view/special-day/special-day/sd1?back=/periods",
     },
   ]);
   expect(dialog.paintedInLinks).toBe(true);
@@ -853,7 +853,7 @@ it.each(["department", "inactive department", "period"])(
           },
     );
     expect(dialogOf(screen)).toBeNull();
-    await expect.poll(() => location.pathname).toBe("/manage/periods");
+    await expect.poll(() => location.pathname).toBe("/periods");
     expect(dialog.isConnected).toBe(false);
     expect(app.leave.coordinator.isDirty()).toBe(false);
     emit(dialog, "period-save", { periodId: "p1", input: { name: "Stale" } });
@@ -882,7 +882,7 @@ it("Cancel asks before discarding the period page draft and returns to the list"
   await question.updateComplete;
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => dialogOf(screen)).toBeNull();
-  expect(location.pathname).toBe("/manage/periods");
+  expect(location.pathname).toBe("/periods");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
@@ -964,11 +964,11 @@ it.each(["new", "p1", "missing"])(
     history.replaceState(
       {},
       "",
-      id === "new" ? "/manage/periods/view/new?keep=yes" : `/manage/periods/period/${id}?keep=yes`,
+      id === "new" ? "/periods/view/new?keep=yes" : `/periods/period/${id}?keep=yes`,
     );
     const el = await mount();
     if (id === "missing") {
-      await expect.poll(() => location.pathname).toBe("/manage/periods");
+      await expect.poll(() => location.pathname).toBe("/periods");
       expect(dialogOf(el)).toBeNull();
     } else {
       await expect.poll(() => dialogOf(el)).not.toBeNull();
@@ -978,9 +978,9 @@ it.each(["new", "p1", "missing"])(
   },
 );
 it("a viewer's direct period edit address returns to the list", async () => {
-  history.replaceState({}, "", "/manage/periods/period/p1");
+  history.replaceState({}, "", "/periods/period/p1");
   const el = await mount(undefined, true);
-  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  await expect.poll(() => location.pathname).toBe("/periods");
   expect(dialogOf(el)).toBeNull();
 });
 
@@ -989,7 +989,7 @@ it("returns an open period page to its list when access becomes view-only", asyn
   await edit(el, "p1");
   el.readOnly = true;
   await el.updateComplete;
-  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  await expect.poll(() => location.pathname).toBe("/periods");
   expect(dialogOf(el)).toBeNull();
   expect(el.shadowRoot!.querySelector("a.parent")).toBeNull();
   expect(table(el)!.closest("[hidden]")).toBeNull();
@@ -1007,7 +1007,7 @@ it.each(["Save", "Cancel"])(
         submit(editor);
       } else await editor.requestClose();
       await expect.poll(() => dialogOf(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/periods");
+      expect(location.pathname).toBe("/periods");
       expect(replace).toHaveBeenCalledTimes(1);
       expect(push).not.toHaveBeenCalled();
     } finally {

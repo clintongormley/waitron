@@ -10,7 +10,7 @@ import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 
-export const BACKUP_SETUP_URL = "/manage/backup";
+export const BACKUP_SETUP_URL = "/backup";
 
 const HEADINGS = {
   none: "done.heading",
@@ -409,7 +409,7 @@ export class SetupDoneScreen extends LitElement {
       <p class="intro" data-test="status" role="status">${t(this.#statusKey())}</p>
       ${this.#clockStep()}
       <div class="choices" data-test="links">
-        <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/manage"
+        <wt-choice-row data-test="link-dashboard" heading=${t("done.link.dashboard")} href="/"
           >${t("done.description.dashboard")}</wt-choice-row
         >
         <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/till/"
@@ -420,7 +420,7 @@ export class SetupDoneScreen extends LitElement {
             ? html`<wt-choice-row
                 data-test="link-email"
                 heading=${t("done.link.email")}
-                href="/manage/email"
+                href="/email"
                 >${t("done.description.email")}</wt-choice-row
               >`
             : nothing
@@ -431,7 +431,7 @@ export class SetupDoneScreen extends LitElement {
           ? nothing
           : html`<wt-card data-test="opening-hours">
               <p>${t("done.opening_hours")}</p>
-              <a href="/manage/opening-hours/view/year">${t("done.change_opening_hours")}</a>
+              <a href="/opening-hours/view/year">${t("done.change_opening_hours")}</a>
             </wt-card>`
       }
       ${this.restored === undefined ? nothing : this.#deviceSteps()} ${this.#breakGlass()}

@@ -1677,8 +1677,8 @@ describe("till-app", () => {
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-demo-bar")).toBeNull();
-    expect(el.shadowRoot!.querySelector('a[href="/manage"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('a[href="/manage/email"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('a[href="/"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('a[href="/email"]')).toBeNull();
     expect(modeIndicator(el)).not.toBeNull();
   });
 
@@ -3387,7 +3387,7 @@ describe("till-app", () => {
           .toBe("47");
       }
       const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("[data-approval-guide]")!;
-      expect(link.pathname).toBe("/manage/devices");
+      expect(link.pathname).toBe("/devices");
       const click = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
       let browserDefault = false;
       const blockNavigation = (event: MouseEvent) => {
@@ -8376,7 +8376,7 @@ describe("till-app", () => {
         parkOrder: vi.fn().mockRejectedValue({
           code: "sif.allocation_invalid",
           reason: "conflict_requires_administrator",
-          recoveryUrl: "/manage/recovery/fiscal-conflict",
+          recoveryUrl: "/recovery/fiscal-conflict",
           status: 409,
         }),
       });
@@ -8386,7 +8386,7 @@ describe("till-app", () => {
       emit(c, "park-order", { label: "Table 4" });
       await flush(el);
       expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
-        "/manage/recovery/fiscal-conflict",
+        "/recovery/fiscal-conflict",
       );
       expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
         t("recovery.issuance_stopped"),
@@ -11434,7 +11434,7 @@ describe("till-app", () => {
           pay: vi.fn().mockRejectedValue({
             code: charged ? "sale.charged_not_recorded" : "sif.allocation_invalid",
             reason: charged ? "issuance_refused" : "conflict_requires_administrator",
-            recoveryUrl: "/manage/recovery/fiscal-conflict",
+            recoveryUrl: "/recovery/fiscal-conflict",
             status: 409,
           }),
         });
@@ -11444,7 +11444,7 @@ describe("till-app", () => {
         emit(c, "collect-card", {});
         await flush(el);
         expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
-          "/manage/recovery/fiscal-conflict",
+          "/recovery/fiscal-conflict",
         );
         if (charged)
           expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
@@ -11457,7 +11457,7 @@ describe("till-app", () => {
       const { el } = await mountApp({
         recordSale: vi.fn().mockRejectedValue({
           code: "sif.allocation_invalid",
-          recoveryUrl: "/manage/recovery/fiscal-conflict",
+          recoveryUrl: "/recovery/fiscal-conflict",
           status: 409,
         }),
       });
@@ -11470,7 +11470,7 @@ describe("till-app", () => {
         t("recovery.manual_card"),
       );
       expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
-        "/manage/recovery/fiscal-conflict",
+        "/recovery/fiscal-conflict",
       );
     });
 

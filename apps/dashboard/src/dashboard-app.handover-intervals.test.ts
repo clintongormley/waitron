@@ -13,7 +13,7 @@ afterEach(() => {
 it.each([true, false])(
   "gates navigation and the direct address by report.view (%s)",
   async (allowed) => {
-    history.replaceState(null, "", "/manage/handover-intervals");
+    history.replaceState(null, "", "/handover-intervals");
     const list = vi.fn().mockResolvedValue({ intervals: [], timeZone: "Europe/Madrid" });
     const api = {
       liveData: new LiveData(),
@@ -53,10 +53,10 @@ it.each([true, false])(
         expect(el.shadowRoot?.querySelector("dashboard-handover-intervals-screen")).not.toBeNull(),
       );
       expect(el.shadowRoot!.querySelector('[data-test="nav-handover-intervals"]')).not.toBeNull();
-      expect(location.pathname).toBe("/manage/handover-intervals");
+      expect(location.pathname).toBe("/handover-intervals");
       await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
     } else {
-      await vi.waitFor(() => expect(location.pathname).toBe("/manage/overview"));
+      await vi.waitFor(() => expect(location.pathname).toBe("/overview"));
       expect(el.shadowRoot!.querySelector('[data-test="nav-handover-intervals"]')).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-handover-intervals-screen")).toBeNull();
       expect(list).not.toHaveBeenCalled();

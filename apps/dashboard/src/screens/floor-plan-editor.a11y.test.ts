@@ -62,7 +62,7 @@ function stubApi(
 }
 
 async function open(api: DashboardApi, theme: "light" | "dark") {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1");
   const mounted = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api }, theme);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await mounted.el.updateComplete;

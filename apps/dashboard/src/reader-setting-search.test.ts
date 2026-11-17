@@ -27,8 +27,8 @@ it("resolves all listed readers passively with exact labels, location and encode
   ]);
   for (const entry of entries)
     expect(await entry.resolve({ request: createRequest({ fetchImpl }) })).toEqual([
-      { id: "r/+", label: "Counter", path: "/manage/payments/reader/r%2F%2B" },
-      { id: "off", label: "Bar", path: "/manage/payments/reader/off" },
+      { id: "r/+", label: "Counter", path: "/payments/reader/r%2F%2B" },
+      { id: "off", label: "Bar", path: "/payments/reader/off" },
     ]);
   expect(foreground).not.toHaveBeenCalled();
   expect(fetchImpl.mock.calls).toHaveLength(2);

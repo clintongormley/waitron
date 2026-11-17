@@ -25,7 +25,7 @@ async function mount(theme: "light" | "dark", state: string) {
       { name: "Grill", text: "", station: true },
       { name: "Restaurant", text: "Lunch 13:00–16:00" },
     ];
-    box.innerHTML = `<a slot="season-action" href="/manage/opening-hours/view/season/season/autumn">Autumn standard hours</a><wt-button>Edit special day</wt-button>`;
+    box.innerHTML = `<a slot="season-action" href="/opening-hours/view/season/season/autumn">Autumn standard hours</a><wt-button>Edit special day</wt-button>`;
   } else if (state === "a special day with buttons") {
     box.name = "School holidays";
     box.nameKind = "special";

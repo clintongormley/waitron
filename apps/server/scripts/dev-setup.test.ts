@@ -526,7 +526,7 @@ describe("dev-setup run as a command", () => {
     expect(result.stdout).toContain(`dev-setup: wrote ${settingsFile}`);
     expect(result.stdout).toContain("till       http://localhost:5290/till/");
     expect(result.stdout).toContain("http://localhost:5290/till/?dev");
-    expect(result.stdout).toContain("dashboard  http://localhost:5291/manage/");
+    expect(result.stdout).toContain("dashboard  http://localhost:5291/");
     expect(result.stdout).toContain("setup      http://localhost:5292/setup/");
     expect(parseEnvFile(readFileSync(settingsFile, "utf8")).WAITRON_VENUE_DIR).toBe(
       join(workDir, "venue"),

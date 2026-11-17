@@ -427,7 +427,7 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   ]);
   const link = item(el, "source-included-wine");
   expect(link.tagName).toBe("A");
-  expect(link.getAttribute("href")).toBe("/manage/menus/menu/wine/view/structure");
+  expect(link.getAttribute("href")).toBe("/menus/menu/wine/view/structure");
   expect(link.textContent!.trim()).toBe(t("menus.open_included").replace("{name}", "Wines"));
   expect(item(el, "edit-included-wine").textContent!.trim()).toBe(t("action.edit"));
   expect(item(el, "remove-included-wine").textContent!.trim()).toBe(t("menus.remove_included"));
@@ -2451,7 +2451,7 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     const swatch = swatchOf(el, "m-drinks/m-lemonade");
     expect(swatch.tagName).toBe("A");
-    expect(swatch.getAttribute("href")).toBe("/manage/products/product/p-lemonade?field=image");
+    expect(swatch.getAttribute("href")).toBe("/products/product/p-lemonade?field=image");
     expect(swatch.getAttribute("aria-label")).toBe(
       t("product.edit_named").replace("{name}", "Lemonade"),
     );
@@ -2687,7 +2687,7 @@ describe("Structure product media", () => {
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
     expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
     expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
-    expect(media!.getAttribute("href")).toBe("/manage/products/product/p-burger?field=image");
+    expect(media!.getAttribute("href")).toBe("/products/product/p-burger?field=image");
     media!.focus();
     expect(table(el).shadowRoot!.activeElement).toBe(media);
   });
@@ -2754,14 +2754,14 @@ describe("a product row's Available and Edit product", () => {
     const link = item(el, "edit-product-m-burger");
     expect(link.tagName).toBe("A");
     expect(link.textContent!.trim()).toBe(t("product.edit"));
-    expect(link.getAttribute("href")).toBe("/manage/products/product/p-burger");
+    expect(link.getAttribute("href")).toBe("/products/product/p-burger");
     await toggle(el, "m-drinks");
     expect(menuItems(el, "m-drinks/m-lemonade")).toEqual([
       "edit-product-m-drinks/m-lemonade",
       "remove-m-drinks/m-lemonade",
     ]);
     expect(item(el, "edit-product-m-drinks/m-lemonade").getAttribute("href")).toBe(
-      "/manage/products/product/p-lemonade",
+      "/products/product/p-lemonade",
     );
 
     const heard = vi.fn();

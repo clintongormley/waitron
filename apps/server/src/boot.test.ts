@@ -2502,7 +2502,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(await dash.text()).toContain("dashboard-spa-root");
 
       for (const [path, marker] of [
-        ["/manage/floor/view/plano", "dashboard-spa-root"],
+        ["/floor/view/plano", "dashboard-spa-root"],
         ["/till/tabs/counter/menu/lunch", "till-spa-root"],
       ]) {
         const page = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
@@ -2529,7 +2529,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
 
-      const asset = await fetch(`http://127.0.0.1:${httpPort()}/manage/assets/d-1.js`);
+      const asset = await fetch(`http://127.0.0.1:${httpPort()}/assets/d-1.js`);
       expect(asset.status).toBe(200);
       expect(asset.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await asset.text()).toContain("dashboard-spa-asset");

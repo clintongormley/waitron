@@ -125,7 +125,7 @@ function liveWords(status: MenuStatus) {
 }
 
 function tabAddress(menuId: string, tab: Tab): string {
-  return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/${tab}`;
+  return `/menus/menu/${encodeURIComponent(menuId)}/view/${tab}`;
 }
 
 /** The state a publish answered as version `number` left, shown until the next read replaces it.
@@ -2674,7 +2674,7 @@ export class MenusScreen extends LitElement {
           : html`<p role="status" data-test="structure-loading">${t("menus.structure_loading")}</p>`
       }`;
     return html`${error}
-      ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/manage/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
+      ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
         .products=${this.products}
@@ -3913,7 +3913,7 @@ export class MenusScreen extends LitElement {
         <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
           <a
             data-test="back"
-            href="/manage/menus"
+            href="/menus"
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;
               event.preventDefault();

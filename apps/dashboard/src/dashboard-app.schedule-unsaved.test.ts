@@ -10,7 +10,7 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
-async function mount(path = "/manage/my-schedule") {
+async function mount(path = "/my-schedule") {
   history.replaceState(null, "", path);
   let logouts = 0;
   const locales: string[] = [];
@@ -131,12 +131,12 @@ for (const action of ["sidebar", "logout", "locale"] as const) {
     await choose(app, "keep");
     expect(screen.isConnected).toBe(true);
     expect(note(screen)).toBe("Keep my note");
-    expect(location.pathname).toBe("/manage/my-schedule");
+    expect(location.pathname).toBe("/my-schedule");
     expect(logouts()).toBe(0);
     expect(locales).toEqual([]);
     leave();
     await choose(app, "discard");
-    if (action === "sidebar") await expect.poll(() => location.pathname).toBe("/manage/orders");
+    if (action === "sidebar") await expect.poll(() => location.pathname).toBe("/orders");
     else if (action === "logout") await expect.poll(() => logouts()).toBe(1);
     else {
       await expect.poll(currentLocale).toBe("es-ES");
@@ -153,17 +153,17 @@ for (const action of ["sidebar", "logout", "locale"] as const) {
   });
 }
 it("native history Back keeps the schedule and URL until Discard replays the traversal", async () => {
-  const { app } = await mount("/manage/orders");
+  const { app } = await mount("/orders");
   nav(app, "my-schedule");
   const screen = await edit(app);
   history.back();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/my-schedule");
+  expect(location.pathname).toBe("/my-schedule");
   expect(screen.isConnected).toBe(true);
   expect(note(screen)).toBe("Keep my note");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/orders");
+  await expect.poll(() => location.pathname).toBe("/orders");
   expect(screen.isConnected).toBe(false);
 });
 it("forced session expiry clears the schedule draft and invalidates an unanswered leave", async () => {
@@ -179,7 +179,7 @@ it("forced session expiry clears the schedule draft and invalidates an unanswere
   );
   await expect.poll(() => screen.isConnected).toBe(false);
   oldDiscard.click();
-  await expect.poll(() => location.pathname).toBe("/manage/");
+  await expect.poll(() => location.pathname).toBe("/");
   expect(note(screen)).toBe("");
   expect(question.open).toBe(false);
   expect(logouts()).toBe(0);

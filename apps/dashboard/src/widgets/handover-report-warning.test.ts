@@ -35,7 +35,7 @@ it.each([
       expect(el.shadowRoot?.textContent).toContain(words["handover_warning.unconfirmed"]),
     );
     expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-      "/manage/handover-intervals",
+      "/handover-intervals",
     );
     expect(el.shadowRoot!.querySelector("a")!.textContent).toContain(
       words["handover_warning.check"],
@@ -105,7 +105,7 @@ it.each([
       );
       expect(el.shadowRoot!.querySelectorAll("a")).toHaveLength(1);
       expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-        "/manage/handover-intervals",
+        "/handover-intervals",
       );
       expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(1);
     }

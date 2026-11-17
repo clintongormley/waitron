@@ -390,7 +390,7 @@ describe("dashboard attendance corrections", () => {
     expect(m.root.querySelector("[data-add-shift]")).toBeNull();
     expect(m.root.textContent).toContain("My Schedule → Hours");
     expect(m.root.querySelector("a[data-own-hours]")?.getAttribute("href")).toBe(
-      "/manage/my-schedule/view/hours",
+      "/my-schedule/view/hours",
     );
   });
   it("a refusal survives a later successful passive read", async () => {

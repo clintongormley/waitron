@@ -20,12 +20,12 @@ it("resolves encoded addresses passively through the contribution", async () => 
     {
       id: "zone / terrace",
       label: "Restaurant / Terrace",
-      path: "/manage/venue-operations/department/room%20%2F%20west/view/zones/zone/zone%20%2F%20terrace",
+      path: "/venue-operations/department/room%20%2F%20west/view/zones/zone/zone%20%2F%20terrace",
     },
     {
       id: "z2",
       label: "Deli / Terrace",
-      path: "/manage/venue-operations/department/d2/view/zones/zone/z2",
+      path: "/venue-operations/department/d2/view/zones/zone/z2",
     },
   ]);
   expect(request.mock.calls).toEqual([

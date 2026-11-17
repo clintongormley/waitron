@@ -124,7 +124,7 @@ const navItems = (el: DashboardApp) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-item")].map((item) => item.dataset.test);
 
 it("shows a panel-only module's panel on Venue details after the core panels", async () => {
-  const el = await mount("/manage/venue-settings/view/venue-details");
+  const el = await mount("/venue-settings/view/venue-details");
   await vi.waitFor(() => expect(settings(el)).not.toBeNull());
   const details = () =>
     settings(el)!.shadowRoot!.querySelector('[data-test="venue-settings-venue-details"]');
@@ -141,9 +141,9 @@ it("shows a panel-only module's panel on Venue details after the core panels", a
 });
 
 it("adds nothing to the nav for a panel-only module, where a screened module adds its screen", async () => {
-  const screenedOnly = navItems(await mount("/manage", ["gauges"]));
+  const screenedOnly = navItems(await mount("/", ["gauges"]));
   cleanupWidgets();
-  const both = navItems(await mount("/manage", ["gauges", "certs"]));
+  const both = navItems(await mount("/", ["gauges", "certs"]));
   expect(screenedOnly).toContain("nav-gauges");
   expect(both).toEqual(screenedOnly);
 });
@@ -153,7 +153,7 @@ it("lets the nav search find a screened module by its label, and nothing of a pa
   const [width, height] = [window.innerWidth, window.innerHeight];
   await browserPage.viewport(1280, 800);
   onTestFinished(() => browserPage.viewport(width, height));
-  const el = await mount("/manage", ["gauges", "certs"]);
+  const el = await mount("/", ["gauges", "certs"]);
   const box = el.shadowRoot!.querySelector<WtInput>("[data-test=nav-search]")!;
   async function search(term: string): Promise<(string | undefined)[]> {
     box.focus();
@@ -172,7 +172,7 @@ it("lets the nav search find a screened module by its label, and nothing of a pa
 
 it("keeps a screened module's address word, and none for a panel-only module", async () => {
   urlConfigs.length = 0;
-  await mount("/manage");
-  const config = urlConfigs.find((each) => each.basePath === "/manage");
+  await mount("/");
+  const config = urlConfigs.find((each) => each.basePath === "/");
   expect(config?.keepUnlisted).toEqual([...(dashboardPath.keepUnlisted ?? []), "gauges"]);
 });

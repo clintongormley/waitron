@@ -41,7 +41,7 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations", view = model()) {
+async function mount(path = "/venue-operations", view = model()) {
   history.replaceState(null, "", `${path}?dev=1&source=saved`);
   const shell = document.createElement("venue-departments-shell");
   applyTokens(shell);
@@ -71,7 +71,7 @@ it.each([0, 1, 2])("bare address always renders the list with %i departments", a
   expect(list).not.toBeNull();
   expect(list!.model!.departments).toEqual(model(count).departments);
   expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
-  expect(location.pathname).toBe("/manage/venue-operations");
+  expect(location.pathname).toBe("/venue-operations");
 });
 it("Open pushes the selected department page and keeps unrelated query values", async () => {
   const shell = await mount();
@@ -89,48 +89,48 @@ it("Open pushes the selected department page and keeps unrelated query values", 
     "Edit department: Department d2",
   );
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-  expect(location.pathname).toBe("/manage/venue-operations/department/d2");
+  expect(location.pathname).toBe("/venue-operations/department/d2");
   expect(location.search).toBe("?dev=1&source=saved");
   expect(push).toHaveBeenCalledTimes(1);
 });
 it("a direct department address selects Settings without replacing history", async () => {
   const replace = vi.spyOn(history, "replaceState");
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
   expect(replace).toHaveBeenCalledTimes(1);
 });
 it("a zone row opens its exact editor and a department row removes the zone path", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const push = vi.spyOn(history, "pushState");
   const list = shell.shadowRoot!.querySelector("departments-list")!;
   emit(list, "edit-zone", { zoneId: "z2" });
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z2");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/z2");
   expect(push).toHaveBeenCalledTimes(1);
   emit(list, "open-department", { departmentId: "d1" });
   await expect
     .poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")?.departmentId)
     .toBe("d1");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(location.pathname).toBe("/venue-operations/department/d1");
   expect(push).toHaveBeenCalledTimes(2);
 });
 it("Settings' differing-zone link opens the exact protected zone editor", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await editor.updateComplete;
   const settings = editor.shadowRoot!.querySelector("department-settings")!;
   emit(settings, "zone-change", { zoneId: "z2" });
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z2");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/z2");
 });
 it.each(["departments", "zones", "status", "missing", "menus", "kitchen"])(
   "old %s bookmarks replace to the list",
   async (view) => {
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const shell = await mount(`/manage/venue-operations/view/${view}`);
+    const shell = await mount(`/venue-operations/view/${view}`);
     expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-operations");
+    expect(location.pathname).toBe("/venue-operations");
     expect(location.search).toBe("?dev=1&source=saved");
     expect(push).not.toHaveBeenCalled();
     expect(replace).toHaveBeenCalledTimes(2);
@@ -140,19 +140,19 @@ it.each(["en", "es"] as const)(
   "unknown department keeps its address and explains itself in %s",
   async (locale) => {
     setLocale(locale);
-    const shell = await mount("/manage/venue-operations/department/gone");
+    const shell = await mount("/venue-operations/department/gone");
     expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
     expect(shell.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe(
       locale === "en" ? "This department no longer exists." : "Este departamento ya no existe.",
     );
     expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-operations/department/gone");
+    expect(location.pathname).toBe("/venue-operations/department/gone");
   },
 );
 it("accepted history changes return to the list and do not write another entry", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/zones/zone/z2");
+  const shell = await mount("/venue-operations/department/d1/view/zones/zone/z2");
   expect(shell.shadowRoot!.querySelector("zone-edit-dialog")!.zoneId).toBe("z2");
-  history.replaceState(null, "", "/manage/venue-operations?dev=1&source=saved");
+  history.replaceState(null, "", "/venue-operations?dev=1&source=saved");
   const push = vi.spyOn(history, "pushState");
   const replace = vi.spyOn(history, "replaceState");
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -163,10 +163,10 @@ it("accepted history changes return to the list and do not write another entry",
   expect(replace).not.toHaveBeenCalled();
 });
 it("a zone outside this department keeps the list visible without opening an unrelated zone", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/zones/zone/elsewhere");
+  const shell = await mount("/venue-operations/department/d1/view/zones/zone/elsewhere");
   expect(shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeNull();
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(location.pathname).toBe(
-    "/manage/venue-operations/department/d1/view/zones/zone/elsewhere",
+    "/venue-operations/department/d1/view/zones/zone/elsewhere",
   );
 });

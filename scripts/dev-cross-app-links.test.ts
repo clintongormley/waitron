@@ -75,11 +75,11 @@ it.each([false, true])(
     const till = shifted ? 5290 : 5190;
     const dashboard = shifted ? 5291 : 5191;
     for (const [app, url, expected] of [
-      ["till", "/manage/devices?view=all", `http://localhost:${dashboard}/manage/devices?view=all`],
-      ["till", "/manage", `http://localhost:${dashboard}/manage`],
+      ["till", "/devices?view=all", `http://localhost:${dashboard}/devices?view=all`],
+      ["till", "/", `http://localhost:${dashboard}/`],
       ["dashboard", "/till/?dev", `http://localhost:${till}/till/?dev`],
       ["setup", "/till/", `http://localhost:${till}/till/`],
-      ["setup", "/manage/email", `http://localhost:${dashboard}/manage/email`],
+      ["setup", "/email", `http://localhost:${dashboard}/email`],
     ]) {
       const response = await fetch(origin(app!) + url, { redirect: "manual" });
       await response.arrayBuffer();

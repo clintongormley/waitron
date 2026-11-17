@@ -70,7 +70,7 @@ async function withLivePage(check: (fixture: Fixture) => Promise<void>): Promise
       } else if (request.url === "/management-api/alerts") {
         reads.push(documents);
         response.end("[]");
-      } else if (request.url === "/manage/") {
+      } else if (request.url === "/") {
         documents += 1;
         response.setHeader("content-type", "text/html");
         response.end(
@@ -111,7 +111,7 @@ globalThis.live.start();
     page.setDefaultNavigationTimeout(3000);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto("https://staff.generated.example.test/manage/");
+    await page.goto("https://staff.generated.example.test/");
     await page.waitForFunction("globalThis.completed === 2 && !observed.snapshot.loading");
     expect(reads).toEqual([1, 1]);
     await check({ page, reads, streams });
@@ -143,7 +143,7 @@ it("keeps real stream refreshes after a person cancels the browser's leave promp
     const dialog = await prompt;
     expect(dialog.type()).toBe("beforeunload");
     await dialog.dismiss();
-    expect(page.url()).toBe("https://staff.generated.example.test/manage/");
+    expect(page.url()).toBe("https://staff.generated.example.test/");
     for (const stream of streams) stream.write("event: reset\ndata: {}\n\n");
     await page.waitForFunction("globalThis.completed === 3 && !observed.snapshot.loading");
     expect(reads).toEqual([1, 1, 1]);

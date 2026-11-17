@@ -554,7 +554,7 @@ export class BusinessDayStartEditor extends LitElement {
                             preview.conflictCount
                               ? html`<p data-test="conflicts">
                                     ${t("business_day.conflicts")} ${conflicts!.count}.
-                                    <a href="/manage/opening-hours"
+                                    <a href="/opening-hours"
                                       >${t("business_day.open_hours")}</a
                                     >
                                   </p>

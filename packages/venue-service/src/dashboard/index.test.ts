@@ -117,14 +117,14 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           ),
       } as Response),
     );
-    history.replaceState(null, "", "/manage/venue-operations/department/d1");
+    history.replaceState(null, "", "/venue-operations/department/d1");
     const handle = VENUE_SERVICE_DASHBOARD.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData: new LiveData(),
     });
     const at = (path: string) => new URL(path, location.origin);
     expect(
-      handle.navigationScopes!(at("/manage/venue-operations/department/d1/view/service")),
+      handle.navigationScopes!(at("/venue-operations/department/d1/view/service")),
     ).toBe(undefined);
     const container = document.createElement("div");
     document.body.append(container);
@@ -141,9 +141,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       ).toBeTruthy(),
     );
     expect(
-      handle.navigationScopes!(at("/manage/venue-operations/department/d1/view/service")),
+      handle.navigationScopes!(at("/venue-operations/department/d1/view/service")),
     ).toEqual([]);
-    expect(handle.navigationScopes!(at("/manage/venue-operations/department/d2"))).toBe(undefined);
+    expect(handle.navigationScopes!(at("/venue-operations/department/d2"))).toBe(undefined);
   });
 
   it("opens Prep stations with the same request and live-data context", async () => {
@@ -245,7 +245,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           ),
       } as Response),
     );
-    history.replaceState(null, "", "/manage/opening-hours/view/year");
+    history.replaceState(null, "", "/opening-hours/view/year");
     const liveData = new LiveData();
     const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
       (entry) => entry.screen.id === "opening-hours",
@@ -405,7 +405,7 @@ it("the Periods page is read-only for a viewer and editable for a manager", asyn
         ),
     } as Response),
   );
-  history.replaceState(null, "", "/manage/periods");
+  history.replaceState(null, "", "/periods");
   const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "periods")!;
   expect(entry, "module contributes the Periods page").toBeDefined();
   const liveData = new LiveData();
@@ -466,8 +466,8 @@ it("opens each declared prep-station search destination on its named tab", async
     ?.filter((x) => x.kind !== "setting")
     .filter((x) => x.screen === "prep-stations");
   expect(destinations?.map((x) => x.path)).toEqual([
-    "/manage/prep-stations/view/stations",
-    "/manage/prep-stations/view/routing",
+    "/prep-stations/view/stations",
+    "/prep-stations/view/routing",
   ]);
   for (const destination of destinations!) {
     history.replaceState(null, "", destination.path);
@@ -491,9 +491,9 @@ it("declares the Calendar's Week as a search destination", async () => {
     ?.filter((x) => x.kind !== "setting")
     .filter((x) => x.screen === "opening-hours");
   expect(destinations?.map((x) => x.path)).toEqual([
-    "/manage/opening-hours/view/year",
-    "/manage/opening-hours/view/month",
-    "/manage/opening-hours/view/week",
+    "/opening-hours/view/year",
+    "/opening-hours/view/month",
+    "/opening-hours/view/week",
   ]);
   const model = {
     dayCutover: "06:00",
@@ -544,5 +544,5 @@ it("A725 offers only Stations and Routes as Prep search destinations", () => {
     VENUE_SERVICE_DASHBOARD.searchDestinations!.filter((x) => x.kind !== "setting")
       .filter((row) => row.screen === "prep-stations")
       .map((row) => row.path),
-  ).toEqual(["/manage/prep-stations/view/stations", "/manage/prep-stations/view/routing"]);
+  ).toEqual(["/prep-stations/view/stations", "/prep-stations/view/routing"]);
 });

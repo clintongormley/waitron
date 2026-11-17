@@ -62,7 +62,7 @@ afterEach(() => {
 });
 async function mount(overrides: Partial<DashboardApi> = {}) {
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/printers/view/printers/printer/p1");
   const { el: app } = await mountWidget<PrinterDetailsApp>("printer-details-leave-test-app", {
     api: {
       listAgents: async () => [],
@@ -404,14 +404,14 @@ for (const owner of ["name", "host"] as const) {
       };
       leave();
       await choose(app, "keep");
-      expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+      expect(location.pathname).toBe("/printers/view/printers/printer/p1");
       expect(field(screen, owner).value).toBe(edited);
       expect(unload()).toBe(true);
       leave();
       await choose(app, "discard");
       await expect
         .poll(() => location.pathname)
-        .toBe(route === "navigation" ? "/manage/devices" : "/manage/printers/view/printers");
+        .toBe(route === "navigation" ? "/devices" : "/printers/view/printers");
       if (route !== "navigation")
         await expect.poll(() => q(screen, "[data-test=printer-details-form]")).toBeNull();
       expect(unload()).toBe(false);

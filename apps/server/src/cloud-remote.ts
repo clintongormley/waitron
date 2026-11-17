@@ -135,8 +135,8 @@ export function createStaffApp(app: Hono, origin: string): Hono {
       path.startsWith("/api/box/") ||
       path.startsWith("/api/backup/") ||
       (read &&
-        (path === "/manage" ||
-          path.startsWith("/manage/") ||
+        (path === "/" ||
+          path.startsWith("/") ||
           path === "/api/theme" ||
           path === "/api/content-languages" ||
           path.startsWith("/media/") ||

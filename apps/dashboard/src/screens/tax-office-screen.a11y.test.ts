@@ -71,7 +71,7 @@ describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (t
     ],
   ] as const)("keeps %s accessible", async (_state, answer) => {
     setLocale("en-GB");
-    history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+    history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
     const { el, host } = await mountWidget<TaxOfficeScreen>(
       "dashboard-tax-office-screen",
       { api: api(answer) },
@@ -109,7 +109,7 @@ describe.each(["light", "dark"] as const)("invoices for the tax office (%s)", (t
     ],
   ] as const)("keeps %s accessible", async (_state, view: MonthDownloadDto) => {
     setLocale("en-GB");
-    history.replaceState(null, "", "/manage/invoices/from/2026-11-01/to/2026-11-30");
+    history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30");
     const { el, host } = await mountWidget<TaxOfficeScreen>(
       "dashboard-tax-office-screen",
       {

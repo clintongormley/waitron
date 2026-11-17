@@ -46,7 +46,7 @@ describe("STAFFING_DASHBOARD", () => {
     "offers the Access roles link only when the app grants access (%j)",
     async (permissions, allowed) => {
       const { screen } = await mount(false, [...permissions]);
-      expect(Boolean(screen.shadowRoot!.querySelector('a[href="/manage/access-roles"]'))).toBe(
+      expect(Boolean(screen.shadowRoot!.querySelector('a[href="/access-roles"]'))).toBe(
         allowed,
       );
     },

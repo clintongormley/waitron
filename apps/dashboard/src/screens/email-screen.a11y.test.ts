@@ -29,7 +29,7 @@ function stubApi(inbox: EmailInbox): DashboardApi {
       to: LOCAL.messages[0]!.to,
       subject: LOCAL.messages[0]!.subject,
       date: LOCAL.messages[0]!.createdAt,
-      text: `Open ${window.location.origin}/manage/account?token=secret`,
+      text: `Open ${window.location.origin}/account?token=secret`,
     }),
   } as unknown as DashboardApi;
 }

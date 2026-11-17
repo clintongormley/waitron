@@ -195,8 +195,8 @@ function gridCombo(grid: HTMLElement, row: string, zone: string) {
 
 it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
-  ['a[href="/manage/printing-rules"]', ""],
-  ['a[href="/manage/devices"]', ""],
+  ['a[href="/printing-rules"]', ""],
+  ['a[href="/devices"]', ""],
   ["", "Watched by:"],
 ])("keeps assignment and late-flag settings %s %s out of Routes", async (selector, text) => {
   setLocale("en");
@@ -281,7 +281,7 @@ it.each(
     await page.viewport(width, 900);
     expect(window.innerWidth).toBe(width);
     setLocale(locale);
-    history.replaceState(null, "", "/manage/prep-stations/view/routing");
+    history.replaceState(null, "", "/prep-stations/view/routing");
     const timed = withUpstairs({ open: false, why: "closed_by_hand" });
     const visualView = {
       ...ticketView,
@@ -386,7 +386,7 @@ it.each(
     await closed;
     await settle(el);
     expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull();
-    history.replaceState(null, "", "/manage");
+    history.replaceState(null, "", "/");
   } finally {
     document.body.style.background = previous.body;
     document.documentElement.style.background = previous.canvas;
@@ -626,11 +626,11 @@ it("shows linked printers and kitchen screens in Stations", async () => {
   const screens = q(el, '[data-test="screens-bar"]')!;
   expect(printers.textContent).toContain("Bar printer");
   expect(screens.textContent).toContain("Bar display");
-  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices/device/d%2Fone");
+  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/devices/device/d%2Fone");
   expect(
     el
       .shadowRoot!.querySelector('[slot="routing"]')!
-      .querySelector('a[href="/manage/printing-rules"]'),
+      .querySelector('a[href="/printing-rules"]'),
   ).toBeNull();
 });
 it("creates a station from the modal with the chosen thresholds", async () => {
@@ -1914,7 +1914,7 @@ it("a health snapshot ahead of routing metadata leaves the row note absent until
 
 it("opens the default Stations tab and places Add station, the only create action, beside the tabs", async () => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/prep-stations");
+  history.replaceState(null, "", "/prep-stations");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
@@ -1924,7 +1924,7 @@ it("opens the default Stations tab and places Add station, the only create actio
     { key: "routing", label: "Routes" },
   ]);
   expect(tabs!.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
   expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add a station");
   expect(q(el, '[data-test="new-station"]')!.getAttribute("aria-label")).toBeNull();
@@ -1941,7 +1941,7 @@ it.each([
 ])(
   "opens the %s tab an old tester link names (showing %s), and its next tab change drops the tester's product",
   async (tab, shown) => {
-    history.replaceState(null, "", `/manage/prep-stations/view/${tab}/test/bread`);
+    history.replaceState(null, "", `/prep-stations/view/${tab}/test/bread`);
     const el = await mount(api());
     const tabs = el.shadowRoot!.querySelector("wt-tabs");
     expect(tabs, "the page owns a tab strip").not.toBeNull();
@@ -1949,7 +1949,7 @@ it.each([
     expect(tabs!.value).toBe(shown);
     tabs!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
     await settle(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
+    expect(location.pathname).toBe("/prep-stations/view/routing");
     expect(q(el, '[data-test="route-tester"]')).toBeNull();
     expect(await routingGrid(el)).not.toBeNull();
     expect((await routingGrid(el))!.closest('[slot="routing"]')).not.toBeNull();
@@ -1957,19 +1957,19 @@ it.each([
 );
 
 it("opens Stations from the retired Settings address, replacing it without a history entry", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/settings");
+  history.replaceState(null, "", "/prep-stations/view/settings");
   const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(push).not.toHaveBeenCalled();
   expect(stationTable(el)).not.toBeNull();
 });
 
 it("opens Routing from an old tester link that names it, and its next tab change writes no tester segment", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
+  history.replaceState(null, "", "/prep-stations/view/routing/test/lager");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
@@ -1979,20 +1979,20 @@ it("opens Routing from an old tester link that names it, and its next tab change
   tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="stations"]')!.click();
   await settle(el);
   expect(tabs.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
 });
 
 it("opens Stations from an old tester link that names no tab, and restores panels on Back without adding history entries", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/test/bread");
+  history.replaceState(null, "", "/prep-stations/test/bread");
   const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
   await tabs!.updateComplete;
   expect(tabs!.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(push).not.toHaveBeenCalled();
-  history.replaceState(null, "", "/manage/prep-stations/view/routing");
+  history.replaceState(null, "", "/prep-stations/view/routing");
   dispatchEvent(new PopStateEvent("popstate"));
   await settle(el);
   expect(tabs!.value).toBe("routing");
@@ -2000,14 +2000,14 @@ it("opens Stations from an old tester link that names no tab, and restores panel
 });
 
 it("replaces invalid tabs with Stations and ignores nested tab changes", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/missing");
+  history.replaceState(null, "", "/prep-stations/view/missing");
   const push = vi.spyOn(history, "pushState");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs");
   expect(tabs, "the page owns a tab strip").not.toBeNull();
   await tabs!.updateComplete;
   expect(tabs!.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(push).not.toHaveBeenCalled();
   q(el, '[slot="routing"]')!.dispatchEvent(
     new CustomEvent("wt-tab-change", {
@@ -2018,41 +2018,41 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   );
   await settle(el);
   expect(tabs!.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
 });
 
 describe("A725 retired Times destinations", () => {
   it.each([
-    "/manage/prep-stations/view/times",
-    "/manage/prep-stations/view/times/station/gone",
-    "/manage/prep-stations/view/times/station/disabled",
-    "/manage/prep-stations/view/times/station/terrace",
+    "/prep-stations/view/times",
+    "/prep-stations/view/times/station/gone",
+    "/prep-stations/view/times/station/disabled",
+    "/prep-stations/view/times/station/terrace",
   ])("replaces %s, including after reloading, without pushing history", async (address) => {
     history.replaceState(null, "", address);
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     let el = await mount(api());
     await settle(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.pathname).toBe("/prep-stations/view/stations");
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+    expect(writtenPaths(replace)).toEqual(["/prep-stations/view/stations"]);
     expect(push).not.toHaveBeenCalled();
     el.parentElement!.remove();
     el = await mount(api());
     await settle(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
     expect(push).not.toHaveBeenCalled();
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+    expect(writtenPaths(replace)).toEqual(["/prep-stations/view/stations"]);
   });
   it("keeps Routes and drops a station child without pushing history", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/routing/station/terrace");
+    history.replaceState(null, "", "/prep-stations/view/routing/station/terrace");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const el = await mount(api());
     await settle(el);
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("routing");
-    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/routing"]);
+    expect(location.pathname).toBe("/prep-stations/view/routing");
+    expect(writtenPaths(replace)).toEqual(["/prep-stations/view/routing"]);
     expect(push).not.toHaveBeenCalled();
     expect(await routingGrid(el)).not.toBeNull();
   });
@@ -2067,12 +2067,12 @@ describe("a link naming a station", () => {
     ],
   };
   it("opens that station's editor once the stations have loaded", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/bar");
     const push = vi.spyOn(history, "pushState");
     const el = await mount(api());
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/bar");
+    expect(location.pathname).toBe("/prep-stations/view/stations/station/bar");
     expect(push).not.toHaveBeenCalled();
   });
   it.each([
@@ -2081,29 +2081,29 @@ describe("a link naming a station", () => {
   ])(
     "opens nothing for %s and drops it from the address without a history entry",
     async (_, id) => {
-      history.replaceState(null, "", `/manage/prep-stations/view/stations/station/${id}`);
+      history.replaceState(null, "", `/prep-stations/view/stations/station/${id}`);
       const push = vi.spyOn(history, "pushState");
       const replace = vi.spyOn(history, "replaceState");
       const el = await mount(api({ load: vi.fn().mockResolvedValue(withDeletedGrill) }));
       await settleEditor(el);
       expect(stationEditor(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+      expect(location.pathname).toBe("/prep-stations/view/stations");
+      expect(writtenPaths(replace)).toEqual(["/prep-stations/view/stations"]);
       expect(push).not.toHaveBeenCalled();
     },
   );
   it("closing the editor it opened takes the station out of the address without a history entry", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/bar");
     const push = vi.spyOn(history, "pushState");
     const el = await mount(api());
     await settleEditor(el);
     expect(stationEditor(el)).not.toBeNull();
     await cancelEditor(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.pathname).toBe("/prep-stations/view/stations");
     expect(push).not.toHaveBeenCalled();
   });
   it("closes the editor it opened when the address loses the station, and a re-read of the same address changes nothing", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/bar");
     const el = await mount(api());
     await settleEditor(el);
     const opened = stationEditor(el);
@@ -2111,14 +2111,14 @@ describe("a link naming a station", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await settleEditor(el);
     expect(stationEditor(el)).toBe(opened);
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    history.replaceState(null, "", "/prep-stations/view/stations");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await settle(el);
     expect(stationEditor(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.pathname).toBe("/prep-stations/view/stations");
   });
   it("leaves an editor opened from its row menu open when a link names another station, which leaves the address", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    history.replaceState(null, "", "/prep-stations/view/stations");
     const el = await mount(
       api({ load: vi.fn().mockResolvedValue({ ...view, stations: [...view.stations, upstairs] }) }),
     );
@@ -2127,19 +2127,19 @@ describe("a link naming a station", () => {
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
     const push = vi.spyOn(history, "pushState");
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/upstairs");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/upstairs");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.pathname).toBe("/prep-stations/view/stations");
     expect(push).not.toHaveBeenCalled();
   });
   it("a link naming a station again after its editor was cancelled opens it again", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/bar");
     const el = await mount(api());
     await settleEditor(el);
     await cancelEditor(el);
-    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    history.replaceState(null, "", "/prep-stations/view/stations/station/bar");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await settleEditor(el);
     expect(stationEditor(el)?.station?.id).toBe("bar");
@@ -2209,7 +2209,7 @@ it.each([
   async ({ locale, heading, disable }) => {
     setLocale(locale);
     // A cell's name is read from what it draws, so the grid's tab is the one shown.
-    history.replaceState(null, "", "/manage/prep-stations/view/routing");
+    history.replaceState(null, "", "/prep-stations/view/routing");
     const disabled = { ...upstairs, active: false };
     const el = await mount(
       api({
@@ -2259,7 +2259,7 @@ it.each([
 
 it("shows Add station on the Stations tab alone, and no action on the other tabs", async () => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/prep-stations");
+  history.replaceState(null, "", "/prep-stations");
   const el = await mount(api());
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
@@ -2282,7 +2282,7 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
 
 it("at 320 px in Spanish, every tab shows whole and the tab row does not overflow", async () => {
   setLocale("es");
-  history.replaceState(null, "", "/manage/prep-stations");
+  history.replaceState(null, "", "/prep-stations");
   const el = await mount(api());
   el.parentElement!.style.width = "320px";
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
@@ -2311,7 +2311,7 @@ it.each(["en", "es"] as const)(
   "at 390 px, the Stations tab shows every tab and its add button whole (%s)",
   async (locale) => {
     setLocale(locale);
-    history.replaceState(null, "", "/manage/prep-stations");
+    history.replaceState(null, "", "/prep-stations");
     const el = await mount(api());
     el.parentElement!.style.width = "390px";
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
@@ -2362,7 +2362,7 @@ it.each([
     try {
       await page.viewport(width, 900);
       setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations");
+      history.replaceState(null, "", "/prep-stations");
       const el = await mount(
         api({
           load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "open" })),
@@ -2385,7 +2385,7 @@ it.each([
         expect(tabs.shadowRoot!.querySelectorAll('[role="tabpanel"]:not([hidden])')).toHaveLength(
           1,
         );
-        expect(location.pathname).toBe(`/manage/prep-stations/view/${key}`);
+        expect(location.pathname).toBe(`/prep-stations/view/${key}`);
         expect(tabs.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
         await expectNoA11yViolations(el.parentElement!);
@@ -2403,7 +2403,7 @@ async function mountToday(
   overrides: Partial<PrepStationsApi> = {},
   theme?: "light" | "dark",
 ) {
-  history.replaceState(null, "", "/manage/prep-stations/view/stations");
+  history.replaceState(null, "", "/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     ...overrides,
@@ -2480,7 +2480,7 @@ it.each([
       await page.viewport(width, 900);
       expect(window.innerWidth).toBe(width);
       setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations");
+      history.replaceState(null, "", "/prep-stations");
       const next = withUpstairs(
         { open: true, why: "open" },
         {
@@ -2740,7 +2740,7 @@ it.each([
     try {
       await page.viewport(width, 900);
       setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations");
+      history.replaceState(null, "", "/prep-stations");
       const next = withUpstairs({ open: true, why: "open" });
       next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
       next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
@@ -2839,7 +2839,7 @@ const ticketView: PrepStationsView = {
   ],
 };
 async function mountStations(overrides: Partial<PrepStationsApi> = {}) {
-  history.replaceState(null, "", "/manage/prep-stations/view/stations");
+  history.replaceState(null, "", "/prep-stations/view/stations");
   const a = api({
     load: vi.fn().mockResolvedValue(ticketView),
     updateStation: vi.fn().mockResolvedValue(undefined),
@@ -2891,7 +2891,7 @@ it("Stations names each station's printers and links the devices that show it", 
   expect(bar.textContent).toContain("Bar screen");
   expect(bar.textContent).not.toContain("Other screen");
   expect(bar.textContent).not.toContain("Disabled screen");
-  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices/device/current");
+  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/devices/device/current");
   expect(printed.querySelector("wt-combobox, button")).toBeNull();
   expect(bar.querySelector("wt-combobox")).toBeNull();
 });
@@ -2899,14 +2899,14 @@ it("Stations names each station's printers and links the devices that show it", 
 it.each(["light", "dark"] as const)(
   "paints the Devices link in the link token (%s)",
   async (theme) => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    history.replaceState(null, "", "/prep-stations/view/stations");
     const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
     await settle(el);
     const probe = document.createElement("span");
     probe.style.color = "var(--wt-color-primary-text)";
     el.parentElement!.append(probe);
     const token = getComputedStyle(probe).color;
-    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices/device/current"]')!;
+    const devices = q(el, '[data-test="screens-bar"] a[href="/devices/device/current"]')!;
     expect(getComputedStyle(devices).color).toBe(token);
   },
 );
@@ -2960,9 +2960,9 @@ it.each(["en", "es"])(
         link.getAttribute("href"),
       ),
     ).toEqual([
-      "/manage/devices/device/current",
-      "/manage/devices/device/pass",
-      "/manage/devices/device/till-grill",
+      "/devices/device/current",
+      "/devices/device/pass",
+      "/devices/device/till-grill",
     ]);
   },
 );
@@ -3277,26 +3277,26 @@ it.each(["en", "es"] as const)(
 );
 
 it("an old Watchers address opens Stations and rewrites the address", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  history.replaceState(null, "", "/prep-stations/view/watchers");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
   await settle(el);
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(tabs.shadowRoot!.querySelector('[data-key="watchers"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[slot="watchers"]')).toBeNull();
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
 });
 
 it("an old Tickets address opens Stations and rewrites the address", async () => {
-  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+  history.replaceState(null, "", "/prep-stations/view/tickets");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
   await settle(el);
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
   expect(tabs.value).toBe("stations");
-  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(location.pathname).toBe("/prep-stations/view/stations");
   expect(tabs.shadowRoot!.querySelector('[data-key="tickets"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[slot="tickets"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
@@ -3319,7 +3319,7 @@ it("Stations orders tied station positions by name and omits deleted stations", 
     { ...upstairs, id: "disabled", name: "A disabled", active: false },
     { ...view.stations[0]!, name: "Alpha" },
   ];
-  history.replaceState(null, "", "/manage/prep-stations/view/stations");
+  history.replaceState(null, "", "/prep-stations/view/stations");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(server) }));
   await settle(el);
   const table = el
@@ -4891,7 +4891,7 @@ describe("Save follows changes", () => {
   const modes = ["create", "rename", "printers", "timing"] as const;
   type Mode = (typeof modes)[number];
   async function openSave(mode: Mode, overrides: Partial<PrepStationsApi> = {}) {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    history.replaceState(null, "", "/prep-stations/view/stations");
     const a = api({
       load: vi.fn().mockResolvedValue({
         ...ticketView,
@@ -5350,7 +5350,7 @@ it.each(["en", "es"] as const)(
     );
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
     await settle(el);
-    expect(stationTable(el)!.querySelectorAll('a[href^="/manage/prep-stations"]')).toHaveLength(0);
+    expect(stationTable(el)!.querySelectorAll('a[href^="/prep-stations"]')).toHaveLength(0);
     const rows = [...stationTable(el)!.querySelectorAll("tbody tr")];
     expect(rows.map((row) => row.querySelector('[part="name"]')!.textContent?.trim())).toEqual([
       "Bar",
@@ -5697,7 +5697,7 @@ it.each(["en", "es"] as const)(
   "A725 replaces retired Times addresses with two Prep tabs in %s",
   async (locale) => {
     setLocale(locale);
-    history.replaceState(null, "", "/manage/prep-stations/view/times/station/bar?dev=1#saved");
+    history.replaceState(null, "", "/prep-stations/view/times/station/bar?dev=1#saved");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const el = await mount(api());
@@ -5715,11 +5715,11 @@ it.each(["en", "es"] as const)(
             { key: "routing", label: "Rutas" },
           ],
     );
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.pathname).toBe("/prep-stations/view/stations");
     expect(location.search).toBe("?dev=1");
     expect(location.hash).toBe("#saved");
     expect(push).not.toHaveBeenCalled();
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+    expect(writtenPaths(replace)).toEqual(["/prep-stations/view/stations"]);
     expect(el.shadowRoot!.querySelector('[slot="times"]')).toBeNull();
   },
 );
@@ -5768,7 +5768,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     "A773 station policy: draws one line per zone, above the tabs, on %s",
     async (tab) => {
       setLocale("en");
-      history.replaceState(null, "", `/manage/prep-stations/view/${tab}`);
+      history.replaceState(null, "", `/prep-stations/view/${tab}`);
       const el = await mount(api({ readPassCoverage: vi.fn().mockResolvedValue(gaps) }));
       await settle(el);
       expect(lines(el)).toEqual([
@@ -5781,7 +5781,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       for (const line of section.querySelectorAll("p")) {
         const link = line.querySelector("a")!;
         expect(link.textContent).toBe("Devices");
-        expect(link.getAttribute("href")).toBe("/manage/devices");
+        expect(link.getAttribute("href")).toBe("/devices");
       }
       const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
       expect(section.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -5868,7 +5868,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     for (const line of warning(el)!.querySelectorAll("p")) {
       expect(line.querySelectorAll("a")).toHaveLength(1);
       expect(line.querySelector("a")!.textContent).toBe("Devices");
-      expect(line.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+      expect(line.querySelector("a")!.getAttribute("href")).toBe("/devices");
     }
   });
 

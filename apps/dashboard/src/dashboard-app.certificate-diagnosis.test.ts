@@ -126,7 +126,7 @@ it.each(["same-account", "other-account", "no-permission"])(
       listAlerts: async () => ({ visible: false, alerts: [] }),
       getDiskStop: async () => ({ stopped: false, deleted: null }),
     } as unknown as DashboardApi;
-    history.replaceState(null, "", "/manage/diagnosis-test");
+    history.replaceState(null, "", "/diagnosis-test");
     const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
       request: request as unknown as DashboardRequest,

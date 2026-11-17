@@ -41,7 +41,7 @@ export function accountActionMail(deps: {
     async compose({ issued, origin, roles }) {
       let actionUrl = deps.emailChangeUrl;
       if (issued.purpose !== "email_change") {
-        const url = new URL("/manage/account", origin ?? deps.emailChangeUrl);
+        const url = new URL("/account", origin ?? deps.emailChangeUrl);
         url.searchParams.set("token", issued.token);
         url.searchParams.set("purpose", issued.purpose);
         url.hash = new URLSearchParams({ email: issued.email }).toString();

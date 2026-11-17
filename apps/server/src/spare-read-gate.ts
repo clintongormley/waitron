@@ -70,8 +70,8 @@ export function spareReadGate(deps: {
     c.header("Cache-Control", "no-store");
     if (
       path === "/" ||
-      path === "/manage" ||
-      path.startsWith("/manage/") ||
+      path === "/" ||
+      path.startsWith("/") ||
       path === "/till" ||
       path.startsWith("/till/")
     ) {

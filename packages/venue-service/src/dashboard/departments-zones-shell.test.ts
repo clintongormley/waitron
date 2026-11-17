@@ -20,7 +20,7 @@ afterEach(() => {
   setLocale("en");
 });
 async function mount(
-  path = "/manage/venue-operations",
+  path = "/venue-operations",
   request?: DashboardRequest,
   model = structuredClone(zonesModel),
 ) {
@@ -56,7 +56,7 @@ it.each([
   "/department/d1/view/receipt",
   "/department/gone",
 ])("list remains visible under the deep link %s without department pages", async (suffix) => {
-  const shell = await mount(`/manage/venue-operations${suffix}`);
+  const shell = await mount(`/venue-operations${suffix}`);
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
   expect(shell.shadowRoot!.querySelector("department-zones")).toBeNull();
@@ -77,12 +77,12 @@ it("row actions open protected editors and receipt content while preserving the 
   await expect
     .poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")?.departmentId)
     .toBe("d2");
-  history.replaceState(null, "", "/manage/venue-operations?source=saved");
+  history.replaceState(null, "", "/venue-operations?source=saved");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await shell.updateComplete;
   emit(shell, "edit-zone", { zoneId: "z1" });
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z1");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/zones/zone/z1");
 });
 it("Add zone takes the row's department rather than the address", async () => {
   const shell = await mount();
@@ -94,14 +94,14 @@ it("Add zone takes the row's department rather than the address", async () => {
   });
 });
 it("a deleted editor identity closes while its list remains visible", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  const shell = await mount("/venue-operations/department/d1/view/zones/zone/z1");
   shell.model = { ...shell.model, zones: shell.model.zones.filter((row) => row.id !== "z1") };
   await shell.updateComplete;
   await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeNull();
   expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
 });
 it("a successful editor write followed by a failed refresh closes and reports only a load failure", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1", (async (path) => {
+  const shell = await mount("/venue-operations/department/d1", (async (path) => {
     if (path === "/management-api/venue-service") throw { code: "server.internal" };
     return path.includes("profiles")
       ? []
@@ -189,31 +189,31 @@ function written(spy: { mock: { calls: unknown[][] } }) {
   return spy.mock.calls.map(([, , url]) => new URL(String(url), location.href).pathname);
 }
 it("choosing the Service tab records /view/service and Back returns to Details", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
   await selectDepartmentTab(form, "service");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/d1/view/service");
+    .toBe("/venue-operations/department/d1/view/service");
   expect(location.search).toBe("?source=saved");
   history.back();
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
   await expect.poll(() => form.tab).toBe("details");
   expect(form.isConnected).toBe(true);
 });
 it("a tab change whose address write does not land puts the form back on the address's tab", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
   let answer!: (outcome: "kept") => void;
   const guard = new NavigationGuard(window, {
     isDirty: () => true,
     request: () => new Promise((resolve) => (answer = resolve)),
   });
-  const elsewhere = guard.write("/manage/products?source=saved");
+  const elsewhere = guard.write("/products?source=saved");
   try {
     await selectDepartmentTab(form, "service");
     await expect.poll(() => form.tab).toBe("details");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(location.pathname).toBe("/venue-operations/department/d1");
   } finally {
     answer("kept");
     await elsewhere;
@@ -223,7 +223,7 @@ it("a tab change whose address write does not land puts the form back on the add
 it.each(["service", "tables"] as const)(
   "the department's %s address opens the matching tab",
   async (tab) => {
-    const path = `/manage/venue-operations/department/d1/view/${tab}`;
+    const path = `/venue-operations/department/d1/view/${tab}`;
     const shell = await mount(path);
     const form = await departmentSettings(shell);
     expect(form.tab).toBe(tab);
@@ -231,12 +231,12 @@ it.each(["service", "tables"] as const)(
   },
 );
 it("choosing Tables records its address and keeps the tab open", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
   await selectDepartmentTab(form, "tables");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/d1/view/tables");
+    .toBe("/venue-operations/department/d1/view/tables");
   expect(form.tab).toBe("tables");
 });
 
@@ -244,14 +244,14 @@ it("an address naming Transfers with one department opens Details and replaces t
   const replace = vi.spyOn(history, "replaceState");
   const push = vi.spyOn(history, "pushState");
   const shell = await mount(
-    "/manage/venue-operations/department/d1/view/transfers",
+    "/venue-operations/department/d1/view/transfers",
     undefined,
     oneDepartment(),
   );
   const form = await departmentSettings(shell);
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
   expect(form.tab).toBe("details");
-  expect(written(replace)).toContain("/manage/venue-operations/department/d1");
+  expect(written(replace)).toContain("/venue-operations/department/d1");
   expect(push).not.toHaveBeenCalled();
 });
 it.each(["unknown", "details"])(
@@ -259,41 +259,41 @@ it.each(["unknown", "details"])(
   async (view) => {
     const replace = vi.spyOn(history, "replaceState");
     const push = vi.spyOn(history, "pushState");
-    const shell = await mount(`/manage/venue-operations/department/d1/view/${view}`);
+    const shell = await mount(`/venue-operations/department/d1/view/${view}`);
     const form = await departmentSettings(shell);
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
     expect(form.tab).toBe("details");
-    expect(written(replace)).toContain("/manage/venue-operations/department/d1");
+    expect(written(replace)).toContain("/venue-operations/department/d1");
     expect(push).not.toHaveBeenCalled();
   },
 );
 it("moving from Details to an unrecognised view replaces the address with Details", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1");
+  const shell = await mount("/venue-operations/department/d1");
   const form = await departmentSettings(shell);
-  history.pushState(null, "", "/manage/venue-operations/department/d1/view/missing?source=saved");
+  history.pushState(null, "", "/venue-operations/department/d1/view/missing?source=saved");
   const replace = vi.spyOn(history, "replaceState");
   const push = vi.spyOn(history, "pushState");
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
   expect(form.tab).toBe("details");
-  expect(written(replace)).toEqual(["/manage/venue-operations/department/d1"]);
+  expect(written(replace)).toEqual(["/venue-operations/department/d1"]);
   expect(push).not.toHaveBeenCalled();
 });
 it("when Transfers stops being offered the address returns to Details by replacement", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/transfers");
+  const shell = await mount("/venue-operations/department/d1/view/transfers");
   const form = await departmentSettings(shell);
   expect(form.tab).toBe("transfers");
   const replace = vi.spyOn(history, "replaceState");
   const push = vi.spyOn(history, "pushState");
   shell.model = oneDepartment();
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
   await shell.updateComplete;
   expect(form.tab).toBe("details");
-  expect(written(replace)).toEqual(["/manage/venue-operations/department/d1"]);
+  expect(written(replace)).toEqual(["/venue-operations/department/d1"]);
   expect(push).not.toHaveBeenCalled();
 });
 it("while the replacement for an unoffered tab is in flight, further updates write nothing more", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/transfers");
+  const shell = await mount("/venue-operations/department/d1/view/transfers");
   const form = await departmentSettings(shell);
   expect(form.tab).toBe("transfers");
   let answer!: (outcome: "proceeded") => void;
@@ -316,7 +316,7 @@ it("while the replacement for an unoffered tab is in flight, further updates wri
     }
     expect(write).toHaveBeenCalledTimes(1);
     answer("proceeded");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await expect.poll(() => location.pathname).toBe("/venue-operations/department/d1");
     await shell.updateComplete;
     expect(write).toHaveBeenCalledTimes(1);
   } finally {
@@ -334,7 +334,7 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
   await selectDepartmentTab(form, "service");
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/d1/view/service");
+    .toBe("/venue-operations/department/d1/view/service");
   departmentCancel(form).click();
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   const menu = table
@@ -351,7 +351,7 @@ it("the list's tax-agency description button opens Details and focuses the descr
     departmentId: "d2",
     departmentName: "Deli",
   } as (typeof model.readiness)[number]);
-  const shell = await mount("/manage/venue-operations", undefined, model);
+  const shell = await mount("/venue-operations", undefined, model);
   const editors = new Map<string, ReceiptEditorStub>();
   shell.renderPanel = (_panel, subject) => {
     let editor = editors.get(subject!.id);
@@ -373,7 +373,7 @@ it("the list's tax-agency description button opens Details and focuses the descr
   );
   const form = await departmentSettings(shell);
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d2");
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d2");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d2");
   expect(form.tab).toBe("details");
   const field = () =>
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -393,7 +393,7 @@ it("closing a dialog opened from the description link returns focus to that row'
     departmentId: "d2",
     departmentName: "Deli",
   } as (typeof model.readiness)[number]);
-  const shell = await mount("/manage/venue-operations", undefined, model);
+  const shell = await mount("/venue-operations", undefined, model);
   const list = shell.shadowRoot!.querySelector("departments-list")!;
   await list.updateComplete;
   const table = list.shadowRoot!.querySelector("wt-data-table")!;
@@ -402,7 +402,7 @@ it("closing a dialog opened from the description link returns focus to that row'
     table.shadowRoot!.querySelector<HTMLElement>("[data-test=description-setup-d2]")!,
   );
   const form = await departmentSettings(shell);
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d2");
+  await expect.poll(() => location.pathname).toBe("/venue-operations/department/d2");
   departmentCancel(form).click();
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   const menu = table
@@ -413,7 +413,7 @@ it("closing a dialog opened from the description link returns focus to that row'
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
 it("/view/receipt opens the department dialog on its Receipts tab", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/receipt");
+  const shell = await mount("/venue-operations/department/d1/view/receipt");
   const form = await departmentSettings(shell);
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
   expect(form.tab).toBe("receipt");
@@ -427,16 +427,16 @@ it("/view/receipt opens the department dialog on its Receipts tab", async () => 
   expect(panels(shell.shadowRoot!)).toEqual([
     form.shadowRoot!.querySelector("[data-test=receipt-panel]"),
   ]);
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
+  expect(location.pathname).toBe("/venue-operations/department/d1/view/receipt");
 });
 it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {
   const at = (path: string) => new URL(path, location.origin);
   const list = await mount();
-  expect(list.navigationScopes(at("/manage/venue-operations/department/d1?source=saved"))).toBe(
+  expect(list.navigationScopes(at("/venue-operations/department/d1?source=saved"))).toBe(
     undefined,
   );
   list.remove();
-  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  const shell = await mount("/venue-operations/department/d1/view/service");
   shell.renderPanel = undefined;
   await shell.updateComplete;
   await departmentSettings(shell);
@@ -446,47 +446,47 @@ it("navigationScopes is [] for another offered tab of the open department and un
     "/department/d1/view/transfers",
   ])
     expect(
-      shell.navigationScopes(at(`/manage/venue-operations${path}?source=saved`)),
+      shell.navigationScopes(at(`/venue-operations${path}?source=saved`)),
       path,
     ).toEqual([]);
   for (const path of [
-    "/manage/venue-operations/department/d2?source=saved",
-    "/manage/venue-operations/department/d1/view/zones/zone/z1?source=saved",
-    "/manage/venue-operations/department/d1/view/receipt?source=saved",
-    "/manage/venue-operations?source=saved",
-    "/manage/venue-operations/department/d1/view/service",
-    "/manage/venue-operations/department/d1/view/service?source=saved#x",
-    "/manage/products?source=saved",
-    "/manage/venue-operations/department/%E0%A4%A?source=saved",
-    "/manage/venue-operations/department/d1/department/d1?source=saved",
-    "/manage/venue-operations/department?source=saved",
-    "/manage/venue-operations/department/d1/view/service/zone/z1?source=saved",
-    "/manage/venue-operations/department/d1/view/zones?source=saved",
+    "/venue-operations/department/d2?source=saved",
+    "/venue-operations/department/d1/view/zones/zone/z1?source=saved",
+    "/venue-operations/department/d1/view/receipt?source=saved",
+    "/venue-operations?source=saved",
+    "/venue-operations/department/d1/view/service",
+    "/venue-operations/department/d1/view/service?source=saved#x",
+    "/products?source=saved",
+    "/venue-operations/department/%E0%A4%A?source=saved",
+    "/venue-operations/department/d1/department/d1?source=saved",
+    "/venue-operations/department?source=saved",
+    "/venue-operations/department/d1/view/service/zone/z1?source=saved",
+    "/venue-operations/department/d1/view/zones?source=saved",
     "/other/venue-operations/department/d1?source=saved",
-    "https://elsewhere.example/manage/venue-operations/department/d1?source=saved",
+    "https://elsewhere.example/venue-operations/department/d1?source=saved",
   ])
     expect(shell.navigationScopes(at(path)), path).toBe(undefined);
   shell.remove();
-  const single = await mount("/manage/venue-operations/department/d1", undefined, oneDepartment());
+  const single = await mount("/venue-operations/department/d1", undefined, oneDepartment());
   await departmentSettings(single);
   expect(
     single.navigationScopes(
-      at("/manage/venue-operations/department/d1/view/transfers?source=saved"),
+      at("/venue-operations/department/d1/view/transfers?source=saved"),
     ),
   ).toBe(undefined);
 });
 it("navigationScopes is [] for receipt when the dialog offers it", async () => {
   const at = (path: string) => new URL(path, location.origin);
-  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  const shell = await mount("/venue-operations/department/d1/view/service");
   shell.renderPanel = undefined;
   await shell.updateComplete;
   await departmentSettings(shell);
-  const receipt = "/manage/venue-operations/department/d1/view/receipt?source=saved";
+  const receipt = "/venue-operations/department/d1/view/receipt?source=saved";
   expect(shell.navigationScopes(at(receipt))).toBe(undefined);
   shell.renderPanel = (_panel, subject) => html`<p data-test="receipt-panel">${subject?.id}</p>`;
   await shell.updateComplete;
   expect(shell.navigationScopes(at(receipt))).toEqual([]);
   expect(
-    shell.navigationScopes(at("/manage/venue-operations/department/d2/view/receipt?source=saved")),
+    shell.navigationScopes(at("/venue-operations/department/d2/view/receipt?source=saved")),
   ).toBe(undefined);
 });

@@ -643,7 +643,7 @@ export class CloudServicesScreen extends LitElement {
                 >${t("cloud.emergency_sign_in")}</wt-button
               >`
       }
-      <a href="/manage/backup?recovery-pack=make">${t("cloud.emergency_print_pack")}</a>
+      <a href="/backup?recovery-pack=make">${t("cloud.emergency_print_pack")}</a>
       ${s.accountUrl ? html`<a href=${s.accountUrl} target="_blank" rel="noopener noreferrer">${t("cloud.account")}</a>` : nothing}
     </section>`;
   }

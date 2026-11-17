@@ -564,7 +564,7 @@ export class AccessRolesScreen extends LitElement {
                 >
               </div>
             </div>
-            ${this.viewerPermissions.some((p) => p === "venue.view" || p === "schedule.manage") ? html`<p><a href="/manage/staff-roles">${t("access_roles.job_roles")}</a></p>` : nothing}
+            ${this.viewerPermissions.some((p) => p === "venue.view" || p === "schedule.manage") ? html`<p><a href="/staff-roles">${t("access_roles.job_roles")}</a></p>` : nothing}
             <wt-data-table
               noMatchesMessage=${tableNoMatches()}
               searchable

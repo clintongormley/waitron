@@ -55,7 +55,7 @@ import { calendarDay } from "./dates.js";
 import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
 import { t } from "./strings.js";
 
-const RECOVERY_PATH = "/manage/recovery/fiscal-conflict";
+const RECOVERY_PATH = "/recovery/fiscal-conflict";
 const PAGE_SIZE = 50;
 const CASE_CHANGED: ReadonlySet<string> = new Set(
   Object.keys(REFUSAL_WORDS).filter((code) => refusalKey(code) === "fiscal_filing.refused.changed"),

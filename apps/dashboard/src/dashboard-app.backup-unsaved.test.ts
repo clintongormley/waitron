@@ -11,7 +11,7 @@ afterEach(() => {
   setLocale("en-GB");
 });
 async function mount(
-  path = "/manage/backup",
+  path = "/backup",
   permissions = ["venue.view", "venue.configure", "system.manage"],
 ) {
   history.replaceState(null, "", path);
@@ -100,7 +100,7 @@ it.each([false, true])(
   "opens Backups and its recovery pack card only with system.manage=%s",
   async (allowed) => {
     const { app } = await mount(
-      "/manage/backup",
+      "/backup",
       allowed ? ["venue.view", "system.manage"] : ["venue.view"],
     );
     const screen = backup(app);
@@ -145,30 +145,30 @@ it("the actual dashboard sidebar keeps archive and export inputs until Discard",
   const secret = await enter(app, "configuration-passphrase", "synthetic secret");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/backup");
+  expect(location.pathname).toBe("/backup");
   expect(destination.value).toBe("/mnt/edited");
   expect(secret.value).toBe("synthetic secret");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(screen.isConnected).toBe(false);
   await screen.updateComplete;
   expect(secret.value).toBe("");
 });
 it("real Back keeps an export draft and accepted Back/Forward returns with empty credentials", async () => {
-  const { app } = await mount("/manage/overview");
+  const { app } = await mount("/overview");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-backup]")!.click();
   await expect.poll(() => field(app, "configuration-passphrase")).not.toBeNull();
   const secret = await enter(app, "configuration-passphrase", "synthetic secret");
   history.back();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/backup");
+  expect(location.pathname).toBe("/backup");
   expect(secret.value).toBe("synthetic secret");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   history.forward();
-  await expect.poll(() => location.pathname).toBe("/manage/backup");
+  await expect.poll(() => location.pathname).toBe("/backup");
   await expect.poll(() => field(app, "configuration-passphrase")?.value).toBe("");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
@@ -191,7 +191,7 @@ it("export drafts protect voluntary sign-out and language replacement before the
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
   await choose(app, "discard");
   await expect.poll(logouts).toBe(1);
-  await expect.poll(() => location.pathname).toBe("/manage/");
+  await expect.poll(() => location.pathname).toBe("/");
 });
 it("forced expiry clears export credentials and cancels an unanswered leave decision", async () => {
   const { app, logouts } = await mount();
@@ -210,7 +210,7 @@ it("forced expiry clears export credentials and cancels an unanswered leave deci
   discard.click();
   expect(logouts()).toBe(0);
   expect(secret.value).toBe("");
-  expect(location.pathname).toBe("/manage/");
+  expect(location.pathname).toBe("/");
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);

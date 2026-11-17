@@ -149,8 +149,8 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     onBox: false,
   });
   for (const path of [
-    "/manage",
-    "/manage/assets/index.js",
+    "/",
+    "/assets/index.js",
     "/api/theme",
     "/api/content-languages",
     "/api/backup/status",
@@ -179,8 +179,8 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     "/manage-other",
     "/management-api-other/x",
     "/api/box-other/x",
-    "/manage/%2e%2e/setup",
-    "/manage/%2f..%2fsetup",
+    "/%2e%2e/setup",
+    "/%2f..%2fsetup",
     "/management-api/membership",
     "/management-api/mirror-bundle",
     "/management-api/promote",
@@ -193,7 +193,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
       ).toBe(404);
   }
   expect(
-    (await staff.request("https://staff.example.test/manage", { method: "POST" })).status,
+    (await staff.request("https://staff.example.test/", { method: "POST" })).status,
   ).toBe(404);
   expect(
     (await staff.request("https://staff.example.test/media/logo.webp", { method: "POST" })).status,
@@ -223,13 +223,13 @@ it("the staff entrance lets the tax office's invoice list, PDF, month and its do
 it("refuses another venue hostname and does not accept a remote marker from HTTP headers", async () => {
   const { requestFromBox } = await import("./request-from-box.js");
   const app = new Hono();
-  app.get("/manage", (c) => c.json({ onBox: requestFromBox(c) }));
+  app.get("/", (c) => c.json({ onBox: requestFromBox(c) }));
   const staff = createStaffApp(app, "https://staff.example.test");
-  expect((await staff.request("https://other.example.test/manage")).status).toBe(404);
-  expect((await staff.request("http://staff.example.test/manage")).status).toBe(404);
+  expect((await staff.request("https://other.example.test/")).status).toBe(404);
+  expect((await staff.request("http://staff.example.test/")).status).toBe(404);
   expect(
     await (
-      await app.request("/manage", { headers: { "x-waitron-remote": "1", remoteStaff: "true" } })
+      await app.request("/", { headers: { "x-waitron-remote": "1", remoteStaff: "true" } })
     ).json(),
   ).toEqual({ onBox: true });
 });
@@ -249,7 +249,7 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
   await mkdir(join(root, "cloud"), { recursive: true });
   await writeFile(join(root, "cloud/staff.crt"), material.serverCertPem);
   const app = new Hono();
-  app.get("/manage", (c) => c.text("dashboard"));
+  app.get("/", (c) => c.text("dashboard"));
   app.get("/setup", (c) => c.text("setup must stay local"));
   const lines: Parameters<Logger>[] = [];
   const server = startStaffListener(
@@ -294,10 +294,10 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     expect(outcome[1], JSON.stringify(lines)).toBe("server.listening");
     expect(outcome[2]?.port, JSON.stringify(lines)).toBeGreaterThan(0);
     port = Number(outcome[2]!.port);
-    expect(await ask("/manage")).toEqual({ status: 200, text: "dashboard" });
+    expect(await ask("/")).toEqual({ status: 200, text: "dashboard" });
     expect((await ask("/setup")).status).toBe(404);
     await server!.close();
-    await expect(ask("/manage")).rejects.toThrow();
+    await expect(ask("/")).rejects.toThrow();
   } finally {
     await server?.close();
     await rm(root, { recursive: true, force: true });

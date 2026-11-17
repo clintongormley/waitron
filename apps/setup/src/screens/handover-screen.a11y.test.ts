@@ -101,7 +101,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 JSON.stringify({
                   sourceNodeId: "old",
                   destinationNodeId: "new",
-                  sourceServersUrl: "https://main.example/manage/servers",
+                  sourceServersUrl: "https://main.example/servers",
                   copy: {
                     ...(stage === "declaration"
                       ? { source: "followed-copy", sourceId: "c".repeat(64) }

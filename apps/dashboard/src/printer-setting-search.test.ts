@@ -30,7 +30,7 @@ it("resolves only offered controls through passive lists, including switched-off
     {
       id: "p/+",
       label: "Network",
-      path: "/manage/printers/view/printers/printer/p%2F%2B/editor/edit",
+      path: "/printers/view/printers/printer/p%2F%2B/editor/edit",
     },
   ]);
   expect(pages).not.toHaveBeenCalled();
@@ -38,37 +38,37 @@ it("resolves only offered controls through passive lists, including switched-off
     {
       id: "p/+",
       label: "Network",
-      path: "/manage/printers/view/printers/printer/p%2F%2B/editor/edit",
+      path: "/printers/view/printers/printer/p%2F%2B/editor/edit",
     },
-    { id: "usb", label: "USB", path: "/manage/printers/view/printers/printer/usb/editor/edit" },
-    { id: "bt", label: "Bluetooth", path: "/manage/printers/view/printers/printer/bt/editor/edit" },
+    { id: "usb", label: "USB", path: "/printers/view/printers/printer/usb/editor/edit" },
+    { id: "bt", label: "Bluetooth", path: "/printers/view/printers/printer/bt/editor/edit" },
     {
       id: "cloud",
       label: "Cloud",
-      path: "/manage/printers/view/printers/printer/cloud/editor/edit",
+      path: "/printers/view/printers/printer/cloud/editor/edit",
     },
-    { id: "pp1", label: "Office", path: "/manage/printers/view/printers/printer/pp1/editor/edit" },
+    { id: "pp1", label: "Office", path: "/printers/view/printers/printer/pp1/editor/edit" },
   ]);
   expect(await resolve("printer-cash-drawer")).toEqual([
     {
       id: "p/+",
       label: "Network",
-      path: "/manage/printers/view/printers/printer/p%2F%2B/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/p%2F%2B/editor/calibrate/step/3",
     },
     {
       id: "usb",
       label: "USB",
-      path: "/manage/printers/view/printers/printer/usb/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/usb/editor/calibrate/step/3",
     },
     {
       id: "bt",
       label: "Bluetooth",
-      path: "/manage/printers/view/printers/printer/bt/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/bt/editor/calibrate/step/3",
     },
     {
       id: "cloud",
       label: "Cloud",
-      path: "/manage/printers/view/printers/printer/cloud/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/cloud/editor/calibrate/step/3",
     },
   ]);
   expect(background).toHaveBeenCalledTimes(3);

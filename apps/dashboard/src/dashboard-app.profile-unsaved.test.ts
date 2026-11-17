@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 async function mount(overrides: Partial<DashboardApi> = {}) {
-  history.replaceState(null, "", "/manage/profile");
+  history.replaceState(null, "", "/profile");
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     api: {
       getMe: async () => ({
@@ -130,19 +130,19 @@ for (const route of ["footer", "escape"] as const) {
     await expect.poll(() => m.question.open).toBe(true);
     expect(m.outer.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect(m.inner.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     close(m, route);
     await choose(m, "keep");
     expect(telephone(m)).toBe("+34 600 000 001");
     expect(m.screen.isConnected).toBe(true);
-    expect(location.pathname).toBe("/manage/profile");
+    expect(location.pathname).toBe("/profile");
     expect(unload()).toBe(true);
     close(m, route);
     await expect.poll(() => m.question.open).toBe(true);
     await choose(m, "discard");
     await expect.poll(() => m.app.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
     expect(m.outer.open).toBe(false);
-    expect(location.pathname).toBe("/manage/my-schedule");
+    expect(location.pathname).toBe("/my-schedule");
     expect(unload()).toBe(false);
     expect(m.screen.shadowRoot!.querySelector("wt-input[name=telephone]")).toBeNull();
     m.app.shadowRoot!.querySelector<HTMLElement>("[data-test=profile]")!.click();
@@ -168,7 +168,7 @@ it("outer close directly leaves clean and reverted child forms", async () => {
   close(m, "footer");
   await expect.poll(() => m.screen.isConnected).toBe(false);
   expect(m.question.open).toBe(false);
-  expect(location.pathname).toBe("/manage/my-schedule");
+  expect(location.pathname).toBe("/my-schedule");
 });
 it("outer close never interrupts a child's in-flight save, and a refusal remains protected", async () => {
   let refuse!: (error: unknown) => void;
@@ -190,7 +190,7 @@ it("outer close never interrupts a child's in-flight save, and a refusal remains
   expect(m.screen.isConnected).toBe(true);
   expect(m.outer.open).toBe(true);
   expect(m.question.open).toBe(false);
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   refuse({ code: "connection.failed" });
   await expect
     .poll(() => m.screen.shadowRoot!.querySelector<WtInput>("wt-input[name=telephone]")!.disabled)
@@ -309,7 +309,7 @@ it("forced expiry bypasses a pending outer close and clears credential input", a
   expect(unload()).toBe(false);
   expect(m.screen.shadowRoot!.querySelector("wt-input[name=password]")).toBeNull();
   expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
-  expect(location.pathname).toBe("/manage/");
+  expect(location.pathname).toBe("/");
 });
 
 it("a save invalidates an older outer Discard without closing the saved profile", async () => {
@@ -341,6 +341,6 @@ it("a save invalidates an older outer Discard without closing the saved profile"
   });
   expect(m.outer.open).toBe(true);
   expect(m.screen.isConnected).toBe(true);
-  expect(location.pathname).toBe("/manage/profile");
+  expect(location.pathname).toBe("/profile");
   expect(unload()).toBe(false);
 });

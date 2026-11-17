@@ -272,7 +272,7 @@ describe("account mail owner", () => {
     await runMailPass(deps);
     expect(connections).toEqual(["smtp://mail.test"]);
     const link = new URL(messages[0]!.split("\n").find((line) => line.startsWith("https://"))!);
-    expect(link.pathname).toBe("/manage/account");
+    expect(link.pathname).toBe("/account");
     expect(link.origin).toBe("https://entry.test:8443");
     expect(new URLSearchParams(link.hash.slice(1)).get("email")).toBe("person@example.test");
     expect(
@@ -451,7 +451,7 @@ describe("account mail owner", () => {
       expect(messages[0]).toContain(ACCOUNT_EMAIL_WORDS.es.hello("Recipient"));
       const action = messages[0]!.split("\n").find((line) => line.startsWith("https://"));
       if (purpose === "email_change") expect(action).toBe("https://box.test/");
-      else expect(new URL(action!).pathname).toBe("/manage/account");
+      else expect(new URL(action!).pathname).toBe("/account");
       expect(
         suite.db.get<{ recipient: string }>(sql`select recipient from outgoing_mail`)?.recipient,
       ).toBe(purpose === "email_change" ? "changed@example.test" : "person@example.test");

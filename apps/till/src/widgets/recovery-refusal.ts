@@ -10,7 +10,7 @@ interface RecoveryRefusal {
 
 function recoveryPath(refusal: RecoveryRefusal | null): string | null {
   const path = refusal?.recoveryUrl;
-  if (path === undefined || !path.startsWith("/manage/")) return null;
+  if (path === undefined || !path.startsWith("/")) return null;
   const parsed = new URL(path, location.origin);
   return parsed.pathname === path ? path : null;
 }
@@ -26,7 +26,7 @@ export function recoveryRefusalOf(value: unknown): RecoveryRefusal | undefined {
 export function recoveryRefusalText(refusal: RecoveryRefusal): string | null {
   const path = recoveryPath(refusal);
   if (path === null) return null;
-  if (path === "/manage/check-card-payments") {
+  if (path === "/check-card-payments") {
     if (refusal.code !== "sale.charged_not_recorded") return null;
     const charged = t(
       refusal.reason === "disk_full"
@@ -55,6 +55,6 @@ export function recoveryLink(refusal: RecoveryRefusal | null, onDanger = false) 
         target="_blank"
         rel="noopener"
         style=${onDanger ? "color: var(--wt-color-on-danger)" : "color: var(--wt-color-primary-text)"}
-        >${t(path === "/manage/check-card-payments" ? "bill_pay.card_recovery_open" : "recovery.open")}</a
+        >${t(path === "/check-card-payments" ? "bill_pay.card_recovery_open" : "recovery.open")}</a
       >`;
 }

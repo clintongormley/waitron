@@ -3024,7 +3024,7 @@ it.each(["settings", "turn-on"])(
 
 it("opens the existing pack maker for its linked address", async () => {
   const before = location.href;
-  history.replaceState(null, "", "/manage/backup?recovery-pack=make");
+  history.replaceState(null, "", "/backup?recovery-pack=make");
   try {
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
       api: stubApi({}, OFF),

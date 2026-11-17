@@ -76,7 +76,7 @@ export function productMedia(options: {
     part=${busy ? "product-media media-link media-link-busy" : "product-media media-link"}
     data-test=${`color-${key}`}
     ?data-own-click=${open !== undefined}
-    href=${`/manage/products/product/${encodeURIComponent(productId)}?field=image`}
+    href=${`/products/product/${encodeURIComponent(productId)}?field=image`}
     aria-label=${
       inheritedFrom === undefined
         ? fill("product.edit_named", { name })

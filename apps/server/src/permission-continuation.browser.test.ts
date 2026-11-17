@@ -58,7 +58,7 @@ await import(${JSON.stringify(join(repo, "apps/dashboard/src/main.ts"))});
   );
   await writeFile(
     join(buildRoot, "vite.config.mjs"),
-    `export default ${JSON.stringify({ root: buildRoot, base: "/manage/", publicDir: false, build: { target: "esnext", outDir: join(buildRoot, "dist"), emptyOutDir: true } })}`,
+    `export default ${JSON.stringify({ root: buildRoot, base: "/", publicDir: false, build: { target: "esnext", outDir: join(buildRoot, "dist"), emptyOutDir: true } })}`,
   );
   await promisify(execFile)(
     "pnpm",
@@ -256,8 +256,8 @@ it.each(["password", "passkey"] as const)(
           });
           return;
         }
-        const asset = url.pathname.startsWith("/manage/assets/")
-          ? url.pathname.slice("/manage/".length)
+        const asset = url.pathname.startsWith("/assets/")
+          ? url.pathname.slice("/".length)
           : "index.html";
         await route.fulfill({
           contentType: asset.endsWith(".js")
@@ -274,7 +274,7 @@ it.each(["password", "passkey"] as const)(
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
       page.setDefaultTimeout(3_000);
-      await page.goto(`${origin}/manage/test-continuation`);
+      await page.goto(`${origin}/test-continuation`);
       try {
         await page.locator("[data-test=test-sign-in] button").click();
       } catch (error) {

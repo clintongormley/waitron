@@ -159,7 +159,7 @@ async function hours(
   initial = hoursFixture(),
   write: () => Promise<unknown> = async () => undefined,
 ) {
-  history.replaceState(null, "", `/manage/opening-hours/view/${view}/department/d1`);
+  history.replaceState(null, "", `/opening-hours/view/${view}/department/d1`);
   await mount();
   const live = new LiveData();
   let model = initial;
@@ -245,8 +245,8 @@ it.each(["week", "zone-week"])(
       null,
       "",
       kind === "week"
-        ? "/manage/opening-hours/view/season/season/autumn/department/d1"
-        : "/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1",
+        ? "/opening-hours/view/season/season/autumn/department/d1"
+        : "/opening-hours/view/season/season/autumn/department/d1/zone/z1",
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect
@@ -285,7 +285,7 @@ it.each(["week", "zone-week"])(
 it("department deletion closes the department dialog with its Receipts tab while another department draft survives", async () => {
   await mount();
   const survivor = await settings("d2");
-  history.replaceState(null, "", "/manage/venue-operations/department/d1/view/receipt");
+  history.replaceState(null, "", "/venue-operations/department/d1/view/receipt");
   const page = document.createElement("venue-departments-shell");
   page.api = new VenueServiceApi((async (path) =>
     path.endsWith("/profiles")

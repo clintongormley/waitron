@@ -256,4 +256,4 @@ describe.each(["en", "es"] as const)("Periods row menus in the window (%s)", (lo
   });
 });
 
-beforeEach(() => history.replaceState({}, "", "/manage/periods"));
+beforeEach(() => history.replaceState({}, "", "/periods"));

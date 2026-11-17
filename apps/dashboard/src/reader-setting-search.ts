@@ -16,7 +16,7 @@ export function readerSettingSearchDestinations(
       return (await api.background.listReaders()).map((row) => ({
         id: row.id,
         label: row.name,
-        path: `/manage/payments/reader/${encodePathSegment(row.id)}`,
+        path: `/payments/reader/${encodePathSegment(row.id)}`,
       }));
     },
   }));

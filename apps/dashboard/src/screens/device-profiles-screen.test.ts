@@ -4134,15 +4134,15 @@ describe("a device profile's address", () => {
     null;
 
   it("ordinary Edit ignores a tab on the list address", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/view/equipment");
+    history.replaceState(null, "", "/device-profiles/view/equipment");
     const el = await mount(stubApi());
     await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
     expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general");
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+    expect(location.pathname).toBe("/device-profiles/profile/p1");
   });
   it("a field error writes the tab it opens", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/where");
+    history.replaceState(null, "", "/device-profiles/profile/p1/view/where");
     const el = await mount(stubApi());
     change(el, "profile-name", "");
     await el.updateComplete;
@@ -4150,18 +4150,18 @@ describe("a device profile's address", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general"),
     );
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p1/view/general");
+    expect(location.pathname).toBe("/device-profiles/profile/p1/view/general");
   });
 
   it("opens an explicit tab and follows same-profile addresses without reloading", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/equipment");
+    history.replaceState(null, "", "/device-profiles/profile/p1/view/equipment");
     const api = stubApi();
     const el = await mount(api);
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
     expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "equipment");
     await selectProfileTab(el, "who");
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p1/view/who");
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/where");
+    expect(location.pathname).toBe("/device-profiles/profile/p1/view/who");
+    history.replaceState(null, "", "/device-profiles/profile/p1/view/where");
     dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "where"),
@@ -4175,25 +4175,25 @@ describe("a device profile's address", () => {
     );
   });
   it.each(["unknown", "where"])("refuses an invalid or unoffered explicit tab %s", async (tab) => {
-    history.replaceState(null, "", `/manage/device-profiles/profile/p2/view/${tab}`);
+    history.replaceState(null, "", `/device-profiles/profile/p2/view/${tab}`);
     const el = await mount(stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profiles[1]) }));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain(t("device_profiles.setting_unavailable")),
     );
     expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-target-cancel]")!.click();
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/device-profiles"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/device-profiles"));
   });
 
   it("names the profile while its editor is open, so a reload opens it again", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     const api = stubApi();
     const el = await mount(api);
     const replace = vi.spyOn(history, "replaceState");
     const push = vi.spyOn(history, "pushState");
     await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+    expect(location.pathname).toBe("/device-profiles/profile/p1");
     expect(replace).toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
     const address = location.href;
@@ -4201,11 +4201,11 @@ describe("a device profile's address", () => {
     history.replaceState(null, "", address);
     const reloaded = await mount(stubApi());
     await vi.waitFor(() => expect(editingId(reloaded)).toBe("p1"));
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+    expect(location.pathname).toBe("/device-profiles/profile/p1");
   });
 
   it("leaves the profile's name out of the address when Cancel closes its editor", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    history.replaceState(null, "", "/device-profiles/profile/p1");
     const el = await mount();
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
     const push = vi.spyOn(history, "pushState");
@@ -4213,12 +4213,12 @@ describe("a device profile's address", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull(),
     );
-    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(location.pathname).toBe("/device-profiles");
     expect(push).not.toHaveBeenCalled();
   });
 
   it("leaves the profile's name out of the address when a save closes its editor", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    history.replaceState(null, "", "/device-profiles/profile/p1");
     const api = stubApi();
     const el = await mount(api);
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
@@ -4229,14 +4229,14 @@ describe("a device profile's address", () => {
       expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull(),
     );
     expect(api.updateDeviceProfile).toHaveBeenCalled();
-    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(location.pathname).toBe("/device-profiles");
   });
 
   it("closes the editor when Back takes the profile's name out of the address", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    history.replaceState(null, "", "/device-profiles/profile/p1");
     const el = await mount();
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
@@ -4244,15 +4244,15 @@ describe("a device profile's address", () => {
   });
 
   it("keeps a new profile's editor when the address comes back from another page naming no profile", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     const el = await mount();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     change(el, "profile-name", "New counter");
     await el.updateComplete;
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(
@@ -4262,18 +4262,18 @@ describe("a device profile's address", () => {
   });
 
   it("closes an editor opened from the list when Back takes its name out of the address", async () => {
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     const el = await mount();
     await profileAction(el, "edit-p1");
     await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
-    history.replaceState(null, "", "/manage/device-profiles");
+    history.replaceState(null, "", "/device-profiles");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
   });
 
   it("opens the profile its address names, once", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p2");
+    history.replaceState(null, "", "/device-profiles/profile/p2");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profiles[1]) });
@@ -4285,7 +4285,7 @@ describe("a device profile's address", () => {
     );
     expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p2");
-    expect(location.pathname).toBe("/manage/device-profiles/profile/p2");
+    expect(location.pathname).toBe("/device-profiles/profile/p2");
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -4294,7 +4294,7 @@ describe("a device profile's address", () => {
   });
 
   it("takes the profile's name out of the address when the profile it names cannot be read", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/p1");
+    history.replaceState(null, "", "/device-profiles/profile/p1");
     const push = vi.spyOn(history, "pushState");
     const api = stubApi({
       getDeviceProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -4304,16 +4304,16 @@ describe("a device profile's address", () => {
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
     expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();
-    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(location.pathname).toBe("/device-profiles");
     expect(push).not.toHaveBeenCalled();
   });
 
   it("opens nothing for an address naming no profile", async () => {
-    history.replaceState(null, "", "/manage/device-profiles/profile/gone");
+    history.replaceState(null, "", "/device-profiles/profile/gone");
     const push = vi.spyOn(history, "pushState");
     const api = stubApi();
     const el = await mount(api);
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/device-profiles"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/device-profiles"));
     expect(api.getDeviceProfile).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
     expect(profileListRoot(el).querySelector('[data-row-key="p1"]')).toBeTruthy();

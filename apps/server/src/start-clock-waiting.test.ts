@@ -83,7 +83,7 @@ const html = { accept: "text/html,application/xhtml+xml" };
 const refused = { error: { code: "promotion.break_glass_invalid", params: {} } };
 
 describe("the restore's waiting app: pages", () => {
-  it.each(["/", "/manage", "/till/anything"])(
+  it.each(["/", "/", "/till/anything"])(
     "answers %s with the waiting page in English, asking for the key",
     async (path) => {
       const { app } = await waiting();
@@ -109,7 +109,7 @@ describe("the restore's waiting app: pages", () => {
 
   it("answers in Spanish to a Spanish browser", async () => {
     const { app } = await waiting();
-    const res = await app.request("/manage", { headers: { ...html, "accept-language": "es" } });
+    const res = await app.request("/", { headers: { ...html, "accept-language": "es" } });
     expect(res.status).toBe(503);
     expect(res.headers.get("vary")).toContain("Accept-Language");
     const body = await res.text();
@@ -125,7 +125,7 @@ describe("the restore's waiting app: pages", () => {
     ["GET", "/api/device/equipment", html],
     ["GET", "/setup-api/status", {}],
     ["POST", "/api/payments", html],
-    ["GET", "/manage", { accept: "application/json" }],
+    ["GET", "/", { accept: "application/json" }],
     ["POST", "/restore-clock/reading", {}],
   ] as const)("answers %s %s with server.waiting_for_clock", async (method, path, headers) => {
     const { app } = await waiting();

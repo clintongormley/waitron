@@ -449,7 +449,7 @@ async function main(): Promise<void> {
   const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
   const serverPort = process.env.WAITRON_HTTP_PORT?.trim() || result.env.WAITRON_HTTP_PORT;
   console.log(`  till       http://localhost:${tillPort}/till/`);
-  console.log(`  dashboard  http://localhost:${dashboardPort}/manage/`);
+  console.log(`  dashboard  http://localhost:${dashboardPort}/`);
   console.log(
     `  server     localhost:${serverPort}   (HTTP fresh; HTTPS with a preserved box leaf)`,
   );

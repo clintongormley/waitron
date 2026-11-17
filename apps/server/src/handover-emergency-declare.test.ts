@@ -365,7 +365,7 @@ it("previews the checked spare copy without recording a declaration", async () =
   expect(answer.body).toEqual({
     sourceNodeId: primary.nodeId,
     destinationNodeId: standby.nodeId,
-    sourceServersUrl: "https://main.example/manage/servers",
+    sourceServersUrl: "https://main.example/servers",
     copy: {
       source: "mirror-copy",
       identifier: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -589,7 +589,7 @@ it("refuses declaration even when the answering source is restricted to this spa
   external.restriction = { kind: "superseded", successorNodeId: standby.nodeId, operationId: null };
   expect((await service().post()).body.error?.code).toBe("handover.source_still_answering");
   const preview = await service().post({ signIn: request.signIn }, true, "preview");
-  expect(preview.body.error?.params?.sourceServersUrl).toBe("https://main.example/manage/servers");
+  expect(preview.body.error?.params?.sourceServersUrl).toBe("https://main.example/servers");
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });
 

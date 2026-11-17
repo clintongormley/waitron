@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 it("boots the real module recovery page before creating a dashboard session client", async () => {
-  history.replaceState(null, "", "/manage/recovery/fiscal-conflict");
+  history.replaceState(null, "", "/recovery/fiscal-conflict");
   const app = document.createElement("div");
   app.id = "app";
   document.body.append(app);
@@ -61,22 +61,22 @@ it("matches contributed paths exactly and leaves unrelated destinations to the s
     strings: { en: {}, es: {} },
     publicPages: [
       {
-        path: "/manage/recovery/example",
+        path: "/recovery/example",
         create: () => ({ render: () => html`<h1>Public procedure</h1>` }),
       },
     ],
   };
   for (const pathname of [
-    "/manage",
-    "/manage/recovery/example/child",
-    "/manage/recovery/example/",
-    "/manage/recovery/Example",
+    "/",
+    "/recovery/example/child",
+    "/recovery/example/",
+    "/recovery/Example",
   ]) {
     expect(mountPublicModulePage(app, pathname, [contribution], { locale: "en" })).toBe(false);
     expect(app.textContent).toBe("session shell");
   }
   expect(
-    mountPublicModulePage(app, "/manage/recovery/example", [contribution], { locale: "en" }),
+    mountPublicModulePage(app, "/recovery/example", [contribution], { locale: "en" }),
   ).toBe(true);
   expect(app.querySelector("h1")?.textContent).toBe("Public procedure");
 });
@@ -92,7 +92,7 @@ it("registers the matching module's strings and passes a plain request and chose
     },
     publicPages: [
       {
-        path: "/manage/recovery/example",
+        path: "/recovery/example",
         create: ({ request, locale }) => ({
           render: () =>
             html`<h1 lang=${locale}>${t("public_test.title")}</h1>
@@ -103,7 +103,7 @@ it("registers the matching module's strings and passes a plain request and chose
       },
     ],
   };
-  mountPublicModulePage(app, "/manage/recovery/example", [contribution], {
+  mountPublicModulePage(app, "/recovery/example", [contribution], {
     locale: "es",
     fetchImpl,
   });
@@ -130,7 +130,7 @@ it("refuses ambiguous duplicate paths before mounting either module", () => {
     strings: { en: {}, es: {} },
     publicPages: [
       {
-        path: "/manage/recovery/example",
+        path: "/recovery/example",
         create: () => ({ render: () => html`<h1>Wrong module</h1>` }),
       },
     ],
@@ -138,7 +138,7 @@ it("refuses ambiguous duplicate paths before mounting either module", () => {
   expect(() =>
     mountPublicModulePage(
       app,
-      "/manage/recovery/example",
+      "/recovery/example",
       [contribution, { ...contribution, module: "other" }],
       { locale: "en" },
     ),

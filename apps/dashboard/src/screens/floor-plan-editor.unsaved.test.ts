@@ -48,7 +48,7 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
 });
 
 async function mount() {
-  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1?back=%2Fmanage%2Foverview");
+  history.replaceState(null, "", "/floor-plan/set/s1/zone/z1?back=%2Foverview");
   const api = {
     liveData: new LiveData(),
     getMe: async () => ({
@@ -147,7 +147,7 @@ function unload() {
 it("an untouched editor closes without asking", async () => {
   const { app } = await mount();
   await escape(editor(app));
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 
@@ -157,7 +157,7 @@ it("Escape asks after a move, and Keep stays with the move", async () => {
   await move(el);
   await escape(el);
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
   expect(placed(el, "m1").x).toBe(5);
 });
 
@@ -166,7 +166,7 @@ it("Cancel discards a move and leaves without asking or writing", async () => {
   const el = editor(app);
   await move(el);
   el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
   expect(api.saveFloorPlan).not.toHaveBeenCalled();
 });
@@ -202,7 +202,7 @@ it("Escape on an untouched editor leaves without asking", async () => {
   const { app } = await mount();
   await expect.poll(() => editor(app).shadowRoot!.querySelector("wt-modal")?.open).toBe(true);
   await userEvent.keyboard("{Escape}");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 
@@ -213,12 +213,12 @@ it("Escape asks after a move: Keep stays with the move, Discard leaves", async (
   await move(el);
   await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
   expect(placed(el, "m1").x).toBe(5);
   el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.focus();
   await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
 });
 
 it("undoing every change closes without asking", async () => {
@@ -227,7 +227,7 @@ it("undoing every change closes without asking", async () => {
   await move(el);
   await undo(el);
   await escape(el);
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 
@@ -238,7 +238,7 @@ it("a table moved by hand back to where it was closes without asking", async () 
   await move(el, placement.x, placement.y);
   expect(button(el, "undo").disabled).toBe(false);
   await escape(el);
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 
@@ -248,10 +248,10 @@ it("a sidebar link asks before leaving a changed plan", async () => {
   await move(el);
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
 });
 
 it("opening another zone's editor asks first, and Discard opens it fresh", async () => {
@@ -259,10 +259,10 @@ it("opening another zone's editor asks first, and Discard opens it fresh", async
   const el = editor(app);
   await move(el);
   void navigationGuardFor(window)!.write(
-    new URL("/manage/floor-plan/set/s1/zone/z2", location.origin),
+    new URL("/floor-plan/set/s1/zone/z2", location.origin),
   );
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/floor-plan/set/s1/zone/z2");
+  await expect.poll(() => location.pathname).toBe("/floor-plan/set/s1/zone/z2");
   expect(api.getFloorPlan).toHaveBeenLastCalledWith("s1", "z2");
   await expect.poll(() => canvasOf(editor(app))?.tables.map((t) => t.key)).toEqual(["b1"]);
   expect(button(editor(app), "undo").disabled).toBe(true);
@@ -312,7 +312,7 @@ it("put back after a detached update, the editor still asks before Escape discar
   await move(el);
   await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
 });
 
 it("a departed save's answer cannot change a reconnected editor", async () => {
@@ -334,7 +334,7 @@ it("a departed save's answer cannot change a reconnected editor", async () => {
   expect(api.getFloorPlan).toHaveBeenCalledTimes(1);
   await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
   await choose(app, "keep");
   button(el, "save").click();
   await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(2);
@@ -355,7 +355,7 @@ it("an edit made while a save is sent still asks on Escape once the save is acce
   expect(placed(el, "m1").x).toBe(7);
   await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
 });
 
 it("an accepted save leaves without asking", async () => {
@@ -366,7 +366,7 @@ it("an accepted save leaves without asking", async () => {
   await expect.poll(() => api.getFloorPlan.mock.calls.length).toBe(2);
   await el.updateComplete;
   await escape(el);
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 
@@ -456,11 +456,11 @@ it("a typed short name turns Save on, asks before Escape, and typed back is clea
   expect(button(el, "save").disabled).toBe(false);
   await escape(el);
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  expect(location.pathname).toBe("/floor-plan/set/s1/zone/z1");
   await type(stored);
   expectSaveQuiet(el);
   await escape(el);
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(question(app).open).toBe(false);
 });
 

@@ -33,7 +33,7 @@ export const VERIFACTU_DASHBOARD: DashboardContribution = {
   ],
   publicPages: [
     {
-      path: "/manage/recovery/fiscal-conflict",
+      path: "/recovery/fiscal-conflict",
       create: ({ request, locale }) => ({
         render: () =>
           html`<vf-conflict-recovery .request=${request} .locale=${locale}></vf-conflict-recovery>`,

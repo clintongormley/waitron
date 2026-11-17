@@ -227,7 +227,7 @@ it("routes Home View as a normal link to this menu's Home tab", async () => {
   };
   const el = await mount(fixture([home]));
   expect(link(el, "home")).not.toBeNull();
-  expect(link(el, "home").getAttribute("href")).toBe("/manage/menus/menu/menu-lunch/view/home");
+  expect(link(el, "home").getAttribute("href")).toBe("/menus/menu/menu-lunch/view/home");
 });
 
 it("hides one bullet and its empty group, then restores all without changing publication", async () => {

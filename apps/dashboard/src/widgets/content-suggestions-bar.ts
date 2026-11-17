@@ -104,7 +104,7 @@ export class ContentSuggestionsBar extends LitElement {
       return [
         html`<p>
           ${t("suggestions.about")}
-          <a data-test="suggestions-connect" href="/manage/cloud">${t("suggestions.connect")}</a>
+          <a data-test="suggestions-connect" href="/cloud">${t("suggestions.connect")}</a>
         </p>`,
       ];
     if (this.service === "off") return [html`<p>${t("suggestions.off")}</p>`];

@@ -74,7 +74,7 @@ export async function mountReceiptApp(
   history.replaceState(
     null,
     "",
-    options.path ?? "/manage/venue-operations/department/bar/view/receipt",
+    options.path ?? "/venue-operations/department/bar/view/receipt",
   );
   const model = venueServiceModel(options.departments, options.zones);
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {

@@ -2785,7 +2785,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     describe("the recovery link", () => {
       const conflict = {
         code: "sif.allocation_invalid",
-        recoveryUrl: "/manage/recovery/fiscal-conflict",
+        recoveryUrl: "/recovery/fiscal-conflict",
       };
 
       it.each(["light", "dark"] as const)(
@@ -2825,7 +2825,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         getTablesState: vi.fn().mockResolvedValue(oneTableFloor()),
         ...refused({
           code: "sif.allocation_invalid",
-          recoveryUrl: "/manage/recovery/fiscal-conflict",
+          recoveryUrl: "/recovery/fiscal-conflict",
         }),
       });
       emit(tableOrder(el)!, "split-table", {
@@ -3318,7 +3318,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         await openMoveDishes(el);
         await pickMoveDish(el);
 
-        refuse({ code: "sif.allocation_invalid", recoveryUrl: "/manage/recovery/fiscal-conflict" });
+        refuse({ code: "sif.allocation_invalid", recoveryUrl: "/recovery/fiscal-conflict" });
         await flush(el, 6);
 
         expect(banner(el)!.querySelector("[data-recovery]")!.getAttribute("style")).toContain(

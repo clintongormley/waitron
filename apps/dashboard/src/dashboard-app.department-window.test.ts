@@ -7,7 +7,7 @@ import { departmentForm, mountReceiptTab } from "./testing/department-receipt-ap
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 
 it.each([

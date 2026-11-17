@@ -17,7 +17,7 @@ export const zoneSettingSearchDestinations: readonly DashboardSettingSearchDesti
         .map((zone) => ({
           id: zone.id,
           label: `${model.departments.find((department) => department.id === zone.departmentId)!.name} / ${zone.name}`,
-          path: `/manage/venue-operations/department/${encodePathSegment(zone.departmentId)}/view/zones/zone/${encodePathSegment(zone.id)}`,
+          path: `/venue-operations/department/${encodePathSegment(zone.departmentId)}/view/zones/zone/${encodePathSegment(zone.id)}`,
         }));
     },
   }));

@@ -55,7 +55,7 @@ export function renderMenuWarnings(
         return html`<li>
           <p>${t("menu_preview.allergens_unreviewed")}</p>
           <ul>
-            ${warning.products.map((product) => html`<li><a href=${`/manage/products/product/${encodeURIComponent(product.id)}`} @click=${(event: MouseEvent) => openProduct(event, product.id)}>${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a></li>`)}
+            ${warning.products.map((product) => html`<li><a href=${`/products/product/${encodeURIComponent(product.id)}`} @click=${(event: MouseEvent) => openProduct(event, product.id)}>${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a></li>`)}
           </ul>
         </li>`;
       return [];

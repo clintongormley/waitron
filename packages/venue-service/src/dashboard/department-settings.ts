@@ -1164,7 +1164,7 @@ export class DepartmentSettings extends LitElement {
                         html`${index ? ", " : nothing}<a
                             data-own-click
                             data-zone=${zone.id}
-                            href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
+                            href=${`/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
                             @click=${(e: MouseEvent) => {
                               if (leftToBrowser(e)) return;
                               e.preventDefault();

@@ -14,7 +14,7 @@ const coreDestinations: readonly DashboardSearchDestination[] = [
     id: `modifiers:${view}`,
     screen: "modifiers",
     labelKey: labelKey!,
-    path: `/manage/modifiers/view/${view}`,
+    path: `/modifiers/view/${view}`,
   })),
   ...[
     ["queue", "printers.jobs_title"],
@@ -24,19 +24,19 @@ const coreDestinations: readonly DashboardSearchDestination[] = [
     id: `printers:${view}`,
     screen: "printers",
     labelKey: labelKey!,
-    path: `/manage/printers/view/${view}`,
+    path: `/printers/view/${view}`,
   })),
   {
     id: "modules:card-providers",
     screen: "modules",
     labelKey: "modules.providers",
-    path: "/manage/modules/view/card-providers/state/all",
+    path: "/modules/view/card-providers/state/all",
   },
   {
     id: "payments:readers",
     screen: "payments",
     labelKey: "payments.readers_heading",
-    path: "/manage/payments",
+    path: "/payments",
   },
 ];
 
@@ -91,7 +91,7 @@ export function collectSearchDestinations(input: {
   for (const item of coreDestinations)
     if (pages.has(item.screen)) add(item.id, item.screen, input.label(item.labelKey), item.path);
   for (const { view } of input.calendarViews) {
-    const path = `/manage/opening-hours/view/${encodePathSegment(view.id)}`;
+    const path = `/opening-hours/view/${encodePathSegment(view.id)}`;
     add(`calendar:${view.id}`, "opening-hours", input.label(view.labelKey), path);
     for (const child of view.searchDestinations ?? []) {
       const suffix = Object.entries(child.params)
@@ -110,14 +110,14 @@ export function collectSearchDestinations(input: {
       `settings:${tab.id}`,
       "venue-settings",
       tab.label,
-      `/manage/venue-settings/view/${encodePathSegment(tab.id)}`,
+      `/venue-settings/view/${encodePathSegment(tab.id)}`,
     );
   return destinations;
 }
 
 export function validSearchDestinationPath(screen: string, path: string): boolean {
   try {
-    const prefix = `/manage/${encodePathSegment(screen)}`;
+    const prefix = `/${encodePathSegment(screen)}`;
     const parsed = new URL(path, "https://dashboard.invalid");
     return (
       parsed.origin === "https://dashboard.invalid" &&

@@ -21,17 +21,17 @@ import { formatIsoMinute } from "../date-utils.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
-beforeEach(() => history.replaceState(null, "", "/manage/menus"));
+beforeEach(() => history.replaceState(null, "", "/menus"));
 beforeEach(() => {
   const before = currentLocale();
   setLocale("en");
   onTestFinished(() => setLocale(before));
 });
 
-const LIST_PATH = "/manage/menus";
-const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
-const PREVIEW_PATH = "/manage/menus/menu/menu-lunch/view/preview";
-const PRICES_PATH = "/manage/menus/menu/menu-lunch/view/prices";
+const LIST_PATH = "/menus";
+const LUNCH_PATH = "/menus/menu/menu-lunch/view/structure";
+const PREVIEW_PATH = "/menus/menu/menu-lunch/view/preview";
+const PRICES_PATH = "/menus/menu/menu-lunch/view/prices";
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
 const LIVE_WORDS = `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`;
 

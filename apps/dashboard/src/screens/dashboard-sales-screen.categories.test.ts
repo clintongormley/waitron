@@ -776,7 +776,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
       "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
     );
     const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
-    expect(link.getAttribute("href")).toBe("/manage/printers");
+    expect(link.getAttribute("href")).toBe("/printers");
     expect(link.textContent!.trim()).toBe("Printers");
     expect(q(el, "no-printers-sign-in")).toBeNull();
     const button = q<HTMLElement & { disabled: boolean }>(el, "print-categories")!;
@@ -795,7 +795,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
       "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",
     );
     const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
-    expect(link.getAttribute("href")).toBe("/manage/printers");
+    expect(link.getAttribute("href")).toBe("/printers");
     expect(link.textContent!.trim()).toBe("Impresoras");
   });
 

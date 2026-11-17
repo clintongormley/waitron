@@ -22,7 +22,7 @@ afterEach(async () => {
   await page.viewport(...viewport);
 });
 const path = (id: string, editor = "edit", step?: string) =>
-  `/manage/printers/view/printers/printer/${id}/editor/${editor}${step ? `/step/${step}` : ""}`;
+  `/printers/view/printers/printer/${id}/editor/${editor}${step ? `/step/${step}` : ""}`;
 it.each(["en-GB", "es-ES"])(
   "declarations equal mounted controls and labels in %s",
   async (locale) => {
@@ -142,7 +142,7 @@ it("restores targets after delayed lists, Back/Forward and remount; closes and s
   await userEvent.click(
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-edit-printer]")!,
   );
-  await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  await expect.poll(() => location.pathname).toBe("/printers/view/printers/printer/p1");
   expect(location.search).toBe("?keep=yes");
   cleanupWidgets();
   const fresh = await mountPrinterApp({ path: path("pp1"), pagePrinters: [officePrinter] });
@@ -155,7 +155,7 @@ it("restores targets after delayed lists, Back/Forward and remount; closes and s
       "[data-test=save-printer-details]",
     )!,
   );
-  await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers/printer/pp1");
+  await expect.poll(() => location.pathname).toBe("/printers/view/printers/printer/pp1");
   expect(name()).toBeNull();
 });
 it.each([
@@ -181,7 +181,7 @@ it.each([
   await userEvent.click(
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=printer-details-close]")!,
   );
-  await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers");
+  await expect.poll(() => location.pathname).toBe("/printers/view/printers");
 });
 it("step changes and live reads retain calibration edits; a guarded target change asks Keep/Discard", async () => {
   const { app, api } = await mountPrinterApp({ path: path("p1", "calibrate", "1") });
@@ -256,7 +256,7 @@ it.each(["edit-cancel", "calibration-save", "calibration-escape"] as const)(
       await userEvent.click(
         screen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-printer-details]")!,
       );
-    await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+    await expect.poll(() => location.pathname).toBe("/printers/view/printers/printer/p1");
     expect(location.search).toBe("?keep=yes");
     expect(
       screen.shadowRoot!.querySelector("[name=printer-detail-name], [name=printer-ruler-number]"),

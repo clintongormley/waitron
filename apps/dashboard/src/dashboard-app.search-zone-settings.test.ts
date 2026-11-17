@@ -42,7 +42,7 @@ const zoneEditor = (app: Parameters<typeof deep>[0]) =>
 it.each(["en-GB", "es-ES"])("%s Zone name opens its editor", async (locale) => {
   const { app } = await mountReceiptApp({
     locale,
-    path: "/manage/venue-operations",
+    path: "/venue-operations",
     zones: zones.slice(0, 1),
   });
   await searchSettings(app, t("venue.order_start"));
@@ -59,12 +59,12 @@ it.each(["en-GB", "es-ES"])("%s Zone name opens its editor", async (locale) => {
   await expect
     .poll(() => zoneEditor(app.shadowRoot!)?.shadowRoot?.querySelector("[name=name]"))
     .toBeTruthy();
-  expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/zones/zone/z1");
+  expect(location.pathname).toBe("/venue-operations/department/bar/view/zones/zone/z1");
   expect(searchBox(app).value).toBe("");
 });
 it("same-zone search preserves its edited draft", async () => {
   const { app } = await mountReceiptApp({
-    path: "/manage/venue-operations/department/bar/view/zones/zone/z1",
+    path: "/venue-operations/department/bar/view/zones/zone/z1",
     zones,
     departments: [
       { id: "bar", name: "Bar" },

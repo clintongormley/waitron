@@ -109,7 +109,7 @@ function inbox(): MailpitClient {
       to: SUMMARY.messages[0]!.to,
       subject: SUMMARY.messages[0]!.subject,
       date: SUMMARY.messages[0]!.createdAt,
-      text: "Open https://waitron.local/manage/account?token=secret",
+      text: "Open https://waitron.local/account?token=secret",
     }),
   };
 }

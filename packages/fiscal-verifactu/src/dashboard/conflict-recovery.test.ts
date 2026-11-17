@@ -38,7 +38,7 @@ it("opens key-only recovery without a session or disclosing conflicts before key
       }[];
     }
   ).publicPages;
-  const page = pages?.find((entry) => entry.path === "/manage/recovery/fiscal-conflict");
+  const page = pages?.find((entry) => entry.path === "/recovery/fiscal-conflict");
   expect(page, "The module must supply its key-only public page").toBeDefined();
   const host = document.createElement("div");
   document.body.append(host);

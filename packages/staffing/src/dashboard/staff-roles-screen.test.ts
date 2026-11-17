@@ -17,7 +17,7 @@ import "./staff-roles-screen.js";
 const BASE = "/management-api/staffing/staff-roles";
 it("does not offer Access roles without permission to open it", async () => {
   await mount(fakeRequest(() => [waiter]));
-  expect(el.shadowRoot!.querySelector('a[href="/manage/access-roles"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('a[href="/access-roles"]')).toBeNull();
 });
 
 it.each(["en", "es"])("links job roles to access roles (%s)", async (locale) => {
@@ -26,7 +26,7 @@ it.each(["en", "es"])("links job roles to access roles (%s)", async (locale) => 
     fakeRequest(() => [waiter]),
     { canOpenAccessRoles: true },
   );
-  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/access-roles"]');
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/access-roles"]');
   expect(link?.textContent?.trim()).toBe(
     locale === "es"
       ? STAFFING_STRINGS.es["staffing.role.access_roles"]

@@ -49,10 +49,10 @@ type Deletion = {
   busy: boolean;
 };
 
-const PAGE = "/manage/floor-plans";
+const PAGE = "/floor-plans";
 
 export function layoutPath(setId: string, zoneId: string): string {
-  return `/manage/floor-plan/set/${encodeURIComponent(setId)}/zone/${encodeURIComponent(zoneId)}?back=${encodeURIComponent(PAGE)}`;
+  return `/floor-plan/set/${encodeURIComponent(setId)}/zone/${encodeURIComponent(zoneId)}?back=${encodeURIComponent(PAGE)}`;
 }
 
 const swatchColours = unsafeCSS(

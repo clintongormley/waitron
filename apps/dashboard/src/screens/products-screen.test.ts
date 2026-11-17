@@ -2683,7 +2683,7 @@ describe("menu-screen", () => {
   });
 
   it("opens the product named in the address", async () => {
-    history.replaceState(null, "", "/manage/products/product/p1");
+    history.replaceState(null, "", "/products/product/p1");
     const api = stubApi();
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -2691,7 +2691,7 @@ describe("menu-screen", () => {
   });
 
   it("ignores an unknown product id", async () => {
-    history.replaceState(null, "", "/manage/products/product/00000000-0000-4000-8000-000000000000");
+    history.replaceState(null, "", "/products/product/00000000-0000-4000-8000-000000000000");
     const api = stubApi();
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -2699,7 +2699,7 @@ describe("menu-screen", () => {
   });
 
   it("keeps a new product's editor when the address comes back from another page naming no product", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
@@ -2707,16 +2707,16 @@ describe("menu-screen", () => {
     emit(list(el), "add-product", { categoryId: null });
     await el.updateComplete;
     expect(editor(el).open).toBe(true);
-    history.replaceState(null, "", "/manage/profile");
+    history.replaceState(null, "", "/profile");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(editor(el).open).toBe(true);
   });
 
   it("closes a product opened from the list when Back takes its name out of the address", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
@@ -2724,8 +2724,8 @@ describe("menu-screen", () => {
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
     expect(editor(el).open).toBe(true);
-    expect(location.pathname).toBe("/manage/products/product/p1");
-    history.replaceState(null, "", "/manage/products");
+    expect(location.pathname).toBe("/products/product/p1");
+    history.replaceState(null, "", "/products");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
     expect(editor(el).open).toBe(false);
@@ -2806,7 +2806,7 @@ describe("menu-screen", () => {
         const previous = currentLocale();
         onTestFinished(() => setLocale(previous));
         setLocale(locale);
-        history.replaceState(null, "", "/manage/products/product/v1");
+        history.replaceState(null, "", "/products/product/v1");
         const api = variantApi();
         const first = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
         await flush(first.el);
@@ -2827,7 +2827,7 @@ describe("menu-screen", () => {
     );
 
     it("opens the variant named in the address", async () => {
-      history.replaceState(null, "", "/manage/products/product/v1");
+      history.replaceState(null, "", "/products/product/v1");
       const api = variantApi();
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
@@ -2837,7 +2837,7 @@ describe("menu-screen", () => {
     });
 
     it("opens a variant's page from its parent's variants section, and saves to the variant", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const api = variantApi();
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
@@ -2846,7 +2846,7 @@ describe("menu-screen", () => {
       emit(editor(el), "wt-open-product", { productId: "v1" });
       await flush(el);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/products/product/v1");
+      expect(location.pathname).toBe("/products/product/v1");
       emit(editor(el), "wt-submit", { value: variantValue });
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
@@ -2856,7 +2856,7 @@ describe("menu-screen", () => {
     // later. Neither a report that lands while the variant is still loading, nor one that lands
     // after the variant's window is already showing, is the person cancelling.
     it("keeps a variant opened from its parent when its load outlasts the parent's window closing", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const api = variantApi();
       let release!: () => void;
       const loaded = new Promise<ProductEditorValue>((resolve) => {
@@ -2874,11 +2874,11 @@ describe("menu-screen", () => {
       await flush(el);
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/products/product/v1");
+      expect(location.pathname).toBe("/products/product/v1");
     });
 
     it("keeps a variant opened from its parent when it loads before the closed window reports", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const api = variantApi();
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
@@ -2895,7 +2895,7 @@ describe("menu-screen", () => {
       await el.updateComplete;
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
-      expect(location.pathname).toBe("/manage/products/product/v1");
+      expect(location.pathname).toBe("/products/product/v1");
     });
 
     it("names extras removed for active variants with their parent and updates names after a live replacement and reopen", async () => {
@@ -2978,7 +2978,7 @@ describe("menu-screen", () => {
     });
 
     it("confirms a variant's Archive and switches the variant off through its own write", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const api = variantApi();
       // Sold out as well, so a write that resets availability while removing is caught.
       vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
@@ -3030,7 +3030,7 @@ describe("menu-screen", () => {
     });
 
     it("says how many menus a variant comes off, asking about the variant itself", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const before = currentLocale();
       setLocale("en-GB");
       onTestFinished(() => setLocale(before));
@@ -3052,7 +3052,7 @@ describe("menu-screen", () => {
     });
 
     it("reports a failed reload after a written archive as a load failure", async () => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const api = variantApi();
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
@@ -3086,7 +3086,7 @@ describe("menu-screen", () => {
     });
 
     it("names the extras lists that refuse a save inside the variant's own editor", async () => {
-      history.replaceState(null, "", "/manage/products/product/v1");
+      history.replaceState(null, "", "/products/product/v1");
       const api = variantApi();
       vi.mocked(api.getProductEditor).mockResolvedValue(variantValue);
       vi.mocked(api.updateProductEditor).mockRejectedValue({
@@ -3449,7 +3449,7 @@ describe("menu-screen", () => {
 });
 
 it("reads and writes the opened category in the address", async () => {
-  history.replaceState(null, "", "/manage/products/category/c1");
+  history.replaceState(null, "", "/products/category/c1");
   const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
@@ -3458,10 +3458,10 @@ it("reads and writes the opened category in the address", async () => {
   expect(browser.categoryId).toBe("c1");
   emit(browser, "open-category", { categoryId: "b" });
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/products/category/b");
+  expect(location.pathname).toBe("/products/category/b");
   emit(browser, "open-category", { categoryId: null });
   await el.updateComplete;
-  expect(location.pathname).toBe("/manage/products");
+  expect(location.pathname).toBe("/products");
 });
 
 describe("menu-screen sticky headings", () => {
@@ -3504,7 +3504,7 @@ describe("media editor entry", () => {
   it("honours a photo deep link from the Structure menu", async () => {
     const old = location.href;
     try {
-      history.replaceState(null, "", "/manage/products/product/p1?field=image");
+      history.replaceState(null, "", "/products/product/p1?field=image");
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
         api: stubApi(),
       });
@@ -3523,7 +3523,7 @@ describe("media editor entry", () => {
 });
 
 it("clears the photo entry target when the product editor closes", async () => {
-  history.replaceState(null, "", "/manage/products/product/p1?field=image");
+  history.replaceState(null, "", "/products/product/p1?field=image");
   const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
@@ -3536,7 +3536,7 @@ it("clears the photo entry target when the product editor closes", async () => {
 });
 
 it("closing a guarded linked product retires its field query before opening another editor", async () => {
-  history.replaceState(null, "", "/manage/products");
+  history.replaceState(null, "", "/products");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async (proceed) => {
@@ -3549,10 +3549,10 @@ it("closing a guarded linked product retires its field query before opening anot
     api: stubApi(),
   });
   await flush(el);
-  await guard.write("/manage/products/product/p1?field=name");
+  await guard.write("/products/product/p1?field=name");
   await expect.poll(() => editor(el).value?.id).toBe("p1");
   emit(editor(el), "wt-cancel", {});
-  await expect.poll(() => location.pathname).toBe("/manage/products");
+  await expect.poll(() => location.pathname).toBe("/products");
   expect(location.search).toBe("");
   emit(list(el), "edit-product", { productId: "p1" });
   await expect.poll(() => editor(el).open).toBe(true);
@@ -3708,7 +3708,7 @@ it.each([true, false])(
 
 describe("archived product entry", () => {
   it("reads archived details passively from the existing background client", async () => {
-    history.replaceState(null, "", "/manage/products");
+    history.replaceState(null, "", "/products");
     const background = stubApi({
       getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
     });
@@ -3726,7 +3726,7 @@ describe("archived product entry", () => {
   it.each(["row", "variant", "link"])(
     "opens details through %s without opening the editor",
     async (entry) => {
-      history.replaceState(null, "", "/manage/products");
+      history.replaceState(null, "", "/products");
       const archived = { ...value, active: false, id: entry === "variant" ? "v1" : "p1" };
       const api = stubApi({
         getProductEditor: vi.fn().mockResolvedValue(archived),
@@ -3757,7 +3757,7 @@ describe("archived product entry", () => {
           },
         ]),
       });
-      if (entry === "link") history.replaceState(null, "", "/manage/products/product/p1");
+      if (entry === "link") history.replaceState(null, "", "/products/product/p1");
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       await flush(el);
       if (entry !== "link") emit(list(el), "view-product", { productId: archived.id });
@@ -3771,7 +3771,7 @@ describe("archived product entry", () => {
       emit(details!, "wt-close", {});
       await flush(el);
       expect(details?.open).toBe(false);
-      expect(location.pathname).toBe("/manage/products");
+      expect(location.pathname).toBe("/products");
     },
   );
 
@@ -3793,7 +3793,7 @@ describe("archived product entry", () => {
 it("A462 Products root closure clears category URL through native tree events", async () => {
   const previousUrl = location.href;
   onTestFinished(() => history.replaceState(null, "", previousUrl));
-  history.replaceState(null, "", "/manage/products");
+  history.replaceState(null, "", "/products");
   localStorage.clear();
   sessionStorage.clear();
   const api = stubApi({
@@ -3815,7 +3815,7 @@ it("A462 Products root closure clears category URL through native tree events", 
     await productTable(el);
   }
   expect(list(el).categoryId).toBe("b");
-  expect(location.pathname).toBe("/manage/products/category/b");
+  expect(location.pathname).toBe("/products/category/b");
   const search = list(el).shadowRoot!.querySelector('[name="menu-search"]')!;
   emit(search, "wt-change", { value: "Beer" });
   await productTable(el);
@@ -3823,7 +3823,7 @@ it("A462 Products root closure clears category URL through native tree events", 
     root.querySelector<HTMLButtonElement>('tr[data-row-key="folder:b"] .row-activate')!.click();
     await productTable(el);
     expect(list(el).categoryId).toBe("b");
-    expect(location.pathname).toBe("/manage/products/category/b");
+    expect(location.pathname).toBe("/products/category/b");
   }
   emit(search, "wt-change", { value: "" });
   await productTable(el);
@@ -3836,7 +3836,7 @@ it("A462 Products root closure clears category URL through native tree events", 
   await productTable(el);
   expect(sent).toEqual([{ categoryId: null }]);
   expect(list(el).categoryId).toBeNull();
-  expect(location.pathname).toBe("/manage/products");
+  expect(location.pathname).toBe("/products");
   expect(root.querySelectorAll("tr[data-row-key]")).toHaveLength(1);
   expect(editor(el).open).toBe(false);
   expect(api.createProductEditor).not.toHaveBeenCalled();

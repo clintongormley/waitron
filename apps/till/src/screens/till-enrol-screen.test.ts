@@ -70,11 +70,11 @@ it("guides a new device to dashboard Devices during setup and approval", async (
     const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
     await flush(el);
     const guidance = () => query(el, "[data-approval-guide]") as HTMLAnchorElement | null;
-    expect(guidance()?.href).toContain("/manage/devices");
+    expect(guidance()?.href).toContain("/devices");
     expect(guidance()?.textContent).toContain("Devices");
     await knock(el);
     expect(query(el, "[data-number]")).not.toBeNull();
-    expect(guidance()?.href).toContain("/manage/devices");
+    expect(guidance()?.href).toContain("/devices");
   } finally {
     setLocale(previousLocale);
   }

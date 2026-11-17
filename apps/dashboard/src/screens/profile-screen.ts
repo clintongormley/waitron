@@ -1197,7 +1197,7 @@ export class ProfileScreen extends LitElement {
         status === "sent"
           ? nothing
           : this.canAdminister
-            ? html`<a data-test="email-settings-link" href="/manage/email"
+            ? html`<a data-test="email-settings-link" href="/email"
                 >${t(status === "captured" ? "nav.email_inbox" : "nav.email")}</a
               >`
             : html`<p>${t("profile.email_admin_help")}</p>

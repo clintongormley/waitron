@@ -24,7 +24,7 @@ afterEach(() => {
   sessionStorage.clear();
   setLocale("en-GB");
 });
-async function mount(path = "/manage/", overrides: Partial<DashboardApi> = {}) {
+async function mount(path = "/", overrides: Partial<DashboardApi> = {}) {
   history.replaceState({ external: "preserved" }, "", path);
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     api: {
@@ -90,7 +90,7 @@ it.each(["email", "password"] as const)(
     const initialSession = new Promise<never>((_resolve, reject) => {
       refuse = () => reject({ code: "management_session.required" });
     });
-    const app = await mount("/manage/", { getMe: () => initialSession });
+    const app = await mount("/", { getMe: () => initialSession });
     let input = await enter(app, "email", "draft@example.test");
     if (step === "password") {
       await userEvent.click(login(app).shadowRoot!.querySelector("wt-button[data-test=continue]")!);
@@ -119,7 +119,7 @@ it.each(["typed", "clean", "reverted"])(
   "the real login reset link acts at once with a %s password",
   async (state) => {
     const requestPasswordReset = vi.fn().mockResolvedValue(undefined);
-    const app = await mount("/manage/", { requestPasswordReset });
+    const app = await mount("/", { requestPasswordReset });
     await enter(app, "email", "ada@example.test");
     login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
     await expect.poll(() => field(app, "password")).not.toBeNull();
@@ -140,12 +140,12 @@ it.each(["typed", "clean", "reverted"])(
 );
 
 it("the dashboard's login action URL is removed by Cancel at once, keeping history state", async () => {
-  const app = await mount("/manage/account?token=synthetic&purpose=invitation");
+  const app = await mount("/account?token=synthetic&purpose=invitation");
   await enter(app, "new-password", "synthetic password");
   await enter(app, "new-pin", "4321");
   expect(unload()).toBe(false);
   login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
-  await expect.poll(() => location.pathname).toBe("/manage/");
+  await expect.poll(() => location.pathname).toBe("/");
   await expect.poll(() => field(app, "email")).not.toBeNull();
   expect(asked(app)).toBe(false);
   expect(location.search).toBe("");
@@ -157,7 +157,7 @@ it("the dashboard's login action URL is removed by Cancel at once, keeping histo
 });
 it("the actual dashboard history adapter accepts Back/Forward over a typed login email without asking", async () => {
   const app = await mount();
-  await navigationGuardFor(window)!.write("/manage/?view=login-next");
+  await navigationGuardFor(window)!.write("/?view=login-next");
   const input = await enter(app, "email", "draft@example.test");
   expect(unload()).toBe(false);
   history.back();
@@ -189,7 +189,7 @@ it("changing the login language retains the same native draft without a warning"
 it.each(["management_session.expired", "management_session.required", "person.suspended"])(
   "%s clears the retained login credentials immediately",
   async (code) => {
-    const app = await mount("/manage/account?token=synthetic&purpose=invitation");
+    const app = await mount("/account?token=synthetic&purpose=invitation");
     const screen = login(app);
     const password = await enter(app, "new-password", "synthetic password");
     const pin = await enter(app, "new-pin", "4321");
@@ -205,15 +205,15 @@ it.each(["management_session.expired", "management_session.required", "person.su
 );
 
 it("a Google callback marker stays removed after a guarded page write", async () => {
-  const app = await mount("/manage/?login=google");
+  const app = await mount("/?login=google");
   expect(location.search).toBe("");
   await new UrlStateController(app, () => {}, {
-    basePath: "/manage",
+    basePath: "/",
     primary: "dashboard",
     children: {},
   }).write({ dashboard: "overview" });
   expect(location.search).toBe("");
-  await navigationGuardFor(window)!.write(new URL("/manage/", navigationGuardFor(window)!.href));
+  await navigationGuardFor(window)!.write(new URL("/", navigationGuardFor(window)!.href));
   expect(location.search).toBe("");
   app.remove();
 });

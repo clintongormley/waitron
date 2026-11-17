@@ -2698,7 +2698,7 @@ export class DeviceProfilesScreen extends LitElement {
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
         <nav aria-label=${t("device_profiles.title")}>
           <a
-            href="/manage/device-profiles"
+            href="/device-profiles"
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;
               event.preventDefault();

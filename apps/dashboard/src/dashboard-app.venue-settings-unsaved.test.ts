@@ -71,7 +71,7 @@ async function venueServiceReads(path: string) {
   return Response.json(answers[path] ?? []);
 }
 async function mount(
-  path = "/manage/venue-settings/view/kitchen",
+  path = "/venue-settings/view/kitchen",
   locale = "en-GB",
   theme: "light" | "dark" = "light",
   apiOverrides: Partial<DashboardApi> = {},
@@ -211,19 +211,19 @@ function savedStreet(panel: HTMLElementTagNameMap["dashboard-venue-details-panel
 }
 
 it("the actual Venue details tab keeps a Venue details draft through Keep and restores it only after Discard", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const { panel, input } = await draftVenueDetails(app);
   await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(selected(app)).toBe("venue-details");
   expect(input.checkVisibility()).toBe(true);
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   await choose(app, "keep");
   expect(input.value).toBe("Different street");
   await select(app, "kitchen");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("kitchen");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(location.pathname).toBe("/venue-settings/view/kitchen");
   await panel.updateComplete;
   expect(inViewMode(panel)).toBe(true);
   expect(savedStreet(panel)).toBe("Calle Mayor 1");
@@ -231,14 +231,14 @@ it("the actual Venue details tab keeps a Venue details draft through Keep and re
 });
 
 it("real history Back waits for a Venue details draft decision and Forward restores its accepted baseline", async () => {
-  const { app } = await mount("/manage/venue-settings/view/kitchen");
+  const { app } = await mount("/venue-settings/view/kitchen");
   await select(app, "venue-details");
   const { panel, input } = await draftVenueDetails(app);
   history.back();
   await choose(app, "keep");
   expect(selected(app)).toBe("venue-details");
   expect(input.value).toBe("Different street");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   history.back();
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("kitchen");
@@ -251,11 +251,11 @@ it("real history Back waits for a Venue details draft decision and Forward resto
 });
 
 it("a Venue details draft protects sidebar, voluntary logout and language replacement before their actions", async () => {
-  const { app, logouts, locales } = await mount("/manage/venue-settings/view/venue-details");
+  const { app, logouts, locales } = await mount("/venue-settings/view/venue-details");
   const { input } = await draftVenueDetails(app);
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   expect(input.value).toBe("Different street");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
   await choose(app, "keep");
@@ -272,12 +272,12 @@ it("a Venue details draft protects sidebar, voluntary logout and language replac
   expect(input.value).toBe("Different street");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(input.isConnected).toBe(false);
 });
 
 it("forced expiry clears a Venue details draft and makes its unanswered Discard inert", async () => {
-  const { app, logouts } = await mount("/manage/venue-settings/view/venue-details");
+  const { app, logouts } = await mount("/venue-settings/view/venue-details");
   const { panel, input } = await draftVenueDetails(app);
   await select(app, "kitchen");
   const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -291,7 +291,7 @@ it("forced expiry clears a Venue details draft and makes its unanswered Discard 
   discard.click();
   expect(logouts()).toBe(0);
   expect(input.isConnected).toBe(false);
-  expect(location.pathname).toBe("/manage/");
+  expect(location.pathname).toBe("/");
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
   expect(unload.defaultPrevented).toBe(false);
@@ -324,7 +324,7 @@ async function choose(app: DashboardApp, decision: "keep" | "discard") {
 }
 
 it("ignores a repeated tab target and another leave target while deciding and changes only to the accepted target", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   await draftVenueDetails(app);
   await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
@@ -334,11 +334,11 @@ it("ignores a repeated tab target and another leave target while deciding and ch
   expect(selected(app)).toBe("venue-details");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("kitchen");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(location.pathname).toBe("/venue-settings/view/kitchen");
 });
 
 it("a reverted Venue details draft lets the real container tab switch without warning", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const { input } = await draftVenueDetails(app);
   await userEvent.fill(
     page.elementLocator(input.shadowRoot!.querySelector("input")!),
@@ -347,11 +347,11 @@ it("a reverted Venue details draft lets the real container tab switch without wa
   await select(app, "kitchen");
   await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(location.pathname).toBe("/venue-settings/view/kitchen");
 });
 
 it("a real Venue details draft stays visible through its container tab warning", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
   panel.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
@@ -398,7 +398,7 @@ function inViewMode(panel: HTMLElementTagNameMap["dashboard-venue-details-panel"
 }
 
 it("a Venue details edit with nothing changed ends when its tab is left", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const { panel } = await editVenueDetails(app);
   await select(app, "kitchen");
   await expect.poll(() => selected(app)).toBe("kitchen");
@@ -409,7 +409,7 @@ it("a Venue details edit with nothing changed ends when its tab is left", async 
 });
 
 it("a changed Venue details edit survives Keep and ends in view mode after Discard", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const { panel, street } = await editVenueDetails(app);
   await userEvent.fill(
     page.elementLocator(street.shadowRoot!.querySelector("input")!),
@@ -435,7 +435,7 @@ it("a changed Venue details edit survives Keep and ends in view mode after Disca
 });
 
 it("keyboard tab navigation holds the edited panel until Discard", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { app } = await mount("/venue-settings/view/venue-details");
   const { input } = await draftVenueDetails(app);
   tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.focus();
   await userEvent.keyboard("{End}");
@@ -455,7 +455,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
         const { app, host } = await mount(
-          "/manage/venue-settings/view/venue-details",
+          "/venue-settings/view/venue-details",
           locale,
           theme,
         );
@@ -584,7 +584,7 @@ it("the Receipts tab's Escape protects the appearance before closing", async () 
 });
 
 it("an obsolete receipt department query cannot bypass a venue draft leave decision", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details?departmentId=bar");
+  const { app } = await mount("/venue-settings/view/venue-details?departmentId=bar");
   const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   await expect.poll(() => details.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
   await userEvent.click(
@@ -629,7 +629,7 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
     permissions: ["venue.view", "venue.configure"],
     modules: ["venue-service", "kitchen-test"],
   }));
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getMe,
     renameTaxpayer: async (input: { legalName: string }) => {
       legalName = input.legalName;
@@ -654,7 +654,7 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
   await expect.poll(banner).toBe("New SL");
   expect(getMe.mock.calls.length).toBe(calls + 1);
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
 });
 
 async function openLegalName(app: DashboardApp, typed?: string) {
@@ -913,7 +913,7 @@ it("the newest banner read wins when two reads finish in the opposite order", as
     .fn()
     .mockResolvedValueOnce(response("Initial SL"))
     .mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getMe,
   });
   const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
@@ -948,7 +948,7 @@ it("a failed banner read keeps the name the banner shows", async () => {
       modules: ["venue-service", "kitchen-test"],
     })
     .mockRejectedValue(new Error("network"));
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getMe,
   });
   const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
@@ -1017,7 +1017,7 @@ function storedDefaults() {
 
 it("Venue details hosts the Defaults card, whose Save stays quiet until the draft changes", async () => {
   const { getVenueDefaults, put } = storedDefaults();
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
@@ -1039,7 +1039,7 @@ it("Venue details hosts the Defaults card, whose Save stays quiet until the draf
 it.each([["venue.view"], ["venue.configure"], ["booking.manage"]])(
   "the hosted Defaults card gate matches the server for %j",
   async (permission) => {
-    const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {}, [
+    const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {}, [
       permission,
     ]);
     expect(defaultsPanel(app) !== null).toBe(permission === "venue.view");
@@ -1049,7 +1049,7 @@ it.each([["venue.view"], ["venue.configure"], ["booking.manage"]])(
 it("saving the Defaults card preserves a separate venue-details draft", async () => {
   const { getVenueDefaults, put } = storedDefaults();
   const detailsWrite = vi.fn<DashboardApi["patchVenueDetails"]>();
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
     putVenueDefaults: put,
@@ -1075,15 +1075,15 @@ it("saving the Defaults card preserves a separate venue-details draft", async ()
   expect(detailsWrite).not.toHaveBeenCalled();
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   expect(name.value).toBe("Draft venue");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
 });
 
 it("the hosted Defaults card protects sidebar navigation through Keep and Discard", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
   });
@@ -1094,10 +1094,10 @@ it("the hosted Defaults card protects sidebar navigation through Keep and Discar
   await choose(app, "keep");
   expect(panel.checkVisibility()).toBe(true);
   expect(languageField(panel).value).toBe("ca-ES");
-  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(location.pathname).toBe("/venue-settings/view/venue-details");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(panel.isConnected).toBe(false);
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -1106,7 +1106,7 @@ it("the hosted Defaults card protects sidebar navigation through Keep and Discar
 
 it("leaving Venue settings with a changed Privacy draft asks, and Discard leaves without a write", async () => {
   const put = vi.fn<DashboardApi["putVenuePrivacy"]>();
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: "privacy@example.com" }),
     putVenuePrivacy: put,
@@ -1124,7 +1124,7 @@ it("leaving Venue settings with a changed Privacy draft asks, and Discard leaves
   );
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  await expect.poll(() => location.pathname).toBe("/overview");
   expect(put).not.toHaveBeenCalled();
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
@@ -1132,7 +1132,7 @@ it("leaving Venue settings with a changed Privacy draft asks, and Discard leaves
 });
 
 it("the Venue details tab's five cards are spaced evenly", async () => {
-  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
     getVenueDefaults: async () => defaultsModel,
     getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
   });
@@ -1161,7 +1161,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         registerIcons(DASHBOARD_ICONS);
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
-        const { app } = await mount("/manage/venue-settings/view/venue-details", locale, theme, {
+        const { app } = await mount("/venue-settings/view/venue-details", locale, theme, {
           getVenueDefaults: async () => defaultsModel,
           getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         });

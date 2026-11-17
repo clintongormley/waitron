@@ -114,7 +114,7 @@ it("on a full start's primary, /handover/emergency goes to Servers", async () =>
   for (const path of ["/handover/emergency", "/handover/emergency/"]) {
     const answer = await app.request(path, { headers: { Accept: "text/html" } });
     expect(answer.status).toBe(302);
-    expect(answer.headers.get("location")).toBe("/manage/servers");
+    expect(answer.headers.get("location")).toBe("/servers");
   }
   expect((await app.request(`/handover/${OP}`, { headers: { Accept: "text/html" } })).status).toBe(
     200,

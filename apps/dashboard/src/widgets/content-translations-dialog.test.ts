@@ -480,15 +480,15 @@ describe("staged translation dialog", () => {
     expect(
       links.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
     ).toEqual([
-      ["Abrir STAFF Bread", "/manage/products/product/prod-1"],
-      ["Abrir STAFF Bread › STAFF Small", "/manage/products/product/var-1"],
-      ["Abrir STAFF Doneness", "/manage/modifiers/view/options/list/list-1"],
-      ["Abrir STAFF Doneness › STAFF Rare", "/manage/modifiers/view/options/list/list-1"],
-      ["Abrir STAFF Sides", "/manage/modifiers/view/extras/list/extras-1"],
-      ["Abrir Lunch", "/manage/menus/menu/menu-1/view/structure"],
-      ["Abrir Lunch › STAFF Drinks", "/manage/menus/menu/menu-1/view/structure"],
-      ["Abrir Lunch › STAFF Coffee", "/manage/menus/menu/menu-1/view/structure"],
-      ["Abrir portion", "/manage/units"],
+      ["Abrir STAFF Bread", "/products/product/prod-1"],
+      ["Abrir STAFF Bread › STAFF Small", "/products/product/var-1"],
+      ["Abrir STAFF Doneness", "/modifiers/view/options/list/list-1"],
+      ["Abrir STAFF Doneness › STAFF Rare", "/modifiers/view/options/list/list-1"],
+      ["Abrir STAFF Sides", "/modifiers/view/extras/list/extras-1"],
+      ["Abrir Lunch", "/menus/menu/menu-1/view/structure"],
+      ["Abrir Lunch › STAFF Drinks", "/menus/menu/menu-1/view/structure"],
+      ["Abrir Lunch › STAFF Coffee", "/menus/menu/menu-1/view/structure"],
+      ["Abrir portion", "/units"],
     ]);
     const kinds = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!;
     expect(kinds.options.map(({ value }) => value)).toEqual([
@@ -838,7 +838,7 @@ describe("staged translation dialog", () => {
       q(unavailable.el, `[data-unavailable='["product","one","es","name"]']`)?.textContent?.trim(),
     ).toBe(t("translations.unavailable"));
     expect(q<HTMLAnchorElement>(unavailable.el, "a")!.getAttribute("href")).toBe(
-      "/manage/products/product/one",
+      "/products/product/one",
     );
     expect(
       q<HTMLElementTagNameMap["wt-button"]>(unavailable.el, "[data-test=save]")!.disabled,

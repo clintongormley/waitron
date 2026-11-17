@@ -34,14 +34,14 @@ it.each(["en-GB", "es-ES"])(
     );
     expect(new Map(declared)).toEqual(new Map(actual));
     expect(declared).toHaveLength(new Map(declared).size);
-    expect(location.pathname).toBe("/manage/payments");
+    expect(location.pathname).toBe("/payments");
   },
 );
 it("linked reader follows history/remount and close/unknown cleanup", async () => {
   const { app } = await mountReaderApp();
   const push = vi.spyOn(history, "pushState");
   await navigationGuardFor(window)!.write(
-    new URL("/manage/payments/reader/r1", location.origin).href,
+    new URL("/payments/reader/r1", location.origin).href,
     false,
   );
   await readyReaderEditor(app);
@@ -60,19 +60,19 @@ it("linked reader follows history/remount and close/unknown cleanup", async () =
   const closed = dialogClosed(modal);
   await userEvent.click(modal.querySelector<HTMLElement>("[data-test=close-reader-editor]")!);
   await closed;
-  await expect.poll(() => location.pathname).toBe("/manage/payments");
+  await expect.poll(() => location.pathname).toBe("/payments");
   expect(screen.shadowRoot!.activeElement).toBe(screen.shadowRoot!.querySelector("h1"));
   await navigationGuardFor(window)!.write(
-    new URL("/manage/payments/reader/missing", location.origin).href,
+    new URL("/payments/reader/missing", location.origin).href,
     false,
   );
-  await expect.poll(() => location.pathname).toBe("/manage/payments");
+  await expect.poll(() => location.pathname).toBe("/payments");
   expect(screen.shadowRoot!.querySelector("[data-test=reader-editor]")).toBeNull();
 });
 it("live reads retain the linked draft and disappearance clears its address", async () => {
   let rows = [reader];
   const { app, api } = await mountReaderApp({
-    path: "/manage/payments/reader/r1",
+    path: "/payments/reader/r1",
     respond: (path) =>
       path === "/management-api/payments/readers"
         ? Promise.resolve(new Response(JSON.stringify(rows)))
@@ -93,6 +93,6 @@ it("live reads retain the linked draft and disappearance clears its address", as
   await expect
     .poll(() => readerScreen(app).shadowRoot!.querySelector("[data-test=reader-editor]"))
     .toBeNull();
-  expect(location.pathname).toBe("/manage/payments");
+  expect(location.pathname).toBe("/payments");
   expect(readerScreen(app).shadowRoot!.textContent).toContain(codeMessage("reader.not_found"));
 });

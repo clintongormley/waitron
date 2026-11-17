@@ -26,7 +26,7 @@ export function deviceSettingSearchDestinations(
         .map((row) => ({
           id: row.id,
           label: row.label,
-          path: `/manage/devices/device/${encodePathSegment(row.id)}`,
+          path: `/devices/device/${encodePathSegment(row.id)}`,
         }));
     },
   }));

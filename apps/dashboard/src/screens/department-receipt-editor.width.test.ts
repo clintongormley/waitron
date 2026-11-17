@@ -23,7 +23,7 @@ beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 const json = (body: unknown) =>
   Promise.resolve(

@@ -52,7 +52,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 async function mount(
-  path = "/manage/",
+  path = "/",
   overrides: Partial<DashboardApi> = {},
   theme: "light" | "dark" = "light",
 ) {
@@ -140,15 +140,15 @@ it("typed email never installs the unload warning nor holds navigation", async (
   await change(screen, "email", "draft@example.test");
   expect(unload()).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(await guard!.write("/manage/other")).toBe("proceeded");
+  expect(await guard!.write("/other")).toBe("proceeded");
   expect(asked(app)).toBe(false);
 });
 it("email navigation proceeds at once without touching the typed email and preserves history state", async () => {
   const { app, screen } = await mount();
   await change(screen, "email", "draft@example.test");
-  expect(await guard!.write("/manage/other")).toBe("proceeded");
+  expect(await guard!.write("/other")).toBe("proceeded");
   expect(asked(app)).toBe(false);
-  expect(location.pathname).toBe("/manage/other");
+  expect(location.pathname).toBe("/other");
   expect(value(screen, "email")).toBe("draft@example.test");
   expect(history.state).toMatchObject({ external: "retained", __wtNavigation: expect.any(Object) });
 });
@@ -175,7 +175,7 @@ it("switching to Google with a typed password redirects without asking", async (
 });
 it("a failed login keeps the unchanged request body and Change account still leaves without asking", async () => {
   const bodies: unknown[] = [];
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     login: async (body) => {
       bodies.push(body);
       throw { code: "password.invalid" };
@@ -204,14 +204,14 @@ it("successful login reports the authenticated result with no unload warning", a
 it.each(["invitation", "password_reset"])(
   "%s Cancel with typed credentials removes only the action without asking",
   async (purpose) => {
-    const { app, screen } = await mount(`/manage/account?token=synthetic&purpose=${purpose}`);
+    const { app, screen } = await mount(`/account?token=synthetic&purpose=${purpose}`);
     await change(screen, "new-password", "synthetic new password");
     if (purpose === "invitation") await change(screen, "new-pin", "4321");
     expect(unload()).toBe(false);
     await click(screen, "cancel-account-action");
     await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
     expect(asked(app)).toBe(false);
-    expect(location.pathname).toBe("/manage/");
+    expect(location.pathname).toBe("/");
     expect(location.search).toBe("");
     expect(history.state).toMatchObject({ external: "retained" });
     expect(unload()).toBe(false);
@@ -219,7 +219,7 @@ it.each(["invitation", "password_reset"])(
 );
 it("accepted account credentials leave the action URL with no question or warning", async () => {
   const { app, screen, completions } = await mount(
-    "/manage/account?token=synthetic&purpose=invitation",
+    "/account?token=synthetic&purpose=invitation",
   );
   await change(screen, "new-password", "synthetic new password");
   await change(screen, "new-pin", "4321");
@@ -230,7 +230,7 @@ it("accepted account credentials leave the action URL with no question or warnin
   expect(unload()).toBe(false);
 });
 it("Back from an entered factor and changing its mode act at once and clear its code", async () => {
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     login: async () => {
       throw { code: "totp.required" };
     },
@@ -272,7 +272,7 @@ it("disconnect clears typed secrets", async () => {
 it.each(["empty", "code"])(
   "optional passkey setup with %s input signs in on Skip without asking",
   async (field) => {
-    const { app, screen } = await mount("/manage/", {
+    const { app, screen } = await mount("/", {
       login: async () => ({ personId: "p1", offerPasskey: true }),
       passkeyRegisterOptions: async () => {
         throw { code: "totp.invalid" };
@@ -305,7 +305,7 @@ it("switching to a passkey opens its native prompt at once without asking", asyn
     prompts++;
     throw new DOMException("Synthetic cancellation", "NotAllowedError");
   });
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     passkeyAuthOptions: async () => ({
       challengeHandle: "synthetic",
       options: { challenge: "AQID" },
@@ -323,7 +323,7 @@ it("switching to a passkey opens its native prompt at once without asking", asyn
 it("an accepted account write moves on with the submitted values even after later input", async () => {
   const pending = deferred<{ personId: string; authenticated: boolean }>();
   const bodies: unknown[][] = [];
-  const { app, screen } = await mount("/manage/account?token=synthetic&purpose=invitation", {
+  const { app, screen } = await mount("/account?token=synthetic&purpose=invitation", {
     completeAccountAction: async (...args) => {
       bodies.push(args);
       return pending.promise;
@@ -344,7 +344,7 @@ it.each(["resolve", "reject"])(
   "a departed login %s cannot authenticate or replace a reconnected draft",
   async (settlement) => {
     const pending = deferred<{ personId: string; offerPasskey: boolean }>();
-    const { app, screen } = await mount("/manage/", { login: async () => pending.promise });
+    const { app, screen } = await mount("/", { login: async () => pending.promise });
     await password(screen);
     await change(screen, "password", "departed synthetic password");
     const results: unknown[] = [];
@@ -367,7 +367,7 @@ it.each(["resolve", "reject"])(
 );
 it("a cancelled account inspection never reopens or changes the later login form", async () => {
   const inspection = deferred<{ email: string; purpose: "invitation" }>();
-  history.replaceState(null, "", "/manage/account?token=synthetic&purpose=invitation");
+  history.replaceState(null, "", "/account?token=synthetic&purpose=invitation");
   const { el: app } = await mountWidget<LoginLeaveApp>("login-leave-test-app", {
     api: {
       getGoogleConfig: async () => ({ configured: false }),
@@ -388,7 +388,7 @@ it("a cancelled account inspection never reopens or changes the later login form
 
 it("requesting a reset with a typed password changes to the read-only notice without asking", async () => {
   const resets: string[] = [];
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     requestPasswordReset: async (email) => {
       resets.push(email);
     },
@@ -405,7 +405,7 @@ it("requesting a reset with a typed password changes to the read-only notice wit
 });
 it("Google's delayed reply redirects without asking about input entered while it ran", async () => {
   const reply = deferred<{ authorizationUrl: string }>();
-  const { app, screen } = await mount("/manage/", { beginGoogleLogin: async () => reply.promise });
+  const { app, screen } = await mount("/", { beginGoogleLogin: async () => reply.promise });
   await password(screen);
   await click(screen, "google-login");
   await change(screen, "password", "newer synthetic password");
@@ -417,7 +417,7 @@ it("Google's delayed reply redirects without asking about input entered while it
 });
 it("switching to recovery mode clears only the code and sends the new recovery request unchanged", async () => {
   const bodies: unknown[] = [];
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     login: async (body) => {
       bodies.push(body);
       if (bodies.length === 1) throw { code: "totp.required" };
@@ -494,7 +494,7 @@ function registrationApi(seen: Promise<void>, verifies: unknown[]): Partial<Dash
 it("a passkey is verified without a name or unload warning before offer bookkeeping answers", async () => {
   const seen = deferred<void>();
   const verifies: unknown[] = [];
-  const { screen } = await mount("/manage/", registrationApi(seen.promise, verifies));
+  const { screen } = await mount("/", registrationApi(seen.promise, verifies));
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "submit");
@@ -516,7 +516,7 @@ for (const locale of ["en-GB", "es-ES"])
       it(`native Change account leaves a typed password without asking, ${locale}, ${theme}, ${width}`, async () => {
         setLocale(locale);
         await page.viewport(width, 900);
-        const { app, screen } = await mount("/manage/", {}, theme);
+        const { app, screen } = await mount("/", {}, theme);
         await password(screen);
         const input =
           screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -538,7 +538,7 @@ for (const locale of ["en-GB", "es-ES"])
 it("a verified passkey signs in with no unload warning while its answer is pending", async () => {
   const verify = deferred<{ credentialId: string }>();
   const requests: unknown[] = [];
-  const { app, screen } = await mount("/manage/", {
+  const { app, screen } = await mount("/", {
     ...registrationApi(Promise.resolve(), []),
     passkeyRegisterVerify: async (body) => {
       requests.push(body);
@@ -571,7 +571,7 @@ it("a successful autofill passkey sends the authenticated event with no unload w
     },
   );
   vi.spyOn(navigator.credentials, "get").mockImplementation(async () => credential.promise);
-  const { screen } = await mount("/manage/", {
+  const { screen } = await mount("/", {
     passkeyAuthOptions: async () => ({
       challengeHandle: "synthetic",
       options: { challenge: "AQID" },
@@ -602,7 +602,7 @@ it.each(["email", "password", "new-password", "new-pin", "one-time-code"])(
   async (name) => {
     const action = name.startsWith("new-");
     const { app, screen } = await mount(
-      action ? "/manage/account?token=synthetic&purpose=invitation" : "/manage/",
+      action ? "/account?token=synthetic&purpose=invitation" : "/",
       {
         login: async () => {
           if (name === "one-time-code") throw { code: "totp.required" };
@@ -629,8 +629,8 @@ it.each(["email", "password", "new-password", "new-pin", "one-time-code"])(
       }),
     );
     expect(unload()).toBe(false);
-    expect(await guard!.write("/manage/other")).toBe("proceeded");
+    expect(await guard!.write("/other")).toBe("proceeded");
     expect(asked(app)).toBe(false);
-    expect(location.pathname).toBe("/manage/other");
+    expect(location.pathname).toBe("/other");
   },
 );

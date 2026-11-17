@@ -25,7 +25,7 @@ class ModulesLeaveApp extends LitElement {
 customElements.define("modules-leave-test", ModulesLeaveApp);
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/modules");
+  history.replaceState(null, "", "/modules");
 });
 afterEach(() => {
   cleanupWidgets();
@@ -74,7 +74,7 @@ for (const reason of ["escape", "back"] as const) {
           scopes: "all",
           reason: "navigation",
           proceed: () => {
-            history.replaceState(null, "", "/manage");
+            history.replaceState(null, "", "/");
             screen.remove();
           },
         });
@@ -83,7 +83,7 @@ for (const reason of ["escape", "back"] as const) {
     await choose(app, "keep");
     expect(input.value).toBe("sk_test_synthetic");
     expect(dialog.open).toBe(true);
-    expect(location.pathname).toBe("/manage/modules");
+    expect(location.pathname).toBe("/modules");
     await close();
     await choose(app, "discard");
     await vi.waitFor(() =>

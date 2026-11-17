@@ -71,7 +71,7 @@ const notice = (el: ModulesScreen) =>
     ?.shadowRoot?.querySelector("[role=alert] .message");
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+  history.replaceState(null, "", "/modules/view/card-providers/state/all");
 });
 afterEach(() => {
   cleanupWidgets();

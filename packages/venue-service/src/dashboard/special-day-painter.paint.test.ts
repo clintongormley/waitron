@@ -1248,7 +1248,7 @@ it.each(["season", "stored special day"])(
       },
     };
     const address = location.href;
-    history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+    history.replaceState(null, "", "/opening-hours/view/month/month/2026-12");
     const screen = document.createElement("dashboard-opening-hours-screen");
     const api = specialDayApi([], answers);
     const month = monthModel();

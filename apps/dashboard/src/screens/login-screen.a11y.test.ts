@@ -114,7 +114,7 @@ describe.each(["light", "dark"] as const)("login-screen a11y (%s theme)", (theme
     history.replaceState(
       null,
       "",
-      "/manage/account?token=token-1&purpose=invitation#email=new%40example.test",
+      "/account?token=token-1&purpose=invitation#email=new%40example.test",
     );
     const { el, host } = await mountWidget<LoginScreen>(
       "dashboard-login-screen",

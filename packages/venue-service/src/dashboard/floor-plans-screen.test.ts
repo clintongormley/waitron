@@ -137,11 +137,11 @@ it("links each zone row to its set's layout in the editor, and back to this page
   const link = cell(table, "zone:dinner:terrace", "name").querySelector("a")!;
   expect(text(link)).toBe("Terrace");
   expect(link.getAttribute("href")).toBe(
-    "/manage/floor-plan/set/dinner/zone/terrace?back=%2Fmanage%2Ffloor-plans",
+    "/floor-plan/set/dinner/zone/terrace?back=%2Ffloor-plans",
   );
   expect(link.getAttribute("aria-label")).toBe("Terrace · Dinner");
   expect(cell(table, "zone:standard:inside", "name").querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/floor-plan/set/standard/zone/inside?back=%2Fmanage%2Ffloor-plans",
+    "/floor-plan/set/standard/zone/inside?back=%2Ffloor-plans",
   );
 });
 

@@ -122,7 +122,7 @@ class OpeningLeaveApp extends LitElement {
 customElements.define("opening-leave-test-app", OpeningLeaveApp);
 let app: OpeningLeaveApp;
 const originalUrl = location.href;
-beforeEach(() => history.replaceState(null, "", "/manage/opening-hours/view/year"));
+beforeEach(() => history.replaceState(null, "", "/opening-hours/view/year"));
 afterEach(() => {
   app?.remove();
   setLocale("en");
@@ -148,7 +148,7 @@ async function choose(decision: "keep" | "discard") {
 describe.each(["en", "es"])("Year discard (%s)", (locale) => {
   it("protects a changed special day through close and reconnect", async () => {
     setLocale(locale);
-    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    history.replaceState(null, "", "/opening-hours/view/year/year/2026");
     app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
     applyTokens(app);
     document.body.append(app);

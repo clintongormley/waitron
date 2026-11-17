@@ -81,7 +81,7 @@ it.each([false, true])(
   "opens the report from the real dashboard banner (signed in=%s)",
   async (signedIn) => {
     vi.stubGlobal("isSecureContext", true);
-    history.replaceState(null, "", "/manage/");
+    history.replaceState(null, "", "/");
     vi.stubGlobal(
       "PublicKeyCredential",
       class {

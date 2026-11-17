@@ -18,7 +18,7 @@ import "./department-receipt-editor.js";
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
-  history.replaceState(null, "", "/manage");
+  history.replaceState(null, "", "/");
 });
 async function mount() {
   let model = structuredClone(receiptModel);

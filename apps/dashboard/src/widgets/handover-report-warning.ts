@@ -67,7 +67,7 @@ export class HandoverReportWarning extends LitElement {
                   : html`${this.hasEmergencyHandover ? html`<span>${t("handover_warning.unconfirmed")}</span>` : nothing}
                     ${this.hasReturnedInvoices ? html`<span>${t("handover_warning.returned")}</span>` : nothing}`
               }
-              ${this.status === "unconfirmed" ? html`<a href="/manage/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
+              ${this.status === "unconfirmed" ? html`<a href="/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
               <wt-button .disabled=${this.loading} @click=${() => void this.#load()}
                 >${t("handover_warning.refresh")}</wt-button
               >

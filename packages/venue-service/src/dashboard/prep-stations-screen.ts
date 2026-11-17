@@ -110,7 +110,7 @@ function screenDevices(devices: PrepStationsView["devices"], stationId: string) 
           html`<a
             part="devices-link"
             data-test="screen-device"
-            href=${`/manage/devices/device/${encodeURIComponent(device.id)}`}
+            href=${`/devices/device/${encodeURIComponent(device.id)}`}
             >${device.label}</a
           >`,
       );
@@ -208,7 +208,7 @@ export class PrepStationsScreen extends LitElement {
       }
     },
     {
-      basePath: "/manage",
+      basePath: "/",
       primary: "dashboard",
       children: { "prep-stations": { view: "view", station: "station" }, "*": { view: "view" } },
     },
@@ -536,7 +536,7 @@ export class PrepStationsScreen extends LitElement {
           .map((part) =>
             part.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole),
           );
-        return html`<p>${before}<a href="/manage/devices">${t("prep.devices")}</a>${after}</p>`;
+        return html`<p>${before}<a href="/devices">${t("prep.devices")}</a>${after}</p>`;
       })}
     </section>`;
   }

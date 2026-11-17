@@ -19,10 +19,10 @@ describe.each(["light", "dark"] as const)("load wrapper accessibility (%s)", (th
       null,
       "",
       state === "settings"
-        ? "/manage/venue-operations/department/d1"
+        ? "/venue-operations/department/d1"
         : state === "missing"
-          ? "/manage/venue-operations/department/gone"
-          : "/manage/venue-operations",
+          ? "/venue-operations/department/gone"
+          : "/venue-operations",
     );
     await mountThemed("<div></div>", theme);
     const loader = document.createElement("a10-load-a11y") as VenueOperationsLoader;

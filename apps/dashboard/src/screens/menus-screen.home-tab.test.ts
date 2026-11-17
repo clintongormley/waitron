@@ -29,7 +29,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
 
-const HOME_PATH = "/manage/menus/menu/menu-lunch/view/home";
+const HOME_PATH = "/menus/menu/menu-lunch/view/home";
 
 function product(id: string, name: string, overrides: Partial<Product> = {}): Product {
   return {
@@ -409,7 +409,7 @@ describe("the Structure tab without the home", () => {
   it("makes no home read on the Structure tab, opened from its address or from the Home page tab", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });
-    history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
+    history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client });
     await vi.waitFor(() => expect(q(el, "dashboard-menu-structure-table")).not.toBeNull());
     live.invalidate([{ type: "sections" }]);
@@ -709,7 +709,7 @@ describe("the Home page tab's shortcuts", () => {
     const client = api({ moveHomeShortcut: vi.fn(() => refusal.promise) });
     const el = await mountHome(client);
     emit(preview(el)!, "wt-shortcut-move", { memberId: "t-chips", to: 0 });
-    await toMenu(el, "/manage/menus/menu/menu-dinner/view/home", "Dinner Menu");
+    await toMenu(el, "/menus/menu/menu-dinner/view/home", "Dinner Menu");
     const lunchReads = () =>
       client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
     const before = lunchReads();
@@ -726,7 +726,7 @@ describe("the Home page tab's shortcuts", () => {
     const el = await mountHome(client);
     emit(preview(el)!, "wt-shortcut-remove", { memberId: "t-chips" });
     await vi.waitFor(() => expect(client.removeHomeShortcut).toHaveBeenCalled());
-    await toMenu(el, "/manage/menus/menu/menu-dinner/view/home", "Dinner Menu");
+    await toMenu(el, "/menus/menu/menu-dinner/view/home", "Dinner Menu");
     refusal.reject({ code: "menu_section.not_found" });
     await new Promise((resolve) => setTimeout(resolve, 20));
     await el.updateComplete;
@@ -988,7 +988,7 @@ describe("adding shortcuts on the Home page tab", () => {
     await choose(el, ["p-lemonade", "p-burger", "p-lager"]);
     pressAdd(el);
     await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(1));
-    await toMenu(el, "/manage/menus/menu/menu-dinner/view/home", "Dinner Menu");
+    await toMenu(el, "/menus/menu/menu-dinner/view/home", "Dinner Menu");
     const lunchReads = () =>
       client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
     const before = lunchReads();

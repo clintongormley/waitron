@@ -40,7 +40,7 @@ export function mountPrinterApp(
   } = {},
 ) {
   return mountReceiptApp({
-    path: "/manage/printers/view/printers",
+    path: "/printers/view/printers",
     permissions: ["venue.view", "hardware.manage"],
     modules: [],
     ...options,

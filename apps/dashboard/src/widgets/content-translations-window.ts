@@ -43,19 +43,19 @@ export function translationEditorHref(
   switch (row.kind) {
     case "product":
     case "variant":
-      return `/manage/products/product/${id}`;
+      return `/products/product/${id}`;
     case "option_list":
-      return `/manage/modifiers/view/options/list/${id}`;
+      return `/modifiers/view/options/list/${id}`;
     case "option_label":
-      return `/manage/modifiers/view/options/list/${parent}`;
+      return `/modifiers/view/options/list/${parent}`;
     case "extra_list":
-      return `/manage/modifiers/view/extras/list/${id}`;
+      return `/modifiers/view/extras/list/${id}`;
     case "menu":
     case "section":
     case "included_menu":
-      return `/manage/menus/menu/${parent}/view/structure`;
+      return `/menus/menu/${parent}/view/structure`;
     case "unit":
-      return "/manage/units";
+      return "/units";
   }
 }
 

@@ -805,7 +805,7 @@ export class MenuPreviewPanel extends LitElement {
                           : html`<a
                               ?data-own-click=${target.kind !== "home"}
                               data-change-id=${change.id}
-                              href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/${target.kind === "home" ? "home" : "preview"}`}
+                              href=${`/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/${target.kind === "home" ? "home" : "preview"}`}
                               @click=${target.kind === "home" ? nothing : (event: MouseEvent) => void this.#navigate(event, change, target)}
                               >(${t("menu_preview.view_change")})</a
                             >`
@@ -814,7 +814,7 @@ export class MenuPreviewPanel extends LitElement {
                       <a
                         data-own-click
                         data-hide-change=${change.id}
-                        href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/preview`}
+                        href=${`/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/preview`}
                         @click=${(event: MouseEvent) => void this.#hide(event, change, preview)}
                         >${t("menu_preview.hide_change")}</a
                       >
@@ -862,20 +862,20 @@ export class MenuPreviewPanel extends LitElement {
         return html`<a
           data-own-click
           data-edit-change=${change.id}
-          href=${`/manage/products/product/${encodeURIComponent(action.productId)}`}
+          href=${`/products/product/${encodeURIComponent(action.productId)}`}
           @click=${(event: MouseEvent) => openProduct(event, action.productId)}
           >${t("product.edit")}</a
         >`;
       case "edit_menu":
         return html`<a
           data-edit-change=${change.id}
-          href=${`/manage/menus/menu/${encodeURIComponent(action.menuId)}/view/${action.tab}`}
+          href=${`/menus/menu/${encodeURIComponent(action.menuId)}/view/${action.tab}`}
           >${fill("menu_preview.edit_menu", { menu: change.includedMenu?.name ?? "" })}</a
         >`;
       case "edit_extras_list":
         return html`<a
           data-edit-change=${change.id}
-          href=${`/manage/modifiers/view/extras/list/${encodeURIComponent(action.listId)}`}
+          href=${`/modifiers/view/extras/list/${encodeURIComponent(action.listId)}`}
           >${t("extras.edit")}</a
         >`;
       default:
@@ -965,7 +965,7 @@ export class MenuPreviewPanel extends LitElement {
       .map((part) => {
         if (part.type === "literal") return part.value;
         const menu = this.includedBy[index++]!;
-        return html`<a href=${`/manage/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
+        return html`<a href=${`/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
           >${menu.name}</a
         >`;
       });
@@ -1021,7 +1021,7 @@ export class MenuPreviewPanel extends LitElement {
             }),
           );
         }}
-        href=${`/manage/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices/filter/clashes`}
+        href=${`/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices/filter/clashes`}
         >${t("menu_prices.show_clashes")}</a
       >
     </section>`;

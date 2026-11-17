@@ -30,7 +30,7 @@ export function mountHandoverPage(
           deps.servesDashboard === true &&
           (await readHandoverRestriction(deps.node, deps.nodeId)) === null
         )
-          return c.redirect("/manage/servers", 302);
+          return c.redirect("/servers", 302);
         return c.notFound();
       }
     } else {

@@ -2447,14 +2447,14 @@ export class DashboardApp extends LitElement {
   #demoBar(authenticated: boolean): TemplateResult | typeof nothing {
     if (this.onboardingIntent !== "demo" && this.onboardingIntent !== "prepare") return nothing;
     const links = [
-      { label: t("demo_bar.dashboard"), href: "/manage", current: true },
+      { label: t("demo_bar.dashboard"), href: "/", current: true },
       { label: t("demo_bar.device"), href: "/till/" },
       ...(this.onboardingIntent === "demo" &&
       (!authenticated || this.#sessionPermissions.includes("person.admin"))
-        ? [{ label: t("nav.email_inbox"), href: "/manage/email" }]
+        ? [{ label: t("nav.email_inbox"), href: "/email" }]
         : []),
       ...(!authenticated || this.#canOpenScreen("demo-printer")
-        ? [{ label: t("demo_printer.title"), href: "/manage/demo-printer" }]
+        ? [{ label: t("demo_printer.title"), href: "/demo-printer" }]
         : []),
     ];
     return html`<wt-demo-bar

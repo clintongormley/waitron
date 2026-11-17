@@ -71,7 +71,7 @@ it.each(["en-GB", "es-ES"])("declarations equal mounted names and labels in %s",
       devices: [row],
       kitchen,
       stations: "empty" in variant ? [] : undefined,
-      path: "/manage/devices/device/d1",
+      path: "/devices/device/d1",
     });
     const screen = deviceScreen(app);
     await expect
@@ -116,7 +116,7 @@ it.each(["en-GB", "es-ES"])("declarations equal mounted names and labels in %s",
 it("reader refusal still hides its field after the other editor reads settle", async () => {
   let refused = false;
   const { app } = await mountDeviceApp({
-    path: "/manage/devices/device/d1",
+    path: "/devices/device/d1",
     respond: (path) => {
       if (!path.endsWith("/d1/reader")) return undefined;
       refused = true;

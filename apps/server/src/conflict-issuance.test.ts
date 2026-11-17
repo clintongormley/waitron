@@ -96,7 +96,7 @@ describe("conflict issuance preflights over real routes", () => {
       params: { reason: "issuance_refused" },
     });
     expect(charged.json).toMatchObject({
-      params: { recoveryUrl: "/manage/recovery/fiscal-conflict" },
+      params: { recoveryUrl: "/recovery/fiscal-conflict" },
     });
     expect(
       suite.db.all(
@@ -118,7 +118,7 @@ describe("conflict issuance preflights over real routes", () => {
     const answer = await pay(billId, part(method));
     expect(answer.json).toMatchObject(refusal);
     expect(answer.json).toMatchObject({
-      params: { recoveryUrl: "/manage/recovery/fiscal-conflict" },
+      params: { recoveryUrl: "/recovery/fiscal-conflict" },
     });
     expect(venue.card.collectCalls).toHaveLength(sends);
     expect(

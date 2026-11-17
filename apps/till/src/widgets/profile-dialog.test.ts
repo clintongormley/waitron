@@ -129,7 +129,7 @@ it.each(["en", "es"])("unfinished card offers check and sign in in %s", async (l
   try {
     const el = await mountDialog({ notice: { code: "device.payment_in_progress" } });
     const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]");
-    expect(link?.getAttribute("href")).toBe("/manage/check-card-payments");
+    expect(link?.getAttribute("href")).toBe("/check-card-payments");
     expect(link?.textContent).toBe(t("bill_pay.card_recovery_open"));
     expect(await bottom(el)).toContain(t("profile.payment_recovery"));
     expect(picker(el).error).toBe("");

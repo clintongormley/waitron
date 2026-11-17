@@ -46,15 +46,15 @@ it("resolves only active departments to encoded Details, Tables and Transfers ad
     {
       id: "room / west",
       label: "Restaurant",
-      path: "/manage/venue-operations/department/room%20%2F%20west",
+      path: "/venue-operations/department/room%20%2F%20west",
     },
-    { id: "d2", label: "Deli", path: "/manage/venue-operations/department/d2" },
+    { id: "d2", label: "Deli", path: "/venue-operations/department/d2" },
   ]);
   expect((await resolve("courseSettings", ctx))[0]?.path).toBe(
-    "/manage/venue-operations/department/room%20%2F%20west/view/tables",
+    "/venue-operations/department/room%20%2F%20west/view/tables",
   );
   expect((await resolve("receivingProfileId", ctx))[0]?.path).toBe(
-    "/manage/venue-operations/department/room%20%2F%20west/view/transfers",
+    "/venue-operations/department/room%20%2F%20west/view/transfers",
   );
   expect(request.mock.calls).toEqual(
     Array.from({ length: 3 }, () => [
@@ -114,6 +114,6 @@ it("finds How it sells only where takeaway VAT applies, and Starts as only in de
   model.takeawayVat = true;
   expect((await resolve("dining", ctx)).map((row) => row.id)).toEqual(["d1", "d2"]);
   expect(await resolve("diningStartsAs", ctx)).toEqual([
-    { id: "d1", label: "Restaurant", path: "/manage/venue-operations/department/d1/view/service" },
+    { id: "d1", label: "Restaurant", path: "/venue-operations/department/d1/view/service" },
   ]);
 });

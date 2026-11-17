@@ -76,7 +76,7 @@ it.each(["en", "es-ES"])(
         },
         setHomeDisplay,
       } as unknown as DashboardApi;
-      history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
+      history.replaceState(null, "", "/menus/menu/menu/view/home");
       const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api });
       const slider = () =>
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-slider"]>(

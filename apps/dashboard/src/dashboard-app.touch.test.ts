@@ -113,7 +113,7 @@ it.each<[number, number, "capped" | "page", number]>([
   "at %i×%i Structure native drags follow %s scrolling and leave the other container still",
   async (width, height, mode, wholeRows) => {
     await page.viewport(width, height);
-    history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
+    history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const products = Array.from({ length: 40 }, (_, index) => ({
       id: `p${index}`,
       name: `Product ${index}`,
