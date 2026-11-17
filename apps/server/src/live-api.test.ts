@@ -14,6 +14,7 @@ import {
   installChangeFeed,
   subscribeToChanges,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -227,7 +228,7 @@ it("closes the stream with session-invalid when the person is suspended while it
       .where(eq(dashboardSessions.tokenHash, hashSessionToken(session.token)));
     await suite.db
       .update(persons)
-      .set({ status: "suspended" })
+      .set(withFoldedPersonChanges({ status: "suspended" }))
       .where(eq(persons.id, row!.personId));
     bus.publish({ resources: [{ type: "printers", id: "p1" }] });
     expect(new TextDecoder().decode((await reader.read()).value)).toBe(

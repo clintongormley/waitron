@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -526,9 +526,15 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
           .where(eq(dashboardSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).not.toBe(oldActivity);
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, manager.id));
     expect((await send(manager.cookie)).status).toBe(403);
-    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "active" }))
+      .where(eq(persons.id, manager.id));
     await suite.db
       .update(dashboardSessions)
       .set({ lastSeenAt: new Date(Date.now() - 3600000).toISOString() })
@@ -770,7 +776,10 @@ it("refresh and revoke require a live manager and exact Origin; revoke rechecks 
       await new Promise<void>((resolve) => {
         release = resolve;
       });
-      await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, manager.id));
     });
     const refreshing = f.client.refresh();
     await started;
@@ -795,7 +804,10 @@ it("refresh and revoke require a live manager and exact Origin; revoke rechecks 
     expect((await revoking).status).toBe(403);
     expect(f.requests.some((v) => v[2] === "revoke")).toBe(false);
     f.delay(async () => {});
-    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "active" }))
+      .where(eq(persons.id, manager.id));
     primary = false;
     expect((await send("revoke")).status).toBe(200);
     expect((await f.client.status()).installation?.state).toBe("revoked");
@@ -853,7 +865,10 @@ it("Stop access records the stop with the replacement after the permission reche
       await new Promise<void>((resolve) => {
         release = resolve;
       });
-      await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, manager.id));
     });
     const refreshing = f.client.refresh();
     await started;
@@ -878,7 +893,10 @@ it("Stop access records the stop with the replacement after the permission reche
     expect((await revoking).status).toBe(403);
     expect(stops).toEqual([]);
     f.delay(async () => {});
-    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "active" }))
+      .where(eq(persons.id, manager.id));
     expect((await send()).status).toBe(200);
     expect(stops).toEqual([0]);
     expect((await f.client.status()).installation?.state).toBe("revoked");
@@ -1053,7 +1071,7 @@ for (const change of ["the manager is suspended", "the box stops being the prima
           ? async () => {
               await suite.db
                 .update(persons)
-                .set({ status: "suspended" })
+                .set(withFoldedPersonChanges({ status: "suspended" }))
                 .where(eq(persons.id, manager.id));
             }
           : async () => {
@@ -1068,7 +1086,10 @@ for (const change of ["the manager is suspended", "the box stops being the prima
           : [409, "cloud.not_primary"],
       );
     } finally {
-      await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "active" }))
+        .where(eq(persons.id, manager.id));
       await f.close();
     }
   });

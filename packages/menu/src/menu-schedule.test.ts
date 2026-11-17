@@ -15,6 +15,7 @@ import {
   UNIQUE_VIOLATION,
   withTransaction,
   type Transaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import { racePair, useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
@@ -234,7 +235,7 @@ const writtenTables = (statements: readonly string[]) =>
 
 beforeEach(async () => {
   f = await menusFixture(fx.db);
-  await fx.db.insert(persons).values({ id: ANA, displayName: "Manager Ana" });
+  await fx.db.insert(persons).values(withFoldedPersonKeys({ id: ANA, displayName: "Manager Ana" }));
   const hash = await hashOf(f.lunch);
   v1 = (await app((tx) => publishMenu(tx, f.lunch, hash, "person-1", { at: NOW }))).versionId;
 });

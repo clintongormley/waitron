@@ -7,6 +7,7 @@ import {
   kitchenStations,
   persons,
   withTransaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import { seedDevice, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -22,10 +23,12 @@ const at = new Date("2026-11-12T22:00:00Z");
 async function fixture() {
   return withTransaction(suite.db, async (tx) => {
     await seedVenue(tx, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
-    await tx.insert(persons).values([
-      { id: "staff", displayName: "Staff" },
-      { id: "manager", displayName: "Manager" },
-    ]);
+    await tx.insert(persons).values(
+      withFoldedPersonKeys([
+        { id: "staff", displayName: "Staff" },
+        { id: "manager", displayName: "Manager" },
+      ]),
+    );
     const { deviceId } = await seedDevice(tx);
     const actor = { personId: "staff", deviceId, authorizedBy: "manager" };
     const zone = await seedZone(tx, { name: "Terrace" });

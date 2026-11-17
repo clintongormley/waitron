@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import {
   replaceTransferredSettings,
   readActivityForSubject,
@@ -64,7 +65,10 @@ describe("the settings table", () => {
   });
   it("names its saver by a real person", async () => {
     expect(() => insert("probe", "{}", 1, 1, "missing")).toThrow(/FOREIGN KEY/);
-    const [person] = await suite.db.insert(persons).values({ displayName: "Owner" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Owner" }))
+      .returning();
     insert("probe", "{}", 1, 1, person!.id);
     insert("system");
     expect(() => suite.db.execute(sql`delete from persons where id = ${person!.id}`)).toThrow(
@@ -169,7 +173,10 @@ describe("settings documents", () => {
     });
   });
   it("stores the checked document and the saver with the server time", async () => {
-    const [person] = await suite.db.insert(persons).values({ displayName: "Owner" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Owner" }))
+      .returning();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-09T12:00:00.000Z"));
     try {
@@ -238,7 +245,9 @@ describe("settings documents", () => {
   it("a save records who saved which document and the revision it made", async () => {
     const people = await suite.db
       .insert(persons)
-      .values([{ displayName: "First saver" }, { displayName: "Second saver" }])
+      .values(
+        withFoldedPersonKeys([{ displayName: "First saver" }, { displayName: "Second saver" }]),
+      )
       .returning();
     await save({ size: 2, unit: "cm" }, 0, people[0]!.id);
     await save({ size: 3, unit: "in" }, 1, people[1]!.id);
@@ -347,7 +356,10 @@ describe("replaceTransferredSettings", () => {
     parse: (doc: unknown) => ({ ok: true as const, doc: doc as object }),
   });
   it("replaces only the named documents, resetting revision and saver, and clears an omitted document", async () => {
-    const [person] = await suite.db.insert(persons).values({ displayName: "Saver" }).returning();
+    const [person] = await suite.db
+      .insert(persons)
+      .values(withFoldedPersonKeys({ displayName: "Saver" }))
+      .returning();
     suite.db.execute(
       sql`insert into settings values ('probe', 1, 4, '{}', '2026-11-09T12:00:00.000Z', ${person!.id}), ('other', 1, 2, '{"keep":true}', '2026-11-09T12:00:00.000Z', null)`,
     );

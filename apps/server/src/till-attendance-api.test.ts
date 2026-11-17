@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -241,7 +241,7 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended"] as const)(
     if (kind === "suspended")
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.personId));
     const before = await snapshot();
     for (const [path, body] of routes) {
@@ -473,7 +473,7 @@ it("lets a legitimate request queued behind another transaction write its own co
   const holder = withTransaction(suite.db, async (tx) => {
     await tx
       .update(persons)
-      .set({ displayName: "Updated supervisor" })
+      .set(withFoldedPersonChanges({ displayName: "Updated supervisor" }))
       .where(eq(persons.id, managerId));
     entered.resolve();
     await release.promise;
@@ -508,11 +508,14 @@ it.each(["active", "demoted", "suspended"] as const)(
       withTransaction(suite.db, async (tx) => {
         if (kind === "demoted") await setBuiltInRoleForTest(tx, managerId, "staff");
         else if (kind === "suspended")
-          await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
+          await tx
+            .update(persons)
+            .set(withFoldedPersonChanges({ status: "suspended" }))
+            .where(eq(persons.id, managerId));
         else
           await tx
             .update(persons)
-            .set({ displayName: "Still a supervisor" })
+            .set(withFoldedPersonChanges({ displayName: "Still a supervisor" }))
             .where(eq(persons.id, managerId));
       }),
     );

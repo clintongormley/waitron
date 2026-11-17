@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -62,7 +62,7 @@ describe("signed-in own till clock routes", () => {
     const holder = withTransaction(suite.db, async (tx) => {
       await tx
         .update(persons)
-        .set({ displayName: "Owner updated" })
+        .set(withFoldedPersonChanges({ displayName: "Owner updated" }))
         .where(eq(persons.email, "owner@example.test"));
       entered.resolve();
       await release.promise;
@@ -167,7 +167,7 @@ describe("signed-in own till clock routes", () => {
         if (change === "person")
           await tx
             .update(persons)
-            .set({ status: "suspended" })
+            .set(withFoldedPersonChanges({ status: "suspended" }))
             .where(eq(persons.id, venue.personId));
         entered.resolve();
         await releaseWriter.promise;
@@ -396,12 +396,15 @@ describe("signed-in own till clock routes", () => {
   it("refuses a revoked person or ended session", async () => {
     await suite.db
       .update(persons)
-      .set({ status: "suspended" })
+      .set(withFoldedPersonChanges({ status: "suspended" }))
       .where(eq(persons.id, venue.personId));
     const revoked = await request("in");
     expect(revoked.status).toBe(403);
     expect(await revoked.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, venue.personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "active" }))
+      .where(eq(persons.id, venue.personId));
     await withTransaction(suite.db, (tx) =>
       tx
         .update(tillSessions)

@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import {
   endManagementSession,
   hashSessionToken,
@@ -276,7 +276,11 @@ describe("both routes", () => {
 
     it(`refuses a disabled administrator's live session at ${route}`, async () => {
       const admin = await ownAdmin();
-      suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, admin.id)).run();
+      suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, admin.id))
+        .run();
       await refused(await ask(withTaxId(route, "12345678Z"), admin.cookie), 403, {
         code: "person.suspended",
         params: { personId: admin.id },
@@ -388,7 +392,10 @@ describe("the invoice customer download", () => {
     const admin = await ownAdmin();
     const render = async () => {
       await withTransaction(suite.db, async (tx) => {
-        await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, admin.id));
+        await tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, admin.id));
       });
       return stubPdf();
     };

@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { generateSync } from "otplib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, persons } from "@waitron/identity";
@@ -594,7 +594,11 @@ describe("passkey registration's own-credential check", () => {
     const cookie = await login(app, MANAGER_EMAIL);
     await suite.db
       .update(persons)
-      .set({ totpSecret: encryptTotpSecret(SECRET, { version: 1, key: TOTP_KEY }) })
+      .set(
+        withFoldedPersonChanges({
+          totpSecret: encryptTotpSecret(SECRET, { version: 1, key: TOTP_KEY }),
+        }),
+      )
       .where(eq(persons.id, managerId));
     const options = (body: Record<string, unknown>) =>
       app.request("/management-api/passkey/register/options", {
@@ -663,7 +667,10 @@ describe("what the browser's password manager is told", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-abc");
-    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, managerId));
     mockVerifyAuth.mockResolvedValue(authVerified(1));
 
     const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });

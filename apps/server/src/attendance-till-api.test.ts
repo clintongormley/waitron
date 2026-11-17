@@ -6,7 +6,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { devices, persons, newId, withTransaction } from "@waitron/db";
+import { devices, persons, newId, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tillSessions } from "@waitron/identity";
@@ -40,7 +40,7 @@ beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
   await suite.db
     .update(persons)
-    .set({ displayName: "Worker", pinHash: fixturePinHash("1234") })
+    .set(withFoldedPersonChanges({ displayName: "Worker", pinHash: fixturePinHash("1234") }))
     .where(eq(persons.id, OPERATOR));
   await setBuiltInRoleForTest(suite.db, OPERATOR, "admin");
   const [device] = await suite.db

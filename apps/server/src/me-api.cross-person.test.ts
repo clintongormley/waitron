@@ -41,7 +41,7 @@ describe("your profile", () => {
     const personId = await seedPerson("Profile owner");
     const colleagueId = await seedPerson("Colleague");
     await suite.db.execute(
-      sql`update persons set email='profile@example.com', password_hash=${fixturePasswordHash("current password")} where id=${personId}`,
+      sql`update persons set email='profile@example.com', email_folded = 'profile@example.com', password_hash=${fixturePasswordHash("current password")} where id=${personId}`,
     );
     const cookie = await cookieFor(personId);
     const app = mountApp();

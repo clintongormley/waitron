@@ -16,6 +16,7 @@ import {
   withTransaction,
   workingOrders,
   workingOrderLines,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
@@ -619,7 +620,10 @@ describe("approval through the route (plan D6)", () => {
       }
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, active!.id)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, active!.id)),
       );
     }
   });
@@ -1374,7 +1378,10 @@ describe("what the till reads", () => {
     });
 
     await inTx(venue, (tx) =>
-      tx.update(persons).set({ locale: "en-GB" }).where(eq(persons.id, venue.staffId)),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ locale: "en-GB" }))
+        .where(eq(persons.id, venue.staffId)),
     );
     try {
       const english = await send(venue.app, venue.cookie.staff, "GET", "/api/adjustment-reasons");
@@ -1385,7 +1392,10 @@ describe("what the till reads", () => {
       ).toBe("Guest complaint");
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(persons).set({ locale: null }).where(eq(persons.id, venue.staffId)),
+        tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ locale: null }))
+          .where(eq(persons.id, venue.staffId)),
       );
     }
   });

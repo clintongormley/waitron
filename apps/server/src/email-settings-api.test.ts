@@ -4,7 +4,12 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { readActivityForSubject, settings as documents, withTransaction } from "@waitron/db";
+import {
+  readActivityForSubject,
+  settings as documents,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, startManagementSession } from "@waitron/identity";
@@ -529,7 +534,10 @@ describe("SMTP settings boundary cases", () => {
   it("refuses a test when the authenticated person has no email address", async () => {
     const venue = await setupVenue();
     await withTransaction(suite.db, (tx) =>
-      tx.update(persons).set({ email: null }).where(eq(persons.email, "manager@example.test")),
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ email: null }))
+        .where(eq(persons.email, "manager@example.test")),
     );
     const response = await mount().request(path + "/test", {
       method: "POST",
@@ -576,7 +584,7 @@ it("allows another database write while an SMTP settings upload is unfinished", 
   const write = withTransaction(suite.db, async (tx) => {
     await tx
       .update(persons)
-      .set({ displayName: "Saved beside slow upload" })
+      .set(withFoldedPersonChanges({ displayName: "Saved beside slow upload" }))
       .where(eq(persons.email, "manager@example.test"));
     return true;
   });
@@ -880,7 +888,7 @@ describe("removing saved SMTP settings", () => {
         await withTransaction(suite.db, (tx) =>
           tx
             .update(persons)
-            .set({ status: "suspended" })
+            .set(withFoldedPersonChanges({ status: "suspended" }))
             .where(eq(persons.email, "owner@example.test")),
         );
       const before = await suite.db.select().from(venueCredentials);

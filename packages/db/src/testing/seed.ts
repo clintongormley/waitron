@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "../schema/identity/fold.js";
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { mediaImages, mediaBlobs } from "../schema/media/images.js";
 import { withPrinter } from "../station-printer-list.js";
@@ -338,7 +339,7 @@ export async function seedPerson(
   const id = input.id ?? newId();
   await db
     .insert(persons)
-    .values({ id, displayName: input.displayName ?? "Test person" })
+    .values(withFoldedPersonKeys({ id, displayName: input.displayName ?? "Test person" }))
     .onConflictDoNothing({ target: persons.id });
   return id;
 }

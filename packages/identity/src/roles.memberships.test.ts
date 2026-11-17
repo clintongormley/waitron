@@ -7,6 +7,7 @@ import {
   persons,
   roles,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
@@ -276,7 +277,10 @@ it("backs out memberships, log and mail when removing the last usable Admin", as
 
 it("keeps an outstanding invitation usable after adding a role", async () => {
   const { input, target } = await fixture(true);
-  await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, target.id));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "pending" }))
+    .where(eq(persons.id, target.id));
   const action = await withTransaction(suite.db, (tx) =>
     issueAccountAction(tx, { personId: target.id, purpose: "invitation" }),
   );
@@ -295,7 +299,10 @@ it("keeps an outstanding invitation usable after adding a role", async () => {
 
 it("still records a membership when the recipient has no email", async () => {
   const { target, input } = await fixture();
-  await suite.db.update(persons).set({ email: null }).where(eq(persons.id, target.id));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ email: null }))
+    .where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input));
   expect(
     await suite.db
@@ -308,7 +315,10 @@ it("still records a membership when the recipient has no email", async () => {
 
 it("records a pending person's role change without emailing them", async () => {
   const { target, input } = await fixture();
-  await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, target.id));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "pending" }))
+    .where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => identity.setPersonAccessRoles(tx, input));
   expect(
     await suite.db

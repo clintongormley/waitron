@@ -2,7 +2,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -179,7 +179,7 @@ it.each(["absent", "ended", "expired", "suspended"] as const)(
     if (kind === "suspended")
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.personId));
     const before = snapshot();
     for (const route of routes()) {

@@ -6,6 +6,7 @@ import {
   persons,
   roles,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions } from "@waitron/identity";
@@ -203,10 +204,10 @@ it("a Manager with person.admin can invite someone new without person.email", as
 it("the membership route cannot demote the last usable Admin", async () => {
   const f = await fixture("email", "admin");
   await setBuiltInRoleForTest(suite.db, f.manager.id, "admin");
-  await suite.db.update(persons).set({ passwordHash: null });
+  await suite.db.update(persons).set(withFoldedPersonChanges({ passwordHash: null }));
   await suite.db
     .update(persons)
-    .set({ passwordHash: "target-password" })
+    .set(withFoldedPersonChanges({ passwordHash: "target-password" }))
     .where(eq(persons.id, f.target.id));
   const builtIns = await suite.db.select().from(roles);
   const response = await f.send(`/management-api/staff/${f.target.id}/access-roles`, "PUT", {

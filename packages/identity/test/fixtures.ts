@@ -1,3 +1,4 @@
+import { foldForUniqueness } from "@waitron/db";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "./person-rows.js";
 import { captureError, withTransaction } from "@waitron/db";
@@ -76,7 +77,7 @@ export async function seedManager(
   const personId = await seedPerson(db, opts.role ?? "manager", opts.status ?? "active");
   await withTransaction(db, (tx) =>
     tx.execute(
-      sql`update persons set password_hash = ${hashPassword("correct horse")}, email = ${opts.email} where id = ${personId}`,
+      sql`update persons set password_hash = ${hashPassword("correct horse")}, email = ${opts.email}, email_folded = ${foldForUniqueness(opts.email)} where id = ${personId}`,
     ),
   );
   return personId;

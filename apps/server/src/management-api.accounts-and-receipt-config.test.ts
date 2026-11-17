@@ -28,6 +28,7 @@ import {
   roles,
   withTransaction,
   type Transaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -2280,7 +2281,9 @@ describe("Management API — fresh sign-in for people changes", () => {
       if (action === "invitation" || action === "reactivate")
         await suite.db
           .update(persons)
-          .set({ status: action === "invitation" ? "pending" : "suspended" })
+          .set(
+            withFoldedPersonChanges({ status: action === "invitation" ? "pending" : "suspended" }),
+          )
           .where(eq(persons.id, staffId));
       let primary = true;
       const app = mountApp(
@@ -2995,7 +2998,7 @@ describe("A998 staff route authority", () => {
       await setBuiltInRoleForTest(suite.db, staffId, role as "admin" | "staff");
       await suite.db
         .update(persons)
-        .set({ status: status as "active" | "pending" | "suspended" })
+        .set(withFoldedPersonChanges({ status: status as "active" | "pending" | "suspended" }))
         .where(eq(persons.id, staffId));
       const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
       const sent: Parameters<MailSink>[0][] = [];
@@ -3047,7 +3050,10 @@ describe("A998 staff route authority", () => {
 
 it("rechecks person.admin authority lost after the invitation preflight", async () => {
   const { staffId } = await setupVenue();
-  await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, staffId));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "pending" }))
+    .where(eq(persons.id, staffId));
   const sent: Parameters<MailSink>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
@@ -3328,7 +3334,7 @@ it("keeps the remote Google ceremony and its return on the staff origin", async 
   const { managerId } = await setupVenue();
   await suite.db
     .update(persons)
-    .set({ googleSubject: "remote-google" })
+    .set(withFoldedPersonChanges({ googleSubject: "remote-google" }))
     .where(eq(persons.id, managerId));
   const exchange = vi.fn<typeof exchangeGoogleCode>().mockImplementation(async (config) => {
     if (config.redirectUri !== "https://staff.example.test/management-api/google/callback")
@@ -3390,7 +3396,11 @@ describe("queued invitation answers", () => {
         if (action === "invitation" || action === "reactivate")
           await suite.db
             .update(persons)
-            .set({ status: action === "invitation" ? "pending" : "suspended" })
+            .set(
+              withFoldedPersonChanges({
+                status: action === "invitation" ? "pending" : "suspended",
+              }),
+            )
             .where(eq(persons.id, staffId));
         const app = mountApp(undefined, undefined, undefined, noopLog, async () => mode);
         const cookie = await login(app, "owner@example.test", "dashPass123");

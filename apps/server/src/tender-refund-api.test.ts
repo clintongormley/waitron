@@ -16,6 +16,7 @@ import {
   printJobs,
   withTransaction,
   floorZones,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -271,7 +272,7 @@ it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspe
     if (kind === "suspended") {
       await store.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.supervisorId));
       code = "device_profile.not_admitted";
       http = 403;

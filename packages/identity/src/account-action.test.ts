@@ -1,3 +1,4 @@
+import { foldForUniqueness } from "@waitron/db";
 import { randomBytes, randomUUID, randomInt, scrypt } from "node:crypto";
 import {
   CORE_MIGRATIONS,
@@ -75,7 +76,7 @@ describe("management account actions", () => {
     const personId = await seedManager(suite.db, { email: "hash-original@x.com" });
     const codeKey = Buffer.alloc(32, 17);
     await suite.db.execute(
-      sql`update persons set pending_email='hash-a@x.com' where id=${personId}`,
+      sql`update persons set pending_email='hash-a@x.com', pending_email_folded = 'hash-a@x.com' where id=${personId}`,
     );
     const issued = await run((tx) =>
       issueQueuedAccountAction(
@@ -85,7 +86,7 @@ describe("management account actions", () => {
       ),
     );
     await suite.db.execute(
-      sql`update persons set pending_email='hash-b@x.com' where id=${personId}`,
+      sql`update persons set pending_email='hash-b@x.com', pending_email_folded = 'hash-b@x.com' where id=${personId}`,
     );
     expect(
       await run((tx) => confirmEmailChangeByCode(tx, { personId, codeKey, code: issued!.code! })),
@@ -105,7 +106,7 @@ describe("management account actions", () => {
       .mockImplementationOnce(() => 123456)
       .mockImplementationOnce(() => 654321);
     await suite.db.execute(
-      sql`update persons set pending_email='newer-a@x.com' where id=${personId}`,
+      sql`update persons set pending_email='newer-a@x.com', pending_email_folded = 'newer-a@x.com' where id=${personId}`,
     );
     const a = await run((tx) =>
       issueQueuedAccountAction(
@@ -115,7 +116,7 @@ describe("management account actions", () => {
       ),
     );
     await suite.db.execute(
-      sql`update persons set pending_email='newer-b@x.com' where id=${personId}`,
+      sql`update persons set pending_email='newer-b@x.com', pending_email_folded = 'newer-b@x.com' where id=${personId}`,
     );
     const b = await run((tx) =>
       issueQueuedAccountAction(
@@ -210,7 +211,7 @@ describe("management account actions", () => {
     const codeKey = Buffer.alloc(32, 7);
     const personId = await seedManager(suite.db, { email: "code@x.com" });
     await suite.db.execute(
-      sql`update persons set pending_email = 'changed@x.com' where id = ${personId}`,
+      sql`update persons set pending_email = 'changed@x.com', pending_email_folded = 'changed@x.com' where id = ${personId}`,
     );
     const issued = await run((tx) =>
       issueAccountAction(tx, {
@@ -493,7 +494,9 @@ describe("management account actions", () => {
 
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {
     const personId = await seedManager(suite.db, { email: "known@x.com" });
-    await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
+    await suite.db.execute(
+      sql`update persons set email = 'Known@X.com', email_folded = 'known@x.com' where id = ${personId}`,
+    );
     await expect(
       run((tx) => queuedRecoveryAction(tx, { email: "  KNOWN@X.COM  " })),
     ).resolves.toMatchObject({ personId, email: "Known@X.com", purpose: "password_reset" });
@@ -766,7 +769,7 @@ describe("issuing an account action refuses an account that cannot receive one",
     const personId = await seedManager(suite.db, { email: "issue-target@x.com" });
     for (const pendingEmail of [null, "not-an-address"]) {
       await suite.db.execute(
-        sql`update persons set pending_email=${pendingEmail} where id=${personId}`,
+        sql`update persons set pending_email=${pendingEmail}, pending_email_folded = ${pendingEmail === null ? null : foldForUniqueness(pendingEmail)} where id=${personId}`,
       );
       expect(
         await codeOf(() =>
@@ -1289,7 +1292,7 @@ describe("an account action issued before a backward clock step", () => {
     const codeKey = Buffer.alloc(32, 11);
     const personId = await seedManager(suite.db, { email: "step-code@x.com" });
     await suite.db.execute(
-      sql`update persons set pending_email = 'step-changed@x.com' where id = ${personId}`,
+      sql`update persons set pending_email = 'step-changed@x.com', pending_email_folded = 'step-changed@x.com' where id = ${personId}`,
     );
     const issue = (now: Date) =>
       run((tx) =>
@@ -1383,7 +1386,7 @@ describe("queued account actions", () => {
       },
     ]);
     await suite.db.execute(
-      sql`update persons set pending_email = 'new-address@x.com' where id = ${personId}`,
+      sql`update persons set pending_email = 'new-address@x.com', pending_email_folded = 'new-address@x.com' where id = ${personId}`,
     );
     expect(
       await run((tx) =>

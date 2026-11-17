@@ -1,4 +1,4 @@
-import { staffRoles, personStaffRoles } from "@waitron/db";
+import { staffRoles, personStaffRoles, withFoldedPersonChanges } from "@waitron/db";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -310,7 +310,10 @@ describe("settled-tender refund authorization before reservation", () => {
     "rejects a %s operator with a surviving session",
     async (status) => {
       const t = await target();
-      await store.db.update(persons).set({ status }).where(eq(persons.id, personId));
+      await store.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status }))
+        .where(eq(persons.id, personId));
       await refused(t, "device_profile.not_admitted");
     },
   );
@@ -355,7 +358,7 @@ describe("settled-tender refund authorization before reservation", () => {
       if (kind === "suspended")
         await store.db
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, managerId));
       else if (kind === "no-permission") await setBuiltInRoleForTest(store.db, managerId, "staff");
       await refused(
@@ -448,7 +451,7 @@ describe("settled-tender refund authorization before reservation", () => {
       if (kind === "suspended")
         await store.db
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, managerId));
       else if (kind === "no-permission") await setBuiltInRoleForTest(store.db, managerId, "staff");
       await refused(
@@ -465,7 +468,10 @@ describe("settled-tender refund authorization before reservation", () => {
     const t = await target("card", "manual");
     watchDerivationsAndLock(store.db, PIN, () =>
       withTransaction(store.db, async (tx) => {
-        await tx.update(persons).set({ locale: "es" }).where(eq(persons.id, managerId));
+        await tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ locale: "es" }))
+          .where(eq(persons.id, managerId));
       }),
     );
     expect(
@@ -481,7 +487,10 @@ describe("settled-tender refund authorization before reservation", () => {
     await role("staff");
     watchDerivationsAndLock(store.db, PIN, () =>
       withTransaction(store.db, async (tx) => {
-        await tx.update(persons).set({ locale: "es" }).where(eq(persons.id, managerId));
+        await tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ locale: "es" }))
+          .where(eq(persons.id, managerId));
       }),
     );
     expect(
@@ -613,9 +622,15 @@ describe("settled-tender refund authorization before reservation", () => {
               .set({ endedAt: AT })
               .where(eq(tillSessions.id, sessionId));
           if (change === "operator")
-            await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+            await tx
+              .update(persons)
+              .set(withFoldedPersonChanges({ status: "suspended" }))
+              .where(eq(persons.id, personId));
           if (change === "approver")
-            await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
+            await tx
+              .update(persons)
+              .set(withFoldedPersonChanges({ status: "suspended" }))
+              .where(eq(persons.id, managerId));
           if (change === "permission") await setBuiltInRoleForTest(tx, managerId, "staff");
           if (change === "profile") {
             const [replacement] = await seedDeviceProfiles(tx, {

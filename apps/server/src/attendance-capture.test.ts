@@ -1,7 +1,12 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  type Transaction,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -62,7 +67,10 @@ describe("transactional attendance capture", () => {
     const { recordAttendanceFact } = await import("./attendance-capture.js");
     await expect(
       run(async (tx) => {
-        await tx.update(persons).set({ displayName: "Changed" }).where(eq(persons.id, personId));
+        await tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ displayName: "Changed" }))
+          .where(eq(persons.id, personId));
         await recordAttendanceFact(tx, { ...fact(), key: "" });
       }),
     ).rejects.toMatchObject({ code: "attendance.invalid" });

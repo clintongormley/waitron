@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
 import { adjustments, recordAdjustment } from "@waitron/adjustments";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
@@ -257,7 +257,11 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   });
 
   it("refuses a disabled admin's live session", async () => {
-    suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, ids.admin)).run();
+    suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, ids.admin))
+      .run();
     await refused(await ask(staffPath(ids.martha), tokens.admin), 403, {
       code: "person.suspended",
       params: { personId: ids.admin },
@@ -309,7 +313,10 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   it("checks again after building, and sends nothing to an admin disabled meanwhile", async () => {
     duringBuild = () =>
       withTransaction(suite.db, async (tx) => {
-        await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, ids.admin));
+        await tx
+          .update(persons)
+          .set(withFoldedPersonChanges({ status: "suspended" }))
+          .where(eq(persons.id, ids.admin));
       });
     await refused(await ask(staffPath(ids.martha), tokens.admin), 403, {
       code: "person.suspended",

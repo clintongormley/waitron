@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import {
@@ -53,7 +53,7 @@ describe("archived operational TOTP derivation", () => {
       );
       await suite.db
         .update(persons)
-        .set({ totpSecret: enrolment!.encrypted_secret })
+        .set(withFoldedPersonChanges({ totpSecret: enrolment!.encrypted_secret }))
         .where(eq(persons.id, person!.id));
       const path = suite.db
         .all<{ file: string }>(sql`pragma database_list`)

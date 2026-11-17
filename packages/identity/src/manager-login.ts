@@ -40,8 +40,6 @@ async function findPersonLogin(
   db: Database | Transaction,
   who: { email: string } | { personId: string },
 ): Promise<PersonLoginRow | undefined> {
-  // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
-  // address that signs in is exactly the one the index treats as taken.
   const [person] = await selectPersonLogin(db).where(
     "email" in who
       ? eq(loginEmailKey(), foldedLoginEmail(who.email))

@@ -685,7 +685,7 @@ describe("complete backup verification", () => {
     };
     await appendFile(
       join(targetOnlyRoot, journal.entries.at(-1)!.tag + ".sql"),
-      `\n--> statement-breakpoint\ninsert into persons (id, display_name, created_at) values ('verification-fixture', 'Verification actor', '${capturedAt}');
+      `\n--> statement-breakpoint\ninsert into persons (id, display_name, display_name_folded, created_at) values ('verification-fixture', 'Verification actor', 'verification actor', '${capturedAt}');
 --> statement-breakpoint
 insert into bookings
         (id, booking_date, booking_time, party_size, contact_name, created_by, created_at)

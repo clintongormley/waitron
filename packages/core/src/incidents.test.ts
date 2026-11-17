@@ -12,6 +12,7 @@ import {
   persons,
   sales,
   withTransaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,10 +44,12 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
-  await suite.db.insert(persons).values([
-    { id: "00000000-0000-4000-8000-000000000001", displayName: "First manager" },
-    { id: "00000000-0000-4000-8000-000000000002", displayName: "Second manager" },
-  ]);
+  await suite.db.insert(persons).values(
+    withFoldedPersonKeys([
+      { id: "00000000-0000-4000-8000-000000000001", displayName: "First manager" },
+      { id: "00000000-0000-4000-8000-000000000002", displayName: "Second manager" },
+    ]),
+  );
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");

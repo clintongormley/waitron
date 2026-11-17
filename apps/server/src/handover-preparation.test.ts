@@ -18,6 +18,7 @@ import {
   taxpayer,
   withNodeTransaction,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -460,7 +461,7 @@ it("releases the sign-in write lock before the emergency activation callback", a
         await withTransaction(suite.db, (tx) =>
           tx
             .update(persons)
-            .set({ displayName: "Activation checked" })
+            .set(withFoldedPersonChanges({ displayName: "Activation checked" }))
             .where(eq(persons.id, ADMIN)),
         );
       },
@@ -875,7 +876,10 @@ describe("the handover's preparation route", () => {
     it("a suspended account gets that same answer after one hash", async () => {
       const s = service();
       await controlledAtFilingAssumed();
-      await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, ADMIN));
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, ADMIN));
       external.hashes = 0;
       expect(await attempt(route(s), signIn)).toMatchObject({
         status: 401,

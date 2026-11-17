@@ -1,6 +1,6 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
-import { settings, nodes, taxpayer } from "@waitron/db";
+import { settings, nodes, taxpayer, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -197,7 +197,7 @@ describe("fresh setup authority carried into a module seed", () => {
         if (change.role !== undefined) {
           const [person] = await suite.db.select({ id: persons.id }).from(persons);
           await setBuiltInRoleForTest(suite.db, person!.id, change.role);
-        } else await suite.db.update(persons).set(change);
+        } else await suite.db.update(persons).set(withFoldedPersonChanges(change));
         return "first";
       });
       const second = fakeModule("second-regime", {

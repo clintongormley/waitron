@@ -11,3 +11,5 @@ export { staffRoles, personStaffRoles } from "./staff-roles.js";
 export { roles, personRoles, builtInRole } from "./roles.js";
 
 export { signInChallenges, signInChallengeKind } from "./sign-in-challenges.js";
+
+export { foldForUniqueness, withFoldedPersonKeys, withFoldedPersonChanges } from "./fold.js";

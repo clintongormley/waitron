@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { newId } from "@waitron/db";
+import { newId, withFoldedPersonChanges } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { type BusinessDayClock } from "@waitron/shared";
@@ -437,7 +437,10 @@ it("counts a shift clocked in on one node and out on another once", async () => 
 });
 it("manager includes minimal names, zero-hour people and suspended history without mutating any attendance facts", async () => {
   await shift(undefined, f.other);
-  await f.suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, f.other));
+  await f.suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "suspended" }))
+    .where(eq(persons.id, f.other));
   await automatic();
   const closed = await freeze();
   const state = await f.state();

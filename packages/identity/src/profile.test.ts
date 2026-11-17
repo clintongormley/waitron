@@ -341,7 +341,7 @@ describe("your profile", () => {
     const f = await fixture();
     const otherId = await seedManager(suite.db, { email: "other@example.com" });
     await suite.db.execute(
-      sql`update persons set display_name = 'Already Here' where id = ${otherId}`,
+      sql`update persons set display_name = 'Already Here', display_name_folded = 'already here' where id = ${otherId}`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>

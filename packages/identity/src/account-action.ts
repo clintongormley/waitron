@@ -12,13 +12,15 @@ import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizz
 import {
   enqueueMail,
   outgoingMail,
-  indexViolated,
+  refusalOn,
+  UNIQUE_VIOLATION,
   type Transaction,
   accountActions,
   dashboardSessions,
   recordActivity,
   loginEmailKey,
   persons,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { authorizePersonLoginChange } from "./staff.js";
@@ -234,19 +236,21 @@ export async function confirmEmailChangeByCode(
   try {
     const changed = await tx
       .update(persons)
-      .set({
-        email: action.pendingEmail,
-        emailFolded: foldForUniqueness(action.pendingEmail),
-        pendingEmail: null,
-        pendingEmailFolded: null,
-        emailVerifiedAt: nowIso,
-      })
+      .set(
+        withFoldedPersonChanges({
+          email: action.pendingEmail,
+          emailFolded: foldForUniqueness(action.pendingEmail),
+          pendingEmail: null,
+          pendingEmailFolded: null,
+          emailVerifiedAt: nowIso,
+        }),
+      )
       .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.pendingEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
     return changed[0]!.email;
   } catch (error) {
-    if (indexViolated(error, PERSONS_EMAIL)) {
+    if (refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
       throw new AppError("person.email_taken", { email: action.pendingEmail });
     }
     throw error;
@@ -327,13 +331,15 @@ async function finishClaimedAction(
   const passwordHash = await hashPasswordAsync(input.password);
   const updated = await tx
     .update(persons)
-    .set({
-      passwordHash,
-      emailVerifiedAt: nowIso,
-      ...(input.purpose === "invitation"
-        ? { pinHash: await hashPinAsync(input.pin!), status: "active" as const }
-        : {}),
-    })
+    .set(
+      withFoldedPersonChanges({
+        passwordHash,
+        emailVerifiedAt: nowIso,
+        ...(input.purpose === "invitation"
+          ? { pinHash: await hashPinAsync(input.pin!), status: "active" as const }
+          : {}),
+      }),
+    )
     .where(eq(persons.id, personId))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});

@@ -6,6 +6,12 @@
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
 
+> **2026-11-17, watcher 01:21:** Direct-column indexes report `persons.email_folded`,
+> `persons.display_name_folded` or `persons.pending_email_folded`, rather than their index name.
+> Keep the planned index renames, but port identity's existing translators to
+> `refusalOn(error, UNIQUE_VIOLATION, { table: "persons", columns: [the folded column] })`.
+> Preserve domain refusals and negative controls; the engine-message assertion checks the column.
+
 **Goal:** `persons.display_name_folded` becomes required; CHECKs make `email_folded` set exactly
 when `email` is, and `pending_email_folded` exactly when `pending_email` is; the four unique indexes
 read the folded column directly instead of `case when folded is null then lower(raw) else folded
@@ -30,8 +36,11 @@ script's parsing.
 ("CHECK `(email is null) = (email_folded is null)` and the same for display name and pending email,
 so the unique indexes can read the folded column directly"), §5 (`persons` rows), §6 item 7.
 
-**First line of the pull request:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported." (rules §2)
+**First line of the pull request:** "Every venue is reset: core; backups from before this cannot
+be restored, and older configuration exports with null or missing folded person keys cannot be
+imported." Configuration format 45 is unchanged; exported rows already carrying complete folded
+keys keep the same shape. The wording names the actual constraint break without implying that
+all older format-45 exports are refused.
 
 **Who lands:** the lane (rules §6). The script and the raw-SQL edits touch test files under
 `packages/fiscal-verifactu/src/` only to add the folded name to a person insert; no fiscal code or
@@ -70,8 +79,9 @@ the new names.
   - `foldedKey` (`:22-24`) and its comment go; `liveDisplayNameKey`, `loginEmailKey`,
     `pendingEmailKey` (`:113-121`) keep their names and return the folded column, so their callers
     do not change.
-- `packages/identity/src/person-constraints.ts:14-18`: the three names the refusal translation
-  matches become `persons_email_uq`, `persons_live_display_name_uq`, `persons_pending_email_uq`.
+- `packages/identity/src/person-constraints.ts`: the three refusal targets become the `persons`
+  columns `email_folded`, `display_name_folded`, and `pending_email_folded`. Existing consumers
+  in `staff.ts` and `account-action.ts` use `refusalOn` with `UNIQUE_VIOLATION`.
 - `scripts/a1308/pp4-fold-person-inserts.mjs` and its test.
 - Backlog: delete `docs/backlog/dashboard.md` "## A person row written from outside
   `packages/identity` still folds its key ASCII-only" and its line in
@@ -190,9 +200,9 @@ Any other line is a stop.
 ## Review Focus
 
 1. **The CHECKs refuse a half-set pair** and accept both legitimate shapes (both null; both set).
-2. **The refusal translation still fires** for each of the three named indexes
-   (`person-constraints.db.test.ts` drives one real collision per index and reads the name back);
-   a renamed index left out of `person-constraints.ts` silently stops a translation.
+2. **The refusal translation still fires** for each of the three direct-column indexes
+   (`person-constraints.db.test.ts` drives one real collision per key and checks the column message);
+   each translation matches its own column target and preserves its domain refusal.
 3. **The script only wraps**: its output changes no value a test inserts, only adds the folded keys.
 
 ---
@@ -271,10 +281,10 @@ The same script wraps the argument of `X.set(ARG)` whose receiver is `…update(
   - `"refuses a second live person whose name folds the same (José García, JOSÉ GARCÍA)"`;
     `"accepts that name again once the first is suspended"`; `"accepts Lopez beside López"`;
   - the same accented pair for `email` and `pending_email`.
-  Change `person-constraints.db.test.ts` to expect the new names read back off each refusal (it
-  reads the name from the database, so this is the failing test for `person-constraints.ts`). Change `index.test.ts:19-20`'s two expected names (named above).
+  Change `person-constraints.db.test.ts` to expect the folded column read back off each refusal
+  and port its existing translation checks to the column targets. The domain refusals stay the same. Change `index.test.ts:19-20`'s two expected names (named above).
 - [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement** the column, CHECKs, indexes, key helpers and the three names.
+- [ ] **Step 3: Implement** the column, CHECKs, indexes, key helpers and the three column refusal targets.
 - [ ] **Step 4: Rebuild** core; run the finish line's db and identity runs.
 - [ ] **Step 5: Commit** `git commit -s -m "Require folded person keys and index them directly"`.
 

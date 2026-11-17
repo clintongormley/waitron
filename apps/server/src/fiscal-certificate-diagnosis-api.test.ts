@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as credentials from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu/src/slot.js";
 import {
@@ -160,7 +160,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
       if (mode === "suspended")
         await tx
           .update(persons)
-          .set({ status: "suspended" })
+          .set(withFoldedPersonChanges({ status: "suspended" }))
           .where(eq(persons.id, f.session.personId));
       if (mode === "permission") await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
     });
@@ -216,7 +216,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
             if (mode === "suspended")
               await tx
                 .update(persons)
-                .set({ status: "suspended" })
+                .set(withFoldedPersonChanges({ status: "suspended" }))
                 .where(eq(persons.id, f.session.personId));
             if (mode === "expiry")
               await tx

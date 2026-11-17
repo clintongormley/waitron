@@ -62,12 +62,12 @@ function translated(fn: () => never, error: unknown): string | "RE-THROWN" {
 }
 
 describe("translating a persons index refusal", () => {
-  it("names the login-email index in the engine's own words", async () => {
+  it("names the login-email column in the engine's own words", async () => {
     const error = await collision(
       { displayName: "A", email: "owner@x.com" },
       { displayName: "B", email: "Owner@X.com" },
     );
-    expect(driverMessage(error)).toBe("UNIQUE constraint failed: index 'persons_tenant_email_uq'");
+    expect(driverMessage(error)).toBe("UNIQUE constraint failed: persons.email_folded");
   });
 
   it("turns a login-email collision into person.email_taken", async () => {

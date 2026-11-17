@@ -10,7 +10,13 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, incidents, printJobs, withTransaction } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  incidents,
+  printJobs,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   hashPin,
@@ -2267,7 +2273,7 @@ describe("the refund attestation checks the manager's PIN before the write lock 
     withTransaction(venue.db, (tx) =>
       tx
         .update(persons)
-        .set({ pinHash: hashPin(pin) })
+        .set(withFoldedPersonChanges({ pinHash: hashPin(pin) }))
         .where(eq(persons.id, venue.adminId)),
     );
 

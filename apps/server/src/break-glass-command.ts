@@ -7,6 +7,7 @@ import {
   openVenueDatabase,
   type Database,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
@@ -118,13 +119,15 @@ export async function runBreakGlassReset(deps: {
 
         const updated = await tx
           .update(persons)
-          .set({
-            passwordHash: hashPassword(newPassword),
-            ...(resetPin ? { pinHash: hashPin(newPin!) } : {}),
-            totpSecret: null,
-            googleSubject: null,
-            status: "active",
-          })
+          .set(
+            withFoldedPersonChanges({
+              passwordHash: hashPassword(newPassword),
+              ...(resetPin ? { pinHash: hashPin(newPin!) } : {}),
+              totpSecret: null,
+              googleSubject: null,
+              status: "active",
+            }),
+          )
           .where(eq(persons.id, targetId))
           .returning({ id: persons.id });
 

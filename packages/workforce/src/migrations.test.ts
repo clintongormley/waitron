@@ -49,8 +49,8 @@ function rowIdentity() {
 describe("persons, from core's set layered under workforce", () => {
   it("stores a person and defaults status to active", async () => {
     await suite.db.execute(sql`
-      insert into persons (id, created_at, display_name, pin_hash)
-      values (${rowIdentity()}, 'Ana', ${PIN})`);
+      insert into persons (id, created_at, display_name, display_name_folded, pin_hash)
+      values (${rowIdentity()}, 'Ana', 'ana', ${PIN})`);
     const rows = await suite.db.execute<{ status: string }>(sql`
       select status from persons where display_name = 'Ana'`);
     expect(rows.rows[0]).toEqual({ status: "active" });
@@ -59,8 +59,8 @@ describe("persons, from core's set layered under workforce", () => {
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (id, created_at, display_name, pin_hash, status)
-        values (${rowIdentity()}, 'Bad status', ${PIN}, 'fired')`),
+        insert into persons (id, created_at, display_name, display_name_folded, pin_hash, status)
+        values (${rowIdentity()}, 'Bad status', 'bad status', ${PIN}, 'fired')`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/persons_status_ck/);
@@ -69,8 +69,8 @@ describe("persons, from core's set layered under workforce", () => {
   it("rejects an empty display_name", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (id, created_at, display_name, pin_hash)
-        values (${rowIdentity()}, '', ${PIN})`),
+        insert into persons (id, created_at, display_name, display_name_folded, pin_hash)
+        values (${rowIdentity()}, '', '', ${PIN})`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/persons_display_name_ck/);
@@ -79,8 +79,8 @@ describe("persons, from core's set layered under workforce", () => {
   it("rejects an empty pin_hash", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (id, created_at, display_name, pin_hash)
-        values (${rowIdentity()}, 'No pin', '')`),
+        insert into persons (id, created_at, display_name, display_name_folded, pin_hash)
+        values (${rowIdentity()}, 'No pin', 'no pin', '')`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/persons_pin_hash_ck/);

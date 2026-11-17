@@ -208,7 +208,7 @@ describe("account mail owner", () => {
     "composes %s with its current address and locale",
     async (purpose) => {
       await suite.db.run(
-        sql`update persons set status=${purpose === "invitation" ? "pending" : "active"}, pending_email='changed@example.test',locale='es-ES' where id=${personId}`,
+        sql`update persons set status=${purpose === "invitation" ? "pending" : "active"}, pending_email='changed@example.test', pending_email_folded = 'changed@example.test',locale='es-ES' where id=${personId}`,
       );
       deps.owners = [
         accountActionMail({

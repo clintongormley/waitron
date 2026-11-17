@@ -1,7 +1,12 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withTransaction,
+  type Transaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, registerModulePermissions } from "@waitron/identity";
@@ -263,7 +268,10 @@ it("keeps the captured record, names and input after later writes", async () => 
   const format = await run((tx) => prepare(tx, sent));
   sent.audience = "representatives";
   sent.period = { start: "2030-01-01", end: "2030-02-01" };
-  await suite.db.update(persons).set({ displayName: "Changed name" }).where(eq(persons.id, worker));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ displayName: "Changed name" }))
+    .where(eq(persons.id, worker));
   const target = (await read()).entries.find((r) => r.entry.entryKind === "out")!.entry.entryId;
   const change = await request(target);
   await run((tx) =>
@@ -541,7 +549,10 @@ it.each([
   { locale: "en", worker: "Worker", requested: "Requested" },
   { locale: "es", worker: "Persona trabajadora", requested: "Solicitado" },
 ] as const)("leaves code-shaped free text as written for $locale", async (words) => {
-  await suite.db.update(persons).set({ displayName: "worker" }).where(eq(persons.id, worker));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ displayName: "worker" }))
+    .where(eq(persons.id, worker));
   const change = await request(await day(), "approved");
   const exported = await doc({ locale: words.locale });
   expect(cells(exported, "history").find((r) => r.entryId === change)).toMatchObject({

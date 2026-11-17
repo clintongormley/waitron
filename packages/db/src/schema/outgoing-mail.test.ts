@@ -12,7 +12,7 @@ describe("outgoing mail database protections", () => {
   const person = randomUUID();
   beforeEach(() => {
     suite.db.run(
-      sql`insert into persons (id, display_name, created_at) values (${person}, 'Mail recipient', '2026-11-09T12:00:00.000Z')`,
+      sql`insert into persons (id, display_name, display_name_folded, created_at) values (${person}, 'Mail recipient', 'mail recipient', '2026-11-09T12:00:00.000Z')`,
     );
   });
   const insert = (patch: Record<string, string | number | null> = {}) => {

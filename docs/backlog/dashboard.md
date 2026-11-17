@@ -15,22 +15,6 @@ reading unless marked run:
   handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
 
-## A person row written from outside `packages/identity` still folds its key ASCII-only
-
-**A person row written from outside `packages/identity` still folds its key ASCII-only — OPEN
-(found 2026-09-23, task F1's review wave).** SQLite's `lower()` folds ASCII and nothing else, so the
-three unique indexes on `persons` stopped refusing two staff whose names differ only in the case of
-an accented letter — José García beside JOSÉ GARCÍA, on a Spanish product. The repair stores a
-folded key in its own column (`packages/identity/src/fold.ts`: trim, NFC, lower, NFC) and each
-index reads `case when <folded> is null then lower(<raw>) else <folded> end`. **The `case` is why
-this entry exists:** a bare index on the folded column alone would put every row that did not carry
-one OUTSIDE the uniqueness check, which is worse than the defect. The provisioning admin insert (`packages/provisioning/src/venue-apply.ts`) calls the exported
-`foldForUniqueness`. **What is left
-open:** every remaining writer outside `packages/identity` is a fixture or a seed, each still
-folding ASCII-only, and the column is still nullable, so nothing at the compiler stops a new writer
-forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
-fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**

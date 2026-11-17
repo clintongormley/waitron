@@ -5,6 +5,7 @@ import {
   webauthnCredentials,
   dashboardSessions,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "../test/person-rows.js";
@@ -78,7 +79,7 @@ it.each(operations)(
       expect(await suite.db.select().from(webauthnCredentials)).toHaveLength(1);
     await suite.db
       .update(persons)
-      .set({ passwordHash: "other-password" })
+      .set(withFoldedPersonChanges({ passwordHash: "other-password" }))
       .where(eq(persons.id, other!.id));
     await invoke();
     const [changed] = await suite.db.select().from(persons).where(eq(persons.id, target!.id));

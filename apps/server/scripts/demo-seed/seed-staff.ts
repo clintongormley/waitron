@@ -5,6 +5,7 @@ import {
   deviceProfileAdmissionRoles,
   personStaffRoles,
   staffRoles,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import { starterName } from "@waitron/country-packs";
 import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
@@ -42,12 +43,14 @@ export async function seedStaff(
     const passwordHash = person.dashboardLogin ? hashPassword(DEMO_DASHBOARD_PASSWORD) : null;
     const [created] = await tx
       .insert(persons)
-      .values({
-        displayName: person.displayName,
-        pinHash,
-        passwordHash,
-        email: person.email,
-      })
+      .values(
+        withFoldedPersonKeys({
+          displayName: person.displayName,
+          pinHash,
+          passwordHash,
+          email: person.email,
+        }),
+      )
       .returning({ id: persons.id });
     await importAccessRoleMembership(tx, created!.id, (await ensureBuiltInRoles(tx))[person.role]);
     for (const name of person.jobRoles) {

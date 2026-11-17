@@ -1,4 +1,4 @@
-import { departments } from "@waitron/db";
+import { departments, withFoldedPersonChanges } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { eq } from "drizzle-orm";
@@ -339,7 +339,7 @@ it.each(["ended", "suspended", "wrong-device", "disabled", "rotated-token"])(
     if (fault === "suspended")
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, venue.operatorId));
     if (fault === "wrong-device")
       till = {

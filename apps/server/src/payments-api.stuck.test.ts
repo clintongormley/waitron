@@ -23,6 +23,7 @@ import {
   readNodeMembership,
   stampDeployment,
   writeNodeMembership,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
@@ -1460,7 +1461,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
                   const resolved = await target.resolveAbandonedAttempt(paymentRef, now, audit);
                   await suite.db
                     .update(persons)
-                    .set({ status: "suspended" })
+                    .set(withFoldedPersonChanges({ status: "suspended" }))
                     .where(eq(persons.id, managerId));
                   return resolved;
                 }
@@ -2686,7 +2687,7 @@ describe("the bill payment attestation checks the manager's PIN before the write
       withTransaction(suite.db, (tx) =>
         tx
           .update(persons)
-          .set({ pinHash: hashPin("4321") })
+          .set(withFoldedPersonChanges({ pinHash: hashPin("4321") }))
           .where(eq(persons.id, v.managerId)),
       ),
     );
@@ -3176,7 +3177,7 @@ describe("provider-confirmed partial-refund release", () => {
         if (problem === "permission lost")
           await suite.db
             .update(persons)
-            .set({ status: "suspended" })
+            .set(withFoldedPersonChanges({ status: "suspended" }))
             .where(eq(persons.id, v.managerId));
         return evidence;
       });
@@ -3379,7 +3380,7 @@ describe("provider-confirmed partial-refund release", () => {
     lookup.mockImplementation(async () => {
       await suite.db
         .update(persons)
-        .set({ status: "suspended" })
+        .set(withFoldedPersonChanges({ status: "suspended" }))
         .where(eq(persons.id, v.managerId));
       return evidence;
     });

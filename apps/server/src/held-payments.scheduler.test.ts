@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
-import { persons, withTransaction } from "@waitron/db";
+import { persons, withTransaction, withFoldedPersonKeys } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -173,7 +173,9 @@ describe("held card payments on the real scheduler", () => {
     for (const hold of holds) {
       await withTransaction(suite.db, async (tx) => {
         const personId = randomUUID();
-        await tx.insert(persons).values({ id: personId, displayName: "Manager " + personId });
+        await tx
+          .insert(persons)
+          .values(withFoldedPersonKeys({ id: personId, displayName: "Manager " + personId }));
         await recordHoldOutcome(tx, {
           paymentId: hold.paymentId,
           outcome: "kept",

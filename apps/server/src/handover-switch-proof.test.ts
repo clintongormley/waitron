@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { signEnvelope } from "@waitron/handover";
@@ -91,7 +91,10 @@ describe("checking a switch proof", () => {
 
   it("refuses a proof for a person who is not active", async () => {
     const proof = await makeSwitchProof(deps(), personId);
-    await box.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+    await box.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, personId));
     expect(await verdictOf(proof)).toBe("not_permitted");
   });
 

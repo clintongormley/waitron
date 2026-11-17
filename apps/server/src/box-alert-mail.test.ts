@@ -9,6 +9,7 @@ import {
   persons,
   readMail,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -113,7 +114,11 @@ it.each([
 ])("cancels mail for an inadmissible recipient %o", async (patch) => {
   await queue("backup.archives_deleted");
   if (patch.role !== undefined) await setBuiltInRoleForTest(suite.db, personId, patch.role);
-  else await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
+  else
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges(patch))
+      .where(eq(persons.id, personId));
   await runMailPass(deps);
   expect(await row()).toMatchObject({ status: "cancelled", attempts: 0 });
   expect(deps.send).not.toHaveBeenCalled();
@@ -158,7 +163,10 @@ it.each([
 ] as const)(
   "words %s from its queued params using the venue language fallback",
   async (code, params) => {
-    await suite.db.update(persons).set({ locale: null }).where(eq(persons.id, personId));
+    await suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ locale: null }))
+      .where(eq(persons.id, personId));
     await queue(code, { incident: false, params });
     await runMailPass(deps);
     expect(deps.send).toHaveBeenCalledWith(expect.anything(), {

@@ -21,6 +21,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import {
   assignMenuToVenue,
@@ -395,14 +396,18 @@ async function seed(
     }
 
     for (let w = 1; w <= BENCH_PROFILE.waiters; w++)
-      await tx.insert(persons).values({
-        displayName: `${WAITER_PREFIX}${w}`,
-        pinHash: fixturePinHash(waiterPin(w)),
-      });
-    await tx.insert(persons).values({
-      displayName: MANAGER_NAME,
-      pinHash: fixturePinHash("9999"),
-    });
+      await tx.insert(persons).values(
+        withFoldedPersonKeys({
+          displayName: `${WAITER_PREFIX}${w}`,
+          pinHash: fixturePinHash(waiterPin(w)),
+        }),
+      );
+    await tx.insert(persons).values(
+      withFoldedPersonKeys({
+        displayName: MANAGER_NAME,
+        pinHash: fixturePinHash("9999"),
+      }),
+    );
 
     const [benchJob] = await tx.insert(staffRoles).values({ name: "Bench team" }).returning();
     const holders = await tx

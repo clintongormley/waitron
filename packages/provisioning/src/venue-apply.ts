@@ -27,6 +27,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import {
   foldForUniqueness,
@@ -231,20 +232,20 @@ export async function applyVenue(
           if (seededAdmin.length === 0) {
             const [created] = await tx
               .insert(persons)
-              .values({
-                id: initialAdministratorId,
-                displayName: action.displayName,
-                firstNames: action.firstNames,
-                lastNames: action.lastNames,
-                locale: action.locale,
-                pinHash: action.pinHash,
-                passwordHash: action.passwordHash,
-                email: action.email,
-                // Without the folded twin, login falls back on an ASCII-only key and an address
-                // with a non-ASCII character stops matching at sign-in.
-                emailFolded: foldForUniqueness(action.email),
-                displayNameFolded: foldForUniqueness(action.displayName),
-              })
+              .values(
+                withFoldedPersonKeys({
+                  id: initialAdministratorId,
+                  displayName: action.displayName,
+                  firstNames: action.firstNames,
+                  lastNames: action.lastNames,
+                  locale: action.locale,
+                  pinHash: action.pinHash,
+                  passwordHash: action.passwordHash,
+                  email: action.email,
+                  emailFolded: foldForUniqueness(action.email),
+                  displayNameFolded: foldForUniqueness(action.displayName),
+                }),
+              )
               .returning({ id: persons.id });
             createdAdministrator = created!.id;
             await importAccessRoleMembership(

@@ -14,6 +14,7 @@ import {
   openVenueDatabase,
   type Transaction,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
@@ -461,7 +462,10 @@ it("suspended selected authorizer cannot replay a successful decision", async ()
   await send(value);
   const decision = await command({ action: "approve", itemId: value.commandId });
   await send(decision, personId, manager);
-  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager));
+  await suite.db
+    .update(persons)
+    .set(withFoldedPersonChanges({ status: "suspended" }))
+    .where(eq(persons.id, manager));
   await refused(() => send(decision, personId, manager), "correction.not_permitted");
 });
 it("a foreign question cannot be confirmed by another worker", async () => {

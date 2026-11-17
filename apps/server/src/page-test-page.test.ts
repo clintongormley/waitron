@@ -15,6 +15,7 @@ import {
   printAgents,
   taxpayer,
   withTransaction,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { createClient } from "@waitron/print-agent";
@@ -420,7 +421,7 @@ describe("printing a test page", () => {
     await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
     v.cfg.locale = "en-GB";
     [v.cfg.locale] = ["en-GB"];
-    await suite.db.update(persons).set({ locale: "en-GB" });
+    await suite.db.update(persons).set(withFoldedPersonChanges({ locale: "en-GB" }));
     expect(await requested(v, office)).toEqual(first);
     const job = (await claim(v))!;
     expect(await requested(v, office)).toEqual({ id: first.id, status: "printing" });

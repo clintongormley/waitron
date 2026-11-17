@@ -5,7 +5,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, settings, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, withTransaction, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -232,12 +232,20 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("refuses a suspended person's live session", async () => {
-    suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, marthaId)).run();
+    suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "suspended" }))
+      .where(eq(persons.id, marthaId))
+      .run();
     await refused(await ask(mounted()), 403, "person.suspended");
   });
 
   it("refuses a pending person's live session", async () => {
-    suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, marthaId)).run();
+    suite.db
+      .update(persons)
+      .set(withFoldedPersonChanges({ status: "pending" }))
+      .where(eq(persons.id, marthaId))
+      .run();
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 

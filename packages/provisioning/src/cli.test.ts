@@ -875,8 +875,8 @@ describe("runCli venue", () => {
       env: VENUE_ENV,
       applyVenue: () =>
         Promise.reject(
-          Object.assign(new Error("UNIQUE constraint failed: index 'persons_tenant_email_uq'"), {
-            cause: refusalError({ uniqueIndex: "persons_tenant_email_uq" }),
+          Object.assign(new Error("UNIQUE constraint failed: persons.email_folded"), {
+            cause: refusalError({ unique: { table: "persons", columns: ["email_folded"] } }),
           }),
         ),
     });

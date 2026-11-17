@@ -528,3 +528,9 @@ export {
 } from "./station-printer-list.js";
 
 export { departmentCourses } from "./schema/venue-service/department-courses.js";
+
+export {
+  foldForUniqueness,
+  withFoldedPersonKeys,
+  withFoldedPersonChanges,
+} from "./schema/identity/fold.js";

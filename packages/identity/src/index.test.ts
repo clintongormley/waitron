@@ -16,8 +16,8 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("persons_tenant_google_subject_uq");
-    expect(indexNames).toContain("persons_tenant_pending_email_uq");
+    expect(indexNames).toContain("persons_google_subject_uq");
+    expect(indexNames).toContain("persons_pending_email_uq");
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("persons_display_name_ck");

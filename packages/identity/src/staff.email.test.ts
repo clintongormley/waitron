@@ -1,4 +1,11 @@
-import { CORE_MIGRATIONS, activityLog, outgoingMail, persons, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  activityLog,
+  outgoingMail,
+  persons,
+  withTransaction,
+  withFoldedPersonChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -114,7 +121,7 @@ it("records a first email without queuing a notice to a nonexistent old address"
   const { target, actor, input } = await fixture();
   await suite.db
     .update(persons)
-    .set({ email: null, emailFolded: null })
+    .set(withFoldedPersonChanges({ email: null, emailFolded: null }))
     .where(eq(persons.id, target.id));
   await withTransaction(suite.db, (tx) => updatePersonDetails(tx, input));
   const entries = await suite.db

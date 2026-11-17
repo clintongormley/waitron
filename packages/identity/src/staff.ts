@@ -2,7 +2,8 @@ import "./errors.js";
 import { and, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   recordActivity,
-  indexViolated,
+  refusalOn,
+  UNIQUE_VIOLATION,
   isUniqueViolation,
   nowIso,
   liveDisplayNameKey,
@@ -17,6 +18,8 @@ import {
   signInChallenges,
   webauthnCredentials,
   recoveryCodes,
+  withFoldedPersonChanges,
+  withFoldedPersonKeys,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -60,12 +63,10 @@ const settleId = (value: string) => value.toLowerCase();
 
 /**
  * Translate a collision on the login-email index into `person.email_taken`, and re-throw anything
- * else untouched, a unique violation on another `persons` key included. The index is asked for by
- * name because that is all the engine reports for an index over an expression
- * (`person-constraints.ts`). Exported for staff.test.ts, not from the package barrel.
+ * else untouched, a unique violation on another `persons` key included.
  */
 export function asEmailTaken(err: unknown, email: string): never {
-  if (indexViolated(err, PERSONS_EMAIL)) {
+  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
     throw new AppError("person.email_taken", { email });
   }
   throw err;
@@ -80,11 +81,12 @@ export function asPersonUniqueViolation(
   err: unknown,
   input: { email?: string; displayName: string },
 ): never {
-  if (indexViolated(err, PERSONS_LIVE_DISPLAY_NAME)) {
+  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_LIVE_DISPLAY_NAME)) {
     throw new AppError("person.display_name_taken", { displayName: input.displayName });
   }
   if (
-    (indexViolated(err, PERSONS_EMAIL) || indexViolated(err, PERSONS_PENDING_EMAIL)) &&
+    (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL) ||
+      refusalOn(err, UNIQUE_VIOLATION, PERSONS_PENDING_EMAIL)) &&
     input.email !== undefined
   ) {
     throw new AppError("person.email_taken", { email: input.email });
@@ -105,9 +107,7 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** The predicate reads `liveDisplayNameKey()`, the expression `persons_tenant_live_display_name_uq`
- * is declared over (`packages/db/src/schema/identity/persons.ts`), so this pre-check and the index
- * cannot disagree about which names collide. */
+/** The pre-check and unique index must compare the same folded key. */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -136,8 +136,6 @@ export async function assertEmailAvailable(
     .from(persons)
     .where(
       and(
-        // The expressions the two email indexes are declared over, as in
-        // {@link assertDisplayNameAvailable}.
         or(
           eq(loginEmailKey(), foldForUniqueness(email)),
           eq(pendingEmailKey(), foldForUniqueness(email)),
@@ -288,19 +286,21 @@ export async function updatePersonDetails(
   try {
     await tx
       .update(persons)
-      .set({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        firstNames,
-        lastNames,
-        telephone,
-        email,
-        emailFolded: foldForUniqueness(email),
-        emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
-        status: input.status,
-        locale,
-        ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
-      })
+      .set(
+        withFoldedPersonChanges({
+          displayName,
+          displayNameFolded: foldForUniqueness(displayName),
+          firstNames,
+          lastNames,
+          telephone,
+          email,
+          emailFolded: foldForUniqueness(email),
+          emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
+          status: input.status,
+          locale,
+          ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
+        }),
+      )
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
@@ -354,7 +354,11 @@ export async function deactivatePerson(
   const alreadySuspended = person.status === "suspended";
   await tx
     .update(persons)
-    .set(alreadySuspended ? NO_SIGN_IN_SECRETS : { status: "suspended", ...NO_SIGN_IN_SECRETS })
+    .set(
+      withFoldedPersonChanges(
+        alreadySuspended ? NO_SIGN_IN_SECRETS : { status: "suspended", ...NO_SIGN_IN_SECRETS },
+      ),
+    )
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   if (!alreadySuspended) await revokePersonAccess(tx, person.id, authorizedBy);
@@ -368,7 +372,7 @@ export async function clearPersonPin(
   await authorizePersonLoginChange(tx, input);
   const updated = await tx
     .update(persons)
-    .set({ pinHash: null })
+    .set(withFoldedPersonChanges({ pinHash: null }))
     .where(eq(persons.id, settleId(input.personId)))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
@@ -395,7 +399,9 @@ export async function resetPersonLogin(
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
   await tx
     .update(persons)
-    .set({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS })
+    .set(
+      withFoldedPersonChanges({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS }),
+    )
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   await revokePersonAccess(tx, person.id, authorizedBy);
@@ -427,7 +433,13 @@ export async function reactivatePersonForInvitation(
   try {
     await tx
       .update(persons)
-      .set({ status: "pending", emailVerifiedAt: null, ...NO_SIGN_IN_SECRETS })
+      .set(
+        withFoldedPersonChanges({
+          status: "pending",
+          emailVerifiedAt: null,
+          ...NO_SIGN_IN_SECRETS,
+        }),
+      )
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName: person.displayName });
@@ -465,18 +477,20 @@ export async function invitePerson(
   try {
     const [row] = await tx
       .insert(persons)
-      .values({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        firstNames,
-        lastNames,
-        telephone,
-        pinHash: null,
-        passwordHash: null,
-        status: "pending",
-        email,
-        emailFolded: foldForUniqueness(email),
-      })
+      .values(
+        withFoldedPersonKeys({
+          displayName,
+          displayNameFolded: foldForUniqueness(displayName),
+          firstNames,
+          lastNames,
+          telephone,
+          pinHash: null,
+          passwordHash: null,
+          status: "pending",
+          email,
+          emailFolded: foldForUniqueness(email),
+        }),
+      )
       .returning({ id: persons.id });
 
     await setPersonAccessRoles(tx, {
@@ -490,7 +504,7 @@ export async function invitePerson(
     // Any unique violation off the email index is read as the display name: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
-    if (isUniqueViolation(error) && !indexViolated(error, PERSONS_EMAIL)) {
+    if (isUniqueViolation(error) && !refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(error, email);
@@ -508,7 +522,7 @@ export async function setPersonLocale(
   const locale = assertSupportedLocale(input.locale);
   await tx
     .update(persons)
-    .set({ locale })
+    .set(withFoldedPersonChanges({ locale }))
     .where(eq(persons.id, settleId(input.personId)));
 }
 

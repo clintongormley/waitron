@@ -2,7 +2,7 @@ import { queueSecurityChangeMail } from "./security-change-mail.js";
 import "./errors.js";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, inArray, lte } from "drizzle-orm";
-import { isUniqueViolation, signInChallenges, persons } from "@waitron/db";
+import { isUniqueViolation, signInChallenges, persons, withFoldedPersonChanges } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { startManagementSession } from "./management-session.js";
@@ -131,7 +131,7 @@ export async function completeGoogleLink(
   try {
     const updated = await tx
       .update(persons)
-      .set({ googleSubject: input.subject })
+      .set(withFoldedPersonChanges({ googleSubject: input.subject }))
       .where(and(eq(persons.id, input.personId), eq(persons.status, "active")))
       .returning({ id: persons.id });
     if (updated.length !== 1) throw new AppError("google.invalid", {});
