@@ -390,8 +390,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Replace these buffers with file-based processing while preserving their
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
   The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB.
-  Cloud recovery downloads and configuration imports keep their separate buffers. Larger Cloud
-  backups depend on Cloud's object and verification limits.
+  Configuration imports keep their separate buffer. Cloud capture and verifier qualification
+  remain open. [Cloud transfer plan](superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
-import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -93,9 +93,8 @@ const expectedSelection = {
   timeZone: "Europe/Madrid",
   module: "fiscal-verifactu",
 };
-function deps(artifact: Uint8Array) {
+function previewDeps() {
   return {
-    artifact,
     recoveryKey: archiveKey,
     stateDir: scratch,
     stagingDir: scratch,
@@ -103,6 +102,10 @@ function deps(artifact: Uint8Array) {
     migrationsRoot: null,
     environment: "preproduction" as const,
   };
+}
+
+function deps(artifact: Uint8Array) {
+  return { ...previewDeps(), artifact };
 }
 
 it("binds archive preview to its validated snapshot when the caller changes the request buffer", async () => {
@@ -278,7 +281,7 @@ it("derives managed Cloud selection only after the exact approved point is downl
     stateDir: join(scratch, "cloud"),
     origin: "https://cloud.example.test",
     environment: "preproduction",
-    download: async () => f.artifact,
+    download: async (_grant, path) => writeFile(path, f.artifact),
     fetch: (async (url, init) => {
       const action = new URL(String(url)).pathname.split("/").at(-1);
       const body = JSON.parse(String(init?.body)) as { payload: string };
@@ -309,14 +312,13 @@ it("derives managed Cloud selection only after the exact approved point is downl
   });
   await client.start();
   const preview = await client.preview(
-    (request) =>
-      previewRecoveryArchive({ ...deps(request.artifact), recoveryKey: request.recoveryKey }),
+    (request) => previewRecoveryArchive({ ...previewDeps(), ...request }),
     POINT,
   );
   expect(preview).toHaveProperty("fiscalSelection", expectedSelection);
   expect(preview.sourceId).toBe(point.digest);
   await expect(
-    client.preview((request) => previewRecoveryArchive(deps(request.artifact)), LOCATION),
+    client.preview((request) => previewRecoveryArchive({ ...previewDeps(), ...request }), LOCATION),
   ).rejects.toThrow("Cloud recovery is unavailable");
 });
 
@@ -437,7 +439,7 @@ it("reads public hour evidence only from the approved managed-Cloud artifact", a
     stateDir: join(scratch, "cloud-evidence"),
     origin: "https://cloud.example.test",
     environment: "preproduction",
-    download: async () => f.artifact,
+    download: async (_grant, path) => writeFile(path, f.artifact),
     fetch: (async (url, init) => {
       const action = new URL(String(url)).pathname.split("/").at(-1);
       const body = JSON.parse(String(init?.body)) as { payload: string };
@@ -468,8 +470,7 @@ it("reads public hour evidence only from the approved managed-Cloud artifact", a
   });
   await client.start();
   const preview = await client.preview(
-    (request) =>
-      previewRecoveryArchive({ ...deps(request.artifact), recoveryKey: request.recoveryKey }),
+    (request) => previewRecoveryArchive({ ...previewDeps(), ...request }),
     POINT,
   );
   expect(preview).toHaveProperty("moduleEvidence", {

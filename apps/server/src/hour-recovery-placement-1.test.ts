@@ -338,7 +338,7 @@ describe("selected-hour admission before archive placement", () => {
               });
             throw new Error(`unexpected Cloud recovery action ${action}`);
           },
-          download: async () => f.restore.artifact,
+          download: async (_grant: unknown, path: string) => writeFile(path, f.restore.artifact),
         });
         await client.start();
         await client.restore(async (request) => {

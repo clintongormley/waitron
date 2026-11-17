@@ -677,7 +677,7 @@ describe("selected-hour admission before archive placement", () => {
           stateDir: f.roots.stateDir,
           origin: "https://cloud.example.test",
           environment: "preproduction",
-          download: async () => f.restore.artifact,
+          download: async (_grant: unknown, path: string) => writeFile(path, f.restore.artifact),
           fetch: async (url, init) => {
             const action = new URL(String(url)).pathname.split("/").at(-1);
             const body = JSON.parse(String(init?.body)) as { payload: string };

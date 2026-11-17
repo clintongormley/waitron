@@ -1,3 +1,4 @@
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
 import { CLOUD_RECOVERY_FILE } from "@waitron/store";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
@@ -94,7 +95,7 @@ export function readSnapshotRecoveryVerification(value: unknown): SnapshotRecove
     typeof value.archiveBytes !== "number" ||
     !Number.isSafeInteger(value.archiveBytes) ||
     value.archiveBytes < 1 ||
-    value.archiveBytes > 512 * 1024 * 1024
+    value.archiveBytes > MAX_CLOUD_ARCHIVE_BYTES
   )
     cloudRecoveryUnavailable();
   return Object.freeze({

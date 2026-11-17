@@ -36,7 +36,6 @@ import {
   validateArtifactFile,
   validateDatabaseEntries,
   type ValidatedArtifact,
-  type ValidationDeps,
   type RestoreOperationRunner,
 } from "./restore.js";
 import type {
@@ -48,6 +47,7 @@ import type {
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import { parseRecoveryKit } from "@waitron/stream";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
+import type { ArchiveRequest } from "./restore-request.js";
 import { VENUE_FILE } from "@waitron/store";
 import { STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
@@ -495,10 +495,11 @@ export function createSetupRecoveryPreparation(
     throw new AppError("restore.staged_copy_missing", {});
   };
   const prepare: PrepareRecovery = async (source, request, hold, client, signal) => {
-    const archive = async (
-      input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
-    ) => {
-      const copy = await validateArtifact({ ...options, ...input });
+    const archive = async (input: ArchiveRequest) => {
+      const copy =
+        input.kind === "archive-file"
+          ? await validateArtifactFile({ ...options, ...input })
+          : await validateArtifact({ ...options, ...input });
       try {
         return await interactive.prepare(copy, copy.sourceId!, request, hold, client);
       } finally {

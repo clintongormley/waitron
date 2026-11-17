@@ -48,7 +48,8 @@ function setup(
     binding: async () => ({ requestId: "cloud-request", pointId }),
     restore: async (stage) => {
       await stage({
-        artifact: new Uint8Array([7, 8]),
+        kind: "archive-file",
+        artifactPath: "/fixture/cloud-archive",
         recoveryKey: "archive-cloud-key",
         environment: "preproduction",
       });
@@ -127,7 +128,7 @@ it.each(["archive", "bucket", "cloud"])(
                 artifactPath: expect.stringContaining("upload-"),
                 signal: expect.any(AbortSignal),
               }
-            : { artifact: new Uint8Array([7, 8]) }),
+            : { kind: "archive-file", artifactPath: "/fixture/cloud-archive" }),
           recoveryKey: kind === "archive" ? "archive-key" : "archive-cloud-key",
           environment: "preproduction",
           ...credentials,
