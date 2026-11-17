@@ -28,6 +28,25 @@ README §10 ("Waitron Cloud backups: follow the venue's schedule, which must be 
 Cloud is a destination"); owner 2026-10-23 (Waitron works entirely on-premises with no Cloud).
 Slice rules apply.
 
+## Measure 13 — 2026-11-17, watcher-cleared to continue at 21:34
+
+The existing 366-day bench fixture produced a **1,676,015,028-byte encrypted archive** from a
+12,318,072,832-byte database copy through the real `runOnce` path. It exceeds the current
+536,870,912-byte (512 MiB) Cloud ceiling by more than three times. The fixture used its matching
+`30c1c1c564` checkout on the 32-core bench stand-in; current main refuses its older schema. No new
+year was built. The archive-building functions are unchanged since that checkout.
+
+The watcher cleared this plan to build the test-only destination under the current ceiling and
+real-venue refusal. The owner chose a streaming ceiling increase, assigned to lanes J and G
+(watcher, 21:35); this slice does not raise it. No owner approval of this slice's design is claimed.
+
+The measurement's post-upload warning was its own wrong outcome-holder shape: it supplied
+`destinations`, while `recordBackupOutcome` reads `failed`. With the wrong shape, the real
+`runOnce` probe logged `backup.destination_prune_failed` before listing anything; with `failed:
+new Map()`, it listed once and logged completion. This corrects the probe, not a jr8/jr10 product
+path. The year measurement establishes size, not retention or restore qualification. Its owned
+remote data and ciphertext are deleted; small text receipts remain with Lane E.
+
 ## What it builds
 
 1. The backup settings record gains `cloud: boolean` (default `false`): in `ArchiveSettings`
