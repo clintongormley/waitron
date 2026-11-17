@@ -278,7 +278,7 @@ itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own 
 … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
 for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
 also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
-rate's base «Base» (`labels.base`) where paper now prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
+rate's base «Base» (`labels.base`) where a printed full invoice prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
 invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
 of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
 dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
@@ -286,7 +286,9 @@ into line with the printed receipt; A661 (#1745), which changed that file, has l
 not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
 paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
 date in words, with the table and order on a line beneath them; it does pad the hour to two
-digits as paper does.
+digits as paper does. Nor does it show what a printed simplified receipt gained in
+RECEIPT-LAYOUT-1: a price each, a rate letter beside each amount on a bill with more than one
+VAT rate, and one tax-table row per rate under TOTAL.
 
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
@@ -596,7 +598,7 @@ Hardware and inbox checks to complete in the owner session.
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
   `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
 
-- **A ruled line between TOTAL and the VAT lines on every simplified receipt (owner, 2026-11-05,
+- **A ruled line between TOTAL and the tax table on every simplified receipt (owner, 2026-11-05,
   A404).** It reverses A663's "TOTAL, then the rates, nothing between them" for that one line; the
   sample receipt matches (`buildReceiptDocument`, `apps/server/src/receipt-document.ts`).
 

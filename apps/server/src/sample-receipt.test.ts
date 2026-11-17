@@ -108,8 +108,8 @@ describe("formatSampleReceipt", () => {
     expect(receiptSampleItemsFor("es-ES")).toHaveLength(5);
     for (const pattern of [
       /^TOTAL +16,50 €$/,
-      /^Base imponible 10% +15,00 €$/,
-      /^IVA 10% +1,50 €$/,
+      /^Tipo +Base +IVA +Total$/,
+      /^10% +15,00 +1,50 +16,50$/,
       /^Efectivo +20,00 €$/,
       /^Cambio +3,50 €$/,
     ])
@@ -126,7 +126,7 @@ describe("formatSampleReceipt", () => {
         formatSampleReceipt({ paperWidth, resolution: "203dpi" }, WORDS, "es-ES"),
       );
       const totalAt = lines.findIndex((line) => line.trim().startsWith("TOTAL"));
-      const taxAt = lines.findIndex((line) => line.startsWith("Base imponible"));
+      const taxAt = lines.findIndex((line) => line.startsWith("Tipo "));
       expect(totalAt).toBeGreaterThan(0);
       expect(lines[taxAt - 1]).toMatch(/^-+$/);
       expect(lines[taxAt - 1]!.length).toBe(lines[taxAt]!.length);

@@ -658,25 +658,27 @@ describe("POST /management-api/receipt-preview", () => {
       return printedLines((await response.json()) as ReceiptPreviewResponse);
     };
     const labelled = (lines: string[], label: string) =>
-      lines.some((line) => line === label || line.startsWith(`${label} `));
+      lines
+        .map((line) => line.replace(/\s+/gu, " "))
+        .some((line) => line === label || line.startsWith(`${label} `));
 
     it("draws the sample in a language asked for, whatever the venue has saved", async () => {
       const lines = await at("gl-ES");
-      expect(labelled(lines, "Base impoñible 10%")).toBe(true);
-      expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
-      expect(labelled(lines, "Base imponible 10%")).toBe(false);
+      expect(labelled(lines, "Tipo Base IVE Total")).toBe(true);
+      expect(labelled(lines, "10%")).toBe(true);
+      expect(labelled(lines, "Tipo Base IVA Total")).toBe(false);
     });
 
     it("follows the venue's saved language when none is asked for", async () => {
       await setVenueLanguages(["gl-ES"]);
       try {
         const lines = await at();
-        expect(labelled(lines, "Base impoñible 10%")).toBe(true);
-        expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
+        expect(labelled(lines, "Tipo Base IVE Total")).toBe(true);
+        expect(labelled(lines, "10%")).toBe(true);
       } finally {
         await setVenueLanguages(["es-ES"]);
       }
-      expect(labelled(await at(), "Base imponible 10%")).toBe(true);
+      expect(labelled(await at(), "Tipo Base IVA Total")).toBe(true);
     });
 
     it("checks permission before reading the body, then draws from one transaction snapshot", async () => {

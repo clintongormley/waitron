@@ -14,6 +14,7 @@ import {
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
+import { taxTableLines, type TaxTableRow } from "./receipt-tax-table.js";
 import {
   buildReceiptDocument,
   type ElementRange,
@@ -48,6 +49,15 @@ function preparedTable(table: ReceiptTable): ReceiptTable {
   };
 }
 
+function preparedTaxRow(row: TaxTableRow): TaxTableRow {
+  return {
+    rate: prepareText(row.rate),
+    base: prepareText(row.base),
+    tax: prepareText(row.tax),
+    total: prepareText(row.total),
+  };
+}
+
 function toTextStyle(style: ReceiptStyle | undefined): TextStyle {
   return { bold: style?.bold === true, double: style?.double === true };
 }
@@ -64,7 +74,7 @@ export interface PictureRange {
 
 /**
  * The receipt's commands; which of the pictures they draw are the rules that end its sections, so a
- * preview can tell a rule from a trim line of dashes that draws the same; and the pictures each
+ * preview can tell a rule from a trim line of dashes that reads the same; and the pictures each
  * part of the trim draws, for a part that draws any.
  */
 export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInput): {
@@ -139,9 +149,18 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
           b.line(line.text, { bold: line.header, double: false });
         }
         break;
+      case "taxTable":
+        for (const line of taxTableLines(
+          preparedTaxRow(element.header),
+          element.rows.map(preparedTaxRow),
+          columns,
+        )) {
+          b.line(line.text, { bold: line.header, double: false });
+        }
+        break;
       case "rule":
         rules.push(b.pictures);
-        b.line("-".repeat(columns));
+        b.rule();
         break;
       case "align":
         b.align(element.alignment);

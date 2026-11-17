@@ -10,7 +10,9 @@ import {
   compareDecimal,
   decimal,
   divideDecimal,
+  isZeroDecimal,
   MONEY_SCALE,
+  multiplyDecimal,
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
@@ -39,6 +41,7 @@ import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
+import type { TaxTableRow } from "./receipt-tax-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -89,7 +92,8 @@ export type ReceiptElement =
   | { kind: "align"; alignment: "left" | "center" }
   | { kind: "logo" }
   | { kind: "qr"; text: string }
-  | { kind: "table"; table: ReceiptTable };
+  | { kind: "table"; table: ReceiptTable }
+  | { kind: "taxTable"; header: TaxTableRow; rows: TaxTableRow[] };
 
 /** A part of the trim the dashboard's preview highlights. */
 export type ReceiptPart =
@@ -141,6 +145,17 @@ function sameAddress(lines: readonly string[], domicile: string): boolean {
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
   return fold(lines.join(", ")) === fold(domicile);
+}
+
+/** A letter per VAT rate, in `vatBreakdown` order; `null` when the bill has a single rate. */
+export function rateLetters(vatBreakdown: readonly { rate: string }[]): Map<string, string> | null {
+  const letters = new Map<string, string>();
+  for (const { rate } of vatBreakdown) {
+    if (![...letters.keys()].some((seen) => compareDecimal(decimal(seen), decimal(rate)) === 0)) {
+      letters.set(rate, String.fromCharCode(65 + letters.size));
+    }
+  }
+  return letters.size > 1 ? letters : null;
 }
 
 export function buildReceiptDocument({
@@ -196,10 +211,23 @@ export function buildReceiptDocument({
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
   };
-  const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
+  const letters = simplified ? rateLetters(result.vatBreakdown) : null;
+  const rateLetter = (rate: string): string | undefined =>
+    letters === null
+      ? undefined
+      : [...letters].find(([seen]) => compareDecimal(decimal(seen), decimal(rate)) === 0)?.[1];
+  const letter = ({ vatRate }: TillSaleLine): string => {
+    const found = vatRate === undefined ? undefined : rateLetter(vatRate);
+    return found === undefined ? "" : ` ${found}`;
+  };
+  const sharedLetter = (covered: readonly TillSaleLine[]): string => {
+    const [first, ...rest] = covered.map(letter);
+    return rest.every((one) => one === first) ? first! : "";
+  };
+  const takenOff = (adjustment: ReceiptAdjustment, indent: number, suffix = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
-    row(name, `-${itemAmount(adjustment.amount)}`, indent);
+    row(name, `-${itemAmount(adjustment.amount)}${suffix}`, indent);
   };
   if (simulated) {
     text(label.practice);
@@ -402,13 +430,37 @@ export function buildReceiptDocument({
   const withVatGroup = ({ dish, options }: LineGroup): void => {
     // Without its filed figures, a dish priced per pack prints its quantity, not its packs.
     const { quantity: count, unitName, soldInEach } = dish;
-    const quantity = `${quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale)}  `;
+    const shown = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
+    const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
+    const amount = decimal(dish.listGross ?? dish.gross);
     row(
       `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,
-      itemAmount(dish.listGross ?? dish.gross),
+      `${itemAmount(amount)}${letter(dish)}`,
       { after: quantity },
     );
+    const sold = decimal(count);
+    const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
+    if (
+      simplified &&
+      !result.corrects &&
+      recorded !== undefined &&
+      compareDecimal(decimal(dish.priceQuantity ?? "1"), decimal("1")) === 0 &&
+      !isZeroDecimal(amount) &&
+      compareDecimal(sold, decimal("1")) !== 0
+    ) {
+      const unit = decimal(recorded);
+      // A weighed amount is rounded to the cent, so the price it was sold at may not give it back.
+      if (compareDecimal(multiplyDecimal(unit, sold), amount) === 0) {
+        const price = formatMoney(unit, locale);
+        // Counted exactly when the quantity printed above carries no unit name.
+        const each =
+          shown === formatDecimalInput(count, locale)
+            ? label.perUnit.replace("{price}", () => price)
+            : `${price} / ${resolveSnapshotText(unitName!, namesLocale, namesLocale)}`;
+        text(`${" ".repeat(quantity.length)}${each}`, quantity.length);
+      }
+    }
     for (const answer of answers(dish)) text(`  ${answer}`, 2);
     for (const option of options) {
       const dishName = lineName(option.descriptions, namesLocale);
@@ -428,7 +480,7 @@ export function buildReceiptDocument({
         option.listGross !== undefined ||
         compareDecimal(decimal(option.gross), decimal("0")) !== 0
       )
-        row(caption, itemAmount(option.listGross ?? option.gross), 2);
+        row(caption, `${itemAmount(option.listGross ?? option.gross)}${letter(option)}`, 2);
     }
     if (dish.setLunch)
       for (const option of options) {
@@ -442,8 +494,11 @@ export function buildReceiptDocument({
               : "";
         text(`  ${name}${quantity}`, 2);
       }
+    // A dish's adjustment covers its extras too (`planAdjustment`); an extra's covers it alone.
     for (const line of [dish, ...options]) {
-      for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);
+      const covered = line === dish ? [dish, ...options] : [line];
+      for (const adjustment of line.adjustments ?? [])
+        takenOff(adjustment, 2, sharedLetter(covered));
     }
   };
   let nextFiled = 0;
@@ -475,7 +530,26 @@ export function buildReceiptDocument({
   if (simplified) {
     total();
     rule();
-    vatRows();
+    if (result.vatBreakdown.length > 0)
+      elements.push({
+        kind: "taxTable",
+        header: {
+          rate: label.taxRateColumn,
+          base: label.taxBaseColumn,
+          tax: label.taxAmountColumn,
+          total: label.taxTotalColumn,
+        },
+        rows: result.vatBreakdown.map((v) => {
+          const rate = formatVatRate(v.rate, locale);
+          const found = rateLetter(v.rate);
+          return {
+            rate: found === undefined ? rate : `${found} ${rate}`,
+            base: formatAmount(v.base, locale),
+            tax: formatAmount(v.tax, locale),
+            total: formatAmount(addDecimal(decimal(v.base), decimal(v.tax)), locale),
+          };
+        }),
+      });
   } else {
     vatRows();
     rule();

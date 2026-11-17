@@ -3,6 +3,7 @@ import { invoiceFont } from "./invoice-font.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { qrModules } from "./qr-matrix.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
+import type { TaxTableRow } from "./receipt-tax-table.js";
 
 export const INVOICE_PAGE_WIDTH = 595.28;
 export const INVOICE_PAGE_HEIGHT = 841.89;
@@ -296,6 +297,32 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
             drawHeader(itemHeader, withRate);
           }
           tableRow(row, lines, false, withRate, itemHeader);
+        }
+        break;
+      }
+      case "taxTable": {
+        const { header, rows } = element;
+        const amounts = (row: TaxTableRow): string[] => [row.base, row.tax, row.total];
+        const widths = amounts(header).map((_, at) =>
+          Math.max(...[header, ...rows].map((row) => width(amounts(row)[at]!, BODY_SIZE))),
+        );
+        const rights: number[] = [];
+        let right = INVOICE_PAGE_WIDTH - MARGIN;
+        for (let at = widths.length - 1; at >= 0; at--) {
+          rights[at] = right;
+          right -= widths[at]! + COLUMN_GAP;
+        }
+        // The table moves to the next page whole, unless it is taller than a page.
+        room(Math.min(rows.length + 1, linesPerPage) * LINE_HEIGHT);
+        for (const [index, row] of [header, ...rows].entries()) {
+          room(LINE_HEIGHT);
+          const page = pages.at(-1)!;
+          const bold = index === 0;
+          place(page, y, row.rate, MARGIN, BODY_SIZE, bold);
+          amounts(row).forEach((amount, at) =>
+            placeRight(page, y, amount, rights[at]!, BODY_SIZE, bold),
+          );
+          y += LINE_HEIGHT;
         }
         break;
       }

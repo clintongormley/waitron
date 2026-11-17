@@ -14,9 +14,10 @@ import {
 import { compareDecimal, decimal, resolveSnapshotText, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
-import { formatReceipt } from "./receipt-ticket.js";
+import { drawReceipt, formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
+import { formatAmount, formatVatRate } from "./receipt-money.js";
 import {
   bytesInclude,
   decodeTicket,
@@ -80,6 +81,7 @@ const FILED_WITHOUT_TEXT: TillSaleResult = {
       descriptions: { "es-ES": "Agua mineral", "en-GB": "Mineral water" },
       quantity: "2",
       gross: "8.80",
+      unitPriceGross: "4.40",
     },
   ],
   tender: { method: "cash", change: "9.10" },
@@ -695,6 +697,21 @@ it.each([
   },
 );
 
+it.each([PRINTER_80, PRINTER_58])("draws section rules as solid lines ($paperWidth)", (printer) => {
+  const { bytes, rules } = drawReceipt({
+    result: FILED_SALE,
+    issuer: ISSUER,
+    receipt: TRIM,
+    invoiceLocale: "es-ES",
+    printer,
+  });
+  const pictures = printedCommands(bytes).filter((c) => c.name === "GS v 0");
+  const solid = [...esc(printer).rule().bytes()];
+  expect(rules.length).toBeGreaterThan(1);
+  for (const index of rules) expect([...pictures[index]!.bytes]).toEqual(solid);
+  expect(pictures.filter((p) => p.text === rule(printer))).toHaveLength(rules.length);
+});
+
 it("puts the QR legend immediately after the raster and a rule after it", () => {
   const bytes = formatReceipt({
     result: FILED_SALE,
@@ -1039,8 +1056,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
       // Tipo(s) impositivo(s) + base imponible per rate, plus the cuota (allowed extra) (7.1.f).
       for (const v of FILED_SALE.vatBreakdown) {
-        expect(s).toContain(`Base imponible ${v.rate}%`);
-        expect(s).toContain(`IVA ${v.rate}%`);
+        const comma = (value: string): string => value.replace(".", ",");
+        expect(s).toMatch(new RegExp(` ${v.rate}% +${comma(v.base)} +${comma(v.tax)} `, "u"));
       }
 
       // Contraprestación total (7.1.g).
@@ -1059,8 +1076,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
-      // Label and amount on one line: a bare "2,10" would match inside line 1's "12,10".
-      expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
+      // Rate and amount on one line: a bare "2,10" would match inside line 1's "12,10".
+      expect(s).toMatch(/21% +10,00 +2,10 /u); // IVA 21% cuota
       expect(s).toContain("8,00"); // base 10%
       expect(s).toContain("0,80"); // IVA 10%
       expect(s).toContain("20,90"); // TOTAL
@@ -1099,7 +1116,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       "17 ago 2026",
       lineName(FILED_SALE.lines[0]!),
       "TOTAL",
-      "Base imponible 21%",
+      "A 21%",
       "Efectivo",
       TRIM.footerMessage!,
     ];
@@ -2058,7 +2075,7 @@ describe("formatReceipt — printer layout", () => {
       }),
     );
     expect(lines).toContain(`TOTAL${" ".repeat(3)}20,90 €`);
-    expect(lines).toContain(`Base imponible 21%${" ".repeat(5)}10,00 €`);
+    expect(lines).toContain(`Efectivo${" ".repeat(15)}30,00 €`);
   });
 
   it.each([
@@ -2152,10 +2169,9 @@ describe("a bill paid in parts before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
@@ -2204,10 +2220,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Efectivo 50,00 €",
       "Devolución -6,00 €",
       "Devolución -4,00 €",
@@ -2244,10 +2259,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(withoutRules(printed.slice(start + 1))).toEqual([
-      "Base imponible 21% 10,00 €",
-      "IVA 21% 2,10 €",
-      "Base imponible 10% 8,00 €",
-      "IVA 10% 0,80 €",
+      "Tipo Base IVA Total",
+      "A 21% 10,00 2,10 12,10",
+      "B 10% 8,00 0,80 8,80",
       "Tarjeta 20,00 €",
       "Ref. OP-3",
       "Devolución -5,00 €",
@@ -2287,6 +2301,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         descriptions: { "es-ES": "Agua mineral" },
         quantity: "2",
         gross: "4.00",
+        unitPriceGross: "2.00",
         parentLineNo: null,
       },
       {
@@ -2309,6 +2324,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         quantity: "3",
         gross: "9.00",
         listGross: "9.99",
+        listUnitPriceGross: "3.33",
         parentLineNo: null,
         adjustments: [{ kind: "discount", amount: "0.99" }],
       },
@@ -2327,6 +2343,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         quantity: "2",
         gross: "3.50",
         listGross: "4.00",
+        listUnitPriceGross: "2.00",
         parentLineNo: null,
       },
       {
@@ -2357,17 +2374,19 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(ADJUSTED);
     const first = lines.indexOf(at80("1  Hamburguesa", "12,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 11)).toEqual([
+    expect(lines.slice(first, first + 13)).toEqual([
       at80("1  Hamburguesa", "12,00"),
       at80("  Descuento 100%", "-12,00"),
       at80("1  Tabla de quesos", "12,00"),
       at80("  Descuento 20%", "-2,40"),
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pizza margarita", "9,00"),
       // The comp covers the dish and its extras, so it prints after them.
       at80("  Aceitunas", "1,50"),
       at80("  Descuento 100%", "-10,50"),
       at80("3  Croquetas", "9,99"),
+      "   3,33 € por unidad",
       at80("  Descuento", "-0,99"),
       rule(PRINTER_80),
     ]);
@@ -2378,15 +2397,16 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(BILL_DISCOUNT);
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 8)).toEqual([
+    expect(lines.slice(first, first + 9)).toEqual([
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 12,5%", "-0,81"),
       rule(PRINTER_80),
       `TOTAL${" ".repeat(10)}5,69 €`,
       rule(PRINTER_80),
-      at80("Base imponible 10%", "5,17 €"),
-      at80("IVA 10%", "0,52 €"),
+      "Tipo         Base         IVA        Total",
+      "10%          5,17        0,52         5,69",
     ]);
     expect(lines.filter((line) => line.startsWith("Descuento"))).toHaveLength(1);
   });
@@ -2399,7 +2419,10 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(lines.filter((line) => line.includes("->"))).toEqual([]);
     const start = lines.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
     const end = lines.indexOf(rule(PRINTER_80), start);
-    const goods = lines.slice(start, end).map((line) => printedCents(line.trimEnd()));
+    const goods = lines
+      .slice(start, end)
+      .filter((line) => !line.endsWith(" por unidad"))
+      .map((line) => printedCents(line.trimEnd()));
     const total = lines.find((line) => line.startsWith("TOTAL"))!;
     expect(goods.reduce((sum, cents) => sum + cents, 0)).toBe(printedCents(total.trimEnd()));
   });
@@ -2469,6 +2492,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
               quantity: "12",
               gross: "1111.11",
               listGross: "1234.56",
+              listUnitPriceGross: "102.88",
               parentLineNo: null,
               adjustments: [{ kind: "discount", percentBp: 1000, amount: "123.45" }],
             },
@@ -2490,14 +2514,17 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
             "1  Tabla de quesos       12,00",
             "  Descuento 20%          -2,40",
             "2  Agua mineral           4,00",
+            "   2,00 € por unidad",
             "1  Pizza margarita        9,00",
             "  Aceitunas               1,50",
             "  Descuento 100%        -10,50",
             "3  Croquetas              9,99",
+            "   3,33 € por unidad",
             "  Descuento              -0,99",
             "12  Chuletón de buey madurado",
             "    a la brasa con guarnición",
             "                       1234,56",
+            "    102,88 € por unidad",
             "  Descuento 10%        -123,45",
             "Descuento 12,5%       -1000,00",
           ]
@@ -2507,13 +2534,16 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
             "1  Tabla de quesos                   12,00",
             "  Descuento 20%                      -2,40",
             "2  Agua mineral                       4,00",
+            "   2,00 € por unidad",
             "1  Pizza margarita                    9,00",
             "  Aceitunas                           1,50",
             "  Descuento 100%                    -10,50",
             "3  Croquetas                          9,99",
+            "   3,33 € por unidad",
             "  Descuento                          -0,99",
             "12  Chuletón de buey madurado a la brasa",
             "    con guarnición                 1234,56",
+            "    102,88 € por unidad",
             "  Descuento 10%                    -123,45",
             "Descuento 12,5%                   -1000,00",
           ],
@@ -2533,8 +2563,9 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     });
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 4)).toEqual([
+    expect(lines.slice(first, first + 5)).toEqual([
       at80("2  Agua mineral", "4,00"),
+      "   2,00 € por unidad",
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 100%", "-6,50"),
       rule(PRINTER_80),
@@ -2697,8 +2728,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicili fiscal: Calle Fiscal 27, Madrid",
         comp: "Descompte 100% -12,00",
         discount: "Descompte 12,5% -1,50",
-        base: "Base imposable 21% 10,00 €",
-        vat: "IVA 21% 2,10 €",
+        taxHeader: "Tipus Base IVA Total",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "TOTAL 20,90 €",
         cash: "Efectiu 50,00 €",
         change: "Canvi 40,00 €",
@@ -2732,8 +2763,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicilio fiscal: Calle Fiscal 27, Madrid",
         comp: "Desconto 100% -12,00",
         discount: "Desconto 12,5% -1,50",
-        base: "Base impoñible 21% 10,00 €",
-        vat: "IVE 21% 2,10 €",
+        taxHeader: "Tipo Base IVE Total",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "TOTAL 20,90 €",
         cash: "Efectivo 50,00 €",
         change: "Cambio 40,00 €",
@@ -2767,8 +2798,8 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Helbide fiskala: Calle Fiscal 27, Madrid",
         comp: "Deskontua 100% -12,00",
         discount: "Deskontua 12,5% -1,50",
-        base: "Zerga-oinarria 21% 10,00 €",
-        vat: "BEZ 21% 2,10 €",
+        taxHeader: "Tasa Oinarria BEZ Guztira",
+        taxRow: "A 21% 10,00 2,10 12,10",
         total: "GUZTIRA 20,90 €",
         cash: "Eskudirua 50,00 €",
         change: "Itzulia 40,00 €",
@@ -2951,8 +2982,8 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toContain("Base imposable 10% 3,64 €");
-    expect(text).toContain("IVA 10% 0,36 €");
+    expect(text).toContain("Tipus Base IVA Total");
+    expect(text).toContain("10% 3,64 0,36 4,00");
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/^2 rebanada Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
@@ -3187,13 +3218,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
       }),
     );
     const { columns } = textGrid(PRINTER_80.paperWidth, PRINTER_80.resolution);
-    for (const start of [
-      "1  Menú del día",
-      "2  Agua mineral",
-      "Base imponible 21%",
-      "IVA 10%",
-      "TOTAL",
-    ]) {
+    for (const start of ["1  Menú del día", "2  Agua mineral", "Tipo", "A 21%", "B 10%", "TOTAL"]) {
       const line = lines.find((l) => l.startsWith(start));
       expect(line, start).toBeDefined();
       expect(line!.length, start).toBe(start === "TOTAL" ? Math.floor(columns / 2) : columns);
@@ -3314,7 +3339,7 @@ describe("the roll's spacing and rule (A497)", () => {
       .map((c) => c.text ?? (c.widthDots === LOGO.widthDots ? "<LOGO>" : "<QR>"));
 
   it.each([PRINTER_58, PRINTER_80])(
-    "prints a dash row as wide as the $paperWidth roll directly above TOTAL",
+    "prints a rule across the $paperWidth roll's text width directly above TOTAL",
     (printer) => {
       const lines = images(
         formatReceipt({
@@ -3328,7 +3353,8 @@ describe("the roll's spacing and rule (A497)", () => {
       const { columns } = textGrid(printer.paperWidth, printer.resolution);
       const total = lines.findIndex((line) => line.startsWith("TOTAL"));
       expect(lines[total - 1]).toBe("-".repeat(columns));
-      expect(lines[total - 2]).toMatch(/^2 {2}Agua mineral +8,80$/u);
+      expect(lines[total - 2]).toBe("   4,40 € por unidad");
+      expect(lines[total - 3]).toMatch(/^2 {2}Agua mineral +8,80$/u);
     },
   );
 
@@ -3592,6 +3618,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         unitName: { es: "ud" },
         quantity: "4",
         gross: "24.00",
+        unitPriceGross: "6.00",
       },
     ],
     tender: { method: "cash", change: "11.00" },
@@ -3622,16 +3649,16 @@ describe("the simplified receipt's own layout (A663)", () => {
       expect(lines).toContain("1 Bloody Mary 15,00");
       expect(lines).toContain("4 Agua, pan y aceite 24,00");
       expect(lines).toContain("TOTAL 39,00 €");
-      expect(lines).toContain("Base imponible 10% 35,45 €");
-      expect(lines).toContain("IVA 10% 3,55 €");
+      expect(lines).toContain("Tipo Base IVA Total");
+      expect(lines).toContain("10% 35,45 3,55 39,00");
       expect(lines).not.toContain("Factura T-2026/000112");
       expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
       expect(lines.some((line) => line.startsWith("Factura simplificada"))).toBe(false);
       expect(number).toBeLessThan(at("1 Bloody Mary"));
       expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
-      expect(at("TOTAL")).toBeLessThan(at("Base imponible 10%"));
-      expect(at("Base imponible 10%")).toBeLessThan(at("IVA 10%"));
-      expect(at("IVA 10%")).toBeLessThan(at("Efectivo"));
+      expect(at("TOTAL")).toBeLessThan(at("Tipo"));
+      expect(at("Tipo")).toBeLessThan(at("10%"));
+      expect(at("10%")).toBeLessThan(at("Efectivo"));
       expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
       expect(at("VERI*FACTU")).toBeLessThan(heading);
     },
@@ -3710,7 +3737,8 @@ describe("the simplified receipt's own layout (A663)", () => {
     ).filter((command) => command.text !== undefined && command.text.trim() !== "");
     const total = commands.findIndex((command) => command.text!.trim().startsWith("TOTAL"));
     expect(commands[total - 1]!.text!.trim()).toMatch(/^-+$/);
-    expect(commands[total - 2]!.text!.trim().replace(/\s+/g, " ")).toBe(
+    expect(commands[total - 2]!.text!.trim()).toBe("6,00 € por unidad");
+    expect(commands[total - 3]!.text!.trim().replace(/\s+/g, " ")).toBe(
       "4 Agua, pan y aceite 24,00",
     );
     const grid = esc(PRINTER_80).grid;
@@ -3719,27 +3747,26 @@ describe("the simplified receipt's own layout (A663)", () => {
     );
   });
 
-  it("prints a base and a VAT line for each of several rates", () => {
+  it("prints a tax-table row for each of several rates", () => {
     const lines = squeezed(FILED_WITHOUT_TEXT, PRINTER_80);
     expect(lines).toEqual(
       expect.arrayContaining([
-        "Base imponible 21% 10,00 €",
-        "IVA 21% 2,10 €",
-        "Base imponible 10% 8,00 €",
-        "IVA 10% 0,80 €",
+        "Tipo Base IVA Total",
+        "A 21% 10,00 2,10 12,10",
+        "B 10% 8,00 0,80 8,80",
       ]),
     );
     expect(lines.some((line) => line.includes("incluido"))).toBe(false);
     expect(lines.findIndex((l) => l.startsWith("TOTAL"))).toBeLessThan(
-      lines.findIndex((l) => l.startsWith("Base imponible 21%")),
+      lines.findIndex((l) => l.startsWith("A 21%")),
     );
-    expect(lines.findIndex((l) => l.startsWith("IVA 10%"))).toBeLessThan(
+    expect(lines.findIndex((l) => l.startsWith("B 10%"))).toBeLessThan(
       lines.findIndex((l) => l.startsWith("Efectivo")),
     );
   });
 
   it.each([PRINTER_58, PRINTER_80])(
-    "prints neither VAT line on a zero-total sale ($paperWidth)",
+    "prints no tax table on a zero-total sale ($paperWidth)",
     (printer) => {
       const lines = squeezed(
         {
@@ -3752,7 +3779,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         printer,
       );
       expect(lines).toContain("TOTAL 0,00 €");
-      expect(lines.some((line) => /^(Base|IVA)/.test(line))).toBe(false);
+      expect(lines.some((line) => /^(Tipo|Base|IVA)\b/u.test(line))).toBe(false);
     },
   );
 
@@ -3798,7 +3825,7 @@ describe("the simplified receipt's own layout (A663)", () => {
   });
 });
 
-describe("a rule between TOTAL and the VAT lines on a simplified receipt (owner, 2026-11-05)", () => {
+describe("a rule between TOTAL and the tax table on a simplified receipt (owner, 2026-11-05)", () => {
   it.each([PRINTER_58, PRINTER_80])(
     "prints it on a simplified receipt on $paperWidth",
     (printer) => {
@@ -3812,7 +3839,7 @@ describe("a rule between TOTAL and the VAT lines on a simplified receipt (owner,
         }),
       );
       const totalAt = lines.findIndex((line) => line.trim().startsWith("TOTAL"));
-      const taxAt = lines.findIndex((line) => line.startsWith("Base imponible"));
+      const taxAt = lines.findIndex((line) => line.startsWith("Tipo "));
       expect(totalAt).toBeGreaterThan(0);
       expect(lines[taxAt - 1]).toBe(rule(printer));
       expect(lines.slice(totalAt, taxAt - 1).every((line) => /TOTAL|€/.test(line))).toBe(true);
@@ -3967,4 +3994,443 @@ describe("a takeaway sale's printed receipt", () => {
       expect(takeaway).toEqual([...eatIn.slice(0, at + 1), words, ...eatIn.slice(at + 1)]);
     },
   );
+});
+
+describe("simplified receipt: price each and rate letters", () => {
+  const ONE_RATE = [{ rate: "10", base: "4.91", tax: "0.49" }];
+  const TWO_RATES = [
+    { rate: "10", base: "5.00", tax: "0.50" },
+    { rate: "21", base: "2.23", tax: "0.47" },
+  ];
+  const simplified = (
+    lines: TillSaleResult["lines"],
+    vatBreakdown: TillSaleResult["vatBreakdown"] = ONE_RATE,
+    extra: Partial<TillSaleResult> = {},
+  ): TillSaleResult => ({ ...FILED_SALE, invoiceType: "F2", lines, vatBreakdown, ...extra });
+  const print = (result: TillSaleResult, printer: EscSetting = PRINTER_80): string[] =>
+    printedLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", printer }),
+    );
+  const lineAfter = (lines: string[], name: string): string =>
+    lines[lines.findIndex((line) => line.includes(name)) + 1]!;
+  const lineWith = (lines: string[], text: string): string =>
+    lines.find((line) => line.includes(text))!;
+  const mahou = (
+    quantity: string,
+    gross: string,
+    unitPriceGross = "2.70",
+  ): TillSaleResult["lines"][number] => ({
+    descriptions: { "es-ES": "Mahou caña" },
+    quantity,
+    gross,
+    unitPriceGross,
+    parentLineNo: null,
+  });
+  const mixed: TillSaleResult["lines"] = [
+    {
+      descriptions: { "es-ES": "Tortilla" },
+      quantity: "1",
+      gross: "4.50",
+      listGross: "5.00",
+      vatRate: "10.00",
+      parentLineNo: null,
+      adjustments: [{ kind: "discount", percentBp: 1000, amount: "0.50" }],
+    },
+    {
+      descriptions: { "es-ES": "Extra queso" },
+      quantity: "1",
+      gross: "1.00",
+      vatRate: "10.00",
+      parentLineNo: 1,
+    },
+    { ...mahou("1", "2.70"), vatRate: "21.00" },
+  ];
+
+  it("prints the price each under a line of two", () => {
+    const after = lineAfter(print(simplified([mahou("2", "5.40")])), "Mahou caña");
+    expect(after).toMatch(/^ +2,70 € por unidad$/u);
+  });
+
+  it("prints a weighed line's price per its unit", () => {
+    const lines = print(
+      simplified([
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.5",
+          unitName: { "es-ES": "kg" },
+          gross: "12.00",
+          unitPriceGross: "24.00",
+          parentLineNo: null,
+        },
+      ]),
+    );
+    expect(lineAfter(lines, "Jamón")).toMatch(/^ +24,00 € \/ kg$/u);
+  });
+
+  it("prints a line counted in the each unit's name as a count", () => {
+    const lines = print(simplified([{ ...mahou("2", "5.40"), unitName: { es: "ud" } }]));
+    expect(lineAfter(lines, "Mahou caña")).toMatch(/^ +2,70 € por unidad$/u);
+  });
+
+  it("prints no price each when it does not divide exactly", () => {
+    expect(print(simplified([mahou("3", "10.00", "3.33")])).join("\n")).not.toContain("por unidad");
+  });
+
+  it("prints no price each for one", () => {
+    expect(print(simplified([mahou("1", "2.70")])).join("\n")).not.toContain("por unidad");
+  });
+
+  it("prints no price each for a weighed line that was not charged a whole-cent price", () => {
+    const lines = print(
+      simplified([
+        {
+          descriptions: { "es-ES": "Jamón" },
+          quantity: "0.333",
+          unitName: { "es-ES": "kg" },
+          gross: "7.99",
+          unitPriceGross: "24.00",
+          parentLineNo: null,
+        },
+      ]),
+    );
+    expect(lines.join("\n")).not.toContain("/ kg");
+  });
+
+  it("prints no price each for a free line", () => {
+    expect(print(simplified([mahou("2", "0.00", "0.00")])).join("\n")).not.toContain("por unidad");
+  });
+
+  it.each([
+    ["in full", "-5.00"],
+    ["in part", "-3.00"],
+  ])("prints no price each on a corrective that returns money %s", (_, gross) => {
+    const corrective = simplified(
+      [
+        {
+          descriptions: { "es-ES": "Croquetas" },
+          quantity: "-1",
+          gross,
+          unitPriceGross: gross.slice(1),
+          parentLineNo: null,
+        },
+      ],
+      ONE_RATE,
+      {
+        invoiceType: "R5",
+        corrects: { invoiceNumber: "T-2026-000041", issuedAt: "2026-10-14T20:00:00.000Z" },
+      },
+    );
+    const lines = print(corrective);
+    expect(lineWith(lines, "Croquetas")).toMatch(/^-1 +Croquetas +-\d,00$/u);
+    expect(lines.join("\n")).not.toContain("por unidad");
+  });
+
+  it("uses the list price before a discount", () => {
+    const lines = print(
+      simplified([
+        {
+          ...mahou("2", "5.40"),
+          listGross: "6.00",
+          listUnitPriceGross: "3.00",
+          adjustments: [{ kind: "discount", amount: "0.60" }],
+        },
+      ]),
+    );
+    expect(lineAfter(lines, "Mahou caña")).toMatch(/^ +3,00 € por unidad$/u);
+  });
+
+  it("letters each line by its rate on a mixed-rate bill", () => {
+    const lines = print(simplified(mixed, TWO_RATES));
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 5,00 A$/u);
+    expect(lineWith(lines, "Extra queso")).toMatch(/ 1,00 A$/u);
+    expect(lineWith(lines, "Descuento 10%")).toMatch(/ -0,50 A$/u);
+    expect(lineWith(lines, "Mahou caña")).toMatch(/ 2,70 B$/u);
+  });
+
+  it("prints no letter on a dish's discount that also covers an extra at another rate", () => {
+    const lines = print(
+      simplified(
+        [
+          {
+            descriptions: { "es-ES": "Margherita" },
+            quantity: "1",
+            gross: "0.00",
+            listGross: "9.00",
+            vatRate: "21.00",
+            parentLineNo: null,
+            adjustments: [{ kind: "discount", percentBp: 10000, amount: "10.50" }],
+          },
+          {
+            descriptions: { "es-ES": "Aceitunas aliñadas" },
+            quantity: "1",
+            gross: "0.00",
+            listGross: "1.50",
+            vatRate: "10.00",
+            parentLineNo: 1,
+          },
+        ],
+        TWO_RATES,
+      ),
+    );
+    expect(lineWith(lines, "Margherita")).toMatch(/ 9,00 B$/u);
+    expect(lineWith(lines, "Aceitunas aliñadas")).toMatch(/ 1,50 A$/u);
+    expect(lineWith(lines, "Descuento 100%")).toMatch(/ -10,50$/u);
+  });
+
+  it("letters an extra's own discount by the extra's rate", () => {
+    const lines = print(
+      simplified(
+        [
+          {
+            descriptions: { "es-ES": "Margherita" },
+            quantity: "1",
+            gross: "9.00",
+            vatRate: "21.00",
+            parentLineNo: null,
+          },
+          {
+            descriptions: { "es-ES": "Aceitunas aliñadas" },
+            quantity: "1",
+            gross: "0.00",
+            listGross: "1.50",
+            vatRate: "10.00",
+            parentLineNo: 1,
+            adjustments: [{ kind: "discount", percentBp: 10000, amount: "1.50" }],
+          },
+        ],
+        TWO_RATES,
+      ),
+    );
+    expect(lineWith(lines, "Descuento 100%")).toMatch(/ -1,50 A$/u);
+  });
+
+  it("prints no letters on a single-rate bill", () => {
+    const lines = print(
+      simplified(
+        mixed.map((line) => ({ ...line, vatRate: "10.00" })),
+        ONE_RATE,
+      ),
+    );
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 5,00$/u);
+    expect(lineWith(lines, "Extra queso")).toMatch(/ 1,00$/u);
+    expect(lineWith(lines, "Descuento 10%")).toMatch(/ -0,50$/u);
+    expect(lineWith(lines, "Mahou caña")).toMatch(/ 2,70$/u);
+  });
+
+  it("prints no letter on a bill-wide discount", () => {
+    const lines = print(
+      simplified(
+        mixed.map((line) => {
+          const plain = { ...line };
+          delete plain.adjustments;
+          delete plain.listGross;
+          return plain;
+        }),
+        TWO_RATES,
+        { billAdjustments: [{ kind: "discount", amount: "0.80" }] },
+      ),
+    );
+    expect(lineWith(lines, "Tortilla")).toMatch(/ 4,50 A$/u);
+    expect(lineWith(lines, "Descuento")).toMatch(/ -0,80$/u);
+  });
+
+  it("fits 58 mm", () => {
+    const lines = print(
+      simplified(
+        [
+          ...mixed.slice(0, 2),
+          { ...mahou("1", "1234.56"), vatRate: "21.00" },
+          { ...mahou("2", "5.40"), vatRate: "21.00" },
+        ],
+        TWO_RATES,
+      ),
+      PRINTER_58,
+    );
+    const rules = lines.flatMap((line, at) => (/^-+$/u.test(line) ? [at] : []));
+    expect(lines.slice(rules[2]! + 1, rules[3])).toEqual([
+      "1  Tortilla             5,00 A",
+      "  Extra queso           1,00 A",
+      "  Descuento 10%        -0,50 A",
+      "1  Mahou caña        1234,56 B",
+      "2  Mahou caña           5,40 B",
+      "   2,70 € por unidad",
+    ]);
+  });
+});
+
+describe("simplified receipt: tax table", () => {
+  const santet: TillSaleResult = {
+    ...FILED_SALE,
+    invoiceType: "F2",
+    total: "26.50",
+    vatBreakdown: [{ rate: "10", base: "24.09", tax: "2.41" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Bocadillo de jamón" },
+        quantity: "1",
+        gross: "26.50",
+        vatRate: "10.00",
+        parentLineNo: null,
+      },
+    ],
+    tender: { method: "card", reference: null, tip: "0.00", charged: "26.50" },
+  };
+  const mixed: TillSaleResult = {
+    ...santet,
+    total: "33.76",
+    vatBreakdown: [
+      { rate: "10", base: "24.09", tax: "2.41" },
+      { rate: "21", base: "6.00", tax: "1.26" },
+    ],
+    lines: [
+      ...santet.lines,
+      {
+        descriptions: { "es-ES": "Vino" },
+        quantity: "1",
+        gross: "7.26",
+        vatRate: "21.00",
+        parentLineNo: null,
+      },
+    ],
+  };
+  const print = (result: TillSaleResult, printer: EscSetting): string[] =>
+    printedLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", printer }),
+    );
+  const taxTable = (lines: string[], totalLabel = "TOTAL"): string[] => {
+    const total = lines.findIndex((line) => line.startsWith(totalLabel));
+    const ruleAfter = (from: number): number =>
+      lines.findIndex((line, at) => at > from && /^-+$/u.test(line));
+    const start = ruleAfter(total);
+    return lines.slice(start + 1, ruleAfter(start));
+  };
+
+  it.each([PRINTER_80, PRINTER_58])(
+    "prints the simplified tax summary as one row per rate ($paperWidth)",
+    (printer) => {
+      const lines = print(santet, printer);
+      const columns = esc(printer).grid.columns;
+      const table = taxTable(lines);
+      expect(table).toHaveLength(2);
+      expect(table[0]!.split(/ +/u)).toEqual(["Tipo", "Base", "IVA", "Total"]);
+      expect(table[1]!.split(/ +/u)).toEqual(["10%", "24,09", "2,41", "26,50"]);
+      for (const line of table) expect(line).toHaveLength(columns);
+      expect(lines.join("\n")).not.toContain("Base imponible");
+      expect(lines.join("\n")).not.toContain("IVA 10%");
+    },
+  );
+
+  it.each([PRINTER_80, PRINTER_58])(
+    "prints the simplified tax summary's rows with their letters on a mixed-rate bill ($paperWidth)",
+    (printer) => {
+      const table = taxTable(print(mixed, printer));
+      expect(table.slice(1).map((line) => line.split(/ +/u))).toEqual([
+        ["A", "10%", "24,09", "2,41", "26,50"],
+        ["B", "21%", "6,00", "1,26", "7,26"],
+      ]);
+      expect(table[1]!.indexOf("24,09") + 5).toBe(table[0]!.indexOf("Base") + 4);
+      expect(table[2]!.indexOf("6,00") + 4).toBe(table[0]!.indexOf("Base") + 4);
+      expect(table[1]!.indexOf("2,41") + 4).toBe(table[0]!.indexOf("IVA") + 3);
+      expect(table[2]!.indexOf("1,26") + 4).toBe(table[0]!.indexOf("IVA") + 3);
+    },
+  );
+
+  it("fits a two-rate tax table with four-figure amounts on 58 mm", () => {
+    const large: TillSaleResult = {
+      ...mixed,
+      total: "2568.02",
+      vatBreakdown: [
+        { rate: "10", base: "1234.56", tax: "123.46" },
+        { rate: "21", base: "1000.00", tax: "210.00" },
+      ],
+    };
+    const table = taxTable(print(large, PRINTER_58));
+    const { columns } = esc(PRINTER_58).grid;
+    expect(table.map((line) => line.split(/ +/u))).toEqual([
+      ["Tipo", "Base", "IVA", "Total"],
+      ["A", "10%", "1234,56", "123,46", "1358,02"],
+      ["B", "21%", "1000,00", "210,00", "1210,00"],
+    ]);
+    for (const line of table) expect(line).toHaveLength(columns);
+  });
+
+  it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "prints every figure of a mixed-rate refund of about 3,000 a rate whole on 58 mm (%s)",
+    (invoiceLocale) => {
+      const refund: TillSaleResult = {
+        ...mixed,
+        invoiceType: "R5",
+        corrects: { invoiceNumber: "T-2026-000041", issuedAt: "2026-10-14T20:00:00.000Z" },
+        total: "-6000.00",
+        vatBreakdown: [
+          { rate: "10", base: "-2727.27", tax: "-272.73" },
+          { rate: "21", base: "-2479.34", tax: "-520.66" },
+        ],
+        lines: [
+          { ...mixed.lines[0]!, quantity: "-1", gross: "-3000.00" },
+          { ...mixed.lines[1]!, quantity: "-1", gross: "-3000.00" },
+        ],
+      };
+      const lines = printedLines(
+        formatReceipt({
+          result: refund,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale,
+          printer: PRINTER_58,
+        }),
+      );
+      const labels = receiptLabelsFor(invoiceLocale);
+      const table = taxTable(lines, labels.total);
+      const words = [
+        labels.taxRateColumn,
+        labels.taxBaseColumn,
+        labels.taxAmountColumn,
+        labels.taxTotalColumn,
+        `A ${formatVatRate("10", invoiceLocale)}`,
+        `B ${formatVatRate("21", invoiceLocale)}`,
+        ...["-2727.27", "-272.73", "-2479.34", "-520.66", "-3000.00"].map((amount) =>
+          formatAmount(amount, invoiceLocale),
+        ),
+      ];
+      for (const word of words) {
+        expect(
+          table.some((line) => ` ${line} `.includes(` ${word} `)),
+          `${word} in\n${table.join("\n")}`,
+        ).toBe(true);
+      }
+      for (const line of table) expect(line.length).toBeLessThanOrEqual(30);
+    },
+  );
+
+  it("prints no tax table when the sale has no tax summary", () => {
+    const lines = print({ ...santet, total: "0.00", vatBreakdown: [] }, PRINTER_80);
+    expect(lines.some((line) => line.startsWith("Tipo "))).toBe(false);
+  });
+
+  it("prints the tax summary's header in bold", () => {
+    const commands = printedCommands(
+      formatReceipt({
+        result: santet,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).filter((command) => command.text !== undefined);
+    const grid = esc(PRINTER_80).grid;
+    const header = commands.find((command) => command.text!.startsWith("Tipo"))!;
+    const row = commands.find((command) => command.text!.startsWith("10%"))!;
+    expect(header.bytes.subarray(8)).toEqual(
+      drawTextBand(header.text!, grid, "left", { bold: true }),
+    );
+    expect(row.bytes.subarray(8)).toEqual(drawTextBand(row.text!, grid, "left", {}));
+  });
+
+  it("leaves a full invoice's tax rows as they were", () => {
+    const lines = printedLines(formatReceipt(FULL_INVOICE_FIXTURE));
+    expect(lines.join("\n")).toContain("Base imponible 21%");
+    expect(lines.join("\n")).toContain("IVA 21%");
+    expect(lines.some((line) => line.startsWith("Tipo "))).toBe(false);
+  });
 });

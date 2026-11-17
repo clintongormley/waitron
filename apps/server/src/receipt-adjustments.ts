@@ -17,7 +17,40 @@ import {
 import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
-import type { OrderLineIdentity } from "./working-order.js";
+import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
+
+/**
+ * `lines`, each holding the gross unit price it was sold at: a line rebuilt from a sale's rows takes
+ * it from its order's stored line of the same number, and only while that line still has the same
+ * quantity, price quantity and total; otherwise, and when the order holds no line, it gets none.
+ */
+async function withSoldPrices(
+  tx: Transaction,
+  workingOrderId: string | null,
+  lines: readonly ReceiptSource[],
+): Promise<readonly ReceiptSource[]> {
+  if (
+    workingOrderId === null ||
+    lines.every((line) => line.grossUnitPrice !== undefined) ||
+    !(await hasStoredLines(tx, workingOrderId))
+  ) {
+    return lines;
+  }
+  const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
+  const stored = new Map(
+    (await readStoredOrder(tx, workingOrderId)).gross.lines.map((line) => [line.lineNo, line]),
+  );
+  return lines.map((line) => {
+    const order = stored.get(line.lineNo);
+    return line.grossUnitPrice === undefined &&
+      order !== undefined &&
+      same(order.quantity, line.quantity) &&
+      same(order.priceQuantity ?? "1", line.priceQuantity ?? "1") &&
+      same(order.lineGross, line.lineGross)
+      ? { ...line, grossUnitPrice: order.grossUnitPrice }
+      : line;
+  });
+}
 
 /**
  * The receipt's lines for `priced` (`ticketLinesFrom`), with the comps and discounts it prints as
@@ -37,29 +70,35 @@ export async function receiptLines(
     tx,
     identities.flatMap((identity, i) => (priced.lines[i]?.unitName != null ? [identity.id] : [])),
   );
-  let lines = ticketLinesFrom(priced, identities).map((line, i) =>
-    each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line,
-  );
-  if (saleId !== undefined) {
-    const filed = await tx
-      .select({
-        lineNo: saleLines.lineNo,
-        unitPrice: saleLines.unitPrice,
-        priceQuantity: saleLines.priceQuantity,
-        base: saleLines.lineTotal,
-        rate: saleLines.vatRate,
-        gross: saleLines.lineGross,
-        listGross: saleLines.listGross,
-        listUnitPriceGross: saleLines.listUnitPriceGross,
-        parentLineId: saleLines.parentLineId,
-        productId: saleLines.productId,
-        parentProductId: saleLines.parentProductId,
-        versionId: saleLines.menuVersionId,
-        counterpartyTaxId: sales.counterpartyTaxId,
-      })
-      .from(saleLines)
-      .innerJoin(sales, eq(sales.id, saleLines.saleId))
-      .where(eq(sales.id, saleId));
+  const filed =
+    saleId === undefined
+      ? undefined
+      : await tx
+          .select({
+            lineNo: saleLines.lineNo,
+            unitPrice: saleLines.unitPrice,
+            priceQuantity: saleLines.priceQuantity,
+            base: saleLines.lineTotal,
+            rate: saleLines.vatRate,
+            gross: saleLines.lineGross,
+            listGross: saleLines.listGross,
+            listUnitPriceGross: saleLines.listUnitPriceGross,
+            parentLineId: saleLines.parentLineId,
+            productId: saleLines.productId,
+            parentProductId: saleLines.parentProductId,
+            versionId: saleLines.menuVersionId,
+            counterpartyTaxId: sales.counterpartyTaxId,
+          })
+          .from(saleLines)
+          .innerJoin(sales, eq(sales.id, saleLines.saleId))
+          .where(eq(sales.id, saleId));
+  // A full invoice prints no price each, so it never reads the order's lines for one.
+  const fullInvoice = filed?.[0]?.counterpartyTaxId != null;
+  let lines = ticketLinesFrom(
+    { lines: fullInvoice ? priced.lines : await withSoldPrices(tx, workingOrderId, priced.lines) },
+    identities,
+  ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
+  if (filed !== undefined) {
     const documents = await readRecordedDocuments(
       tx,
       filed.flatMap((row) =>
@@ -86,15 +125,22 @@ export async function receiptLines(
         )
         .map((row) => row.lineNo),
     );
-    lines = lines.map((line, i) =>
-      lunchLines.has(priced.lines[i]!.lineNo) ? { ...line, setLunch: true as const } : line,
-    );
-    if (filed[0]?.counterpartyTaxId != null) {
-      const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
+    const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
+    lines = lines.map((line, i) => {
+      const lineNo = priced.lines[i]!.lineNo;
+      const vatRate = basisPointsToDecimal(byLineNo.get(lineNo)!.rate);
+      return lunchLines.has(lineNo)
+        ? { ...line, vatRate, setLunch: true as const }
+        : { ...line, vatRate };
+    });
+    if (fullInvoice) {
       lines = lines.map((line, i) => {
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };
         delete display.listGross;
+        delete display.listUnitPriceGross;
+        delete display.unitPriceGross;
+        delete display.priceQuantity;
         return {
           ...display,
           ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),

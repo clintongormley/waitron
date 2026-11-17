@@ -1,4 +1,5 @@
 import { getCountryPack, receiptLabelsFor } from "@waitron/country-packs";
+import { grossLockedLines, type LockedLine } from "@waitron/menu";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -19,6 +20,7 @@ import {
   receiptDayNumeric,
 } from "./receipt-dates.js";
 import { formatAmount, formatMoney } from "./receipt-money.js";
+import { ticketLinesFrom } from "./receipt-lines.js";
 
 describe("format-neutral invoice content", () => {
   it.each([false, true])(
@@ -458,8 +460,15 @@ describe("the simplified receipt's own layout (A663)", () => {
   };
   const rows = (input: Parameters<typeof buildReceiptDocument>[0]) =>
     buildReceiptDocument(input).elements.flatMap((e): unknown[] =>
-      e.kind === "amount" ? [[e.caption, e.amount, e.style]] : e.kind === "rule" ? ["rule"] : [],
+      e.kind === "amount"
+        ? [[e.caption, e.amount, e.style]]
+        : e.kind === "rule"
+          ? ["rule"]
+          : e.kind === "taxTable"
+            ? [["taxTable", e.header, ...e.rows]]
+            : [],
     );
+  const ES_TAX_HEADER = { rate: "Tipo", base: "Base", tax: "IVA", total: "Total" };
 
   it("heads with the order, then the number and date, and prints TOTAL before each rate's base and VAT", () => {
     expect(rows(SIMPLIFIED)).toEqual([
@@ -474,10 +483,12 @@ describe("the simplified receipt's own layout (A663)", () => {
       "rule",
       ["TOTAL", "19,69 €", { double: true }],
       "rule",
-      ["Base imponible 21%", "9,00 €", undefined],
-      ["IVA 21%", "1,89 €", undefined],
-      ["Base imponible 10%", "8,00 €", undefined],
-      ["IVA 10%", "0,80 €", undefined],
+      [
+        "taxTable",
+        ES_TAX_HEADER,
+        { rate: "A 21%", base: "9,00", tax: "1,89", total: "10,89" },
+        { rate: "B 10%", base: "8,00", tax: "0,80", total: "8,80" },
+      ],
       "rule",
       ["Efectivo", "20,00 €", undefined],
       ["Cambio", "0,31 €", undefined],
@@ -496,16 +507,19 @@ describe("the simplified receipt's own layout (A663)", () => {
         },
       });
     const es = oneRate("es-ES");
-    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 6)).toEqual([
+    const oneRow = { rate: "10%", base: "17,90", tax: "1,79", total: "19,69" };
+    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 5)).toEqual([
       ["TOTAL", "19,69 €", { double: true }],
       "rule",
-      ["Base imponible 10%", "17,90 €", undefined],
-      ["IVA 10%", "1,79 €", undefined],
+      ["taxTable", ES_TAX_HEADER, oneRow],
       "rule",
     ]);
     const ca = oneRate("ca-ES");
-    expect(ca).toContainEqual(["Base imposable 10%", "17,90 €", undefined]);
-    expect(ca).toContainEqual(["IVA 10%", "1,79 €", undefined]);
+    expect(ca).toContainEqual([
+      "taxTable",
+      { rate: "Tipus", base: "Base", tax: "IVA", total: "Total" },
+      oneRow,
+    ]);
     const captions = [...es, ...ca].flatMap((row) => (Array.isArray(row) ? [String(row[0])] : []));
     expect(captions.filter((caption) => /incluido|inclòs/u.test(caption))).toEqual([]);
   });
@@ -566,6 +580,64 @@ describe("the simplified receipt's own layout (A663)", () => {
     expect(printed).toContain("Pago aplazado");
     for (const word of ["Tarjeta", "Cobrado", "Ref.", "Efectivo"])
       expect(printed).not.toContain(word);
+  });
+});
+
+describe("the simplified receipt's price each is the price the line was sold at", () => {
+  const SIMPLIFIED = {
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" as const },
+  };
+  const locked = (overrides: Partial<LockedLine>): LockedLine => ({
+    grossUnitPrice: "1.00",
+    quantity: "1",
+    vatClass: "reduced",
+    name: "Jamón",
+    descriptions: { "es-ES": "Jamón" },
+    category: null,
+    unitName: { es: "kg" },
+    unitPrecision: 3,
+    ...overrides,
+  });
+  // The stored line as the till's receipt reads it: through the lock and onto the receipt.
+  const texts = (line: LockedLine): string[] => {
+    const gross = grossLockedLines([line]);
+    const input = structuredClone(SIMPLIFIED);
+    input.result.lines = ticketLinesFrom(gross, [{ listUnitGross: null }]);
+    return buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "text" ? [e.text.trim()] : [],
+    );
+  };
+
+  it("prints none for 0,01 kg sold at 6,60 € / kg and charged 0,07 €", () => {
+    const line = locked({ grossUnitPrice: "6.60", quantity: "0.010" });
+    expect(grossLockedLines([line]).lines[0]!.lineGross).toBe("0.07");
+    expect(texts(line).filter((text) => text.includes("€"))).toEqual([]);
+  });
+
+  it("prints 12,00 € / kg for half a kilo sold at 12,00 € / kg", () => {
+    expect(texts(locked({ grossUnitPrice: "12.00", quantity: "0.500" }))).toContain("12,00 € / kg");
+  });
+
+  it("prints a counted line's price each", () => {
+    expect(
+      texts(locked({ grossUnitPrice: "2.70", quantity: "2", unitName: null, unitPrecision: null })),
+    ).toContain("2,70 € por unidad");
+  });
+
+  it("prints none for a price recorded per a quantity other than one", () => {
+    const line = locked({ grossUnitPrice: "1.20", quantity: "0.500", priceQuantity: "0.100" });
+    expect(grossLockedLines([line]).lines[0]!.lineGross).toBe("6.00");
+    expect(texts(line).filter((text) => text.includes("€"))).toEqual([]);
+  });
+
+  it("prints none for a line that carries no recorded price", () => {
+    const input = structuredClone(SIMPLIFIED);
+    input.result.lines = [{ descriptions: { "es-ES": "Caña" }, quantity: "2", gross: "5.40" }];
+    const printed = buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "text" ? [e.text] : [],
+    );
+    expect(printed.join("\n")).not.toContain("por unidad");
   });
 });
 
@@ -1363,7 +1435,11 @@ describe("identical dishes on the receipt (A803)", () => {
     };
     delete input.result.recipient;
     return buildReceiptDocument(input).elements.flatMap((e): [string, string][] =>
-      e.kind === "amount" ? [[e.caption, e.amount]] : [],
+      e.kind === "amount"
+        ? [[e.caption, e.amount]]
+        : e.kind === "taxTable"
+          ? e.rows.map((row) => [row.rate, `${row.base} + ${row.tax} = ${row.total}`])
+          : [],
     );
   };
 
@@ -1440,10 +1516,9 @@ describe("identical dishes on the receipt (A803)", () => {
     );
     const cents = goods.reduce((sum, [, amount]) => sum + Number(amount.replace(",", "")), 0);
     expect(cents).toBe(900);
-    expect(rows.slice(-3)).toEqual([
+    expect(rows.slice(-2)).toEqual([
       ["TOTAL", "9,00 €"],
-      ["Base imponible 10%", "8,18 €"],
-      ["IVA 10%", "0,82 €"],
+      ["10%", "8,18 + 0,82 = 9,00"],
     ]);
   });
 
@@ -1638,8 +1713,12 @@ describe("the corrective invoice (R5)", () => {
         `A/41 ${date(CORRECTIVE.corrects!.issuedAt, locale, 60)}`,
       ]);
       expect(lines).toContain(`-1 ${dish} ${formatAmount("-6.00", locale)}`);
-      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("-4.13", locale)}`);
-      expect(lines).toContain(`${label.vat} 21% ${formatMoney("-0.87", locale)}`);
+      expect(lines).toContain(
+        `${label.taxRateColumn} ${label.taxBaseColumn} ${label.taxAmountColumn} ${label.taxTotalColumn}`,
+      );
+      expect(lines).toContain(
+        `21% ${formatAmount("-4.13", locale)} ${formatAmount("-0.87", locale)} ${formatAmount("-5.00", locale)}`,
+      );
       expect(qrs).toHaveLength(1);
     },
   );
@@ -1693,8 +1772,12 @@ describe("the corrective invoice (R5)", () => {
       expect(lines).not.toContain(label.correctsInvoice);
       const dish = CORRECTIVE.lines[0]!.descriptions[locale]!;
       expect(lines).toContain(`1 ${dish} ${formatAmount("6.00", locale)}`);
-      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("4.96", locale)}`);
-      expect(lines).toContain(`${label.vat} 21% ${formatMoney("1.04", locale)}`);
+      expect(lines).toContain(
+        `${label.taxRateColumn} ${label.taxBaseColumn} ${label.taxAmountColumn} ${label.taxTotalColumn}`,
+      );
+      expect(lines).toContain(
+        `21% ${formatAmount("4.96", locale)} ${formatAmount("1.04", locale)} ${formatAmount("6.00", locale)}`,
+      );
     },
   );
 
