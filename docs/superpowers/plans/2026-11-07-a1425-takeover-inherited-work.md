@@ -20,7 +20,7 @@ chart names as the serving primary appends to a chain.
 **Spec:** `docs/superpowers/specs/2026-11-07-restore-takes-new-identity-design.md` (approved
 2026-11-07). This plan is its §8 part 1 only. Part 3 (a restore as a takeover) waits for Cloud.
 
-**2026-11-17:** [A1308 os1](2026-11-08-a1308-os1-order-numbers.md) replaces part 3’s
+**2026-11-17:** [A1308 os1](2026-11-08-a1308-os1-order-numbers.md) replaces Task 3’s
 counter-based allocator with the highest stored bill plus one and removes its `nodeId` argument.
 
 ## Global constraints

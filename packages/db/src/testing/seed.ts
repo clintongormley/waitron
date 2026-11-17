@@ -234,7 +234,7 @@ export async function seedDevice(
   return { deviceId: brandDeviceId(row!.id), profileId };
 }
 
-/** Seeds one working order; omitted numbers follow the highest bill already stored. */
+/** Seeds one working order; calls with omitted numbers must run in turn. */
 export async function seedWorkingOrder(
   db: Database | Transaction,
   values: Partial<typeof workingOrders.$inferInsert> = {},

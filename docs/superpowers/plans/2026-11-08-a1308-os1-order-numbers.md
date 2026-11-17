@@ -15,7 +15,7 @@ already carries on above every number given out; the handover test
 `"M2's next order number is above every number given out, and none repeats"`
 (`apps/server/src/handover-controlled.e2e.test.ts:2157`) holds it. This PR changes **where** the
 number is read from (the bills, not a second table) and adds the database guard; it does not change
-which number a bill gets. **Owner, 2026-11-09:** keep #2570's behaviour (including that a restore
+which number a bill gets. **Owner, 2026-11-09, A1308 approval page (recorded in 2337f7a193):** keep #2570's behaviour (including that a restore
 which lost the latest bills can give their numbers out again, as today).
 
 **Architecture:** One starting-migration change to core's set (slice rules §2), made through the
