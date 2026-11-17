@@ -30,6 +30,7 @@ import { assertNotAhead } from "./upgrade-schema-check.js";
 export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
+import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -324,6 +325,10 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  * 8. The connection check stands aside while a staged reset of a box that joined another is
  *    pending: that reset empties `tls/`, so one cut short leaves a part-emptied set that only the
  *    reset, further on, can finish.
+ * 9. The emergency-copy refusal (`refuseUnactivatedEmergencyCopy`) reads `node.db` alone, after
+ *    the box env is loaded and before the ahead check, whose store open switches a `venue.db` not
+ *    in WAL mode; Cloud's repeat placement of that copy would then refuse
+ *    `emergency_copy.hash_mismatch`.
  *
  * `startServer` resolving, and its `fullyStarted` settling where present, is the signal rather
  * than a healthy `/health`, because `/health` is 503 on a setup box by design, so a health-gated
@@ -859,11 +864,16 @@ async function runAdmittedEntry(
       await (deps.clearReplacedDatabases ?? clearReplacedDatabases)(deps.venueDir, deps.log);
       await (deps.clearRestoreSecretFiles ?? clearRestoreSecretFiles)(deps.stateDir, deps.log);
 
+      const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
+      // Ordering 9 in the doc comment above.
+      await refuseUnactivatedEmergencyCopy(
+        deps.venueDir,
+        isUnset(env.WAITRON_NODE_ID) ? undefined : env.WAITRON_NODE_ID,
+      );
       // Unchecked, an ahead database would surface as an unclassified driver error in whatever
       // query first touched the changed schema.
       await (deps.assertNotAhead ?? assertNotAhead)(deps.venueDir, migrationsRoot);
 
-      const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
       // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
       // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
       // one.

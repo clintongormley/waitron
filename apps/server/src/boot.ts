@@ -348,6 +348,7 @@ import { boundObjectStore } from "./bounded-store.js";
 import { validateArtifact, validateArtifactFile } from "./restore.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { assertOutsideScratchResolved, emptyScratch } from "./scratch.js";
+import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -1294,6 +1295,8 @@ async function bootServer(
   } catch (error) {
     log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
+  // Before either placement and any open of venue.db, which would switch a file not in WAL mode.
+  await refuseUnactivatedEmergencyCopy(config.venueDir, config.node?.nodeId);
   // Both placements run here and not in entry so that `startServer`-based starts and the dev entry
   // place too. It follows entry's ahead check, whose close drains the old file's -wal before placing
   // removes it (pinned in `boot.place-copy.test.ts`). A box with no identity has no node id to read

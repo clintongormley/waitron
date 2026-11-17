@@ -46,10 +46,11 @@ vi.mock("./box-secrets.js", async (original) => {
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
-import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   KEY_RING_VARIABLES,
   loadKeyRing,
@@ -57,16 +58,27 @@ import {
   openNodeSigningKeyRow,
   readNodeSigningKey,
 } from "@waitron/credentials";
-import { CORE_MIGRATIONS, type NodeDatabase } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  openVenueDatabase,
+  withNodeTransaction,
+  type NodeDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { box, NODE_MIGRATIONS, nodeHandoverEvents, readNodeMode } from "@waitron/node-db";
+import {
+  box,
+  NODE_MIGRATIONS,
+  nodeHandoverEvents,
+  readNodeMode,
+  setNodeModeTx,
+} from "@waitron/node-db";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateKeyRing } from "@waitron/provisioning";
 import { INCOMING_SUFFIX, NODE_FILE, VENUE_FILE } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import { PLACED, readImmutableNodeDb, readPlacedEmergencyCopy } from "./emergency-copy-check.js";
-import { placeEmergencyCopy } from "./emergency-copy-placement.js";
+import { placeEmergencyCopy, refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { parseEnvFile } from "./env-file.js";
 import { writeTradingEnv } from "./trading-config.js";
 import {
@@ -577,4 +589,90 @@ it("of two overlapping placements of different bindings, the second is refused a
   expect(await readPlacedNode((node) => readPlacedEmergencyCopy(node))).toEqual(binding);
   expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
+});
+
+describe("an unactivated placed copy", () => {
+  const UNACTIVATED = { code: "node.emergency_copy_unactivated" };
+  const refusal = (nodeId: string | undefined) => refuseUnactivatedEmergencyCopy(venueDir, nodeId);
+
+  async function activate(): Promise<void> {
+    const store = await openVenueDatabase(venueDir);
+    try {
+      await withNodeTransaction(store.node, (tx) =>
+        setNodeModeTx(tx, copyId, "primary", "emergency_copy"),
+      );
+    } finally {
+      await store.close();
+    }
+  }
+
+  it("passes a folder with no node.db, and leaves it without one", async () => {
+    await expect(refusal(sourceId)).resolves.toBeUndefined();
+    expect(await listing(venueDir)).toEqual([]);
+  });
+
+  it("passes a node.db that records no placed copy", async () => {
+    const [nodeFile] = suite.node.all<{ file: string }>(sql`pragma database_list`);
+    await expect(
+      refuseUnactivatedEmergencyCopy(dirname(nodeFile!.file), sourceId),
+    ).resolves.toBeUndefined();
+  });
+
+  it("passes a node.db that has no handover events table yet, as a new box's has before migrations", async () => {
+    const raw = new DatabaseSync(join(venueDir, NODE_FILE));
+    raw.exec("create table unrelated (a)");
+    raw.close();
+    await expect(refusal(sourceId)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ["the source's", sourceId],
+    ["the copy's own", copyId],
+    ["no", undefined],
+  ])(
+    "refuses a copy still a mirror under %s id, leaving node.db's bytes alone",
+    async (_name, nodeId) => {
+      await place(await placedBinding());
+      const before = sha(join(venueDir, NODE_FILE));
+      await expect(refusal(nodeId)).rejects.toMatchObject(UNACTIVATED);
+      expect(sha(join(venueDir, NODE_FILE))).toBe(before);
+    },
+  );
+
+  it.each([
+    ["the source's", sourceId],
+    ["no", undefined],
+  ])("refuses an activated copy started under %s id", async (_name, nodeId) => {
+    await place(await placedBinding());
+    await activate();
+    await expect(refusal(nodeId)).rejects.toMatchObject(UNACTIVATED);
+  });
+
+  it("passes an activated copy started under its own id", async () => {
+    await place(await placedBinding());
+    await activate();
+    await expect(refusal(copyId)).resolves.toBeUndefined();
+  });
+
+  it("reads an activation that reached only node.db's -wal before a crash", async () => {
+    await place(await placedBinding());
+    const live = join(venueDir, NODE_FILE);
+    const crashed = join(root, "crashed");
+    await mkdir(crashed);
+    const writer = new DatabaseSync(live);
+    try {
+      writer.exec("pragma wal_autocheckpoint = 0");
+      writer.prepare("update box set mode = 'primary' where node_id = ?").run(copyId);
+      // Copied while the writer holds them: the files a crash at this moment leaves behind.
+      for (const suffix of ["", "-wal", "-shm"])
+        await writeFile(join(crashed, `${NODE_FILE}${suffix}`), readFileSync(`${live}${suffix}`));
+    } finally {
+      writer.close();
+    }
+    const before = sha(join(crashed, NODE_FILE));
+
+    // Failing case, an immutable read that skips the -wal: refused as a mirror.
+    await expect(refuseUnactivatedEmergencyCopy(crashed, copyId)).resolves.toBeUndefined();
+    expect(sha(join(crashed, NODE_FILE))).toBe(before);
+  });
 });

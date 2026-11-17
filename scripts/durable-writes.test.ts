@@ -18,7 +18,7 @@ const server = Object.fromEntries(
     ["cloud-tunnel", "tunnel volume outside state"],
     [
       "emergency-copy-placement",
-      "the copy's node.db copied in beside venue.db, then renamed; reachDisk",
+      "the copy's node.db copied in beside venue.db, flushed before the rename and its folder after (reachDisk)",
     ],
     ["handover-acceptance", "A1018 reachDisk"],
     ["handover-place-copy", "A1018 reachDisk"],

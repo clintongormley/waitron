@@ -5194,6 +5194,14 @@ control still sends before the wait. Run them with
 the check on an open read-only handle to a copy, for the spare's `checkCopy` (which already called
 `assertNotAhead`) and for `checkPlacedEmergencyCopy`. Neither migrates the copy.
 
+**2026-11-17 (A1425 part 3, PR 3):** `refuseUnactivatedEmergencyCopy`
+(`apps/server/src/emergency-copy-placement.ts`) reads `node.db` alone, through its own read-only
+connection, and refuses `node.emergency_copy_unactivated`. `runAdmittedEntry` calls it before the
+ahead check, and `bootServer` calls it again before both copy placements and its own first open of
+`venue.db`. Both calls come before an open that would switch a `venue.db` not in WAL mode, after
+which Cloud's repeat placement refuses `emergency_copy.hash_mismatch`. Pinned by the two
+not-in-WAL cases in `apps/server/src/boot.emergency-copy.test.ts`.
+
 **2026-11-12 (A950 3a):** the dormant upgrade data checker is a third caller. It shares
 `upgrade-schema-check.ts`'s preflight with the ordinary entry, which re-exports it. It checks the
 venue before applying packaged migrations. No installed command invokes that library yet;

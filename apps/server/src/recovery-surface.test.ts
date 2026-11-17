@@ -488,6 +488,37 @@ describe("a box that lost its own record", () => {
   });
 });
 
+describe("a box holding an emergency copy that is not activated", () => {
+  it("the recovery page shows the title, the action and Retry a normal boot in both languages, and no Start again", async () => {
+    const english = await pageFor("node.emergency_copy_unactivated", undefined, "en-GB");
+    expect(english).toContain(
+      escapeHtml("This box holds an emergency copy of the venue that this start cannot use"),
+    );
+    expect(english).toContain(
+      escapeHtml(
+        "The copy has not been activated yet, or this start does not use the copy's own identity. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until the copy is activated and started under its own identity.",
+      ),
+    );
+    expect(english).toContain('<button type="submit">Retry a normal boot</button>');
+    const spanish = await pageFor("node.emergency_copy_unactivated", undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml(
+        "Este equipo guarda una copia de emergencia del local que este arranque no puede usar",
+      ),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
+      ),
+    );
+    expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
+    for (const page of [english, spanish]) {
+      expect(page).not.toContain("/recovery-api/start-again");
+      expect(page).not.toContain("/recovery-api/environment/start-again");
+    }
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
@@ -571,7 +602,9 @@ describe("curated operator text", () => {
   // generic line does not say what to change; `sif.allocation_invalid` because, though three of a
   // restore's clock refusals wait in `runEntry` (`CLOCK_WAIT_REASONS`), its other refusals reach the
   // page, and the generic line does not say what to do;
-  // `node.state_missing` because Retry refuses again while the record is missing.
+  // `node.state_missing` because Retry refuses again while the record is missing;
+  // `node.emergency_copy_unactivated` because Retry refuses again until the copy is activated and
+  // started under its own id.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -600,6 +633,7 @@ describe("curated operator text", () => {
       "sif.producer_changed",
       "sif.allocation_invalid",
       "node.state_missing",
+      "node.emergency_copy_unactivated",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_WORDS),

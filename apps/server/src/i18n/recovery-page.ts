@@ -331,6 +331,18 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como equipo principal». Un administrador puede retirar este equipo en la pantalla Servidores del equipo principal, para que el equipo principal deje de esperarlo. Los datos del local siguen en el equipo principal.",
     },
   },
+  "node.emergency_copy_unactivated": {
+    "en-GB": {
+      title: "This box holds an emergency copy of the venue that this start cannot use",
+      action:
+        "The copy has not been activated yet, or this start does not use the copy's own identity. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until the copy is activated and started under its own identity.",
+    },
+    "es-ES": {
+      title: "Este equipo guarda una copia de emergencia del local que este arranque no puede usar",
+      action:
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
+    },
+  },
   "sif.allocation_invalid": {
     // Chosen by code alone. Three of a restore's clock refusals wait in `runEntry` instead. The
     // discard choice is drawn only when the restore holds administrator verifiers, over HTTPS
