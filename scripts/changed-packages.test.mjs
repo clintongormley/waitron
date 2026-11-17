@@ -541,9 +541,9 @@ describe("scopeForPaths", () => {
     );
   });
 
-  it("builds the image for a release-source generator change in root scope", () => {
+  it("builds the image and tests the server for a release-source generator change", () => {
     expect(formatScope(scopeForPaths(["scripts/generate-hour-release.mjs"], workspace()))).toBe(
-      "code=false\nscope=root\npackages=\nroot=true\ndeploy=true",
+      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=true",
     );
   });
 
