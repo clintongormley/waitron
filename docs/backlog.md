@@ -1171,9 +1171,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   cross-period corrections; retain the new latest-instant and person-scoped reads. The remaining query paths are in
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
-- **Loose ends left by A585-7 (#1766).**
-  [Detail](backlog/workforce.md#loose-ends-left-by-a585-7-1766).
-
 - **A711. Special-day staffing dates come from the first area.** The read has no top-level date list. [Detail](backlog/workforce.md#a711-special-day-staffing-dates-come-from-the-first-area)
 
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
