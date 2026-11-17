@@ -73,20 +73,45 @@ function fakeHost() {
 type Host = ReturnType<typeof fakeHost>;
 type RouteMethod = Exclude<keyof Host, "tagWrite">;
 
-/** Makes the method wait until the returned release is called, then answer as it did before. */
-function hold(host: Host, method: RouteMethod): () => void {
+interface Held {
+  release: () => void;
+  /** Settles when the host is asked. */
+  asked: Promise<void>;
+}
+
+/** Makes the method's next call wait until `release` is called, then answer as it did before. */
+function hold(host: Host, method: RouteMethod): Held {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
+  let markAsked!: () => void;
+  const asked = new Promise<void>((resolve) => (markAsked = resolve));
   const fn = host[method] as unknown as {
     getMockImplementation(): (...args: unknown[]) => Promise<unknown>;
     mockImplementationOnce(impl: (...args: unknown[]) => Promise<unknown>): void;
   };
   const answerAfter = fn.getMockImplementation();
   fn.mockImplementationOnce(async (...args) => {
+    markAsked();
     await gate;
     return answerAfter(...args);
   });
-  return release;
+  return { release, asked };
+}
+
+/** Waits until the host is asked; fails at once if the route answers without asking it. */
+async function untilAsked(held: Held, response: Promise<Response>, label: string): Promise<void> {
+  let asked = false;
+  await Promise.race([
+    held.asked.then(() => (asked = true)),
+    response.then(
+      (answered) => {
+        if (!asked) throw new Error(`${label} answered ${answered.status} without asking the host`);
+      },
+      (error: unknown) => {
+        if (!asked) throw error;
+      },
+    ),
+  ]);
 }
 
 function mount(host: BoxHostRequests): Hono {
@@ -156,15 +181,23 @@ const route = (method: RouteMethod) => ROUTES.find(([, m]) => m === method)![2];
 
 /** Starts a scan and a network read and waits until the host has been asked both. */
 async function takeBothPlaces(app: Hono, host: Host) {
-  const releaseScan = hold(host, "networkScan");
-  const releaseRead = hold(host, "networkRead");
+  const scanHeld = hold(host, "networkScan");
+  const readHeld = hold(host, "networkRead");
   const scan = route("networkScan")(app);
   const read = route("networkRead")(app);
-  await vi.waitFor(() => {
+  try {
+    await Promise.all([
+      untilAsked(scanHeld, scan, "the scan"),
+      untilAsked(readHeld, read, "the network read"),
+    ]);
     expect(host.networkScan).toHaveBeenCalledTimes(1);
     expect(host.networkRead).toHaveBeenCalledTimes(1);
-  });
-  return { scan, read, releaseScan, releaseRead };
+  } catch (error) {
+    scanHeld.release();
+    readHeld.release();
+    throw error;
+  }
+  return { scan, read, releaseScan: scanHeld.release, releaseRead: readHeld.release };
 }
 
 async function expectBusy(response: Promise<Response>): Promise<void> {
@@ -238,21 +271,19 @@ describe("a place is freed whatever happens", () => {
     setUp(host);
     const app = mount(host);
     expect((await route("screenRead")(app)).status).toBe(status);
-    const releaseScan = hold(host, "networkScan");
-    const releaseRead = hold(host, "networkRead");
+    const scanHeld = hold(host, "networkScan");
+    const readHeld = hold(host, "networkRead");
     const scan = route("networkScan")(app);
-    await vi.waitFor(() => expect(host.networkScan).toHaveBeenCalledTimes(1));
-    let readAnswered = false;
-    const read = route("networkRead")(app).finally(() => (readAnswered = true));
+    await untilAsked(scanHeld, scan, "the scan");
+    expect(host.networkScan).toHaveBeenCalledTimes(1);
+    const read = route("networkRead")(app);
     try {
-      await vi.waitFor(() => {
-        expect(host.networkRead.mock.calls.length > 0 || readAnswered).toBe(true);
-      });
+      await untilAsked(readHeld, read, "the network read");
       await expectBusy(route("screenRead")(app));
       expect(host.screenRead).toHaveBeenCalledTimes(1);
     } finally {
-      releaseScan();
-      releaseRead();
+      scanHeld.release();
+      readHeld.release();
     }
     expect([(await scan).status, (await read).status]).toEqual([200, 200]);
   });
@@ -308,24 +339,26 @@ describe("refusals take no place", () => {
 });
 
 describe("no database lock around the host", () => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = () =>
-    new Promise<string>((resolve) => (timer = setTimeout(() => resolve("timed out"), 1000)));
+  // Runs before the database reset, which would otherwise wait on a lock a timed-out case left held.
+  let releaseAfter = () => {};
+  afterEach(() => releaseAfter());
 
   it.each([
     ["a write lock", () => suite.db.withWriteLock(async () => "granted")],
     ["a transaction", () => withTransaction(suite.db, async () => "granted")],
   ])("%s is granted while a join is pending", async (_label, take) => {
     const host = fakeHost();
-    const release = hold(host, "networkJoin");
+    const held = hold(host, "networkJoin");
+    releaseAfter = held.release;
     const app = mount(host);
     const joined = route("networkJoin")(app);
     try {
-      await vi.waitFor(() => expect(host.networkJoin).toHaveBeenCalledTimes(1));
-      expect(await Promise.race([take(), timedOut()])).toBe("granted");
+      await untilAsked(held, joined, "the join");
+      expect(host.networkJoin).toHaveBeenCalledTimes(1);
+      // A lock held around the host is never granted, so this case fails by its own time limit.
+      expect(await take()).toBe("granted");
     } finally {
-      clearTimeout(timer);
-      release();
+      held.release();
     }
     expect((await joined).status).toBe(200);
   });
