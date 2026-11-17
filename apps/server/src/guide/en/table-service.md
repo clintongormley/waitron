@@ -867,8 +867,8 @@ dashboard's **Sales & takings** page.
 
 ## Practise with different devices in Demo {#demo-devices}
 
-Open the till in a new browser tab to choose a device. A browser already paired with a device
-starts as that device; choose **Choose another device** on the sign-in screen to change it.
+In an unpaired browser, open the till to choose a device. A paired browser starts as its
+device; choose **Choose another device** on the sign-in screen to change it.
 A kitchen display offers the same choice beside its language control.
 
 Choose different devices in different tabs to sign in and sign out independently. Tabs that

@@ -330,11 +330,6 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
   return environment;
 }
 
-/**
- * Whether this host runs in DEV mode: `WAITRON_ENV=dev` exactly, which gates the dev routes and the
- * dev device switcher. {@link deploymentEnvironment} maps `dev` to `preproduction`, so a host is
- * never both production and dev mode.
- */
 export function isDevMode(env: Env): boolean {
   return env.WAITRON_ENV === "dev";
 }

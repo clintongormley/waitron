@@ -3354,7 +3354,7 @@ describe("join rate limiter (spec §8)", () => {
   });
 });
 
-describe("GET /api/dev/devices (dev-only chooser list)", () => {
+describe("GET /api/dev/devices (development and Demo chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);

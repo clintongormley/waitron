@@ -866,7 +866,6 @@ export const en = {
   "device.type.till": "Counter till",
   "device.type.handheld": "Handheld",
   "device.type.kds": "Prep station display",
-  // Dev-only
   "device.switch": "Choose another device",
   "device.chooser.title": "Choose a device",
   "device.chooser.select": "Select a device",

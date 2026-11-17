@@ -640,7 +640,7 @@ describe("till-lock-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-switch-device]")).toBeNull();
   });
 
-  it("in dev mode, Switch device emits a composed, bubbling switch-device event", async () => {
+  it("when available, Choose another device emits a composed, bubbling switch-device event", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
       canChooseDevice: true,

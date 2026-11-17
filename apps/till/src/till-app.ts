@@ -5327,7 +5327,7 @@ export class TillApp extends LitElement {
       return show;
     } catch (error) {
       if (overtaken()) return true;
-      if ((error as { status?: number })?.status === 404) return false;
+      if (!show || (error as { status?: number })?.status === 404) return false;
       this.errorKey = "boot.error";
       return true;
     }

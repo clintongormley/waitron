@@ -930,8 +930,8 @@ Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)
 
 ## Practicar con distintos dispositivos en Demostración {#demo-devices}
 
-Abre la caja en una pestaña nueva del navegador para elegir un dispositivo. Si el navegador
-ya está emparejado, sigue usando ese dispositivo; pulsa **Elegir otro dispositivo** en la
+En un navegador sin emparejar, abre la caja para elegir un dispositivo. Si ya está
+emparejado, sigue usando ese dispositivo; pulsa **Elegir otro dispositivo** en la
 pantalla de acceso para cambiarlo. Una pantalla de cocina ofrece la misma opción junto al idioma.
 
 Elige dispositivos distintos en cada pestaña para iniciar y cerrar sesión por separado. Las

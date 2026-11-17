@@ -74,6 +74,16 @@ async function expectTaken(response: Response, method = "POST") {
   expect(log).not.toHaveBeenCalled();
 }
 
+it("checks the page of a chosen-device session without a paired-device cookie", async () => {
+  const deviceId = randomUUID();
+  cookieText = `waitron_till_session_${deviceId}=${randomUUID()}`;
+  refusalCode = "till.origin_refused";
+  const headers = { "x-waitron-dev-device": deviceId, origin: "https://elsewhere.example" };
+  await expectRefused(await send(headers), "POST", headers);
+  log.mockClear();
+  await expectTaken(await send({ ...headers, origin: BOX }));
+});
+
 const REFUSED_ROWS: [string, Record<string, string>, { noLookup?: boolean }][] = [
   [
     "another port of the box's own name",

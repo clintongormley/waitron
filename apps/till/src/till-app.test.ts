@@ -3477,6 +3477,18 @@ describe("till-app", () => {
     expect(counter(el)).not.toBeNull();
   });
 
+  it.each([{ status: 503 }, new TypeError("Network unavailable")])(
+    "keeps a paired till usable when the optional chooser probe fails: %j",
+    async (error) => {
+      const { el } = await mountApp({ getDevDevices: vi.fn().mockRejectedValue(error) });
+      await flush(el);
+      expect(lock(el)?.deviceId).toBe("till-dev");
+      expect(lock(el)?.shadowRoot!.querySelector("[data-switch-device]")).toBeNull();
+      expect(chooser(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    },
+  );
+
   it("shows the device list for an unpaired development tab", async () => {
     const list: DevDeviceList = { devices: [] };
     const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
@@ -3616,7 +3628,7 @@ describe("till-app", () => {
     }
   });
 
-  it("the login screen offers a dev-only Switch device link that clears the tab device and returns to the chooser", async () => {
+  it("the login screen offers a Choose another device link that clears the tab device and returns to the chooser", async () => {
     // This tab adopted a device (dev), so boot lands on the login screen WITH the switch affordance.
     // Switching clears the tab device and re-boots; with no tab device the re-boot re-detects dev mode
     // (getDevDevices resolves) and shows the chooser.

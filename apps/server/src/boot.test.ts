@@ -3215,10 +3215,7 @@ describe("MAX_UPLOAD_BYTES", () => {
   });
 });
 
-describe("the dev-device header reaches the live device routes only under devMode", () => {
-  // `config.devMode` must reach the live device routes: under devMode the `x-waitron-dev-device`
-  // header authenticates as the named device, and a non-dev boot must ignore it (fail closed). Two
-  // devices with different names show the header selects a specific device.
+describe("the chooser header reaches device routes through development boot", () => {
   let deviceId1: string;
   let deviceId2: string;
 
@@ -3267,7 +3264,7 @@ describe("the dev-device header reaches the live device routes only under devMod
         );
         try {
           const headers = {
-            cookie: `waitron_till_session=${session.token}`,
+            cookie: `waitron_till_session_${deviceId1}=${session.token}`,
             [DEV_DEVICE_HEADER]: deviceId1,
             "content-type": "application/json",
           };
