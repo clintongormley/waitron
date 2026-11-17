@@ -1,6 +1,6 @@
 # D-ESCAPE-WHILE-SAVING implementation plan
 
-**Author:** separate GPT-6.1 Sol high-effort invocation. **Status:** Claude approach read completed311seconds; watcher cleared the corrected approach on2026-11-17 at15:20, with these instructions written into the plan; no owner plan approval claimed.
+**Author:** separate GPT-6.1 Sol high-effort invocation. **Status:** Claude approach read completed in 311 seconds; watcher cleared the corrected approach on 2026-11-17 at 15:20, with these instructions written into the plan; no owner plan approval claimed.
 
 **Finish line:** cover `/Users/clintongormley/waitron-campaign-d/queue.md` D-ESCAPE-WHILE-SAVING: two Escapes cannot dismiss a window during its write; success closes correctly, refusal retains its draft/target. No defect or required fix is established by this read-only inspection. Reuse Lit/Vitest Chromium harnesses; one branch within the runner's three-hour budget.
 

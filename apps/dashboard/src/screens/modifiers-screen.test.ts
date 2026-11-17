@@ -2531,6 +2531,11 @@ it.each([
       resolve();
       await delivered;
       expect(modal.open).toBe(false);
+      await vi.waitFor(() =>
+        expect(
+          kind === "extras" ? client.listExtraLists : client.listOptionLists,
+        ).toHaveBeenCalledTimes(2),
+      );
     } else {
       reject({ code: "server.internal" });
       await vi.waitFor(async () =>

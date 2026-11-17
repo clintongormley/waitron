@@ -52,7 +52,7 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
-async function mount() {
+async function mount(editing = true) {
   setLocale("en-GB");
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
   const { el: app } = await mountWidget<ImagePickerLeaveApp>("image-picker-leave-test-app", {});
@@ -67,6 +67,7 @@ async function mount() {
   await vi.waitFor(() =>
     expect(library.shadowRoot!.querySelector("[data-test=edit-one]")).not.toBeNull(),
   );
+  if (!editing) return { app, upload, library };
   library.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-one]")!.click();
   await library.updateComplete;
   await library.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -163,4 +164,45 @@ it("picker Cancel cannot interrupt a nested image write in progress", async () =
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   upload.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+});
+
+it("keeps image delete and its chooser open through two delivered Escapes", async () => {
+  const { app, upload, library } = await mount(false);
+  let finish!: (value: { deleted: boolean; uses: [] }) => void;
+  app.request.mockImplementation(async (path: string, method: string) => {
+    if (method === "GET")
+      return path.endsWith("/one") ? { image, uses: [] } : { images: [image], total: 1 };
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-one]")!.click();
+  await vi.waitFor(() =>
+    expect(library.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  const inner = library.shadowRoot!.querySelector("wt-modal")!;
+  const outer = upload.shadowRoot!.querySelector("wt-modal")!;
+  const outerClosed = vi.fn();
+  outer.addEventListener("wt-close", outerClosed);
+  await userEvent.click(
+    library.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!,
+  );
+  await library.updateComplete;
+  expect(app.request.mock.calls.filter(([, method]) => method === "DELETE")).toEqual([
+    ["/management-api/images/one", "DELETE"],
+  ]);
+  expect(document.activeElement).toBe(document.body);
+  for (let press = 0; press < 2; press++) {
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    expect(inner.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(outer.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(outerClosed).not.toHaveBeenCalled();
+    expect(upload.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+  }
+  finish({ deleted: true, uses: [] });
+  await vi.waitFor(() => expect(library.shadowRoot!.querySelector("wt-modal")).toBeNull());
+  expect(upload.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+  expect(outer.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(outerClosed).not.toHaveBeenCalled();
 });
