@@ -81,6 +81,20 @@ assert.equal(
 );
 assert.deepEqual(verifyMachine(envelope, publicKey, origin, "configuration", now), claims);
 assert.throws(() => verifyMachine(envelope, publicKey, origin, "report", now));
+for (const action of [
+  "owner-recovery-read",
+  "owner-recovery-approve",
+  "owner-recovery-refuse",
+] as const) {
+  const recoveryClaims = { ...claims, action },
+    bytes = encodeMachine(recoveryClaims),
+    signed = {
+      payload: bytes.toString("base64url"),
+      signature: sign(null, bytes, keys.privateKey).toString("base64url"),
+    };
+  assert.deepEqual(verifyMachine(signed, publicKey, origin, action, now), recoveryClaims);
+  assert.throws(() => verifyMachine(signed, publicKey, origin, "configuration", now));
+}
 const issuer = createLeaseIssuer(
   keys.privateKey.export({ type: "pkcs8", format: "der" }).toString("base64url"),
 );
