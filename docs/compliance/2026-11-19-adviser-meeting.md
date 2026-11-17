@@ -5,8 +5,8 @@ Written 15 November 2026 for the owner; last updated 17 November. Nothing here h
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question can be read without the others. Questions
 1 and 2 need the adviser's judgement, questions 3 to 14 are confirmations, questions 15 to 21 follow
-up the adviser's answers of 15 November, questions 22 and 23 ask about what is still missing, and question 24, added on 17 November, asks
-about duplicates.
+up the adviser's answers of 15 November, questions 22 and 23 ask about what is still missing, and questions 24 and 25, added on 17 November,
+ask about duplicates and about separate tickets after a table's ticket.
 
 **Where the questions come from.** The adviser answered S1 to S16 and R1 to R6 of the October
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09) on 15 November; what those
@@ -535,6 +535,17 @@ payment. Staff reprint it: marked «DUPLICADO», with the same number, lines, to
 
 Yes / No / Note: ____________________________________________
 
+**25. Two guests want their own tickets after the table's ticket was issued (follows answer 1.7).**
+
+*The situation.* Following answer 1.3, a table's ticket will be issued when staff close the table,
+paid or not (the owner's decision D1). After a ticket is issued for a table, two guests each want
+their own ticket. We propose a corrective invoice (R5) correcting the first ticket and new tickets
+for each guest, never a cancellation record, because the sale happened (answer 1.7).
+
+*We ask:* Is that right?
+
+Yes / No / Note: ____________________________________________
+
 ## Part 2: Español (para el asesor fiscal)
 
 Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un software de punto de
@@ -542,8 +553,8 @@ venta para restauración que funciona en modalidad VERI\*FACTU. Se ejecuta en un
 en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregunta puede leerse por
 separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15 a
 la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
-1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta, y la 24, añadida el 17 de
-noviembre, trata de los duplicados.
+1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta, y la 24 y la 25, añadidas el
+17 de noviembre, tratan de los duplicados y de los tiques separados tras el tique de la mesa.
 
 ### Requieren su criterio
 
@@ -1077,6 +1088,19 @@ importe pendiente.
   del original en esas líneas de pago?
 - (c) Un justificante de pago impreso horas o días después del tique, ¿sigue sin ser una factura?
   ¿Puede indicar el número del tique que paga, para que el cliente pueda relacionarlos?
+
+Sí / No / Nota: ____________________________________________
+
+**25. Dos comensales quieren su propio tique cuando ya se expidió el de la mesa (a partir de su
+respuesta 1.7).**
+
+*Situación.* A partir de su respuesta 1.3, el tique de una mesa se expedirá cuando el personal cierre
+la mesa, esté pagado o no (decisión D1 del titular). Expedido el tique de una mesa, dos comensales
+quieren cada uno su propio tique. Proponemos una factura rectificativa (R5) del primer tique y un
+tique nuevo para cada comensal, nunca un registro de anulación, porque la venta se produjo (su
+respuesta 1.7).
+
+*Preguntamos:* ¿Es correcto?
 
 Sí / No / Nota: ____________________________________________
 

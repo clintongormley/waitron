@@ -3002,8 +3002,8 @@ landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one �
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287, A1289–A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, which
-no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
+dishes in one panel, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, not
+scheduled for the foreseeable future (owner, 2026-11-17). One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
 during implementation. Each new seating starts at Bill 1

@@ -105,7 +105,8 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
-**4. Released by the hold, once A760 lands.** Build order: A446 pre-bill,
+**4. Released by the hold, once A760 lands.** Build order (A446's pre-bill is not scheduled, owner
+2026-11-17):
 close the day, then A947 and its handover bundles.
 
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
@@ -252,7 +253,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
-- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — OPEN, build it now to the strict reading, without waiting for S2 (owner, 2026-11-04).** Needs a build plan from A803 §3.9.
+- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is issued when staff close the table instead (decision D1, MEAL-END-TICKET). The design stays A803 §3.9, kept as written.
   [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
 - **A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice.** No change until answered.
@@ -679,8 +680,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, which no longer
-  waits for asesor S2.
+  picker, has landed; it leaves open A1349 and A1359. Remaining: pre-bills through A446, not scheduled for
+  the foreseeable future (owner, 2026-11-17).
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
 

@@ -27,6 +27,13 @@ Fiscal: the owner lands it.
 
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
 
+**Owner, 2026-11-17: not scheduled.** Asked whether to build the printed pre-bill or decision D1
+first, the owner chose "Drop it; queue D1", and then: "the printed pre-bill, leave it on the backlog
+for the foreseeable future". A table's ticket is issued when staff close the table instead (D1,
+[adviser answers B1](../compliance/2026-11-15-adviser-answers.md#b1-a-tables-ticket-waits-until-the-bill-is-fully-paid)).
+The design (A803 §3.9) and what the plans say about the pre-bill are kept as written. The rest of
+this entry is the 4 November decision, which this one sets aside.
+
 **Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
 cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a
 precuenta does not count, the stored copies are merely unnecessary. S1 (when the invoice must be
