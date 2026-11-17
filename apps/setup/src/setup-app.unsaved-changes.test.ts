@@ -1331,7 +1331,7 @@ it("the actual Done links leave a successfully provisioned root without another 
   expect(done.shadowRoot!.querySelector("[data-test=link-email]")).toBeNull();
   const links: [HTMLAnchorElement, string][] = [];
   for (const [id, path] of [
-    ["till", "/"],
+    ["till", "/till/"],
     ["dashboard", "/manage"],
   ]) {
     const choice = done.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-row"]>(
