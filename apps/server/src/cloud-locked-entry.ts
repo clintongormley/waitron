@@ -55,6 +55,9 @@ try {
   const running = await startLockedCopy({
     ...input,
     binding,
+    emergencyAppDir:
+      input.emergencyAppDir ??
+      fileURLToPath(new URL("../../setup/dist-emergency", import.meta.url)),
     processEnv: {},
     totpPurposeKeys,
     modules: ALL_MODULES,
