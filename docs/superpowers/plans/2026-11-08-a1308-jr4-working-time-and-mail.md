@@ -9,6 +9,11 @@
 > `loop.ts:42–51` resolves when aborted, including an already-aborted signal (both probe calls ran).
 > Only the synthetic sleep-failure portions retire; pass failures, backoff, abort/join and processing
 > assertions stay, and the mail sleep-log check becomes an observed runner waiting-state check.
+> At 15:57 the watcher cleared one additional read-only pending condition: unprocessed future
+> days whose saved bounds differ from `businessDayBounds` run the existing refresh/process pass.
+> `day_cutover_changes` wakes that check, preserving scheduled changes to an earlier day end.
+> A1308's design was approved on 4 November (backlog); this slice was reviewed by Claude and
+> cleared by the watcher. No owner approval of this slice's design is claimed.
 
 **Owner lands:** no (rules §6). The certificate reminder job only changes when an existing decision
 runs; nothing reaches AEAT.

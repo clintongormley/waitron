@@ -6,11 +6,13 @@ import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   type Database,
   stampDeployment,
+  enqueueMail,
+  outgoingMail,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -305,6 +307,24 @@ describe("attendance boot with permanent workforce", () => {
               setSingletonRoleTx(tx, f.venue.cfg.nodeId, "secondary", "fenced"),
             );
           }
+          if (mode === "secondary")
+            await withTransaction(suite.db, async (tx) => {
+              const mail = await enqueueMail(tx, {
+                kind: "security_change",
+                dedupeKey: "secondary-claim",
+                personId: f.venue.personId,
+                notAfter: new Date(Date.now() + 3_600_000),
+              });
+              await tx
+                .update(outgoingMail)
+                .set({
+                  status: "sending",
+                  claimToken: "held-claim",
+                  claimedAt: new Date().toISOString(),
+                  recipient: "worker@example.test",
+                })
+                .where(eq(outgoingMail.id, mail.id));
+            });
           const loopSpy = vi.spyOn(attendance, "attendanceJob"),
             mailSpy = vi.spyOn(mailSender, "mailSendJob");
           try {
@@ -317,6 +337,14 @@ describe("attendance boot with permanent workforce", () => {
               expect(loopSpy.mock.results[0]!.value.applies()).toBe(false);
               expect(mailSpy).toHaveBeenCalledOnce();
               expect(mailSpy.mock.results[0]!.value.applies()).toBe(false);
+              expect(
+                (
+                  await suite.db
+                    .select()
+                    .from(outgoingMail)
+                    .where(eq(outgoingMail.dedupeKey, "secondary-claim"))
+                )[0]!.status,
+              ).toBe("sending");
             } else {
               expect(loopSpy).not.toHaveBeenCalled();
               expect(mailSpy).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import * as liveApi from "./live-api.js";
 import { runTestJob } from "./testing/run-job.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
@@ -296,6 +297,36 @@ async function venueName(): Promise<string> {
 }
 
 describe("the running server's notice and email checks", () => {
+  it("publishes captured mail to the running dashboard's email inbox", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    const live = vi.spyOn(liveApi, "mountLiveApi");
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Capture recipient",
+        email: "capture@example.test",
+        locale: "en-GB",
+      });
+      await withTransaction(suite.db, (tx) =>
+        queueAccountMail(tx, { personId: person!.id, purpose: "password_reset" }),
+      );
+      holder.pauseMail = true;
+      await bootServer(booted, venue, { intent: "demo", development: true });
+      const changes: unknown[] = [];
+      unsubscribe = live.mock.calls[0]![1].bus.subscribe((event) => changes.push(event));
+      await runMailPass(holder.mail!);
+      expect(changes).toContainEqual({
+        kind: "change",
+        change: { resources: [{ type: "email_inbox" }] },
+      });
+    } finally {
+      unsubscribe?.();
+      live.mockRestore();
+      await shutDown(booted);
+    }
+  });
+
   it.each(["on", "off", "never_enabled"] as const)(
     "wires paired account mail with relay %s while other notice delivery stays local",
     async (relay) => {

@@ -1,7 +1,13 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, getTableColumns, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, installChangeFeed, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  CORE_CHANGE_SOURCES,
+  dayCutoverChanges,
+  installChangeFeed,
+  withTransaction,
+} from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
@@ -641,6 +647,49 @@ describe("attendance runner job", () => {
 });
 
 describe("attendance job change feed", () => {
+  it("a scheduled earlier day end wakes and evaluates the day at its corrected end", async () => {
+    await suite.db.insert(attendanceDays).values({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T04:00:00.000Z",
+      endAt: "2026-01-06T04:00:00.000Z",
+      nextDueAt: "2026-01-06T04:00:00.000Z",
+    });
+    await installChangeFeed(
+      suite.db,
+      CORE_CHANGE_SOURCES.filter((source) => source.table === "day_cutover_changes"),
+    );
+    const at = new Date("2026-01-06T02:00:00Z");
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const asleep = gate();
+    const runner = createJobRunner({
+      now: () => at,
+      log: () => {},
+      delay: async (ms, signal) => {
+        asleep.release();
+        await realSleep(ms, signal);
+      },
+    });
+    runner.add(attendanceJob({ ...deps(), now: () => at, maxSleepMs: 60_000 }));
+    try {
+      await asleep.promise;
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .insert(dayCutoverChanges)
+          .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "03:00:00" }),
+      );
+      await vi.waitFor(
+        async () => {
+          const [day] = await suite.db.select().from(attendanceDays);
+          expect(day!.endAt).toBe("2026-01-06T02:00:00.000Z");
+          expect(day!.evaluatedRevision).toBe(1);
+        },
+        { timeout: 2_000 },
+      );
+    } finally {
+      await runner.stopJobs();
+    }
+  });
+
   it("a clock-out through the workforce chain wakes and evaluates its marked day", async () => {
     await suite.db.insert(attendanceDays).values({
       businessDay: "2026-01-05",

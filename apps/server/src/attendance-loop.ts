@@ -1,9 +1,10 @@
-import { withTransaction, type Database } from "@waitron/db";
-import { and, sql } from "drizzle-orm";
+import { withTransaction, readVenueClock, type Database } from "@waitron/db";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { attendanceDays, processAttendanceDay } from "@waitron/workforce";
 import { nextAttendanceDay } from "./attendance-discovery.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
 import type { JobDefinition } from "./job-runner.js";
+import { businessDayBounds } from "@waitron/shared";
 
 export type AttendancePassDeps = {
   db: Database;
@@ -23,7 +24,23 @@ export async function attendanceWorkPending(db: Database, now: Date): Promise<bo
       ),
     )
     .limit(1);
-  return due !== undefined;
+  if (due !== undefined) return true;
+  const future = await db
+    .select({
+      businessDay: attendanceDays.businessDay,
+      startAt: attendanceDays.startAt,
+      endAt: attendanceDays.endAt,
+    })
+    .from(attendanceDays)
+    .where(
+      and(eq(attendanceDays.evaluatedRevision, 0), gt(attendanceDays.endAt, now.toISOString())),
+    );
+  if (future.length === 0) return false;
+  const clock = await readVenueClock(db);
+  return future.some((day) => {
+    const bounds = businessDayBounds(clock, day.businessDay);
+    return bounds.startAt !== day.startAt || bounds.endAt !== day.endAt;
+  });
 }
 
 export async function nextAttendanceDueAt(db: Database, now: Date): Promise<Date | null> {
@@ -42,7 +59,7 @@ export function attendanceJob(deps: AttendancePassDeps & { maxSleepMs: number })
   return {
     name: "attendance.end_of_day",
     applies: deps.isPrimary,
-    wakeOn: ["attendance_days", "time_entries", "workforce_chains"],
+    wakeOn: ["attendance_days", "time_entries", "workforce_chains", "day_cutover_changes"],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },

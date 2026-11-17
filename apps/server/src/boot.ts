@@ -3105,21 +3105,23 @@ async function bootServer(
           (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
       }),
     ];
-    await withTransaction(db, async (tx) => {
-      const rows = await tx
-        .select({ id: outgoingMail.id })
-        .from(outgoingMail)
-        .where(
-          and(
-            eq(outgoingMail.kind, "box_alert"),
-            isNull(outgoingMail.subjectId),
-            inArray(outgoingMail.status, ["pending", "rejected"]),
-            isNull(outgoingMail.finishedAt),
-          ),
-        );
-      for (const row of rows) previousEpisodeMailIds.add(row.id);
-      await abandonMailClaims(tx, owners, now());
-    });
+    if (isSingletonPrimary) {
+      await withTransaction(db, async (tx) => {
+        const rows = await tx
+          .select({ id: outgoingMail.id })
+          .from(outgoingMail)
+          .where(
+            and(
+              eq(outgoingMail.kind, "box_alert"),
+              isNull(outgoingMail.subjectId),
+              inArray(outgoingMail.status, ["pending", "rejected"]),
+              isNull(outgoingMail.finishedAt),
+            ),
+          );
+        for (const row of rows) previousEpisodeMailIds.add(row.id);
+        await abandonMailClaims(tx, owners, now());
+      });
+    }
     jobRunner.add(
       mailSendJob({
         db,
@@ -3129,6 +3131,7 @@ async function bootServer(
         resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
         ...cloudMail,
         log,
+        bus: liveEvents,
         maxSleepMs: 60_000,
       }),
     );

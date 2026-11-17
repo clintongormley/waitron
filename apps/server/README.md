@@ -863,8 +863,9 @@ The ones worth grepping for:
 - **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the
   existing till recovery path. `payment.automatic_recovery_failed` (`warn`) names a retained payment
   and its error, or a failure reading the recovery set. Captured payments stay available for retry.
-- **Mail loop events** use a `mail.` prefix, for example `mail.loop.sleeping` and
-  `mail.pass.threw`, so you can distinguish them from the fiscal loop's events.
+- **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
+  `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
+  `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
 - **`loop.sleeping`** (`info`) — `{ sleepMs }`. The card loop's own scheduling and failure messages
   additionally carry `loop: "pending_cards"`; the fiscal loop reports its duties through `pass.complete`.
 - **`pass.threw`** (`error`) — `{ errorCode }`. On the fiscal loop, something escaped `runPass` itself, rather than
