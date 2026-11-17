@@ -161,6 +161,22 @@ browser test page cannot be served over HTTPS. **Next action:** during the on-de
 above, click past the certificate warning on one device and confirm the page appears in the
 browser's preferred supported language, falling back to English when none is supported.
 
+## A dev stack cannot finish a Live setup
+
+Seen while looking at the recovery-pack card (PACK-CARD-LOOK, 2026-11-17): on a `wa-wt onboarding`
+stack, Live → Start empty → owner → shop details → **Provision this server** answered "This server
+did not accept this request from this page" and logged `setup.owner_required`, from the setup app's
+dev server and from the server's own HTTPS address alike. In development mode the wizard skips the
+Live owner flow (`apps/setup/src/setup-app.ts`, `if (this.draft.mode === "live" &&
+!this.developmentMode)`) and sends a plain provision, which `apps/server/src/setup-api.ts` refuses
+with `setup.owner_required` whenever a fiscal module is offered. So no dev stack reaches a venue
+whose pack 1 setup recorded, and the Backups card has never been seen with one.
+
+## Start empty asks to discard changes nobody made
+
+Seen the same day on the Live path: pressing Start empty on the untouched Import a configuration
+screen opened "Discard unsaved changes?" with nothing typed. Not traced.
+
 ## Loose ends left by A496 (moving to a new tax ID).
 
 - How long, and in what form, an old taxpayer's database must be kept. Not checked;
