@@ -1,7 +1,13 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  resetPage,
+  rgbContrast,
+  tokenColour,
+} from "./test-helpers.js";
 import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
@@ -417,6 +423,32 @@ describe("A773 pass board widget", () => {
     expect(itemOf(el, "held-1").classList.contains("held")).toBe(true);
     expect(getComputedStyle(itemOf(el, "held-1")).borderTopStyle).toBe("dashed");
   });
+
+  it.each(["light", "dark"] as const)(
+    "draws a held card's and its held dishes' dashes in the field-line colour, 3:1 against the card (%s)",
+    async (theme) => {
+      const el = await mountBoard({ board: passBoard({ held: [heldCard], toFire: [toFireCard] }) });
+      const host = el.parentElement!;
+      host.setAttribute("data-theme", theme);
+      const line = tokenColour(host, "--wt-color-field-line");
+      const border = tokenColour(host, "--wt-color-border");
+      expect(line).not.toBe(border);
+      const style = getComputedStyle(cardOf(el, heldCard.key));
+      expect(style.borderTopStyle).toBe("dashed");
+      expect(style.borderLeftStyle).toBe("solid");
+      for (const side of ["Top", "Right", "Bottom", "Left"] as const)
+        expect(style[`border${side}Color`]).toBe(line);
+      expect(rgbContrast(line, style.backgroundColor)).toBeGreaterThanOrEqual(3);
+      const other = getComputedStyle(cardOf(el, toFireCard.key));
+      for (const side of ["Top", "Right", "Bottom"] as const)
+        expect(other[`border${side}Color`]).toBe(border);
+      expect(other.borderLeftColor).not.toBe(line);
+      const heldDish = getComputedStyle(itemOf(el, "held-1"));
+      expect(heldDish.borderTopStyle).toBe("dashed");
+      expect(heldDish.borderTopColor).toBe(line);
+      expect(heldDish.borderLeftColor).not.toBe(line);
+    },
+  );
 
   it("draws the owner's column order and leaves the columns they hid out", async () => {
     const el = await mountBoard({

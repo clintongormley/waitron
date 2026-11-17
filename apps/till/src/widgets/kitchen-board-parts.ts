@@ -117,6 +117,9 @@ export const kitchenBoardStyles = css`
   .line.held {
     border-style: dashed;
     border-left-style: solid;
+    border-top-color: var(--wt-color-field-line);
+    border-right-color: var(--wt-color-field-line);
+    border-bottom-color: var(--wt-color-field-line);
     color: var(--wt-color-text-muted);
   }
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import type { StaffNotice } from "../api/client.js";
@@ -35,16 +35,6 @@ const flat = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g,
 
 async function settle(el: TillNoticeStrip): Promise<void> {
   await el.updateComplete;
-}
-
-/** The colour a token resolves to inside `host`, read off a probe element. */
-function tokenColour(host: HTMLElement, token: string): string {
-  const probe = document.createElement("span");
-  probe.style.color = `var(${token})`;
-  host.appendChild(probe);
-  const colour = getComputedStyle(probe).color;
-  probe.remove();
-  return colour;
 }
 
 describe("till-notice-strip", () => {

@@ -408,6 +408,7 @@ export class TillStationQueue extends LitElement {
       /* Every dish held: dashed, as a held line is, with no age band. */
       .ticket.held {
         border-style: dashed;
+        border-color: var(--wt-color-field-line);
       }
 
       /* .flash is set only while reduced motion is not asked for; the @media rule also stops a card
