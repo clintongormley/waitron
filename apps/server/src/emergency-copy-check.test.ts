@@ -251,14 +251,6 @@ it("refuses a copy of another stream", async () => {
   ).rejects.toMatchObject({ code: "emergency_copy.stream_mismatch" });
 });
 
-it("refuses a generation another machine wrote", async () => {
-  const hash = await place();
-  const generation = generationName(3, copyId, new Date("2026-11-17T10:00:00Z"));
-  await expect(check(bindingFor(hash, {}, { generation }))).rejects.toMatchObject({
-    code: "emergency_copy.generation_mismatch",
-  });
-});
-
 it("refuses a source the copy holds no machine row for", async () => {
   await suite.db.delete(nodes).where(sql`id = ${sourceId}`);
   const hash = await place();

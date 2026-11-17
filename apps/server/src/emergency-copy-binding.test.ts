@@ -126,6 +126,15 @@ describe("parseEmergencyCopyBinding", () => {
     expect(refusal({ ...valid, venueId: venueId.toUpperCase() })).toEqual(invalid("venueId"));
   });
 
+  it("refuses a generation another machine wrote", () => {
+    expect(
+      refusal({
+        ...valid,
+        selectedStream: { ...valid.selectedStream, generation: `gen-3-${COPY_NODE}-20261117T101500Z` },
+      }),
+    ).toEqual(invalid("selectedStream.generation"));
+  });
+
   it("refuses an environment the database cannot hold", () => {
     expect(refusal({ ...valid, environment: "dev" })).toEqual(invalid("environment"));
     expect(refusal({ ...valid, environment: "" })).toEqual(invalid("environment"));

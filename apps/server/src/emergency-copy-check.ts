@@ -17,7 +17,6 @@ import {
   WAL_SUFFIX,
   type BackupQuery,
 } from "@waitron/store";
-import { parseGenerationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { checkCopyIntegrity } from "./handover-integrity.js";
 import { isReadableChart } from "./membership-trust.js";
@@ -99,9 +98,6 @@ export async function checkPlacedEmergencyCopy(deps: {
       throw new AppError("emergency_copy.venue_mismatch", {});
     if (venue.streamId !== binding.selectedStream.streamId)
       throw new AppError("emergency_copy.stream_mismatch", {});
-
-    if (parseGenerationName(binding.selectedStream.generation)?.nodeId !== binding.sourceNodeId)
-      throw new AppError("emergency_copy.generation_mismatch", {});
 
     const sourceRow = await firstRow(query, "select id from nodes where id = ?", [
       binding.sourceNodeId,

@@ -114,7 +114,6 @@ declare module "@waitron/shared" {
     };
     "emergency_copy.venue_mismatch": Record<string, never>;
     "emergency_copy.stream_mismatch": Record<string, never>;
-    "emergency_copy.generation_mismatch": Record<string, never>;
     "emergency_copy.source_not_primary": Record<string, never>;
     "emergency_copy.chart_unverified": Record<string, never>;
     "emergency_copy.copy_node_known": Record<string, never>;

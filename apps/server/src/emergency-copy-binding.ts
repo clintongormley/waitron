@@ -90,7 +90,7 @@ export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyC
   const streamId = nonEmpty(stream.streamId, "selectedStream.streamId");
   if (!isKeySegment(streamId)) refuse("selectedStream.streamId");
   const generation = nonEmpty(stream.generation, "selectedStream.generation");
-  if (parseGenerationName(generation) === null) refuse("selectedStream.generation");
+  if (parseGenerationName(generation)?.nodeId !== sourceNodeId) refuse("selectedStream.generation");
   const databaseSha256 = stream.databaseSha256;
   if (!isSha256Hex(databaseSha256)) refuse("selectedStream.databaseSha256");
 
