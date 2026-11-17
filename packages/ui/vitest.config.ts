@@ -113,6 +113,7 @@ const refusePopoverChunk: BrowserCommand<[refuse: boolean]> = async (context, re
 };
 const fallbackTests = "src/popover-fallback.test.ts";
 const touchTests = "src/icon-button.touch.test.ts";
+const scaledTests = "src/components/wt-data-table.scaled.test.ts";
 
 export default defineConfig({
   server: { forwardConsole: false },
@@ -135,7 +136,7 @@ export default defineConfig({
       headless: true,
       instances: [
         // An instance's own `exclude` replaces the root one rather than adding to it.
-        { browser: "chromium", exclude: [...exclude, touchTests, fallbackTests] },
+        { browser: "chromium", exclude: [...exclude, touchTests, fallbackTests, scaledTests] },
         {
           browser: "chromium",
           name: "chromium-fallback",
@@ -149,6 +150,13 @@ export default defineConfig({
           name: "chromium-touch",
           include: [touchTests],
           provider: playwright({ contextOptions: { hasTouch: true } }),
+        },
+        // A screen scaling applies to the whole browser context, so the scaled test gets its own instance.
+        {
+          browser: "chromium",
+          name: "chromium-scaled",
+          include: [scaledTests],
+          provider: playwright({ contextOptions: { deviceScaleFactor: 1.5 } }),
         },
       ],
       commands: {
