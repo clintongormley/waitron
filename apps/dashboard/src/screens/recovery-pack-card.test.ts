@@ -719,7 +719,7 @@ describe("making a pack", () => {
     },
   );
 
-  it("dates the ready line from the box's time for the pack, not the browser's, before a status names it", async () => {
+  it("dates the ready line from the box's time for the pack, not the browser's", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     onTestFinished(() => {
       vi.useRealTimers();
