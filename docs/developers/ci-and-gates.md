@@ -259,7 +259,7 @@ changed valid total. During routing, its queued CI-workflow list is accepted whe
 end on empty pages with identical row values, ignoring row order. The first read's empty
 page may change its count; a changing count within the second read still refuses. It uses the second read and logs
 `Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
-(watcher, 2026-11-15 15:10). Natural workflow qualification remains open.
+(watcher, 2026-11-15 15:10). The run records below include natural acceptance of this queued-list exception.
 Different short rows still select hosted. Outside the discovery exceptions below, other
 lists discard earlier rows and retain strict count completeness. Duplicate/excess rows
 take precedence even when totals change; malformed replies also refuse the read.
@@ -440,6 +440,8 @@ local call in `ci.yml`, rather than substituting the checked-out PR head.
 | Natural idle server choice | [43763090634/1](https://github.com/clintongormley/waitron/actions/runs/43763090634), `a06769381334fd3f9609c6012269f0bebbdf5e87` | Same commit; planner `132962043266` / `1000350116` | At 21:20:33 UTC, fresh server 0+0/12 selected server without hosted counts, age 19172 ms. Four server jobs and the aggregate passed. |
 | Natural busy server, hosted choice | [43762851651/1](https://github.com/clintongormley/waitron/actions/runs/43762851651), `6e38f045569187a9e3028865e8714669fc6ff007` | `95fbb76b1e0762c5e09191e612372ccaaf5b87f8`; planner `132961296135` / `22076` | At 21:18:32 UTC, fresh server 7+0/12 versus hosted 1+0/20 selected hosted, age 129872 ms. The server planner and 77 hosted jobs passed. |
 | Natural agreeing-row inventory exception | [43948927220/1](https://github.com/clintongormley/waitron/actions/runs/43948927220), `16f327ed8a3c80b800e454665c47e166627a7eac` | `d7aff3a1b35bacf68a0dcf82f6030b945d56e777`; planner `133585902765` / `25670` | On 16 November at 20:22:33 UTC, empty agreeing queued-run rows with starting counts 1,1 were accepted; the subsequent hosted choice and all 38 selected jobs, including aggregate `133590760703`, passed. |
+| Scheduled idle pickup | [44159930128/1](https://github.com/clintongormley/waitron/actions/runs/44159930128) and [44160033077/1](https://github.com/clintongormley/waitron/actions/runs/44160033077), `b042abc1899e7c763f7404b9bb147290ecfc6df9` | Same commit for both workflows and the health module. Health `134310681452` / `1000362367`, probe `134311058616` / `27722`, aggregate `134312119693` / `1000362371` | On 17 November at 19:34:31 UTC, scheduled health logged that it dispatched a probe after observing no recent server traffic. The probe ran on the disposable server on its first attempt. Both selected jobs, the probe and the hosted aggregate, passed. |
+| Short repository running list | [44179139053/1](https://github.com/clintongormley/waitron/actions/runs/44179139053), `c99c16f6a9c20ce963e6059f22c483b246a9553f` | `dfb7f1ea74c872ab9bfe8392bbe8be28b8ad836a`, planner `134378447960` / `27854`, aggregate `134385184335` / `1000362876` | At 21:23:42 UTC on 17 November, the repository-wide `in_progress` list ended after three of six advertised rows on its second read. The fresh capacity read succeeded and the strict inventory check selected the documented hosted fallback. The server planner and all 41 selected hosted jobs passed. |
 
 API runner names for the disposable jobs above are `dt-1314919489-RUN-1-JOB`;
 labels are `self-hosted` plus the job-family label, not that runner name. The health
@@ -448,8 +450,9 @@ revision's checked-out recovery module matches the tool and planner revisions by
 exercises stale-count acceptance. The contributor-approval API returned
 `all_external_contributors` on 15 November. These receipts do not establish VM isolation.
 
-When a later status check shows an idle server, inspect the choosing job's earlier capacity
-before diagnosing a routing fault. The eight runs created from 21:06 through 21:25 UTC on
+When a later status check shows an idle server, read the choosing job's route and reason.
+Run 44179139053 had already selected the hosted fallback before the 21:27:46 UTC idle
+snapshot. The eight runs created from 21:06 through 21:25 UTC on
 15 November had 22 successful server assignments across four CI runs; three of the eight
 were hosted Server health runs. The routing logs above distinguish an idle-server choice
 from a busy-server choice. To inspect assignments, read
@@ -457,17 +460,18 @@ from a busy-server choice. To inspect assignments, read
 and check each job's `labels`, `runner_id` and `runner_name`; the watcher's
 `gh run view --json jobs` inspection omitted those assignment details.
 
-Keep server coverage and automatic idle pickup open. Successful nightly
+Server coverage remains open. Successful nightly
 [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
 coverage merges and aggregate on GitHub. Three executed idle checks in six scheduled health
 runs `43743762173` through `43747449175` reported recent server traffic and dispatched no
-probe. A manual successful probe is a different proof. The [remaining qualification runs](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
+probe. The scheduled dispatch on 17 November closes the idle-pickup requirement.
+The [remaining qualification runs](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
 name what is still needed; no queue-time improvement is claimed.
 
 **16 November, post-#3514 observation.** Attempt-specific job records and logs for
 14 completed CI attempts and six health passes, created from 12:55 through 13:38 UTC,
 did not show planner shortfall rescue, routing's agreeing-row exception, scheduled idle
-dispatch or a controller-attributed per-job move. All four proofs remain open. The two
+dispatch or a controller-attributed per-job move. That sample left all four proofs open. The two
 executed idle checks reported server traffic. A strict standalone check in
 [43872977759/1](https://github.com/clintongormley/waitron/actions/runs/43872977759)
 still refused an in-progress list with count one and no rows.
@@ -488,9 +492,8 @@ the remaining selected jobs ran on GitHub. Attempt-specific jobs and the planner
 rechecked against the exact workflow/module source, are retained in Lane I's
 `receipts/ci-stale-count-20261117/` and `receipts/ci-idle-20261116-2123/`.
 The workflow identity comes from the referenced local reusable workflow; `ci.yml` fetches the
-routing module at `GITHUB_WORKFLOW_SHA`. Planner shortfall recovery, scheduled idle pickup and
-the other [qualification gaps](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
-remain open. This records an event, with no speed or whole-bundle qualification claim.
+routing module at `GITHUB_WORKFLOW_SHA`. That reconciliation left planner shortfall recovery and
+the other requirements open. See the [current qualification gaps](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup).
 
 The public repository still exposes the runner VM, host and reachable network to code that
 obtains admission. Labels are routing information, not isolation. Lane I owns disposable VMs
