@@ -547,6 +547,18 @@ for (const locale of ["en", "es"] as const) {
       "before" | "provisioned" | "seeded",
       CanonicalMadridSemantics
     >;
+    for (const [email, displayNameFolded] of [
+      ["diego@demo.waitron.local", "diego molina"],
+      ["javier@demo.waitron.local", "javier torres"],
+      ["lucia@demo.waitron.local", "luc\u00eda fern\u00e1ndez"],
+      ["manager@demo.waitron.local", "marta ruiz"],
+      ["sofia@demo.waitron.local", "sof\u00eda navarro"],
+    ] as const) {
+      const row = expected.seeded.tables.persons!.rows[`@persons:${stable([email])}`]!;
+      expect([row.display_name_folded, row.email_folded]).toEqual([null, null]);
+      row.display_name_folded = displayNameFolded;
+      row.email_folded = email;
+    }
     expect(historicalSeeded.tables.payments!.rows).toEqual({});
     historicalSeeded.tables.payments = structuredClone(expected.seeded.tables.payments!);
     for (const name of ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]) {
@@ -2248,6 +2260,9 @@ for (const locale of ["en", "es"] as const) {
         pk: 0,
       });
       for (const row of Object.values(paymentTable.rows)) row.requested_by = null;
+      expected[phase].tables.persons!.columns.find(
+        (column) => column.name === "display_name_folded",
+      )!.notnull = 1;
       const actions = expected[phase].tables.account_actions!;
       actions.columns = actions.columns.filter((column) => column.name !== "target_email");
       for (const row of Object.values(actions.rows)) delete row.target_email;
