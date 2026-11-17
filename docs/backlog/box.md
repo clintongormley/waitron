@@ -1319,13 +1319,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: What pack part 1's reviews left
 
-2 entries, size S.
+3 entries, size S, needs the owner.
 
 - **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old
   Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
 - **A1187: the Backups card's reads and receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
+- **A1187: the Backups card after a real Live setup has not been looked at.** No dev stack can
+  finish one ([why](setup.md#a-dev-stack-cannot-finish-a-live-setup)).
 
 ## Bundle: Remaining bucket-copy limits
 
