@@ -1023,7 +1023,7 @@ describe("asking for the month's file and saving it", () => {
     const app = mount({ render: countingRender().render });
     const asker = await sessionHolding(db(), ["invoice.inspect"]);
     expect((await requestMonth(app, "2025-06", { cookie: asker.cookie })).status).toBe(202);
-    await inTx(venue, (tx) => endManagementSession(tx, tokenOf(asker.cookie)));
+    await inTx(venue, (tx) => endManagementSession(tx, tokenOf(asker.cookie), "signed_out"));
     await runBuild(app);
     const next = await withNewSession(asker.personId);
     expect(await (await monthStatus(app, next)).json()).toMatchObject({ status: "ready" });
@@ -1034,7 +1034,9 @@ describe("asking for the month's file and saving it", () => {
 });
 
 async function withNewSession(personId: string): Promise<string> {
-  const session = await inTx(venue, (tx) => startManagementSession(tx, { personId }));
+  const session = await inTx(venue, (tx) =>
+    startManagementSession(tx, { method: "password", personId }),
+  );
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
