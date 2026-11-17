@@ -71,7 +71,9 @@ to say what is still owed.
   after payment (owner, 17 November, chose this over a duplicado; see Approaches).
 - Every receipt language (`packages/country-es/src/receipt-labels.ts` and every other country pack's
   labels) needs the new words.
-- 58 mm paper has 32 columns (80 mm, 42 at 180 dpi): the tax table and letters must fit there.
+- 58 mm paper has 30 columns and 80 mm paper 42 (`textGrid`, `packages/printing/src/layout.ts`):
+  the tax table and letters must fit there. (Corrected 2026-11-17 while building PR 1; this line
+  said 32 for 58 mm.)
 - The receipt is rebuilt from the database each time it prints (`readSettledTicket`,
   `readTransactionReceipt`); only a retry of a failed original reuses stored bytes
   (`receipt-print.ts:559`). Goal 5 relies on that.
@@ -109,11 +111,15 @@ to say what is still owed.
 - Goal 4 is read as "solid lines in the existing places", not "more lines".
 - The tax table applies to every simplified receipt, single-rate included.
 - The unit-price line prints the price the item was sold at, as its order line recorded it, and
-  only when that price is per one unit and × quantity equals the printed amount to the cent;
-  otherwise none. It is never worked out from the amount: 0,01 kg sold at 6,60 €/kg is charged
+  only when that price is per one unit and × quantity equals the printed amount exactly;
+  otherwise none. A corrective receipt and a line charged nothing print none. It is never worked out from the amount: 0,01 kg sold at 6,60 €/kg is charged
   0,07 €, and the line is left out rather than printed as 7,00 €/kg. A receipt line with no recorded
   price prints none.
-- Rate letters run A, B, C… in the order of the tax summary (`vatBreakdown`).
+- Rate letters run A, B, C… in the order of the tax summary (`vatBreakdown`). A discount that
+  spans rates carries no letter: a whole-bill discount, and (decided while building PR 1) a dish's
+  discount that also covers an extra taxed at another rate.
+- The solid line runs across the text columns, where today's dashes print, not the full paper
+  width (decided while building PR 1).
 - Column headings of the tax table are short per-language words (Spanish: `Tipo`, `Base`, `IVA`,
   `Total`); amounts in the table carry no `€`.
 - Card line wording: `Visa ****4034 (Sin contacto)` with its amount on the right, then

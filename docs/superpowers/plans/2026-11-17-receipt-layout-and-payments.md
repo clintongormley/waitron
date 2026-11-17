@@ -199,6 +199,8 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
   solid horizontal bar 2 dots thick, vertically centred, across `widthDots`; counts as one picture.
   `readRasterText` reads that exact band back as `"-".repeat(columns)`, so previews, `printedLines`
   and `withoutRules` keep reading a rule as dashes.
+  (2026-11-17, as built: 58 mm has 30 text columns, not the 32 this plan names; the bar spans
+  the text grid, not the full paper width; see the spec's author's calls.)
 
 - [ ] **Step 1: Failing tests.** `escpos.test.ts`: `"rule() draws a solid bar, not dash glyphs"` —
   its image bytes differ from `line("-".repeat(columns))`'s and every set bit lies in two adjacent
