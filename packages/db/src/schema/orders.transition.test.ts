@@ -237,7 +237,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   });
 
   it("rejects any change to a settled order other than the handover stamp or leaving its party, and a re-stamp of an already-collected one (the settled-state freeze holds)", async () => {
-    // The relaxations permit the collected_at stamp and leaving a party, and NOTHING ELSE.
+    // A handover cannot change the bill’s recorded facts with its stamp.
     const id = await open();
     await inTx((tx) =>
       tx
@@ -255,10 +255,15 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
+    const before = await rowOf(id);
+    const changedSettlement = new Date(Date.parse(before.settledAt!) + 1000).toISOString();
     // A bare settled_at edit: the handover relaxation requires collected_at itself to go NULL→non-null.
     const eSettledAt = await captureError(() =>
       inTx((tx) =>
-        tx.update(workingOrders).set({ settledAt: now() }).where(eq(workingOrders.id, id)),
+        tx
+          .update(workingOrders)
+          .set({ settledAt: changedSettlement })
+          .where(eq(workingOrders.id, id)),
       ),
     );
     expect(engineErrorMessage(eSettledAt)).toBe(TRANSITION_REFUSAL);
@@ -267,9 +272,14 @@ describe("working_orders state machine (enforce_transition)", () => {
       tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
     );
     // A re-stamp of an already-collected order: the handover relaxation requires the old collected_at null.
+    const collected = await rowOf(id);
+    const changedCollection = new Date(Date.parse(collected.collectedAt!) + 1000).toISOString();
     const eRecollect = await captureError(() =>
       inTx((tx) =>
-        tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
+        tx
+          .update(workingOrders)
+          .set({ collectedAt: changedCollection })
+          .where(eq(workingOrders.id, id)),
       ),
     );
     expect(engineErrorMessage(eRecollect)).toBe(TRANSITION_REFUSAL);
@@ -684,15 +694,16 @@ describe("working_orders state machine (enforce_transition)", () => {
     },
   );
 
-  it("refuses a handed-over order leaving its party", async () => {
+  it("lets a handed-over order leave its party", async () => {
     const id = await settledIn(await party());
     await inTx((tx) =>
       tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
     );
-    const e = await captureError(() =>
-      inTx((tx) => tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, id))),
+    const before = await rowOf(id);
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, id)),
     );
-    expect(engineErrorMessage(e)).toBe(TRANSITION_REFUSAL);
+    expect(await rowOf(id)).toEqual({ ...before, partyId: null });
   });
 
   it("refuses the handover stamp together with leaving the party", async () => {
@@ -708,22 +719,124 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(e)).toBe(TRANSITION_REFUSAL);
   });
 
-  it("refuses a settled order joining a party or changing party", async () => {
+  it("lets a settled order join or change party", async () => {
     const target = await party();
-    const loose = await settledIn(null);
-    const eJoin = await captureError(() =>
+    for (const previous of [null, await party()]) {
+      const id = await settledIn(previous),
+        before = await rowOf(id);
+      await inTx((tx) =>
+        tx.update(workingOrders).set({ partyId: target }).where(eq(workingOrders.id, id)),
+      );
+      expect(await rowOf(id)).toEqual({ ...before, partyId: target });
+    }
+  });
+
+  it.each([false, true])(
+    "a settled bill may change only party, bill number, bill name and editor (collected %s)",
+    async (collected) => {
+      const target = await party();
+      const id = await settledIn(await party());
+      const editorId = await seedPerson(suite.db, {
+        id: "identity-editor",
+        displayName: "Identity editor",
+      });
+      if (collected)
+        await inTx((tx) =>
+          tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
+        );
+      for (const change of [
+        { partyId: target },
+        { billNumber: 2 },
+        { billName: "Window" },
+        { editorId },
+        { editorVersion: 1 },
+      ]) {
+        const before = await rowOf(id);
+        await inTx((tx) => tx.update(workingOrders).set(change).where(eq(workingOrders.id, id)));
+        expect(await rowOf(id)).toEqual({ ...before, ...change });
+      }
+    },
+  );
+
+  it("a settled bill still refuses every other column", async () => {
+    const id = await settledIn(await party());
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
+    );
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('working_orders')`,
+    );
+    for (const { name } of columns.filter(
+      ({ name }) =>
+        !["party_id", "bill_number", "bill_name", "editor_id", "editor_version", "status"].includes(
+          name,
+        ),
+    )) {
+      const error = await captureError(() =>
+        inTx((tx) =>
+          tx.execute(
+            sql`update working_orders set ${sql.identifier(name)} = ${"changed"} where id = ${id}`,
+          ),
+        ),
+      );
+      expect(engineErrorMessage(error), name).toBe(TRANSITION_REFUSAL);
+    }
+  });
+
+  it.each(["placed", "settled"] as const)(
+    "the %s handover stamp refuses a bill number or editor change in the same update",
+    async (status) => {
+      const id = await open(),
+        partyId = await party();
+      await inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ partyId, status, ...(status === "settled" ? { settledAt: now() } : {}) })
+          .where(eq(workingOrders.id, id)),
+      );
+      for (const change of [{ billNumber: 1 }, { editorVersion: 1 }]) {
+        const error = await captureError(() =>
+          inTx((tx) =>
+            tx
+              .update(workingOrders)
+              .set({ collectedAt: now(), ...change })
+              .where(eq(workingOrders.id, id)),
+          ),
+        );
+        expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+      }
+    },
+  );
+
+  it("an abandoned bill refuses an editor change", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id)),
+    );
+    const error = await captureError(() =>
       inTx((tx) =>
-        tx.update(workingOrders).set({ partyId: target }).where(eq(workingOrders.id, loose)),
+        tx.update(workingOrders).set({ editorVersion: 1 }).where(eq(workingOrders.id, id)),
       ),
     );
-    expect(engineErrorMessage(eJoin)).toBe(TRANSITION_REFUSAL);
-    const seated = await settledIn(await party());
-    const eChange = await captureError(() =>
-      inTx((tx) =>
-        tx.update(workingOrders).set({ partyId: target }).where(eq(workingOrders.id, seated)),
-      ),
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("a placed bill's identity columns change freely", async () => {
+    const id = await open(),
+      partyId = await party();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
-    expect(engineErrorMessage(eChange)).toBe(TRANSITION_REFUSAL);
+    const before = await rowOf(id);
+    const change = {
+      partyId,
+      billNumber: 1,
+      billName: "Patio",
+      editorId: "person",
+      editorVersion: 2,
+    };
+    await inTx((tx) => tx.update(workingOrders).set(change).where(eq(workingOrders.id, id)));
+    expect(await rowOf(id)).toEqual({ ...before, ...change });
   });
 
   // Weaker than its name: it reads the trigger's stored TEXT, which is why the refusals above
@@ -736,13 +849,16 @@ describe("working_orders state machine (enforce_transition)", () => {
       sql`select sql from sqlite_master where type = 'trigger' and name = 'working_orders_enforce_transition'`,
     );
     const text = trigger!.sql;
-    const anchor = "old.party_id IS NOT NULL AND new.party_id IS NULL";
+    const anchor =
+      "-- settled: party, bill number, bill name and editor may change (owner, 2026-11-04)";
     const start = text.indexOf(anchor);
     expect(start).toBeGreaterThan(-1);
-    const next = text.indexOf("OR (", start);
+    const next = text.indexOf("OR (", text.indexOf("OR (", start) + 1);
     const branch = text.slice(start, next === -1 ? undefined : next);
     expect(columns).toContain("revision");
-    for (const column of columns.filter((c) => c !== "party_id")) {
+    for (const column of columns.filter(
+      (c) => !["party_id", "bill_number", "bill_name", "editor_id", "editor_version"].includes(c),
+    )) {
       expect(branch, column).toMatch(
         new RegExp(`new\\.("?)${column}\\1 IS old\\.\\1${column}\\1(?!\\w)`),
       );

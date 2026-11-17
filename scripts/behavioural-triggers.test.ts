@@ -652,7 +652,6 @@ describe("working_orders_enforce_transition", () => {
     ).toBeUndefined();
   });
 
-  // The kitchen-handover stamp is the ONLY write a settled order takes.
   it("accepts the kitchen-handover stamp on a settled order", () => {
     expect(
       refusalFor(
@@ -682,8 +681,6 @@ describe("working_orders_enforce_transition", () => {
     ).toBe(TRANSITION_REFUSAL);
   });
 
-  // Changing `party_id` ALONE would be refused whether or not the column is in the list, because the
-  // settled exception also needs `collected_at` to go from null to set; so the stamp rides along.
   it("refuses the handover stamp when the order's party changes with it", () => {
     expect(
       refusalFor(
@@ -729,7 +726,16 @@ describe("working_orders_dining_fixed", () => {
  * The columns of `working_orders` the placed → placed exception's list does not name: `status`,
  * which it requires to stay `placed`, and the three a move may change.
  */
-const MOVABLE_ORDER_COLUMNS = new Set(["status", "party_id", "delivery_table_id", "revision"]);
+const MOVABLE_ORDER_COLUMNS = new Set([
+  "status",
+  "party_id",
+  "delivery_table_id",
+  "revision",
+  "bill_number",
+  "bill_name",
+  "editor_id",
+  "editor_version",
+]);
 /** Every column of `working_orders` a presented bill's move must leave as it is. */
 const FROZEN_PLACED_ORDER_COLUMNS = connection
   .prepare(`select name from pragma_table_info('working_orders') order by cid`)

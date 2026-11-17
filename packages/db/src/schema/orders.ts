@@ -48,20 +48,9 @@ export type StagedInvoiceDelivery =
  * all. Two tables, one transition between them: conflating them means chaining
  * drafts and rectifying records that were never sales.
  *
- * What replaces immutability here is a state machine the database enforces
- * (`working_orders_enforce_transition`): an `open` order may change freely or
- * advance to any next state; a `placed` order may be settled or abandoned, or
- * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
- * or change its invoice choice, recipient and receipt language with a revision advance before a
- * sale exists, or only take its handover stamp; `settled` and `abandoned` are terminal,
- * save the handover stamp on a settled order and, before that stamp, a settled order
- * leaving its party. In any state, an order holding a
- * `delivery_table_id` and no `delivery_table_label` may let go of the id,
- * keeping the name in the label; the label is otherwise free only while the
- * order is open or as a placed order is settled or abandoned.
- *
- * Each exception names the columns it holds unchanged; a new column must enter
- * those lists, or the trigger will permit it to change on a placed order.
+ * The transition trigger pins every column except party, bill number, bill name and editor
+ * on a settled bill; its separate handover branch only adds the first collection stamp.
+ * Each exception names the columns it holds unchanged, including newly added columns.
  *
  * `dining` is fixed earlier still, while the order is open: once a line has been
  * sent or has a kitchen ticket item, a payment attempt has started, a payment is

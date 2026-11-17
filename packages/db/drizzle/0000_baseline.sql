@@ -3492,6 +3492,10 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
+        AND new.bill_number IS old.bill_number
+        AND new.bill_name IS old.bill_name
+        AND new.editor_id IS old.editor_id
+        AND new.editor_version IS old.editor_version
         AND new.delivery_table_label IS old.delivery_table_label)
     OR (old.status = 'settled' AND new.status = 'settled'
         AND old.collected_at IS NULL AND new.collected_at IS NOT NULL
@@ -3517,11 +3521,13 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
         AND new."party_id" IS old."party_id"
+        AND new.bill_number IS old.bill_number
+        AND new.bill_name IS old.bill_name
+        AND new.editor_id IS old.editor_id
+        AND new.editor_version IS old.editor_version
         AND new.delivery_table_label IS old.delivery_table_label)
-    -- A paid bill not yet handed over may leave its party, once; only the server limits this to Finish table's counter collection (A758-7).
+    -- settled: party, bill number, bill name and editor may change (owner, 2026-11-04)
     OR (old.status = 'settled' AND new.status = 'settled'
-        AND old.collected_at IS NULL AND new.collected_at IS NULL
-        AND old.party_id IS NOT NULL AND new.party_id IS NULL
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
@@ -3570,7 +3576,11 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
         AND new.payment_attempt_at IS old.payment_attempt_at
-        AND new.party_id IS old.party_id)
+        AND new.party_id IS old.party_id
+        AND new.bill_number IS old.bill_number
+        AND new.bill_name IS old.bill_name
+        AND new.editor_id IS old.editor_id
+        AND new.editor_version IS old.editor_version)
   );
 END;
 --> statement-breakpoint
