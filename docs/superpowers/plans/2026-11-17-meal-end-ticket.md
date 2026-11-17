@@ -4,9 +4,13 @@
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
-**Status: proposed 2026-11-17 by lane L; revised the same day after one fresh-context review
-("Ready after fixes": one critical, seven important, four minor findings, all folded in).** The
-defaults in §6 marked **watcher** need the watcher's confirmation before an implementer starts.
+**Status: cleared to build 2026-11-17.** Revised the same day after one fresh-context review
+("Ready after fixes": one critical, seven important, four minor findings, all folded in), then
+amended for the answers recorded in lane L's `questions.md`: the watcher cleared §6's defaults 1
+and 2 (17:20); the owner chose "Warn, let staff print" for dishes not yet served (17:50) and to
+replace the adviser sheet's question 3 (17:52); and the owner asked that "once a bill is printed
+(its invoice issued), neither invoice switch may happen" (17:59, lane L `queue.md`), which Task 3a
+builds.
 
 **Authority.** Owner decision D1, 16 November (`docs/compliance/2026-11-15-adviser-answers.md`,
 Part B1): "yes. The ticket is issued when the meal ends, even if the bill is paid much later"; the
@@ -17,65 +21,9 @@ it." Owner, 12 November 11:38 (`docs/superpowers/plans/2026-11-08-a1308-build-or
 part payments on a presented bill, "Yes, allow parts". The owner approved those outcomes, not this
 design: every "Decision" below is lane L's, open to the owner.
 
-**Thursday's adviser sheet does not yet describe this moment.** Question 3 of
-`docs/compliance/2026-11-19-adviser-meeting.md` (English `:77-96`, Spanish `:600-620`) still gives
-the 16 November definition: "The meal ends when staff close the table: at the last payment, or when
-they record that the table has left with part unpaid." This plan issues the ticket earlier, when
-staff print the bill, before payment. This plan does not edit the sheet. Replacement wording for the
-watcher to put on it before Thursday, in the sheet's style:
-
-> **3. When the meal ends (follows answers 1.1, 1.3 and 1.4).**
->
-> *The situation.* The adviser answered that a meal is one service, supplied when it ends, and that
-> the ticket is due then, not held back until the bill is fully paid.
->
-> *What Waitron proposes.* When a table asks for the bill, staff print it: the ticket is issued at
-> that moment, for everything on the bill, and the guests pay against it, in one payment or
-> several. Separate bills at one table are printed separately. Before printing, every dish on the
-> bill must be served or taken off it. A bill nobody printed is issued at its last payment, or when
-> staff record that the guests left with part unpaid. The ticket carries the date it is issued. A
-> separate date of the meal appears only when a bill is issued on a later trading day than its last
-> dish was served (the venue's trading day ends at the start-of-day time it sets), for example a
-> bill left open overnight by mistake; the date of the meal is then the day of its last dish.
->
-> *Example.* The last dish is served at 23:40 on the 1st. At 00:20 on the 2nd the guests ask for
-> the bill and staff print it; at 00:30 one pays half by card and the other the rest in cash. With a
-> 05:00 start of day, all of it falls in the evening's service: the ticket is dated the 2nd, with no
-> separate date of the meal. With midnight, the ticket is dated the 2nd and shows the 1st as the date
-> of the meal. Both payments are recorded against that ticket.
->
-> *We ask:* Does the meal end when the bill is printed for the guests to pay, rather than when the
-> last dish is served or when the last payment is made? Is the trading-day rule acceptable for a
-> bill issued late?
->
-> Yes / No / Note: ____________________________________________
-
-> **3. Cuándo termina la comida (a partir de sus respuestas 1.1, 1.3 y 1.4).**
->
-> *Situación.* Indica que una comida es un único servicio que se presta al terminar, y que el tique
-> se expide entonces, sin quedar condicionado al cobro total.
->
-> *Propuesta de Waitron.* Cuando la mesa pide la cuenta, el personal la imprime: el tique se expide
-> en ese momento, por todo lo que figura en la cuenta, y los clientes pagan con él, en uno o varios
-> pagos. Las cuentas separadas de una misma mesa se imprimen por separado. Antes de imprimir, cada
-> plato de la cuenta debe estar servido o retirado de ella. Una cuenta que nadie imprimió se expide
-> con su último pago, o cuando el personal registra que los clientes se han marchado sin pagarlo
-> todo. El tique lleva la fecha en que se expide. Solo se indica otra fecha de operación cuando la
-> cuenta se expide en una jornada comercial posterior a la de su último plato (la jornada termina a
-> la hora de inicio del día que fija el local), por ejemplo una cuenta que se dejó abierta por error
-> durante la noche; la fecha de operación es entonces el día de su último plato.
->
-> *Ejemplo.* El último plato se sirve a las 23:40 del día 1. A las 00:20 del día 2 piden la cuenta
-> y el personal la imprime; a las 00:30 uno paga la mitad con tarjeta y el otro el resto en
-> efectivo. Con el inicio del día a las 05:00, todo cae en el servicio de la noche: el tique se fecha
-> el día 2, sin otra fecha de operación. Con la medianoche, el tique se fecha el día 2 e indica el
-> día 1 como fecha de la operación. Los dos pagos se registran contra ese tique.
->
-> *Preguntamos:* ¿Termina la comida cuando se imprime la cuenta para que los clientes paguen, y no al
-> servirse el último plato ni con el último pago? ¿Es aceptable la regla de la jornada comercial para
-> una cuenta expedida tarde?
->
-> Sí / No / Nota: ____________________________________________
+**Thursday's adviser sheet.** Question 3 of `docs/compliance/2026-11-19-adviser-meeting.md` (English
+and Spanish) asks about this moment since `4941038c49`: the ticket is issued when staff print the
+bill; staff are shown any dish not yet served and may print anyway.
 
 **Goal.** Part B1's changes 1–3: (1) the receipt (simplified invoice, "ticket") is issued when the
 meal ends, for everything on the bill, paid or not; (2) a part-paid bill can be recorded as left
@@ -96,7 +44,7 @@ this item; see "Seam for the receipt-layout plan".
 adviser answers are recorded (lane L queue). PR A (server, Tasks 1–5), then PR B (till and guide,
 Tasks 6–10).
 
-**Size.** About 240 production lines on the server and 370 in the till, about 610 in all, with
+**Size.** About 270 production lines on the server and 380 in the till, about 650 in all, with
 about 1,200 lines of tests and 120 of guide: medium. The review's cuts (no separate "what a printed
 bill owes" change, one bill at a time, no confirmation window) took off about 170.
 
@@ -229,11 +177,13 @@ may still be eating. For that bill, in one transaction, it:
    flight (`checkAndBumpParty`, `requireBillEditors`, `assertBillHasNoUnsent`,
    `refusePaymentInFlight`, `refusePlacedPaymentInFlight`: `unpaid-departure.ts:94-117`), and
    refuses `meal_end.already_issued` when the bill already has a ticket;
-2. refuses `meal_end.unserved_dishes`, listing them, while any line on the bill is not fully served
-   and not cancelled (the same reckoning as Finish: `serviceDishCondition` and
-   `serviceQuantities(...).remaining`, `finish-party-service.ts:255-306`). Each listed dish says
-   whether the kitchen has it (`isReleased`, `working-order.ts:3999-4011`): one it has can be marked
-   served; one not sent, on hold or waiting to be called can only be sent or taken off;
+2. unless the request says `printAnyway: true`, refuses `meal_end.unserved_dishes`, listing them,
+   while any line on the bill is not fully served and not cancelled (the same reckoning as Finish:
+   `serviceDishCondition` and `serviceQuantities(...).remaining`, `finish-party-service.ts:255-306`).
+   Each listed dish says whether the kitchen has it (`isReleased`, `working-order.ts:3999-4011`): one
+   it has can be marked served; one not sent, on hold or waiting to be called can be sent or taken
+   off. With `printAnyway: true` it prints with those dishes on the ticket. `printAnyway` absent
+   means false; any value but a boolean is refused `management.request_invalid` at the route;
 3. refuses `meal_end.no_printer` when the bill needs paper (a simplified invoice, or a full invoice
    staged for the receipt printer) and this device's receipts resolve to no printer: its own chosen
    receipt printer, else its profile's default, a portable one only while this device holds it
@@ -254,16 +204,22 @@ The ticket's amount is the bill's total, whatever has been paid. Its date is the
 (D1); VAT is charged at that day's rates (`priceForIssuance` prices "at the rates of today, its issue
 date", `working-order.ts:7708`).
 
-**Decision: every dish served or taken off before printing.** Measured above: "served" is a waiter's
-tap, never automatic, drinks included, and Finish table already demands every paid line be served or
-cancelled. Printing with a dish unserved would put it on a ticket that cannot be reduced before
-payment (§1, "Taking a dish off"), so a dessert that never comes would be charged, then refunded with
-a corrective after payment. Refusing until each dish is served or taken off moves Finish's existing
-demand to the moment the receipt is issued, and needs no confirmation window. Change 3 holds: an
-unserved dish no longer stops the ticket for days, as in Example 3; staff settle it when they print.
-How often the list appears depends on whether staff tap **Serve** as they serve: for a venue that
-does not, it appears at every print, with one **Mark served** tap (§2.5). This is a **watcher**
-default (Q3).
+**Decision (owner, 17 November 17:50, "Warn, let staff print"): dishes not yet served are shown,
+and staff may print anyway.** Measured above: "served" is a waiter's tap, never automatic, drinks
+included. The till lists the dishes, with **Mark served** for those the kitchen has and **Print
+anyway**; nothing new is built for a dish that then never comes. It stays on the ticket, which
+cannot be reduced before payment (§1, "Taking a dish off"); once the bill is paid, staff take it off
+with the existing **Correct invoice** (A802), which refunds it, or, while the bill holds no payment,
+**Cancel and credit** the whole ticket and print again. Change 3 holds: an unserved dish no longer
+stops the ticket for days, as in Example 3. Finish table's demand that every paid line be served or
+cancelled (`finish-party-service.ts:276-284`) is unchanged.
+
+**Invoice type is locked once printed (owner, 17:59).** A printed bill's receipt is issued, so
+neither switch, full to simplified nor simplified to full, may happen afterwards. Today such a
+request is refused `working_order.not_open` (`readChoiceChangeableOrder`,
+`working-order.ts:4829-4838`, for a placed bill holding a sale); Task 3a answers it
+`invoice.choice_locked`, the refusal #3663 gives a full-invoice bill that has received a payment,
+with wording that covers both causes. Choose **Full invoice** before printing.
 
 ### 2.2 Paying a printed bill
 
@@ -314,9 +270,10 @@ bill** beside **Take payment** for the bill it names, when that bill has no tick
 refusal explains and offers the next step). Printing it issues the ticket; staff then take the rest
 or record the departure. That closes the gap through which B1's Example 3 would otherwise recur.
 
-The not-served refusal of §2.1 shows the dishes by name, with **Mark served** for those the kitchen
+The not-served warning of §2.1 shows the dishes by name, with **Mark served** for those the kitchen
 has (the existing serve command for those lines, on a device whose profile allows
-`hand-over-orders`); the others are sent or taken off with today's buttons.
+`hand-over-orders`) and **Print anyway**, which sends the same request with `printAnyway: true`; the
+others are sent or taken off with today's buttons.
 
 ### 2.6 Worked examples (Madrid, trading day starting 05:00)
 
@@ -324,7 +281,7 @@ has (the existing serve command for those lines, on a device whose profile allow
 |---|---|---|
 | **B1 Example 1.** Table of four, one bill, €120. 21:30 Ana pays €30 by card and leaves; mains still to come. At 22:55 the table asks for the bill; 23:00 the others pay €90. | No ticket at 21:30 or 22:55; one €120 ticket at 23:00 listing both payments. | 21:30 unchanged (change 4 waits for question 15). 22:55 **Print the bill** (every dish served): one €120 ticket, dated 22:55, prints; the bill owes €90. 23:00 the others pay €90 through **Pay**; the sale settles with the €30 and €90 as its tenders. Cash-up: €30 at 21:30 and €90 at 23:00 on their devices. |
 | **B1 Example 2.** €120. Two guests pay €80 after the meal; the third leaves. | No ticket; "left without paying" refused (`bill_holds_payment`); the bill stays open. | If printed: the €120 ticket exists; **Record unpaid departure** records €40 owed. If not printed: the departure issues the €120 ticket and records €40 owed. The table can then be finished. Next week the third guest pays €40 through **Find bill**; the ticket settles. |
-| **B1 Example 3.** Guests pay on Monday for what they ate; a dessert ordered was never served; staff remove it on Wednesday. | No ticket until Wednesday's removal. | Monday, **Print the bill** lists the dessert as not served; staff take it off (Cancel dish) and print: the ticket, dated Monday, is for what was eaten. If staff skip printing and press **Finish table**, its refusal offers **Print the bill**, which lists the dessert the same way. |
+| **B1 Example 3.** Guests pay on Monday for what they ate; a dessert ordered was never served; staff remove it on Wednesday. | No ticket until Wednesday's removal. | Monday, **Print the bill** lists the dessert as not served; staff take it off (Cancel dish) and print: the ticket, dated Monday, is for what was eaten. If they press **Print anyway**, the dessert is on Monday's ticket, and once paid they refund it with **Correct invoice**. If staff skip printing and press **Finish table**, its refusal offers **Print the bill**, which lists the dessert the same way. |
 | A couple, €54, everything marked served. | €54 ticket at payment, then the document choice. | **Print the bill**: €54 ticket prints. **Pay** €54 by card; the till shows the result and returns to the table. **Finish table** as today. |
 | Two bills at one table, €38.50 (a couple who have finished) and €54.00 (still on dessert). | Each ticket at its own full payment. | **Print the bill** on Bill 1: its ticket prints; Bill 2 is untouched until its guests ask. |
 | A bill comped to €0.00. | €0.00 ticket when settled ("Comp closes it"). | **Print the bill** issues the €0.00 ticket and settles it in the same step. |
@@ -353,12 +310,11 @@ still owed when the party left" (`packages/db/src/schema/unpaid-departures.ts:10
 `completeBillPayment` (bill-payments.ts), adds `apps/server/src/sale-day.ts` and the
 `working_order_lines.last_served_at` column, and keeps every call this plan makes valid. This plan
 changes none of those bodies: in `bill-payments.ts` only `requirePayableBill` (main `:1065-1094`),
-and it does not touch `working-order.ts`. Expected textual meeting: `errors.ts` and import lines
-only. Meaning: after both land, **Print the bill** gets the PR's sale-day rule through
-`priceForIssuance`. Since every dish is served at printing, the PR's `lastServedAt` has an answer;
-when it falls on an earlier trading day than the print (a bill left open overnight) the ticket
-carries that day as the date of the sale, the owner's fallback of 16 November, and otherwise the
-print moment. The PR's `last_served_at` is written by the same Serve tap §1 traces. The PR's
+and in `working-order.ts` only `setOrderInvoiceChoice` and `readChoiceChangeableOrder` (Task 3a).
+Expected textual meeting: `errors.ts` and import lines only. Meaning: after both land, **Print the bill** gets the PR's sale-day rule through
+`priceForIssuance`. With **Print anyway**, some or none of the bill's dishes may be served at
+printing; what the PR's rule answers for such a bill is not traced here. Whichever lands second
+reads `sale-day.ts` as then built and adds one case: a bill printed anyway with no dish served. The PR's `last_served_at` is written by the same Serve tap §1 traces. The PR's
 Example 3 tests (`bill-left-open.later-sale-date.test.ts`, about lines 240 and 306) drive issuance
 by an edit through `issueIfFullyPaid`; this plan keeps that path, so they should still pass, though
 D1 makes their situation rare. Whichever lands second rebases; the owner lands both.
@@ -416,6 +372,7 @@ line, as an unpaid departure's receipt does today (`readTenderBlock` answers `un
 3. The departure's recorded debt, and the till's departure window, show amount due less net
    received, never the whole amount on a part-paid bill, and the credited amount on a credited one.
 4. Nothing reaches `recordSale` other than through `issueUnpaidInvoice` and `issueWhenFullyPaid`.
+5. Once a bill's receipt is issued, no invoice-choice request changes it, in either direction.
 
 ---
 
@@ -456,6 +413,16 @@ modify `apps/server/src/unpaid-departure.test.ts`; modify `docs/backlog/till.md`
     payment in full and the departure, invoicing the bill once, with %s"; departure first, the payment
     answers 200 and settles the ticket (the departure row stays, as a debt collected in full does
     today). Payment first is unchanged (`unpaid_departure.nothing_outstanding`).
+  - `:1910` `it.each` "refuses a new payment $label on the bill left unpaid after its card was given
+    back, as on one never paid, writing nothing", and `:2362` "refuses a part payment on the departed
+    bill, so its invoice is never filed again and the row stands": **before** 409
+    `working_order.not_open`; **after** (decision: §6 question 4, part payments on a bill left unpaid
+    are allowed) the payment answers 200 and is held, the bill still has exactly one sale with the
+    same id and invoice number, nothing is filed again, and the departure row stands. Rename each to
+    say so.
+  - Any other existing assertion that fails because a placed bill with a ticket now takes part
+    payments changes under the same decision and is named in the PR's "Changed test checks"; one
+    that fails for any other reason is a defect in the change.
 - [ ] **Step 5: run** both files whole, then `bill-payments-api.test.ts`,
   `bill-payments.in-flight.test.ts`, `collect-by-invoice.test.ts` and the fiscal pair (§5). Expect PASS.
 - [ ] **Step 6: backlog.** In `docs/backlog/till.md` "Task 17", delete the bullet "Collecting PART of
@@ -516,7 +483,7 @@ status), `apps/till/src/i18n/codes.ts:174-177`; tests `apps/server/src/unpaid-de
 **Interface:**
 `endMeal(tx, deps: { admission; db; backend; clock; log?; attendance? }, cfg: DeviceRequestConfig,
 partyId: string, req: { billId: string; expectedPartyRevision: number; expectedEdits:
-BillEditExpected[]; submissionId: string }, operatorId: string): Promise<{ revision: number;
+BillEditExpected[]; submissionId: string; printAnyway: boolean }, operatorId: string): Promise<{ revision: number;
 workingOrderId: string; saleId: string; invoiceNumber: string; total: string; owed: string }>`, run
 through `runServiceCommand` with scope `{ kind: "party", partyId }` and kind `"party.end_meal"`, as
 `requestBill` does (`bill-request.ts:29-55`).
@@ -525,20 +492,57 @@ through `runServiceCommand` with scope `{ kind: "party", partyId }` and kind `"p
   with `markServed` unless the case says otherwise): "issues the bill's ticket and leaves the table
   seated" (one sale; bill `placed`; party `open`; table held; total = bill total); "leaves the
   table's other bill alone"; "a part-paid bill's ticket is for the whole bill and owes the rest"; "a
-  €0.00 bill is issued and settled"; "refuses a bill that already has a ticket"; "refuses a dish not
-  marked served, listing it as one the kitchen has" (`seatedWith`, not served); "lists a dish on hold
-  as one the kitchen does not have" (`seatedHeldWith`); "a dish cancelled in full is not listed";
+  €0.00 bill is issued and settled"; "refuses a bill that already has a ticket"; "warns of a dish not
+  marked served, listing it as one the kitchen has, and issues nothing" (`seatedWith`, not served);
+  "lists a dish on hold as one the kitchen does not have" (`seatedHeldWith`); "prints anyway with
+  `printAnyway`, the unserved dish on the ticket" (one sale, its line included); "a dish cancelled
+  in full is not listed";
   "refuses someone else's unsent dishes (`bill.unsent_dishes`) and a payment in flight
   (`order.payment_in_flight`)"; "a resend with the same submission id answers the same and issues
   nothing more"; "a stale party revision is refused (`party.out_of_date`)". Each refusal also asserts
   `salesOf` is unchanged.
+- [ ] **Step 0: survey** whether a line on a placed bill with a ticket can still be marked served,
+  have its hold released and be called away (`markServed`, `releaseHeldWorkOf`,
+  `order-groups.ts:1058`, `fireLines`, `working-order.ts:2237`, and their routes). Run one case for
+  each and record each answer in the commit message. If any refuses, a dish printed anyway could not
+  be sent to the kitchen afterwards: write `## WATCHER-NEEDED:` in lane L's `questions.md` before
+  going on, and build nothing for it meanwhile.
 - [ ] **Step 2: run** `pnpm --filter @waitron/server exec vitest run src/meal-end.test.ts` — expect FAIL
   (module missing).
 - [ ] **Step 3: implement** §2.1 steps 1, 2, 4 and 6, with `requireEconomicWrite`,
   `backend.refuseUntilRecordable` first, as `recordUnpaidDeparture` (`unpaid-departure.ts:87-93`)
   does. `owed` is amount due less net received, as Task 2.
 - [ ] **Step 4: run** the file and the fiscal pair — expect PASS.
-- [ ] **Step 5: commit** `git commit -s -m "Printing a bill issues its receipt once every dish is served"`.
+- [ ] **Step 5: commit** `git commit -s -m "Printing a bill issues its receipt, warning of dishes not yet served"`.
+
+### Task 3a: a printed bill's invoice type is locked
+
+**Files:** modify `apps/server/src/working-order.ts` (`setOrderInvoiceChoice`,
+`readChoiceChangeableOrder`), `apps/till/src/i18n/codes.ts` (`invoice.choice_locked`'s wording);
+tests `apps/server/src/meal-end.test.ts`, `apps/server/src/counter-handover.test.ts`.
+
+- [ ] **Step 1: failing tests** in `meal-end.test.ts`: "a printed, unpaid simplified bill refuses a
+  switch to a full invoice" and "a printed, unpaid full-invoice bill refuses a switch to a simplified
+  one", each through `PUT /api/working-orders/:id/invoice-choice` after `endMeal`, answering 409
+  `invoice.choice_locked` with `params: {}`, the order row and its sale unchanged. Control: the same
+  bill before printing switches both ways (200).
+- [ ] **Step 2: run** with `-t "refuses a switch"` — expect FAIL with `working_order.not_open`.
+- [ ] **Step 3: implement:** for an invoice-choice request, an open or placed order holding an
+  issued sale answers `invoice.choice_locked`; the receipt-language request
+  (`setOrderReceiptLanguage`) keeps `working_order.not_open`. The received-payment lock of #3663
+  (`working-order.ts:4873-4880`) is unchanged.
+- [ ] **Step 4: change existing assertion** `counter-handover.test.ts:186-214` "refuses to change a
+  placed order after its simplified invoice was issued": **before** 409 `working_order.not_open`
+  with `{ workingOrderId }`; **after** 409 `invoice.choice_locked` with `{}`, the row and sale count
+  checks unchanged (decision: owner, 17 November 17:59).
+- [ ] **Step 5: wording** (the watcher clears final wording): `invoice.choice_locked` becomes "This
+  bill already has its receipt or a payment, so it can no longer switch between a full and a
+  simplified invoice." / "Esta cuenta ya tiene su tique o un pago, así que ya no puede cambiar entre
+  factura completa y simplificada." Run `pnpm --filter @waitron/till exec vitest run
+  src/i18n/codes.test.ts src/till-app-bill-payments.test.ts`.
+- [ ] **Step 6: run** `meal-end.test.ts`, `counter-handover.test.ts`, `bill-payments-api.test.ts`,
+  `bill-editing.order-choices.test.ts` and the fiscal pair — expect PASS.
+- [ ] **Step 7: commit** `git commit -s -m "A bill's invoice type is locked once its receipt is issued"`.
 
 ### Task 4: printing
 
@@ -567,7 +571,7 @@ through `runServiceCommand` with scope `{ kind: "party", partyId }` and kind `"p
 `apps/server/src/till-api.session-person.test.ts`.
 
 **Interface:** `POST /api/parties/:id/end-meal`, body `{ billId, expectedPartyRevision,
-expectedEdits, submissionId }`. Session with `action: "take-orders"` and `permission:
+expectedEdits, submissionId, printAnyway? }`. Session with `action: "take-orders"` and `permission:
 "payment.take"` (issuing the ticket is the first step of taking payment); zones checked for the
 party; `withIssuanceTransaction`, as `unpaid-departure-api.ts:54-84`.
 
@@ -644,7 +648,9 @@ id per press, `#resend` under `TABLE_REQUEST_LIMIT_MS`, nothing sent when the sc
 - [ ] **Step 1: failing tests:** a press sends `endMeal` and rereads the party's bills, showing
   **Bill printed**; `meal_end.unserved_dishes` shows the dishes by name with **Mark served** for those
   the kitchen has (sends the existing `markServed` for those lines; hidden on a profile without
-  `hand-over-orders`), and a press of Print the bill after serving them prints; `meal_end.no_printer`,
+  `hand-over-orders`) and **Print anyway** (sends `printAnyway: true`, one new submission id), and a
+  press of Print the bill after serving them prints; **Full invoice** is not offered in **Bill ⋯** for
+  a bill with an `invoiceNumber` (if it is today, hide it); `meal_end.no_printer`,
   `meal_end.already_issued`, `bill.unsent_dishes` and `party.out_of_date` show their messages (the
   last reloads the table); a lost answer resent answers once; Finish table's refusal shows **Print the
   bill** beside **Take payment** for the named bill when it has no `invoiceNumber`, and not when it
@@ -686,7 +692,8 @@ it) and `apps/server/src/find-bill-api.test.ts`.
 | `bill.printed` | Bill printed | Cuenta impresa |
 | `meal_end.unserved_heading` | Not served yet: | Aún sin servir: |
 | `meal_end.mark_served` | Mark served | Marcar como servidos |
-| code `meal_end.unserved_dishes` | Every dish must be served or taken off the bill before it prints. Mark served what has been served; send or cancel the rest. | Cada plato debe estar servido o retirado de la cuenta antes de imprimirla. Marca como servido lo que se ha servido; envía o cancela el resto. |
+| `meal_end.print_anyway` | Print anyway | Imprimir igualmente |
+| code `meal_end.unserved_dishes` | Some dishes on this bill are not marked served. Mark served what has been served, or print anyway: a dish that never comes is refunded after payment with Correct invoice. | Algunos platos de esta cuenta no están marcados como servidos. Marca como servido lo que se ha servido, o imprime igualmente: un plato que no llegue se devuelve después del cobro con Rectificar factura. |
 | code `meal_end.already_issued` | This bill already has its receipt. Take payment, or print a receipt copy. | Esta cuenta ya tiene su tique. Cóbrala o imprime una copia del tique. |
 | code `meal_end.no_printer` | This device has no receipt printer. Choose one in Equipment, then print the bill. | Este dispositivo no tiene impresora de tiques. Elige una en Equipo y luego imprime la cuenta. |
 | code `bill.presented` (changed) | This bill has been presented, so it cannot be changed. Put anything more on a new bill. | Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva. |
@@ -699,15 +706,18 @@ place…"), both languages, anchors shared:
 
 - new section **Print the bill** / **Imprimir la cuenta** `{#print-bill}`, after `{#bill-switcher}`:
   when to use it; that the bill gets its receipt now and prints where this device's receipts print;
-  every dish served or taken off first, with **Mark served**; that a printed bill takes no new dishes
-  (use **+ New bill**); choose **Full invoice** before printing; part payments taken earlier count;
+  dishes not yet served are listed, with **Mark served** and **Print anyway**; that a printed bill
+  takes no new dishes (use **+ New bill**); choose **Full invoice** before printing, as it cannot be
+  changed afterwards; part payments taken earlier count;
   each bill at the table is printed on its own;
 - `{#pay-window}`: replace "A bill already presented for collection offers the whole amount only"
   (`table-service.md:798`) with what the code then does;
 - `{#bill-switcher}`: add **Print the bill** to the bill's ⋯ list; in the Finish table paragraph,
   its refusal's **Print the bill**; in the unpaid departure paragraph, replace "The bill remains owed
   in full" with what is still owed, and say the rest is taken later from **Find bill**;
-- `{#full-invoice}`: "Paying the table bill in full issues the invoice" gains printing the bill;
+- `{#full-invoice}`: "Paying the table bill in full issues the invoice" gains printing the bill, and
+  the way back to a simplified invoice (#3663) is open until the bill is printed or a payment is
+  received;
 - `{#settlement-document}`: a bill printed before payment skips the choice.
 
 - [ ] **Step 1:** update `codes.test.ts` and `strings.test.ts` expectations first; run
@@ -725,17 +735,15 @@ place…"), both languages, anchors shared:
 
 ## 6. Open questions (each with lane L's default; **watcher** marks the ones to confirm before building)
 
-1. **watcher — The action's name.** **Print the bill** / «Imprimir la cuenta». The owner's word was
+1. **Cleared by the watcher, 17:20 — The action's name.** **Print the bill** / «Imprimir la cuenta». The owner's word was
    "close the table", but the till's Spanish for Finish table is already «Cerrar mesa»
    (`strings.ts:3790`), so "close" would name two actions.
-2. **watcher — One bill at a time.** Print the bill acts on the bill on screen, in **Bill ⋯** and in
+2. **Cleared by the watcher, 17:20 — One bill at a time.** Print the bill acts on the bill on screen, in **Bill ⋯** and in
    Finish table's refusal (review I4): separate bills at one table are separate sales (answer 1.9),
    and a whole-table print would issue tickets for bills whose meal has not ended. Also putting it in
    the bill's foot beside **Pay** is a small addition if staff miss it in ⋯.
-3. **watcher — Every dish served or taken off before printing** (§2.1, measured in §1). For a venue
-   whose staff do not tap **Serve**, every print meets the list once, answered by one **Mark served**
-   tap. The alternative (print with unserved dishes after a confirmation) charges for a dish that
-   never comes and needs a corrective after payment to put right.
+3. **Answered by the owner, 17:50 — dishes not yet served.** "Warn, let staff print": the till lists
+   them, with **Mark served** and **Print anyway** (§2.1).
 4. **Part payments on a bill left unpaid.** Allowed, the same rule as any issued bill (Task 1), and
    collected from **Find bill** (Task 9).
 5. **Correcting a printed bill before payment** (a guest disputes a line). Not built: "Correct
@@ -753,5 +761,6 @@ place…"), both languages, anchors shared:
 10. **Who lands PR B.** The owner, as PR A, because it is the first way staff issue a ticket before
     payment.
 11. **Counter bills.** Not in this item; Print the bill is a table action.
-12. **watcher — Thursday's question 3.** Put the replacement wording above on the sheet before the
-    meeting, or tell lane L to build to the sheet's current definition instead.
+12. **Answered by the owner, 17:52 — Thursday's question 3.** Replaced on the sheet (`4941038c49`).
+13. **Answered by the owner, 17:59 — the invoice type after printing.** Locked in both directions
+    (Task 3a).
