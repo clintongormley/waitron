@@ -277,7 +277,7 @@ it.each(["restaurant", "deli"])(
     )!;
     if (departmentId === "restaurant")
       expect(field.error).toBe(
-        "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
+        "That department has no usable receiving desk. It can be chosen in the dashboard, under Departments and zones, in the department's Transfers.",
       );
     else {
       expect(field.error).toBe("");
@@ -285,7 +285,7 @@ it.each(["restaurant", "deli"])(
         el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-transfer-actions]")!
           .error,
       ).toBe(
-        "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
+        "That department has no usable receiving desk. It can be chosen in the dashboard, under Departments and zones, in the department's Transfers.",
       );
     }
   },

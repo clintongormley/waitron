@@ -276,7 +276,7 @@ it.each(["en-GB", "es"])(
     const el = await mount({ refusal: { code: "clock.unusable" } });
     expect(actions(el).error).toBe(
       locale === "en-GB"
-        ? "Can't be recorded: the server's clock is wrong. Tell a manager."
+        ? "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status."
         : codeMessage("clock.unusable", locale),
     );
   },

@@ -1427,14 +1427,11 @@ line was not touched or an id on the answer, change what the till and the box ag
 
 Left open by A1382, which changed only `device.forbidden_action`. By code:
 
-- `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `department_transfer.desk_unavailable`,
-  `series.no_rectificative_for_node`,
+- `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_rectificative_for_node`,
   `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
-  `invoice_delivery.email_unavailable`, `sale.correction_unsupported`, `reader.not_found`,
-  `reader.provider_disconnected`, `device.forbidden_station`,
-  `device.pairing_closed`, `reader.payment_in_progress`, `sale.department_missing`,
-  `department.operation_description_required`, `sale.charged_not_recorded`, `clock.unusable`.
+  `invoice_delivery.email_unavailable`, `sale.correction_unsupported`,
+  `department.operation_description_required`, `sale.charged_not_recorded`.
 - `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
   `station.printer_down`,
   `device.join_refused_hint`, `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`,

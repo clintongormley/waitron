@@ -111,10 +111,10 @@ it("defaults to the module locale when none is passed (shipped default en-GB)", 
 
 it("resolves a shut pairing window to its own actionable copy, in both locales (device-join-and-accept §2)", () => {
   expect(codeMessage("device.pairing_closed", "en")).toBe(
-    "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
+    "New devices aren't being accepted right now. Open “Add a device” in the dashboard, under Devices, then try again.",
   );
   expect(codeMessage("device.pairing_closed", "es")).toBe(
-    "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
+    "Ahora mismo no se aceptan dispositivos nuevos. Abre «Añadir un dispositivo» en el panel, en Dispositivos, y vuelve a intentarlo.",
   );
   expect(codeMessage("device.unauthorized", "en")).toBe(
     "This device could not be verified for this action. Reload or reopen Waitron on this device, then try again.",
@@ -691,12 +691,12 @@ it("tells staff a department without a tax-agency description cannot sell, and w
   );
 });
 
-it("asks for a manager when a sale has no department, without directing staff to edit its description", () => {
+it("calls a sale with no department a fault in Waitron, without directing staff to edit its description", () => {
   expect(codeMessage("sale.department_missing", "en")).toBe(
-    "No department was found for this sale. Ask a manager.",
+    "No department was found for this sale, so nothing was recorded. This is a fault in Waitron; no setting changes it.",
   );
   expect(codeMessage("sale.department_missing", "es")).toBe(
-    "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
+    "No se ha encontrado un departamento para esta venta, así que no se ha registrado nada. Es un fallo de Waitron; ningún ajuste lo cambia.",
   );
 });
 
@@ -769,8 +769,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     ],
     [
       "clock.unusable",
-      "No se puede registrar: la hora del servidor es incorrecta. Avisa al encargado.",
-      "Can't be recorded: the server's clock is wrong. Tell a manager.",
+      "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
+      "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
     ],
   ];
   for (const [code, spanish, english] of cases) {
@@ -1065,3 +1065,19 @@ it.each([
     expect(codeMessage("order.dining_fixed", "es", { dining })).toBe(es);
   },
 );
+
+it.each([
+  "department_transfer.desk_unavailable",
+  "reader.not_found",
+  "reader.provider_disconnected",
+  "device.forbidden_station",
+  "device.pairing_closed",
+  "reader.payment_in_progress",
+  "sale.department_missing",
+  "clock.unusable",
+])("never sends staff to somebody else for %s, in either language", (code) => {
+  expect(codeMessage(code, "en")).not.toMatch(/ask a manager|tell a manager|a manager can/i);
+  expect(codeMessage(code, "es")).not.toMatch(/responsable|encargado/i);
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+});
