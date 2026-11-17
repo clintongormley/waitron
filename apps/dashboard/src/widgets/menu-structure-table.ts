@@ -214,6 +214,25 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(root-label) {
         position: relative;
       }
+      wt-data-table[wrap-to-fit] {
+        overflow-wrap: anywhere;
+      }
+      wt-data-table[wrap-to-fit]::part(kind),
+      wt-data-table[wrap-to-fit]::part(available) {
+        overflow-wrap: normal;
+      }
+      wt-data-table[wrap-to-fit]::part(root-label) {
+        min-inline-size: var(--wt-tap-min);
+      }
+      wt-data-table[wrap-to-fit]::part(tree-cell) {
+        display: grid;
+        grid-template-columns: var(--tree-arrow-width) minmax(0, 1fr);
+      }
+      wt-data-table[wrap-to-fit]::part(folder-cell),
+      wt-data-table[wrap-to-fit]::part(name-stack) {
+        min-inline-size: 0;
+        overflow-wrap: anywhere;
+      }
       wt-data-table::part(menu-divider) {
         align-self: stretch;
         margin: var(--wt-space-1) 0;
@@ -338,7 +357,9 @@ export class MenuStructureTable extends LitElement {
     if (this.#fitFrame) return;
     this.#fitFrame = requestAnimationFrame(() => {
       this.#fitFrame = 0;
-      const root = this.#table()!.shadowRoot!;
+      const table = this.#table()!;
+      table.wrapToFit = table.getBoundingClientRect().width < 800;
+      const root = table.shadowRoot!;
       const scroll = root.querySelector<HTMLElement>(".scroll")!;
       const lines = [...root.querySelectorAll<HTMLElement>('[part~="search-name-line"]')];
       const rooms = lines.map((line) => {

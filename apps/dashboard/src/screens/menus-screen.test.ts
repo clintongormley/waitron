@@ -11567,11 +11567,9 @@ describe("the name forms", () => {
   });
 });
 
-// At 390 px the list takes its narrow layout, which wraps the name and never scrolls sideways (the
-// phone-width case above); from about 480 px the Status column returns and a long name overflows.
 describe("the menus list just wider than its narrow layout", () => {
   it.each(["en-GB", "es-ES"])(
-    "keeps every menu row's menu on screen and uncovered while the other columns scroll sideways (600 px, %s)",
+    "keeps every menu row's menu on screen and uncovered (600 px, %s)",
     async (locale) => {
       const longMenus: MenuSummary[] = [
         {
@@ -11596,7 +11594,7 @@ describe("the menus list just wider than its narrow layout", () => {
             [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th)),
           ).toContain(t("menus.status"));
         });
-        expectRowMenusOnScreen(table(el), longMenus.length);
+        expectRowMenusOnScreen(table(el), longMenus.length, "wt-row-actions", false);
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -13380,3 +13378,49 @@ it("drags a Structure row under held headings with its preview at the pointer", 
   );
   expect(widget.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
 });
+
+it.each(
+  [390, 600, 700, 1280].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))),
+)(
+  "fits menu names, status and live time before Actions ($width px, $locale)",
+  async ({ width, locale }) => {
+    await at([width, 844], locale, async () => {
+      const el = await mount(
+        api({
+          listMenus: vi
+            .fn()
+            .mockResolvedValue([
+              {
+                ...menus[0]!,
+                name: "Weekday lunch from Monday to Friday with cakes and drinks included",
+              },
+              menus[1]!,
+            ]),
+        }),
+      );
+      await vi.waitFor(() => {
+        const root = table(el).shadowRoot;
+        expect(root.querySelectorAll("tbody tr")).toHaveLength(2);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        if (width < 800) expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+        else {
+          expect(table(el).hasAttribute("wrap-to-fit")).toBe(false);
+          expect([...root.querySelectorAll("thead th")].map((th) => text(th))).toContain(
+            t("menus.changes"),
+          );
+        }
+        for (const row of root.querySelectorAll("tbody tr")) {
+          const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+          for (const content of row.querySelectorAll(
+            '[part~="name-text"], [part~="status"], [part~="time"]',
+          )) {
+            const range = document.createRange();
+            range.selectNodeContents(content);
+            for (const line of range.getClientRects())
+              expect(line.right).toBeLessThanOrEqual(pinned + 1);
+          }
+        }
+      });
+    });
+  },
+);
