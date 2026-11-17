@@ -159,8 +159,6 @@ due), then build it. Also decide how a later paid-break policy change affects th
 - Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
   week once per candidate on each redraw. Measure a large picker, then share that baseline across
   its candidates without sharing candidate-specific warnings. Cost unmeasured.
-- The dashboard live-query guard misses inline dependency lists: `scripts/live-subscriptions.test.ts`
-  reads `live-queries.ts` declarations, not inline lists in `client.ts`. Add a guard that refuses inline lists and a failing control.
 
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
