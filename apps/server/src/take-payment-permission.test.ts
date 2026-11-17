@@ -314,6 +314,22 @@ describe("POST /api/parties/:id/end-meal needs payment.take", () => {
     expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
   });
 
+  it("refuses inside the write when the permission is gone after the check before the queue", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    gate.deny = true;
+    gate.allowFirst = 1;
+
+    expectRefused(await printBill(party));
+
+    expect(gate.calls.filter(({ permission }) => permission === "payment.take")).toEqual([
+      { sessionId, permission: "payment.take" },
+      { sessionId, permission: "payment.take" },
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("open");
+    expect(salesCount(party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
+  });
+
   it("passes the permission when it is held, reaching the till's own print-receipt check", async () => {
     const party = await seatedWith(venue, "Tarta");
 

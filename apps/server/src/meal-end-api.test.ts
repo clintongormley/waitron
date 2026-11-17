@@ -1,14 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { devices, printJobs, sales, taxpayer, workingOrders, workingOrderLines } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import {
+  deviceProfiles,
+  devices,
+  printJobs,
+  sales,
+  taxpayer,
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { loginWithPin } from "@waitron/identity";
+import { loginWithPin, tillSessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import {
+  fiscalRecordCount,
   inTx,
   provisionBillVenue,
   seatedWith,
@@ -16,7 +27,11 @@ import {
   statusOf,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
+import {
+  BASIC_ACTIONS,
+  seedSessionDevice,
+  sessionCookieForTest,
+} from "./testing/session-device.js";
 import { markServed } from "./working-order.js";
 import "./errors.js";
 
@@ -49,10 +64,15 @@ async function printingTill(db: BillVenue["db"], printerName: string | null) {
   const session = await inTx(venue, (tx) =>
     loginWithPin(tx, { deviceId, personId: venue.operatorId, pin: "5555" }),
   );
-  return { cookie: await sessionCookieForTest(db, session.token), printerId };
+  return {
+    cookie: await sessionCookieForTest(db, session.token),
+    printerId,
+    deviceId,
+    sessionId: session.id,
+  };
 }
 
-useVenueDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -326,4 +346,123 @@ describe("POST /api/parties/:id/end-meal", () => {
     });
     await nothingIssued(party, revision);
   });
+});
+
+/** A Print the bill held after `requireSession` passed, while it reads its body. */
+async function pausedPrint(cookie: string, party: Party) {
+  const sent = await body(party);
+  let reached!: () => void;
+  let release!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        reached();
+        await hold;
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(sent)));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const response = venue.app.request(
+    new Request(`http://localhost/api/parties/${party.partyId}/end-meal`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: stream,
+      duplex: "half",
+    } as RequestInit & { duplex: string }),
+  );
+  await reading;
+  return { response, release };
+}
+
+type PrintingTill = Awaited<ReturnType<typeof printingTill>>;
+
+async function profileOf(tx: Transaction, till: PrintingTill): Promise<string> {
+  const [row] = await tx
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, till.deviceId));
+  return row!.profileId;
+}
+
+const revocations = {
+  "the person signs out": async (tx: Transaction, till: PrintingTill) => {
+    await tx
+      .update(tillSessions)
+      .set({ endedAt: new Date().toISOString() })
+      .where(eq(tillSessions.id, till.sessionId));
+  },
+  "the device is switched off": async (tx: Transaction, till: PrintingTill) => {
+    await tx.update(devices).set({ active: false }).where(eq(devices.id, till.deviceId));
+  },
+  "taking orders is taken off the profile": async (tx: Transaction, till: PrintingTill) => {
+    await tx
+      .update(deviceProfiles)
+      .set({ capabilities: BASIC_ACTIONS.filter((action) => action !== "take-orders") })
+      .where(eq(deviceProfiles.id, await profileOf(tx, till)));
+  },
+  "the profile is retired": async (tx: Transaction, till: PrintingTill) => {
+    await tx
+      .update(deviceProfiles)
+      .set({ retiredAt: new Date().toISOString() })
+      .where(eq(deviceProfiles.id, await profileOf(tx, till)));
+  },
+} as const;
+const refusalOf = {
+  "the person signs out": [401, "session.required"],
+  "the device is switched off": [401, "device.unauthorized"],
+  "taking orders is taken off the profile": [403, "device.forbidden_action"],
+  "the profile is retired": [401, "device.unauthorized"],
+} as const;
+
+describe("POST /api/parties/:id/end-meal, access withdrawn while queued", () => {
+  it.each(Object.keys(revocations) as (keyof typeof revocations)[])(
+    "refuses a Print the bill waiting behind the write in which %s, issuing nothing",
+    async (change) => {
+      const till = await printingTill(suite.db, "Queued receipt printer");
+      const party = await served("Red wine bottle");
+      const revision = revisionOf(party.partyId);
+      const pending = await pausedPrint(till.cookie, party);
+      let entered!: () => void;
+      let releaseWrite!: () => void;
+      const inside = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const holdWrite = new Promise<void>((resolve) => {
+        releaseWrite = resolve;
+      });
+      const revocation = withTransaction(suite.db, async (tx) => {
+        await revocations[change](tx, till);
+        entered();
+        await holdWrite;
+      });
+      await inside;
+      const waits = vi.spyOn(suite.db, "withWriteLock");
+      try {
+        pending.release();
+        await vi.waitFor(() => expect(waits).toHaveBeenCalled());
+      } finally {
+        waits.mockRestore();
+        releaseWrite();
+        pending.release();
+      }
+      await revocation;
+
+      const response = await pending.response;
+      const [status, code] = refusalOf[change];
+      expect({ status: response.status, json: await response.json() }).toMatchObject({
+        status,
+        json: { error: { code } },
+      });
+      expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
+      await nothingIssued(party, revision);
+    },
+  );
 });
