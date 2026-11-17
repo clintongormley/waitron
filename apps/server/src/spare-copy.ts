@@ -7,7 +7,7 @@ import { nodeSigningPublicKey, readPairSecret, type KeyRing } from "@waitron/cre
 import { nodes, type Database, type NodeDatabase } from "@waitron/db";
 import { manifestSets, type MigrationFiles } from "@waitron/migrations";
 import { readPairLink, readPinnedPrimaryKey, type PairLink } from "@waitron/node-db";
-import { assertNotAhead, openImmutable, writeFileDurable } from "@waitron/provisioning";
+import { assertNotAhead, writeFileDurable } from "@waitron/provisioning";
 import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
 import { connectionPair, drizzleNodeSqlite, PAIR_COPY_DIR, VENUE_FILE } from "@waitron/store";
@@ -181,35 +181,15 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
   }
 }
 
-function openCopy(path: string, immutable = false) {
-  const connection = immutable
-    ? openImmutable(path)
-    : new DatabaseSync(path, { readOnly: true, allowExtension: false });
-  return {
-    connection,
-    copy: drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} }),
-  };
-}
-
-/**
- * Opened read-only. Refuses a copy of `venue.db` whose schema is ahead of this software.
- * `immutable` leaves no `-wal` or `-shm` beside the copy; it is only for a caller that has already
- * refused a `-wal` or a `-journal` there.
- */
-export async function assertVenueCopyNotAhead(
-  path: string,
+/** Refuses a read-only handle on a copy of `venue.db` whose schema is ahead of this software. */
+export async function assertCopyNotAhead(
+  copy: Pick<Database, "execute">,
   migrationsRoot: string | null,
-  options: { immutable?: boolean } = {},
 ): Promise<void> {
-  const { connection, copy } = openCopy(path, options.immutable);
-  try {
-    const files: MigrationFiles = { venue: copy, node: copy };
-    // The copy is venue.db alone; node.db's sets are this box's own.
-    const venueSets = manifestSets().filter((set) => set.database !== "node");
-    await assertNotAhead(files, venueSets, migrationsRoot);
-  } finally {
-    connection.close();
-  }
+  const files: MigrationFiles = { venue: copy, node: copy };
+  // The copy is venue.db alone; node.db's sets are this box's own.
+  const venueSets = manifestSets().filter((set) => set.database !== "node");
+  await assertNotAhead(files, venueSets, migrationsRoot);
 }
 
 /**
@@ -222,9 +202,10 @@ export async function checkCopy(
   ownPublicKey: string,
   migrationsRoot: string | null,
 ): Promise<boolean> {
-  await assertVenueCopyNotAhead(path, migrationsRoot);
-  const { connection, copy } = openCopy(path);
+  const connection = new DatabaseSync(path, { readOnly: true, allowExtension: false });
   try {
+    const copy = drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
+    await assertCopyNotAhead(copy, migrationsRoot);
     const [row] = await copy
       .select({ publicKey: nodes.publicKey })
       .from(nodes)

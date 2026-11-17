@@ -10,7 +10,10 @@ import {
 } from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
+import { openImmutable } from "@waitron/provisioning";
 import {
+  connectionPair,
+  drizzleNodeSqlite,
   JOURNAL_SUFFIX,
   NODE_FILE,
   openBackupQuery,
@@ -20,7 +23,7 @@ import {
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { checkCopyIntegrity } from "./handover-integrity.js";
 import { isReadableChart } from "./membership-trust.js";
-import { assertVenueCopyNotAhead } from "./spare-copy.js";
+import { assertCopyNotAhead } from "./spare-copy.js";
 import "./errors.js";
 
 async function fileSha256(path: string, signal: AbortSignal | undefined): Promise<string> {
@@ -63,7 +66,15 @@ export async function checkPlacedEmergencyCopy(deps: {
     throw new AppError("emergency_copy.hash_mismatch", {});
   if (!(await checkCopyIntegrity(venuePath, { signal: deps.signal, immutable: true })))
     throw new AppError("emergency_copy.integrity_failed", {});
-  await assertVenueCopyNotAhead(venuePath, deps.migrationsRoot, { immutable: true });
+  const connection = openImmutable(venuePath);
+  try {
+    await assertCopyNotAhead(
+      drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} }),
+      deps.migrationsRoot,
+    );
+  } finally {
+    connection.close();
+  }
   deps.signal?.throwIfAborted();
 
   const opened = await openBackupQuery(venuePath, { immutable: true });
