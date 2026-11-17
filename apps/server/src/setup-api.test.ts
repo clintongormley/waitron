@@ -33,7 +33,11 @@ import type { ConfigurationPreview } from "./configuration-import.js";
 
 const receiveArchive = useSetupArchiveUpload();
 function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {
-  mountSetupBase(app, { receiveArchive, ...deps }, log);
+  mountSetupBase(
+    app,
+    { receiveArchive, recoveryOperationPath: "/run/recovery-operation.json", ...deps },
+    log,
+  );
 }
 
 const noopLog: Logger = () => {};

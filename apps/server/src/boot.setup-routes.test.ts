@@ -430,6 +430,11 @@ describe("startServer — background listeners and sinks that fail or close", ()
 });
 
 describe("startServer — setup-mode routes that hand work to the boot's own wiring", () => {
+  /** A restore without recovery details is refused unless the real environment names this file;
+   * these cases test what happens after that check. */
+  const OPERATION_FILE_BASE = {
+    WAITRON_RECOVERY_OPERATION_FILE: join(tmpdir(), "waitron-unread-recovery-operation.json"),
+  };
   const ES_MODULE_CONFIG = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common");
 
   /** The same venue `provisionVenueBody` describes, with the admin secrets already hashed — the
@@ -794,7 +799,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(entries[0]!.params.source).toBe("setup");
           expect(kills).toEqual([]);
         },
-        { seams: { boxHost, testClock: clock, requestFromBox: () => false } },
+        {
+          seams: { boxHost, testClock: clock, requestFromBox: () => false },
+          base: OPERATION_FILE_BASE,
+        },
       );
     } finally {
       await venue.store.close();
@@ -1371,28 +1379,88 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     try {
-      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
-        const response = await post("/setup-api/restore", {
-          headers: {
-            "content-type": "application/octet-stream",
-            "x-waitron-recovery-key": "not-the-key-that-sealed-it",
-            "x-waitron-restore-environment": "preproduction",
-          },
-          body: new Uint8Array(
-            encryptArtifact(
-              packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
-              "the key that really sealed it",
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills, stateDir }) => {
+          const response = await post("/setup-api/restore", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+              "x-waitron-restore-environment": "preproduction",
+            },
+            body: new Uint8Array(
+              encryptArtifact(
+                packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+                "the key that really sealed it",
+              ),
             ),
+          });
+          const body = (await response.json()) as { error?: { code: string } };
+          expect(response.status).toBe(422);
+          expect(body.error?.code).toBe("recovery.passphrase_invalid");
+          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
+            {
+              code: "ENOENT",
+            },
+          );
+          expect(kills).toEqual([]);
+        },
+        { base: OPERATION_FILE_BASE },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a restore without recovery details unless the real environment names an operation file", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const restore = (post: (path: string, init: RequestInit) => Promise<Response>) =>
+      post("/setup-api/restore", {
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+          "x-waitron-restore-environment": "preproduction",
+        },
+        body: new Uint8Array(
+          encryptArtifact(
+            packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+            "the key that really sealed it",
           ),
-        });
-        const body = (await response.json()) as { error?: { code: string } };
-        expect(response.status).toBe(422);
-        expect(body.error?.code).toBe("recovery.passphrase_invalid");
-        await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-        expect(kills).toEqual([]);
+        ),
       });
+    const operationFile = OPERATION_FILE_BASE.WAITRON_RECOVERY_OPERATION_FILE;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_RECOVERY_OPERATION_FILE: operationFile },
+        async ({ post, kills, stateDir }) => {
+          const response = await restore(post);
+          expect(response.status).toBe(400);
+          expect(await response.json()).toEqual({
+            error: { code: "setup.request_invalid", params: { field: "recoveryOperation" } },
+          });
+          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
+            { code: "ENOENT" },
+          );
+          expect(kills).toEqual([]);
+        },
+      );
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const response = await restore(post);
+          expect(response.status).toBe(422);
+          expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
+            "recovery.passphrase_invalid",
+          );
+          expect(kills).toEqual([]);
+        },
+        { base: { WAITRON_RECOVERY_OPERATION_FILE: operationFile } },
+      );
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
@@ -1553,32 +1621,39 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         ]),
         "validation-key",
       );
-      await withSetupBoot(venue.directory, {}, async ({ post, stateDir, kills }) => {
-        await publishRestoreFlow(
-          stateDir,
-          { version: 1, phase: "staged", request: { version: 1, environment: "preproduction" } },
-          async (dir) => {
-            await writeFile(join(dir, "artifact"), "earlier archive");
-            await writeFile(join(dir, "key"), "earlier key");
-          },
-        );
-        const response = await post("/setup-api/restore", {
-          headers: {
-            "content-type": "application/octet-stream",
-            "x-waitron-recovery-key": "validation-key",
-            "x-waitron-restore-environment": "preproduction",
-            "x-waitron-old-box-gone": "1",
-          },
-          body: new Uint8Array(artifact),
-        });
-        expect(response.status).toBe(202);
-        expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
-        expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
-        expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(artifact);
-        expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe("validation-key");
-        await poll(() => (kills.length > 0 ? kills.length : undefined));
-        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
-      });
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, stateDir, kills }) => {
+          await publishRestoreFlow(
+            stateDir,
+            { version: 1, phase: "staged", request: { version: 1, environment: "preproduction" } },
+            async (dir) => {
+              await writeFile(join(dir, "artifact"), "earlier archive");
+              await writeFile(join(dir, "key"), "earlier key");
+            },
+          );
+          const response = await post("/setup-api/restore", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-recovery-key": "validation-key",
+              "x-waitron-restore-environment": "preproduction",
+              "x-waitron-old-box-gone": "1",
+            },
+            body: new Uint8Array(artifact),
+          });
+          expect(response.status).toBe(202);
+          expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+          expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
+          expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(artifact);
+          expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe(
+            "validation-key",
+          );
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+        },
+        { base: OPERATION_FILE_BASE },
+      );
     } finally {
       await venue.store.close();
       await source.store.close();
@@ -1616,38 +1691,43 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const venue = await freshVenue();
     try {
       await withSilentBucket(async (endpoint) => {
-        await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
-          const unreadable = await post("/setup-api/restore-bucket", {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ kit: "not a recovery kit", environment: "preproduction" }),
-          });
-          expect(unreadable.status).toBe(400);
-          expect(await unreadable.json()).toEqual({
-            error: { code: "backup.stream_kit_invalid", params: { reason: "not_found" } },
-          });
-          const kit = encodeRecoveryKit({
-            version: 2 as const,
-            streamId: "c0000000-0000-4000-8000-000000000002",
-            bucket: { ...SILENT_BUCKET, endpoint },
-            recoveryKey: "recovery-key-one-strong",
-            pointerSignerPublicKey: "unused",
-          });
-          const response = await post("/setup-api/restore-bucket", {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ kit, environment: "preproduction" }),
-            signal: AbortSignal.timeout(20_000),
-          });
-          expect(response.status).toBe(502);
-          expect(await response.json()).toMatchObject({
-            error: { code: "backup.stream_request_failed", params: { name: "TimedOut" } },
-          });
-          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
-            {
+        await withSetupBoot(
+          venue.directory,
+          {},
+          async ({ post, kills, stateDir }) => {
+            const unreadable = await post("/setup-api/restore-bucket", {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ kit: "not a recovery kit", environment: "preproduction" }),
+            });
+            expect(unreadable.status).toBe(400);
+            expect(await unreadable.json()).toEqual({
+              error: { code: "backup.stream_kit_invalid", params: { reason: "not_found" } },
+            });
+            const kit = encodeRecoveryKit({
+              version: 2 as const,
+              streamId: "c0000000-0000-4000-8000-000000000002",
+              bucket: { ...SILENT_BUCKET, endpoint },
+              recoveryKey: "recovery-key-one-strong",
+              pointerSignerPublicKey: "unused",
+            });
+            const response = await post("/setup-api/restore-bucket", {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ kit, environment: "preproduction" }),
+              signal: AbortSignal.timeout(20_000),
+            });
+            expect(response.status).toBe(502);
+            expect(await response.json()).toMatchObject({
+              error: { code: "backup.stream_request_failed", params: { name: "TimedOut" } },
+            });
+            await expect(
+              readFile(join(stateDir, "flows/restore/record.json")),
+            ).rejects.toMatchObject({
               code: "ENOENT",
-            },
-          );
-          expect(kills).toEqual([]);
-        });
+            });
+            expect(kills).toEqual([]);
+          },
+          { base: OPERATION_FILE_BASE },
+        );
       });
     } finally {
       await venue.store.close();
@@ -1717,6 +1797,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             });
             expect(kills).toEqual([]);
           },
+          { base: OPERATION_FILE_BASE },
         );
         const logged = [lines.join("\n"), await readFile(join(logDir, "waitron.log"), "utf8")];
         for (const text of logged) {
@@ -1823,6 +1904,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             });
             expect(kills).toEqual([]);
           },
+          { base: OPERATION_FILE_BASE },
         );
         const logged = [lines.join("\n"), await readFile(join(logDir, "waitron.log"), "utf8")];
         for (const text of logged) {
@@ -1907,28 +1989,33 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           "the archive's recovery key",
         );
         await rm(dirname(dump), { recursive: true, force: true });
-        await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
-          const response = await post("/setup-api/restore", {
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-waitron-recovery-key": "the archive's recovery key",
-              "x-waitron-restore-environment": "preproduction",
-            },
-            body: new Uint8Array(artifact),
-            signal: AbortSignal.timeout(20_000),
-          });
-          expect(response.status).toBe(409);
-          expect(await response.json()).toEqual({
-            error: { code: "restore.stream_source_unchecked", params: { reason: "bucket" } },
-          });
-          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
-            {
+        await withSetupBoot(
+          venue.directory,
+          {},
+          async ({ post, kills, stateDir }) => {
+            const response = await post("/setup-api/restore", {
+              headers: {
+                "content-type": "application/octet-stream",
+                "x-waitron-recovery-key": "the archive's recovery key",
+                "x-waitron-restore-environment": "preproduction",
+              },
+              body: new Uint8Array(artifact),
+              signal: AbortSignal.timeout(20_000),
+            });
+            expect(response.status).toBe(409);
+            expect(await response.json()).toEqual({
+              error: { code: "restore.stream_source_unchecked", params: { reason: "bucket" } },
+            });
+            await expect(
+              readFile(join(stateDir, "flows/restore/record.json")),
+            ).rejects.toMatchObject({
               code: "ENOENT",
-            },
-          );
-          expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
-          expect(kills).toEqual([]);
-        });
+            });
+            expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
+            expect(kills).toEqual([]);
+          },
+          { base: OPERATION_FILE_BASE },
+        );
       });
     } finally {
       await venue.store.close();

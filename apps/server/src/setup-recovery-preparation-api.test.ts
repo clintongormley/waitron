@@ -46,6 +46,7 @@ function fixture(extra: Partial<SetupDeps> = {}) {
       receiveArchive,
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
       prepareRecovery: execute,
+      recoveryOperationPath: "/run/recovery-operation.json",
       ...extra,
     } as SetupDeps,
     log,

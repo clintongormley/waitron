@@ -30,7 +30,13 @@ import {
   normalizeAndValidateEmail,
   verifySecretAsync,
 } from "@waitron/identity";
-import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  SUPPORTED_LOCALE_CODES,
+  isAppError,
+  isUnset,
+} from "@waitron/shared";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
@@ -109,6 +115,14 @@ function recoveryCredentials(
   };
 }
 
+function assertRecoveryOperationAvailable(
+  credentials: { recoveryOperation?: RecoveryOperationInput },
+  recoveryOperationPath: string | undefined,
+): void {
+  if (credentials.recoveryOperation === undefined && isUnset(recoveryOperationPath))
+    invalidRequest("recoveryOperation");
+}
+
 /**
  * Everything setup mode needs for an unprovisioned box. Its routes are UNAUTHENTICATED, like
  * `/health`, because no venue is bound yet.
@@ -165,6 +179,9 @@ export interface SetupDeps {
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   receiveArchive?: ReceiveArchive;
   stageRestore?: (request: ArchiveRequest, options: { oldBoxGone: boolean }) => Promise<void>;
+  /** `WAITRON_RECOVERY_OPERATION_FILE` as the start reads it; a restore without recovery details
+   * is refused when it is unset. */
+  recoveryOperationPath?: string;
   prepareRecovery?: PrepareRecovery;
   stageRecovery?: StageRecovery;
   discardStagedRecovery?: DiscardStagedRecovery;
@@ -1227,6 +1244,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           body.nodeRecoverySecret,
           body.recoveryContext,
         );
+        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const pointId = body.pointId;
         const oldBoxGone = body.oldBoxGone === true;
@@ -1444,6 +1462,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             }
           })(),
         );
+        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const hash = createHash("sha256")
           .update(rawEnvironment)
@@ -1532,6 +1551,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           body.nodeRecoverySecret,
           body.recoveryContext,
         );
+        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const input: BucketRestoreInput = {
           ...credentials,
