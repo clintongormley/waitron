@@ -316,7 +316,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     failures: {
       "backup.archive_settings_unreadable": {
         what: "The box could not read its saved archive settings.",
-        todo: "Open Backups, check the archive settings and save them again, then make a new pack.",
+        todo: "Use Backups → Change destination or schedule, choose the destinations again and press Save changes. If backups are off, use Turn on backups instead. Then make a new pack.",
       },
       "backup.recovery_key_missing": {
         what: "The box has no recovery key.",
@@ -436,7 +436,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     failures: {
       "backup.archive_settings_unreadable": {
         what: "El servidor no pudo leer los ajustes de archivo guardados.",
-        todo: "Abre Copias de seguridad, revisa los ajustes de archivo y vuelve a guardarlos; después haz un paquete nuevo.",
+        todo: "Usa Copias de seguridad → Cambiar el destino o la programación, elige de nuevo los destinos y pulsa Guardar cambios. Si las copias están desactivadas, usa Activar las copias. Después haz un paquete nuevo.",
       },
       "backup.recovery_key_missing": {
         what: "El servidor no tiene clave de recuperación.",

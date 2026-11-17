@@ -34,6 +34,27 @@ describe("part failure words", () => {
     }
   });
 
+  it("names the Backups buttons that replace unreadable archive settings", () => {
+    const en = partFailure("en", "backup.archive_settings_unreadable", {}).todo;
+    const es = partFailure("es", "backup.archive_settings_unreadable", {}).todo;
+    for (const label of [
+      "Backups → Change destination or schedule",
+      "Save changes",
+      "Turn on backups",
+    ]) {
+      expect(en).toContain(label);
+    }
+    for (const label of [
+      "Copias de seguridad → Cambiar el destino o la programación",
+      "Guardar cambios",
+      "Activar las copias",
+    ]) {
+      expect(es).toContain(label);
+    }
+    expect(en).not.toMatch(/save them again/);
+    expect(es).not.toMatch(/vuelve a guardarlos/);
+  });
+
   it("says in words what disagrees for a contradicting invoice-series history", () => {
     expect(partFailure("en", "sif.allocation_invalid", { reason: "history_invalid" }).what).toBe(
       "The box's record of its invoice series disagrees with what setup recorded.",

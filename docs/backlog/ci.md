@@ -122,15 +122,6 @@ restoring the pinned binaries and checkout dependencies. The watcher parked this
 01:34 CET pending a portable design. The five unused-peer server rows above remain open;
 keep `probeRefusal` and its `ECONNREFUSED` requirement unchanged.
 
-## Archive-settings inline advice must name its available action
-
-An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts`:
-`backup.archive_settings_invalid` tells you to save again on Backups, while the shown action is
-**Turn on backups** and you are already on that page. The English wording entered in
-[PR #1628](https://github.com/clintongormley/waitron/pull/1628), before #2068, and remains on main.
-Align the inline instruction with the available action when reworking this refusal; preserve its
-cause and the distinction between a failed write and a successful write whose reload failed.
-
 ## What the per-push CI concurrency groups (#384) left open
 
 - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
@@ -1169,6 +1160,5 @@ Check the later regional demo guides’ photo-library name claims against image 
 screen’s content-language selection.
 Keep the IPP clock-driver limit explicit when
 changing the polling continuation, and check that a failed fixture’s print call settles after
-teardown. Align the archive-settings inline instruction with its available action.
-[Inline advice](#archive-settings-inline-advice-must-name-its-available-action).
+teardown.
 
