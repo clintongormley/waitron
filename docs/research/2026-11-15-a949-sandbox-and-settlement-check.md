@@ -203,4 +203,4 @@ or over ten minutes old at the status read. The existing alert cache can retain 
 for another five minutes. An idle reader may therefore show no percentage or low-battery alert;
 check its charge on the reader. These are Waitron limits, not a provider freshness guarantee.
 
-Practice customer documents keep a neutral test-document mark. It does not say whether money moved; a provider sandbox and a live provider use the same practice-document wording. The dashboard’s no-charge notice identifies only Waitron’s built-in simulator.
+Practice customer documents keep a neutral test-document mark. A separate no-charge line appears only for a saved built-in-simulator payment; cash, manual, unknown and mixed payments do not qualify. Provider sandboxes and live providers keep the neutral mark without that claim. The dashboard’s simulator notice identifies only Waitron’s built-in simulator.

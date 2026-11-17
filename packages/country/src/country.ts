@@ -80,6 +80,7 @@ export const RECEIPT_LABEL_KEYS = [
   "reference",
   "duplicate",
   "practice",
+  "noRealCharge",
   "phone",
   "simplifiedInvoice",
   "invoiceHeading",

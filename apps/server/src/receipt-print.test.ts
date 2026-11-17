@@ -1,3 +1,4 @@
+import { SimulatorPaymentProvider } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
@@ -1150,31 +1151,45 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(decoded).not.toContain("Gracias por su visita");
   });
 
-  it("does not print a no-charge heading for a saved provider charge in Prepare", async () => {
-    const base = await setupVenue();
-    const cfg = { ...base.cfg, practiceMode: true };
-    const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
-    const orderId = randomUUID();
-    const result = await readerPay(
-      { ...deps(), admission: testTradingAdmission(), provider: new FakePaymentProvider(suite.db) },
-      cfg,
-      {
-        id: orderId,
-        zoneId: base.zoneId,
-        lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
-      },
-      OPERATOR,
-    );
-    expect(result.outcome).toBe("captured");
-    await printSaleReceipt(deps(), cfg, orderId, false);
-    const receipt = (await printJobsFor(cfg)).find((job) =>
-      decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
-    )!;
-    expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("TOTAL");
-    expect(decodeTicket(new Uint8Array(receipt.payload))).not.toContain("SIN COBRO REAL");
-    expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("DOCUMENTO DE PRUEBA");
-  });
+  it.each(["fake", "simulator"] as const)(
+    "splits practice and no-charge marks for a saved %s payment in Prepare",
+    async (provider) => {
+      const base = await setupVenue();
+      const cfg = { ...base.cfg, practiceMode: true };
+      const printerId = await makePrinter();
+      await configureReceipt(cfg, { printerId });
+      const orderId = randomUUID();
+      const result = await readerPay(
+        {
+          ...deps(),
+          admission: testTradingAdmission(),
+          provider:
+            provider === "simulator"
+              ? new SimulatorPaymentProvider(suite.db)
+              : new FakePaymentProvider(suite.db),
+        },
+        cfg,
+        {
+          id: orderId,
+          zoneId: base.zoneId,
+          lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
+        },
+        OPERATOR,
+      );
+      expect(result.outcome).toBe("captured");
+      if (result.outcome === "captured")
+        expect(result.ticket.simulatedCardPayment).toBe(provider === "simulator");
+      await printSaleReceipt(deps(), cfg, orderId, false);
+      const receipt = (await printJobsFor(cfg)).find((job) =>
+        decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
+      )!;
+      expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("TOTAL");
+      expect(decodeTicket(new Uint8Array(receipt.payload)).includes("SIN COBRO REAL")).toBe(
+        provider === "simulator",
+      );
+      expect(decodeTicket(new Uint8Array(receipt.payload))).toContain("DOCUMENTO DE PRUEBA");
+    },
+  );
 
   it("marks an explicitly printed practice sale as simulated", async () => {
     const base = await setupVenue();

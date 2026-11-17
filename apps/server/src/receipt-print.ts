@@ -1,3 +1,4 @@
+import { readSimulatedCardPayment } from "./receipt-presentation.js";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   deviceProfiles,
@@ -224,6 +225,7 @@ async function buildReceiptBytes(
     namesLocale: ticket.namesLocale ?? ticket.locale,
     printer,
     simulated: cfg.practiceMode,
+    simulatedCardPayment: await readSimulatedCardPayment(tx, saleId, cfg.practiceMode === true),
     duplicate,
     ...(guests === undefined ? {} : { guests }),
   });

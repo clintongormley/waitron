@@ -873,7 +873,7 @@ async function issueWhenFullyPaid(
   }
   const ticket = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-    ...(await readReceiptPresentation(tx, saleId, language.locale)),
+    ...(await readReceiptPresentation(tx, saleId, language.locale, cfg.practiceMode === true)),
     invoiceType: selected.invoiceType,
     ...(selected.recipient === undefined ? {} : { recipient: selected.recipient }),
     ...receiptOrder,

@@ -649,6 +649,7 @@ export class TillTicketView extends LitElement {
   @property() invoiceLocale = "es-ES";
   /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
   @property({ type: Boolean }) simulated = false;
+  @property({ type: Boolean }) simulatedCardPayment = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
   @property({ type: Boolean }) receiptCopiesOnly = false;
@@ -1208,6 +1209,7 @@ export class TillTicketView extends LitElement {
           this.simulated
             ? html`<p class="simulation-notice" data-test="simulation-notice">
                 ${labels.practice.replace(" - ", " — ")}
+                ${this.simulatedCardPayment ? html`<br />${labels.noRealCharge}` : nothing}
               </p>`
             : nothing
         }

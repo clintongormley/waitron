@@ -10,6 +10,7 @@ import {
   openTable,
   resetBillPayDrafts,
   stubApi,
+  till,
   shell,
 } from "../test/bill-pay-app.js";
 
@@ -341,5 +342,31 @@ it.each([true, false])(
     await vi.waitFor(() => expect(completed).toHaveBeenCalled());
     expect(completed.mock.calls[0]![0]).toBe(saved);
     if (!saved) expect(completed.mock.calls[0]![1]).toEqual(expect.any(String));
+  },
+);
+
+it.each([
+  ["prepare", false, true],
+  ["prepare", true, true],
+  ["demo", true, true],
+  ["live", false, false],
+] as const)(
+  "splits the %s settlement mark for simulator %s",
+  async (onboardingIntent, simulatedCardPayment, practice) => {
+    const api = stubApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
+      recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), simulatedCardPayment }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    emit(await openTable(el), "pay-tab", { method: "cash", amount: "120.00" });
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+    const notice = dialog.shadowRoot!.querySelector("[data-test=simulation-notice]");
+    expect(notice !== null).toBe(practice);
+    if (practice) {
+      expect(notice!.textContent).toContain("DOCUMENTO DE PRUEBA");
+      expect(notice!.textContent!.includes("SIN COBRO REAL")).toBe(simulatedCardPayment);
+    }
   },
 );

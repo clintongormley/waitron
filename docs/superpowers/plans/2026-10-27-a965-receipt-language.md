@@ -1,6 +1,6 @@
 # A965 receipt language implementation plan
 
-_2026-11-17: practice document labels are now neutral and make no claim about charges; see [the SumUp followup plan](2026-11-17-sumup-real-card-followups.md). This plan records the original wording._
+_2026-11-17: the practice mark and conditional simulator no-charge line are now separate; see [the SumUp followup plan](2026-11-17-sumup-real-card-followups.md). This plan records the original wording._
 
 > **For agentic workers:** Use `superpowers:executing-plans` to implement inline, task by task. Read the TDD skill before writing implementation or tests. Follow each failing-test-first cycle below. Use one final Claude run-it whole-branch review during `finish-branch`; do not dispatch automatic per-task reviewers.
 

@@ -324,6 +324,7 @@ describe("receipt labels", () => {
       discount: "Discount",
       duplicate: "DUPLICATE",
       practice: "TEST DOCUMENT",
+      noRealCharge: "NO REAL CHARGE",
       invoiceHeading: "INVOICE",
       paymentHeading: "PAYMENT RECEIPT",
       paymentNotice: "This document is not an invoice",

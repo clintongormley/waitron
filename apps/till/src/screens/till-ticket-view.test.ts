@@ -728,6 +728,22 @@ describe("till-ticket-view", () => {
     );
   });
 
+  it.each([false, true])(
+    "limits the ticket's no-charge line to a simulator payment (%s)",
+    async (simulatedCardPayment) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result,
+        issuer,
+        invoiceLocale: "es-ES",
+        simulated: true,
+        simulatedCardPayment,
+      });
+      const notice = el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!;
+      expect(notice).toContain("DOCUMENTO DE PRUEBA");
+      expect(notice.includes("SIN COBRO REAL")).toBe(simulatedCardPayment);
+    },
+  );
+
   it("prints the issuer venue name and NIF (RD 1619/2012 art. 7.1.d)", async () => {
     const { el } = await mount();
     const t = text(el);

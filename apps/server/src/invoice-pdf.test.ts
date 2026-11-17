@@ -178,18 +178,23 @@ describe("A4 invoice PDF", () => {
       }
   });
 
-  it("marks a practice duplicate and omits a QR when the stored invoice has none", async () => {
-    const { pages } = await rendered({
-      ...fixture,
-      duplicate: true,
-      simulated: true,
-      result: { ...fixture.result, qr: "" },
-    });
-    expect(pages[0]!.text).toContain("DUPLICADO");
-    expect(pages[0]!.text).toContain("DOCUMENTO DE PRUEBA");
-    expect(pages[0]!.text).not.toContain("VERI*FACTU");
-    expect(pages[0]!.qr).toBeNull();
-  });
+  it.each([false, true])(
+    "marks a practice duplicate with simulator claim %s and omits an absent QR",
+    async (simulatedCardPayment) => {
+      const { pages } = await rendered({
+        ...fixture,
+        duplicate: true,
+        simulated: true,
+        simulatedCardPayment,
+        result: { ...fixture.result, qr: "" },
+      });
+      expect(pages[0]!.text).toContain("DUPLICADO");
+      expect(pages[0]!.text).toContain("DOCUMENTO DE PRUEBA");
+      expect(pages[0]!.text.includes("SIN COBRO REAL")).toBe(simulatedCardPayment);
+      expect(pages[0]!.text).not.toContain("VERI*FACTU");
+      expect(pages[0]!.qr).toBeNull();
+    },
+  );
 });
 
 describe("department A4 presentation", () => {
