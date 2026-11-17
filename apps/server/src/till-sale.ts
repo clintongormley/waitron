@@ -79,6 +79,7 @@ import {
   refuseUnavailableFullInvoice,
   readInvoiceNumber,
   readStoredOrder,
+  refuseOrderPaymentMarked,
   refusePaymentInFlight,
   refusePendingPartPayment,
   refuseRefundInProgress,
@@ -91,6 +92,7 @@ import type {
   LineExtras,
   OrderLineIdentity,
   TillSaleDeps as BaseTillSaleDeps,
+  WorkingOrderStatus,
 } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { LateSendConfirmation } from "./late-send.js";
@@ -1705,12 +1707,12 @@ export async function refuseBillPaymentInFlight(
   db: Database,
   tx: Transaction,
   billId: string,
-  status: "open" | "placed",
+  status: WorkingOrderStatus,
 ): Promise<void> {
-  if (status === "open") return refusePaymentInFlight(tx, [billId]);
   await refuseRefundInProgress(tx, [billId]);
   await refusePendingPartPayment(tx, [billId], "any");
-  await refusePlacedPaymentInFlight(db, tx, [billId]);
+  if (status === "open") await refuseOrderPaymentMarked(tx, [billId]);
+  else await refusePlacedPaymentInFlight(db, tx, [billId]);
 }
 
 export interface UnfiledPaymentOptions {

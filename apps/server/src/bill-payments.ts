@@ -504,7 +504,7 @@ export async function stillOwedOnIssuedBill(
     amountDue,
     await readPaymentMoney(tx, [workingOrderId]),
   );
-  return toScale(subtractDecimal(amountDue, received), MONEY_SCALE);
+  return outstandingOf(amountDue, received);
 }
 
 /** Those of these bills that hold money: a pending payment, or received money not given back. */
@@ -1090,16 +1090,15 @@ async function requirePayableBill(
     if (order.partyId === null && !invoiced) return { payable: "placed" };
     if (invoiced) {
       return { payable: "placed", held: await readPaymentMoney(tx, [workingOrderId]) };
-    } else {
-      const [part] = await tx
-        .select({ id: billPayments.id })
-        .from(billPayments)
-        .where(
-          and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
-        )
-        .limit(1);
-      if (part !== undefined) return { payable: "placed" };
     }
+    const [part] = await tx
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(
+        and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
+      )
+      .limit(1);
+    if (part !== undefined) return { payable: "placed" };
   }
   await requireOpenBill(tx, workingOrderId);
   return { payable: "open" };

@@ -1,8 +1,9 @@
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
   orderGroups,
   ticketItems,
+  unpaidDepartures,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -19,7 +20,7 @@ import { pinnedAt } from "./issue-moment.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import type { Logger } from "./logger.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { billOwes, checkAndBumpParty, readBillsOfParties, runServiceCommand } from "./parties.js";
+import { billOwes, checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
 import { enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
 import { serviceDishCondition } from "./service-dishes.js";
@@ -89,9 +90,7 @@ export async function endMeal(
       const reading = deps.clock.now();
       await deps.backend.refuseUntilRecordable(tx, reading);
       const revision = await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
-      const bill = (await readBillsOfParties(tx, [partyId]))
-        .get(partyId)!
-        .find((row) => row.workingOrderId === req.billId);
+      const bill = await readFamilyBill(tx, partyId, req.billId);
       if (bill === undefined)
         throw new AppError("working_order.not_open", { workingOrderId: req.billId });
       await requireBillEditors(
@@ -105,14 +104,9 @@ export async function endMeal(
         throw new AppError("meal_end.already_issued", { workingOrderId: req.billId });
       if (!billOwes(bill))
         throw new AppError("bill.nothing_outstanding", { workingOrderId: req.billId });
-      await refuseBillPaymentInFlight(
-        deps.db,
-        tx,
-        req.billId,
-        bill.status === "open" ? "open" : "placed",
-      );
+      await refuseBillPaymentInFlight(deps.db, tx, req.billId, bill.status);
       const printers = printerLookup(tx, cfg.origin);
-      const paper = await needsPaper(tx, req.billId);
+      const paper = needsPaper(bill);
       if (paper) assertProfileAction(device, "print-receipt", "receipt");
       if (paper && (await printers("receipt")) === undefined)
         throw new AppError("meal_end.no_printer", { workingOrderId: req.billId });
@@ -146,22 +140,15 @@ export async function endMeal(
       if (bill.status === "open")
         await markOrderPlaced(tx, deps.clock, cfg, req.billId, operatorId, deps.attendance);
       if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, req.billId, saleId);
-      if (paper)
-        await enqueueOriginalReceipt(
-          tx,
-          cfg,
-          await readSettledTicket(deps.backend, tx, cfg, req.billId),
-          saleId,
-          { printers, personId: operatorId },
-        );
-      return {
-        revision,
-        workingOrderId: req.billId,
-        saleId,
-        invoiceNumber: (await readInvoiceNumbers(tx, [saleId])).get(saleId)!,
-        total,
-        owed,
-      };
+      let invoiceNumber: string;
+      if (paper) {
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.billId);
+        await enqueueOriginalReceipt(tx, cfg, ticket, saleId, { printers, personId: operatorId });
+        invoiceNumber = ticket.invoiceNumber;
+      } else {
+        invoiceNumber = (await readInvoiceNumbers(tx, [saleId])).get(saleId)!;
+      }
+      return { revision, workingOrderId: req.billId, saleId, invoiceNumber, total, owed };
     },
   );
 }
@@ -192,14 +179,35 @@ async function assertDeliveryQueued(tx: Transaction, billId: string, saleId: str
     });
 }
 
-/** A full invoice staged for A4 or email has its delivery reserved by `issueUnpaidInvoice`. */
-async function needsPaper(tx: Transaction, billId: string): Promise<boolean> {
-  const [order] = await tx
-    .select({ invoiceType: workingOrders.invoiceType, delivery: workingOrders.invoiceDelivery })
+/** The bill, when it belongs to the party's family, with what Print the bill decides on. */
+async function readFamilyBill(tx: Transaction, partyId: string, billId: string) {
+  const [bill] = await tx
+    .select({
+      status: workingOrders.status,
+      leftUnpaid: sql<boolean>`${unpaidDepartures.id} is not null`.mapWith(Boolean),
+      lines: sql<number>`count(${workingOrderLines.id})`,
+      invoiceType: workingOrders.invoiceType,
+      delivery: workingOrders.invoiceDelivery,
+    })
     .from(workingOrders)
-    .where(eq(workingOrders.id, billId));
-  const medium = order!.delivery?.medium;
-  return order!.invoiceType !== "F1" || (medium !== "a4" && medium !== "email");
+    .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
+    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+    .where(
+      and(
+        eq(workingOrders.id, billId),
+        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+      ),
+    )
+    .groupBy(workingOrders.id);
+  return bill;
+}
+
+/** A full invoice staged for A4 or email has its delivery reserved by `issueUnpaidInvoice`. */
+function needsPaper(
+  bill: Pick<NonNullable<Awaited<ReturnType<typeof readFamilyBill>>>, "invoiceType" | "delivery">,
+): boolean {
+  const medium = bill.delivery?.medium;
+  return bill.invoiceType !== "F1" || (medium !== "a4" && medium !== "email");
 }
 
 /** The bill's dishes neither served in full nor cancelled, as Finish table reckons them. */
@@ -218,7 +226,7 @@ async function unservedDishes(tx: Transaction, billId: string) {
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [billId])),
+        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
       ),
     )
     .orderBy(workingOrderLines.lineNo);
