@@ -7,6 +7,7 @@ import {
   type ResolvedExtraList,
 } from "@waitron/menu";
 import {
+  asksNoNewAnswer,
   buildLineExtras,
   editLineExtras,
   editLineOptions,
@@ -760,6 +761,60 @@ describe("editLineOptions", () => {
     expect(editLineOptions([renamed], requested, stored, "en")).toEqual(
       freeze({ options: [renamed] }, { options: requested }).optionSnapshots,
     );
+  });
+});
+
+describe("asksNoNewAnswer", () => {
+  const rare = [{ listId: cooked.id, labelId: mediumRare.id }];
+  const stored = freeze({ options: [cooked] }, { options: rare }).optionSnapshots;
+
+  it("asks nothing new of an answer whose customer and kitchen names changed since", () => {
+    const reworded = {
+      ...cooked,
+      customerName: { en: "Reworded diner" },
+      kitchenName: "Reworded kitchen",
+      labels: cooked.labels.map((label) => ({ ...label, kitchenName: "Reworded label kitchen" })),
+    };
+    expect(asksNoNewAnswer([reworded], rare, stored)).toBe(true);
+  });
+
+  it("asks nothing new when the request leaves out a list the line answered", () => {
+    expect(asksNoNewAnswer([cooked], [], stored)).toBe(true);
+  });
+
+  it.each([
+    { case: "another label", requested: [{ listId: cooked.id, labelId: "label-well-done" }] },
+    {
+      case: "a list the line never answered",
+      requested: [...rare, { listId: sauce.id, labelId: "label-pepper" }],
+    },
+    { case: "an unknown label", requested: [{ listId: cooked.id, labelId: "label-gone" }] },
+    { case: "an unknown list", requested: [{ listId: "list-gone", labelId: mediumRare.id }] },
+    { case: "a malformed answer", requested: [{ listId: cooked.id }] },
+    { case: "no list of answers", requested: {} },
+  ])("asks for a new answer given $case", ({ requested }) => {
+    expect(asksNoNewAnswer([cooked, sauce], requested, stored)).toBe(false);
+  });
+
+  it("matches ids in any case, as the validator does", () => {
+    expect(
+      asksNoNewAnswer(
+        [cooked],
+        [{ listId: cooked.id.toUpperCase(), labelId: mediumRare.id.toUpperCase() }],
+        stored,
+      ),
+    ).toBe(true);
+  });
+
+  it("pairs two lists sharing a staff name each with its own stored answer", () => {
+    const twin: OptionList = { ...cooked, id: "list-cooked-twin" };
+    const requested = [
+      { listId: cooked.id, labelId: mediumRare.id },
+      { listId: twin.id, labelId: "label-well-done" },
+    ];
+    const both = freeze({ options: [cooked, twin] }, { options: requested }).optionSnapshots;
+    expect(asksNoNewAnswer([cooked, twin], requested, both)).toBe(true);
+    expect(asksNoNewAnswer([cooked, twin], requested, [both[0]!, both[0]!])).toBe(false);
   });
 });
 

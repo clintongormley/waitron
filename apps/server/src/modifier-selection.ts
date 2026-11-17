@@ -224,6 +224,36 @@ export function editLineOptions(
   return answers.map((freeze, index) => kept[index] ?? freeze(defaultLanguage));
 }
 
+/**
+ * Whether every answer `requested` names is one `stored` holds, by the staff names of its list and
+ * label: the till re-derives a stored answer by those names alone, and leaves out a list it cannot
+ * match, so such a request asks for nothing new. A malformed request, or one naming an id `offered`
+ * does not carry, answers false.
+ */
+export function asksNoNewAnswer(
+  offered: readonly OptionList[],
+  requested: unknown,
+  stored: readonly OptionSnapshot[],
+): boolean {
+  if (!Array.isArray(requested)) return false;
+  const named: { list: string; label: string }[] = [];
+  for (const entry of requested as unknown[]) {
+    const { listId, labelId } = (entry ?? {}) as { listId?: unknown; labelId?: unknown };
+    if (typeof listId !== "string" || typeof labelId !== "string") return false;
+    const list = offered.find((candidate) => candidate.id === listId.toLowerCase());
+    const label = list?.labels.find((candidate) => candidate.id === labelId.toLowerCase());
+    if (list === undefined || label === undefined) return false;
+    named.push({ list: list.name, label: label.name });
+  }
+  const staffName = (names: Record<string, string>) => Object.values(names)[0];
+  return pairEach(
+    named,
+    stored,
+    (answer, held) =>
+      staffName(held.listName) === answer.list && staffName(held.labelName) === answer.label,
+  ).every((held) => held !== undefined);
+}
+
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */
 export function namedPicks(
   requested: unknown,

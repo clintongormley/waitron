@@ -2727,8 +2727,6 @@ describe("updateHeldOrder", () => {
     },
   );
 
-  // A1416: a whole-order save keeps a sent dish's options answer, whatever a published rename
-  // of its option does to what the till sends back for it.
   it.each([
     { renamed: "customer name", column: "customer_name", state: "preparing" },
     { renamed: "kitchen name", column: "kitchen_name", state: "preparing" },
@@ -2821,9 +2819,10 @@ describe("updateHeldOrder", () => {
     },
   );
 
-  it("still recalls and resends a fired dish whose options answer one dish's change replaces", async () => {
+  /** A table order holding a dish answered "Rare" from a two-option list; `hold` keeps it unfired. */
+  async function seedAnsweredDish(hold: boolean) {
     const { cfg, coffeeId } = await setupVenue();
-    const { tabId, cooking } = await withTransaction(db, async (tx) => {
+    const seeded = await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const cooking = await addOptionList(tx, coffeeId, "Cooking", ["Rare", "Well done"]);
       const tableId = await makeTable(tx, cfg);
@@ -2833,45 +2832,143 @@ describe("updateHeldOrder", () => {
           productId: coffeeId,
           quantity: "1",
           options: [{ listId: cooking.listId, labelId: cooking.labelIds[0]! }],
+          ...(hold ? { hold: true } : {}),
         },
       ]);
       return { tabId, cooking };
     });
-    const itemsOf = () =>
+    const [dish] = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, seeded.tabId));
+    const items = () =>
       db
         .select({ id: ticketItems.id, firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, tabId));
-    const [fired] = await itemsOf();
-    expect(fired!.firedAt).not.toBeNull();
+        .where(eq(ticketItems.workingOrderLineId, dish!.id));
+    return { cfg, coffeeId, ...seeded, dish: dish!, items };
+  }
 
-    const revision = await revisionOf(tabId);
-    await withTransaction(db, (tx) =>
-      updateOrderLine(
-        tx,
-        cfg,
-        tabId,
-        1,
+  it("saves a different answer picked for a fired, not-started dish by recalling and resending it", async () => {
+    const { cfg, coffeeId, tabId, cooking, dish, items } = await seedAnsweredDish(false);
+    const [fired] = await items();
+    expect(fired!.firedAt).not.toBeNull();
+    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+      revision: await revisionOf(tabId),
+      operatorId: OPERATOR,
+      lines: [
         {
-          portionLineNos: [],
+          workingOrderLineId: dish.id,
+          menuItemId: offers.offerFor(coffeeId),
+          quantity: "1",
           options: [{ listId: cooking.listId, labelId: cooking.labelIds[1]! }],
         },
-        revision,
-        OPERATOR,
-      ),
-    );
+      ],
+    });
 
-    const resent = await itemsOf();
+    const resent = await items();
     expect(resent).toEqual([{ id: expect.any(String), firedAt: expect.any(String) }]);
     expect(resent[0]!.id).not.toBe(fired!.id);
-    const [line] = await db
+    const [after] = await db
       .select({ optionSnapshots: workingOrderLines.optionSnapshots })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId));
-    expect(line!.optionSnapshots).toEqual([
+      .where(eq(workingOrderLines.id, dish.id));
+    expect(after!.optionSnapshots).toEqual([
       expect.objectContaining({ labelKitchenName: "Well done kitchen" }),
     ]);
+  });
+
+  it.each([
+    { renamed: "nothing", column: null },
+    { renamed: "the customer name", column: "customer_name" },
+  ] as const)(
+    "refuses a different answer picked for a started dish when $renamed was renamed",
+    async ({ column }) => {
+      const { cfg, coffeeId, tabId, cooking, dish, items } = await seedAnsweredDish(false);
+      const [item] = await items();
+      await withTransaction(db, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
+      if (column !== null)
+        await withTransaction(db, async (tx) => {
+          await tx.execute(
+            sql`update option_labels set ${sql.identifier(column)} = json_set(customer_name, ${`$.${CONTENT_LANGUAGE}`}, 'Renamed') where id = ${cooking.labelIds[0]!}`,
+          );
+          await republishMenus(tx);
+        });
+      const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+
+      await expect(
+        updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+          revision: await revisionOf(tabId),
+          operatorId: OPERATOR,
+          lines: [
+            {
+              workingOrderLineId: dish.id,
+              menuItemId: offers.offerFor(coffeeId),
+              quantity: "1",
+              options: [{ listId: cooking.listId, labelId: cooking.labelIds[1]! }],
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: "ticket.already_started" });
+      const [after] = await db
+        .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, dish.id));
+      expect(after!.optionSnapshots).toEqual(dish.optionSnapshots);
+    },
+  );
+
+  it("still asks a held dish not yet fired to answer an options list whose staff name was renamed", async () => {
+    const { cfg, coffeeId, tabId, cooking, dish, items } = await seedAnsweredDish(true);
+    expect(dish.sentAt).toBeNull();
+    expect(await items()).toEqual([{ id: expect.any(String), firedAt: null }]);
+    await withTransaction(db, async (tx) => {
+      await tx.execute(
+        sql`update option_labels set name = 'Medium-rare' where id = ${cooking.labelIds[0]!}`,
+      );
+      await republishMenus(tx);
+    });
+    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+        revision: await revisionOf(tabId),
+        operatorId: OPERATOR,
+        // The till matches a stored answer by staff name, so it has none to send once that is renamed.
+        lines: [
+          { workingOrderLineId: dish.id, menuItemId: offers.offerFor(coffeeId), quantity: "1" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: cooking.listId },
+    });
+  });
+
+  it("keeps a sent dish's answer from an options list deleted since", async () => {
+    const { cfg, coffeeId, tabId, cooking, dish } = await seedAnsweredDish(false);
+    await withTransaction(db, async (tx) => {
+      await menu.deleteOptionList(tx, cooking.listId);
+      await republishMenus(tx);
+    });
+    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+      revision: await revisionOf(tabId),
+      operatorId: OPERATOR,
+      label: "Window",
+      lines: [
+        { workingOrderLineId: dish.id, menuItemId: offers.offerFor(coffeeId), quantity: "1" },
+      ],
+    });
+
+    const [after] = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, dish.id));
+    expect(after).toEqual(dish);
   });
 
   it.each(["dish", "variant", "extras item"] as const)(
@@ -6664,6 +6761,59 @@ describe("correction slips on line changes and cancellations (A6)", () => {
       expect(ticket).toContain("Croquettes");
       expect(ticket).toContain("No onion");
     });
+  });
+
+  it("still recalls and resends a fired dish whose options answer one dish's change replaces", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    const { tabId, cooking } = await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const cooking = await addOptionList(tx, coffeeId, "Cooking", ["Rare", "Well done"]);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [
+        {
+          productId: coffeeId,
+          quantity: "1",
+          options: [{ listId: cooking.listId, labelId: cooking.labelIds[0]! }],
+        },
+      ]);
+      return { tabId, cooking };
+    });
+    const itemsOf = () =>
+      db
+        .select({ id: ticketItems.id, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+    const [fired] = await itemsOf();
+    expect(fired!.firedAt).not.toBeNull();
+
+    const revision = await revisionOf(tabId);
+    await withTransaction(db, (tx) =>
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        {
+          portionLineNos: [],
+          options: [{ listId: cooking.listId, labelId: cooking.labelIds[1]! }],
+        },
+        revision,
+        OPERATOR,
+      ),
+    );
+
+    const resent = await itemsOf();
+    expect(resent).toEqual([{ id: expect.any(String), firedAt: expect.any(String) }]);
+    expect(resent[0]!.id).not.toBe(fired!.id);
+    const [line] = await db
+      .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(line!.optionSnapshots).toEqual([
+      expect.objectContaining({ labelKitchenName: "Well done kitchen" }),
+    ]);
   });
 
   it("(d) voiding a HELD line no HOLD ticket carries enqueues NO slip", async () => {

@@ -10159,6 +10159,11 @@ export class TillApp extends LitElement {
       if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
         liveByMenuItem.set(candidate.menuItemId, candidate);
     }
+    const sentLines = new Set(
+      (listed?.lines ?? [])
+        .filter((row) => row.sentAt !== null || row.firedAt !== null)
+        .map((row) => row.id),
+    );
     for (const line of order.lines) {
       // The snapshot keeps the order's names and price; the offered lists are today's live offer's,
       // as the till would offer them on that dish now, which is what an edit has to answer against.
@@ -10178,12 +10183,11 @@ export class TillApp extends LitElement {
       // Each pick goes back to the list it was taken from, if the live offer still has it there.
       const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
       if (picks.notOffered.length > 0) extraNotOffered = true;
-      // A still-offered list that nothing matched must be answered again: the server refuses the
-      // edit until it is, and falling back to the list's default would change what the diner asked for.
+      // On a line not yet sent, a still-offered list that nothing matched must be answered again:
+      // the server refuses the edit until it is, and falling back to the list's default would change
+      // what the diner asked for. A whole-order save keeps a sent line's answer.
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
-      // A sent line is read-only, and a whole-order save keeps its answer.
-      const row = listed?.lines.find((each) => each.id === line.workingOrderLineId);
-      const sent = row !== undefined && (row.sentAt !== null || row.firedAt !== null);
+      const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
       if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
       lines.push({
         product,

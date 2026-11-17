@@ -8097,8 +8097,6 @@ describe("till-app", () => {
     expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
   });
 
-  // A sent line is read-only, so its renamed answer is not something staff can choose again; the
-  // server keeps what was sent on a whole-order save.
   it.each([
     { kitchen: "sent", sentAt: "2026-11-17T20:00:00.000Z", firedAt: null, banner: false },
     { kitchen: "fired", sentAt: null, firedAt: "2026-11-17T20:00:00.000Z", banner: false },

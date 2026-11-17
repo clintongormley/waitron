@@ -112,6 +112,7 @@ import {
   type PortionRef,
 } from "./order-portions.js";
 import {
+  asksNoNewAnswer,
   buildLineExtras,
   editLineExtras,
   editLineOptions,
@@ -6208,8 +6209,8 @@ async function applyLineEdits(
     fresh: RequestedLine[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
-    /** Keep a sent dish's options answer unread: the till cannot edit one, and a rename cannot
-     * be told from a change. */
+    /** Keep a sent dish's options answer while the edit names no answer it does not hold: a
+     * rename since sending cannot be told from a change. */
     keepSentAnswers?: true;
   },
   operatorId: string | undefined,
@@ -6253,12 +6254,13 @@ async function applyLineEdits(
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
     return records.some((record) => record.firedAt !== null);
   };
+  const wasSent = (parent: EditableParent): boolean =>
+    [parent, ...parent.children].some(
+      (part) => part.sentAt !== null || part.ticket?.firedAt != null,
+    );
   if (plan.refuseSentDrop) {
     for (const parent of order.parents) {
-      const sent = [parent, ...parent.children].some(
-        (part) => part.sentAt !== null || part.ticket?.firedAt != null,
-      );
-      if (!sent) continue;
+      if (!wasSent(parent)) continue;
       const edit = plan.edits.find((edit) => edit.parent.id === parent.id);
       const picks = namedPicks(edit?.intent.extras?.set);
       const drops =
@@ -6415,7 +6417,10 @@ async function applyLineEdits(
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     const keepAnswer =
-      plan.keepSentAnswers === true && (parent.sentAt !== null || parent.ticket?.firedAt != null);
+      plan.keepSentAnswers === true &&
+      intent.options !== null &&
+      wasSent(parent) &&
+      asksNoNewAnswer(modifiers.options, intent.options.set, parent.optionSnapshots);
     if (intent.options !== null && !keepAnswer) {
       optionSnapshots =
         editLineOptions(
