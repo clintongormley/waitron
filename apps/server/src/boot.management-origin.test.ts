@@ -153,6 +153,27 @@ async function withServer(
 const url = (path: string) => `http://127.0.0.1:${httpPort()}${path}`;
 const otherPort = () => `http://127.0.0.1:${httpPort() + 1}`;
 
+describe("the card-provider notice in the running server", () => {
+  it.each([
+    ["", true],
+    ["enabled", false],
+  ] as const)(
+    "reports the actual simulator with test providers %j",
+    async (providers, expected) => {
+      await withServer(
+        { WAITRON_ONBOARDING_INTENT: "prepare", WAITRON_PAYMENT_TEST_PROVIDERS: providers },
+        async ({ venue }) => {
+          const response = await fetch(url("/management-api/session/me"), {
+            headers: { cookie: venue.managerCookie },
+          });
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ simulatedCardPayments: expected });
+        },
+      );
+    },
+  );
+});
+
 async function answerOf(response: Response) {
   const text = await response.text();
   try {
