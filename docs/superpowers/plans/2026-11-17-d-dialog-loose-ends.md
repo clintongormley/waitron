@@ -1,22 +1,22 @@
 # D-DIALOG-LOOSE-ENDS implementation plan
 
-**Goal:** Keep the station chooser and its buttons still while staff choose a station; remove the four resolved backlog observations.
+**Goal:** Keep the station chooser and its buttons still while staff choose a station; retire the four backlog observations once current evidence and watcher clearance settle them.
 **Authority:** Exact ask: `/Users/clintongormley/waitron-campaign-d/queue.md`, D-DIALOG-LOOSE-ENDS, “Ask”.
 The queue authorizes the outcome. This separately authored plan awaits Claude review and watcher clearance; no owner plan approval is claimed.
 **Scope decision for the watcher:** The reproduced station defect belongs to the till, despite the queue's dashboard heading.
-Clear that boundary explicitly before building; do not substitute an unrelated dashboard station screen.
+Clear that boundary and keeping the specified Back wording explicitly before building; do not substitute an unrelated dashboard station screen.
 **Execution:** Inline, using `superpowers:executing-plans` and TDD after clearance; no new helpers or framework.
 
 ## Evidence and smallest result
 
 Driver probes on main base `7f0ad91e2605f37c13171964ac13c15d364a544c` (2026-11-17, about 06:56):
 
-- Theme first-save/copy: visible native Back dismisses after `wt-close` without submitting; “A331 look canvas (copy)” fits at 1280px (2 passed).
+- Theme first-save/copy: visible native Back dismisses after `wt-close` without submitting; “A331 look canvas (copy)” fits at 1280px and 390px (2 passed at each width).
 - Printer discovery: fresh and retained/disabled rows say Add; fresh opens “Add a printer”/Add, retained adds directly without naming (2 passed).
 - Till station choice: native width changes from 245.53125px to 204.734375px after choosing Grill; width invariant fails (1 failed).
 
-Receipts and saved temporary probe texts: `/Users/clintongormley/waitron-campaign-d/receipts/dialog-loose-ends/` (`theme-probe.log`, `printer-probe.log`, `station-probe.log`).
-These are driver measurements, not new executions by this plan author. Recheck against current main before build/backlog deletion if it has moved.
+Receipts and saved temporary probe texts: `/Users/clintongormley/waitron-campaign-d/receipts/dialog-loose-ends/` (`theme-probe.log`, `theme-phone-probe.log`, `printer-probe.log`, `station-probe.log`).
+These are driver measurements, not executions by the plan author. Paste the probe bodies, source SHA, commands and counts into the PR so deletion evidence can be repeated.
 
 ## Files and reuse
 
@@ -32,15 +32,15 @@ Keep `wt-dialog`, `trackDialog()`, combobox, footer slots, event payloads and dr
 
 - [ ] Before building, driver obtains Claude plan review with `~/workspace/tools/claude-seat.sh review-branch <checkout> <brief-file> <report-file>`; inspect completed findings, address them, then obtain watcher clearance.
   Brief quotes the queue ask verbatim with its location, names this separately invoked Codex author and plan, then asks: simplest delivery of the ask/anything unasked; then correctness/buildability.
-  Keep brief/report outside the checkout and candidate fixed during review; watcher clearance must explicitly cover the till boundary.
+  Keep brief/report outside the checkout and candidate fixed during review; watcher clearance must explicitly cover the till boundary and retaining Back, specified at `2026-10-19-a841-theme-editor-design.md:650`.
 - [ ] In a disposable current-main checkout, replay the saved temporary probes if main moved; retain SHA, commands, counts and measurements outside the repo, then remove probes.
   Theme: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/theme-name-dialog.test.ts -t 'D-DIALOG'`.
   Printer: `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts -t 'D-DIALOG'`.
   Station: `pnpm --filter @waitron/till exec vitest run src/widgets/station-choice-dialog.test.ts -t 'D-DIALOG'`.
 - [ ] Add “keeps station dialog width and footer positions stable when choices change”; run `pnpm --filter @waitron/till exec vitest run src/widgets/station-choice-dialog.test.ts -t 'keeps station dialog width'` and observe the expected geometry failure before CSS.
   Measure the open native dialog and both native footer buttons before/after choosing short and long names, including a closed-station label; allow at most 1px width/x/y change.
-  Cover Make at and Move to, en/es, light/dark and 390/1280px; assert actual `window.innerWidth`, no horizontal body overflow, and dialog/buttons within the viewport.
-  Use `page.viewport`, await component updates/fonts before measuring, and restore incoming viewport, locale and theme in `finally`; reuse the themed mount fixture.
+  Cover Make at and Move to at 390/1280px in English, plus one Spanish phone case; assert actual `window.innerWidth`, no horizontal body overflow, and dialog/buttons within the viewport.
+  Use existing `pageAt`/`resetPage` and mount/choose helpers; await component updates/fonts, and restore viewport/locale after the case. Keep the full language/theme matrix in visual inspection.
 - [ ] Apply only the token-backed body width above; rerun the named test and require a passing Tests count.
 - [ ] Run `pnpm --filter @waitron/till exec vitest run src/widgets/station-choice-dialog.test.ts src/widgets/station-choice-dialog.save-state.test.ts src/widgets/station-choice-dialog.unsaved.test.ts src/widgets/station-choice-dialog.a11y.test.ts`.
   Geometry belongs to the widget test; existing suites retain Save-state, submission, refusal, close/draft and accessibility assertions. No route, payment or shared-primitive tests need changing.
@@ -52,4 +52,4 @@ Keep `wt-dialog`, `trackDialog()`, combobox, footer slots, event payloads and dr
 
 Leave Back wording and already-correct dashboard source/tests alone. Exclude purchases/staff synthetic-event work, Bluetooth Pair, bill attestation, devices (#3636), A1517 renderer and unrelated station screens.
 No shared `wt-modal`/`wt-dialog`, API, payment, fiscal, migration, token or translation changes are proposed.
-Expected: code about +8; tests about +55; documentation about +50/−8 including this plan; under 150 changed lines overall. Material departure returns to the watcher before build.
+Expected: code about +8; tests about +45; documentation about +50/−8 including this plan; under 150 changed lines overall. Material departure returns to the watcher before build.
