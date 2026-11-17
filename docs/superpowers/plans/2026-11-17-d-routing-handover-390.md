@@ -13,11 +13,13 @@
 
 **Steps:**
 1. Claude approach review; watcher clearance before build.
-2. Using supplied main 77bc77e31b reproduction, add one primitive regression: part-local heading 4px/body 12px; inherited/explicit 8px. Observe failure first.
+2. Using supplied main 77bc77e31b reproduction, add one primitive regression: document-level `wt-data-table::part(table-head)` overrides `--wt-space-3` to `--wt-space-1`, removed with `onTestFinished`; heading4/body12 is the failing leg, explicit8 is a preservation control.
 3. Remove host default; resolve `var(--wt-table-cell-padding-inline,var(--wt-space-3))` at th/td and narrow tree-arrow calculation.
-4. Run primitive spacing/tree tests, entire unchanged 334-case venue-service file, and Structure narrow cases: 4px, contained 44px tree; toolbar unchanged.
-5. Record measured dependency gap; finish reviews (two for cross-package contract), CI, authorised landing, Lane E notification.
+4. Run all `wt-data-table*.test.ts` files (the primitive, not whole UI package), entire unchanged334-case venue-service file, and Structure narrow cases: 4px, contained 44px tree; toolbar unchanged.
+5. Add a dated #3612→venue-service/CI44010882278 example under `ci-and-gates.md:11–18`, not a new rule; clarify per-cell fallback in design-system.md; finish reviews (two for cross-package contract), CI, authorised landing, Lane E notification.
 
 **Exclusions:** Screen styling, APIs, tokens, frameworks, CI selection, migrations, guides.
 
 **Size:** Production 3–6/test 15–25/docs 8–15 lines; total under 100.
+
+Separate Sol-high draft; Claude approach read2026-11-17 (88s), driver source-checked corrections. Watcher clearance pending; no owner design approval claimed. Nothing generated.
