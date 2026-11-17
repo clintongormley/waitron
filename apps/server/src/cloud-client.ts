@@ -1,3 +1,4 @@
+import { fetchOwnerRecovery, ownerRecoveryBinding } from "./cloud-owner-recovery.js";
 import {
   fetchCloudEmailGrant,
   sendCloudEmail,
@@ -469,6 +470,24 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       else return;
       await save(state);
     }, true);
+  async function ownerRecovery(
+    authorize: () => Promise<string>,
+    decision: { action: "approve" | "refuse"; request: unknown } | undefined,
+    signal?: AbortSignal,
+  ) {
+    const binding = ownerRecoveryBinding(await read());
+    const deadline = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+      : AbortSignal.timeout(8000);
+    await leaseState(deadline);
+    const actor = await authorize();
+    const state = await read();
+    if (ownerRecoveryBinding(state) !== binding) throw new AppError("cloud.binding_conflict", {});
+    const result = await fetchOwnerRecovery(state!, actor, decision, deadline, recordRefusal);
+    if ((await authorize()) !== actor || ownerRecoveryBinding(await read()) !== binding)
+      throw new AppError("cloud.binding_conflict", {});
+    return result;
+  }
   // Cloud's billing contract allows one read a minute across every dashboard (Retry-After may ask
   // for longer) and no snapshot on disk, so the last read and its outcome live here, per registration.
   let billingRead:
@@ -687,6 +706,14 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         return project(state);
       }, true);
     },
+    ownerRecoveryRead: (authorize: () => Promise<string>, signal?: AbortSignal) =>
+      ownerRecovery(authorize, undefined, signal),
+    ownerRecoveryDecide: (
+      action: "approve" | "refuse",
+      request: unknown,
+      authorize: () => Promise<string>,
+      signal?: AbortSignal,
+    ) => ownerRecovery(authorize, { action, request }, signal),
     async guestMenuStatus(signal?: AbortSignal) {
       const deadline = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(8000)])

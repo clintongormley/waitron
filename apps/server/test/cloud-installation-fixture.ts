@@ -17,6 +17,7 @@ export async function installationFixture(
     emergencyCode?: MachineHandler;
     staffCertificate?: MachineHandler;
     guestMenu?: MachineHandler;
+    ownerRecovery?: MachineHandler;
     tunnel?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
@@ -68,6 +69,10 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
+    if (String(values[2]).startsWith("owner-recovery-") && options.ownerRecovery) {
+      await options.ownerRecovery(values, saved, req, res, sent);
+      return;
+    }
     if (values[2] === "emergency-hosting-code" && options.emergencyCode) {
       await options.emergencyCode(values, saved, req, res, sent);
       return;

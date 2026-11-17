@@ -853,3 +853,35 @@ it("a revocation met after the connection was paired again as another installati
     await expect(status).rejects.toMatchObject({ code: "cloud.unavailable" });
     expect(await saved(f)).toEqual(JSON.parse(JSON.stringify(replaced)));
   }));
+
+it("allows a caller's versionless reply and refusal mapping without changing the defaults", () =>
+  withFake(async (f) => {
+    const { serviceExchange } = await import("./cloud-translation.js");
+    const { AppError } = await import("@waitron/shared");
+    await f.client.refresh();
+    const state = JSON.parse(
+      await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
+    ) as SavedCloudState;
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response('{"requests":[]}'));
+    await expect(
+      serviceExchange(state, "translation-status", op(), "{}", {}),
+    ).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await expect(
+      serviceExchange(state, "translation-status", op(), "{}", {}, undefined, undefined, {
+        requireVersion: false,
+      }),
+    ).resolves.toEqual({ requests: [] });
+    fetch.mockImplementation(async () => new Response('{"error":"conflict"}', { status: 409 }));
+    const options = {
+      requireVersion: false,
+      refusal: () => new AppError("cloud.request_unavailable", {}),
+    };
+    await expect(
+      serviceExchange(state, "translation-status", op(), "{}", {}, undefined, undefined, options),
+    ).rejects.toMatchObject({ code: "cloud.request_unavailable" });
+    await expect(
+      serviceExchange(state, "translation-status", op(), "{}", {}),
+    ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  }));

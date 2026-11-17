@@ -1501,7 +1501,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Loose ends left by the Cloud connection integration.** Customer remote setup UI and production
   deployment remain open. Continuous complete-server recovery, planned final-write handover and
   production recovery remain open.
-  Paired-box owner recovery still needs guarded server calls, its dashboard panel and Cloud
+  Paired-box owner recovery still needs its dashboard panel and Cloud
   adoption/qualification of the [recovery actions](superpowers/plans/2026-11-17-box-owner-recovery.md).
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 

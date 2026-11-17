@@ -43,6 +43,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "person.suspended": 403,
       "authorization.not_permitted": 403,
       "cloud.unavailable": 503,
+      "cloud.owner_recovery_not_available": 409,
+      "cloud.owner_recovery_admin_required": 403,
       "cloud.emergency_hosting_closed": 403,
       "cloud.emergency_code_rate_limited": 429,
       "cloud.tunnel_unavailable": 422,
@@ -89,6 +91,56 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       onError: (c) => c.json({ error: { code: "cloud.request_invalid", params: {} } }, 400),
     }),
   );
+  for (const action of ["read", "approve", "refuse"] as const)
+    app.post(`/management-api/cloud/owner-recovery/${action}`, (c) =>
+      run(c, log, async () => {
+        c.header("Cache-Control", "no-store");
+        if (
+          isRemoteStaffRequest(c) ||
+          c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin)
+        )
+          return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+        // Cloud waits stay outside the venue transaction; each check reads current authority.
+        const authorizeRecovery = async (touch = false) => {
+          const actor = await withTransaction(deps.db, async (tx) => {
+            const sessionId = requireManagementSession(c);
+            const result = await authorizeManager(tx, {
+              managementSessionId: sessionId,
+              permission: "system.manage",
+              touch,
+            });
+            if (!result.authority.admin)
+              throw new AppError("cloud.owner_recovery_admin_required", {});
+            await requireFreshManagementSignIn(tx, sessionId);
+            return result.authorizedBy;
+          });
+          primary();
+          return actor;
+        };
+        await authorizeRecovery(true);
+        const body = await readRawJsonBody<unknown>(c);
+        if (
+          !body ||
+          typeof body !== "object" ||
+          Array.isArray(body) ||
+          (action === "read"
+            ? Object.keys(body).length !== 0
+            : Object.keys(body).length !== 1 || !("request" in body))
+        )
+          throw new AppError("cloud.request_invalid", {});
+        const client = connection();
+        const result =
+          action === "read"
+            ? await client.ownerRecoveryRead(authorizeRecovery, c.req.raw.signal)
+            : await client.ownerRecoveryDecide(
+                action,
+                (body as { request: unknown }).request,
+                authorizeRecovery,
+                c.req.raw.signal,
+              );
+        return c.json(result);
+      }),
+    );
   app.get("/management-api/cloud/status", (c) =>
     run(c, log, async () => {
       await authorize(c, true);
