@@ -64,7 +64,25 @@ function api(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listCourses: async () => [],
     listProducts: async () => [],
     getFolderRouting: async () => null,
-    getMenuStructure: async () => ({ members: [] }),
+    getMenuStructures: async () => [
+      {
+        menu: { id: "menu", name: "Menu", active: true },
+        structure: {
+          rootSectionId: "root",
+          root: {
+            id: "root",
+            internalName: "Menu",
+            names: {},
+            image: null,
+            color: null,
+            members: [],
+          },
+          nodes: [],
+          includable: [],
+          includedBy: [],
+        },
+      },
+    ],
 
     ...overrides,
   } as unknown as DashboardApi;

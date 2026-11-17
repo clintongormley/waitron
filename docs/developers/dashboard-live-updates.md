@@ -63,8 +63,7 @@ also covers queued reads, timers, cached restoration and a generation change dur
 Declare the API method's dependencies in `apps/dashboard/src/api/live-queries.ts`. Include every
 source of computed fields: a printer's pending count depends on print jobs, not just its printer
 record. Use `DashboardQueries.watch` to assign the resulting snapshot to the screen's data fields.
-Its key includes the method arguments, so changing a filter replaces the old subscription. Use
-`watchGroup` when a single displayed list combines the same query for several arguments.
+Its key includes the method arguments, so changing a filter replaces the old subscription.
 
 A contributed module receives `liveData` alongside `request` in `DashboardModuleContext`. Use
 `QueryController` with that shared cache and export `QUERY_DEPENDENCIES` from your module's

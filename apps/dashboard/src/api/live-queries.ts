@@ -290,6 +290,7 @@ export const QUERY_DEPENDENCIES = {
   listPendingSwaps: ["shift_swaps", "shifts"],
   listMenus: ["menus"],
   getMenuStructure: ["sections", "section_members", "menus"],
+  getMenuStructures: ["sections", "section_members", "menus"],
   // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
@@ -520,6 +521,7 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getMenuSettings",
   "listMenus",
   "getMenuStructure",
+  "getMenuStructures",
   "getMenuPrices",
   "getMenuHome",
   "listCategories",

@@ -6,7 +6,8 @@ import { DashboardApi } from "./client.js";
 import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
 
 it("quiets only the audited database queries while connected", () => {
-  const expected = `getMenuSettings listMenus getMenuStructure getMenuPrices getMenuHome
+  const expected =
+    `getMenuSettings listMenus getMenuStructure getMenuStructures getMenuPrices getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
@@ -33,19 +34,22 @@ it("reads the person's tax-office month file on its own event, and every minute 
   expect(query.refreshMs).toBe(60_000);
 });
 
-it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {
-  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
-    async () => new Response("[]", { status: 200 }),
-  );
-  const active = vi.fn();
-  const api = new DashboardApi("", fetchImpl, undefined, active);
-  const query = dashboardQuery(api, "listPrinters", []);
-  await query.read();
-  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
-  await query.read();
-  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
-  expect(active).toHaveBeenCalledOnce();
-});
+it.each(["listPrinters", "getMenuStructures"] as const)(
+  "counts the initial %s read as activity and subsequent refreshes as passive",
+  async (name) => {
+    const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+      async () => new Response("[]", { status: 200 }),
+    );
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const query = dashboardQuery(api, name, []);
+    await query.read();
+    expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+    await query.read();
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  },
+);
 
 it("reads a printer's delete impact passively after the first read, and sends its delete as activity", async () => {
   const impact = { target: { id: "p1", name: "Kitchen" }, refusals: [], ends: [], removes: [] };
@@ -335,6 +339,7 @@ it.each([
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
   ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
+  ["getMenuStructures", [], ["sections", "section_members", "menus"]],
   [
     "getMenuPrices",
     ["menu-1"],

@@ -1,7 +1,7 @@
 import { storedMenuParts } from "../test/menu-parts.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   menus,
   menuItems,
@@ -19,6 +19,7 @@ import {
   deactivateMenu,
   deactivateProduct,
   listMenuOffers,
+  listMenus,
   menuPrices,
   updateMenuDetails,
   updateMenuItem,
@@ -27,6 +28,7 @@ import {
 import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import * as menuStructure from "./menu-structure.js";
+import * as sectionGraph from "./section-graph.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
@@ -988,5 +990,40 @@ it("finds a menu's root and Home sections by role without a side row", async () 
     expect(await menuStructure.menuRoot(tx, menu!.id)).toBe(root!.id);
     expect(await menuStructure.menuHome(tx, menu!.id)).toBe(home!.id);
     expect(await menuStructure.menuRoots(tx, [menu!.id])).toEqual(new Map([[menu!.id, root!.id]]));
+  });
+});
+
+describe("all menu structures", () => {
+  it("keeps included, inactive and empty menus while loading one section graph", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      await addMember(tx, f.lunchRoot, section(f.drinks));
+      await addMember(tx, f.drinks, product(f.water));
+      await deactivateMenu(tx, f.dinner);
+      const expected = [];
+      for (const menu of await listMenus(tx))
+        expected.push({ menu, structure: await readMenuStructure(tx, menu.id) });
+      const load = vi.spyOn(sectionGraph, "loadSectionGraph");
+      try {
+        expect(await menuStructure.readMenuStructures(tx)).toEqual(expected);
+        expect(load).toHaveBeenCalledOnce();
+      } finally {
+        load.mockRestore();
+      }
+    });
+  });
+
+  it("returns an empty list when there are no menus", async () => {
+    expect(await app((tx) => menuStructure.readMenuStructures(tx))).toEqual([]);
+  });
+
+  it("refuses a listed menu that has no root", async () => {
+    const [menu] = await app((tx) =>
+      tx.insert(menus).values({ name: "Missing root" }).returning({ id: menus.id }),
+    );
+    await expect(app((tx) => menuStructure.readMenuStructures(tx))).rejects.toMatchObject({
+      code: "menu.not_found",
+      params: { menuId: menu!.id },
+    });
   });
 });

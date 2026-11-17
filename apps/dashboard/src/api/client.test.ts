@@ -14,6 +14,17 @@ function emptyResponse(): Response {
 }
 
 describe("DashboardApi", () => {
+  it("reads all menu structures through one authenticated GET", async () => {
+    const rows = [{ menu: { id: "m", name: "Menu" }, structure: { nodes: [] } }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getMenuStructures()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+      "/management-api/menus/structures",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
   it("encodes the whole Users page query without trimming the final search word", async () => {
     const result = { rows: [], page: 1, pageSize: 50, total: 51, anyPeople: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));

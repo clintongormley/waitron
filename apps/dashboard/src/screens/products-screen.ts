@@ -18,7 +18,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
-  MenuSummary,
   CategorySummary,
   DashboardApi,
   ExtraList,
@@ -89,7 +88,6 @@ export class ProductsScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private menuSettings: MenuSettingsAnswer | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
-  @state() private menus: MenuSummary[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private units: Unit[] = [];
   @state() private extraLists: ExtraList[] = [];
@@ -267,9 +265,6 @@ export class ProductsScreen extends LitElement {
         }),
         this.#queries.watch("listOptionLists", [], (value) => {
           this.optionLists = value;
-        }),
-        this.#queries.watch("listMenus", [], (value) => {
-          this.menus = value;
         }),
         this.#queries.watch("listCourses", [], (value) => {
           this.courses = value;
@@ -486,15 +481,14 @@ export class ProductsScreen extends LitElement {
     this.placementMenus = null;
     this.placementLoadError = null;
     this.placementFailures = [];
-    const menus = [...this.menus];
     try {
-      await this.#placementQueries.watchGroup(
-        "getMenuStructure",
-        menus.map(({ id }) => [id]),
-        (structures) => {
-          if (this.placing === placing) this.placementMenus = placementMenus(menus, structures);
-        },
-      );
+      await this.#placementQueries.watch("getMenuStructures", [], (rows) => {
+        if (this.placing === placing)
+          this.placementMenus = placementMenus(
+            rows.map((row) => row.menu),
+            rows.map((row) => row.structure),
+          );
+      });
     } catch (error) {
       if (this.placing === placing) this.placementLoadError = codeMessage(codeOf(error));
     }
@@ -541,7 +535,7 @@ export class ProductsScreen extends LitElement {
     this.placementMenus = null;
     this.placementLoadError = null;
     this.placementFailures = [];
-    this.#placementQueries.release("getMenuStructure");
+    this.#placementQueries.release("getMenuStructures");
   }
 
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {

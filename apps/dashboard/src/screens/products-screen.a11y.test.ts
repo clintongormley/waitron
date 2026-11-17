@@ -153,7 +153,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listExtraLists: vi.fn().mockResolvedValue([]),
     listOptionLists: vi.fn().mockResolvedValue([]),
     createProductEditor: vi.fn().mockResolvedValue({ id: "new", name: "Ham croquettes" }),
-    getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
+    getMenuStructures: vi
+      .fn()
+      .mockResolvedValue(menus.map((menu) => ({ menu, structure: structures[menu.id] }))),
     listSections: vi.fn().mockResolvedValue(sections),
     ...overrides,
   } as unknown as DashboardApi;
@@ -181,7 +183,10 @@ describe.each(["light", "dark"] as const)("menu-screen a11y (%s theme)", (theme)
   });
 
   it("renders accessibly when no menu exists yet", async () => {
-    const api = stubApi({ listMenus: vi.fn().mockResolvedValue([]) });
+    const api = stubApi({
+      listMenus: vi.fn().mockResolvedValue([]),
+      getMenuStructures: vi.fn().mockResolvedValue([]),
+    });
     const { el, host } = await mountWidget<ProductsScreen>(
       "dashboard-products-screen",
       { api },

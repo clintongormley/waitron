@@ -3249,6 +3249,13 @@ export class DashboardApi {
     return this.#request<MenuSummary[]>("/management-api/menus", "GET");
   }
 
+  getMenuStructures(): Promise<{ menu: MenuSummary; structure: MenuStructure }[]> {
+    return this.#request<{ menu: MenuSummary; structure: MenuStructure }[]>(
+      "/management-api/menus/structures",
+      "GET",
+    );
+  }
+
   getMenuSettings(): Promise<MenuSettingsAnswer> {
     return this.#request<MenuSettingsAnswer>("/management-api/menu-settings", "GET");
   }

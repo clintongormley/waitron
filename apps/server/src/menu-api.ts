@@ -77,6 +77,7 @@ import {
   rescheduleMenuPublication,
   type MenuPublicationsAnswer,
   readMenuStructure,
+  readMenuStructures,
   listOptionLists,
   getOptionList,
   createOptionList,
@@ -964,6 +965,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const rows = await gated(c, sessionId, (tx) => listMenus(tx));
       return c.json(rows);
+    }),
+  );
+
+  app.get("/management-api/menus/structures", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(await gated(c, sessionId, (tx) => readMenuStructures(tx)));
     }),
   );
 
