@@ -174,6 +174,34 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   return body as ProvisionBody;
 }
 
+/** Switching to or from Demo drops the venue's fiscal and imported values. */
+function switchMode(
+  draft: DeepPartial<ProvisionBody>,
+  mode: ProvisionBody["mode"] | undefined,
+): DeepPartial<ProvisionBody> {
+  if (
+    mode === undefined ||
+    draft.mode === undefined ||
+    mode === draft.mode ||
+    (mode !== "demo" && draft.mode !== "demo")
+  )
+    return draft;
+  const venue = { ...draft.venue };
+  if (draft.mode === "demo" && draft.demoVenueNameSource === "automatic") delete venue.name;
+  delete venue.taxId;
+  delete venue.legalName;
+  delete venue.seriesCode;
+  delete venue.fullSeriesCode;
+  delete venue.rectificativeSeriesCode;
+  delete venue.dayCutover;
+  delete venue.invoiceLocales;
+  const switched = { ...draft, venue };
+  delete switched.demoVenueNameSource;
+  delete switched.configurationImport;
+  delete switched.newTaxpayer;
+  return switched;
+}
+
 /**
  * What an accepted fiscal test is bound to: the mode, the certificate (whose passphrase the server
  * needs to open it), and the four venue fields `fiscalReadinessInput` keys the stored result on. A
@@ -1016,35 +1044,24 @@ export class SetupApp extends LitElement {
     }
     this.#registerRoot();
     const before = this.draft;
-    const mode = event.detail.patch.mode;
-    if (
-      mode !== undefined &&
-      this.draft.mode !== undefined &&
-      mode !== this.draft.mode &&
-      (mode === "demo" || this.draft.mode === "demo")
-    ) {
-      const venue = { ...this.draft.venue };
-      if (this.draft.mode === "demo" && this.draft.demoVenueNameSource === "automatic") {
-        delete venue.name;
-      }
-      delete venue.taxId;
-      delete venue.legalName;
-      delete venue.seriesCode;
-      delete venue.fullSeriesCode;
-      delete venue.rectificativeSeriesCode;
-      delete venue.dayCutover;
-      delete venue.invoiceLocales;
-      this.draft = { ...this.draft, venue };
-      delete this.draft.demoVenueNameSource;
-      delete this.draft.configurationImport;
-      delete this.draft.newTaxpayer;
-    }
-    this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
+    const { mode, configurationImport } = event.detail.patch;
+    this.draft = deepMerge(
+      switchMode(this.draft, mode),
+      event.detail.patch,
+    ) as DeepPartial<ProvisionBody>;
     const status = this.fiscalTestStatus;
     if (!sameDraftValue(fiscalTestInputs(before, status), fiscalTestInputs(this.draft, status))) {
       this.#invalidateFiscalTest();
     }
-    this.#rootScope?.changed();
+    // A mode or Start empty choice is not staged input: only authored values count as changed.
+    const startsEmpty = configurationImport === false;
+    if (this.#rootBaseline && (mode !== undefined || startsEmpty)) {
+      this.#rootBaseline = deepMerge(switchMode(this.#rootBaseline, mode), {
+        mode,
+        configurationImport: startsEmpty ? false : undefined,
+      }) as DeepPartial<ProvisionBody>;
+      this.#rootScope?.commit(this.#rootBaseline);
+    } else this.#rootScope?.changed();
   }
 
   #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };

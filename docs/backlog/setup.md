@@ -173,11 +173,6 @@ with `setup.owner_required` whenever a fiscal module is offered for the venue's 
 no dev stack reaches a Live venue whose setup recorded pack 1, and the Backups card has never been
 seen showing such a pack.
 
-## Start empty asks to discard changes nobody made
-
-Seen the same day on the same `wa-wt onboarding` stack, on the Live path: pressing Start empty on the untouched Import a configuration
-screen opened "Discard unsaved changes?" with nothing typed. Not traced.
-
 ## Loose ends left by A496 (moving to a new tax ID).
 
 - How long, and in what form, an old taxpayer's database must be kept. Not checked;

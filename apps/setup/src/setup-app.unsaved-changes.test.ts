@@ -27,7 +27,7 @@ const initialAdmin = {
 type AdminField = keyof typeof initialAdmin;
 type State = { screen: Screen; draft: DeepPartial<ProvisionBody> };
 
-async function mount() {
+async function mountOnMode() {
   const api = {
     firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
@@ -37,6 +37,11 @@ async function mount() {
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect((el as unknown as State).screen).toBe("mode"));
+  return { el, api, host };
+}
+
+async function mount() {
+  const { el, api, host } = await mountOnMode();
   Object.assign(el, {
     draft: { mode: "prepare", venue: { admin: { ...initialAdmin } } },
     screen: "admin",
@@ -900,7 +905,66 @@ function startEmpty(source: SetupLiveSourceScreen) {
   source.shadowRoot!.querySelector<HTMLElement>("[data-test=empty]")!.click();
 }
 
+async function liveSourceThroughModeScreen() {
+  const { el } = await mountOnMode();
+  const modeScreen = el.shadowRoot!.querySelector("setup-mode-screen")!;
+  modeChoice(modeScreen, "choose-live");
+  await modeScreen.updateComplete;
+  modeScreen
+    .shadowRoot!.querySelector("[data-test=understand]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+    );
+  await modeScreen.updateComplete;
+  modeChoice(modeScreen, "confirm-live");
+  await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+  const source = el.shadowRoot!.querySelector<SetupLiveSourceScreen>("setup-live-source-screen")!;
+  await source.updateComplete;
+  return { el, source };
+}
+
 describe("setup Start empty and import draft", () => {
+  it("Start empty on an untouched screen reached through Live goes on without asking", async () => {
+    const { el, source } = await liveSourceThroughModeScreen();
+    expect(unload()).toBe(false);
+    startEmpty(source);
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect(warning(el).open).toBe(false);
+    expect((el as unknown as State).draft.mode).toBe("live");
+    expect((el as unknown as State).draft.configurationImport).toBe(false);
+    expect(unload()).toBe(false);
+  });
+
+  it("Start empty after Live still asks when the root holds authored values", async () => {
+    const { el, source } = await liveSourceThroughModeScreen();
+    patchRoot(el, { venue: { legalName: "Authored restaurant" } });
+    const original = structuredClone((el as unknown as State).draft);
+    expect(unload()).toBe(true);
+    startEmpty(source);
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).screen).toBe("live-source");
+    expect((el as unknown as State).draft).toEqual(original);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft.mode).toBe("live");
+    expect((el as unknown as State).draft.venue?.legalName).toBeUndefined();
+    expect((el as unknown as State).draft.configurationImport).toBe(false);
+    expect(unload()).toBe(false);
+  });
+
+  it("an untouched Live choice changed to Demo goes on without asking", async () => {
+    const { el, source } = await liveSourceThroughModeScreen();
+    source.shadowRoot!.querySelector<HTMLElement>(".actions wt-button")!.click();
+    await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+    const modeScreen = el.shadowRoot!.querySelector("setup-mode-screen")!;
+    await modeScreen.updateComplete;
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect(warning(el).open).toBe(false);
+    expect((el as unknown as State).draft.mode).toBe("demo");
+    expect(unload()).toBe(false);
+  });
+
   it("Start empty asks before changing an authored root and Keep preserves it", async () => {
     const { el, source } = await liveSource();
     patchRoot(el, { configurationImport: true, venue: { legalName: "Authored restaurant" } });
@@ -923,7 +987,7 @@ describe("setup Start empty and import draft", () => {
       configurationImport: false,
       venue: { admin: initialAdmin },
     });
-    expect(unload()).toBe(true);
+    expect(unload()).toBe(false);
   });
 
   it.each(["empty", "back"] as const)(
