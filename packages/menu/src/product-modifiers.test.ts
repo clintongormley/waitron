@@ -369,7 +369,7 @@ describe("reading and writing a product's attachment list", () => {
    * a read in lower case, a second write in the other case REPLACES it rather than landing beside
    * it, and the map comes back keyed lower-case either way.
    */
-  it("settles a product id sent in upper case in the database, and keys the map lower-case", async () => {
+  it("lower-cases a product id sent in upper case, so either case writes and reads one row keyed lower-case", async () => {
     await run((tx) =>
       writeProductModifiers(tx, dishes.burger.toUpperCase(), [
         { kind: "extras", id: extras.breads },

@@ -12,13 +12,6 @@ were PostgreSQL's integer maximum; the test names "refuses a pick bound above wh
 hold" and "refuses a maxQuantity above what the column can hold" (`src/extra-contract.test.ts`)
 assume a column limit.
 
-## Test titles from `packages/menu` a comments-only change cannot touch
-
-**Test titles from `packages/menu` a comments-only change cannot touch — OPEN (found by #603).** Read only, not run:
-`describe("validateContainsTag (Task 4)")` and `describe("validateDietOverride (Task 4)")`
-(`packages/shared/src/menu-document/dietary.test.ts`), "settles a product id sent in upper case in
-the database" (`packages/menu/src/product-modifiers.test.ts`, the code settles it now).
-
 ## The media library still reads every matching image for search and name sorting, inside the venue write lock
 
 **The media library still reads every matching image for search and name sorting, inside the venue

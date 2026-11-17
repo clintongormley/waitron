@@ -313,23 +313,16 @@ async function writeItems(
   // The list now starts from nothing, so no row the body keeps can collide with a row it replaces.
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
-    // The conflict clause names the PRIMARY KEY: left untargeted it would also absorb an
-    // `extra_list_items_list_product_uq` collision and report a product clash as a stolen id.
-    const inserted = await tx
-      .insert(extraListItems)
-      .values({
-        id: item.id ?? randomUUID(),
-        listId: extraListId,
-        productId: item.productId,
-        maxQuantity: item.maxQuantity,
-        preselected: item.preselected,
-        price: item.price === null ? null : stringToCents(item.price),
-        portion: portions[sort]!,
-        sort,
-      })
-      .onConflictDoNothing({ target: extraListItems.id })
-      .returning({ id: extraListItems.id });
-    if (!inserted.length) throw new AppError("extras.invalid", { field: `items.${sort}.id` });
+    await tx.insert(extraListItems).values({
+      id: item.id ?? randomUUID(),
+      listId: extraListId,
+      productId: item.productId,
+      maxQuantity: item.maxQuantity,
+      preselected: item.preselected,
+      price: item.price === null ? null : stringToCents(item.price),
+      portion: portions[sort]!,
+      sort,
+    });
   }
 }
 
