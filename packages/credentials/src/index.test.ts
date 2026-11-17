@@ -18,6 +18,7 @@ describe("the public surface", () => {
         "purposeKeys",
         "sealText",
         "openText",
+        "openTextWithPurposeKeys",
         "isPurpose",
         "validatePayload",
         "KEY_RING_VARIABLES",

@@ -33,3 +33,12 @@ These are source reads. Reproduce pins with `git show <pin>:<path>` (Cloud: `git
 | Main #3618 `285daba145b65e623375751efd0abc73eff22af9`, deletion/diff above | Removes `account-key.ts`, `TotpKeyRing` and `decryptTotpSecret`; do not rebuild against those APIs. |
 | `packages/credentials/src/purpose-seal.ts:5`, `:16`, `:27`; `packages/identity/src/manager-login.ts:133`, `profile.ts:176`, `:210`, `reseal.ts:36` | `purposeKey`, `sealText`, `openText`: source version travels in v2 text, and identity uses purpose `"totp"`. Reuse that path's parsing/opening. |
 | `apps/server/src/emergency-copy-placement.ts:188`, `:213` | `generateKeyRing()` / `writeCredentialsRing(...)`: placement's fresh ring is not the selected backup's source ring. |
+
+
+**2026-11-17 agreement/build update:** Cloud #1276 published acceptance at
+`42b58657453af6f802c89580925090fe97ac9a28`; Lane J `questions.md`, WATCHER 18:30,
+released the already reviewed 3a reader/API scope under the 17:16 and 18:03 clearances.
+The [developer entry/API](../../developers/cloud-connection.md#locked-emergency-copy-api)
+implements that cut. The original text above records the proposal and its gates at publication;
+Cloud's launcher, 3b's page, part 4 activation and year-sized timing remain unqualified.
+The watcher cleared the build; no owner approval of the key amendment is claimed.

@@ -211,7 +211,6 @@ async function placeHeld(deps: PlacementDeps): Promise<void> {
       await store.close();
     }
     await writeCredentialsRing(deps.stateDir, encoded);
-    // No `WAITRON_ACCOUNT_KEY`: Cloud's launcher passes the account key (plan decision 5).
     if (trading === null)
       await writeTradingEnv(deps.stateDir, {
         nodeId: binding.copyNodeId,

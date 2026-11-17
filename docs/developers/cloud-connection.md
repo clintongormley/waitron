@@ -985,3 +985,35 @@ when reconciling later Cloud publications.
 | `docs/waitron-integration-contract.md`                              | `1b0f35cff8cc7a69b79d9d785fa0f6058f387f385fadec63a97c3f6f720ef4b3` |
 | `docs/product-and-platform.md`                                      | `f3ccc126d829b380d2bf31a4983406a4a15c05fc156454e8cd359ff9bbbb18ff` |
 | `docs/superpowers/specs/2026-10-22-cloud-data-protection-design.md` | `34c27c92f952b2499c140533efd9193063821348977bf8fa83003001acf459d1` |
+
+
+## Locked emergency-copy API
+
+To qualify a restored copy before Cloud's launcher exists, build the server package and run
+`node apps/server/dist/cloud-locked-entry.js`. This separate entry places the fresh copy and
+serves only `/health`, `/api/node` and `/locked-api/session` over HTTPS. It does not call ordinary
+boot. Cloud hosting, the sign-in page, declaration and activation remain unfinished.
+
+Supply `WAITRON_LOCKED_COPY` as a JSON launch object with `binding`, `venueDir`, `stateDir`,
+`environment`, `cloud`, `tls: {certFile, keyFile}`, `origin`, `hostname` and `port`.
+`cloud` is the fresh installation's control credentials (`origin`, `publicKey`, `privateKey`,
+`environment` and `view.registration`). The optional `migrationsRoot` defaults to the bundle's
+`drizzle` directory; source tests use `null`. This is the local entry adapter; no Cloud launcher
+has been qualified against it. Keep source vault keys out of the process environment.
+
+Supply `WAITRON_LOCKED_TOTP_KEYS` using the
+[agreed purpose-key shape](../superpowers/plans/2026-11-17-a1188-locked-totp-purpose-keys.md)
+and [shared synthetic examples](../superpowers/plans/2026-11-17-a1188-locked-totp-examples.md).
+The child removes that payload from `process.env` before locking or placing the copy, and removes
+the launch object after reading it. The keys remain in memory until the process exits. Removing
+an environment variable does not promise that the operating system cannot show its startup value.
+
+POST `/locked-api/session` from the emergency origin with `email`, `password` and either `totp`
+or `recoveryCode`. An active person needs an enrolled authenticator and `node.manage`.
+The response names `personId`, `copyOperationId`, `signedInAt`, `expiresAt` and `copyExpiresAt`,
+and sets a Secure, HttpOnly, SameSite=Strict cookie. GET reads it; DELETE ends it. Sessions expire
+after ten minutes or at the original copy deadline, whichever comes first. Recovery-code use is
+remembered only in this process; it does not consume the stored row. Authentication, sessions and
+control renewals write neither database. Restarting keeps the original copy deadline and drops
+all sessions. The process closes its immutable readers and exits on shutdown, deadline or required
+control failure. Year-sized placement and start timing remain unqualified.

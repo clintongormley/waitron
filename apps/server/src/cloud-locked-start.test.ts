@@ -1,20 +1,28 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { purposeKey, sealText } from "@waitron/credentials";
+import { ensureBuiltInRoles, hashPassword } from "@waitron/identity";
+import { generateSync } from "otplib";
+import { CORE_MIGRATIONS, withTransaction, persons, personRoles, recoveryCodes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import type { BackupQuery, BackupRow } from "@waitron/store";
 import { createLockedCloudControl, openLockedCopy, startLockedCopy } from "./cloud-locked-start.js";
 import { lockedCloudFixture } from "./testing/cloud-locked-fixture.js";
-import { retainHttpListener } from "./testing/retained-http-listener.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { bindingFor, copyId, seedEmergencyCopySource } from "./testing/emergency-copy-source.js";
 import { sha } from "./testing/place-copy-box.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS, NODE_MIGRATIONS] });
 let root: string;
 let venueDir: string;
 let stateDir: string;
@@ -249,6 +257,7 @@ it("serves only locked probes over TLS and stops on control failure or the origi
         hostname: held.host,
         port: held.port,
         log: () => {},
+        totpPurposeKeys: [],
       });
       await adoption.bound;
     } finally {
@@ -335,6 +344,7 @@ it("closes at the copy deadline while a control renewal is still waiting for Clo
       hostname: held.host,
       port: held.port,
       log: () => {},
+      totpPurposeKeys: [],
     });
     await adoption.bound;
     f.delay(async () => {
@@ -361,3 +371,223 @@ it("closes at the copy deadline while a control renewal is still waiting for Clo
     await f.close();
   }
 });
+
+it("authenticates through TLS using source-only purpose keys and keeps sessions and recovery use in memory", async () => {
+  const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+  const sourceRing = { current: { version: 7, key: Buffer.alloc(32, 7) } };
+  const personId = crypto.randomUUID();
+  await withTransaction(suite.db, async (tx) => {
+    const roleIds = await ensureBuiltInRoles(tx);
+    await tx.insert(persons).values({
+      id: personId,
+      displayName: "Copy administrator",
+      displayNameFolded: "copy administrator",
+      email: "copy@example.test",
+      emailFolded: "copy@example.test",
+      passwordHash: hashPassword("correct horse"),
+      totpSecret: sealText(sourceRing, "totp", secret),
+    });
+    await tx.insert(personRoles).values({ personId, roleId: roleIds.admin });
+    await tx.insert(recoveryCodes).values({
+      personId,
+      codeHash: (await import("node:crypto"))
+        .createHash("sha256")
+        .update("ABCD0123ABCD0123")
+        .digest("hex"),
+    });
+  });
+  const deps = await placement();
+  const f = await lockedCloudFixture(deps.binding);
+  const certFile = join(root, "copy.crt"),
+    keyFile = join(root, "copy.key");
+  await writeFile(certFile, f.material.serverCertPem);
+  await writeFile(keyFile, f.material.serverKeyPem);
+  const held = await retainHttpListener();
+  const adoption = adoptRetainedListeners([held]);
+  const origin = `https://127.0.0.1:${held.port}`;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(deps.now());
+  let running: Awaited<ReturnType<typeof startLockedCopy>> | undefined;
+  try {
+    running = await startLockedCopy({
+      ...deps,
+      cloud: f.state,
+      tls: { certFile, keyFile },
+      origin,
+      hostname: held.host,
+      port: held.port,
+      log: () => {},
+      totpPurposeKeys: [{ version: 7, key: purposeKey(sourceRing.current, "totp") }],
+    } as Parameters<typeof startLockedCopy>[0]);
+    await adoption.bound;
+    const before = await snapshot();
+    async function request(method: string, body?: unknown, cookie?: string, page = origin) {
+      const response = await fetch(origin + "/locked-api/session", {
+        method,
+        headers: {
+          origin: page,
+          "content-type": "application/json",
+          ...(cookie ? { cookie } : {}),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      return {
+        status: response.status,
+        body: response.headers.get("content-type")?.includes("application/json")
+          ? await response.json()
+          : await response.text(),
+        cookie: response.headers.get("set-cookie"),
+      };
+    }
+    expect((await request("GET")).body).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const input = {
+      email: " COPY@example.test ",
+      password: "correct horse",
+      totp: generateSync({ secret }),
+    };
+    expect((await request("POST", input, undefined, "https://foreign.example")).body).toMatchObject(
+      { error: { code: "node.operation_page_required" } },
+    );
+    expect((await request("POST", { ...input, password: "wrong" })).body).toMatchObject({
+      error: { code: "password.invalid" },
+    });
+    const signed = await request("POST", input);
+    expect(signed.status).toBe(200);
+    expect(signed.cookie).toContain("Secure");
+    expect(signed.cookie).toContain("HttpOnly");
+    expect(signed.cookie).toContain("SameSite=Strict");
+    const cookie = signed.cookie!.split(";")[0]!;
+    expect(signed.body).toEqual({
+      personId,
+      copyOperationId: deps.binding.copyOperationId,
+      signedInAt: deps.now().toISOString(),
+      expiresAt: "2026-11-17T10:20:00.000Z",
+      copyExpiresAt: deps.binding.expiresAt,
+    });
+    expect((await request("GET", undefined, cookie)).body).toEqual(signed.body);
+    vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));
+    expect((await request("GET", undefined, cookie)).body).toMatchObject({
+      error: { code: "management_session.expired" },
+    });
+    const recovery = { ...input, totp: undefined, recoveryCode: "abcd-0123-abcd-0123" };
+    const recovered = await request("POST", recovery);
+    expect(recovered.status).toBe(200);
+    expect((await request("POST", recovery)).body).toMatchObject({
+      error: { code: "password.invalid" },
+    });
+    const recoveredCookie = recovered.cookie!.split(";")[0]!;
+    expect((await request("DELETE", undefined, recoveredCookie)).status).toBe(200);
+    expect((await request("GET", undefined, recoveredCookie)).body).toMatchObject({
+      error: { code: "management_session.expired" },
+    });
+    for (let n = 0; n < 4; n++) await request("POST", { ...input, email: "unknown@example.test" });
+    expect((await request("POST", { ...input, email: "unknown@example.test" })).body).toMatchObject(
+      { error: { code: "password.throttled" } },
+    );
+    await running.close();
+    expect(await snapshot()).toEqual(before);
+  } finally {
+    adoption.restore();
+    await running?.close();
+    vi.useRealTimers();
+    if (held.server.listening) await held.close();
+    await f.close();
+  }
+});
+
+it.each(["signal", "expiry"])(
+  "the separate locked process exits on %s and releases its folder",
+  async (stop) => {
+    const deps = await placement();
+    const f = await lockedCloudFixture(deps.binding);
+    const certFile = join(root, "copy.crt"),
+      keyFile = join(root, "copy.key"),
+      caFile = join(root, "ca.crt");
+    await writeFile(certFile, f.material.serverCertPem);
+    await writeFile(keyFile, f.material.serverKeyPem);
+    await writeFile(caFile, f.material.caPem);
+    const held = await retainHttpListener();
+    const origin = `https://127.0.0.1:${held.port}`;
+    const instant = stop === "expiry" ? "2026-11-17T10:29:57.000Z" : "2026-11-17T10:10:00.000Z";
+    const launch = {
+      ...deps,
+      cloud: f.state,
+      tls: { certFile, keyFile },
+      origin,
+      hostname: held.host,
+      port: held.port,
+    };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(deps.now());
+    await createLockedCloudControl(f.state, deps.binding).check();
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        `
+    await import(${JSON.stringify(retainedHttpPreload)});
+    const RealDate = Date, instant = ${JSON.stringify(instant)};
+    globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [instant])); } static now() { return new RealDate(instant).getTime(); } };
+    Object.defineProperty(performance, 'now', {value: () => 0});
+    await import('./src/cloud-locked-entry.ts');
+  `,
+      ],
+      {
+        env: {
+          ...process.env,
+          NODE_EXTRA_CA_CERTS: caFile,
+          WAITRON_LOCKED_COPY: JSON.stringify(launch),
+          WAITRON_LOCKED_TOTP_KEYS: JSON.stringify({
+            current: { version: 7, key: Buffer.alloc(32, 7).toString("base64") },
+            previous: null,
+          }),
+        },
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      },
+    );
+    let output = "",
+      errors = "";
+    child.stdout!.on("data", (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr!.on("data", (chunk) => {
+      errors += String(chunk);
+    });
+    const exit = new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", resolve);
+    });
+    try {
+      await transferRetainedListeners(child, [held], 30000);
+      await expect
+        .poll(() => output.includes("cloud-locked.ready") || child.exitCode !== null, {
+          timeout: 30000,
+        })
+        .toBe(true);
+      expect(output, errors).toContain("cloud-locked.ready");
+      const before = await snapshot();
+      if (stop === "signal") {
+        expect(outsideLock()).toBe("held");
+        child.kill("SIGTERM");
+      }
+      expect(await exit, errors).toBe(0);
+      expect(outsideLock()).toBe("acquired");
+      expect(await snapshot()).toEqual(before);
+      expect(output).not.toContain("WAITRON_LOCKED_TOTP_KEYS");
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+        await exit;
+      }
+      if (held.server.listening) await held.close();
+      vi.useRealTimers();
+      await f.close();
+    }
+  },
+  75000,
+);

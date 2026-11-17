@@ -39,3 +39,12 @@ With only the 32-byte `01` key in `secrets.env`, empty `trading.env` and no `bac
 On 17 November 2026, at Waitron source tree `89caf7e0c8`, a documentation probe bundled and called the existing `purposeKey`, `sealText`, `openText`, `loadKeyRing`, `resolveBackupKeyInputs`, `aadFor` and `open` functions. It checked source precedence, original versions 7/3, both round trips, direct opening with the derived bytes and associated data, wrong key/purpose/version, a missing previous key, and absent/empty version 1. All assertions passed. The frozen values above are that run's output; no new reader or parser was exercised.
 
 The future startup integration must also check an absent payload and `{"current":{"version":7,"key":"AA=="},"previous":null}`: both refuse before the venue lock or placement, leaving the pre-entry folder snapshot untouched. These two proposed parser cases remain unverified until it is built. Shared examples do not qualify Cloud hosting or emergency activation.
+
+
+**2026-11-17 agreement/build update:** Cloud #1276 published acceptance at
+`42b58657453af6f802c89580925090fe97ac9a28`; Lane J `questions.md`, WATCHER 18:30,
+released the already reviewed 3a reader/API scope under the 17:16 and 18:03 clearances.
+The [developer entry/API](../../developers/cloud-connection.md#locked-emergency-copy-api)
+implements that cut. The original text above records the proposal and its gates at publication;
+Cloud's launcher, 3b's page, part 4 activation and year-sized timing remain unqualified.
+The watcher cleared the build; no owner approval of the key amendment is claimed.
