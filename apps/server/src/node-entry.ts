@@ -403,6 +403,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
           error: environmentMoveError,
           survey: undefined,
+          explained: undefined,
         }) ??
     (await resolveFirstSetupEntry(
       deps,
@@ -505,7 +506,11 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     const logDir = deps.logDir ?? join(rooted.stateDir, LOGS_DIR);
     const exit = deps.exit ?? DEFAULT_EXIT;
     const reason = admission.error.reason ?? null;
-    deps.log("warn", "recovery.serving_refused_start", { errorCode: admission.code, reason });
+    deps.log("warn", "recovery.serving_refused_start", {
+      errorCode: admission.code,
+      reason,
+      surveyReason: admission.explained ?? null,
+    });
     // Both lines, so the page's "Why the last start failed" is this refusal, not an earlier start's.
     const page = pageLog(logDir, now, deps.log);
     page("info", "server.boot_started");

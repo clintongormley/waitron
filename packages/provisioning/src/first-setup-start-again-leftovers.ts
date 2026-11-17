@@ -250,15 +250,16 @@ export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgai
 /**
  * The finisher's `setup.start_again_incomplete` becomes `setup.start_again_files_found` when the
  * page can offer the choice; any other error, or a box that can only be explained, comes back
- * unchanged.
+ * unchanged, the latter with the survey's reason as `explained`.
  */
 export async function classifyStartAgainRefusal(
   roots: Roots,
   error: AppError,
-): Promise<{ error: AppError; survey?: Choice }> {
+): Promise<{ error: AppError; survey?: Choice; explained?: string }> {
   if (error.code !== "setup.start_again_incomplete") return { error };
   const survey = await surveyStartAgainLeftovers(roots);
-  if (survey === null || survey.kind !== "choice") return { error };
+  if (survey === null) return { error };
+  if (survey.kind !== "choice") return { error, explained: survey.reason };
   return {
     error: new AppError(
       "setup.start_again_files_found",

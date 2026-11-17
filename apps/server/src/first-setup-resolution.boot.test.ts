@@ -18,6 +18,7 @@ import {
 import { CORE_MIGRATIONS, LOG_FILE_NAME } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { serveRecovery } from "./recovery-listener.js";
@@ -677,7 +678,47 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
   expect(section).toContain("unlisted file: venue/venue.db");
   expect(lines).toContainEqual({
     event: "recovery.serving_refused_start",
-    fields: { errorCode: "setup.start_again_incomplete", reason: "unlisted file: venue/venue.db" },
+    fields: {
+      errorCode: "setup.start_again_incomplete",
+      reason: "unlisted file: venue/venue.db",
+      surveyReason: "setup record unparseable",
+    },
+  });
+});
+
+it("the development launch logs why the survey offered no choice beside the finisher's reason", async () => {
+  const f = await startingBox("unlisted");
+  const written: string[] = [];
+  const write = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    written.push(String(chunk));
+    return true;
+  });
+  try {
+    const handle = await startServerOrFirstSetupResolution(
+      {
+        WAITRON_STATE_DIR: f.stateDir,
+        WAITRON_VENUE_DIR: f.venueDir,
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: "3000",
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      {},
+      {
+        startServer: () => Promise.reject(new Error("ordinary boot reached")),
+        serveResolution: async () => ({ close: async () => {} }),
+      },
+    );
+    await handle.close();
+  } finally {
+    write.mockRestore();
+  }
+  const line = written
+    .map((text) => JSON.parse(text) as Record<string, unknown>)
+    .find((logged) => logged.event === "recovery.serving_refused_start");
+  expect(line).toMatchObject({
+    errorCode: "setup.start_again_incomplete",
+    reason: "unlisted file: venue/venue.db",
+    surveyReason: "setup record unparseable",
   });
 });
 

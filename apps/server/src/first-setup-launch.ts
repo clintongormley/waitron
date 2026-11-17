@@ -139,6 +139,7 @@ export async function startServerOrFirstSetupResolution(
       log("warn", "recovery.serving_refused_start", {
         errorCode: admission.code,
         reason: admission.error.reason ?? null,
+        surveyReason: admission.explained ?? null,
       });
       return listen(
         recoveryApp({
