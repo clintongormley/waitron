@@ -18,7 +18,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -40,7 +40,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -62,7 +62,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -84,7 +84,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -106,7 +106,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -128,7 +128,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -150,7 +150,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -172,7 +172,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -194,7 +194,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -216,7 +216,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -238,7 +238,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -260,7 +260,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -282,7 +282,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -304,7 +304,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -326,7 +326,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -348,7 +348,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -370,7 +370,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -392,7 +392,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -414,7 +414,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -436,7 +436,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -458,7 +458,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -480,7 +480,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -502,7 +502,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -524,7 +524,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -546,7 +546,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -568,7 +568,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -590,7 +590,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -612,7 +612,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -634,7 +634,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -656,7 +656,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     },
@@ -678,7 +678,7 @@
       "counterparty_country_code": null,
       "authorized_by": null,
       "operator_id": null,
-      "working_order_id": null,
+      "has_working_order": 1,
       "counterparty_address": null,
       "taxpayer_domicile": null
     }
