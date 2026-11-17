@@ -409,9 +409,7 @@ export class TillPassScreen extends LitElement {
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
     if (this.deviceMode)
-      this.dispatchEvent(
-        new CustomEvent<DevicePassBoard>("pass-board-snapshot", { detail: read }),
-      );
+      this.dispatchEvent(new CustomEvent<DevicePassBoard>("pass-board-snapshot", { detail: read }));
   }
 
   /** A kept ask survives only while the board still offers its card under the same context. */
