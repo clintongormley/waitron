@@ -90,6 +90,38 @@ do not assume the default fixture can identify the main listener in that shape.
 
 The port-zero candidate failed a probe of Node’s `http.request`: a 16 November control on macOS Node 26.13.0 observed port 0 reaching the transport as 80, while port 1 remained 1. This did not exercise the SDK or Litestream. Port zero, an assumed-free fixed port and startup-only refusal do not establish lifetime refusal. This independent design remains open after the [server fixture audit](#what-the-landing-port-fix-a80-pr-740-left-open).
 
+**17 November, REFUSED-ENDPOINT probe.** A TCP socket bound to `127.0.0.1` without
+calling `listen` did not provide the required portable refusal. Lane I ran the disposable
+`probe.mjs` in `~/waitron-campaign-i/receipts/refused-endpoint-20261117/` with Node 26.13.0,
+the real AWS SDK `ListObjectsV2` client and checksum-verified Litestream 0.5.18. The Linux
+run used Docker Desktop's aarch64 `node:26-trixie` guest, not a separate physical host.
+The recorded commands were, with `probe` naming that receipt directory and `repo` the
+registered `waitron-fix-refused-endpoint` checkout:
+
+```sh
+REPO="$repo" LITESTREAM="$probe/runtime/darwin/litestream" node "$probe/probe.mjs" held
+docker run --rm --name lane-i-refused-linux-20261117 \
+  -v "$repo:$repo:ro" -v "$probe:/probe:ro" \
+  -e REPO="$repo" -e LITESTREAM=/probe/runtime/linux/litestream \
+  node:26-trixie node /probe/probe.mjs held
+```
+
+| Platform | Competing Node bind | Node connection | AWS SDK | Litestream |
+| --- | --- | --- | --- | --- |
+| macOS | `EADDRINUSE` | `TIMEOUT` after 2 seconds | `AbortError` at its 2-second bound | Outer `ETIMEDOUT`, `SIGTERM` after 30 seconds; no refusal output |
+| Linux guest | `EADDRINUSE` | `ECONNREFUSED` | `ECONNREFUSED` | Exit 1; `connect: connection refused` |
+
+The macOS command with final argument `released` let the competing listener print
+`listening`, failing the assertion that expected `EADDRINUSE`. A separate released-port
+macOS control returned errno 61, `Connection refused`; `sysctl net.inet.tcp.blackhole`
+printed `0`. Wildcard and IPv6 bound-socket variants on macOS timed out too, and the
+wildcard variants allowed a competing bind. The raw records are `released-red.log`,
+`macos-held.log`, `macos-clients.log`, `linux-held.log` and `macos-address-options.jsonl`
+beside the probe. Downloaded binaries were collected after the run; re-running requires
+restoring the pinned binaries and checkout dependencies. The watcher parked this item at
+01:34 CET pending a portable design. The five unused-peer server rows above remain open;
+keep `probeRefusal` and its `ECONNREFUSED` requirement unchanged.
+
 ## Archive-settings inline advice must name its available action
 
 An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts`:
