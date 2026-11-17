@@ -161,15 +161,6 @@ browser test page cannot be served over HTTPS. **Next action:** during the on-de
 above, click past the certificate warning on one device and confirm the page appears in the
 browser's preferred supported language, falling back to English when none is supported.
 
-## A fresh Demo venue opens its dashboard on a red tax-filing alert
-
-Seen on a box image during
-A680, 2026-10-14: a Demo set up through the wizard showed "473 fiscal record(s) have been waiting
-705h to reach the tax agency" (`fiscal.submission_delayed`). The 473 records are the demo seed's
-back-dated sales, and a Demo venue sends nothing to the tax agency. A Preparation venue set up the
-same way had no fiscal records and no fiscal alert. The alert is raised in
-`packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
-
 ## Loose ends left by A496 (moving to a new tax ID).
 
 - How long, and in what form, an old taxpayer's database must be kept. Not checked;

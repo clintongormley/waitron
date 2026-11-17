@@ -15,6 +15,7 @@ import {
 import { hashDeviceToken } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWaitingRecords, stopRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { StartedServer } from "./boot.js";
@@ -227,6 +228,26 @@ describe("the running server's undelivered invoice alert", () => {
           kind: "ongoing",
           area: "invoice_delivery",
         },
+      ]);
+    });
+  });
+});
+
+describe("the running server's fiscal alerts on a box that never sends records", () => {
+  it("leaves out the delayed alert and keeps the stopped one", async () => {
+    const venue = await setupVenue(suite.db);
+    beforeServerStarts();
+    const [issuer] = await suite.db.select({ taxId: taxpayer.taxId }).from(taxpayer);
+    const { recordIds } = await seedWaitingRecords(suite.db, {
+      count: 2,
+      identity: { nodeId: venue.cfg.nodeId, taxId: issuer!.taxId },
+      environment: "preproduction",
+    });
+    await stopRecord(suite.db, recordIds[1]!);
+
+    await withServer(venue, async (base) => {
+      expect((await alertsIn(base, venue, "fiscal")).map((alert) => alert.code)).toEqual([
+        "fiscal.submission_stopped",
       ]);
     });
   });

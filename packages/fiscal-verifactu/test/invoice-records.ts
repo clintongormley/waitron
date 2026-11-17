@@ -4,6 +4,7 @@ import type { IdentityChangeView, InvoiceIdView } from "../src/filing-overview-t
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import type { registroSif } from "../src/schema/sif.js";
+import { seedPendingEnvios } from "./drain-fixtures.js";
 
 /** English names for fiscal tables and AEAT's invoice fields, for suites outside this package. */
 export const invoiceRecords = registrosFacturacion;
@@ -57,4 +58,29 @@ export async function refuseRecord(db: Database, recordId: string, code: string)
     .update(envios)
     .set({ estado: "rechazado", codigoError: code })
     .where(eq(envios.registroId, recordId));
+}
+
+/** `count` records waiting to be sent, generated on 2026-07-20 (`seedPendingEnvios`), under a new
+ * venue's identity or the named one. */
+export async function seedWaitingRecords(
+  db: Database,
+  options: {
+    count: number;
+    identity?: { nodeId: string; taxId: string };
+    environment?: "production" | "preproduction";
+  },
+): Promise<{ recordIds: string[] }> {
+  const seeded = await seedPendingEnvios(db, {
+    count: options.count,
+    ...(options.identity && {
+      identity: { nodeId: options.identity.nodeId, nif: options.identity.taxId },
+    }),
+    ...(options.environment && { entorno: options.environment }),
+  });
+  return { recordIds: seeded.registroIds };
+}
+
+/** Marks one record's sending as stopped. */
+export async function stopRecord(db: Database, recordId: string): Promise<void> {
+  await db.update(envios).set({ estado: "detenido" }).where(eq(envios.registroId, recordId));
 }

@@ -13,37 +13,46 @@ export const SUBMISSION_DELAYED_WARN_MS = 4 * 60 * 60 * 1000;
 export const SUBMISSION_DELAYED_ERROR_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The fiscal-submission ongoing check. Warns when records have waited past
- * {@link SUBMISSION_DELAYED_WARN_MS} to reach AEAT (a stronger alert past
- * {@link SUBMISSION_DELAYED_ERROR_MS}), reports when submission has stopped (`detenido`), reports
- * the filing cases no one has resolved yet, and reports each chain held after a run of refusals
- * with one code (`refusalsRepeated`). A rejected record is not `detenido`, so the stopped alert
- * never counts it. The module contributes this check through its alerts seat so generic code never
- * names the fiscal tables.
+ * Warns when records have waited past {@link SUBMISSION_DELAYED_WARN_MS} to reach AEAT, with a
+ * stronger alert past {@link SUBMISSION_DELAYED_ERROR_MS}.
  */
-export const fiscalSubmissionSource: AlertSource = {
+export const fiscalSubmissionDelayedSource: AlertSource = {
   area: "fiscal",
   permission: "fiscal.view",
+  filingOnly: true,
   async read({ tx, now }): Promise<readonly OngoingAlert[]> {
-    const alerts: OngoingAlert[] = [];
-
     const [waiting] = await tx
       .select({ oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro), n: count() })
       .from(envios)
       .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
       .where(inArray(envios.estado, ["pendiente", "enviando"]));
-    if (waiting?.oldest) {
-      const ageMs = now.getTime() - new Date(waiting.oldest).getTime();
-      if (ageMs >= SUBMISSION_DELAYED_WARN_MS) {
-        alerts.push({
-          key: "fiscal.submission_delayed",
-          code: "fiscal.submission_delayed",
-          params: { count: Number(waiting.n), hours: Math.floor(ageMs / 3_600_000) },
-          severity: ageMs >= SUBMISSION_DELAYED_ERROR_MS ? "error" : "warning",
-          since: new Date(waiting.oldest).toISOString(),
-        });
-      }
-    }
+    if (!waiting?.oldest) return [];
+    const ageMs = now.getTime() - new Date(waiting.oldest).getTime();
+    if (ageMs < SUBMISSION_DELAYED_WARN_MS) return [];
+    return [
+      {
+        key: "fiscal.submission_delayed",
+        code: "fiscal.submission_delayed",
+        params: { count: Number(waiting.n), hours: Math.floor(ageMs / 3_600_000) },
+        severity: ageMs >= SUBMISSION_DELAYED_ERROR_MS ? "error" : "warning",
+        since: new Date(waiting.oldest).toISOString(),
+      },
+    ];
+  },
+};
+
+/**
+ * Reports when submission has stopped (`detenido`), the filing cases no one has resolved yet, and
+ * each chain held after a run of refusals with one code (`refusalsRepeated`). A rejected record is
+ * not `detenido`, so the stopped alert never counts it. The module contributes this check and
+ * {@link fiscalSubmissionDelayedSource} through its alerts seat so generic code never names the
+ * fiscal tables.
+ */
+export const fiscalSubmissionSource: AlertSource = {
+  area: "fiscal",
+  permission: "fiscal.view",
+  async read({ tx }): Promise<readonly OngoingAlert[]> {
+    const alerts: OngoingAlert[] = [];
 
     const [stopped] = await tx
       .select({ n: count(), oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro) })

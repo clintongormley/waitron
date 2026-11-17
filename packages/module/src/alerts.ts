@@ -38,6 +38,9 @@ export interface AlertSource {
   /** External reads receive the plain database as `tx`, with no rollback on failure. They must
    * only read database rows; provider I/O runs after the route releases its write transaction. */
   readonly readOutsideTransaction?: boolean;
+  /** A source whose alerts mean something only on a box whose settings send fiscal records; the
+   * server leaves it out where the settings send none. */
+  readonly filingOnly?: boolean;
   read(ctx: AlertReadContext): Promise<readonly OngoingAlert[]>;
 }
 

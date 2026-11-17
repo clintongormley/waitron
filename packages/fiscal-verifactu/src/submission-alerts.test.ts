@@ -4,7 +4,7 @@ import { newId, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fiscalSubmissionSource } from "./submission-alerts.js";
+import { fiscalSubmissionDelayedSource, fiscalSubmissionSource } from "./submission-alerts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -86,7 +86,10 @@ describe("fiscalSubmissionSource", () => {
     const id = await seedIdentity(suite.db);
     await seedWaiting(suite.db, id, hoursAgo(3), "pendiente");
     await withTransaction(suite.db, async (tx) => {
-      expect(await fiscalSubmissionSource.read({ tx, now: NOW })).toEqual([]);
+      expect([
+        ...(await fiscalSubmissionDelayedSource.read({ tx, now: NOW })),
+        ...(await fiscalSubmissionSource.read({ tx, now: NOW })),
+      ]).toEqual([]);
     });
   });
 
@@ -94,7 +97,7 @@ describe("fiscalSubmissionSource", () => {
     const id = await seedIdentity(suite.db);
     await seedWaiting(suite.db, id, hoursAgo(5), "enviando");
     await withTransaction(suite.db, async (tx) => {
-      const [a] = await fiscalSubmissionSource.read({
+      const [a] = await fiscalSubmissionDelayedSource.read({
         tx,
         now: NOW,
       });
@@ -108,7 +111,7 @@ describe("fiscalSubmissionSource", () => {
 
     await seedWaiting(suite.db, id, hoursAgo(25), "pendiente");
     await withTransaction(suite.db, async (tx) => {
-      const [a] = await fiscalSubmissionSource.read({
+      const [a] = await fiscalSubmissionDelayedSource.read({
         tx,
         now: NOW,
       });
@@ -138,6 +141,14 @@ describe("fiscalSubmissionSource", () => {
     });
   });
 
+  it("does not count a stopped record as waiting", async () => {
+    const id = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, id, hoursAgo(25), "detenido");
+    await withTransaction(suite.db, async (tx) => {
+      expect(await fiscalSubmissionDelayedSource.read({ tx, now: NOW })).toEqual([]);
+    });
+  });
+
   it("points a stopped submission at the Fiscal filing screen", async () => {
     const id = await seedIdentity(suite.db);
     await seedWaiting(suite.db, id, hoursAgo(1), "detenido");
@@ -154,7 +165,7 @@ describe("fiscalSubmissionSource", () => {
     const warn = await seedIdentity(suite.db);
     await seedWaiting(suite.db, warn, hoursAgo(4), "pendiente");
     await withTransaction(suite.db, async (tx) => {
-      const [a] = await fiscalSubmissionSource.read({
+      const [a] = await fiscalSubmissionDelayedSource.read({
         tx,
         now: NOW,
       });
@@ -168,7 +179,7 @@ describe("fiscalSubmissionSource", () => {
     // A second, older record: the oldest is now exactly 24 hours, so the alert becomes an error.
     await seedWaiting(suite.db, warn, hoursAgo(24), "pendiente");
     await withTransaction(suite.db, async (tx) => {
-      const [a] = await fiscalSubmissionSource.read({
+      const [a] = await fiscalSubmissionDelayedSource.read({
         tx,
         now: NOW,
       });

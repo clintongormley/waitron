@@ -385,6 +385,7 @@ import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
 import {
+  alertSourcesFor,
   certificateDutiesEnabled,
   fiscalDrainEnabled,
   runFiscalDrain,
@@ -3920,7 +3921,10 @@ async function bootServer(
   }
   const alertRegistry = createAlertRegistry({
     claims: [...ALL_ALERT_CLAIMS, ZONE_REPAIR_ALERT_CLAIM],
-    sources: [...enabledAlertSources(enabledAtStart), ...serverAlertSources],
+    sources: alertSourcesFor(
+      [...enabledAlertSources(enabledAtStart), ...serverAlertSources],
+      config,
+    ),
   });
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);

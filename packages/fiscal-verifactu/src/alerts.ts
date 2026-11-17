@@ -1,11 +1,11 @@
 import type { ModuleAlerts } from "@waitron/module";
 import { clockUnusableSource } from "./clock-behind-alerts.js";
-import { fiscalSubmissionSource } from "./submission-alerts.js";
+import { fiscalSubmissionDelayedSource, fiscalSubmissionSource } from "./submission-alerts.js";
 
 /** The fiscal area's dashboard alerts: its claims on `fiscal.` incidents and, for the box area, on
- * the clock's steps under `clock.corrected` (events), and its ongoing submission and unusable-clock
- * checks (sources). The sources live with the fiscal code they read, so generic code never names
- * them. */
+ * the clock's steps under `clock.corrected` (events), and its ongoing records-waiting, submission
+ * and unusable-clock checks (sources). The sources live with the fiscal code they read, so generic
+ * code never names them. */
 export const FISCAL_ALERTS: ModuleAlerts = {
   events: [
     { prefix: "fiscal.", area: "fiscal", permission: "fiscal.view" },
@@ -59,5 +59,5 @@ export const FISCAL_ALERTS: ModuleAlerts = {
     },
     { prefix: "clock.corrected", area: "box", permission: "system.manage" },
   ],
-  sources: [fiscalSubmissionSource, clockUnusableSource],
+  sources: [fiscalSubmissionDelayedSource, fiscalSubmissionSource, clockUnusableSource],
 };
