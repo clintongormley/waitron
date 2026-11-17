@@ -9,7 +9,8 @@ import { steadyNow } from "@waitron/shared";
  * mounts. Holds lapse on the `steady` clock; the times answered, and `openSince`, are wall-clock.
  * `openSince` follows a backward wall step, never a forward one: `discardLapsedDeviceRequests`
  * deletes a device request stamped before it, and the knock route reads it before stamping, so a
- * request made after the step is kept.
+ * request made after the step is kept. `opening` counts the times the window went from shut to
+ * open, so the knock route tells openings apart without reading either clock.
  */
 export const PAIRING_HOLD_MS = 3 * 60 * 1000;
 
@@ -29,6 +30,7 @@ export interface PairingMode {
   isOpen(): boolean;
   openUntil(): string | null;
   openSince(): string | null;
+  opening(): number | null;
   claim(requestId: string, claim: PairingClaim): void;
   claimOf(requestId: string): PairingClaim | undefined;
   orphanedClaims(): string[];
@@ -54,6 +56,7 @@ export function createPairingMode(
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
   let openSinceMs: number | null = null;
+  let openings = 0;
   let lapse: ReturnType<typeof setTimeout> | undefined;
 
   const arm = (): void => {
@@ -91,7 +94,10 @@ export function createPairingMode(
     open() {
       prune();
       const t = now();
-      if (openSinceMs === null) openSinceMs = t;
+      if (openSinceMs === null) {
+        openSinceMs = t;
+        openings += 1;
+      }
       const holdId = newId();
       holds.set(holdId, steady() + holdMs);
       arm();
@@ -125,6 +131,10 @@ export function createPairingMode(
     openSince() {
       prune();
       return openSinceMs === null ? null : iso(openSinceMs);
+    },
+    opening() {
+      prune();
+      return holds.size === 0 ? null : openings;
     },
     claim(requestId, claim) {
       claims.set(requestId, claim);

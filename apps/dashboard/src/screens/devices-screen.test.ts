@@ -1660,7 +1660,7 @@ describe("the Edit dialog", () => {
     });
   });
 
-  it("Save sends exactly the edit, then closes and refreshes the list", async () => {
+  it("Save sends exactly the edit, then closes, leaving the list to the live notice", async () => {
     const api = editApi();
     const el = await openEdit(api);
     wtChange(el, "[data-test=edit-name]", "  Cash till 2 ");
@@ -1680,7 +1680,25 @@ describe("the Edit dialog", () => {
     });
     // The reader did not change, so its own route is not called.
     expect(api.setDeviceReader).not.toHaveBeenCalled();
-    expect(api.listDevices).toHaveBeenCalledTimes(2);
+    expect(api.listDevices).toHaveBeenCalledTimes(1);
+  });
+
+  it("a saved edit reaches the list through the live notice, read once", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(editApi(), { liveData });
+    const el = await openEdit(api);
+    await rename(el, "Front counter");
+    const reads = vi.mocked(api.listDevices).mock.calls.length;
+    vi.mocked(api.listDevices).mockResolvedValue([{ ...till, label: "Front counter" }, kitchen]);
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    await flush(el);
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
+    await vi.waitFor(() =>
+      expect(deepText(el, "[data-test=device-label-t1]")).toBe("Front counter"),
+    );
+    await flush(el);
+    expect(api.listDevices).toHaveBeenCalledTimes(reads + 1);
   });
 
   it("chooses Nowhere to clear the device station", async () => {
@@ -1782,8 +1800,8 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-name").error).toBe("");
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
-    // The device's changes were written, so the list is read again.
-    expect(api.listDevices).toHaveBeenCalledTimes(2);
+    // The save itself does not read the list again; the live notice does.
+    expect(api.listDevices).toHaveBeenCalledTimes(1);
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r2");
     await flush(el);
     expect(field(el, "edit-reader").error).toBe("");
@@ -2484,12 +2502,14 @@ describe("the Edit dialog", () => {
   });
 
   it("a saved edit whose refresh fails closes the dialog and says the list could not be read", async () => {
-    const api = editApi();
+    const liveData = new LiveData();
+    const api = Object.assign(editApi(), { liveData });
     const el = await openEdit(api);
     vi.mocked(api.listDevices).mockRejectedValue({ code: "connection.failed" });
     await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
     await vi.waitFor(() =>
       expect(text(el, "[data-test=page-error]")).toBe(codeMessage("connection.failed")),
     );
@@ -3741,7 +3761,9 @@ describe("add a device", () => {
 
   it("returns focus to the heading's Add a device after the first device is paired from the empty table", async () => {
     let rows: DeviceRow[] = [];
+    const liveData = new LiveData();
     const api = stubApi({
+      liveData,
       listDevices: vi.fn(() => Promise.resolve(rows)),
       acceptDeviceJoinRequest: vi.fn(() => {
         rows = [{ ...devices[0]!, id: "d9", label: "Bar 2" }];
@@ -3763,6 +3785,7 @@ describe("add a device", () => {
     await el.updateComplete;
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    liveData.invalidate([{ type: "devices", id: "d9" }]);
     await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Bar 2"));
     const decoy = document.createElement("button");
     el.shadowRoot!.prepend(decoy);
@@ -4399,6 +4422,29 @@ describe("add a device", () => {
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
   });
 
+  it("a paired device reaches the list through the live notice, read once", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    typeField(el, "[data-test=pair-name]", "Bar 2");
+    await el.updateComplete;
+    const reads = vi.mocked(api.listDevices).mock.calls.length;
+    vi.mocked(api.listDevices).mockResolvedValue([
+      ...devices,
+      { ...devices[0]!, id: "d9", label: "Bar 2" },
+    ]);
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    await flush(el);
+    liveData.invalidate([{ type: "devices", id: "d9" }]);
+    await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Bar 2"));
+    await flush(el);
+    expect(api.listDevices).toHaveBeenCalledTimes(reads + 1);
+  });
+
   it("Pair sends the typed name, profile and kitchen screen, then says Added", async () => {
     const api = stubApi();
     const el = await openAdd(api);
@@ -4419,7 +4465,7 @@ describe("add a device", () => {
       t("devices.added").replace("{name}", "Bar 2"),
     );
     expect(q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-    expect(api.listDevices).toHaveBeenCalledTimes(2);
+    expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
     expect(q(el, "[data-test=add-device-modal]")).toBeNull();
   });

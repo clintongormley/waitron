@@ -1044,15 +1044,6 @@ export class DevicesScreen extends LitElement {
     this.#hold.stop();
     this.added = { name: result.name };
     if (!scope?.isDirty()) await this.#finishPair(epoch, "saved");
-    try {
-      await this.#reloadDevices();
-    } catch (error) {
-      this.#showReadError(error);
-    }
-  }
-
-  async #reloadDevices(): Promise<void> {
-    this.devices = await this.api.listDevices();
   }
 
   #panelFor(providerId: string): CardProviderPanel | undefined {
@@ -1476,7 +1467,6 @@ export class DevicesScreen extends LitElement {
     if (epoch === this.#editEpoch) editScope?.commit(submittedDevice);
     if (epoch === this.#editEpoch && sent.invoicePrinterId !== undefined)
       this.#editInvoiceId = sent.invoicePrinterId;
-    this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, approvedProfileIds } = sent;

@@ -119,6 +119,44 @@ describe("createPairingMode", () => {
     expect(mode.openSince()).toBe(new Date(clock.now()).toISOString());
   });
 
+  it("opening is null while shut and stays the same through one unbroken opening", () => {
+    const clock = atClock();
+    const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });
+    expect(mode.opening()).toBeNull();
+    const a = mode.open();
+    const first = mode.opening();
+    expect(first).not.toBeNull();
+    clock.advance(1_000);
+    mode.open();
+    mode.release(a.holdId);
+    expect(mode.opening()).toBe(first);
+    clock.advance(2 * PAIRING_HOLD_MS);
+    expect(mode.opening()).toBeNull();
+  });
+
+  it("opening differs after a shut and reopen within the same millisecond", () => {
+    const frozen = () => 5_000;
+    const mode = createPairingMode({ now: frozen, steady: frozen, newId: ids() });
+    const a = mode.open();
+    const first = mode.opening();
+    mode.release(a.holdId);
+    expect(mode.opening()).toBeNull();
+    mode.open();
+    expect(mode.opening()).not.toBeNull();
+    expect(mode.opening()).not.toBe(first);
+  });
+
+  it("opening stays the same when the wall clock steps back during one opening", () => {
+    let wall = 10_000_000;
+    const mode = createPairingMode({ now: () => wall, steady: () => 1_000, newId: ids() });
+    mode.open();
+    const first = mode.opening();
+    const since = mode.openSince();
+    wall = 1_000;
+    expect(mode.openSince()).not.toBe(since);
+    expect(mode.opening()).toBe(first);
+  });
+
   it("openUntil is the latest live hold's lapse", () => {
     const clock = atClock();
     const mode = createPairingMode({ now: clock.now, steady: clock.now, newId: ids() });

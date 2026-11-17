@@ -278,7 +278,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       // devMode accepts the knock immediately with the venue's default `till` profile, through the
       // real join and accept verbs, without a window, a number check or a claim.
       const auto = deps.devMode === true;
-      const admittedIn = deps.pairingMode.openSince();
+      const admittedIn = deps.pairingMode.opening();
       if (!auto && admittedIn === null) {
         throw new AppError("device.pairing_closed", {});
       }
@@ -289,10 +289,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const returning = await provenDisabledDevice(deps.db, parseDeviceCookie(readDeviceCookie(c)));
       let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
-        // The window can shut, and open again, while the body arrives; a knock admitted in an
-        // earlier open period must not land in a later one as a fresh request (open periods are told
-        // apart by their start time, to the millisecond).
-        if (!auto && deps.pairingMode.openSince() !== admittedIn) {
+        // The window can shut, and open again, while the body arrives; a knock admitted in one
+        // opening must not land in a later one as a fresh request.
+        if (!auto && deps.pairingMode.opening() !== admittedIn) {
           throw new AppError("device.pairing_closed", {});
         }
         // Before the cap is counted, so requests a shut window stranded do not hold places in it.
