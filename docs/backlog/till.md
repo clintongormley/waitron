@@ -989,11 +989,8 @@ control should stack its choices instead. [Design system](../developers/design-s
 ## Look at what A773-2 B4b's look at the running app did not reach.
 
 The table screen's «en el
-pase», department transfers' "Waiting for the pass", the closed-station alert on the dashboard's
-alerts page, a pass card whose dishes Hide has all taken off, the pair dialog's accept form, the
-pass monitor's and All stations' own layouts, a board switching between columns and tabs live when
-a course is fired, and a pass layout saved before B4b. That look also found a held card's dashed
-border faint in the dark theme.
+pase» (wait for the owner's table screen redesign) and the closed-station alert on the dashboard's
+alerts page.
 
 
 ## A559. The till's full-invoice dialog changes width when an error appears.
@@ -1552,10 +1549,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   case beside capitalised status words.
   [Detail](till.md#the-table-screens-sent-list-puts-at-the-pass-under-a-fired-heading-seen-in-a773-2-b4bs-review-the-owners-call)
 - **Look at what A773-2 B4b's look at the running app did not reach.** The table screen's «en el
-  pase», department transfers' "Waiting for the pass", the closed-station alert on the dashboard's
-  alerts page, a pass card whose dishes Hide has all taken off, the pair dialog's accept form, the
-  pass monitor's and All stations' own layouts, a board switching between columns and tabs live when
-  a course is fired, and a pass layout saved before B4b.
+  pase» and the closed-station alert on the dashboard's alerts page.
   [Detail](till.md#look-at-what-a773-2-b4bs-look-at-the-running-app-did-not-reach)
 
 ## Bundle: The "Goes with" line
