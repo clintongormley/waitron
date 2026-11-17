@@ -6446,7 +6446,7 @@ describe("the banner's email inbox link", () => {
     expect(bar!.shadowRoot!.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe(
       "Panel",
     );
-    expect(bar!.shadowRoot!.querySelector('a[href="/"]')).not.toBeNull();
+    expect(bar!.shadowRoot!.querySelector('a[href="/till/"]')).not.toBeNull();
   });
 
   it("opens the till through the development redirect from the Demo bar's Device link", async () => {
@@ -6455,10 +6455,10 @@ describe("the banner's email inbox link", () => {
     });
     await flush(el);
     const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
-    const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/"]')!;
+    const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/till/"]')!;
     expect(link).not.toBeNull();
     const result = await commands.followDevDeviceLink(link.getAttribute("href")!);
-    expect(result.url).toBe(`${result.tillOrigin}/`);
+    expect(result.url).toBe(`${result.tillOrigin}/till/`);
     expect(result.html).toContain("<title>Waitron Till</title>");
   });
 
@@ -6918,7 +6918,9 @@ describe("alerts in the shell", () => {
       await atViewport(host, 1280, async () => {
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/"]')!
+          .shadowRoot!.querySelector(
+            intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/till/"]',
+          )!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!
@@ -6996,7 +6998,9 @@ describe("alerts in the shell", () => {
         const logo = items[1]!.box;
         const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
         const link = bar
-          .shadowRoot!.querySelector(intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/"]')!
+          .shadowRoot!.querySelector(
+            intent === "demo" ? 'a[href="/manage/email"]' : 'a[href="/till/"]',
+          )!
           .getBoundingClientRect();
         const current = bar
           .shadowRoot!.querySelector('[aria-current="page"]')!

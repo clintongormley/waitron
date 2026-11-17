@@ -448,7 +448,7 @@ async function main(): Promise<void> {
   const dashboardPort = process.env.WAITRON_DASHBOARD_VITE_PORT?.trim() || "5191";
   const setupPort = process.env.WAITRON_SETUP_VITE_PORT?.trim() || "5192";
   const serverPort = process.env.WAITRON_HTTP_PORT?.trim() || result.env.WAITRON_HTTP_PORT;
-  console.log(`  till       http://localhost:${tillPort}`);
+  console.log(`  till       http://localhost:${tillPort}/till/`);
   console.log(`  dashboard  http://localhost:${dashboardPort}/manage/`);
   console.log(
     `  server     localhost:${serverPort}   (HTTP fresh; HTTPS with a preserved box leaf)`,
@@ -462,11 +462,11 @@ async function main(): Promise<void> {
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log("");
-  console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/?dev`);
+  console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/till/?dev`);
   for (const line of DEMO_DEVICE_LINES) console.log(`    ${line}`);
   console.log("");
   console.log(
-    `  Or knock from a FRESH browser at http://localhost:${tillPort} — dev mode accepts it at once`,
+    `  Or knock from a FRESH browser at http://localhost:${tillPort}/till/ — dev mode accepts it at once`,
   );
   console.log("  as a till.");
   const salesDays = resolveSalesDays();

@@ -147,11 +147,11 @@ describe("mountSpa", () => {
 
   it("treats a navigation path as a page only for a request that accepts HTML", async () => {
     const app = new Hono();
-    mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, noopLog);
-    const page = await app.request("/tabs/42", { headers: { Accept: "text/html" } });
+    mountSpa(app, { root: root!, basePath: "", navigationPath: "/till/tabs" }, noopLog);
+    const page = await app.request("/till/tabs/42", { headers: { Accept: "text/html" } });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("id=app");
-    const noAccept = await app.request("/tabs/42");
+    const noAccept = await app.request("/till/tabs/42");
     expect(noAccept.status).toBe(404);
   });
 

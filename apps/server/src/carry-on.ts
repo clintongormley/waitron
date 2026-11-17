@@ -35,6 +35,7 @@ import {
   failureFields,
   otherBoxPhrase,
   renderWaitingPage,
+  pageReturnPath,
   type WaitingPageSection,
 } from "./waiting-page.js";
 
@@ -108,13 +109,25 @@ const BLANK: FormView = {
 
 class NoLongerWaiting extends Error {}
 
-function knownBody(successor: string, words: CarryOnWords, back: boolean): string {
-  const link = back ? `<p><a href="/">${escapeHtml(words.back)}</a></p>\n` : "";
+function knownBody(
+  successor: string,
+  words: CarryOnWords,
+  back: boolean,
+  destination = "/",
+): string {
+  const link = back
+    ? `<p><a href="${escapeHtml(destination)}">${escapeHtml(words.back)}</a></p>\n`
+    : "";
   return `<p role="alert">${escapeHtml(words.knownHandover[0])}<strong>${escapeHtml(successor)}</strong>${escapeHtml(words.knownHandover[1])}</p>
 ${link}`;
 }
 
-function formSection(view: FormView, other: string, words: CarryOnWords): string {
+function formSection(
+  view: FormView,
+  other: string,
+  words: CarryOnWords,
+  destination: string,
+): string {
   const error = (field: Field) =>
     view.errors[field] === undefined
       ? ""
@@ -139,6 +152,7 @@ ${error("totp")}`
   return `<h2>${escapeHtml(words.heading)}</h2>
 <p>${escapeHtml(words.intro[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.intro[1])}</p>
 <form method="post" action="/carry-on" id="carry-on">
+<input type="hidden" name="returnTo" value="${escapeHtml(destination)}">
 <p><label for="carry-on-email">${escapeHtml(words.email)} *</label></p>
 <p><input type="email" id="carry-on-email" name="email" autocomplete="username" required value="${escapeHtml(view.email)}"${invalid("email")}></p>
 ${error("email")}<p><label for="carry-on-password">${escapeHtml(words.password)} *</label></p>
@@ -175,7 +189,8 @@ function postedSecurely(c: Context): boolean {
   }
 }
 
-const REFRESH = '<meta http-equiv="refresh" content="5; url=/">\n';
+const refresh = (destination: string) =>
+  `<meta http-equiv="refresh" content="5; url=${escapeHtml(destination)}">\n`;
 
 /**
  * The waiting page's "Carry on as the main box": a person with `node.manage` who states that the
@@ -193,14 +208,15 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
     const other = otherBoxPhrase(await deps.namesOf(deps.peerNodeIds()).catch(() => []), locale);
+    let destination = "/";
     const page = (section: string, status: 200 | 400 | 401 | 403 | 409 | 429 | 500) =>
-      c.html(renderWaitingPage(other, locale, section), status);
+      c.html(renderWaitingPage(other, locale, section, destination), status);
     const known = async (successor: string | null) =>
       c.html(
         renderDocument(
           locale,
           words.knownTitle,
-          knownBody(await successorName(successor, locale), words, true),
+          knownBody(await successorName(successor, locale), words, true, destination),
         ),
         409,
       );
@@ -216,7 +232,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
           locale,
           words.carriedOnTitle,
           `<p>${escapeHtml(words.carriedOnBody)}</p>\n`,
-          REFRESH,
+          refresh(destination),
         ),
         200,
       );
@@ -224,8 +240,17 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
 
     const failed = (error: unknown, shown: FormView = BLANK) => {
       deps.log("warn", "waiting_start.carry_on_failed", failureFields(error));
-      return page(formSection({ ...shown, message: words.failed }, other, words), 500);
+      return page(formSection({ ...shown, message: words.failed }, other, words, destination), 500);
     };
+
+    let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+    try {
+      form = await c.req.parseBody();
+    } catch (error) {
+      return failed(error);
+    }
+    const text = (key: string) => (typeof form[key] === "string" ? form[key] : "");
+    destination = pageReturnPath(text("returnTo"));
 
     let knownBefore: string | null;
     try {
@@ -237,13 +262,6 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     if (!(deps.secure ?? postedSecurely)(c))
       return page(`<p role="alert">${escapeHtml(words.insecure)}</p>\n`, 403);
 
-    let form: Awaited<ReturnType<typeof c.req.parseBody>>;
-    try {
-      form = await c.req.parseBody();
-    } catch (error) {
-      return failed(error);
-    }
-    const text = (key: string) => (typeof form[key] === "string" ? form[key] : "");
     const view: FormView = {
       ...BLANK,
       email: text("email").trim(),
@@ -261,10 +279,13 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     if (!view.switchedOff) view.errors.switchedOff = words.statementMissing;
     if (!view.noOtherRecovery) view.errors.noOtherRecovery = words.statementMissing;
     if (Object.keys(view.errors).length > 0)
-      return page(formSection({ ...view, message: words.fixFields }, other, words), 400);
+      return page(
+        formSection({ ...view, message: words.fixFields }, other, words, destination),
+        400,
+      );
 
     const refused = (message: string, status: 401 | 403 | 429, askCode = view.askCode) =>
-      page(formSection({ ...view, askCode, message }, other, words), status);
+      page(formSection({ ...view, askCode, message }, other, words, destination), status);
 
     let personId: string;
     try {
@@ -314,7 +335,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
             locale,
             words.peerAnsweredTitle,
             `<p>${escapeHtml(words.peerAnswered)}</p>\n`,
-            REFRESH,
+            refresh(destination),
           ),
           200,
         );
@@ -377,6 +398,11 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
         ),
       };
     if (!(deps.secure ?? isSecure)(c)) return `<p>${escapeHtml(words.insecure)}</p>\n`;
-    return formSection(BLANK, other, words);
+    return formSection(
+      BLANK,
+      other,
+      words,
+      pageReturnPath(new URL(c.req.url).pathname + new URL(c.req.url).search),
+    );
   };
 }

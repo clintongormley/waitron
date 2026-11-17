@@ -40,7 +40,7 @@ function webManifest(): PluginOption {
       );
     },
     configureServer(server) {
-      server.middlewares.use("/manifest.webmanifest", (_req, res) => {
+      server.middlewares.use("/till/manifest.webmanifest", (_req, res) => {
         res.setHeader("Content-Type", "application/manifest+json");
         res.end(json);
       });
@@ -49,6 +49,7 @@ function webManifest(): PluginOption {
 }
 
 export default defineConfig({
+  base: "/till/",
   plugins: [devCrossAppLinks("till"), webManifest(), viteNpmNotices()],
   // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
   // mark cannot go stale. A relative path, not `import.meta.resolve`: `@waitron/ui` has no

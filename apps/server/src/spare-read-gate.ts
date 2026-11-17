@@ -68,11 +68,23 @@ export function spareReadGate(deps: {
       return next();
     const locale = resolveLoginLocale(c.req.header("accept-language"), "en-GB");
     c.header("Cache-Control", "no-store");
-    if (path === "/" || path === "/manage" || path.startsWith("/manage/")) {
+    if (
+      path === "/" ||
+      path === "/manage" ||
+      path.startsWith("/manage/") ||
+      path === "/till" ||
+      path.startsWith("/till/")
+    ) {
       const main = deps.main();
       if (new URL(c.req.url).hostname !== BOX_HOSTNAME)
         return c.html(renderSparePage(locale, main, now()));
-      if (main?.silent === true) return c.redirect("/handover/emergency", 302);
+      if (main?.silent === true) {
+        const back =
+          path === "/till" || path.startsWith("/till/")
+            ? `?back=${encodeURIComponent(c.req.url)}`
+            : "";
+        return c.redirect(`/handover/emergency${back}`, 302);
+      }
       return c.html(renderMainBackPage(locale));
     }
     const error = new AppError("node.spare", {});

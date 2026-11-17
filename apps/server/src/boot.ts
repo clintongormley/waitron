@@ -383,7 +383,7 @@ import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
-import { assertBuiltApp, mountSpa } from "./spa-api.js";
+import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
@@ -2672,12 +2672,15 @@ async function bootServer(
       },
       log,
     );
-    if (config.dashboardAppDir !== undefined)
-      mountSpa(
-        app,
-        { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
-        log,
-      );
+    mountBuiltApps(
+      app,
+      {
+        ...(config.dashboardAppDir === undefined
+          ? {}
+          : { dashboardAppDir: config.dashboardAppDir }),
+      },
+      log,
+    );
     const repairMailRunner = createJobRunner({ now, log });
     const stopRepairMail = () => repairMailRunner.stopJobs();
     undoOnFailure.push(stopRepairMail);
@@ -3192,7 +3195,7 @@ async function bootServer(
     );
     mountJoinApi(
       app,
-      { db, cfg: tradingContext, pairingMode, deviceAddress: config.managementOrigin },
+      { db, cfg: tradingContext, pairingMode, deviceAddress: `${config.managementOrigin}/till/` },
       log,
     );
     mountPrintApi(
@@ -4397,20 +4400,7 @@ async function bootServer(
       log,
     );
 
-  // The built front-ends, mounted LAST so the till's root catch-all cannot shadow an API route.
-  // Dashboard first so `/manage/*` wins; the till's origin-root catch-all last
-  // (`boot.spa-mount.test.ts` pins that order).
-  if (config.dashboardAppDir !== undefined) {
-    mountSpa(
-      app,
-      { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
-      log,
-    );
-  }
-  if (config.tillAppDir !== undefined) {
-    // The origin-root catch-all: MUST be the last GET mounted.
-    mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
-  }
+  mountBuiltApps(app, config, log);
 
   jobRunner.add(
     tamperWatchJob({

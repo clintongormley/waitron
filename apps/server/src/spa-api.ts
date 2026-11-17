@@ -16,7 +16,7 @@ export interface SpaDeps {
   root: string;
   /** URL prefix this SPA is served under; "" (or "/") for the origin root, else e.g. "/manage" (no trailing slash). */
   basePath: string;
-  /** Absolute path prefix for browser navigation, e.g. /tabs or /manage. */
+  /** Absolute path prefix for browser navigation, e.g. /till/tabs or /manage. */
   navigationPath?: string;
 }
 
@@ -93,6 +93,24 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
   const base = deps.basePath;
   app.get(base, (c) => serve(c, "/"));
   app.get(`${base}/*`, (c) => serve(c, c.req.path.slice(base.length)));
+}
+
+/** Mount after named routes: the dashboard has an origin-root catch-all. */
+export function mountBuiltApps(
+  app: Hono,
+  apps: { dashboardAppDir?: string; tillAppDir?: string },
+  log: Logger,
+): void {
+  if (apps.tillAppDir !== undefined)
+    mountSpa(app, { root: apps.tillAppDir, basePath: "/till", navigationPath: "/till/tabs" }, log);
+  if (apps.dashboardAppDir !== undefined) {
+    mountSpa(
+      app,
+      { root: apps.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
+      log,
+    );
+    mountSpa(app, { root: apps.dashboardAppDir, basePath: "" }, log);
+  }
 }
 
 /**

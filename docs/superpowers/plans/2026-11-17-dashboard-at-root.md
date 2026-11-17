@@ -1,0 +1,26 @@
+# Dashboard at root — implementation plan
+
+**Finish line:** Lane I’s DASHBOARD-AT-ROOT request quotes the owner: “Move the dashboard to / now”. Dashboard uses `/`, `/account`, etc.; till uses `/till/` and `/till/tabs/<key>`. APIs, setup, handover, help and legal keep their paths. Separate Sol/high draft, two Claude reads; corrections incorporated. Watcher cleared two PRs at 17:40 on 2026-11-17 (Lane I questions.md); no owner design approval is claimed.
+
+**Staging, cleared by the watcher (2026-11-17 17:40):** PR 1 moves till routes, Vite base, manifest and both chooser exits to `/till/`; updates pairing, setup till links, dev links and `/tabs` fixtures; serves dashboard HTML at exactly `/` with its assets still at `/manage/`. Spare pages admit till paths; peer/clock waits and Carry on preserve the requested page. Estimate production/config 120–220 added/removed lines, tests/support 450–650, docs 40–70; outside opinion above 1,305 total changed lines. PR 2 removes `/manage`, adding the shared page classifier, dashboard root fallback, link capture, remote staff serving, permission/recovery returns, mail links and a recorded mechanical substitution commit. Estimate production/config 150–250 changed lines, tests/fixtures 1,400–2,200, docs 40–80; outside opinion above 3,795. Count additions and removals separately. Zone repair admits dashboard pages and `/assets/*`, refuses `/till/`. Classifier boundary/escape cases live once in its tests; callers keep one accepted/refused pair unless answers differ.
+
+**Reuse/boundaries:** retain `mountSpa`, `UrlStateController`, `captureAppLinks`, `devCrossAppLinks`. One browser-safe shared `app-surfaces.ts`/index export holds reserved prefixes and `isDashboardPath` for fallback, link capture and permission/recovery returns. This classifies pages, never authorises APIs. Spare admission accepts dashboard and till pages; zone repair refuses till pages. Preserve dotted/missing-file 404s, including `/sw-probe.js`.
+
+**Remote/waits:** retain staff method/API allowlists, machine refusals and throttle. Serve dashboard GET/HEAD directly with `mountSpa`; never delegate arbitrary root GETs. Reuse main’s spare-read and zone-repair gates in their existing order with identical boot inputs before staff pages; APIs keep main delegation/gates. Named server/till routes precede dashboard fallback. Peer-wait serves both apps’ page GETs and probes the current path. Clock-wait returns by GET to its safe path/query. Carry-on transports that destination in a hidden field, validates a local dashboard/till page, and preserves it through errors/success/back links; never replay POSTs.
+
+**Enrolled tills:** no compatibility redirect. Cookies have `Path=/` (`device-session.ts:76`); saved addresses reduce to origins (`server-router.ts:405`). Replace old bookmarks/home-screen launches with `/till/`. Move manifest start/scope/link and dev handler, keep shared icons. The only found worker registration is the missing-script trust probe, not an offline worker.
+
+**Files and owning checks** (S=server/src, D=dashboard/src, T=till/src, P=ui/src):
+
+| Files / group | Behavior tests |
+| --- | --- |
+| shared app-surfaces/index; S spa-api/boot/config/cloud-remote/zone-repair-serving/spare-read-gate | Classifier boundaries/escape inputs; SPA cache/assets; remote nondelegation, mirror/repair gates and boot mounts. |
+| D navigation/dashboard-app/nav-destinations/permission-continuation and dashboard/module screens; P app-links | Deep refresh, Back/Forward, links, unsaved drafts, safe returns; preserve assertions during URL substitutions. |
+| T navigation/till-app/till-device-chooser/profile-dialog/recovery-refusal/till-enrol-screen; fiscal conflict-evidence | Till/tab paths, both chooser exits, recovery/approval links. |
+| S account-mail/management-api/handover-page-mount/handover-emergency-api/waiting-page/waiting-start/start-clock-waiting/carry-on; setup done/handover and boot join wiring | Account/Google targets, pairing QR, waiting probes/returns and POST destination validation. |
+| Three Vite configs; dev-server-proxy; T manifest/index.html | Bases, default/shifted-port links, proxy, manifest and brand tests. |
+| deploy/waitron.sh; server/scripts/dev-setup; current READMEs/guides; S guide EN/ES box-status; backlog dev-URL entry | Printed URLs, script companions, guide links/content. Historical plans get dated pointers. |
+
+**Cloud coordination:** Lane G’s 17:11 source comparison finds no relay path rewrite; no live forwarding claim. Watcher assigns G’s `registration/src/relay-smtp.ts:17` invitation/reset change to `/account`: prepare alongside, deploy Waitron boxes first, then Cloud; qualify destinations. Pre-live, no resend step. Email-change `/` stays. Tell Lane G in its questions.md when PR 2 opens; the watcher updates external `wa-wt` addresses after landing. No Cloud/shared-tool edits here.
+
+**Validation/exclusions:** TDD by owning layer, changed suites, normal hook/current-head CI. Build all apps; LOOK in both themes at phone/desktop widths, refresh deep links, check assets/manifest and existing/fresh enrolment. No redirects, storage migrations, auth redesign, route framework, offline support or unrelated cleanup.

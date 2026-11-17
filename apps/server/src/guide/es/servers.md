@@ -1,5 +1,7 @@
 # Servidores
 
+Abre la dirección del servidor para entrar al panel de gestión, o añade `/till/` para abrir la caja. Actualiza los marcadores y accesos directos antiguos de la caja para que terminen en `/till/`. El navegador conserva su registro como dispositivo.
+
 ## Cuando abres el servidor de reserva {#spare}
 
 Si ves **Este es el servidor de reserva**, abre la dirección del servidor principal para usar las

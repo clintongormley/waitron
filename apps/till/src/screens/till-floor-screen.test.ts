@@ -511,7 +511,7 @@ describe("till-floor-screen — map/list toggle and tray", () => {
 
   it("restores the zone after refresh and records a new zone selection", async () => {
     const url = new URL(location.href);
-    url.pathname = "/tabs/floor/zone/z2";
+    url.pathname = "/till/tabs/floor/zone/z2";
     history.replaceState(null, "", url);
     const { el } = await mount({
       zones: [zone(), zone({ id: "z2", name: "Terrace" })],
@@ -521,7 +521,7 @@ describe("till-floor-screen — map/list toggle and tray", () => {
     expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
     await el.updateComplete;
-    expect(location.pathname).toBe("/tabs/floor/zone/z1");
+    expect(location.pathname).toBe("/till/tabs/floor/zone/z1");
     const back = new Promise<void>((resolve) =>
       window.addEventListener("popstate", () => resolve(), { once: true }),
     );
@@ -593,7 +593,7 @@ describe("closed floor zones", () => {
 
 it("opens the first zone for an address with an empty zone segment", async () => {
   const url = new URL(location.href);
-  url.pathname = "/tabs/floor/zone/~";
+  url.pathname = "/till/tabs/floor/zone/~";
   history.replaceState(null, "", url);
   const { el } = await mount({
     zones: [zone(), zone({ id: "z2", name: "Terrace", displayOrder: 1 })],
@@ -605,7 +605,7 @@ it("opens the first zone for an address with an empty zone segment", async () =>
   expect(el.shadowRoot!.querySelector('[data-table="t9"]')).toBeNull();
   el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
   await el.updateComplete;
-  expect(location.pathname).toBe("/tabs/floor/zone/z2");
+  expect(location.pathname).toBe("/till/tabs/floor/zone/z2");
 });
 
 describe("floor zones that seat no one", () => {

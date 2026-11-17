@@ -30,14 +30,16 @@ describe("certificate trust instructions", () => {
     expect(host.textContent).toContain(strings["trust.explanation"]);
     expect(host.querySelector("a")?.textContent).toBe(strings["trust.open_setup"]);
     expect(host.querySelector("main")?.lang).toBe(locale);
-    expect(host.querySelector("a")?.href).toBe("http://box.test/");
+    expect(host.querySelector("a")?.href).toBe("http://box.test/setup/trust?app=till");
   });
 
   it("uses browser preferences and the current hostname by default", () => {
     const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-MX", "en-US"]);
     try {
       render(trustInstructions(), host);
-      expect(host.querySelector("a")?.href).toBe(`http://${location.hostname}/`);
+      expect(host.querySelector("a")?.href).toBe(
+        `http://${location.hostname}/setup/trust?app=till`,
+      );
       expect(host.querySelector("h1")?.textContent).toBeTruthy();
       expect(host.querySelector("h1")?.textContent).toBe(es["trust.title"]);
       expect(host.querySelector("main")?.lang).toBe("es-ES");

@@ -45,7 +45,7 @@ it("a single table zone has no pills and a zone without a plan stays in list vie
 
 it("starts on the selected table zone, rejects a counter URL, and follows an explicit new start", async () => {
   setLocale("en-GB");
-  history.replaceState(null, "", "/tabs/floor/zone/Counter");
+  history.replaceState(null, "", "/till/tabs/floor/zone/Counter");
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
     zones: [zone("Room"), zone("Terrace", { closed: true })],
     ...{ selectedZoneId: "Terrace" },

@@ -83,7 +83,7 @@ starts all three processes in parallel:
 
 | Process   | Default URL                                     |
 | --------- | ----------------------------------------------- |
-| Till      | http://localhost:5190                           |
+| Till      | http://localhost:5190/till/                     |
 | Dashboard | http://localhost:5191/manage/                   |
 | Server    | http://localhost:8080 or https://localhost:8080 |
 

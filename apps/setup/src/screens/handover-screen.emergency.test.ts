@@ -1544,10 +1544,29 @@ async function stopAndContinueLinks(pageUrl: string) {
 }
 
 it("Stop and Continue go back to the till named in back", async () => {
-  expect(await stopAndContinueLinks(spareSwitchPage("https://waitron.local/tabs"))).toEqual({
-    stop: "https://waitron.local/tabs",
-    proceed: "https://waitron.local/tabs",
+  expect(await stopAndContinueLinks(spareSwitchPage("https://waitron.local/till/tabs"))).toEqual({
+    stop: "https://waitron.local/till/tabs",
+    proceed: "https://waitron.local/till/tabs",
   });
+});
+
+it("Stop and Continue keep the till when the venue's own address sent it to the switch", async () => {
+  expect(
+    await stopAndContinueLinks(
+      "https://waitron.local/handover/emergency?back=https%3A%2F%2Fwaitron.local%2Ftill%2Ftabs%2Fcounter",
+    ),
+  ).toEqual({
+    stop: "https://waitron.local/till/tabs/counter",
+    proceed: "https://waitron.local/till/tabs/counter",
+  });
+});
+
+it("a switch at the venue address ignores a return to a sibling box", async () => {
+  expect(
+    await stopAndContinueLinks(
+      "https://waitron.local/handover/emergency?back=https%3A%2F%2Fbox-b.waitron.local%2Ftill%2F",
+    ),
+  ).toEqual({ stop: "/", proceed: "/" });
 });
 
 it.each([
@@ -1585,10 +1604,12 @@ async function declareAndReload(pageUrl: string) {
 }
 
 it("a reload after declaring keeps the way back to the till", async () => {
-  const { address, stop } = await declareAndReload(spareSwitchPage("https://waitron.local/tabs"));
+  const { address, stop } = await declareAndReload(
+    spareSwitchPage("https://waitron.local/till/tabs"),
+  );
   expect(address.pathname).toBe(`/handover/${saved.operationId}`);
-  expect(address.searchParams.get("back")).toBe("https://waitron.local/tabs");
-  expect(stop).toBe("https://waitron.local/tabs");
+  expect(address.searchParams.get("back")).toBe("https://waitron.local/till/tabs");
+  expect(stop).toBe("https://waitron.local/till/tabs");
 });
 
 it("a back that was ignored is not carried into the operation's address", async () => {

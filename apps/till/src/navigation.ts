@@ -1,7 +1,7 @@
 import type { UrlPathConfig } from "@waitron/ui";
 
 export const tillPath: UrlPathConfig = {
-  basePath: "/tabs",
+  basePath: "/till/tabs",
   primary: "till-tab",
   children: {
     "*": {

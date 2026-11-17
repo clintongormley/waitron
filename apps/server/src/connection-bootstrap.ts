@@ -90,7 +90,10 @@ export function mountConnectionBootstrap(
         caCertificate: caCertificate ?? undefined,
         caAvailable: status.caAvailable,
         caDownloadPath: "/ca.crt",
-        httpsUrl: deps.reachUrls[0]!,
+        httpsUrl:
+          c.req.query("app") === "till"
+            ? new URL("/till/", deps.reachUrls[0]!).href
+            : deps.reachUrls[0]!,
         reachUrls: deps.reachUrls,
         device: trustDeviceForRequest(c.req),
         connection: {

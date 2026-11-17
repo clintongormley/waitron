@@ -69,7 +69,11 @@ describe("landing app", () => {
 
   // The page's "Continue to Waitron" hand-off — the whole reason the landing page carries
   // `httpsUrl`: the visitor follows it AFTER trusting the CA, escaping the HTTPS interstitial.
-  it("renders the HTTPS hand-off link", async () => {
+  it.each([
+    ["/", "https://waitron.local:8080"],
+    ["/setup/trust?app=till", "https://waitron.local:8080/till/"],
+    ["/setup/connection?app=till", "https://waitron.local/till/"],
+  ])("renders the HTTPS hand-off link for %s", async (path, destination) => {
     const dir = stateDirWithCa();
     try {
       const app = buildLandingApp({
@@ -78,8 +82,8 @@ describe("landing app", () => {
         httpsUrl: "https://waitron.local:8080",
         log,
       });
-      const html = await (await app.request("http://waitron.local/")).text();
-      expect(html).toContain('href="https://waitron.local:8080"');
+      const html = await (await app.request(`http://waitron.local${path}`)).text();
+      expect(html).toContain(`href="${destination}"`);
       expect(html).toMatch(/Continue to Waitron/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });

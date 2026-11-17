@@ -175,7 +175,7 @@ describe("setup-done-screen", () => {
           "/manage",
           "Set up your menu, staff, devices and settings, and see your sales.",
         ],
-        ["Till", "/", "Take orders and payments."],
+        ["Till", "/till/", "Take orders and payments."],
         [
           "Email inbox",
           "/manage/email",
@@ -191,7 +191,7 @@ describe("setup-done-screen", () => {
           "/manage",
           "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
         ],
-        ["Caja", "/", "Toma pedidos y cobra."],
+        ["Caja", "/till/", "Toma pedidos y cobra."],
         [
           "Bandeja de correo",
           "/manage/email",
@@ -1109,7 +1109,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}));
     const links = el.shadowRoot!.querySelector("[data-test=links]")!;
     const hrefs = [...links.querySelectorAll("wt-choice-row")].map((row) => row.href);
-    expect(hrefs).toEqual(["/manage", "/"]);
+    expect(hrefs).toEqual(["/manage", "/till/"]);
   });
 
   it("does not promise trading mode on the mirror path", async () => {
@@ -1383,7 +1383,7 @@ describe("setup-done-screen layout", () => {
     expect(q(el, "[data-test=links]")!.classList.contains("choices")).toBe(true);
     expect(rows.map((row) => [row.heading, row.href])).toEqual([
       ["Dashboard", "/manage"],
-      ["Till", "/"],
+      ["Till", "/till/"],
       ["Email inbox", "/manage/email"],
     ]);
     expect(rows.every((row) => row.textContent!.trim().length > 0)).toBe(true);
@@ -1395,7 +1395,7 @@ describe("setup-done-screen layout", () => {
     const hrefOf = (test: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { href: string }>(`[data-test=${test}]`)?.href;
     expect(["link-till", "link-dashboard", "link-email"].map(hrefOf)).toEqual([
-      "/",
+      "/till/",
       "/manage",
       "/manage/email",
     ]);

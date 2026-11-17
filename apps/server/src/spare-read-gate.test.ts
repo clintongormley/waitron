@@ -115,7 +115,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "shows %s spare status at dashboard addresses and in API refusals",
   async (locale) => {
     const app = fixture();
-    for (const path of ["/", "/manage", "/manage/staff", "/manage/assets/old.js"]) {
+    for (const path of ["/", "/manage", "/manage/staff", "/manage/assets/old.js", "/till/"]) {
       const response = await app.request(path, { headers: { "accept-language": locale } });
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -156,12 +156,17 @@ const OWN = "https://box-bbbb.waitron.local";
 
 it("at the venue's name a silent main server's spare sends pages to the switch page", async () => {
   const app = fixture(SILENT);
-  for (const path of ["/", "/manage", "/manage/servers"]) {
+  for (const [path, destination] of [
+    ["/", "/handover/emergency"],
+    ["/manage", "/handover/emergency"],
+    ["/manage/servers", "/handover/emergency"],
+    [
+      "/till/tabs/counter",
+      "/handover/emergency?back=https%3A%2F%2Fwaitron.local%2Ftill%2Ftabs%2Fcounter",
+    ],
+  ]) {
     const response = await app.request(`${VENUE}${path}`, { headers: { accept: "text/html" } });
-    expect([response.status, response.headers.get("location")]).toEqual([
-      302,
-      "/handover/emergency",
-    ]);
+    expect([response.status, response.headers.get("location")]).toEqual([302, destination]);
     expect(response.headers.get("cache-control")).toBe("no-store");
   }
 });
@@ -170,7 +175,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "at the venue's name, with the main server answering, pages say it is back and reload: %s",
   async (locale) => {
     const app = fixture(ANSWERING);
-    for (const path of ["/", "/manage", "/manage/servers"]) {
+    for (const path of ["/", "/manage", "/manage/servers", "/till/tabs/counter"]) {
       const response = await app.request(`${VENUE}${path}`, {
         headers: { "accept-language": locale },
       });
@@ -208,7 +213,7 @@ it.each(["en-GB", "es-ES"] as const)(
   "the closed page says for how long a silent main server has not answered and links to the switch: %s",
   async (locale) => {
     const app = fixture({ silentSinceMs: NOW - 65_000, reached: true, silent: true });
-    for (const path of ["/", "/manage", "/manage/servers"]) {
+    for (const path of ["/", "/manage", "/manage/servers", "/till/tabs/counter"]) {
       const body = await (
         await app.request(`${OWN}${path}`, { headers: { "accept-language": locale } })
       ).text();

@@ -888,6 +888,38 @@ describe("the waiting start", () => {
       ]);
     });
 
+    it("carries the till destination through a refused sign-in and the successful carry-on", async () => {
+      const waiting = await h.app().request(
+        "https://box.test/till/tabs/counter?view=all",
+        {
+          headers: { "accept-language": "en-GB", accept: "text/html" },
+        },
+        tls(),
+      );
+      expect(await waiting.text()).toContain('name="returnTo" value="/till/tabs/counter?view=all"');
+      const fields = { ...ADMIN, ...BOTH, returnTo: "/till/tabs/counter?view=all" };
+      const refused = await post({ ...fields, password: "incorrectPass1" });
+      expect(refused.status).toBe(401);
+      expect(await refused.text()).toContain('name="returnTo" value="/till/tabs/counter?view=all"');
+      const answer = await post(fields);
+      expect(answer.status).toBe(200);
+      expect(await answer.text()).toContain('content="5; url=/till/tabs/counter?view=all"');
+      expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
+    });
+
+    it("does not return the carry-on form to a submitted external address", async () => {
+      const response = await post({
+        ...ADMIN,
+        password: "incorrectPass1",
+        ...BOTH,
+        returnTo: "//elsewhere.example/till/",
+      });
+      expect(response.status).toBe(401);
+      const html = await response.text();
+      expect(html).toContain('name="returnTo" value="/"');
+      expect(html).not.toContain("elsewhere.example");
+    });
+
     it("a person without `node.manage` is refused with the role sentence", async () => {
       await seedPersons(suite.db, {
         displayName: "Signed-in Manager",

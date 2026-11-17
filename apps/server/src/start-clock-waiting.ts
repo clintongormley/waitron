@@ -10,6 +10,7 @@ import {
 import { bootReader, type BootReading } from "./boot-reader.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import "./errors.js";
+import { pageReturnPath } from "./waiting-page.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -156,11 +157,18 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       (c.req.header("Accept") ?? "").includes("text/html");
     if (!page) return waitingAnswer(c);
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-    return c.html(renderWaitingPage(locale), 503, {
-      "Cache-Control": "no-store",
-      "Retry-After": RETRY_AFTER_SECONDS,
-      Vary: "Accept-Language",
-    });
+    return c.html(
+      renderWaitingPage(
+        locale,
+        pageReturnPath(new URL(c.req.url).pathname + new URL(c.req.url).search),
+      ),
+      503,
+      {
+        "Cache-Control": "no-store",
+        "Retry-After": RETRY_AFTER_SECONDS,
+        Vary: "Accept-Language",
+      },
+    );
   });
 
   return {
@@ -172,7 +180,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   };
 }
 
-function renderWaitingPage(locale: SupportedLocale): string {
+function renderWaitingPage(locale: SupportedLocale, destination: string): string {
   const words = START_CLOCK_WAITING_WORDS[locale];
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
@@ -195,6 +203,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
 </div>
 <script>
 (() => {
+  const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
   const $ = (id) => document.getElementById(id);
   const field = $("clock-key-field");
   const show = (id) => {
@@ -261,7 +270,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     const stop = new AbortController();
     const deadline = setTimeout(() => stop.abort(), 5000);
     try {
-      const response = await fetch("/", {
+      const response = await fetch(destination, {
         cache: "no-store",
         headers: { accept: "application/json" },
         signal: stop.signal,
@@ -273,7 +282,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
       } catch {}
       if (answer?.error?.code !== "server.waiting_for_clock") {
         field.value = "";
-        return location.replace("/");
+        return location.replace(destination);
       }
       if (answer.error.params?.confirmed === false && !$("clock-confirmed").hidden) {
         show(null);

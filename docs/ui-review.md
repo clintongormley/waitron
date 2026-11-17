@@ -8,7 +8,7 @@ the owner how each area works today (screenshots + plain English), the owner the
 corrects what is wrong or unintuitive, and the fixes land. This file records where we are so the
 walkthrough survives a context clear.
 
-**Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190>, dashboard
+**Run path:** `pnpm dev:setup && pnpm dev` — till <http://localhost:5190/till/>, dashboard
 <http://localhost:5191/manage/>, setup <http://localhost:5192/setup/>. Those are the default ports; use `wa-wt ls`
 for another worktree's till and dashboard URLs. The default server on `:8080` uses HTTP without a
 development box leaf and HTTPS when one is present; each Vite proxy selects the same protocol. The
@@ -115,6 +115,9 @@ As the owner finds issues they land here as a checklist per area, then become fi
 one line; the fix's detail belongs in its PR/commit, not here.
 
 ### General UI corrections — 2026-09-06
+
+2026-11-17: the till now opens at `/till/` and uses `/till/tabs/<key>`; the bare box address
+opens the dashboard. See the [current navigation contract](developers/design-system.md#fixed-device-screens).
 
 2026-10-16: the canvas navigation described in this historical walk is retired by A182 part 2.
 Use the [fixed device screens](developers/design-system.md#fixed-device-screens) contract for

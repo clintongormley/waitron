@@ -139,7 +139,7 @@ describe("till clocking integration", () => {
   });
 
   it("Clock in opens the chosen work destination without exposing it behind the page", async () => {
-    history.replaceState(null, "", "/tabs/floor");
+    history.replaceState(null, "", "/till/tabs/floor");
     const f = await clockApp();
     await signIn(f.el);
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());

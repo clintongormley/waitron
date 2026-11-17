@@ -166,7 +166,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
   }
   for (const path of [
     "/",
-    "/tabs",
+    "/till/tabs",
     "/setup",
     "/setup-api/provision",
     "/recovery",

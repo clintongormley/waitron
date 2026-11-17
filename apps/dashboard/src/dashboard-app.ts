@@ -2448,7 +2448,7 @@ export class DashboardApp extends LitElement {
     if (this.onboardingIntent !== "demo" && this.onboardingIntent !== "prepare") return nothing;
     const links = [
       { label: t("demo_bar.dashboard"), href: "/manage", current: true },
-      { label: t("demo_bar.device"), href: "/" },
+      { label: t("demo_bar.device"), href: "/till/" },
       ...(this.onboardingIntent === "demo" &&
       (!authenticated || this.#sessionPermissions.includes("person.admin"))
         ? [{ label: t("nav.email_inbox"), href: "/manage/email" }]

@@ -6156,7 +6156,7 @@ it.each([["till", "floor", "till-floor-screen"]] as const)(
     const screen = el.shadowRoot!.querySelector(tag) as HTMLElement & { embedded: boolean };
     expect(screen).not.toBeNull();
     expect(screen.embedded).toBe(true);
-    expect(location.pathname).toBe(`/tabs/${destination}`);
+    expect(location.pathname).toBe(`/till/tabs/${destination}`);
   },
 );
 
@@ -6179,14 +6179,14 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     };
     expect(screen).not.toBeNull();
     expect(screen.embedded).toBe(true);
-    expect(location.pathname).toBe("/tabs/order");
+    expect(location.pathname).toBe("/till/tabs/order");
   },
 );
 
 it.each(["phone-portrait", "tablet-landscape"] as const)(
   "signs in on the Floor, not a table-less order page, after a reload on a %s's order",
   async (formFactor) => {
-    history.replaceState(null, "", "/tabs/order");
+    history.replaceState(null, "", "/till/tabs/order");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     try {
@@ -6199,7 +6199,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
       await toCounter(el);
       expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
-      expect(location.pathname).toBe("/tabs/floor");
+      expect(location.pathname).toBe("/till/tabs/floor");
       expect(push).not.toHaveBeenCalled();
       expect(replace).toHaveBeenCalled();
     } finally {
@@ -6245,7 +6245,7 @@ it.each([
 ] as const)(
   "replaces an unavailable %s URL screen %s with %s",
   async (formFactor, stale, home, tag) => {
-    history.replaceState(null, "", `/tabs/${stale}`);
+    history.replaceState(null, "", `/till/tabs/${stale}`);
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     try {
@@ -6257,7 +6257,7 @@ it.each([
       });
       await toCounter(el);
       expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
-      expect(location.pathname).toBe(`/tabs/${home}`);
+      expect(location.pathname).toBe(`/till/tabs/${home}`);
       expect(push).not.toHaveBeenCalled();
       expect(replace).toHaveBeenCalled();
     } finally {
@@ -6308,7 +6308,7 @@ it("opens the profile starting screen in the sign-in history entry", async () =>
     await toCounter(el);
     expect(counter(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-schedule-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/tabs/counter/view/schedule");
+    expect(location.pathname).toBe("/till/tabs/counter/view/schedule");
     expect(push).not.toHaveBeenCalled();
   } finally {
     push.mockRestore();
@@ -6920,7 +6920,7 @@ describe("A738 counter order views", () => {
   it.each([undefined, "demo", "prepare"] as const)(
     "A738 gates direct and restored till Kitchen for %s",
     async (onboardingIntent) => {
-      history.replaceState(null, "", "/tabs/counter/view/station");
+      history.replaceState(null, "", "/till/tabs/counter/view/station");
       const { el } = await mountApp({
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "till-dev",

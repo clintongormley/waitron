@@ -1,5 +1,7 @@
 # Servers
 
+Open the box’s address for the dashboard, or add `/till/` to open the till. Update any older till bookmark or home-screen shortcut to end in `/till/`. Your enrolled browser keeps its device sign-in.
+
 ## When you open the spare box {#spare}
 
 If you see **This box is the spare**, open the main box’s address to use the restaurant screens

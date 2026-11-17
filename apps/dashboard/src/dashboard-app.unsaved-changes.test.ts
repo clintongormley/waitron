@@ -797,7 +797,7 @@ it.each(["same-app", "device"] as const)(
     const bar = m.app.shadowRoot!.querySelector("wt-demo-bar")!;
     await bar.updateComplete;
     const link = bar.shadowRoot!.querySelector<HTMLAnchorElement>(
-      destination === "device" ? 'a[href="/"]' : 'a[href="/manage/email"]',
+      destination === "device" ? 'a[href="/till/"]' : 'a[href="/manage/email"]',
     )!;
     expect(link).not.toBeNull();
     let browserDefault = false;

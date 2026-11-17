@@ -951,12 +951,12 @@ it("a line added while a zone read is pending keeps the original zone and price"
 });
 
 it("a hidden history destination resolves to the selected Floor rather than Counter", async () => {
-  history.replaceState(null, "", "/tabs/counter");
+  history.replaceState(null, "", "/till/tabs/counter");
   const { el, api } = await mount(selection(["garden"], "garden"));
   expect(counter(el)).toBeNull();
   expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
   expect(api.setServiceZone).not.toHaveBeenCalled();
-  expect(location.pathname).toBe("/tabs/floor");
+  expect(location.pathname).toBe("/till/tabs/floor");
 });
 
 it.each(["device_profile.no_service_zone", "service_zone.default_missing"])(
@@ -1272,7 +1272,7 @@ it("browser Back restores its accepted URL on Keep and discards settings without
       composed: true,
     }),
   );
-  await vi.waitFor(() => expect(location.pathname).toBe("/tabs/floor"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/till/tabs/floor"));
   expect(push).toHaveBeenCalledOnce();
   const dialog = await openZones(el);
   await userEvent.click(
@@ -1282,14 +1282,14 @@ it("browser Back restores its accepted URL on Keep and discards settings without
   );
   history.back();
   await chooseUnsaved(el, "keep");
-  expect(location.pathname).toBe("/tabs/floor");
+  expect(location.pathname).toBe("/till/tabs/floor");
   expect(
     dialog.shadowRoot!.querySelector<HTMLInputElement>('input[name="starting-zone"][value="room"]')!
       .checked,
   ).toBe(true);
   history.back();
   await chooseUnsaved(el, "discard");
-  await vi.waitFor(() => expect(location.pathname).toBe("/tabs/counter"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/till/tabs/counter"));
   expect(
     dialog.shadowRoot!.querySelector<HTMLInputElement>('input[name="starting-zone"][value="bar"]')!
       .checked,
@@ -1594,7 +1594,7 @@ describe("a handheld's zones", () => {
       expect(await activeTab(el)).toBe("bar");
     });
     it.each(handhelds)("unsaved, with a URL zone, opens on it (%s)", async (formFactor) => {
-      history.replaceState(null, "", "/tabs/floor/zone/room");
+      history.replaceState(null, "", "/till/tabs/floor/zone/room");
       const { el } = await mountHandheld(selection(all, "garden", false), formFactor);
       expect(await activeTab(el)).toBe("room");
     });
@@ -1605,7 +1605,7 @@ describe("a handheld's zones", () => {
     it.each(handhelds)(
       "saved, opens on its Opens first zone over a URL zone (%s)",
       async (formFactor) => {
-        history.replaceState(null, "", "/tabs/floor/zone/room");
+        history.replaceState(null, "", "/till/tabs/floor/zone/room");
         const { el } = await mountHandheld(selection(all, "shop", true), formFactor);
         expect(await activeTab(el)).toBe("shop");
       },
@@ -1992,7 +1992,7 @@ describe("a handheld's zones", () => {
       await openFromBar(el, "table-garden");
       await tapFloor(el);
       expect(await activeTab(el)).toBe("garden");
-      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/garden");
     });
 
     it("beats a saved Opens first once a table has been opened", async () => {
@@ -2161,7 +2161,7 @@ describe("a handheld's zones", () => {
         await showZone(el, "room");
         await el.updateComplete;
         expect(await activeTab(el)).toBe("room");
-        expect(location.pathname).toBe("/tabs/floor/zone/room");
+        expect(location.pathname).toBe("/till/tabs/floor/zone/room");
       },
     );
 
@@ -2185,7 +2185,7 @@ describe("a handheld's zones", () => {
         await vi.waitFor(() => expect(floor(el)).not.toBe(before));
         await floor(el).updateComplete;
         expect(await activeTab(el)).toBe("room");
-        expect(location.pathname).toBe("/tabs/floor/zone/room");
+        expect(location.pathname).toBe("/till/tabs/floor/zone/room");
       },
     );
 
@@ -2203,12 +2203,12 @@ describe("a handheld's zones", () => {
       history.back();
       await back;
       await vi.waitFor(() => expect(activeTab(el)).resolves.toBe("garden"));
-      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/garden");
       const forward = moved();
       history.forward();
       await forward;
       await vi.waitFor(() => expect(activeTab(el)).resolves.toBe("room"));
-      expect(location.pathname).toBe("/tabs/floor/zone/room");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/room");
     });
 
     it("Back from the table onto the Floor opens the table's zone, and the address names it", async () => {
@@ -2222,7 +2222,7 @@ describe("a handheld's zones", () => {
       await back;
       await vi.waitFor(() => expect(orderScreen(el)).toBeNull());
       expect(await activeTab(el)).toBe("garden");
-      expect(location.pathname).toBe("/tabs/floor/zone/garden");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/garden");
     });
 
     it("tapping Floor again while on the Floor keeps the zone tapped", async () => {
@@ -2233,7 +2233,7 @@ describe("a handheld's zones", () => {
       await tapFloor(el);
       await el.updateComplete;
       expect(await activeTab(el)).toBe("room");
-      expect(location.pathname).toBe("/tabs/floor/zone/room");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/room");
     });
 
     it("opens on the table's zone when the zone choice could not be read", async () => {

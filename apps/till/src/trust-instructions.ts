@@ -22,7 +22,7 @@ export function trustInstructions(opts: { hostname?: string; languages?: readonl
       <p>
         <a
           style="color:var(--wt-color-primary-text)"
-          href="http://${opts.hostname ?? location.hostname}/"
+          href="http://${opts.hostname ?? location.hostname}/setup/trust?app=till"
           >${t("trust.open_setup", locale)}</a
         >
       </p>
