@@ -1430,9 +1430,9 @@ Not in any track until the standalone primary is done.
   ([plan](superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)), all three built: the
   read-only checks of the placed file and the placement that gives the copy its own `node.db`,
   signing key and `trading.env`, which nothing calls until A1188 part 3's locked start; and an
-  ordinary start's refusal of a placed copy not yet activated (`node.emergency_copy_unactivated`),
-  before it writes or migrates anything. Part 2, a staff route that cancels a sale, is
-  built only if a venue needs one before go-live.
+  ordinary start's refusal of a placed copy not yet activated, or started under another id
+  (`node.emergency_copy_unactivated`), before it changes `venue.db` or `node.db`. Part 2, a staff
+  route that cancels a sale, is built only if a venue needs one before go-live.
   [Design](superpowers/specs/2026-11-07-restore-takes-new-identity-design.md), approved 2026-11-07.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,

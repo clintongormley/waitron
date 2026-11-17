@@ -222,9 +222,9 @@ declare module "@waitron/shared" {
      */
     "node.state_missing": Record<string, never>;
     /**
-     * This box's node.db records an emergency copy of the venue placed for an emergency start that
-     * has not been activated (its role is still `mirror`, or the start names another node id), so an
-     * ordinary start refuses before writing anything.
+     * This box's node.db records an emergency copy of the venue that has not been activated (its
+     * role is still `mirror`), or this start names another node id than the copy's, or none, so an
+     * ordinary start refuses before it changes venue.db or node.db.
      */
     "node.emergency_copy_unactivated": Record<string, never>;
     /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's

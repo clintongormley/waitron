@@ -532,6 +532,8 @@ The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md)
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The [part 2 plan](../superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
 Cloud agreed the [part 3 proposal](../superpowers/plans/2026-11-15-a1188-part3-locked-start.md) on 15 November: fresh-node placement, the emergency TLS/lease profile, copy status and a repeated-start bound. The [dated design amendment](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md#9-what-waitron-needs-cloud-to-agree) pins the agreement. The locked-start build and production qualification remain open.
+Part 4's activation must move the copy's role in its `node.db` off `mirror` and keep it off: while
+it is `mirror`, an ordinary start refuses with `node.emergency_copy_unactivated` (A1425 part 3).
 The watcher resumed the card on 2026-11-15 at 05:46, requiring a post-agreement plan read
 before build. Cloud hosting, endpoint and authenticated-route qualification remain open:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
