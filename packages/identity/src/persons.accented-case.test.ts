@@ -10,7 +10,13 @@ import { hashSessionToken } from "./session-token.js";
  * cases are encoding cases, with an ASCII case-only control beside each.
  */
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  refusalOn,
+  UNIQUE_VIOLATION,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
@@ -183,7 +189,7 @@ describe("the index itself folds, not only the check in front of it", () => {
         );
       }),
     );
-    expect(indexViolated(error, PERSONS_EMAIL)).toBe(true);
+    expect(refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)).toBe(true);
   });
 
   it("refuses a second live row whose folded name matches, written through the table", async () => {
@@ -198,6 +204,6 @@ describe("the index itself folds, not only the check in front of it", () => {
 
     const error = await captureError(() => write("José García"));
 
-    expect(indexViolated(error, PERSONS_LIVE_DISPLAY_NAME)).toBe(true);
+    expect(refusalOn(error, UNIQUE_VIOLATION, PERSONS_LIVE_DISPLAY_NAME)).toBe(true);
   });
 });

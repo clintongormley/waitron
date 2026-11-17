@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "811d73e3-4cb8-414b-9fc3-4aab604b241a",
+  "id": "3da36fc3-0e4f-41c4-a557-3529822c5bcc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11767,7 +11767,7 @@
           "name": "display_name_folded",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "first_names": {
@@ -11885,43 +11885,51 @@
         }
       },
       "indexes": {
-        "persons_tenant_email_uq": {
-          "name": "persons_tenant_email_uq",
+        "persons_email_uq": {
+          "name": "persons_email_uq",
           "columns": [
-            "case when \"email_folded\" is null then lower(\"email\") else \"email_folded\" end"
+            "email_folded"
           ],
           "isUnique": true,
-          "where": "\"persons\".\"email\" is not null"
+          "where": "\"persons\".\"email_folded\" is not null"
         },
-        "persons_tenant_live_display_name_uq": {
-          "name": "persons_tenant_live_display_name_uq",
+        "persons_live_display_name_uq": {
+          "name": "persons_live_display_name_uq",
           "columns": [
-            "case when \"display_name_folded\" is null then lower(trim(\"display_name\")) else \"display_name_folded\" end"
+            "display_name_folded"
           ],
           "isUnique": true,
           "where": "\"persons\".\"status\" <> 'suspended'"
         },
-        "persons_tenant_google_subject_uq": {
-          "name": "persons_tenant_google_subject_uq",
+        "persons_google_subject_uq": {
+          "name": "persons_google_subject_uq",
           "columns": [
             "google_subject"
           ],
           "isUnique": true,
           "where": "\"persons\".\"google_subject\" is not null"
         },
-        "persons_tenant_pending_email_uq": {
-          "name": "persons_tenant_pending_email_uq",
+        "persons_pending_email_uq": {
+          "name": "persons_pending_email_uq",
           "columns": [
-            "case when \"pending_email_folded\" is null then lower(\"pending_email\") else \"pending_email_folded\" end"
+            "pending_email_folded"
           ],
           "isUnique": true,
-          "where": "\"persons\".\"pending_email\" is not null"
+          "where": "\"persons\".\"pending_email_folded\" is not null"
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "persons_email_folded_ck": {
+          "name": "persons_email_folded_ck",
+          "value": "(\"persons\".\"email\" is null) = (\"persons\".\"email_folded\" is null)"
+        },
+        "persons_pending_email_folded_ck": {
+          "name": "persons_pending_email_folded_ck",
+          "value": "(\"persons\".\"pending_email\" is null) = (\"persons\".\"pending_email_folded\" is null)"
+        },
         "persons_display_name_ck": {
           "name": "persons_display_name_ck",
           "value": "length(\"persons\".\"display_name\") > 0"
@@ -18968,27 +18976,6 @@
             "isExpression": true
           },
           "case when \"sale_id\" is null then '' else \"sale_id\" end": {
-            "isExpression": true
-          }
-        }
-      },
-      "persons_tenant_email_uq": {
-        "columns": {
-          "case when \"email_folded\" is null then lower(\"email\") else \"email_folded\" end": {
-            "isExpression": true
-          }
-        }
-      },
-      "persons_tenant_live_display_name_uq": {
-        "columns": {
-          "case when \"display_name_folded\" is null then lower(trim(\"display_name\")) else \"display_name_folded\" end": {
-            "isExpression": true
-          }
-        }
-      },
-      "persons_tenant_pending_email_uq": {
-        "columns": {
-          "case when \"pending_email_folded\" is null then lower(\"pending_email\") else \"pending_email_folded\" end": {
             "isExpression": true
           }
         }

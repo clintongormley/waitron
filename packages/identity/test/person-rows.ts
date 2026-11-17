@@ -11,7 +11,8 @@ import {
 import { ensureBuiltInRoles } from "../src/roles.js";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BuiltInRoleKey } from "../src/permissions.js";
-export type PersonSeed = Omit<typeof persons.$inferInsert, "role"> & {
+export type PersonSeed = Omit<typeof persons.$inferInsert, "role" | "displayNameFolded"> & {
+  displayNameFolded?: string;
   role?: BuiltInRoleKey;
   jobRoles?: readonly string[];
 };

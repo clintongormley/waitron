@@ -42,7 +42,10 @@ describe("asEmailTaken", () => {
   it("translates a collision on the login-email index", () => {
     let thrown: unknown;
     try {
-      asEmailTaken({ cause: refusalError({ uniqueIndex: "persons_tenant_email_uq" }) }, "o@x.com");
+      asEmailTaken(
+        { cause: refusalError({ unique: { table: "persons", columns: ["email_folded"] } }) },
+        "o@x.com",
+      );
     } catch (e) {
       thrown = e;
     }
@@ -62,11 +65,9 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // The index's NAME identifies the table because SQLite keeps every index in one namespace per
-  // database.
   it("re-throws a collision on another table's email index", () => {
     const original = {
-      cause: refusalError({ uniqueIndex: "invitees_email_uq" }),
+      cause: refusalError({ unique: { table: "invitees", columns: ["email_folded"] } }),
     };
     let thrown: unknown;
     try {

@@ -12,7 +12,8 @@ import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizz
 import {
   enqueueMail,
   outgoingMail,
-  indexViolated,
+  refusalOn,
+  UNIQUE_VIOLATION,
   type Transaction,
   accountActions,
   dashboardSessions,
@@ -249,7 +250,7 @@ export async function confirmEmailChangeByCode(
     if (changed.length !== 1) return null;
     return changed[0]!.email;
   } catch (error) {
-    if (indexViolated(error, PERSONS_EMAIL)) {
+    if (refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
       throw new AppError("person.email_taken", { email: action.pendingEmail });
     }
     throw error;

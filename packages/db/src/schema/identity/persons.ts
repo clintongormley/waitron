@@ -1,21 +1,9 @@
 import { sql, type SQL } from "drizzle-orm";
-import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
 /** `suspended` keeps the row, and any history that references it, while refusing login. */
 export const personStatus = enumType(["pending", "active", "suspended"]);
-
-/**
- * The value a uniqueness index and the query that pre-checks it both read. Shared by the index
- * declarations and the exported keys below because the two MUST agree: if they differ, a pre-check
- * reports a name free and the write behind it is refused, or the other way round.
- *
- * `case when … end`, not `coalesce(…)`: drizzle-kit splits an index expression on its commas and
- * treats each piece as a column name, which generates SQL SQLite will not accept.
- */
-function foldedKey(folded: AnySQLiteColumn, raw: AnySQLiteColumn | SQL): SQL {
-  return sql`case when ${folded} is null then lower(${raw}) else ${folded} end`;
-}
 
 /**
  * Mutable, with no append-only trigger. What keeps a person with history from being deleted is the
@@ -26,10 +14,7 @@ export const persons = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     displayName: label("display_name").notNull(),
-    /** `foldForUniqueness(display_name)` (`packages/identity/src/fold.ts`), set by every write path
-     * in `@waitron/identity` in the statement that sets `display_name`. Nullable because code
-     * outside `@waitron/identity` writes `persons` rows straight through the table definition. */
-    displayNameFolded: label("display_name_folded"),
+    displayNameFolded: label("display_name_folded").notNull(),
     firstNames: label("first_names"),
     lastNames: label("last_names"),
     telephone: label("telephone"),
@@ -63,25 +48,25 @@ export const persons = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // A row without a folded value (written by code outside `@waitron/identity`) falls back to
-    // `lower()`, which on this engine folds ASCII only: the fallback keeps such a row in the index
-    // rather than closing the accented-letter gap for it. The migration that added the folded
-    // columns leaves existing rows NULL: with a backfill, its `CREATE UNIQUE INDEX` fails on a
-    // database already holding a pair the old index allowed (`José García` beside `JOSÉ GARCÍA`).
-    uniqueIndex("persons_tenant_email_uq")
-      .on(foldedKey(t.emailFolded, t.email))
-      .where(sql`${t.email} is not null`),
+    uniqueIndex("persons_email_uq")
+      .on(t.emailFolded)
+      .where(sql`${t.emailFolded} is not null`),
     // A suspended person keeps their row and name outside this index, so the name is free for
     // someone else.
-    uniqueIndex("persons_tenant_live_display_name_uq")
-      .on(foldedKey(t.displayNameFolded, sql`trim(${t.displayName})`))
+    uniqueIndex("persons_live_display_name_uq")
+      .on(t.displayNameFolded)
       .where(sql`${t.status} <> 'suspended'`),
-    uniqueIndex("persons_tenant_google_subject_uq")
+    uniqueIndex("persons_google_subject_uq")
       .on(t.googleSubject)
       .where(sql`${t.googleSubject} is not null`),
-    uniqueIndex("persons_tenant_pending_email_uq")
-      .on(foldedKey(t.pendingEmailFolded, t.pendingEmail))
-      .where(sql`${t.pendingEmail} is not null`),
+    uniqueIndex("persons_pending_email_uq")
+      .on(t.pendingEmailFolded)
+      .where(sql`${t.pendingEmailFolded} is not null`),
+    check("persons_email_folded_ck", sql`(${t.email} is null) = (${t.emailFolded} is null)`),
+    check(
+      "persons_pending_email_folded_ck",
+      sql`(${t.pendingEmail} is null) = (${t.pendingEmailFolded} is null)`,
+    ),
     check("persons_display_name_ck", sql`length(${t.displayName}) > 0`),
     check("persons_first_names_ck", sql`${t.firstNames} is null or length(${t.firstNames}) > 0`),
     check("persons_last_names_ck", sql`${t.lastNames} is null or length(${t.lastNames}) > 0`),
@@ -101,13 +86,11 @@ export const persons = table(
   ],
 );
 
-/** What `persons_tenant_live_display_name_uq` is over — for the query that pre-checks it. */
-export const liveDisplayNameKey = (): SQL =>
-  foldedKey(persons.displayNameFolded, sql`trim(${persons.displayName})`);
+/** What `persons_live_display_name_uq` is over — for the query that pre-checks it. */
+export const liveDisplayNameKey = (): SQL => sql`${persons.displayNameFolded}`;
 
-/** What `persons_tenant_email_uq` is over — for the queries that pre-check it and for login. */
-export const loginEmailKey = (): SQL => foldedKey(persons.emailFolded, persons.email);
+/** What `persons_email_uq` is over — for the queries that pre-check it and for login. */
+export const loginEmailKey = (): SQL => sql`${persons.emailFolded}`;
 
-/** What `persons_tenant_pending_email_uq` is over — for the query that pre-checks it. */
-export const pendingEmailKey = (): SQL =>
-  foldedKey(persons.pendingEmailFolded, persons.pendingEmail);
+/** What `persons_pending_email_uq` is over — for the query that pre-checks it. */
+export const pendingEmailKey = (): SQL => sql`${persons.pendingEmailFolded}`;

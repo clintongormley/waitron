@@ -31,7 +31,7 @@ type PersonInsertish = {
   pendingEmailFolded?: string | null;
 };
 
-export function withFoldedPersonChanges<T extends object>(changes: T): T {
+export function withFoldedPersonChanges<const T extends object>(changes: T): T {
   const row = { ...changes } as Record<string, unknown>;
   for (const [raw, folded] of [
     ["displayName", "displayNameFolded"],
@@ -46,10 +46,10 @@ export function withFoldedPersonChanges<T extends object>(changes: T): T {
   return row as T;
 }
 
-export function withFoldedPersonKeys<T extends PersonInsertish>(
+export function withFoldedPersonKeys<const T extends PersonInsertish>(
   values: T,
 ): T & { displayNameFolded: string };
-export function withFoldedPersonKeys<T extends PersonInsertish>(
+export function withFoldedPersonKeys<const T extends PersonInsertish>(
   values: readonly T[],
 ): (T & { displayNameFolded: string })[];
 export function withFoldedPersonKeys(values: PersonInsertish | readonly PersonInsertish[]): object {

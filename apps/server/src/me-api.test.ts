@@ -458,7 +458,7 @@ describe("mountMeApi — profile credentials", () => {
 
   it("keeps the old login email until the code sent to the replacement is confirmed", async () => {
     await suite.db.execute(sql`
-      update persons set email='old@example.com', pending_email=null,
+      update persons set email='old@example.com', email_folded = 'old@example.com', pending_email=null, pending_email_folded = null,
         password_hash=${fixturePasswordHash("current password")}, totp_secret=null where id=${me}`);
     const sent: string[] = [];
     const codeKey = Buffer.alloc(32, 21);

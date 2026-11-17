@@ -1,3 +1,4 @@
+import { foldForUniqueness } from "@waitron/db";
 import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
 import { readPersonAuthority } from "./authority.js";
@@ -144,11 +145,11 @@ describe("invited person lifecycle", () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const inactiveId = await seedPerson(suite.db, "staff", "suspended");
     await suite.db.execute(
-      sql`update persons set display_name = 'Shared name', email = 'old-shared@example.com' where id = ${inactiveId}`,
+      sql`update persons set display_name = 'Shared name', display_name_folded = 'shared name', email = 'old-shared@example.com', email_folded = 'old-shared@example.com' where id = ${inactiveId}`,
     );
     const currentId = await seedPerson(suite.db, "staff");
     await suite.db.execute(
-      sql`update persons set display_name = 'Shared name', email = 'new-shared@example.com' where id = ${currentId}`,
+      sql`update persons set display_name = 'Shared name', display_name_folded = 'shared name', email = 'new-shared@example.com', email_folded = 'new-shared@example.com' where id = ${currentId}`,
     );
 
     expect(
@@ -480,7 +481,9 @@ async function seedStaffWithSession(
   email: string,
 ): Promise<{ personId: string; tillSessionId: string }> {
   const personId = await seedPerson(suite.db, "staff");
-  await suite.db.execute(sql`update persons set email = ${email} where id = ${personId}`);
+  await suite.db.execute(
+    sql`update persons set email = ${email}, email_folded = ${foldForUniqueness(email)} where id = ${personId}`,
+  );
   const deviceId = await seedSessionDevice(suite.db);
   const tillSessionId = await openSession(suite.db, deviceId, personId);
   return { personId, tillSessionId };
@@ -511,7 +514,9 @@ describe("updatePersonDetails refusals and side effects", () => {
     await openManagementSession(suite.db, "admin");
     const { token } = await openUnprovedManagementSession(suite.db, "manager");
     const target = await seedPerson(suite.db, "staff");
-    await suite.db.execute(sql`update persons set email = 'kept@example.com' where id = ${target}`);
+    await suite.db.execute(
+      sql`update persons set email = 'kept@example.com', email_folded = 'kept@example.com' where id = ${target}`,
+    );
     const listed = async () =>
       (await run((tx) => listPersons(tx, { managementSessionId: token }))).find(
         (p) => p.personId === target,
@@ -556,7 +561,7 @@ describe("updatePersonDetails refusals and side effects", () => {
       const { token } = await openUnprovedManagementSession(suite.db, "admin");
       const target = await seedPerson(suite.db, "staff");
       await suite.db.execute(
-        sql`update persons set email = 'kept@example.com' where id = ${target}`,
+        sql`update persons set email = 'kept@example.com', email_folded = 'kept@example.com' where id = ${target}`,
       );
       const before = (await suite.db.execute(sql`select * from persons where id = ${target}`)).rows;
       const input = details(token, target, {
@@ -651,7 +656,7 @@ describe("updatePersonDetails refusals and side effects", () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
     await suite.db.execute(
-      sql`update persons set email = ${details(token, admin).email}, password_hash = 'admin-password' where id = ${admin}`,
+      sql`update persons set email = ${details(token, admin).email}, email_folded = ${foldForUniqueness(details(token, admin).email)}, password_hash = 'admin-password' where id = ${admin}`,
     );
     await run((tx) =>
       updatePersonDetails(
@@ -962,7 +967,9 @@ describe("a colliding row that lands after the pre-check", () => {
   it("reactivatePersonForInvitation reports a display-name collision as person.display_name_taken", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff", "suspended");
-    await suite.db.execute(sql`update persons set display_name = 'Racer' where id = ${target}`);
+    await suite.db.execute(
+      sql`update persons set display_name = 'Racer', display_name_folded = 'racer' where id = ${target}`,
+    );
     await expect(
       withRacerPlanted("update", () =>
         run((tx) =>
@@ -982,7 +989,7 @@ const VERIFIED_AT = "2026-09-01T00:00:00.000Z";
 async function seedSignInDetails(personId: string, email: string): Promise<void> {
   await suite.db.execute(sql`update persons
     set pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp',
-        google_subject = ${`google-${personId}`}, email = ${email},
+        google_subject = ${`google-${personId}`}, email = ${email}, email_folded = ${foldForUniqueness(email)},
         email_verified_at = ${VERIFIED_AT}
     where id = ${personId}`);
   await suite.db.insert(webauthnCredentials).values({

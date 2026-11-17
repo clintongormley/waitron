@@ -127,9 +127,6 @@ That fiscal protection decision remains outside A646's optional-module repair.
 
 A1308 leaves these names with the slices that own their tables:
 
-- `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
-  `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`: people slice pp4.
-  The first three are matched by name in `packages/identity/src/person-constraints.ts`.
 - `working_orders_tenant_status_idx`: orders slice os1; `sales_tenant_issued_idx`: os8.
 - `registros_tenant_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
 - `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
@@ -1006,8 +1003,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
   A1308 rewrites the starting migrations.**
   [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)
-- **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN.
-  [Detail](dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**

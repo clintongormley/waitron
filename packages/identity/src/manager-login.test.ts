@@ -194,7 +194,9 @@ describe("loginManager", () => {
     // A till-only person with an email but a null password_hash.
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
-      tx.execute(sql`update persons set email = 'owner-nopw@x.com' where id = ${personId}`),
+      tx.execute(
+        sql`update persons set email = 'owner-nopw@x.com', email_folded = 'owner-nopw@x.com' where id = ${personId}`,
+      ),
     );
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
@@ -214,7 +216,7 @@ describe("loginManager", () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(
-        sql`update persons set email = 'owner-pending@x.com', status = 'pending' where id = ${personId}`,
+        sql`update persons set email = 'owner-pending@x.com', email_folded = 'owner-pending@x.com', status = 'pending' where id = ${personId}`,
       ),
     );
     const spy = vi.mocked(verifyPassword);
@@ -313,7 +315,7 @@ describe("the manager logins' timing equalization", () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(
-        sql`update persons set email = 'owner-pending-waits@x.com', status = 'pending' where id = ${personId}`,
+        sql`update persons set email = 'owner-pending-waits@x.com', email_folded = 'owner-pending-waits@x.com', status = 'pending' where id = ${personId}`,
       ),
     );
     await refusalWaitsForTheKdf(byEmail("owner-pending-waits@x.com"));
@@ -321,7 +323,9 @@ describe("the manager logins' timing equalization", () => {
   it("waits for the KDF before refusing an account with no password", async () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
-      tx.execute(sql`update persons set email = 'owner-nopw-waits@x.com' where id = ${personId}`),
+      tx.execute(
+        sql`update persons set email = 'owner-nopw-waits@x.com', email_folded = 'owner-nopw-waits@x.com' where id = ${personId}`,
+      ),
     );
     await refusalWaitsForTheKdf(byEmail("owner-nopw-waits@x.com"));
   });

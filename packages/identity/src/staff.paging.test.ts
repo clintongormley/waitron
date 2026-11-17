@@ -1,3 +1,4 @@
+import { withFoldedPersonKeys } from "@waitron/db";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -38,19 +39,21 @@ it("pages the complete ordered roster, clamps a shrinking page, and searches bey
     await insertInChunks(
       tx,
       persons,
-      ids.map((id, i) => ({
-        id,
-        displayName: `Page ${i + 1}`,
-        firstNames: i === 100 ? "Needle" : "Cohort",
-        email: i === 100 ? "beyond-page@example.test" : `page-${i}@example.test`,
-        telephone: i === 100 ? "555 999" : null,
-        status:
-          i === 99
-            ? ("pending" as const)
-            : i === 100
-              ? ("suspended" as const)
-              : ("active" as const),
-      })),
+      withFoldedPersonKeys(
+        ids.map((id, i) => ({
+          id,
+          displayName: `Page ${i + 1}`,
+          firstNames: i === 100 ? "Needle" : "Cohort",
+          email: i === 100 ? "beyond-page@example.test" : `page-${i}@example.test`,
+          telephone: i === 100 ? "555 999" : null,
+          status:
+            i === 99
+              ? ("pending" as const)
+              : i === 100
+                ? ("suspended" as const)
+                : ("active" as const),
+        })),
+      ),
     );
     await insertInChunks(
       tx,

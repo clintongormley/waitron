@@ -2,7 +2,8 @@ import "./errors.js";
 import { and, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   recordActivity,
-  indexViolated,
+  refusalOn,
+  UNIQUE_VIOLATION,
   isUniqueViolation,
   nowIso,
   liveDisplayNameKey,
@@ -62,12 +63,10 @@ const settleId = (value: string) => value.toLowerCase();
 
 /**
  * Translate a collision on the login-email index into `person.email_taken`, and re-throw anything
- * else untouched, a unique violation on another `persons` key included. The index is asked for by
- * name because that is all the engine reports for an index over an expression
- * (`person-constraints.ts`). Exported for staff.test.ts, not from the package barrel.
+ * else untouched, a unique violation on another `persons` key included. Exported for staff.test.ts, not from the package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
-  if (indexViolated(err, PERSONS_EMAIL)) {
+  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
     throw new AppError("person.email_taken", { email });
   }
   throw err;
@@ -82,11 +81,12 @@ export function asPersonUniqueViolation(
   err: unknown,
   input: { email?: string; displayName: string },
 ): never {
-  if (indexViolated(err, PERSONS_LIVE_DISPLAY_NAME)) {
+  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_LIVE_DISPLAY_NAME)) {
     throw new AppError("person.display_name_taken", { displayName: input.displayName });
   }
   if (
-    (indexViolated(err, PERSONS_EMAIL) || indexViolated(err, PERSONS_PENDING_EMAIL)) &&
+    (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL) ||
+      refusalOn(err, UNIQUE_VIOLATION, PERSONS_PENDING_EMAIL)) &&
     input.email !== undefined
   ) {
     throw new AppError("person.email_taken", { email: input.email });
@@ -107,7 +107,7 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** The predicate reads `liveDisplayNameKey()`, the expression `persons_tenant_live_display_name_uq`
+/** The predicate reads `liveDisplayNameKey()`, the expression `persons_live_display_name_uq`
  * is declared over (`packages/db/src/schema/identity/persons.ts`), so this pre-check and the index
  * cannot disagree about which names collide. */
 export async function assertDisplayNameAvailable(
@@ -508,7 +508,7 @@ export async function invitePerson(
     // Any unique violation off the email index is read as the display name: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
-    if (isUniqueViolation(error) && !indexViolated(error, PERSONS_EMAIL)) {
+    if (isUniqueViolation(error) && !refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(error, email);

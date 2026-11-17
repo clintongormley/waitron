@@ -388,7 +388,7 @@ describe("identity offline backup owner", () => {
   it.each([
     ["staff_roles", "name='Changed role'"],
     ["staff_roles", "hidden_at='2026-11-12T12:00:00.000Z'"],
-    ["persons", "display_name='Changed'"],
+    ["persons", "display_name='Changed', display_name_folded = 'changed'"],
     ["sign_in_challenges", "expires_at='2026-10-21T00:00:00.000Z' where kind='totp_enrolment'"],
     ["account_actions", "code_attempts=3"],
     ["webauthn_credentials", "counter=43"],

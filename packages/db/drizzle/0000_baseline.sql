@@ -1766,7 +1766,7 @@ CREATE TABLE `person_staff_roles` (
 CREATE TABLE `persons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`display_name` text NOT NULL,
-	`display_name_folded` text,
+	`display_name_folded` text NOT NULL,
 	`first_names` text,
 	`last_names` text,
 	`telephone` text,
@@ -1783,6 +1783,8 @@ CREATE TABLE `persons` (
 	`google_subject` text,
 	`status` text DEFAULT 'active' NOT NULL,
 	`created_at` text NOT NULL,
+	CONSTRAINT "persons_email_folded_ck" CHECK(("persons"."email" is null) = ("persons"."email_folded" is null)),
+	CONSTRAINT "persons_pending_email_folded_ck" CHECK(("persons"."pending_email" is null) = ("persons"."pending_email_folded" is null)),
 	CONSTRAINT "persons_display_name_ck" CHECK(length("persons"."display_name") > 0),
 	CONSTRAINT "persons_first_names_ck" CHECK("persons"."first_names" is null or length("persons"."first_names") > 0),
 	CONSTRAINT "persons_last_names_ck" CHECK("persons"."last_names" is null or length("persons"."last_names") > 0),
@@ -1795,10 +1797,10 @@ CREATE TABLE `persons` (
 	CONSTRAINT "persons_status_ck" CHECK("persons"."status" in ('pending', 'active', 'suspended'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `persons_tenant_email_uq` ON `persons` (case when "email_folded" is null then lower("email") else "email_folded" end) WHERE "persons"."email" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `persons_tenant_live_display_name_uq` ON `persons` (case when "display_name_folded" is null then lower(trim("display_name")) else "display_name_folded" end) WHERE "persons"."status" <> 'suspended';--> statement-breakpoint
-CREATE UNIQUE INDEX `persons_tenant_google_subject_uq` ON `persons` (`google_subject`) WHERE "persons"."google_subject" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `persons_tenant_pending_email_uq` ON `persons` (case when "pending_email_folded" is null then lower("pending_email") else "pending_email_folded" end) WHERE "persons"."pending_email" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `persons_email_uq` ON `persons` (`email_folded`) WHERE "persons"."email_folded" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `persons_live_display_name_uq` ON `persons` (`display_name_folded`) WHERE "persons"."status" <> 'suspended';--> statement-breakpoint
+CREATE UNIQUE INDEX `persons_google_subject_uq` ON `persons` (`google_subject`) WHERE "persons"."google_subject" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `persons_pending_email_uq` ON `persons` (`pending_email_folded`) WHERE "persons"."pending_email_folded" is not null;--> statement-breakpoint
 CREATE TABLE `recovery_codes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

@@ -560,7 +560,10 @@ describe("compareFinalCopy", () => {
   describe("the digest and the size", () => {
     it("one row written after capture is refused", async () => {
       const r = await rig();
-      alter(r.path, `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+      alter(
+        r.path,
+        `update persons set display_name = 'Late', display_name_folded = 'late' where id = '${r.authorisedBy}'`,
+      );
       expect(await r.compareRow()).toEqual(refused("handover.copy_mismatch"));
     });
 
@@ -868,7 +871,7 @@ describe("compareFinalCopy", () => {
 
   describe("a file kept between tries", () => {
     const LATE = (r: Awaited<ReturnType<typeof rig>>) =>
-      `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`;
+      `update persons set display_name = 'Late', display_name_folded = 'late' where id = '${r.authorisedBy}'`;
 
     const FORGED_AMOUNT = (r: Awaited<ReturnType<typeof rig>>) =>
       `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`;
@@ -1653,7 +1656,10 @@ describe("the spare's duty runs the real comparison", () => {
     const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
       const answer = await boxDownload(...args);
       if (late) {
-        alter(args[2], `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+        alter(
+          args[2],
+          `update persons set display_name = 'Late', display_name_folded = 'late' where id = '${r.authorisedBy}'`,
+        );
       }
       return answer;
     });
@@ -1787,7 +1793,10 @@ describe("the spare's duty runs the real comparison", () => {
       const answer = await boxDownload(...args);
       if (late) {
         late = false;
-        alter(args[2], `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+        alter(
+          args[2],
+          `update persons set display_name = 'Late', display_name_folded = 'late' where id = '${r.authorisedBy}'`,
+        );
       }
       return answer;
     });

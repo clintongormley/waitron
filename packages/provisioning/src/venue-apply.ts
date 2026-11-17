@@ -242,8 +242,6 @@ export async function applyVenue(
                   pinHash: action.pinHash,
                   passwordHash: action.passwordHash,
                   email: action.email,
-                  // Without the folded twin, login falls back on an ASCII-only key and an address
-                  // with a non-ASCII character stops matching at sign-in.
                   emailFolded: foldForUniqueness(action.email),
                   displayNameFolded: foldForUniqueness(action.displayName),
                 }),

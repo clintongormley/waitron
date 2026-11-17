@@ -218,7 +218,9 @@ it("stops following, stages the followed copy, signs in against it and restarts"
 
 it("a person enrolled after joining can take the copy", async () => {
   const followed = new DatabaseSync(followedVenue());
-  followed.exec(`update persons set email = 'late@venue.test' where email = '${ADMIN_EMAIL}'`);
+  followed.exec(
+    `update persons set email = 'late@venue.test', email_folded = 'late@venue.test' where email = '${ADMIN_EMAIL}'`,
+  );
   followed.close();
   const s = service();
   expect((await s.take({ email: "late@venue.test", password: PASSWORD })).body).toEqual({

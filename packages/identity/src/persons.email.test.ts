@@ -1,8 +1,3 @@
-/**
- * `persons_tenant_email_uq`. The engine reports a collision on an index over an expression by the
- * index's own name and no columns, so the case below identifies it by that name. It does NOT check
- * identity's own translators; `person-constraints.db.test.ts` does.
- */
 import { seedPersons } from "../test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -37,7 +32,7 @@ function driverRefusal(error: unknown): object {
   throw new Error("no driver refusal in the cause chain", { cause: error });
 }
 
-describe("persons.email unique index (persons_tenant_email_uq)", () => {
+describe("persons.email unique index (persons_email_uq)", () => {
   it("rejects a second person with the same email, case-insensitively", async () => {
     await seedTaxpayer(suite.db);
     await insertPerson(suite.db, "A", "Owner@x.com");
@@ -46,7 +41,9 @@ describe("persons.email unique index (persons_tenant_email_uq)", () => {
 
     expect(isUniqueViolation(error)).toBe(true);
     // THIS index, not some other unique constraint.
-    expect(driverRefusal(error)).toEqual(refusalError({ uniqueIndex: "persons_tenant_email_uq" }));
+    expect(driverRefusal(error)).toEqual(
+      refusalError({ unique: { table: "persons", columns: ["email_folded"] } }),
+    );
   });
 
   it("allows multiple persons with NULL email", async () => {
