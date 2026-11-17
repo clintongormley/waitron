@@ -5182,8 +5182,8 @@ control still sends before the wait. Run them with
 
 **2026-11-12, manual activation:** [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades) now invoke the contained data checker and a separate copy-sale process through the retained host runtime. The 3a note below records the earlier dormant slice.
 
-**2026-11-17 (A1425 part 3, PR 1):** `assertVenueCopyNotAhead` (`apps/server/src/spare-copy.ts`)
-runs the check over a copy before it is placed, for the spare's `checkCopy` (which already called
+**2026-11-17 (A1425 part 3, PR 1):** `assertCopyNotAhead` (`apps/server/src/spare-copy.ts`) runs
+the check on an open read-only handle to a copy, for the spare's `checkCopy` (which already called
 `assertNotAhead`) and for `checkPlacedEmergencyCopy`. Neither migrates the copy.
 
 **2026-11-12 (A950 3a):** the dormant upgrade data checker is a third caller. It shares

@@ -59,14 +59,14 @@ folder and this process's environment. It fetches nothing and holds no bucket cr
 It holds the venue folder's lock throughout (`lockVenueDatabase`), then:
 
 1. **Checks the binding's shape:** lowercase UUID v4 ids, `sourceNodeId ≠ copyNodeId`,
-   `copyOperationId` distinct from both, instants in ISO UTC with milliseconds, `expiresAt` exactly 30
+   `copyOperationId` distinct from both, the generation's name names `sourceNodeId`, instants in ISO UTC with milliseconds, `expiresAt` exactly 30
    minutes after `startedAt` and not yet passed by this machine's clock. The two installation ids are
    recorded, not checked (above).
 2. **Checks the placed file without opening it for writing:** no `-wal` or `-journal` beside it (the hash
    would not cover it, and an immutable open ignores it); no `node.db` beside it unless it holds this binding's record (so the source's `node.dump`
    is never adopted); SHA-256 equals `databaseSha256`; integrity; schema not ahead of this software;
    `deployment.environment` equals the binding's and this process's; the settings' Cloud venue id and
-   stream id match; the generation's name names `sourceNodeId`; `sourceNodeId` has a `nodes` row and the
+   stream id match; `sourceNodeId` has a `nodes` row and the
    held chart names it `serving-primary`; `copyNodeId` has no `nodes` row; every module's handover chain
    check passes. The chart is checked against keys in the same file: consistency, not authenticity,
    which rests on Cloud's hash of the stream it chose.
@@ -102,9 +102,8 @@ Each leaves `main` green: nothing calls the function until A1188 part 3; the ref
 naming its `field`). First failing test: `emergency-copy-check.test.ts` "accepts a copy whose binding
 matches", then one refusal per check beside a control differing only in that field, a `node.db` already
 beside the file (a stand-in for the source's `node.dump`) refused, and the file's bytes unchanged
-afterwards. The integrity check, the read-only reader and the not-ahead check each gained an opt-in
-immutable open, so checking a WAL-mode file leaves no `-wal` or `-shm` beside it. Estimated about 190
-production, 340 test lines; built, about 345 and 605.
+afterwards. Its opens are immutable, so checking a WAL-mode file leaves no `-wal` or `-shm` beside it.
+About 190 production, 340 test lines.
 
 **PR 2: the copy's own `node.db`.** `emergency-copy-placement.ts` (steps 3–4, the reader). First failing
 test: `emergency-copy-placement.test.ts` "a placed copy has its own key and the venue file is byte for
