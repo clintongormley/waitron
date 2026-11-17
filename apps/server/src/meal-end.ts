@@ -72,9 +72,6 @@ export async function endMeal(
   operatorId: string,
   device: DeviceBinding | null,
 ): Promise<EndedMeal> {
-  await requireEconomicWrite(tx, cfg, deps.admission);
-  const reading = deps.clock.now();
-  await deps.backend.refuseUntilRecordable(tx, reading);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -82,6 +79,9 @@ export async function endMeal(
     "party.end_meal",
     { partyId, billId: req.billId, printAnyway: req.printAnyway, operatorId },
     async () => {
+      await requireEconomicWrite(tx, cfg, deps.admission);
+      const reading = deps.clock.now();
+      await deps.backend.refuseUntilRecordable(tx, reading);
       const revision = await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
       const bill = (await readBillsOfParties(tx, [partyId]))
         .get(partyId)!

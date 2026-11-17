@@ -32,6 +32,8 @@ import {
   seedSessionDevice,
   sessionCookieForTest,
 } from "./testing/session-device.js";
+import { startClockState } from "./start-clock-check.js";
+import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { markServed } from "./working-order.js";
 import "./errors.js";
 
@@ -205,6 +207,42 @@ describe("POST /api/parties/:id/end-meal", () => {
     expect(first.status).toBe(200);
     expect(second).toEqual(first);
     expect(await jobsOf(first.json.saleId as string)).toHaveLength(1);
+  });
+
+  it("answers a resend while the start waits for its time as it answered the first, and refuses a new one", async () => {
+    const party = await served("Red wine bottle");
+    const request = await body(party);
+    const path = `/api/parties/${party.partyId}/end-meal`;
+    const first = await send(venue.app, firstCookie, "POST", path, request);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const holds = startClockGateHolds(
+      startClockState(),
+      () => true,
+      () => false,
+    );
+    const waiting = venue.appWith({
+      backend: gateSeatOnStartClock(venue.backend, holds),
+      clockUnconfirmed: holds,
+    });
+
+    expect(await send(waiting, firstCookie, "POST", path, request)).toEqual(first);
+
+    const other = await served("Red wine bottle");
+    const revision = revisionOf(other.partyId);
+    expect(
+      await send(
+        waiting,
+        firstCookie,
+        "POST",
+        `/api/parties/${other.partyId}/end-meal`,
+        await body(other),
+      ),
+    ).toEqual({
+      status: 409,
+      json: { code: "clock.unconfirmed", params: {} },
+    });
+    expect(fiscalRecordCount(venue, other.tabId)).toBe(0);
+    await nothingIssued(other, revision);
   });
 
   it("refuses a second Print the bill on the same bill as 409 meal_end.already_issued", async () => {
