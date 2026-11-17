@@ -457,6 +457,33 @@ describe("Print the bill", () => {
       },
     );
   });
+
+  it("refuses a bill already paid in full that has no ticket", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await serveAll(party);
+    await inTx(venue, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: party.tabId,
+        submissionId: randomUUID(),
+        fingerprint: "paid",
+        kind: "contribution",
+        method: "cash",
+        applied: 3000,
+        tendered: 3000,
+        tip: 0,
+        state: "received",
+        receivedAt: new Date().toISOString(),
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+      }),
+    );
+
+    await refused(end(party), party.tabId, {
+      code: "bill.nothing_outstanding",
+      params: { workingOrderId: party.tabId },
+    });
+  });
 });
 
 describe("a Counter bill presented with no ticket, moved to the table", () => {
@@ -603,34 +630,5 @@ describe("a Counter bill presented with no ticket, moved to the table", () => {
     expect(during.status).toBe("fulfilled");
     expect(started.status).toBe(200);
     expect(await salesOf(id)).toEqual([]);
-  });
-});
-
-// No payment route was found that leaves this state (a payment is refused while a refund is
-// pending), so the received money is written directly.
-it("refuses a bill already paid in full that has no ticket", async () => {
-  const party = await seatedWith(venue, "Red wine bottle");
-  await serveAll(party);
-  await inTx(venue, (tx) =>
-    tx.insert(billPayments).values({
-      workingOrderId: party.tabId,
-      submissionId: randomUUID(),
-      fingerprint: "paid",
-      kind: "contribution",
-      method: "cash",
-      applied: 3000,
-      tendered: 3000,
-      tip: 0,
-      state: "received",
-      receivedAt: new Date().toISOString(),
-      requestedBy: venue.operatorId,
-      source: "device",
-      deviceId: venue.deviceId,
-    }),
-  );
-
-  await refused(end(party), party.tabId, {
-    code: "unpaid_departure.nothing_outstanding",
-    params: { partyId: party.partyId },
   });
 });
