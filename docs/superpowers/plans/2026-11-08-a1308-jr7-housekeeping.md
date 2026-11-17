@@ -12,6 +12,15 @@ close time. If the orders slice adds a bill close time, that branch switches to 
 stays off until the latest possible till retry is confirmed (M10). These corrections supersede
 the corresponding instructions below; no owner approval of this slice's design is claimed.
 
+**2026-11-17 review corrections, cleared by the watcher at 17:29:** the new time-based steps
+wait for a confirmed clock, just as activity cleanup does; print and photo cleanup keep running.
+Skipped steps wait for the next daily pass. Each new step resumes from a row cursor across kept
+rows too, so a batch scans at most its row limit. Its `deleteBatch` accepts the previous cursor
+and returns `{ cursor, scanned, deleted }`; the loop advances by scanned rows rather than deletes.
+The regression fixture puts 200,000 retained command answers before 50,000 deletable ones and
+checks the scanned-row count. The command step remains disabled pending M10. This supersedes
+the numeric return interface and the restart-from-the-top loop below.
+
 **2026-11-14 update:** [A1532](2026-11-14-a1532-print-payload-retention.md) supplies the
 `housekeeping` job with its one-week print-payload step. Add this plan's remaining steps to that
 seat; the earlier “print job payloads” exclusion below is superseded by the owner's chosen period.

@@ -77,6 +77,103 @@ function tidy(overrides: Partial<Parameters<typeof housekeepingJob>[0]> = {}) {
 const pass = (duty = tidy(), signal = new AbortController().signal) => duty.pass({ now, signal });
 
 describe("daily housekeeping steps", () => {
+  it.each([-2, 2])(
+    "keeps live sign-ins during an unconfirmed clock %i hours away",
+    async (hours) => {
+      const personId = await seedPerson(suite.db);
+      await suite.db
+        .insert(dashboardSessions)
+        .values({ id: "live", personId, tokenHash: "a".repeat(64), lastSeenAt: now.toISOString() });
+      await suite.db.insert(signInChallenges).values({
+        id: "live",
+        kind: "passkey_login",
+        challenge: "live",
+        createdAt: now.toISOString(),
+        expiresAt: "2026-11-14T04:05:00.000Z",
+      });
+      await suite.db
+        .insert(mediaBlobs)
+        .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
+      let held = true;
+      let at = new Date(now.getTime() + hours * 3600000);
+      const duty = tidy({ clockUnconfirmed: () => held, now: () => at });
+      await duty.pass({ now: at, signal: new AbortController().signal });
+      expect((await suite.db.select().from(dashboardSessions)).map((row) => row.id)).toEqual([
+        "live",
+      ]);
+      expect((await suite.db.select().from(signInChallenges)).map((row) => row.id)).toEqual([
+        "live",
+      ]);
+      expect(await suite.db.select().from(mediaBlobs)).toEqual([]);
+      held = false;
+      at = new Date("2026-11-15T04:00:00.000Z");
+      await duty.pass({ now: at, signal: new AbortController().signal });
+      expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
+      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+    },
+  );
+
+  it("scans retained command answers once before fifty thousand deletable answers", async () => {
+    const began = performance.now();
+    const diagnostic = (stage: string, data = {}) =>
+      process.stderr.write(
+        JSON.stringify({ stage, elapsedMs: performance.now() - began, ...data }) + "\n",
+      );
+    diagnostic("command-fixture-start");
+    const personId = await seedPerson(suite.db);
+    const [party] = await suite.db
+      .insert(parties)
+      .values({ openedBy: personId, state: "closed", closedAt: old })
+      .returning();
+    await insertInChunks(
+      suite.db,
+      serviceCommands,
+      Array.from({ length: 250000 }, (_, index) => ({
+        id: String(index),
+        scopeKind: "party" as const,
+        scopeId: index < 200000 ? "missing" : party!.id,
+        submissionId: String(index),
+        kind: "finish",
+        fingerprint: "same",
+        result: {},
+      })),
+    );
+    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands")!;
+    diagnostic("command-fixture-seeded");
+    let scanned = 0,
+      largest = 0;
+    const controller = new AbortController();
+    await pass(
+      tidy({
+        steps: [
+          {
+            ...step,
+            enabled: true,
+            async deleteBatch(...args) {
+              const result = await step.deleteBatch(...args);
+              scanned += result.scanned;
+              largest = Math.max(largest, result.scanned);
+              if (scanned % 50000 === 0)
+                diagnostic("command-prune-progress", { scanned, cursor: result.cursor });
+              if (scanned > 250000) controller.abort();
+              return result;
+            },
+          },
+        ],
+      }),
+      controller.signal,
+    );
+    diagnostic("command-prune-complete", { scanned, largest });
+    expect(scanned).toBe(250000);
+    expect(largest).toBe(500);
+    expect(
+      suite.db.get(sql`select count(*) n from service_commands where scope_id = 'missing'`),
+    ).toEqual({ n: 200000 });
+    expect(
+      suite.db.get(sql`select count(*) n from service_commands where scope_id = ${party!.id}`),
+    ).toEqual({ n: 0 });
+  }, 120000);
+
   it("keeps photo garbage on a secondary through the runner's startup and stop", async () => {
     await suite.db
       .insert(mediaBlobs)
@@ -101,13 +198,9 @@ describe("daily housekeeping steps", () => {
     const started = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    await suite.db.insert(signInChallenges).values({
-      id: "keep",
-      kind: "passkey_login",
-      challenge: "expired",
-      createdAt: old,
-      expiresAt: now.toISOString(),
-    });
+    await suite.db
+      .insert(mediaBlobs)
+      .values({ hash: "a".repeat(64), format: "jpg", bytes: new Uint8Array([1]) });
     const holding = withTransaction(suite.db, async () => {
       entered();
       await gate;
@@ -127,7 +220,13 @@ describe("daily housekeeping steps", () => {
       });
     let cleaning: Promise<unknown> | undefined;
     try {
-      cleaning = pass(tidy({ clockUnconfirmed: () => true }), controller.signal);
+      cleaning = pass(
+        tidy({
+          clockUnconfirmed: () => true,
+          steps: [HOUSEKEEPING_STEPS.find((step) => step.name === "media_blobs")!],
+        }),
+        controller.signal,
+      );
       await queued;
       controller.abort();
     } finally {
@@ -136,7 +235,9 @@ describe("daily housekeeping steps", () => {
       await cleaning;
       lock.mockRestore();
     }
-    expect((await suite.db.select().from(signInChallenges)).map((row) => row.id)).toEqual(["keep"]);
+    expect((await suite.db.select().from(mediaBlobs)).map((row) => row.hash)).toEqual([
+      "a".repeat(64),
+    ]);
   });
   it("commits short batches separately, yielding to a stop before another batch", async () => {
     const step = HOUSEKEEPING_STEPS.find((step) => step.name === "sign_in_challenges")!;
@@ -153,14 +254,16 @@ describe("daily housekeeping steps", () => {
     );
     const controller = new AbortController();
     const stop = turn().then(() => controller.abort());
-    await pass(tidy({ steps: [step] }), controller.signal);
-    await stop;
-    expect(await suite.db.select().from(signInChallenges)).toHaveLength(501);
     const locks = vi.spyOn(suite.db, "withWriteLock");
     try {
-      await pass(tidy({ steps: [step], clockUnconfirmed: () => true }));
-      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+      await pass(tidy({ steps: [step] }), controller.signal);
+      await stop;
+      expect(await suite.db.select().from(signInChallenges)).toHaveLength(501);
       expect(locks).toHaveBeenCalledTimes(2);
+      locks.mockClear();
+      await pass(tidy({ steps: [step] }));
+      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+      expect(locks).toHaveBeenCalledTimes(3);
     } finally {
       locks.mockRestore();
     }
@@ -186,7 +289,8 @@ describe("daily housekeeping steps", () => {
           name: "media_blobs",
           enabled: true,
           async deleteBatch(tx) {
-            return (await tx.delete(mediaBlobs).returning()).length;
+            const deleted = (await tx.delete(mediaBlobs).returning()).length;
+            return { cursor: deleted, scanned: deleted, deleted };
           },
         },
       ],
@@ -332,8 +436,12 @@ describe("daily housekeeping steps", () => {
     }
     const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands");
     expect(step).toBeDefined();
-    expect(await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 1))).toBe(1);
-    expect(await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 5))).toBe(1);
+    const first = await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 1));
+    expect(first.deleted).toBe(1);
+    expect(
+      (await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 5, first.cursor)))
+        .deleted,
+    ).toBe(1);
     expect((await suite.db.select().from(serviceCommands)).map((row) => row.id).sort()).toEqual([
       "bill-abandoned",
       "bill-boundary",
