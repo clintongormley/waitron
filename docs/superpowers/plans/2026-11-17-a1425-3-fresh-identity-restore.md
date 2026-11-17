@@ -1,7 +1,8 @@
 # A1425 part 3, cut to Cloud's emergency copy: a placed copy under a fresh machine identity
 
 **Status:** plan, written 2026-11-17 by lane L (Claude); one fresh-context review ("Ready after fixes"),
-its nine findings folded in the same day. Not cleared. FISCAL lane: the owner
+its nine findings folded in the same day. Cleared by the watcher 2026-11-17 02:31 (`~/waitron-campaign-l/questions.md`,
+"A1425-3: build PR 1 now; PRs 2–3 on decision 5 (a)"): decision 5 is (a). FISCAL lane: the owner
 lands it. Ask: watcher 2026-11-16 02:06, recorded at `~/waitron-campaign-l/queue.md:109-110` and
 `~/waitron-campaign-shared/watcher-handoff.md:3116`. Unless a line says "ran", every receipt below was
 read at `main` 1de957e795, not run.
