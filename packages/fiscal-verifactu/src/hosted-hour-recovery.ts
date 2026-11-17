@@ -20,11 +20,7 @@ import {
 import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
-import {
-  chosenHourBoot,
-  chosenHourIssuedAtMs,
-  conflictPreparationStatus,
-} from "./hour-selection.js";
+import { chosenHourIssuedAtMs, conflictPreparationStatus } from "./hour-selection.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -79,11 +75,7 @@ function createHostedHourRecovery(
       };
     },
   };
-  const standing = bootStanding(host, wall, monotonicNow);
-  const carried = (
-    state: Parameters<typeof chosenHourBoot>[0],
-    binding: ModuleOperationInput["binding"],
-  ) => standing(chosenHourBoot(state, binding), 0, 0);
+  const { standing, chosen } = bootStanding(host, wall, monotonicNow);
   const confirmed = () => {
     const kept = host.startClockConfirmation?.();
     if (kept == null || kept.reading.result !== "usable") return undefined;
@@ -191,7 +183,7 @@ function createHostedHourRecovery(
           current.contextKey,
           null,
           { onBox: true },
-          carried(state, held.binding) ?? confirmed(),
+          () => chosen(state, held.binding) ?? confirmed(),
         );
         operatorFor(held);
       });

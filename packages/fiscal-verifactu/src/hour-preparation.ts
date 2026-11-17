@@ -10,7 +10,6 @@ import { AppError } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import {
-  chosenHourBoot,
   createHourSelection,
   type HourSelectionFacts,
   type HourSelectionStore,
@@ -85,6 +84,11 @@ export function createHourPreparation(
       binding: ModuleOperationInput["binding"],
       comparisonId?: string,
     ) => Promise<HourSelectionFacts>;
+    /** Takes activation's own clock reading before `read` looks at the held ones. */
+    refreshClock?: (
+      binding: ModuleOperationInput["binding"],
+      state: Parameters<Parameters<HourSelectionStore>[1]>[0],
+    ) => Promise<void>;
   },
 ) {
   const engine = createHourSelection(options);
@@ -98,6 +102,7 @@ export function createHourPreparation(
         return refuse("malformed_allocation");
       }
       return options.withState(held.binding, async (state) => {
+        await options.refreshClock?.(held.binding, state);
         const facts = await options.read(held.binding);
         const selector = createHourSelection({
           ...options,
@@ -141,6 +146,7 @@ export function createHourPreparation(
 export function createHostedHourPreparation(
   host: ModuleOperationHost,
   options: {
+    /** Replaces the held readings, so activation takes no clock reading of its own. */
     readClock?(context: InitialSetupContext): Promise<{ clock: HourClockDecision }>;
     wall?(): number;
     monotonicNow?(): number;
@@ -154,11 +160,18 @@ export function createHostedHourPreparation(
     monotonic: monotonicNow,
     timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
   });
-  const standing = bootStanding(host, options.wall ?? Date.now, monotonicNow);
+  const kept = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
     monotonicNow,
     readBoot: () => selectionBoot(host),
+    refreshClock: async (binding, state) => {
+      if (options.readClock !== undefined) return;
+      const { contextKey } = await host.readSetupFacts!(binding);
+      await clocks.compare(contextKey, null, { onBox: true }, () =>
+        kept.chosen(state, binding, true),
+      );
+    },
     read: async (binding, comparisonId) => {
       const facts = await host.readSetupFacts!(binding);
       const clock =
@@ -187,22 +200,6 @@ export function createHostedHourPreparation(
     );
   return {
     ...preparation,
-    async prepare<T>(
-      operation: ModuleOperationInput,
-      run: (prepared: ModuleOperationInput) => Promise<T>,
-    ): Promise<T> {
-      // The series step's reading is usually over 30 seconds old by Provision.
-      if (options.readClock === undefined)
-        await withFacts(operation.binding, (facts, state) =>
-          clocks.compare(
-            facts.contextKey,
-            null,
-            { onBox: true },
-            standing(chosenHourBoot(state, operation.binding), 0, 0),
-          ),
-        );
-      return preparation.prepare(operation, run);
-    },
     clockChallenge(binding: ModuleOperationInput["binding"]) {
       return withFacts(binding, (facts) => clocks.challenge(facts.contextKey));
     },

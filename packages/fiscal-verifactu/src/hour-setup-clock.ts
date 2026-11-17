@@ -10,13 +10,14 @@ import { AppError } from "@waitron/shared";
 import {
   AGREEMENT_MS,
   canSelectHour,
+  STEP_MS,
   compareHourClocks,
   type HourClockDecision,
   type HourClockObservation,
 } from "./hour-clock.js";
 import { observeTimeServiceHourClock } from "./hour-clock-time-service.js";
 import { readHourRelease } from "./hour-release.js";
-import { chosenHourIssuedAtMs } from "./hour-selection.js";
+import { chosenHourBoot, chosenHourIssuedAtMs, keptInstantMs } from "./hour-selection.js";
 import "./errors.js";
 
 interface ClockDependencies {
@@ -71,40 +72,29 @@ export async function setBoxClockFrom(
   if (host.setBoxClock === undefined) return { status: "refused", reason: "host_unavailable" };
   return host.setBoxClock({ ...binding }, structuredClone(measured.request));
 }
-/** The box's boot id and uptime for a select to keep with its hour, when the host can read them. */
 export function selectionBoot(host: ModuleOperationHost) {
   const boot = host.readBoot?.();
   return boot === undefined || boot.id === null || !(Number.isFinite(boot.ms) && boot.ms >= 0)
     ? undefined
     : { bootId: boot.id, uptimeMs: boot.ms };
 }
-/** A time kept with `kept`'s boot reading, still standing while the box ran on unstepped on the
- * same boot: `offsetMs` from the box's clock, give or take `uncertaintyMs`. */
 export function bootStanding(
   host: ModuleOperationHost,
   wall: () => number,
   monotonicNow: () => number,
 ) {
-  return (
+  /** A time kept with `kept`'s boot reading, still standing while the box ran on unstepped on
+   * the same boot: `offsetMs` from the box's clock, give or take `uncertaintyMs`. */
+  const standing = (
     kept: { bootId: string | null; uptimeMs: number; wallMs: number } | undefined,
     offsetMs: number,
     uncertaintyMs: number,
   ): HourClockObservation | undefined => {
-    const boot = host.readBoot?.();
-    if (
-      kept === undefined ||
-      kept.bootId === null ||
-      !(Number.isFinite(kept.uptimeMs) && kept.uptimeMs >= 0) ||
-      boot === undefined ||
-      boot.id !== kept.bootId ||
-      !(Number.isFinite(boot.ms) && boot.ms >= 0)
-    )
-      return undefined;
+    const boot = selectionBoot(host);
     const wallMs = wall();
+    const instantMs = boot === undefined ? undefined : keptInstantMs(kept, boot, wallMs);
+    if (instantMs === undefined) return undefined;
     const measured = monotonicNow();
-    const instantMs = kept.wallMs + boot.ms - kept.uptimeMs;
-    // The 1-second figure `clock_corrected` uses for a stepped clock.
-    if (!(Math.abs(wallMs - instantMs) <= 1000)) return undefined;
     return {
       source: "browser",
       result: "usable",
@@ -115,6 +105,19 @@ export function bootStanding(
       monotonicStartedMs: measured,
       monotonicFinishedMs: measured,
     };
+  };
+  return {
+    standing,
+    /** The time agreed when `binding`'s hour was chosen, while it stands; with `confirmedOnly`,
+     * only a device's time the person confirmed. */
+    chosen(
+      state: Parameters<typeof chosenHourBoot>[0],
+      binding: OperationBinding,
+      confirmedOnly = false,
+    ) {
+      const kept = chosenHourBoot(state, binding);
+      return confirmedOnly && kept?.confirmed !== true ? undefined : standing(kept, 0, 0);
+    },
   };
 }
 export function createSetupHourClock(deps: ClockDependencies = {}) {
@@ -152,7 +155,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
   const current = (held: Reading, sample: ReturnType<typeof box>) => {
     const elapsed = sample.monotonicFinishedMs - held.monotonic;
     if (elapsed < 0 || elapsed > 30_000 || !Number.isFinite(elapsed)) return refuse("clock_stale");
-    if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > 1000)
+    if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > STEP_MS)
       return refuse("clock_corrected");
     return compareHourClocks([...held.observations, sample], release());
   };
@@ -203,21 +206,23 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         },
       };
     },
-    /** `carried` stands in for the browser when none was sent. */
+    /** `carried` stands in for the browser when none was sent, asked only once the time service
+     * has answered, so a step while it is read ends what it carries. */
     async compare(
       key: string,
       browser: SetupBrowserClockSample | null,
       client: SetupClockClient,
-      carried?: HourClockObservation,
+      carried?: () => HourClockObservation | undefined,
     ) {
       const state = session(key);
-      const observations: HourClockObservation[] = [
-        browser === null
-          ? (carried ?? { source: "browser", result: "unavailable", reason: "challenge" })
-          : { ...take(state, browser, client.onBox), source: "browser" },
-      ];
-      observations.push(await observeTimeServiceHourClock(timeService, { wall, monotonic }));
+      const sent: HourClockObservation | undefined =
+        browser === null ? undefined : { ...take(state, browser, client.onBox), source: "browser" };
+      const internet = await observeTimeServiceHourClock(timeService, { wall, monotonic });
       if (sessions.get(key) !== state) return refuse("clock_stale");
+      const observations: HourClockObservation[] = [
+        sent ?? carried?.() ?? { source: "browser", result: "unavailable", reason: "challenge" },
+        internet,
+      ];
       const sample = box();
       const clock = compareHourClocks([...observations, sample], release());
       const reading: Reading = {

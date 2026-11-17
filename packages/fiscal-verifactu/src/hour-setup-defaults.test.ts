@@ -191,6 +191,17 @@ async function selectAfterSettle(
   if (selected.status !== "selected") throw new Error("expected selected hour");
   return selected;
 }
+async function deviceCompare(f: ReturnType<typeof fixture>) {
+  const challenge = await f.preparation.clockChallenge(binding);
+  return f.preparation.compareClocks(
+    binding,
+    { challengeId: challenge.id, instantMs: Date.now() },
+    { onBox: false },
+  );
+}
+function timeServiceUnavailable() {
+  outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+}
 function activate(f: ReturnType<typeof fixture>, input: unknown) {
   return withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input }, (operation) =>
@@ -199,6 +210,13 @@ function activate(f: ReturnType<typeof fixture>, input: unknown) {
       ),
     ),
   );
+}
+async function expectRefusedUnwritten(activation: Promise<unknown>) {
+  await expect(activation).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
+  });
+  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(0);
 }
 it("a synchronised time service lets activation run however long after the series step", async () => {
   const f = fixture();
@@ -217,34 +235,18 @@ it.each([
 ] as const)(
   "without a time service, activation %i ms after a confirmed device reading %s",
   async (waitMs, _label, writes) => {
-    outside.internet.mockResolvedValue({
-      source: "internet",
-      result: "unavailable",
-      reason: "tls",
-    });
+    timeServiceUnavailable();
     const f = fixture();
-    const selected = await selectAfterSettle(
-      f,
-      async () => {
-        const challenge = await f.preparation.clockChallenge(binding);
-        return f.preparation.compareClocks(
-          binding,
-          { challengeId: challenge.id, instantMs: Date.now() },
-          { onBox: false },
-        );
-      },
-      true,
-    );
+    const selected = await selectAfterSettle(f, () => deviceCompare(f), true);
     vi.advanceTimersByTime(waitMs);
     if (writes) await activate(f, selected.input);
-    else
-      await expect(activate(f, selected.input)).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "second_clock_missing" },
-      });
+    else await expectRefusedUnwritten(activate(f, selected.input));
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
   },
 );
+const sameBoot = (boot: { id: string | null } = { id: "boot-1" }) => ({
+  readBoot: () => ({ id: boot.id, ms: performance.now() + 5_000_000 }),
+});
 it.each([
   ["the box ran on unchanged", "boot-1", () => {}, true],
   ["not after its clock was stepped", "boot-1", () => vi.setSystemTime(Date.now() + 5_000), false],
@@ -253,33 +255,47 @@ it.each([
 ] as const)(
   "without a time service, a confirmed device time counts two minutes later while %s",
   async (_label, bootId, change: (boot: { id: string | null }) => unknown, writes) => {
-    outside.internet.mockResolvedValue({
-      source: "internet",
-      result: "unavailable",
-      reason: "tls",
-    });
+    timeServiceUnavailable();
     const boot: { id: string | null } = { id: bootId };
-    const f = fixture({ readBoot: () => ({ id: boot.id, ms: performance.now() + 5_000_000 }) });
-    const selected = await selectAfterSettle(
-      f,
-      async () => {
-        const challenge = await f.preparation.clockChallenge(binding);
-        return f.preparation.compareClocks(
-          binding,
-          { challengeId: challenge.id, instantMs: Date.now() },
-          { onBox: false },
-        );
-      },
-      true,
-    );
+    const f = fixture(sameBoot(boot));
+    const selected = await selectAfterSettle(f, () => deviceCompare(f), true);
     vi.advanceTimersByTime(120_000);
     change(boot);
     if (writes) await activate(f, selected.input);
-    else
-      await expect(activate(f, selected.input)).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "second_clock_missing" },
-      });
+    else await expectRefusedUnwritten(activate(f, selected.input));
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
   },
 );
+it("a name the time service alone admitted is not carried to a later Provision without it", async () => {
+  const f = fixture(sameBoot());
+  const selected = await selectAfterSettle(f, () =>
+    f.preparation.compareClocks(binding, null, { onBox: true }),
+  );
+  timeServiceUnavailable();
+  vi.advanceTimersByTime(120_000);
+  await expectRefusedUnwritten(activate(f, selected.input));
+});
+it("a clock step while Provision waits for the time service ends the carried time", async () => {
+  timeServiceUnavailable();
+  const f = fixture(sameBoot());
+  const selected = await selectAfterSettle(f, () => deviceCompare(f), true);
+  vi.advanceTimersByTime(120_000);
+  outside.internet.mockImplementationOnce(async () => {
+    vi.setSystemTime(Date.now() + 5_000);
+    return { source: "internet", result: "unavailable", reason: "tls" };
+  });
+  await expectRefusedUnwritten(activate(f, selected.input));
+});
+it("a fresh confirmed choice after a clock step renews the time Provision carries", async () => {
+  timeServiceUnavailable();
+  const f = fixture(sameBoot());
+  const selected = await selectAfterSettle(f, () => deviceCompare(f), true);
+  vi.setSystemTime(Date.now() + 5_000);
+  expect(await f.select((await deviceCompare(f)).id, true)).toMatchObject({
+    status: "selected",
+    identity: selected.identity,
+  });
+  vi.advanceTimersByTime(120_000);
+  await activate(f, selected.input);
+  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+});
