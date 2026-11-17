@@ -3334,7 +3334,7 @@ describe("the roll's spacing and rule (A497)", () => {
       .map((c) => c.text ?? (c.widthDots === LOGO.widthDots ? "<LOGO>" : "<QR>"));
 
   it.each([PRINTER_58, PRINTER_80])(
-    "prints a dash row as wide as the $paperWidth roll directly above TOTAL",
+    "prints a rule across the $paperWidth roll's text width directly above TOTAL",
     (printer) => {
       const lines = images(
         formatReceipt({
@@ -3760,7 +3760,7 @@ describe("the simplified receipt's own layout (A663)", () => {
   });
 
   it.each([PRINTER_58, PRINTER_80])(
-    "prints neither VAT line on a zero-total sale ($paperWidth)",
+    "prints no tax table on a zero-total sale ($paperWidth)",
     (printer) => {
       const lines = squeezed(
         {
@@ -3773,7 +3773,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         printer,
       );
       expect(lines).toContain("TOTAL 0,00 €");
-      expect(lines.some((line) => /^(Base|IVA)/.test(line))).toBe(false);
+      expect(lines.some((line) => /^(Tipo|Base|IVA)\b/u.test(line))).toBe(false);
     },
   );
 
@@ -3819,7 +3819,7 @@ describe("the simplified receipt's own layout (A663)", () => {
   });
 });
 
-describe("a rule between TOTAL and the VAT lines on a simplified receipt (owner, 2026-11-05)", () => {
+describe("a rule between TOTAL and the tax table on a simplified receipt (owner, 2026-11-05)", () => {
   it.each([PRINTER_58, PRINTER_80])(
     "prints it on a simplified receipt on $paperWidth",
     (printer) => {

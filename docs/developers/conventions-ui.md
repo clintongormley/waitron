@@ -1640,11 +1640,13 @@ The print preview shows the job's own pictures, and the text it reports is read 
 (`apps/server/src/print-job-preview.ts`, through `readRasterText` in
 `packages/printing/src/raster-text.ts`, which matches each 12-dot cell against the glyph table and
 its bold form, and reads a double-size line from one dot of each 2×2 block, keeping that reading only
-when redrawing it gives the same picture). A
+when redrawing it gives the same picture; a receipt's dividing line, a bar 2 dots thick across the
+text grid (`drawRuleBand`), reads as a dash in every column). A
 test reads a payload's printed text the same way, with `printedLines`
 (`apps/server/src/testing/decode-ticket.ts`), which fails the test when the preview stops at an
 unsupported command or is cut short instead of hiding the rest of the ticket. Characters drawn
-identically read back as one of them — a no-break space reads as a space — so a test cannot tell
+identically read back as one of them — a no-break space reads as a space, and a line of em dashes as wide as the text grid, whose
+glyphs join into the rule's bar, reads as a rule's dashes — so a test cannot tell
 those apart through the read-back. Built in #367; the QR size rule and the calibration wizard in
 #689; text drawn as pictures, and the wizard's character step removed, in C107 (2026-10-01).
 

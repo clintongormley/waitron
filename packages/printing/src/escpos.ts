@@ -54,7 +54,7 @@ export class EscBuilder {
   private readonly parts: number[] = [];
   private alignment: Alignment = "left";
   private drawn = 0;
-  /** Undefined for a builder made without a setting, which can send anything but text. */
+  /** Undefined for a builder made without a setting, which can send anything but text and rules. */
   readonly grid: TextGrid | undefined;
 
   constructor(setting?: EscSetting) {
