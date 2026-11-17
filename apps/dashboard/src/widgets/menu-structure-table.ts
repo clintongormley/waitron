@@ -141,6 +141,7 @@ export class MenuStructureTable extends LitElement {
     css`
       :host {
         display: block;
+        --structure-cell-space: var(--wt-space-3);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -214,15 +215,10 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(root-label) {
         position: relative;
       }
-      wt-data-table[wrap-to-fit] {
-        overflow-wrap: anywhere;
-      }
-      wt-data-table[wrap-to-fit]::part(kind),
-      wt-data-table[wrap-to-fit]::part(available) {
-        overflow-wrap: normal;
-      }
-      wt-data-table[wrap-to-fit]::part(root-label) {
-        min-inline-size: var(--wt-tap-min);
+      wt-data-table[wrap-to-fit][narrow] {
+        --wt-space-3: var(--wt-space-2);
+        /* Compact cell padding keeps the existing arrow slot. */
+        --tree-arrow-width: calc(var(--wt-tap-min) - var(--structure-cell-space));
       }
       wt-data-table[wrap-to-fit]::part(tree-cell) {
         display: grid;

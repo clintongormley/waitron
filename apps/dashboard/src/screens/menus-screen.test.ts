@@ -5889,23 +5889,7 @@ describe("the Structure tree", () => {
       const from = inStructure<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`);
       expect(from).not.toBeNull();
       const to = rowOf(el, target)!.querySelector<HTMLElement>('[data-test="name"]')!;
-      const send = (type: string, over: Element) => {
-        const box = over.getBoundingClientRect();
-        from!.dispatchEvent(
-          new PointerEvent(type, {
-            bubbles: true,
-            composed: true,
-            cancelable: true,
-            pointerId: 71,
-            clientX: box.left + 8,
-            clientY: box.top + box.height / 2,
-          }),
-        );
-      };
-      send("pointerdown", from!);
-      send("pointermove", to);
-      await settleStructure(el);
-      send("pointerup", to);
+      await userEvent.dragAndDrop(from!, to);
     }
     it("A461 Structure drag sends visible ticks and leaves hidden ticks selected", async () => {
       const client = api();
@@ -13387,15 +13371,13 @@ it.each(
     await at([width, 844], locale, async () => {
       const el = await mount(
         api({
-          listMenus: vi
-            .fn()
-            .mockResolvedValue([
-              {
-                ...menus[0]!,
-                name: "Weekday lunch from Monday to Friday with cakes and drinks included",
-              },
-              menus[1]!,
-            ]),
+          listMenus: vi.fn().mockResolvedValue([
+            {
+              ...menus[0]!,
+              name: "Weekday lunch from Monday to Friday with cakes and drinks included",
+            },
+            menus[1]!,
+          ]),
         }),
       );
       await vi.waitFor(() => {

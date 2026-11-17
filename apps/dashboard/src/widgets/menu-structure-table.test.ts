@@ -4632,6 +4632,10 @@ it.each(
       const pinned = root
         .querySelector('thead th[data-pinned="end"]')!
         .getBoundingClientRect().left;
+      const treeCell = root.querySelector('[part~="tree-cell"]')!;
+      expect(
+        treeCell.children[1]!.getBoundingClientRect().left - treeCell.getBoundingClientRect().left,
+      ).toBe(width === 390 ? 32 : 44);
       const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
       expect(names.length).toBeGreaterThan(2);
       if (width < 800) {
@@ -4652,6 +4656,11 @@ it.each(
         expect(range.getBoundingClientRect().right, "availability heading").toBeLessThanOrEqual(
           pinned + 1,
         );
+        for (const label of [heading, root.querySelector('thead th[data-pinned="end"]')!]) {
+          range.selectNodeContents(label);
+          const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+          expect(new Set(lines.map((rect) => rect.top)).size, label.textContent!).toBe(1);
+        }
         expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
       } else {
         expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);

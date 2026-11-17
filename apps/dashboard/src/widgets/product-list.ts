@@ -148,7 +148,6 @@ export class ProductList extends LitElement {
       /* The name box's room is a flex basis; the phone's grid rule below still wins. */
       wt-data-table::part(naming) {
         display: flex;
-        flex-wrap: wrap;
         max-inline-size: var(--name-room);
         align-items: center;
       }
