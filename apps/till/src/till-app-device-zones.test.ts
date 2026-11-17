@@ -2368,6 +2368,7 @@ describe("a handheld's zones", () => {
       await tick(el);
       await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
       expect(notice(el)).not.toContain("The zones could not be read. Try again.");
+      expect(acceptZones(el)).toEqual(["bar", "shop", "room", "garden"]);
     });
 
     const waiting = (el: TillApp) =>
@@ -2723,20 +2724,23 @@ describe("a handheld's zones", () => {
   const acceptZones = (el: TillApp) =>
     el.shadowRoot!.querySelector("till-department-transfers")!.serviceZones.map((zone) => zone.id);
 
-  it("the transfer accept list stays the offers route's zones", async () => {
-    const { el } = await mountHandheld(
-      selection(["garden"], "garden"),
-      "phone-portrait",
-      { ...transferApi, listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()) },
-      ["payment.take"],
-    );
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
-    );
-    expect(acceptZones(el)).toEqual(["bar", "shop"]);
-  });
+  it.each(handhelds)(
+    "the transfer accept list offers every profile zone, table zones included (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(
+        selection(["garden"], "garden"),
+        formFactor,
+        { ...transferApi, listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()) },
+        ["payment.take"],
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+      );
+      expect(acceptZones(el)).toEqual(["bar", "shop", "room", "garden"]);
+    },
+  );
 
-  it("the transfer accept list stays the offers route's zones after a saved choice", async () => {
+  it("the transfer accept list stays every profile zone after a saved choice", async () => {
     const { el, api } = await mountHandheld(
       selection(["bar", "shop", "room", "garden"], "bar", false),
       "phone-portrait",
@@ -2765,10 +2769,10 @@ describe("a handheld's zones", () => {
     );
     await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
     expect(api.setDeviceZones).toHaveBeenCalledOnce();
-    expect(acceptZones(el)).toEqual(["bar", "shop"]);
+    expect(acceptZones(el)).toEqual(["bar", "shop", "room", "garden"]);
   });
 
-  it("the transfer accept list never takes the choice's zones when the offers read fails", async () => {
+  it("the transfer accept list offers every profile zone when the offers read fails", async () => {
     const { el, api } = await mountHandheld(
       selection(["garden"], "garden"),
       "phone-portrait",
@@ -2782,7 +2786,7 @@ describe("a handheld's zones", () => {
       expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
     );
     expect(api.getDeviceZones).toHaveBeenCalledOnce();
-    expect(acceptZones(el)).toEqual([]);
+    expect(acceptZones(el)).toEqual(["bar", "shop", "room", "garden"]);
   });
 
   it("a kitchen display reads no zones", async () => {

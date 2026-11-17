@@ -677,11 +677,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till and floor wording fixes** (bundle of 5, size M, 4 wait for the owner's table-screen redesign). Holds A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
-- **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
-  fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter
-  zones (`apps/server/src/till-api.ts`); a till's holds every profile zone. Unchanged by A797 slice
-  4 (its plan's D4).
-
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
   [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
 
