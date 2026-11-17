@@ -222,6 +222,11 @@ Planning: part 1 is planned in full now; part 3 gets an outline until Cloud has 
 
 **2026-11-08:** part 1 is built in #2570 (A1425). Part 2 is not built.
 
+**2026-11-17:** part 3 is cut to Cloud's emergency copy
+([plan](../plans/2026-11-17-a1425-3-fresh-identity-restore.md)); §4's replacement statement and
+old-key destruction, §5's no-re-pairing test, §6's two machines and §7's earlier-text changes wait for a
+later part that covers every restore.
+
 ## 9. Left to the builder
 
 - How a restore is written into the taken-over-from list: a handover activation row or a row of its

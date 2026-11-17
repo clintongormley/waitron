@@ -28,7 +28,7 @@ read at `main` 1de957e795, not run.
 | --- | --- |
 | Today's stream restore becomes the old box | It unseals the source box's saved state with the recovery key and writes the source's whole `node.db` (`node.dump`) beside the venue file (`apps/server/src/restore-stream.ts:363-368`); the identity is the backup's `trading.env` node id (`apps/server/src/restore.ts:913-947`); "a restore that keeps the box's identity keeps its node.db too" (`restore.ts:425`). Cloud's text still describes this for both restores (contract `:794-799`). It stays unchanged. |
 | #3142, a spare picks a backup | `stageBackupAsCopy` decrypts an archive file with the recovery key, `skipSecrets: true` (`apps/server/src/handover-copy-from-backup.ts:85-109`); `stageCheckedCopy` checks the file's integrity, its schema, the fiscal chain (`checkHandoverCopy`) and then that the copy's `nodes` row holds **this spare's own public key** and its chart lists **this spare** as `serving-secondary` under the held chart's main box (`:39-64`). `placeFirstCopy` swaps the copy in at start only when this box's `node.db` says `mirror` (`spare-copy-placement.ts:40-53`). |
-| How close #3142 is | Reusable as they stand: the integrity check (`handover-integrity.ts:51`), the module chain check (`packages/module/src/handover.ts:65-84`) and the read-only reader (`packages/store/src/backup-query.ts:10-40`, which denies every write through an authorizer). Reusable once factored out: the not-ahead check over the venue's migration sets inside `checkCopy` (`spare-copy.ts:194-200`); `checkCopy` itself also needs this box's own `nodes` row and key (`:201-205`). **Not reusable:** everything that presumes the box already joined: an existing `node.db` with a signing key and `mirror` role, a held chart, a `nodes` row for itself in the copy, a pair link, the recovery key, an archive file rather than a placed database. A fresh Cloud node has none of these. |
+| How close #3142 is | Reusable: the integrity check (`handover-integrity.ts:51`), the module chain check (`packages/module/src/handover.ts:65-84`) and the read-only reader (`packages/store/src/backup-query.ts:10-40`, which denies every write through an authorizer). Reusable once factored out: the not-ahead check over the venue's migration sets inside `checkCopy` (`spare-copy.ts:194-200`); `checkCopy` itself also needs this box's own `nodes` row and key (`:201-205`). **Not reusable:** everything that presumes the box already joined: an existing `node.db` with a signing key and `mirror` role, a held chart, a `nodes` row for itself in the copy, a pair link, the recovery key, an archive file rather than a placed database. A fresh Cloud node has none of these. |
 | Where the venue's own ids live | Cloud's venue id and the stream id are fields of the venue settings document (`packages/db/src/venue.ts:41-51`); the environment is `deployment.environment` (`packages/db/src/schema/deployment.ts:10-23`); a generation's name carries the node that wrote it (`packages/stream/src/names.ts:47-60`). So the venue, environment and stream id are checked against the placed file. `venue.db` does not record its generation, so "the generation names the source" checks the binding against itself; `sourceInstallationId` and the copy's `installationId` cannot be checked at all, since Cloud's connection files are outside the backup (contract `:785-786`). |
 | Two different keys (#2371) | The signing key in `node.db`'s `box` row (`packages/node-db/src/schema/box.ts:5-61`) is sealed on the **vault ring**, `WAITRON_CREDENTIALS_KEY` (`packages/credentials/src/keyring.ts:5-8`, `node-signing-key.ts:34-48`), which also seals card credentials and the AEAT certificate; the venue's ring travels only in the source's sealed `secrets/secrets.env`, beside `node.dump`. TOTP comes from the separate **account key**, `WAITRON_ACCOUNT_KEY`, or one derived from the ring when unset (`apps/server/src/account-key.ts:9-25`, `boot.ts:1951-1955`). Cloud's launcher inputs name only the account-key source. |
 | A node with no recorded role | Reads as a sole primary (`packages/node-db/src/mode.ts:36-46`). **Ran:** `pnpm exec vitest run src/mode.test.ts -t "sole primary"` in `packages/node-db`: `Tests 8 passed | 14 skipped`, including "reads as a sole primary when the node has no row". So a fresh `node.db` holding only a key would read as a box that sells. |
@@ -102,14 +102,19 @@ Each leaves `main` green: nothing calls the function until A1188 part 3; the ref
 naming its `field`). First failing test: `emergency-copy-check.test.ts` "accepts a copy whose binding
 matches", then one refusal per check beside a control differing only in that field, a `node.db` already
 beside the file (a stand-in for the source's `node.dump`) refused, and the file's bytes unchanged
-afterwards. About 190 production, 340 test lines.
+afterwards. The integrity check, the read-only reader and the not-ahead check each gained an opt-in
+immutable open, so checking a WAL-mode file leaves no `-wal` or `-shm` beside it. Estimated about 190
+production, 340 test lines; built, about 345 and 605.
 
 **PR 2: the copy's own `node.db`.** `emergency-copy-placement.ts` (steps 3–4, the reader). First failing
 test: `emergency-copy-placement.test.ts` "a placed copy has its own key and the venue file is byte for
 byte the one Cloud chose". Then: the key opens only under `copyNodeId` on the copy's ring; `node.db`
 holds no row for `sourceNodeId`; the role reads `mirror`; `trading.env` names `copyNodeId`; a repeat
-keeps the same key; a different binding is refused; a failure before the move leaves no `node.db`. About
-190 production, 280 test lines.
+keeps the same key; a different binding is refused; a failure before the move leaves no `node.db`.
+PR 1's check refuses any `node.db` beside the file, so PR 2 admits one holding this binding's record
+(the repeat). PR 1 checks the expiry only when it reads the binding, and the checks can run for many
+minutes, so placement checks the expiry again before it writes anything. About 190 production, 280 test
+lines.
 
 **PR 3: an ordinary start refuses it, and the docs.** `boot.ts` (the check, before migrations), the
 check in `emergency-copy-placement.ts`, and the new code `node.emergency_copy_unactivated` with its
@@ -155,7 +160,11 @@ None: existing `node_handover_events` and `box` columns via their listed writers
 ## Decisions (defaults, each open to the watcher)
 
 1. **A function the locked start calls, no command.** Alternative: a `waitron.commands` command.
-2. **No migration at placement; an older schema is admitted**; part 4 migrates after the declaration.
+2. **No migration at placement; a copy is admitted when every migration it records is one this
+   software ships**; part 4 migrates after the declaration. Before go-live a starting migration is
+   rebuilt rather than added to, so a copy made before a rebuild is refused as
+   `provisioning.database_ahead` (a run-it review's probe, 2026-11-17, on a copy migrated from an
+   earlier core baseline).
    Alternatives: migrate here (a write before it), or refuse (Cloud runs the box's exact version).
 3. **The record carries no operation id**; `copyOperationId` sits in `detail` and part 4 begins the
    handover operation under it. Alternative: record under `copyOperationId` and add the kind to
