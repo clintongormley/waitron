@@ -554,9 +554,8 @@ below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a senten
 
 Review suggestions #1235 did not take, listed in its description: the edit
 route checks permission before the device id where revoke checks the id first; its body is the
-whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
-`rowClickable` and `rowActivation` could be one option; Edit and
-Pair repeat some request-body building. A save reading the device list twice is a decision, not
+whole device rather than only the fields named (since W105e, made-here may be left out); and
+`rowClickable` and `rowActivation` could be one option. A save reading the device list twice is a decision, not
 open: [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## What W104 left open (#1225)
@@ -1695,8 +1694,7 @@ except that it no longer waits on the retired split and transfer routes (A1196).
     disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W105 (#1235): review suggestions #1235 did not take that are still open: the edit route's
-    checks, request body and repeated writes of the device row, two table options that could be one,
-    and repeated request building.
+    checks and request body, and two table options that could be one.
     [Detail](till.md#what-w105-left-open-1235)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)

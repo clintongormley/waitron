@@ -1995,6 +1995,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     profileId: string;
     receiptPrinterId: string | null;
     paymentSlipPrinterId: string | null;
+    cashDrawerPrinterId?: string | null;
     invoicePrinterId?: string | null;
     madeHereStationIds: string[];
     kitchenScreens?: unknown;
@@ -2224,6 +2225,98 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(await deviceBindings(t.deviceId)).toMatchObject({
       deviceProfileId: t.profileId,
       receiptPrinterId: t.counter,
+      paymentSlipPrinterId: null,
+    });
+  });
+
+  /** How many times `action` updates the device's row, counted by a real trigger on `devices`. */
+  async function deviceRowUpdatesDuring(
+    deviceId: string,
+    action: () => Promise<void>,
+  ): Promise<number> {
+    suite.db.run(sql`create table probe_device_updates (n integer)`);
+    try {
+      suite.db.run(
+        sql.raw(`create trigger probe_device_updated after update on devices
+          when new.id = '${deviceId}'
+          begin insert into probe_device_updates values (1); end`),
+      );
+      try {
+        await action();
+        const [row] = suite.db.all<{ n: number }>(
+          sql`select count(*) as n from probe_device_updates`,
+        );
+        return row!.n;
+      } finally {
+        suite.db.run(sql`drop trigger probe_device_updated`);
+      }
+    } finally {
+      suite.db.run(sql`drop table probe_device_updates`);
+    }
+  }
+
+  it("writes the device row once for a rename that also changes every printer choice", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, t.counter));
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        cashDrawerPrinterIds: [t.counter],
+        invoicePrinterIds: [t.counter],
+      }),
+    );
+
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        name: "Bar till 2",
+        receiptPrinterId: t.counter,
+        paymentSlipPrinterId: t.counter,
+        cashDrawerPrinterId: t.counter,
+        invoicePrinterId: t.counter,
+      });
+      expect(res.status).toBe(204);
+    });
+    expect(writes).toBe(1);
+    expect(await labelOf(t.deviceId)).toBe("Bar till 2");
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.counter,
+    });
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: t.counter,
+      invoicePagePrinterId: null,
+    });
+  });
+
+  it("writes the device row once for a profile switch that puts every choice on Use default", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, other, await readProfilePrinterLists(tx, t.profileId)),
+    );
+
+    // As the dashboard sends a save after a profile switch: every choice back on Use default.
+    const writes = await deviceRowUpdatesDuring(t.deviceId, async () => {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        profileId: other,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: null,
+        invoicePrinterId: null,
+      });
+      expect(res.status).toBe(204);
+    });
+    // The second is clearUnlistedReaderChoice, which writes the row whenever the profile lists no
+    // card reader.
+    expect(writes).toBe(2);
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: other,
+      receiptPrinterId: null,
       paymentSlipPrinterId: null,
     });
   });

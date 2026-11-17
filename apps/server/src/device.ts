@@ -70,21 +70,11 @@ export async function insertDevice(
   }
 }
 
-/** The printers a device row has chosen for each role; `null` is Use default. */
-interface DevicePrinters {
-  receiptPrinterId: string | null;
-  paymentSlipPrinterId: string | null;
-  cashDrawerPrinterId: string | null;
-  invoicePrinterId: string | null;
-  invoicePagePrinterId: string | null;
-}
-
 /**
  * Write a device's name and profile, plus any `also` columns, refusals mapped by
  * {@link mapDeviceNameTaken}. When the profile changes or a disabled device comes back, its
  * equipment settles ({@link settleDevice}), taking the profile's free portable defaults; anything
- * else, such as a rename, leaves its choices and holds alone. Returns the printer choices the row
- * now holds.
+ * else, such as a rename, leaves its choices and holds alone.
  */
 export async function updateDeviceSettings(
   tx: Transaction,
@@ -94,7 +84,7 @@ export async function updateDeviceSettings(
     profileId: string;
   },
   also: Partial<typeof devices.$inferInsert> = {},
-): Promise<DevicePrinters> {
+): Promise<void> {
   const [before] = await tx
     .select({ profileId: devices.deviceProfileId, active: devices.active })
     .from(devices)
@@ -115,17 +105,6 @@ export async function updateDeviceSettings(
   if (before?.profileId !== settings.profileId || comingBack) {
     await settleDevice(tx, device.id, { acquire: true });
   }
-  const [stored] = await tx
-    .select({
-      receiptPrinterId: devices.receiptPrinterId,
-      paymentSlipPrinterId: devices.paymentSlipPrinterId,
-      cashDrawerPrinterId: devices.cashDrawerPrinterId,
-      invoicePrinterId: devices.invoicePrinterId,
-      invoicePagePrinterId: devices.invoicePagePrinterId,
-    })
-    .from(devices)
-    .where(eq(devices.id, device.id));
-  return stored!;
 }
 
 /**

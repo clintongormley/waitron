@@ -40,7 +40,10 @@ function isHeld(role: ProfilePrinterRole): boolean {
 
 type ChoiceColumn = (typeof COLUMN)[ProfilePrinterRole] | "invoicePagePrinterId";
 
-type Choices = Record<ChoiceColumn, string | null>;
+/** A device's stored printer choice for each role; `null` is Use default. */
+export type DevicePrinterChoices = Record<ChoiceColumn, string | null>;
+
+type Choices = DevicePrinterChoices;
 
 /** The role's stored choice; an invoice choice is in one of two columns, the receipt one first. */
 export function chosenPrinterOf(device: Choices, role: ProfilePrinterRole): string | null {
@@ -351,6 +354,86 @@ export async function readPrinterRoles(
   return state === undefined ? [] : ROLES.map((role) => roleState(state, role));
 }
 
+export type DevicePrinterChoiceInput = SelectDevicePrinterInput & {
+  /** The profile the choice is checked against, which may not yet be the device's. */
+  profileId: string;
+};
+
+export type DevicePrinterChoiceCheck =
+  | {
+      ok: true;
+      /** The device columns storing the choice. */
+      columns: Partial<Choices>;
+      /** The portable printer the device must hold for the choice, if any. */
+      heldPrinterId: string | null;
+      previousHolderDeviceId: string | null;
+    }
+  | { ok: false; refusal: "not_permitted" }
+  | { ok: false; refusal: "held"; holderDeviceId: string };
+
+/**
+ * Checks, writing nothing, whether the device may newly choose `selection` for `role` on
+ * `profileId`, by the rules of {@link selectDevicePrinter}; a deleted printer is thrown as
+ * `printer.not_found`.
+ */
+export async function checkDevicePrinterChoice(
+  tx: Transaction,
+  input: DevicePrinterChoiceInput,
+): Promise<DevicePrinterChoiceCheck> {
+  const { deviceId, profileId, role, selection } = input;
+  if (selection !== "default") await refuseDeletedPrinters(tx, [selection.id]);
+  const [profile] = await tx
+    .select({ formFactor: deviceProfiles.formFactor })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  if (profile === undefined || profile.formFactor === "kds")
+    return { ok: false, refusal: "not_permitted" };
+  if (selection === "default") {
+    return {
+      ok: true,
+      columns: choiceColumns(role, null),
+      heldPrinterId: null,
+      previousHolderDeviceId: null,
+    };
+  }
+  const [listed] = await tx
+    .select({
+      printerId: deviceProfilePrinters.printerId,
+      pagePrinterId: deviceProfilePrinters.pagePrinterId,
+      portable: printers.portable,
+    })
+    .from(deviceProfilePrinters)
+    .leftJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
+    .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
+    .where(
+      and(
+        eq(deviceProfilePrinters.deviceProfileId, profileId),
+        eq(deviceProfilePrinters.role, role),
+        or(
+          and(eq(printers.id, selection.id), eq(printers.active, true)),
+          and(eq(pagePrinters.id, selection.id), eq(pagePrinters.active, true)),
+        ),
+      ),
+    );
+  if (listed === undefined) return { ok: false, refusal: "not_permitted" };
+  const columns = choiceColumns(role, listed.printerId, listed.pagePrinterId);
+  if (listed.portable !== true || !isHeld(role)) {
+    return { ok: true, columns, heldPrinterId: null, previousHolderDeviceId: null };
+  }
+  const [holder] = await tx
+    .select({ deviceId: printerHolders.deviceId })
+    .from(printerHolders)
+    .where(eq(printerHolders.printerId, selection.id));
+  let previousHolderDeviceId: string | null = null;
+  if (holder !== undefined && holder.deviceId !== deviceId) {
+    if (!mayTakeOver(input.via, input.takeOver)) {
+      return { ok: false, refusal: "held", holderDeviceId: holder.deviceId };
+    }
+    previousHolderDeviceId = holder.deviceId;
+  }
+  return { ok: true, columns, heldPrinterId: selection.id, previousHolderDeviceId };
+}
+
 /**
  * Sets one role to Use default or to a printer the device may newly choose. A portable printer
  * another device holds is refused unless taken by a scan or a confirmed list choice, never by a
@@ -363,75 +446,39 @@ export async function selectDevicePrinter(
   tx: Transaction,
   input: SelectDevicePrinterInput,
 ): Promise<SelectDevicePrinterResult> {
-  const { deviceId, role, selection } = input;
-  if (selection !== "default") await refuseDeletedPrinters(tx, [selection.id]);
+  const { deviceId } = input;
   const [device] = await tx
-    .select({ profileId: devices.deviceProfileId, formFactor: deviceProfiles.formFactor })
+    .select({ profileId: devices.deviceProfileId })
     .from(devices)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(eq(devices.id, deviceId));
-  if (device === undefined || device.formFactor === "kds")
+  if (device === undefined) {
+    if (input.selection !== "default") await refuseDeletedPrinters(tx, [input.selection.id]);
     return { ok: false, refusal: "not_permitted" };
-  let previousHolderDeviceId: string | null = null;
-  if (selection === "default") {
-    await tx.update(devices).set(choiceColumns(role, null)).where(eq(devices.id, deviceId));
-  } else {
-    const [listed] = await tx
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
-        portable: printers.portable,
-      })
-      .from(deviceProfilePrinters)
-      .leftJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
-      .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
-      .where(
-        and(
-          eq(deviceProfilePrinters.deviceProfileId, device.profileId),
-          eq(deviceProfilePrinters.role, role),
-          or(
-            and(eq(printers.id, selection.id), eq(printers.active, true)),
-            and(eq(pagePrinters.id, selection.id), eq(pagePrinters.active, true)),
-          ),
-        ),
-      );
-    if (listed === undefined) return { ok: false, refusal: "not_permitted" };
-    const printer = { id: selection.id, portable: listed.portable === true };
-    if (printer.portable && isHeld(role)) {
-      const [holder] = await tx
-        .select({ deviceId: printerHolders.deviceId })
-        .from(printerHolders)
-        .where(eq(printerHolders.printerId, printer.id));
-      if (holder !== undefined && holder.deviceId !== deviceId) {
-        if (!mayTakeOver(input.via, input.takeOver)) {
-          return { ok: false, refusal: "held", holderDeviceId: holder.deviceId };
-        }
-        previousHolderDeviceId = holder.deviceId;
-      }
-      await tx
-        .insert(printerHolders)
-        .values({ printerId: printer.id, deviceId })
-        .onConflictDoUpdate({
-          target: printerHolders.printerId,
-          set: { deviceId, heldAt: nowIso() },
-        });
-      if (previousHolderDeviceId !== null) {
-        for (const held of HELD_ROLES) {
-          await tx
-            .update(devices)
-            .set({ [COLUMN[held]]: null })
-            .where(
-              and(eq(devices.id, previousHolderDeviceId), eq(devices[COLUMN[held]], printer.id)),
-            );
-        }
-        await settleDevicePrinters(tx, previousHolderDeviceId, { acquire: false });
-      }
-    }
-    await tx
-      .update(devices)
-      .set(choiceColumns(role, listed.printerId, listed.pagePrinterId))
-      .where(eq(devices.id, deviceId));
   }
+  const check = await checkDevicePrinterChoice(tx, { ...input, profileId: device.profileId });
+  if (!check.ok) return check;
+  const { heldPrinterId, previousHolderDeviceId } = check;
+  if (heldPrinterId !== null) {
+    await tx
+      .insert(printerHolders)
+      .values({ printerId: heldPrinterId, deviceId })
+      .onConflictDoUpdate({
+        target: printerHolders.printerId,
+        set: { deviceId, heldAt: nowIso() },
+      });
+    if (previousHolderDeviceId !== null) {
+      for (const held of HELD_ROLES) {
+        await tx
+          .update(devices)
+          .set({ [COLUMN[held]]: null })
+          .where(
+            and(eq(devices.id, previousHolderDeviceId), eq(devices[COLUMN[held]], heldPrinterId)),
+          );
+      }
+      await settleDevicePrinters(tx, previousHolderDeviceId, { acquire: false });
+    }
+  }
+  await tx.update(devices).set(check.columns).where(eq(devices.id, deviceId));
   await settleDevicePrinters(tx, deviceId, { acquire: true });
   return { ok: true, previousHolderDeviceId };
 }
@@ -569,12 +616,8 @@ async function listedAt(tx: Transaction, profileId: string): Promise<Listed[]> {
   }));
 }
 
-/** Returns the device's choices as they stand afterwards. */
-async function clearUnlisted(
-  tx: Transaction,
-  device: ChoiceRow,
-  listed: Listed[],
-): Promise<ChoiceRow> {
+/** The choice columns that go back to Use default because `listed` does not name them. */
+function unlistedColumns(device: Choices, listed: Listed[]): Partial<Choices> {
   let cleared: Partial<Choices> = {};
   for (const role of ROLES) {
     const chosenId = chosenPrinterOf(device, role);
@@ -582,6 +625,28 @@ async function clearUnlisted(
       cleared = { ...cleared, ...choiceColumns(role, null) };
     }
   }
+  return cleared;
+}
+
+/**
+ * The choices a device holding `stored` would keep on moving to `profileId`, writing nothing: each
+ * choice that profile does not list goes back to Use default.
+ */
+export async function choicesKeptOnProfile(
+  tx: Transaction,
+  stored: Choices,
+  profileId: string,
+): Promise<Choices> {
+  return { ...stored, ...unlistedColumns(stored, await listedAt(tx, profileId)) };
+}
+
+/** Returns the device's choices as they stand afterwards. */
+async function clearUnlisted(
+  tx: Transaction,
+  device: ChoiceRow,
+  listed: Listed[],
+): Promise<ChoiceRow> {
+  const cleared = unlistedColumns(device, listed);
   if (Object.keys(cleared).length > 0) {
     await tx.update(devices).set(cleared).where(eq(devices.id, device.id));
   }

@@ -54,6 +54,8 @@ export {
 } from "./device-printers.js";
 export {
   PRINTER_ROLE_COLUMNS,
+  checkDevicePrinterChoice,
+  choicesKeptOnProfile,
   chosenPrinterOf,
   clearDeletedPagePrinter,
   clearDeletedPrinter,
@@ -69,6 +71,9 @@ export {
   settleProfilePrinterDevices,
 } from "./device-equipment.js";
 export type {
+  DevicePrinterChoiceCheck,
+  DevicePrinterChoiceInput,
+  DevicePrinterChoices,
   ListedPrinter,
   PrinterEquipment,
   PrinterInfo,
