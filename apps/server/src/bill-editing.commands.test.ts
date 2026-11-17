@@ -96,11 +96,7 @@ function take(
   );
 }
 
-const {
-  editorId: _editorId,
-  editorVersion: _editorVersion,
-  ...billColumns
-} = getTableColumns(workingOrders);
+const { editorId, editorVersion, ...billColumns } = getTableColumns(workingOrders);
 
 async function rows() {
   return {
@@ -108,8 +104,8 @@ async function rows() {
     edits: await venue.db
       .select({
         billId: workingOrders.id,
-        editorId: workingOrders.editorId,
-        editorVersion: workingOrders.editorVersion,
+        editorId,
+        editorVersion,
       })
       .from(workingOrders)
       .orderBy(workingOrders.id),

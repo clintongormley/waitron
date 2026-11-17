@@ -1007,7 +1007,9 @@ describe("A803 a moved paid bill is one of the table's bills", () => {
 
 describe("MOVED notices for a paid bill moved to the combined party", () => {
   async function paidBill(billId: string) {
-    const { editorId: _editorId, editorVersion: _editorVersion, ...row } = await billRow(v, billId);
+    const row = { ...(await billRow(v, billId)) };
+    Reflect.deleteProperty(row, "editorId");
+    Reflect.deleteProperty(row, "editorVersion");
     return {
       row,
       lines: await lineRows(billId),

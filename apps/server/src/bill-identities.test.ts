@@ -939,7 +939,9 @@ describe("A803 bill list", () => {
 });
 
 describe("A803 rename", () => {
-  const { billName: _billName, ...billColumns } = getTableColumns(workingOrders);
+  const billColumns = Object.fromEntries(
+    Object.entries(getTableColumns(workingOrders)).filter(([name]) => name !== "billName"),
+  );
 
   /** Every row a rename could touch, for a before-and-after comparison. */
   async function renameRows() {

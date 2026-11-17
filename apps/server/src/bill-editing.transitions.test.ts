@@ -93,19 +93,15 @@ async function addCharge(data: Awaited<ReturnType<typeof fixture>>) {
   });
 }
 
-const {
-  editorId: _editorId,
-  editorVersion: _editorVersion,
-  ...billColumns
-} = getTableColumns(workingOrders);
+const { editorId, editorVersion, ...billColumns } = getTableColumns(workingOrders);
 
 async function rows() {
   return {
     states: await suite.db
       .select({
         billId: workingOrders.id,
-        editorId: workingOrders.editorId,
-        editorVersion: workingOrders.editorVersion,
+        editorId,
+        editorVersion,
       })
       .from(workingOrders),
     drafts: await suite.db.select().from(orderDrafts),
