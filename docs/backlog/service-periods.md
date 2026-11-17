@@ -3,6 +3,35 @@
 The open entries are listed in [the backlog](../backlog.md), under "Service periods, opening hours and departments". This file holds
 their full text.
 
+## A1548. A zone picks which of its department's menus it sells
+
+Owner, 2026-11-17, while settling where set menus may be sold (A1515,
+[set-menu design](../superpowers/specs/2026-11-17-set-menus-design.md)). Today a zone sells every
+menu of its department: `zonePeriodMembership` (`packages/venue-service/src/operations.ts`) joins
+periods to zones on the department alone, so a standing bar counter in the restaurant's department
+sells the full restaurant menu, burger included, at 21:00. No product is marked as needing a table,
+and no check refuses a dish on a counter order other than "not on this zone's menu"
+(`service_zone.offer_not_allowed`, `apps/server/src/working-order.ts`).
+
+What the owner wants (answer A of three: a per-zone choice of menus, not a "table only" switch on
+each product, and not a separate department per counter):
+
+- A zone can narrow its department's menus to some of them (for example, "Bar counter" sells only
+  Drinks and Tapas). The department's timetable still decides when each menu sells.
+- What can be ordered follows where the order goes, not which till takes it. A till at the bar
+  counter can order the burger for a table on the terrace (the table's zone decides), and drinks
+  for someone standing at the counter (the counter zone decides). The till already picks the menu
+  from the table's zone at a table and from the chosen counter zone at the counter (read in the
+  code on 2026-11-17, not run).
+- Telling a standing guest that a dish needs a table is the waiter's job; the till simply does not
+  offer it for that counter.
+
+Not the same as the dropped per-zone "first menu" setting in A740 (`backlog/till.md`), which chose
+which menu a zone opens on, not which menus it sells. Related floor-plan point: a bar with stools
+where guests sit and run a bill is a table-service zone; a bar with stools and standing room is
+two zones. The demo's downstairs bar is one counter-service zone, so its stools B1 to B3 cannot
+hold a bill.
+
 ## Refresh service settings on an open till
 
 A till already signed in keeps its loaded payment flow when a department or zone policy changes.

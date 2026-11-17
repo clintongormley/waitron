@@ -986,6 +986,11 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 ### A1515. Set lunch menus, the menú del día
 
+2026-11-17: the owner replaced this design with set menus, a kind of menu whose dishes are
+ordinary order lines and whose bill picks the cheapest mix of set menus:
+[set-menu design](../superpowers/specs/2026-11-17-set-menus-design.md). The set-lunch build below
+is being removed first (A1515-REMOVE, lane D).
+
 The owner's A1515 decisions, recorded in the [proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md),
 keep one lunch per diner, permit later choices and independent course sends, and price each premium
 supplement separately. Table service is one 10% service; takeaway/delivery VAT treatment remains
