@@ -181,7 +181,7 @@ browser storage is unavailable. The observations stay in this browser and are no
 recovery request. The report reads the storage available at this Waitron address; it does not
 fetch observations from other devices.
 
-Restoring replaces the database already on this box.
+Restoring replaces the database already on this server.
 
 Enter the server key, tick both statements and "These details are correct.", then choose
 **Proceed**. The invoice series is

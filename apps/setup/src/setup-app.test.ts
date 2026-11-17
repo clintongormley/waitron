@@ -6556,7 +6556,7 @@ describe("a recovery request refused because another setup holds the server", ()
 });
 
 it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-restore-screen"])(
-  "%s warns that restoring replaces the box's existing database",
+  "%s warns that restoring replaces the server's existing database",
   async (tag) => {
     setLocale("en-GB");
     const screen = document.createElement(tag) as LitElement;
@@ -6568,7 +6568,7 @@ it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-res
     await screen.updateComplete;
     expect(
       [...screen.shadowRoot!.querySelectorAll("p")].some(
-        (p) => p.textContent?.trim() === "Restoring replaces the database already on this box.",
+        (p) => p.textContent?.trim() === "Restoring replaces the database already on this server.",
       ),
     ).toBe(true);
   },

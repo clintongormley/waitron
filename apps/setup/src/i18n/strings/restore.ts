@@ -38,7 +38,7 @@ export const restoreEn = {
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
   "restore.heading": "Restore from backup",
-  "restore.replace_warning": "Restoring replaces the database already on this box.",
+  "restore.replace_warning": "Restoring replaces the database already on this server.",
   "restore.cloud_restore": "Restore from Waitron Cloud",
   "restore.intro":
     "Use cold recovery only when no other server is still running with newer restaurant data.",
@@ -76,7 +76,7 @@ export const restoreEn = {
     "A recovery pack or kit file is as sensitive as the recovery key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
   "restore_bucket.kit_file": "Recovery pack or kit file",
   "restore_bucket.pack_no_code":
-    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
+    "This recovery pack holds no bucket copy code: the server had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
   "restore_bucket.pack_not_a_pack":
     "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the kit.",
   "restore_bucket.pack_damaged":
