@@ -346,6 +346,39 @@ describe("Print the bill", () => {
     });
   });
 
+  it("refuses a bill that was cancelled, filing no record", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const cancelled = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);
+    await serveAll(party, cancelled);
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${cancelled}/cancel`,
+      { reason: "Wrong order" },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const revision = revisionOf(party.partyId);
+
+    await refused(
+      end(party, { billId: cancelled, printAnyway: true }),
+      cancelled,
+      { code: "bill.nothing_outstanding", params: { workingOrderId: cancelled } },
+      "abandoned",
+    );
+    expect(fiscalRecordCount(venue, cancelled)).toBe(0);
+    expect(revisionOf(party.partyId)).toBe(revision);
+  });
+
+  it("refuses a bill with no dishes, as an unpaid departure does", async () => {
+    const party = await seatedWith(venue);
+
+    await refused(end(party), party.tabId, {
+      code: "bill.nothing_outstanding",
+      params: { workingOrderId: party.tabId },
+    });
+  });
+
   it("warns of a dish not marked served, listing it as one the kitchen has, and issues nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle", "Tarta");
     const [wine, tarta] = await linesOf(party.tabId);

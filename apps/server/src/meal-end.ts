@@ -19,7 +19,7 @@ import { pinnedAt } from "./issue-moment.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import type { Logger } from "./logger.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { checkAndBumpParty, readBillsOfParties, runServiceCommand } from "./parties.js";
+import { billOwes, checkAndBumpParty, readBillsOfParties, runServiceCommand } from "./parties.js";
 import { enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
 import { serviceDishCondition } from "./service-dishes.js";
@@ -103,6 +103,8 @@ export async function endMeal(
       await assertBillHasNoUnsent(tx, req.billId);
       if ((await readIssuedSales(tx, [req.billId])).has(req.billId))
         throw new AppError("meal_end.already_issued", { workingOrderId: req.billId });
+      if (!billOwes(bill))
+        throw new AppError("bill.nothing_outstanding", { workingOrderId: req.billId });
       await refuseBillPaymentInFlight(
         deps.db,
         tx,
