@@ -266,7 +266,8 @@ function equipmentName(
   return name;
 }
 
-/** A battery report older than this is greyed and says when it was taken. */
+/** A battery report older than this is greyed and says when it was taken (add a device design
+ * §6). */
 const BATTERY_STALE_MS = 10 * 60_000;
 
 /** A lightning bolt; U+FE0E asks for the text form, which takes the cell's colour, not an emoji. */
