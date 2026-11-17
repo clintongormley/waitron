@@ -195,7 +195,8 @@ successful status read can return an older battery snapshot; they do not establi
 
 | Source, read 17 November | Source wording | What the reading means here |
 | --- | --- | --- |
-| [SumUp reader status API](https://developer.sumup.com/api/readers/get-status/) | “Battery level percentage” | The documented range is 0–100. The response is the reader's last known status, with its activity timestamp, rather than a guarantee of current charge. |
+| [SumUp reader status API](https://developer.sumup.com/api/readers/get-status/) | “Battery level percentage”; `minimum: 0`, `maximum: 100` | Treat the number as a percentage from 0 to 100. |
+| Same source | “Provides the last known status for a Reader.”; “Timestamp of the last activity from the device” | The response describes the last known status and its activity time. A successful read alone does not establish current charge. |
 
 Waitron omits a SumUp battery percentage when its activity time is missing, invalid, in the future
 or over ten minutes old at the status read. The existing alert cache can retain an accepted reading

@@ -289,7 +289,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         api: stubApi(),
         request: vi.fn() as unknown as PaymentsScreen["request"],
         panels: PANELS,
-        mode: "demo",
+        simulatedCardPayments: true,
       },
       theme,
     );
@@ -506,7 +506,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
           surface: "checks",
-          mode: "live",
+          simulatedCardPayments: false,
         },
         theme,
       );
