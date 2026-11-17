@@ -12,7 +12,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { createPrinter, listPrinters, updatePrinter } from "./printers.js";
+import { createPrinter, listPrinters, refuseDeletedPrinters, updatePrinter } from "./printers.js";
 import type { PaperWidth } from "./layout.js";
 import type { PrintTransport } from "./printers.js";
 
@@ -405,6 +405,35 @@ describe("a deleted printer", () => {
     );
     expect(second).toBe(first);
     expect((await asTx((tx) => listPrinters(tx))).map((p) => p.id)).toEqual([second]);
+  });
+
+  it("refuseDeletedPrinters names the first deleted printer in the order given", async () => {
+    await setup();
+    const live = await seedPrinter("Live");
+    const first = await seedPrinter("Gone 1");
+    const second = await seedPrinter("Gone 2");
+    await markDeleted(first);
+    await markDeleted(second);
+
+    for (const [ids, expected] of [
+      [[live, second, first], second],
+      [[null, first, undefined, second], first],
+    ] as const) {
+      await expect(asTx((tx) => refuseDeletedPrinters(tx, ids))).rejects.toMatchObject({
+        code: "printer.not_found",
+        params: { id: expected },
+      });
+    }
+  });
+
+  it("refuseDeletedPrinters passes an unknown id, a switched-off printer, missing ids and an empty list", async () => {
+    await setup();
+    const off = await seedPrinter("Off");
+    await asTx((tx) => updatePrinter(tx, off, { active: false }));
+
+    for (const ids of [[randomUUID(), off, null, undefined], [null, undefined], []]) {
+      await expect(asTx((tx) => refuseDeletedPrinters(tx, ids))).resolves.toBeUndefined();
+    }
   });
 });
 

@@ -9,6 +9,7 @@ import {
   printAgents,
   type Transaction,
 } from "@waitron/db";
+import { clearDeletedPagePrinter } from "@waitron/layouts";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError, type DeleteImpact } from "@waitron/shared";
 import { named } from "./delete-impact.js";
@@ -158,11 +159,7 @@ export async function deletePagePrinter(
   now = new Date(),
 ): Promise<DeleteImpact> {
   const impact = await readPagePrinterDeleteImpact(tx, id);
-  await tx
-    .update(devices)
-    .set({ invoicePagePrinterId: null })
-    .where(eq(devices.invoicePagePrinterId, id));
-  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.pagePrinterId, id));
+  await clearDeletedPagePrinter(tx, id);
   await tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, id));
   const ofThisPrinter = eq(invoiceDeliveries.pagePrinterId, id);
   await tx

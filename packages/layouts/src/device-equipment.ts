@@ -1,3 +1,5 @@
+// The registry of `printer.not_found`, which this file throws.
+import "@waitron/printing";
 import {
   deviceProfilePrinters,
   deviceProfiles,
@@ -22,6 +24,12 @@ const COLUMN = {
 } as const satisfies Record<ProfilePrinterRole, string>;
 
 const ROLES: ProfilePrinterRole[] = ["receipt", "payment_slip", "cash_drawer", "invoice"];
+
+/** Each role, in role order, with the device column holding the receipt printer chosen for it. */
+export const PRINTER_ROLE_COLUMNS: readonly {
+  readonly role: ProfilePrinterRole;
+  readonly column: (typeof COLUMN)[ProfilePrinterRole];
+}[] = ROLES.map((role) => ({ role, column: COLUMN[role] }));
 
 /** The roles whose portable printers have one holder; a cash drawer and invoices ignore holding. */
 const HELD_ROLES = ["receipt", "payment_slip"] as const;
@@ -486,17 +494,39 @@ export async function settleDevicePrinters(
     );
 }
 
-/** Clears a deleted printer from every device's choices, every profile's lists and its holder. */
-export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
-  for (const role of ROLES) {
-    const column = COLUMN[role];
+/** Puts every device that chose the printer for one of `roles` back on Use default for it. */
+async function clearPrinterChoices(
+  tx: Transaction,
+  printerId: string,
+  roles: readonly ProfilePrinterRole[],
+): Promise<void> {
+  for (const role of roles) {
     await tx
       .update(devices)
-      .set({ [column]: null })
-      .where(eq(devices[column], printerId));
+      .set({ [COLUMN[role]]: null })
+      .where(eq(devices[COLUMN[role]], printerId));
   }
+}
+
+/** Clears a deleted printer from every device's choices, every profile's lists and its holder. */
+export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
+  await clearPrinterChoices(tx, printerId, ROLES);
   await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, printerId));
   await tx.delete(printerHolders).where(eq(printerHolders.printerId, printerId));
+}
+
+/** Clears a deleted page printer from every device's invoice choice and every profile's lists. */
+export async function clearDeletedPagePrinter(
+  tx: Transaction,
+  pagePrinterId: string,
+): Promise<void> {
+  await tx
+    .update(devices)
+    .set({ invoicePagePrinterId: null })
+    .where(eq(devices.invoicePagePrinterId, pagePrinterId));
+  await tx
+    .delete(deviceProfilePrinters)
+    .where(eq(deviceProfilePrinters.pagePrinterId, pagePrinterId));
 }
 
 /** Lets go of every printer the device holds; keeps its choices. */
@@ -632,12 +662,7 @@ export async function setPrinterPortable(
   if (printer.portable === portable) return;
   await tx.update(printers).set({ portable }).where(eq(printers.id, printerId));
   if (portable) {
-    for (const role of HELD_ROLES) {
-      await tx
-        .update(devices)
-        .set({ [COLUMN[role]]: null })
-        .where(eq(devices[COLUMN[role]], printerId));
-    }
+    await clearPrinterChoices(tx, printerId, HELD_ROLES);
   } else {
     await tx.delete(printerHolders).where(eq(printerHolders.printerId, printerId));
   }

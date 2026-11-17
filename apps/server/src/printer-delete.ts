@@ -20,16 +20,9 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printing";
-import { clearDeletedPrinter, readPrinterEquipment } from "@waitron/layouts";
+import { PRINTER_ROLE_COLUMNS, clearDeletedPrinter, readPrinterEquipment } from "@waitron/layouts";
 import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
-
-const ROLES = [
-  { role: "receipt", column: "receiptPrinterId" },
-  { role: "payment_slip", column: "paymentSlipPrinterId" },
-  { role: "cash_drawer", column: "cashDrawerPrinterId" },
-  { role: "invoice", column: "invoicePrinterId" },
-] as const;
 
 type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
 
@@ -71,8 +64,8 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
       invoicePrinterId: devices.invoicePrinterId,
     })
     .from(devices)
-    .where(or(...ROLES.map(({ column }) => eq(devices[column], id))));
-  const deviceChoices = ROLES.map(({ role, column }) =>
+    .where(or(...PRINTER_ROLE_COLUMNS.map(({ column }) => eq(devices[column], id))));
+  const deviceChoices = PRINTER_ROLE_COLUMNS.map(({ role, column }) =>
     named(
       `device_${role}`,
       choosing
@@ -141,9 +134,15 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   ];
   const removes: DeleteImpactItem[] = [
     ...deviceChoices,
-    ...ROLES.map(({ role }) => named(`profile_${role}`, profileTargets(role, false))),
-    ...ROLES.map(({ role }) => named(`profile_${role}_default`, profileTargets(role, true))),
-    ...ROLES.map(({ role }) => named(`device_${role}_default`, inheritingTargets(role))),
+    ...PRINTER_ROLE_COLUMNS.map(({ role }) =>
+      named(`profile_${role}`, profileTargets(role, false)),
+    ),
+    ...PRINTER_ROLE_COLUMNS.map(({ role }) =>
+      named(`profile_${role}_default`, profileTargets(role, true)),
+    ),
+    ...PRINTER_ROLE_COLUMNS.map(({ role }) =>
+      named(`device_${role}_default`, inheritingTargets(role)),
+    ),
     named("station_printers", stations),
   ];
   return {

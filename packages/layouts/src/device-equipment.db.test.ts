@@ -17,6 +17,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
+  clearDeletedPagePrinter,
   clearDeletedPrinter,
   clearUnlistedPrinterChoices,
   readPrinterEquipment,
@@ -1389,5 +1390,48 @@ describe("clearDeletedPrinter", () => {
       })),
     );
     expect(await holders()).toEqual([[kept, c]]);
+  });
+});
+
+describe("clearDeletedPagePrinter", () => {
+  it("clears every device's invoice choice and profile list row naming the page printer, and no other", async () => {
+    await seedFixtureVenue("Here");
+    const first = await seedDevice(suite.db, { label: "Till A" });
+    const a = first.deviceId;
+    const b = (await seedDevice(suite.db, { label: "Till B", profileId: first.profileId }))
+      .deviceId;
+    const c = (await seedDevice(suite.db, { label: "Till C", profileId: first.profileId }))
+      .deviceId;
+    const gone = await seedPagePrinter("Office");
+    const kept = await seedPagePrinter("Back office", "10.0.0.10");
+    const receipt = await seedPrinter("Bar");
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        first.profileId,
+        lists({ invoicePrinterIds: [gone, kept, receipt], invoicePrinterDefaultId: gone }),
+      ),
+    );
+    await suite.db.update(devices).set({ invoicePagePrinterId: gone }).where(eq(devices.id, a));
+    await suite.db.update(devices).set({ invoicePagePrinterId: kept }).where(eq(devices.id, b));
+    await suite.db.update(devices).set({ invoicePrinterId: receipt }).where(eq(devices.id, c));
+
+    await inTx((tx) => clearDeletedPagePrinter(tx, gone));
+
+    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+    expect(await invoiceColumns(b)).toEqual({ printer: null, page: kept });
+    expect(await invoiceColumns(c)).toEqual({ printer: receipt, page: null });
+    const listed = await suite.db
+      .select({
+        printerId: deviceProfilePrinters.printerId,
+        pagePrinterId: deviceProfilePrinters.pagePrinterId,
+      })
+      .from(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, first.profileId))
+      .orderBy(asc(deviceProfilePrinters.position));
+    expect(listed).toEqual([
+      { printerId: null, pagePrinterId: kept },
+      { printerId: receipt, pagePrinterId: null },
+    ]);
   });
 });
