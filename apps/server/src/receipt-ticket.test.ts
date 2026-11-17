@@ -14,7 +14,7 @@ import {
 import { compareDecimal, decimal, resolveSnapshotText, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
-import { formatReceipt } from "./receipt-ticket.js";
+import { drawReceipt, formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
 import {
@@ -694,6 +694,21 @@ it.each([
     expect(lines.filter((line) => line.includes(ISSUER.venueName))).toHaveLength(1);
   },
 );
+
+it.each([PRINTER_80, PRINTER_58])("draws section rules as solid lines ($paperWidth)", (printer) => {
+  const { bytes, rules } = drawReceipt({
+    result: FILED_SALE,
+    issuer: ISSUER,
+    receipt: TRIM,
+    invoiceLocale: "es-ES",
+    printer,
+  });
+  const pictures = printedCommands(bytes).filter((c) => c.name === "GS v 0");
+  const solid = [...esc(printer).rule().bytes()];
+  expect(rules.length).toBeGreaterThan(1);
+  for (const index of rules) expect([...pictures[index]!.bytes]).toEqual(solid);
+  expect(pictures.filter((p) => p.text === rule(printer))).toHaveLength(rules.length);
+});
 
 it("puts the QR legend immediately after the raster and a rule after it", () => {
   const bytes = formatReceipt({

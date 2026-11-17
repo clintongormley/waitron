@@ -67,6 +67,25 @@ export function drawTextBand(
   return data;
 }
 
+/** A rule's bar is this many dots thick, centred in a {@link TEXT_BAND_HEIGHT}-dot band. */
+const RULE_THICKNESS = 2;
+
+/**
+ * A {@link TEXT_BAND_HEIGHT}-dot band `grid.widthDots` wide, packed as {@link drawTextBand}'s,
+ * holding a solid bar {@link RULE_THICKNESS} dots thick across the grid's cells, where text sits,
+ * centred top to bottom.
+ */
+export function drawRuleBand(grid: TextGrid): Uint8Array {
+  const stride = Math.ceil(grid.widthDots / 8);
+  const data = new Uint8Array(stride * TEXT_BAND_HEIGHT);
+  const top = (TEXT_BAND_HEIGHT - RULE_THICKNESS) / 2;
+  const end = grid.offsetDots + grid.columns * GLYPH_WIDTH;
+  for (let y = top; y < top + RULE_THICKNESS; y++) {
+    for (let x = grid.offsetDots; x < end; x++) data[y * stride + (x >> 3)]! |= 0x80 >> (x & 7);
+  }
+  return data;
+}
+
 function glyphPictures(): [string, number[]][] {
   return GLYPHS.map(([codePoint, hex]) => [
     String.fromCodePoint(codePoint),
@@ -111,7 +130,7 @@ function inkBetween(data: Uint8Array, row: number, from: number, to: number): bo
  * its width: one character a cell, a blank cell a space, trailing spaces dropped. Undefined when the
  * band is not one line tall (regular, bold or double), a double one's width is not whole bytes,
  * its bytes do not fill it exactly, or it has ink that is not a glyph in a grid cell — a QR code or
- * a ruler.
+ * a ruler. A {@link drawRuleBand} band reads as a dash in every cell.
  */
 export function readRasterText(
   widthDots: number,
@@ -120,7 +139,11 @@ export function readRasterText(
 ): string | undefined {
   const stride = Math.ceil(widthDots / 8);
   if (data.length !== stride * heightDots) return undefined;
-  if (heightDots === TEXT_BAND_HEIGHT) return readLine(widthDots, stride, data);
+  if (heightDots === TEXT_BAND_HEIGHT) {
+    const grid = gridForWidth(widthDots);
+    if (drawRuleBand(grid).every((byte, i) => byte === data[i])) return "-".repeat(grid.columns);
+    return readLine(widthDots, stride, data);
+  }
   if (heightDots === TEXT_BAND_HEIGHT * 2 && widthDots % 8 === 0) {
     return readDoubleLine(widthDots, stride, data);
   }

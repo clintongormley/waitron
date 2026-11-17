@@ -131,6 +131,57 @@ describe("readRasterText", () => {
   });
 });
 
+/** A 28-dot band whose rows 13 and 14 print from dot `from` up to (not including) dot `to`. */
+function barBand(widthDots: number, from: number, to: number): Uint8Array {
+  const stride = Math.ceil(widthDots / 8);
+  const data = new Uint8Array(stride * 28);
+  for (const y of [13, 14]) {
+    for (let x = from; x < to; x++) data[y * stride + (x >> 3)]! |= 0x80 >> (x & 7);
+  }
+  return data;
+}
+
+/** {@link barBand} across exactly the text grid's cells. */
+function ruleBand(widthDots: number): Uint8Array {
+  const { offsetDots, columns } = gridForWidth(widthDots);
+  return barBand(widthDots, offsetDots, offsetDots + columns * 12);
+}
+
+describe("rules", () => {
+  it.each(SETTING_WIDTHS)("reads a drawn rule as dashes at $widthDots dots", ({ widthDots }) => {
+    expect(readRasterText(widthDots, 28, ruleBand(widthDots))).toBe(
+      "-".repeat(gridForWidth(widthDots).columns),
+    );
+  });
+
+  it("reads a rule across a width that is not whole bytes", () => {
+    // 365 dots: 30 cells of 12 from dot 2.
+    expect(readRasterText(365, 28, ruleBand(365))).toBe("-".repeat(30));
+  });
+
+  it("reads a full row of em dashes as a rule, since the em dash glyph is the same bar", () => {
+    const grid = gridForWidth(576);
+    const emDashes = drawTextBand("\u2014".repeat(grid.columns), grid);
+    expect(emDashes).toEqual(ruleBand(576));
+    expect(readRasterText(576, 28, emDashes)).toBe("-".repeat(grid.columns));
+    expect(readRasterText(576, 28, drawTextBand("\u2014".repeat(41), grid))).toBe(
+      "\u2014".repeat(41),
+    );
+  });
+
+  it("does not read a bar a dot short of the grid, past it, across the paper or a row too thick as a rule's dashes", () => {
+    // 576 dots: 42 cells from dot 36, ending at dot 540.
+    const dashes = "-".repeat(42);
+    expect(readRasterText(576, 28, barBand(576, 36, 539))).not.toBe(dashes);
+    expect(readRasterText(576, 28, barBand(576, 37, 540))).not.toBe(dashes);
+    expect(readRasterText(576, 28, barBand(576, 36, 541))).not.toBe(dashes);
+    expect(readRasterText(576, 28, barBand(576, 0, 576))).not.toBe(dashes);
+    const thick = ruleBand(576);
+    thick.fill(0xff, 12 * 72 + 5, 12 * 72 + 6);
+    expect(readRasterText(576, 28, thick)).not.toBe(dashes);
+  });
+});
+
 describe("bold and double-size lines", () => {
   it.each(SETTING_WIDTHS)(
     "reads a bold line back as its text at $widthDots dots",

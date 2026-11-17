@@ -383,6 +383,35 @@ describe("text drawn as images", () => {
     expect(b.pictures).toBe(4);
   });
 
+  it.each([NETUM_58, TM_T88_80])(
+    "rule() draws a solid bar, not dash glyphs ($paperWidth $resolution)",
+    (setting) => {
+      const b = esc(setting);
+      const { columns, widthDots } = b.grid;
+      const stride = widthDots / 8;
+      const ruled = b.rule().bytes();
+      expect(b.pictures).toBe(1);
+      expect([...ruled.subarray(0, 8)]).toEqual(header(stride, 28));
+      expect(ruled).not.toEqual(esc(setting).line("-".repeat(columns)).bytes());
+      const image = ruled.subarray(8);
+      expect(image.length).toBe(stride * 28);
+      // Rows 13 and 14 (the middle two of 28) print every dot of the text grid's cells, and
+      // nothing outside them; no other row prints.
+      const { offsetDots } = b.grid;
+      for (let y = 0; y < 28; y++) {
+        for (let x = 0; x < widthDots; x++) {
+          const set = (image[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) !== 0;
+          const inBar = (y === 13 || y === 14) && x >= offsetDots && x < offsetDots + columns * 12;
+          expect(set, `dot ${x},${y}`).toBe(inBar);
+        }
+      }
+    },
+  );
+
+  it("refuses to draw a rule without a paper width and resolution", () => {
+    expect(() => esc().rule()).toThrow(/paper width and resolution/);
+  });
+
   it("draws an empty line as a blank band of the same size", () => {
     expect([...esc(TM_T88_58).line().bytes()]).toEqual([
       ...header(45, 28),

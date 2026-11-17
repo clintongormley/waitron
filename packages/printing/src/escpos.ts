@@ -5,7 +5,14 @@
 
 import { textGrid, type PaperWidth, type Resolution, type TextGrid } from "./layout.js";
 import { assertPictureSize, type MonoRaster } from "./dither.js";
-import { drawTextBand, textBandHeight, type Alignment, type TextStyle } from "./raster-text.js";
+import {
+  TEXT_BAND_HEIGHT,
+  drawRuleBand,
+  drawTextBand,
+  textBandHeight,
+  type Alignment,
+  type TextStyle,
+} from "./raster-text.js";
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -78,6 +85,17 @@ export class EscBuilder {
       textBandHeight(style),
       drawTextBand(s, this.grid, this.alignment, style),
     );
+    return this;
+  }
+
+  /** A solid line across the text grid, one band tall: one picture, which reads back as dashes. */
+  rule(): this {
+    if (this.grid === undefined) {
+      throw new Error(
+        "esc() was made without a paper width and resolution, so it cannot draw a rule",
+      );
+    }
+    this.pushRaster(Math.ceil(this.grid.widthDots / 8), TEXT_BAND_HEIGHT, drawRuleBand(this.grid));
     return this;
   }
 
@@ -233,7 +251,7 @@ export class EscBuilder {
     return Uint8Array.from(this.parts);
   }
 
-  /** The `GS v 0` pictures sent so far: each `line`, `raster`, `bitmap` and `qrRaster` is one; a native `qr()` code is not. */
+  /** The `GS v 0` pictures sent so far: each `line`, `rule`, `raster`, `bitmap` and `qrRaster` is one; a native `qr()` code is not. */
   get pictures(): number {
     return this.drawn;
   }
