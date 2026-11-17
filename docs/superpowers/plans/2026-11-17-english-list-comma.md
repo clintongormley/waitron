@@ -5,6 +5,9 @@ printed kitchen cues use “Grill, Fryer and Pastry”, as the production till a
 dashboard already do. The watcher cleared this replacement route at 16:03 and
 16:11 on 2026-11-17 in this lane’s `questions.md`; no owner design approval is claimed.
 Claude’s first plan read found that the production till already uses `en-GB`.
+The final corrections were cleared by the watcher at 16:28 in that same file:
+“the allergen helpers and collection slip keep reading their bare-language tables,
+with only the list formatter getting the full locale” and “build now.”
 
 **Reuse and boundary:** Keep `packages/shared/src/list.ts` and its tests unchanged.
 `readKitchenLanguage` currently reduces saved content settings to the two available
