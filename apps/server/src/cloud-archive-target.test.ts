@@ -221,9 +221,7 @@ it("retries publication without another grant or upload for the old capture", as
 it("refuses a connection that is not a test connection, as an outcome", async () => {
   const f = await fixture();
   f.status.environment = "production";
-  const target = createCloudArchiveTarget(f.deps);
-  await expect(target.roomNeeded(10)).resolves.toBe(0);
-  await expect(target.store(f.input())).resolves.toEqual({
+  await expect(createCloudArchiveTarget(f.deps).store(f.input())).resolves.toEqual({
     stored: false,
     errorCode: "cloud.unavailable",
   });
@@ -233,10 +231,8 @@ it("refuses a connection that is not a test connection, as an outcome", async ()
 
 it("refuses an archive whose plaintext plus overhead is over 512 MiB before reserving", async () => {
   const f = await fixture();
-  const target = createCloudArchiveTarget(f.deps);
-  await expect(target.roomNeeded(536_870_864)).resolves.toBe(0);
   await expect(
-    target.store({
+    createCloudArchiveTarget(f.deps).store({
       ...f.input(),
       plaintextBytes: 536_870_864,
     }),

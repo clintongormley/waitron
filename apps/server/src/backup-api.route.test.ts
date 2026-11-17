@@ -1754,9 +1754,10 @@ describe("backup admin routes", () => {
       expect(await readSealed()).toMatchObject({ destinations: [], cloud: true, schedule });
     });
 
-    it("refuses Cloud on a box whose connection is not a test one", async () => {
+    it("refuses enabling Cloud on a non-test connection and keeps local saves available", async () => {
+      let environment: "test" | "production" = "production";
       const { post } = await primaryApp({
-        readCloudStatus: async () => ({ state: "complete", environment: "production", code: "" }),
+        readCloudStatus: async () => ({ state: "complete", environment, code: "" }),
       });
       const response = await post("/api/backup/apply", cloudOnly);
       expect(response.status).toBe(400);
@@ -1764,26 +1765,13 @@ describe("backup admin routes", () => {
         error: { code: "backup.cloud_unavailable", params: { field: "cloud" } },
       });
       expect(await readSealed()).toBeNull();
-    });
-
-    it("saves a local backup setting after the held Cloud connection changes", async () => {
-      let environment: "test" | "production" = "test";
-      const { post } = await primaryApp({
-        readCloudStatus: async () => ({ state: "complete", environment, code: "" }),
-      });
+      environment = "test";
       expect((await post("/api/backup/apply", cloudOnly)).status).toBe(200);
       environment = "production";
       const { cloud: _cloud, ...edit } = cloudOnly;
-      const dir = makeDestDir();
-      const response = await post("/api/backup/apply", {
-        ...edit,
-        destinations: [{ kind: "local-fs", dir }],
-      });
-      expect(response.status).toBe(200);
-      expect(await readSealed()).toMatchObject({
-        cloud: true,
-        destinations: [{ kind: "local-fs", dir }],
-      });
+      const destinations = [{ kind: "local-fs", dir: makeDestDir() }];
+      expect((await post("/api/backup/apply", { ...edit, destinations })).status).toBe(200);
+      expect(await readSealed()).toMatchObject({ cloud: true, destinations });
     });
 
     const probeCalls = () => {

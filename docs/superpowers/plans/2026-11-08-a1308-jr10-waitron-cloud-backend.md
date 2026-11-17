@@ -30,9 +30,12 @@ Slice rules apply.
 
 ## Measure 13 — 2026-11-17, watcher-cleared to continue at 21:34
 
-The existing untrimmed 366-day bench fixture produced a **1,676,015,028-byte encrypted archive** from a
-12,318,072,832-byte database copy through the real `runOnce` path. It exceeds the current
-536,870,912-byte (512 MiB) Cloud ceiling by more than three times. The fixture used its matching
+The existing untrimmed 366-day bench fixture produced a **1,676,015,028-byte compressed and encrypted
+local archive** from a 12,318,072,832-byte database copy through the real `runOnce` path. Cloud
+packs the raw database, as the retired worker did. In this fixture the database alone is about
+22.94 times Cloud's current 536,870,912-byte (512 MiB) limit, before packing or encryption.
+`cloud-archive-sweep.test.ts` confirms the Cloud format by decrypting and unpacking a real SQLite
+copy without decompression. The fixture used its matching
 `30c1c1c564` checkout on the 32-core bench stand-in; current main refuses its older schema. No new
 year was built. The archive-building functions were unchanged at the time of the measurement.
 The bench fixture retained the year's print payloads. The watcher noted on 2026-11-17 at 22:31
@@ -42,11 +45,12 @@ The watcher cleared this plan to build the test-only destination under the curre
 real-venue refusal. The owner chose a streaming ceiling increase, assigned to lanes J and G
 (watcher, 21:35); this slice does not raise it. No owner approval of this slice's design is claimed.
 
-The measurement's post-upload warning was its own wrong outcome-holder shape: it supplied
+The measurement's post-store warning was its own wrong outcome-holder shape. It supplied
 `destinations`, while `recordBackupOutcome` reads `failed`. With the wrong shape, the real
 `runOnce` probe logged `backup.destination_prune_failed` before listing anything; with `failed:
 new Map()`, it listed once and logged completion. This corrects the probe, not a jr8/jr10 product
-path. The year measurement establishes size, not retention or restore qualification. Its owned
+path. The year measurement sized the local archive and the database fixture. No year archive was
+uploaded to Cloud. Its owned
 remote data and ciphertext are deleted; small text receipts remain with Lane E.
 
 ## What it builds

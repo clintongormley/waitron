@@ -508,6 +508,13 @@ succeeds. The next scheduled run first finishes a pending capture, then stores i
 The first capture of each month in the venue's time zone is labelled monthly. Cloud backups are
 available on test connections and have a 512 MiB upload limit.
 
+Cloud starts turned off, including on test boxes that used the old worker. Until the Backups
+screen includes the Cloud setting, choose it through the backup settings API. It follows the same
+immediate run on start or settings reload as the other scheduled destinations.
+While the Cloud connection is available, the last-backup time is unknown until this run of the
+service observes a successful upload. If that time is unknown, the overdue window runs from
+process start or the most recent success this process recorded.
+
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
 installed checkout. It needs a Cloud that supports `servicesVersion` 2 (see
 [Run the integration proof](#run-the-integration-proof)). It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable

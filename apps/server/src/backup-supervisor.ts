@@ -215,6 +215,7 @@ export class BackupSupervisor {
   #stopped = false;
   #sweep: SweepRecords = new Map();
   #cloudStoredAt: Date | null = null;
+  #cloudLastSuccessUptime = 0;
   readonly #statusClients: StatusClients;
   #noteTurns: Promise<void> = Promise.resolve();
 
@@ -544,7 +545,10 @@ export class BackupSupervisor {
       if (!cloudArchiveAvailable(await this.#deps.readCloudStatus?.())) {
         return unreadDestination("cloud", "cloud.unavailable");
       }
-      if (storedAt === null) return unreadDestination("cloud", null);
+      if (storedAt === null) {
+        const stale = (process.uptime() - this.#cloudLastSuccessUptime) * 1000 > staleAfterMs;
+        return { ...unreadDestination("cloud", null), stale };
+      }
       const ageMs = now.getTime() - storedAt.getTime();
       return {
         id: "cloud",
@@ -595,7 +599,10 @@ export class BackupSupervisor {
   #recordResult(result: DestinationResult): void {
     const prev = this.#sweep.get(result.id);
     const cloud = result.id === "cloud";
-    if (cloud && result.stored) this.#cloudStoredAt = this.#now();
+    if (cloud && result.stored) {
+      this.#cloudStoredAt = this.#now();
+      this.#cloudLastSuccessUptime = process.uptime();
+    }
     this.#sweep.set(result.id, {
       storedUnderCurrentKey: !cloud && ((prev?.storedUnderCurrentKey ?? false) || result.stored),
       uploadErrorCode: result.uploadErrorCode,

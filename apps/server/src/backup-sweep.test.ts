@@ -473,6 +473,8 @@ describe("runOnce (fan-out)", () => {
     const local = new LocalFsBackend("local", dir);
     const onDestinationResult = vi.fn();
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const statfs = vi.fn(async () => ({ bavail: 1_000_000, frsize: 1 }));
+    statfs.mockResolvedValueOnce({ bavail: 300, frsize: 1 });
     const input = {
       ...deps([local]),
       cloud: {
@@ -488,10 +490,7 @@ describe("runOnce (fan-out)", () => {
       stagingEstimateBytes: async () => 100,
       spaceFloorBytes: 0,
       spaceAimBytes: 0,
-      statfs: vi
-        .fn()
-        .mockResolvedValueOnce({ bavail: 300, frsize: 1 })
-        .mockResolvedValue({ bavail: 1_000_000, frsize: 1 }),
+      statfs,
       outcomes,
       onDestinationResult,
     };
