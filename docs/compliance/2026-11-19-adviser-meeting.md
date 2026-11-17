@@ -542,7 +542,7 @@ Yes / No / Note: ____________________________________________
 
 **25. Two guests want their own tickets after the table's ticket was issued (follows answer 1.7).**
 
-*The situation.* Following answer 1.3, a table's ticket will be issued when staff close the table,
+*The situation.* Following answer 1.3, a table's ticket will be issued when staff print the bill,
 paid or not (the owner's decision D1). After a ticket is issued for a table, two guests each want
 their own ticket. We propose a corrective invoice (R5) correcting the first ticket and new tickets
 for each guest, never a cancellation record, because the sale happened (answer 1.7).
@@ -1104,8 +1104,8 @@ Sí / No / Nota: ____________________________________________
 **25. Dos comensales quieren su propio tique cuando ya se expidió el de la mesa (a partir de su
 respuesta 1.7).**
 
-*Situación.* A partir de su respuesta 1.3, el tique de una mesa se expedirá cuando el personal cierre
-la mesa, esté pagado o no (decisión D1 del titular). Expedido el tique de una mesa, dos comensales
+*Situación.* A partir de su respuesta 1.3, el tique de una mesa se expedirá cuando el personal imprima
+la cuenta, esté pagado o no (decisión D1 del titular). Expedido el tique de una mesa, dos comensales
 quieren cada uno su propio tique. Proponemos una factura rectificativa (R5) del primer tique y un
 tique nuevo para cada comensal, nunca un registro de anulación, porque la venta se produjo (su
 respuesta 1.7).
