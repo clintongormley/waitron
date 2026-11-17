@@ -17,7 +17,7 @@ import {
   sentInRun,
   startSuggestionRun,
 } from "./content-suggestion-jobs.js";
-import { storeSuggestionPage } from "./content-suggestion-store.js";
+import { listContentSuggestions, storeSuggestionPage } from "./content-suggestion-store.js";
 import {
   addProduct,
   allJobs,
@@ -27,6 +27,7 @@ import {
   runningJob,
   seedSuggestionVenue,
   sortedSent,
+  missingSent,
   startedJob,
   suggestionSuite,
 } from "../test/suggestion-fixture.js";
@@ -34,6 +35,70 @@ import {
 const { suite, app } = suggestionSuite();
 const at = new Date("2026-10-14T09:00:00.000Z");
 const later = new Date("2026-10-14T10:00:00.000Z");
+
+it.each([
+  ["unchanged", false],
+  ["clarified", false],
+  ["clarified", true],
+  ["renamed while Cloud worked", true],
+] as const)(
+  "retries a clarified placeholder at the next run: %s, note=%s",
+  async (change, note) => {
+    const venue = await seedSuggestionVenue(suite.db);
+    const job = await runningJob(suite.db);
+    const clarify = () =>
+      app((tx) =>
+        tx
+          .update(products)
+          .set({ name: "STAFF Sourdough bread" })
+          .where(eq(products.id, venue.bread)),
+      );
+    if (change === "renamed while Cloud worked") await clarify();
+    await app(async (tx) => {
+      await storeSuggestionPage(
+        tx,
+        job.id,
+        {
+          state: "done",
+          cursor: 0,
+          nextCursor: null,
+          failed: Object.keys(job.sent).filter((key) => key !== ref(venue.bread)),
+          results: [
+            result(
+              ref(venue.bread),
+              {},
+              {
+                placeholder: true,
+                corrections: note
+                  ? [{ field: "internal", wrong: "STAFF Bread", right: "Use a clearer name" }]
+                  : [],
+              },
+            ),
+          ],
+        },
+        context,
+      );
+      await recordSuggestionJobReleased(tx, job.id);
+    });
+    if (change === "clarified") await clarify();
+    const next = await startedJob(suite.db);
+    if (change === "unchanged") expect(next.sent).not.toHaveProperty(ref(venue.bread));
+    else expect(sortedSent(next.sent)[ref(venue.bread)]).toEqual(["en", "es"]);
+    const rows = await suite.db
+      .select()
+      .from(contentSuggestions)
+      .where(eq(contentSuggestions.itemId, venue.bread));
+    if (change === "unchanged") expect(rows).toMatchObject([{ placeholder: true }]);
+    else if (note)
+      expect(rows).toMatchObject([
+        { placeholder: false, fixField: "internal", fixRight: "Use a clearer name" },
+      ]);
+    else expect(rows).toEqual([]);
+    const page = await app((tx) => listContentSuggestions(tx, {}, context));
+    expect(page.waitingFixes).toBe(change === "unchanged" || note ? 1 : 0);
+    expect(page.suggestions.some((row) => row.placeholder)).toBe(change === "unchanged");
+  },
+);
 
 it("has no run before the first Translate all", async () => {
   await seedSuggestionVenue(suite.db);
@@ -133,7 +198,7 @@ it("counts a variant but not its complete product, which travels only as context
   expect(view).toMatchObject({ total: 1 });
   const [job] = await app(allJobs);
   expect(job!.runTotal).toBe(1);
-  expect(job!.sent).toEqual({ [`variant:${small}`]: ["es", "en"] });
+  expect(missingSent(job!.sent)).toEqual({ [`variant:${small}`]: ["es", "en"] });
   const body = JSON.parse(job!.body!) as { items: { ref: string }[] };
   expect(body.items.map((item) => item.ref)).toEqual([ref(water), `variant:${small}`]);
 });
@@ -418,7 +483,7 @@ it("the last job's refusal wins over an earlier job's success", async () => {
         position: 2,
         state: "submitting",
         body: "{}",
-        sent: { "product:later": ["es"] },
+        sent: { "product:later": { missing: ["es"], source: "{}" } },
       })
       .returning();
     await recordSuggestionJobRefused(tx, second!.id, "limit", 0, later);
@@ -454,7 +519,10 @@ it("sums done and failed across a run's jobs, keeps the first job's total, and k
       position: 2,
       state: "running",
       cloudJobId: randomUUID(),
-      sent: { [`product:${other}`]: ["es"], [`unit:${other}`]: ["en"] },
+      sent: {
+        [`product:${other}`]: { missing: ["es"], source: "{}" },
+        [`unit:${other}`]: { missing: ["en"], source: "{}" },
+      },
       done: 1,
       failed: 0,
     });

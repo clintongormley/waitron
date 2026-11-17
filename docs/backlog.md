@@ -513,7 +513,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 5, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
 
-- **Translate all followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
+- **Translate all: notice, release and Cloud followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and

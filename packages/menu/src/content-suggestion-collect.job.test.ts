@@ -21,7 +21,7 @@ import { createCategory } from "./categories.js";
 import { createMenu, createProduct, deactivateMenu, deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
-import { addOversizedFamily } from "../test/suggestion-fixture.js";
+import { addOversizedFamily, missingSent } from "../test/suggestion-fixture.js";
 import {
   buildSuggestionJob,
   collectSuggestionItems,
@@ -425,7 +425,7 @@ describe("the job body", () => {
         { kind: "product", staffName: "STAFF Pa", names: { ca: "CLIENT-CA Pa" } },
       ]);
       expect(draft).toMatchObject({
-        sent: { [`product:${pa}`]: ["es", "en"] },
+        sent: { [`product:${pa}`]: { missing: ["es", "en"] } },
         included: 1,
         heads: 0,
         remaining: 0,
@@ -501,7 +501,7 @@ describe("the job body", () => {
         existing: LUNCH_NAMES,
         missing: [],
       });
-      expect(draft!.sent).toEqual({
+      expect(missingSent(draft!.sent)).toEqual({
         [`variant:${pinta}`]: ["es"],
         [`variant:${quinto}`]: ["es"],
         [`option_label:${poco}`]: ["en"],
@@ -544,7 +544,7 @@ describe("the job body", () => {
           missing: ["es"],
         },
       ]);
-      expect(later!.sent).toEqual({ [`variant:${pinta}`]: ["es"] });
+      expect(missingSent(later!.sent)).toEqual({ [`variant:${pinta}`]: ["es"] });
       expect(later).toMatchObject({ included: 2, heads: 1, remaining: 0 });
 
       const first = await buildSuggestionJob(tx, context, new Set());
@@ -595,7 +595,7 @@ describe("the job body", () => {
           missing: ["es"],
         },
       ]);
-      expect(draft!.sent).toEqual({ [`variant:${pinta}`]: ["es"] });
+      expect(missingSent(draft!.sent)).toEqual({ [`variant:${pinta}`]: ["es"] });
       expect(draft).toMatchObject({ included: 2, heads: 1, remaining: 0 });
     });
   });
@@ -713,7 +713,7 @@ describe("the job's limits", () => {
       expect(items[0]!.ref).toBe(`variant:${variantId}`);
       const draft = await buildSuggestionJob(tx, context, new Set());
       expect(draft).toMatchObject({ included: 0, heads: 0, remaining: items.length });
-      expect(draft!.sent).toEqual({});
+      expect(missingSent(draft!.sent)).toEqual({});
       expect(parsed(draft).items).toEqual([]);
       expect(Buffer.byteLength(draft!.body)).toBe(draft!.bytes);
     });

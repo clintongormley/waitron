@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { contentSuggestionJobs, contentSuggestions, products, withTransaction } from "@waitron/db";
+import {
+  contentSuggestionJobs,
+  contentSuggestions,
+  products,
+  withTransaction,
+  type SuggestionJobRow,
+} from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -710,7 +716,7 @@ it("a later run replaces more than one batch of an item's rows in one store", as
       .returning({ id: products.id });
     return inserted.map((row) => row.id);
   });
-  const answer = (sent: Record<string, string[]>, word: string, names: boolean) =>
+  const answer = (sent: SuggestionJobRow["sent"], word: string, names: boolean) =>
     ids
       .filter((id) => Object.hasOwn(sent, ref(id)))
       .map((id) =>
@@ -718,7 +724,7 @@ it("a later run replaces more than one batch of an item's rows in one store", as
           ref(id),
           names
             ? Object.fromEntries(
-                sent[ref(id)]!.map((language) => [language, `${word} ${language}`]),
+                sent[ref(id)]!.missing.map((language) => [language, `${word} ${language}`]),
               )
             : {},
           {

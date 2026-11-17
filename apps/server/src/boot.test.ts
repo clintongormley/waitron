@@ -3884,7 +3884,7 @@ describe("startServer — what a trading boot wires behind its management routes
         runId: randomUUID(),
         position: 1,
         state: "done",
-        sent: { [`product:${productId}`]: [language] },
+        sent: { [`product:${productId}`]: { missing: [language], source: "{}" } },
         runTotal: 1,
         total: 1,
         done: 1,

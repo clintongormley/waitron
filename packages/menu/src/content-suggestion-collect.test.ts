@@ -1,3 +1,4 @@
+import { missingSent } from "../test/suggestion-fixture.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -448,7 +449,10 @@ describe("the gaps a run starts from", () => {
         ]),
       );
       const draft = await buildSuggestionJob(tx, context, new Set(), gaps);
-      expect(draft!.sent).toEqual({ [`product:${pa}`]: ["en"], [`product:${oli}`]: ["en"] });
+      expect(missingSent(draft!.sent)).toEqual({
+        [`product:${pa}`]: ["en"],
+        [`product:${oli}`]: ["en"],
+      });
       for (const gap of gaps.values()) expect([...gap.missing]).toEqual(["es", "en"]);
 
       await pruneSuggestions(tx, context);

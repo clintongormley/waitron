@@ -1,4 +1,5 @@
 import { setImmediate } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { and, asc, eq, gt, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
@@ -12,6 +13,7 @@ import {
   readLiveItems,
   readSuggestionGaps,
   suggestionRef,
+  suggestionSource,
 } from "./content-suggestion-collect.js";
 import {
   readSuggestionRun,
@@ -145,9 +147,12 @@ export async function storeSuggestionPage(
   );
   const planned = new Map<string, { ref: TranslationRef; rows: Map<string | null, PlannedRow> }>();
   for (const [key, { ref, result }] of answered) {
-    const missing = job.sent[key]!;
+    const { missing, source } = job.sent[key]!;
     const live = current.get(key);
     const entry = live?.entry;
+    const submitted = JSON.parse(source) as { staffName: string };
+    const sourceMatches =
+      !!entry && isDeepStrictEqual(submitted, JSON.parse(suggestionSource(entry)));
     const rows = new Map<string | null, PlannedRow>();
     let usable = result.placeholder;
     for (const [language, name] of Object.entries(result.names)) {
@@ -161,7 +166,7 @@ export async function storeSuggestionPage(
         continue;
       }
       usable = true;
-      if (!live || !languages.includes(language)) {
+      if (!live || !sourceMatches || !languages.includes(language)) {
         dropped += 1;
         continue;
       }
@@ -181,7 +186,7 @@ export async function storeSuggestionPage(
       usable = true;
       const language = fix.field === "internal" ? null : fix.field;
       const entered = language === null || !blankName(effective[language]);
-      if (!entry || !entered || rows.has(language)) {
+      if (!entry || (language !== null && !sourceMatches) || !entered || rows.has(language)) {
         dropped += 1;
         continue;
       }
@@ -194,7 +199,12 @@ export async function storeSuggestionPage(
       });
     }
     if (result.placeholder) {
-      if (entry) rows.set(null, { ...(rows.get(null) ?? emptyRow(null)), placeholder: true });
+      if (entry)
+        rows.set(null, {
+          ...(rows.get(null) ?? emptyRow(null)),
+          placeholder: true,
+          expected: JSON.stringify({ staffName: submitted.staffName }),
+        });
       else dropped += 1;
     }
     if (usable) planned.set(key, { ref, rows });
