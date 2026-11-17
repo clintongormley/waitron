@@ -119,6 +119,10 @@ const cardKeys = (el: TillPassScreen) =>
   [...boardOf(el)!.shadowRoot!.querySelectorAll("[data-card]")].map((card) =>
     card.getAttribute("data-card"),
   );
+const unavailableLines = (el: TillPassScreen) =>
+  [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+    line.textContent!.trim(),
+  );
 
 async function withFakeTimers(run: () => Promise<void>): Promise<void> {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
@@ -328,10 +332,6 @@ describe("A773 pass screen", () => {
       }));
 
     const goneLine = () => kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" });
-    const unavailableLines = (el: TillPassScreen) =>
-      [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
-        line.textContent!.trim(),
-      );
     const boardButtons = (el: TillPassScreen) =>
       boardOf(el)!.shadowRoot!.querySelectorAll(
         "[data-pass-fire], [data-group-ready], [data-ready], [data-reprint]",
@@ -844,12 +844,205 @@ describe("A773 pass screen", () => {
       ));
   });
 
-  describe("lost slots and a lost screen", () => {
-    const lines = (el: TillPassScreen) =>
-      [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
-        line.textContent!.trim(),
-      );
+  describe("the header names what the pass covers", () => {
+    const covers = (el: TillPassScreen) =>
+      el.shadowRoot!.querySelector("[data-covers]")?.textContent?.trim() ?? null;
+    const stations = [
+      { id: "st-2", name: "Parrilla", available: true },
+      { id: "st-1", name: "Freidora", available: true },
+    ];
 
+    it("names the stations in the server's order, in the board's lead slot, with no zone filter", async () => {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(boardA, { stations }) });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+      const line = el.shadowRoot!.querySelector("[data-covers]")!;
+      expect(line.getAttribute("slot")).toBe("lead");
+      expect(line.parentElement).toBe(boardOf(el));
+    });
+
+    it("names the zones after the stations when the pass has a zone filter", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations,
+          zones: [
+            { id: "z-2", name: "Terraza", available: true },
+            { id: "z-1", name: "Sala", available: true },
+          ],
+        }),
+      });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora · Zones: Terraza, Sala");
+    });
+
+    it("leaves a station or zone no longer available to its lost line", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations: [
+            { id: "st-1", name: "Parrilla", available: true },
+            { id: "st-2", name: "Freidora", available: false },
+          ],
+          zones: [
+            { id: "z-1", name: "Terraza", available: false },
+            { id: "z-2", name: "Sala", available: true },
+          ],
+        }),
+      });
+      expect(covers(el)).toBe("Stations: Parrilla · Zones: Sala");
+      expect(unavailableLines(el)).toEqual([
+        t("station.unavailable").replace("{name}", "Freidora"),
+        t("zone.unavailable").replace("{name}", "Terraza"),
+      ]);
+    });
+
+    it("shows the same line on the pass monitor", async () => {
+      const api = fakeApi({
+        getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard(boardA, { stations })),
+      });
+      const el = await mount({ api, monitor: true });
+      expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+    });
+
+    it("shows the same line on the pass opened from the counter", async () => {
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardA, { stations })),
+      });
+      const el = await mount({ api });
+      expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+    });
+
+    it.each([
+      ["names no station at all", { stations: [] }],
+      [
+        "has lost every station",
+        { stations: [{ id: "st-1", name: "Freidora", available: false }] },
+      ],
+    ])("draws no line when the pass %s", async (_, slots) => {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(boardA, slots) });
+      expect(covers(el)).toBeNull();
+    });
+
+    it("draws a name holding replacement patterns as written", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations: [{ id: "st-1", name: "Grill $& $1 {names}", available: true }],
+          zones: [{ id: "z-1", name: "Bar $& $1 {names}", available: true }],
+        }),
+      });
+      expect(covers(el)).toBe("Stations: Grill $& $1 {names} · Zones: Bar $& $1 {names}");
+    });
+
+    it("drops the old pass's line while the pass monitor it switched to is still being read", () =>
+      withFakeTimers(async () => {
+        const monitorRead = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardA, { stations })),
+          getDevicePassMonitorBoard: vi.fn(() => monitorRead.promise),
+        });
+        const el = await mount({ api });
+        expect(covers(el)).toBe("Stations: Parrilla, Freidora");
+        api.getDeviceIdentity.mockResolvedValue(identity([chosen("pass_monitor")]));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.mode).toBe("monitor");
+        expect(covers(el)).toBeNull();
+        monitorRead.resolve(
+          deviceBoard(boardB, { stations: [{ id: "st-3", name: "Postres", available: true }] }),
+        );
+        await flush(el);
+        expect(covers(el)).toBe("Stations: Postres");
+      }));
+
+    it("words the line in Spanish", async () => {
+      const previous = currentLocale();
+      setLocale("es-ES");
+      try {
+        const el = await mount({
+          deviceMode: true,
+          initialBoard: deviceBoard(boardA, {
+            stations,
+            zones: [{ id: "z-1", name: "Terraza", available: true }],
+          }),
+        });
+        expect(covers(el)).toBe("Estaciones: Parrilla, Freidora · Zonas: Terraza");
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it.each([
+      [
+        "en-GB",
+        ["Kitchen", "Downstairs bar prep", "Upstairs bar prep", "Deli prep"],
+        ["Upstairs bar", "Deli counter"],
+      ],
+      [
+        "es-ES",
+        [
+          "Cocina",
+          "Preparación del bar de abajo",
+          "Preparación del bar de arriba",
+          "Preparación de charcutería",
+        ],
+        ["Bar de arriba", "Mostrador de charcutería"],
+      ],
+    ])(
+      "wraps the demo venue's names inside the header at 390 and 1024 px, splitting no word (%s)",
+      async (locale, stationNames, zoneNames) => {
+        const slot = (name: string, index: number) => ({ id: `s-${index}`, name, available: true });
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          for (const width of [390, 1024]) {
+            await pageAt(width, 800);
+            const el = await mount({
+              deviceMode: true,
+              deviceName: "Pass",
+              initialBoard: deviceBoard(boardA, {
+                stations: stationNames.map(slot),
+                zones: zoneNames.map(slot),
+              }),
+            });
+            const head = boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-board-head]")!;
+            const line = el.shadowRoot!.querySelector<HTMLElement>("[data-covers]")!;
+            expect(covers(el)).toContain(stationNames.at(-1));
+            expect(head.scrollWidth).toBeLessThanOrEqual(head.clientWidth);
+            expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
+              head.getBoundingClientRect().right + 0.5,
+            );
+            const text = [...line.childNodes].find(
+              (node): node is Text => node instanceof Text && node.data.trim() !== "",
+            )!;
+            const rows = (start: number, end: number) => {
+              const range = document.createRange();
+              range.setStart(text, start);
+              range.setEnd(text, end);
+              return new Set(
+                [...range.getClientRects()]
+                  .filter((rect) => rect.width > 0)
+                  .map((rect) => Math.round(rect.top)),
+              ).size;
+            };
+            if (width === 390) expect(rows(0, text.length)).toBeGreaterThan(1);
+            const split = [...text.data.matchAll(/\S+/g)]
+              .filter((word) => rows(word.index, word.index + word[0].length) > 1)
+              .map((word) => word[0]);
+            expect(split, `${width} px`).toEqual([]);
+            cleanupWidgets();
+          }
+        } finally {
+          setLocale(previous);
+          await resetPage();
+        }
+      },
+    );
+  });
+
+  describe("lost slots and a lost screen", () => {
     it("shows each station and zone a narrowing took, in the board's status slot", async () => {
       const el = await mount({
         deviceMode: true,
@@ -864,7 +1057,7 @@ describe("A773 pass screen", () => {
           ],
         }),
       });
-      expect(lines(el)).toEqual([
+      expect(unavailableLines(el)).toEqual([
         t("station.unavailable").replace("{name}", "Freidora"),
         t("zone.unavailable").replace("{name}", "Terraza"),
       ]);
@@ -881,7 +1074,9 @@ describe("A773 pass screen", () => {
           stations: [{ id: "st-2", name: "Freidora", available: false }],
         }),
       });
-      expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+      expect(unavailableLines(el)).toEqual([
+        t("station.unavailable").replace("{name}", "Freidora"),
+      ]);
       expect(boardOf(el)).toBeNull();
       expect(el.shadowRoot!.querySelector(".stale")).toBeNull();
     });
@@ -907,7 +1102,9 @@ describe("A773 pass screen", () => {
         });
         const el = await mount({ api, ...props });
         expect(api[read]).toHaveBeenCalledOnce();
-        expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+        expect(unavailableLines(el)).toEqual([
+          t("station.unavailable").replace("{name}", "Freidora"),
+        ]);
         expect(boardOf(el)).toBeNull();
       },
     );
@@ -919,16 +1116,52 @@ describe("A773 pass screen", () => {
           zones: [{ id: "z-1", name: "Terraza", available: false }],
         }),
       });
-      expect(lines(el)).toEqual([t("zone.unavailable").replace("{name}", "Terraza")]);
+      expect(unavailableLines(el)).toEqual([t("zone.unavailable").replace("{name}", "Terraza")]);
       expect(boardOf(el)).toBeNull();
     });
+
+    it("names no station it still has when a narrowing took every zone", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          stations: [{ id: "st-1", name: "Parrilla", available: true }],
+          zones: [{ id: "z-1", name: "Terraza", available: false }],
+        }),
+      });
+      expect(unavailableLines(el)).toEqual([t("zone.unavailable").replace("{name}", "Terraza")]);
+      expect(boardOf(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-covers]")).toBeNull();
+    });
+
+    it("names no station once a narrowing took the till's pass screen", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi.fn().mockResolvedValue(
+            deviceBoard(boardA, {
+              stations: [{ id: "st-1", name: "Parrilla", available: true }],
+            }),
+          ),
+        });
+        const el = await mount({ api });
+        expect(el.shadowRoot!.querySelector("[data-covers]")).not.toBeNull();
+        api.getDeviceIdentity.mockResolvedValue(identity([chosen("pass", false)]));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(unavailableLines(el)).toEqual([
+          kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" }),
+        ]);
+        expect(el.shadowRoot!.querySelector("[data-covers]")).toBeNull();
+      }));
 
     it("at a till whose pass screen a narrowing took, says so and reads no board", async () => {
       const api = fakeApi({
         getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
       });
       const el = await mount({ api });
-      expect(lines(el)).toEqual([kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" })]);
+      expect(unavailableLines(el)).toEqual([
+        kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" }),
+      ]);
       expect(boardOf(el)).toBeNull();
       expect(api.getDevicePassBoard).not.toHaveBeenCalled();
     });
@@ -1048,7 +1281,7 @@ describe("A773 pass screen", () => {
             ),
           });
           const el = await mount({ api });
-          expect(lines(el)).toEqual([stationLine, zoneLine]);
+          expect(unavailableLines(el)).toEqual([stationLine, zoneLine]);
           expect(cardKeys(el)).toEqual(["bill:a"]);
         } finally {
           setLocale(previous);
@@ -1066,7 +1299,7 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)).toBeNull();
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
-        expect(lines(el)).toEqual([]);
+        expect(unavailableLines(el)).toEqual([]);
         expect(cardKeys(el)).toEqual(["bill:b"]);
       }));
 
@@ -1078,11 +1311,11 @@ describe("A773 pass screen", () => {
           .mockResolvedValue(identity([chosen("pass", false)]));
         const el = await mount({ api });
         expect(boardOf(el)).toBeNull();
-        expect(lines(el)).toEqual(["The screen could not be read. Trying again…"]);
+        expect(unavailableLines(el)).toEqual(["The screen could not be read. Trying again…"]);
         await vi.advanceTimersByTimeAsync(15_000);
         await flush(el);
         expect(boardOf(el)).toBeNull();
-        expect(lines(el)).toEqual([
+        expect(unavailableLines(el)).toEqual([
           kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" }),
         ]);
         await vi.advanceTimersByTimeAsync(15_000);
@@ -1879,10 +2112,6 @@ describe("A773 pass screen: a pass monitor", () => {
         .mockResolvedValue(identity([{ ...chosen("pass_monitor"), ...screen }])),
       getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
     });
-  const lines = (el: TillPassScreen) =>
-    [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
-      line.textContent!.trim(),
-    );
 
   /** Every element in `root` and in each shadow root below it. */
   function deepQueryAll(root: ShadowRoot | Element, selector: string): Element[] {
@@ -2016,7 +2245,7 @@ describe("A773 pass screen: a pass monitor", () => {
     ],
   ])("%s, shows each station and zone a narrowing took, and its board", async (_, mountOne) => {
     const el = await mountOne();
-    expect(lines(el)).toEqual([
+    expect(unavailableLines(el)).toEqual([
       t("station.unavailable").replace("{name}", "Freidora"),
       t("zone.unavailable").replace("{name}", "Terraza"),
     ]);
@@ -2026,7 +2255,7 @@ describe("A773 pass screen: a pass monitor", () => {
   it("at a till whose device chose it, shows only its lines and no board when a narrowing left it no station", async () => {
     const slots = { stations: [{ id: "st-2", name: "Freidora", available: false }] };
     const el = await mount({ api: tillApi(deviceBoard(passBoard(), slots), slots) });
-    expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+    expect(unavailableLines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
     expect(boardOf(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-card], [data-empty], .stale")).toBeNull();
   });
@@ -2046,7 +2275,7 @@ describe("A773 pass screen: a pass monitor", () => {
         try {
           const api = tillApi(deviceBoard(), { available: false });
           const el = await mount({ api });
-          expect(lines(el)).toEqual([line]);
+          expect(unavailableLines(el)).toEqual([line]);
           expect(boardOf(el)).toBeNull();
           expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
           await vi.advanceTimersByTimeAsync(15_000);

@@ -6615,7 +6615,9 @@ the combined column once, held card or not. The pass board (`till-pass-board`,
 `toFire`, `held`, `toFireOnly`, `inProgress` and `ready`, and hides `overview`, `held` and
 `toFireOnly`; `toFire`, headed To fire and named "Held + To fire" in Columns
 (`pass.columns_held_to_fire`), draws the server's To fire cards, then the same `heldPart` and the
-server's held cards; `held` and `toFireOnly` draw the server's held or To fire cards alone.
+server's held cards; `held` and `toFireOnly` draw the server's held or To fire cards alone. On the
+pass board, the screen's `lead` may also hold a `--wt-color-text-muted` line naming what the pass
+covers (`coversLine`, `apps/till/src/screens/till-pass-screen.ts`).
 
 Overview is the first column by default (`STATION_COLUMNS`, `kitchen-columns.ts`), and a stored
 layout without it reads with it first, shown and open (`sanitise`). Its rows come from

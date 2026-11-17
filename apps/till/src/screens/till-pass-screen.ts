@@ -70,6 +70,22 @@ function lostLines(screen: Pick<DevicePassBoard, "stations" | "zones">): string[
   ];
 }
 
+function coversLine(screen: Pick<DevicePassBoard, "stations" | "zones">): string {
+  const named = (slots: readonly { name: string; available: boolean }[]) =>
+    slots
+      .filter((slot) => slot.available)
+      .map((slot) => slot.name)
+      .join(", ");
+  const stations = named(screen.stations);
+  const zones = named(screen.zones ?? []);
+  return [
+    stations && t("expo.covers_stations").replace("{names}", () => stations),
+    zones && t("expo.covers_zones").replace("{names}", () => zones),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function cardLabel(card: PassCard): string {
   const numbers = card.orders.map((order) => `#${order.orderNumber}`).join(" · ");
   const first = card.orders[0];
@@ -167,6 +183,13 @@ export class TillPassScreen extends LitElement {
         font-size: var(--wt-font-size-xl);
         font-weight: var(--wt-font-weight-bold);
       }
+
+      .covers {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
 
@@ -194,6 +217,10 @@ export class TillPassScreen extends LitElement {
   @state() private goneScreen: "pass" | "pass_monitor" | null = null;
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
+  @state() private slots: Pick<DevicePassBoard, "stations" | "zones"> = {
+    stations: [],
+    zones: null,
+  };
   @state() private columnsWindow: ColumnsWindow | null = null;
   #choiceRead = false;
   #choiceRequest = 0;
@@ -283,6 +310,7 @@ export class TillPassScreen extends LitElement {
         this.board = emptyBoard();
         this.lostLines = [];
         this.nothingLeft = false;
+        this.slots = { stations: [], zones: null };
         this.columnsWindow = null;
         this.#display = undefined;
       }
@@ -405,6 +433,7 @@ export class TillPassScreen extends LitElement {
     this.#display = read.display;
 
     this.lostLines = lostLines(read);
+    this.slots = read;
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
     if (this.deviceMode)
@@ -597,11 +626,20 @@ export class TillPassScreen extends LitElement {
     return this.#onDevice() ? (this.deviceName ?? "") : t("expo.title");
   }
 
+  #covers(slot?: "lead"): TemplateResult | typeof nothing {
+    const line = this.#shows() ? coversLine(this.slots) : "";
+    return line === ""
+      ? nothing
+      : html`<p class="covers" data-covers slot=${slot ?? nothing}>${line}</p>`;
+  }
+
   #lead(slot?: "lead"): TemplateResult | typeof nothing {
     if (this.#onDevice())
-      return html`<h1 class="title" slot=${slot ?? nothing}>${this.deviceName ?? ""}</h1>`;
+      return html`<h1 class="title" slot=${slot ?? nothing}>${this.deviceName ?? ""}</h1>
+        ${this.#covers(slot)}`;
     if (this.embedded) return nothing;
     return html`<h1 class="title" slot=${slot ?? nothing}>${t("expo.title")}</h1>
+      ${this.#covers(slot)}
       <wt-button
         class="back"
         slot=${slot ?? nothing}
