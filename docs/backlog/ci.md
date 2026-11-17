@@ -324,9 +324,9 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
   [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
 
-## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
+## Bundle: apps/server's test speed: restart tests and recovery-key checks
 
-3 entries, size L. The fixed-secret entry covers uninspected setup.
+2 entries, size L.
 
 - **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
@@ -334,8 +334,6 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
   the remaining wider memo work stays open.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
-- **Inspect other repeated stored-secret setup.**
-  [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
 
 ## Bundle: Vitest settings: remaining measurements
 
@@ -347,6 +345,26 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 
 ## Decisions and deliberate limits
+
+### Remaining fixed-secret setup: measured below the conversion threshold
+
+Keep the remaining server setup unchanged after the 17 November 2026 measurement
+(SERVER-FIXED-SECRET-HASHES). At `7493b0794d4fabc50f16f4a0010f2e27a2ec83db`,
+`rg -l 'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`
+found 146 candidate files. A Node preload forwarded to the real `scryptSync`, recording
+repeated PIN/password inputs per file without writing secrets or salts. On macOS, Node
+26.13.0, 110 selected files passed 4,027 tests. Repeated calls took 56.91 seconds,
+about 0.76% of the duration table's 7,495 file-seconds, below the queued roughly 1% bar.
+The other 36 files were left out for open-PR, fiscal/clock or sign-in/verification scope.
+This is an optimistic local saving estimate: it includes repeated hashing outside setup;
+it is not a measured CI or whole-shard improvement.
+
+A temporary setup-only conversion of `payments-api.stuck.test.ts`, `receipt-print.test.ts`
+and `till-sale-integrated.db.test.ts` reused the existing fixture helpers. With two workers,
+alternating original and converted checkouts twice, the three files' summed collection-to-end
+times were 52.1 / 35.6 seconds, then 51.0 / 27.4 seconds. All four runs passed the same
+413 tests, with every assertion unchanged; recorded repeated hash calls fell from 1,066 to
+zero in each converted run. All trial edits were restored. No CI timing run was made.
 
 ### Native stripping rejected for three server test children
 
@@ -905,10 +923,6 @@ with a function the store takes. Its convention reviewer proposed a CLAUDE.md ru
 module mocks in browser tests; #1934 did not add one, because one failure with no known
 cause is thin ground for a house rule. The owner decides.
 
-
-## Finish reusing fixed-secret hashes in remaining server test setup
-
-Inspect candidates from `rg -l 'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'` for repeated stored-secret setup that can reuse `fixturePinHash`/`fixturePasswordHash` in `apps/server/src/testing/known-secret-hashes.ts`, keeping hashing-subject tests and real sign-in/verification calls unchanged.
 
 ## `packages/db`'s static mutants are not in its mutation score
 
