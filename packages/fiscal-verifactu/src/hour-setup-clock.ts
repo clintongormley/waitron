@@ -25,7 +25,6 @@ interface ClockDependencies {
   monotonic?: () => number;
   timeService?: () => Promise<boolean>;
   release?: () => number | null;
-  boxClockAlone?: boolean;
 }
 export type { SetupBrowserClockSample } from "./hour-clock.js";
 import type { SetupBrowserClockSample } from "./hour-clock.js";
@@ -34,6 +33,8 @@ interface Reading {
   readonly observations: readonly HourClockObservation[];
   readonly wall: number;
   readonly monotonic: number;
+  /** Whether the box's own clock counts as the second clock, as when the reading was taken. */
+  readonly boxClockAlone: boolean;
 }
 export interface SetupClockClient {
   readonly onBox: boolean;
@@ -110,7 +111,7 @@ export function bootStanding(
   return {
     standing,
     /** The time agreed when `binding`'s hour was chosen, while it stands; with `confirmedOnly`,
-     * only a device's time the person confirmed. */
+     * only a time the person confirmed. */
     chosen(
       state: Parameters<typeof chosenHourBoot>[0],
       binding: OperationBinding,
@@ -126,7 +127,6 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
   const monotonic = deps.monotonic ?? (() => performance.now());
   const timeService = deps.timeService ?? (async () => false);
   const release = deps.release ?? (() => readHourRelease()?.instantMs ?? null);
-  const options = { boxClockAlone: deps.boxClockAlone === true };
   const sessions = new Map<string, Session>();
   const session = (key: string) => {
     if (typeof key !== "string" || key.trim().length === 0 || key.length > 64 * 1024)
@@ -159,7 +159,9 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
     if (elapsed < 0 || elapsed > 30_000 || !Number.isFinite(elapsed)) return refuse("clock_stale");
     if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > STEP_MS)
       return refuse("clock_corrected");
-    return compareHourClocks([...held.observations, sample], release(), options);
+    return compareHourClocks([...held.observations, sample], release(), {
+      boxClockAlone: held.boxClockAlone,
+    });
   };
   const take = (state: Session, browser: SetupBrowserClockSample, onBox: boolean) => {
     const challenge =
@@ -215,6 +217,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       browser: SetupBrowserClockSample | null,
       client: SetupClockClient,
       carried?: () => HourClockObservation | undefined,
+      admit: { boxClockAlone?: boolean } = {},
     ) {
       const state = session(key);
       const sent: HourClockObservation | undefined =
@@ -226,12 +229,14 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         internet,
       ];
       const sample = box();
-      const clock = compareHourClocks([...observations, sample], release(), options);
+      const boxClockAlone = admit.boxClockAlone === true;
+      const clock = compareHourClocks([...observations, sample], release(), { boxClockAlone });
       const reading: Reading = {
         id: randomUUID(),
         observations,
         wall: sample.wallFinishedMs,
         monotonic: sample.monotonicFinishedMs,
+        boxClockAlone,
       };
       keep(state.readings, reading.id, reading);
       return { id: reading.id, clock };

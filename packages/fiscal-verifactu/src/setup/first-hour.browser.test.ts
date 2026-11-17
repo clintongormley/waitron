@@ -2457,6 +2457,47 @@ const deviceOnly = {
   usable: clock.usable.filter((r) => r.source !== "internet"),
   unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
 };
+const boxOnly = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source === "box"),
+  unavailable: [
+    { source: "browser", result: "unavailable" as const, reason: "same_machine" },
+    { source: "internet", result: "unavailable" as const, reason: "offline" },
+  ],
+};
+it.each([
+  [
+    "en",
+    "The server could not check its time over the internet. Check that the server's time below is right before you press Proceed.",
+    [
+      ["Server time", "18 October 2026 at 14:30"],
+      ["This device", "Unavailable"],
+    ],
+  ],
+  [
+    "es",
+    "El servidor no ha podido comprobar su hora por internet. Comprueba que la hora del servidor que aparece abajo es correcta antes de pulsar Continuar.",
+    [
+      ["Hora del servidor", "18 de octubre de 2026 a las 14:30"],
+      ["Este dispositivo", "No disponible"],
+    ],
+  ],
+] as const)(
+  "in %s, when the box's own time is the only clock to confirm, the step asks to check the server's time, and Proceed confirms it",
+  async (locale, sentence, rows) => {
+    const { el, calls } = await mount({ locale, decision: boxOnly });
+    await ready(el);
+    await vi.waitFor(() => expect(text(el)).toContain(sentence));
+    expect(text(el)).not.toContain(locale === "en" ? "both times" : "las dos horas");
+    expect(detailRows(el, "clock-times")).toEqual(rows);
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+        { comparisonId: "comparison-2", confirmed: true },
+      ]),
+    );
+  },
+);
 const CONFIRM_PROCEED =
   "The server could not check its time over the internet. Check that both times below are right before you press Proceed.";
 it.each([

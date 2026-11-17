@@ -67,7 +67,6 @@ function validSample(sample: Extract<HourClockObservation, { result: "usable" }>
 export function compareHourClocks(
   observations: readonly HourClockObservation[],
   releaseInstantMs: number | null,
-  // Development only (owner, 2026-11-17): the box's own usable reading counts as the second clock.
   options: { boxClockAlone?: boolean } = {},
 ): HourClockDecision {
   const counts = new Map<HourClockSource, number>();

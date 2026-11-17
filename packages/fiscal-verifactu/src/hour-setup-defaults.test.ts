@@ -55,6 +55,7 @@ function fixture(extra: Partial<ModuleOperationHost> = {}) {
   let value: unknown = null;
   const history: unknown[] = [];
   let key = "owned-frozen-context";
+  let environment: "preproduction" | "production" = "preproduction";
   const host: ModuleOperationHost = {
     environment: {},
     readPublicEvidence: async () => undefined,
@@ -78,19 +79,28 @@ function fixture(extra: Partial<ModuleOperationHost> = {}) {
         administratorId: "administrator",
         country: "ES",
         taxId: "89890001K",
-        environment: "preproduction",
+        environment,
         recipientVenueId: binding.sourceId,
         bases,
       },
     }),
     ...extra,
   };
-  const preparation = createHostedHourPreparation(host);
+  let preparation = createHostedHourPreparation(host);
   return {
-    preparation,
+    get preparation() {
+      return preparation;
+    },
+    /** A new server process over the same retained state. */
+    restart() {
+      preparation = createHostedHourPreparation(host);
+    },
     history,
     context(next: string) {
       key = next;
+    },
+    setupEnvironment(next: typeof environment) {
+      environment = next;
     },
     select: (comparisonId: string, confirmed?: true) =>
       withOperationAuthority(binding, "administrator", (authority) =>
@@ -334,7 +344,7 @@ it("in development the box's clock alone still needs the person to confirm the t
   });
 });
 
-it.each(["preproduction", "production", undefined])(
+it.each(["preproduction", "production", "", undefined])(
   "with WAITRON_ENV %s the box's clock alone is refused second_clock_missing",
   async (env) => {
     outside.internet.mockResolvedValue({
@@ -351,3 +361,44 @@ it.each(["preproduction", "production", undefined])(
     });
   },
 );
+
+const dev = { environment: { WAITRON_ENV: "dev" } };
+const boxCompare = (f: ReturnType<typeof fixture>) =>
+  f.preparation.compareClocks(binding, null, { onBox: true });
+// The server's boot reader on macOS, which has no /proc: no boot id.
+const noBootId = { readBoot: () => ({ id: null, ms: performance.now() + 5_000_000 }) };
+it("without a time service, a clock step after the confirmed choice refuses Provision in preproduction", async () => {
+  timeServiceUnavailable();
+  const f = fixture(sameBoot());
+  const selected = await selectAfterSettle(f, () => deviceCompare(f), true);
+  vi.advanceTimersByTime(120_000);
+  vi.setSystemTime(Date.now() + 5_000);
+  await expectRefusedUnwritten(activate(f, selected.input));
+});
+it.each([
+  ["with no change", () => {}],
+  ["after a server restart", (f: ReturnType<typeof fixture>) => f.restart()],
+  ["after a clock step", () => vi.setSystemTime(Date.now() + 5_000)],
+] as const)(
+  "in development with no boot id, Provision two minutes after the box's clock alone was confirmed takes the box's clock, %s",
+  async (_label, change) => {
+    timeServiceUnavailable();
+    const f = fixture({ ...dev, ...noBootId });
+    const selected = await selectAfterSettle(f, () => boxCompare(f), true);
+    vi.advanceTimersByTime(120_000);
+    change(f);
+    await activate(f, selected.input);
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  },
+);
+it("in development, a setup frozen for production takes no clock alone as the second clock", async () => {
+  timeServiceUnavailable();
+  const f = fixture(dev);
+  f.setupEnvironment("production");
+  const comparison = await boxCompare(f);
+  expect(comparison.clock.secondClock).toBe(false);
+  await expect(f.select(comparison.id, true)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
+  });
+});

@@ -366,11 +366,11 @@ function internetAgrees() {
 // A setup's settle wait ends at a minute start 90 to 150 seconds after its check; a case that
 // starts here takes 11:40's name after it.
 const startEarly = () => vi.setSystemTime(new Date("2026-10-16T11:38:00Z"));
-function configured() {
+function configured(environment: ModuleOperationHost["environment"] = {}) {
   let value: unknown = null;
   const history: unknown[] = [];
   const host: ModuleOperationHost = {
-    environment: {},
+    environment,
     testClock: { wall: () => Date.now(), monotonic: monotonicNow },
     readPublicEvidence: async () => {
       throw new Error("legacy evidence read");
@@ -586,21 +586,24 @@ async function stopDuringWait(): Promise<void> {
   throw STOPPED;
 }
 
-it("the terminal with only the box's clock explains and cancels without a question", async () => {
-  const f = configured();
-  const t = terminal(f, []);
-  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
-  expect(t.output.join("\n")).toContain("box: 2026-10-16T11:40:00.000Z");
-  expect(t.output.join("\n")).toContain("internet: unavailable");
-  expect(t.output).toContain(
-    "No series is made without a confirmed time, so none is ever repeated.",
-  );
-  expect(t.output).toContain(
-    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
-  );
-  expect(t.prompts).toEqual([]);
-  expect(f.history).toEqual([]);
-});
+it.each([{}, { WAITRON_ENV: "dev" }])(
+  "the terminal with only the box's clock, environment %j, explains and cancels without a question",
+  async (environment) => {
+    const f = configured(environment);
+    const t = terminal(f, []);
+    expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
+    expect(t.output.join("\n")).toContain("box: 2026-10-16T11:40:00.000Z");
+    expect(t.output.join("\n")).toContain("internet: unavailable");
+    expect(t.output).toContain(
+      "No series is made without a confirmed time, so none is ever repeated.",
+    );
+    expect(t.output).toContain(
+      "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
+    );
+    expect(t.prompts).toEqual([]);
+    expect(f.history).toEqual([]);
+  },
+);
 
 it("the terminal explains and cancels when the internet's clock disagrees", async () => {
   const f = configured();
@@ -984,10 +987,14 @@ it.each(["standard", "rectificative", "unknown"])(
   },
 );
 
-it.each([true, false])(
-  "the last check before activation with a second clock %s never selects a replacement hour",
-  async (agrees) => {
-    const f = configured();
+it.each([
+  [true, {}],
+  [false, {}],
+  [false, { WAITRON_ENV: "dev" }],
+] as const)(
+  "the last check before activation with a second clock %s, environment %j, never selects a replacement hour",
+  async (agrees, environment) => {
+    const f = configured(environment);
     if (agrees) internetAgrees();
     const t = terminal(f, []);
     expect(await f.seat.commandBeforeActivation!(fixture(), t.actions)).toEqual(

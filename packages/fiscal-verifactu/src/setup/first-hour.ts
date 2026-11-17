@@ -62,6 +62,8 @@ const strings = {
     place: "Place",
     confirmWhyProceed:
       "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
+    confirmWhyProceedServer:
+      "The server could not check its time over the internet. Check that the server's time below is right before you press Proceed.",
     seriesLine:
       "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     secondClockDo:
@@ -84,6 +86,8 @@ const strings = {
     place: "Lugar",
     confirmWhyProceed:
       "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas antes de pulsar Continuar.",
+    confirmWhyProceedServer:
+      "El servidor no ha podido comprobar su hora por internet. Comprueba que la hora del servidor que aparece abajo es correcta antes de pulsar Continuar.",
     seriesLine:
       "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     secondClockDo:
@@ -617,7 +621,13 @@ export class FirstSetupHour extends LitElement {
       >
       ${action === "proceed" && !sending ? html`<p data-test="series-line">${t.seriesLine}</p>` : nothing}
       ${this.#wait.renderProblem(
-        { ...t, confirmWhy: t.confirmWhyProceed, ...(carrying ? {} : { secondClockEnds: "" }) },
+        {
+          ...t,
+          confirmWhy: clock?.usable.some((r) => r.source === "browser")
+            ? t.confirmWhyProceed
+            : t.confirmWhyProceedServer,
+          ...(carrying ? {} : { secondClockEnds: "" }),
+        },
         clock,
         this.locale,
         venue.timeZone,

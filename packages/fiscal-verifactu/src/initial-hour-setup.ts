@@ -103,9 +103,11 @@ async function reviewCommandClock(
     );
   for (const sample of comparison.clock.unavailable)
     actions.output(`${sample.source}: unavailable`);
-  if (!comparison.clock.secondClock || comparison.clock.disagreement) {
+  // Nobody confirms a time at the terminal, so the box's own clock is never its second clock.
+  const secondClock = comparison.clock.usable.some((sample) => sample.source !== "box");
+  if (!secondClock || comparison.clock.disagreement) {
     actions.output("No series is made without a confirmed time, so none is ever repeated.");
-    if (!comparison.clock.secondClock)
+    if (!secondClock)
       actions.output(
         "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
       );
