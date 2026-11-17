@@ -1321,12 +1321,19 @@ export async function priceStoredOrder(
 /** What a persisted order's stored lines total, the figure its invoice is issued at; a lineless
  * order totals nothing. */
 export async function storedOrderTotal(tx: Transaction, workingOrderId: string): Promise<Decimal> {
+  return (await hasStoredLines(tx, workingOrderId))
+    ? (await priceStoredOrder(tx, workingOrderId)).total
+    : decimal("0.00");
+}
+
+/** Whether the order holds any line, so {@link readStoredOrder} can read it without refusing. */
+export async function hasStoredLines(tx: Transaction, workingOrderId: string): Promise<boolean> {
   const [line] = await tx
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .limit(1);
-  return line === undefined ? decimal("0.00") : (await priceStoredOrder(tx, workingOrderId)).total;
+  return line !== undefined;
 }
 
 /** An order's {@link storedOrderTotal} before an edit, for {@link refuseOrderOverSimplifiedLimit};

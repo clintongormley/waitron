@@ -16,7 +16,10 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
-import { decimal, decimalToCents, sumDecimals } from "@waitron/shared";
+import { decimal, decimalToCents, sumDecimals, workingOrderId } from "@waitron/shared";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { recordSale } from "@waitron/core";
+import { prepareIssueClock } from "@waitron/fiscal";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { beforeVatFigures, isFiled } from "./receipt-figures.js";
@@ -993,6 +996,43 @@ describe("receiptLines", () => {
     );
     for (const line of lines) expect(line).not.toHaveProperty("dishFamily");
   });
+
+  it("gives a full invoice's lines no price each, issued, reprinted or rebuilt", async () => {
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }, { name: "Burger" }]);
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 2)),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    const issued = await invoiceOf(billId);
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    const reprint = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, sale!.id),
+    );
+    const rebuilt = await inTx(venue, async (tx) => {
+      const stored = await readStoredOrder(tx, billId);
+      return receiptLines(
+        tx,
+        billId,
+        { lines: stored.gross.lines.map((line) => ({ ...line, priceQuantity: decimal("0.100") })) },
+        [{ ...stored.identities[0]!, listUnitGross: decimal("4.00") }, stored.identities[1]!],
+        sale!.id,
+      );
+    });
+    for (const lines of [issued, reprint.lines, rebuilt.lines]) {
+      expect(lines).toMatchObject([
+        { quantity: "3", net: { priceQuantity: "1.000" } },
+        { quantity: "1", listUnitPriceGross: "12.00", net: { priceQuantity: "1.000" } },
+      ]);
+      expect(lines[0]).not.toHaveProperty("listUnitPriceGross");
+      for (const line of lines) {
+        expect(line).not.toHaveProperty("unitPriceGross");
+        expect(line).not.toHaveProperty("priceQuantity");
+      }
+    }
+  });
 });
 
 describe("a receipt rebuilt from a sale's rows", () => {
@@ -1033,5 +1073,69 @@ describe("a receipt rebuilt from a sale's rows", () => {
       );
       expect(rebuilt.lines.map((line) => line.unitPriceGross)).toEqual(["24.00", undefined]);
     });
+  });
+
+  it("prints no price each for a row whose order line now has another quantity or price quantity", async () => {
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }]);
+    await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "20.00" }, lines: [] },
+    );
+    await inTx(venue, async (tx) => {
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      const stored = await readStoredOrder(tx, billId);
+      const row: ReceiptSource = { ...stored.gross.lines[0]! };
+      delete row.grossUnitPrice;
+      const rebuiltWith = async (changed: ReceiptSource) =>
+        (await receiptLines(tx, billId, { lines: [changed] }, stored.identities, sale!.id))
+          .lines[0]!.unitPriceGross;
+      expect(await rebuiltWith(row)).toBe("3.33");
+      expect(await rebuiltWith({ ...row, quantity: decimal("2") })).toBeUndefined();
+      expect(await rebuiltWith({ ...row, priceQuantity: decimal("2") })).toBeUndefined();
+    });
+  });
+
+  it("answers a reprint of a sale whose order has no lines, with no price each", async () => {
+    const order = await seedWorkingOrder(venue.db, {
+      ...venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+    });
+    const { saleId } = await inTx(venue, async (tx) =>
+      recordSale(tx, venue.backend, {
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: venue.seriesId,
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant service",
+        total: "24.20",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Staff dish",
+            descriptions: { "es-ES": "Plato" },
+            quantity: "2",
+            unitPrice: "10.00",
+            vatRate: "21.00",
+            lineTotal: "20.00",
+          },
+        ],
+        settlement: { kind: "deferred" },
+        clock: await prepareIssueClock(tx, venue.cfg, venue.clock),
+        workingOrderId: workingOrderId(order.id),
+      }),
+    );
+    const reprint = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(reprint.invoiceType).toBe("F2");
+    expect(reprint.lines).toMatchObject([{ quantity: "2", gross: "24.20" }]);
+    expect(reprint.lines[0]).not.toHaveProperty("unitPriceGross");
   });
 });

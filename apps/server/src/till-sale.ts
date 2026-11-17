@@ -284,10 +284,14 @@ export interface TillSaleLine {
   listUnitPriceGross?: string;
   /**
    * Simplified receipts only: the unit price with VAT per price quantity the line was sold at, from
-   * the stored order line; absent where the receipt is rebuilt from the sale's rows alone.
+   * the stored order line; absent when no stored order line of the same number still has the line's
+   * quantity, price quantity and total, and on a printed row merging lines sold at different prices.
    */
   unitPriceGross?: string;
-  /** What `unitPriceGross` and `listUnitPriceGross` are priced per; absent means one. */
+  /**
+   * Simplified receipts only: what `unitPriceGross` and `listUnitPriceGross` are priced per; absent
+   * means one. A full invoice's line keeps its price quantity in `net.priceQuantity`.
+   */
   priceQuantity?: string;
   /**
    * Presentation only. On a full invoice's line whose order line an adjustment on this bill split

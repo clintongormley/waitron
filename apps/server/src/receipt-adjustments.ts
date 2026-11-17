@@ -17,19 +17,23 @@ import {
 import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
-import { readStoredOrder, type OrderLineIdentity } from "./working-order.js";
+import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
 
 /**
  * `lines`, each holding the gross unit price it was sold at: a line rebuilt from a sale's rows takes
  * it from its order's stored line of the same number, and only while that line still has the same
- * quantity, price quantity and total; otherwise it gets none.
+ * quantity, price quantity and total; otherwise, and when the order holds no line, it gets none.
  */
 async function withSoldPrices(
   tx: Transaction,
   workingOrderId: string | null,
   lines: readonly ReceiptSource[],
 ): Promise<readonly ReceiptSource[]> {
-  if (workingOrderId === null || lines.every((line) => line.grossUnitPrice !== undefined)) {
+  if (
+    workingOrderId === null ||
+    lines.every((line) => line.grossUnitPrice !== undefined) ||
+    !(await hasStoredLines(tx, workingOrderId))
+  ) {
     return lines;
   }
   const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
@@ -66,30 +70,35 @@ export async function receiptLines(
     tx,
     identities.flatMap((identity, i) => (priced.lines[i]?.unitName != null ? [identity.id] : [])),
   );
+  const filed =
+    saleId === undefined
+      ? undefined
+      : await tx
+          .select({
+            lineNo: saleLines.lineNo,
+            unitPrice: saleLines.unitPrice,
+            priceQuantity: saleLines.priceQuantity,
+            base: saleLines.lineTotal,
+            rate: saleLines.vatRate,
+            gross: saleLines.lineGross,
+            listGross: saleLines.listGross,
+            listUnitPriceGross: saleLines.listUnitPriceGross,
+            parentLineId: saleLines.parentLineId,
+            productId: saleLines.productId,
+            parentProductId: saleLines.parentProductId,
+            versionId: saleLines.menuVersionId,
+            counterpartyTaxId: sales.counterpartyTaxId,
+          })
+          .from(saleLines)
+          .innerJoin(sales, eq(sales.id, saleLines.saleId))
+          .where(eq(sales.id, saleId));
+  // A full invoice prints no price each, so it never reads the order's lines for one.
+  const fullInvoice = filed?.[0]?.counterpartyTaxId != null;
   let lines = ticketLinesFrom(
-    { lines: await withSoldPrices(tx, workingOrderId, priced.lines) },
+    { lines: fullInvoice ? priced.lines : await withSoldPrices(tx, workingOrderId, priced.lines) },
     identities,
   ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
-  if (saleId !== undefined) {
-    const filed = await tx
-      .select({
-        lineNo: saleLines.lineNo,
-        unitPrice: saleLines.unitPrice,
-        priceQuantity: saleLines.priceQuantity,
-        base: saleLines.lineTotal,
-        rate: saleLines.vatRate,
-        gross: saleLines.lineGross,
-        listGross: saleLines.listGross,
-        listUnitPriceGross: saleLines.listUnitPriceGross,
-        parentLineId: saleLines.parentLineId,
-        productId: saleLines.productId,
-        parentProductId: saleLines.parentProductId,
-        versionId: saleLines.menuVersionId,
-        counterpartyTaxId: sales.counterpartyTaxId,
-      })
-      .from(saleLines)
-      .innerJoin(sales, eq(sales.id, saleLines.saleId))
-      .where(eq(sales.id, saleId));
+  if (filed !== undefined) {
     const documents = await readRecordedDocuments(
       tx,
       filed.flatMap((row) =>
@@ -124,7 +133,7 @@ export async function receiptLines(
         ? { ...line, vatRate, setLunch: true as const }
         : { ...line, vatRate };
     });
-    if (filed[0]?.counterpartyTaxId != null) {
+    if (fullInvoice) {
       lines = lines.map((line, i) => {
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };
