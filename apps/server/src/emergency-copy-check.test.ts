@@ -4,56 +4,35 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  deployment,
-  nodes,
-  saveVenueFields,
-  withTransaction,
-  writeNodeMembership,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, deployment, nodes, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
 import { endorseKey, generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
-import { generationName } from "@waitron/stream";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { checkPlacedEmergencyCopy } from "./emergency-copy-check.js";
+import {
+  bindingFor,
+  chartBody,
+  copyId,
+  seedEmergencyCopySource,
+  source,
+  sourceId,
+  writeChart as writeChartTo,
+  writePlacedRecord,
+} from "./testing/emergency-copy-source.js";
 import { sha } from "./testing/place-copy-box.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-const source = generateNodeKeyPair();
-const sourceId = "e7000000-0000-4000-8000-000000000001";
-const copyId = "e7000000-0000-4000-8000-000000000002";
-const venueId = "e7000000-0000-4000-8000-000000000003";
-const streamId = "e7000000-0000-4000-8000-000000000004";
 let root: string;
 let venuePath: string;
 
-const chartBody = (primary: string) => ({
-  term: 1,
-  nodes: [{ nodeId: primary, standing: "serving-primary" as const, contactUrl: "" }],
-});
-
-async function writeChart(primary: string, privateKey = source.privateKey) {
-  await writeNodeMembership(suite.db, {
-    body: chartBody(primary),
-    signerNodeId: sourceId,
-    signature: signDocumentBody(chartBody(primary), privateKey),
-    endorsements: [],
-  });
-}
+const writeChart = (primary: string, privateKey?: string) =>
+  writeChartTo(suite.db, primary, privateKey);
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "emergency-copy-check-"));
   venuePath = join(root, "venue.db");
-  await seedVenue(suite.db, { invoiceLocales: ["en"] });
-  await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await withTransaction(suite.db, (tx) =>
-    saveVenueFields(tx, { cloudVenueId: venueId, streamId }, null),
-  );
-  await suite.db.insert(nodes).values({ id: sourceId, name: "Main", publicKey: source.publicKey });
-  await writeChart(sourceId);
+  await seedEmergencyCopySource(suite.db);
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
@@ -81,31 +60,6 @@ async function placedCopyRefuses(code: string): Promise<void> {
   await expect(check(bindingFor(hash))).rejects.toMatchObject({ code });
 }
 
-function bindingFor(
-  databaseSha256: string,
-  overrides: Partial<EmergencyCopyBinding> = {},
-  stream: Partial<EmergencyCopyBinding["selectedStream"]> = {},
-): EmergencyCopyBinding {
-  return {
-    copyOperationId: "e7000000-0000-4000-8000-000000000009",
-    venueId,
-    environment: "preproduction",
-    sourceNodeId: sourceId,
-    sourceInstallationId: "source-installation",
-    copyNodeId: copyId,
-    installationId: "copy-installation",
-    selectedStream: {
-      streamId,
-      generation: generationName(3, sourceId, new Date("2026-11-17T10:00:00Z")),
-      databaseSha256,
-      ...stream,
-    },
-    startedAt: "2026-11-17T10:00:00.000Z",
-    expiresAt: "2026-11-17T10:30:00.000Z",
-    ...overrides,
-  };
-}
-
 function check(
   binding: EmergencyCopyBinding,
   extra: Partial<Parameters<typeof checkPlacedEmergencyCopy>[0]> = {},
@@ -122,7 +76,7 @@ function check(
 
 it("accepts a copy whose binding matches", async () => {
   const hash = await place();
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(sha(venuePath)).toBe(hash);
 });
 
@@ -134,9 +88,9 @@ it("leaves nothing beside a WAL-mode copy, accepted or refused, so a second chec
     check(bindingFor(hash, { venueId: "e7000000-0000-4000-8000-0000000000ff" })),
   ).rejects.toMatchObject({ code: "emergency_copy.venue_mismatch" });
   expect(await readdir(root)).toEqual(["venue.db"]);
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(await readdir(root)).toEqual(["venue.db"]);
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
   expect(sha(venuePath)).toBe(hash);
 });
 
@@ -154,6 +108,45 @@ it.each(["-wal", "-journal"])(
 it("refuses a node.db already beside the copy, so the source's is never adopted", async () => {
   const hash = await place();
   await writeFile(join(root, "node.db"), "the source's node dump");
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.node_db_present",
+  });
+});
+
+/** The same binding with every key, its stream's included, in reverse order. */
+function reordered(binding: EmergencyCopyBinding): unknown {
+  const stream = Object.fromEntries(Object.entries(binding.selectedStream).reverse());
+  return Object.fromEntries(Object.entries({ ...binding, selectedStream: stream }).reverse());
+}
+
+it("admits a node.db holding this binding's placed record, keys in any order, so a repeat passes", async () => {
+  const hash = await place();
+  const binding = bindingFor(hash);
+  await writePlacedRecord(join(root, "node.db"), reordered(binding));
+  const before = await readFile(join(root, "node.db"));
+  await expect(check(binding)).resolves.toBe(true);
+  expect(await readFile(join(root, "node.db"))).toEqual(before);
+  expect((await readdir(root)).sort()).toEqual(["node.db", "venue.db"]);
+});
+
+it("refuses a node.db holding another binding's placed record", async () => {
+  const hash = await place();
+  const other = bindingFor(hash, { copyOperationId: "e7000000-0000-4000-8000-0000000000ee" });
+  await writePlacedRecord(join(root, "node.db"), other);
+  await expect(check(bindingFor(hash))).rejects.toMatchObject({
+    code: "emergency_copy.other_binding_placed",
+  });
+});
+
+it("refuses a node.db holding no placed record", async () => {
+  const hash = await place();
+  await writePlacedRecord(join(root, "node.db"), bindingFor(hash));
+  const db = new DatabaseSync(join(root, "node.db"));
+  try {
+    db.exec("delete from node_handover_events");
+  } finally {
+    db.close();
+  }
   await expect(check(bindingFor(hash))).rejects.toMatchObject({
     code: "emergency_copy.node_db_present",
   });
@@ -295,7 +288,7 @@ it("accepts a chart whose signer has a keyless machine row and an endorsement gi
     endorsements: [endorseKey(signerId, signer.publicKey, sourceId, source.privateKey)],
   });
   const hash = await place();
-  await expect(check(bindingFor(hash))).resolves.toBeUndefined();
+  await expect(check(bindingFor(hash))).resolves.toBe(false);
 });
 
 it("refuses a copy that already knows the new machine", async () => {
@@ -359,6 +352,6 @@ it.each([true, false])(
     if (stopped) stop.abort(new Error("stopping"));
     release();
     if (stopped) await expect(checking).rejects.toThrow("stopping");
-    else await expect(checking).resolves.toBeUndefined();
+    else await expect(checking).resolves.toBe(false);
   },
 );

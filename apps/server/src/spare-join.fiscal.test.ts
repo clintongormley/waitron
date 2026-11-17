@@ -228,7 +228,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
   }
 
   it("the promotion preparation route refuses a spare with no dormant setup and writes nothing", async () => {
-    const store = (placed = await fixture.placeEmergencyCopy());
+    const store = (placed = await fixture.placeSpareEmergencyCopy());
     vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
     expect(await preparationHistory()).toEqual([]);
     const venueBefore = allRows(store.venue);
@@ -257,7 +257,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
   }, 60_000);
 
   it("on the spare, under a person's sign-in, reserve then establish writes a dormant setup that a promotion then reads", async () => {
-    const store = (placed = await fixture.placeEmergencyCopy());
+    const store = (placed = await fixture.placeSpareEmergencyCopy());
     vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
     const spare = spareSide(store);
     const admission = await admit(store, spare.service);

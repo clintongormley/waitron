@@ -324,7 +324,7 @@ describe("the emergency routes through a real spare start", () => {
     locale: "en",
   };
   async function startEmergency() {
-    const copy = await fixture.placeEmergencyCopy();
+    const copy = await fixture.placeSpareEmergencyCopy();
     // A failure to connect counts as the main box being gone only at an address this spare
     // reached it at under the venue authority, so the spare first meets it running.
     const authority = await mintBoxAuthority();

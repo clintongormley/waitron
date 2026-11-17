@@ -350,7 +350,7 @@ export function placedSpareFixture(boxes: {
     };
   }
 
-  async function placeEmergencyCopy(): Promise<PlacedSpare> {
+  async function placeSpareEmergencyCopy(): Promise<PlacedSpare> {
     const keys = await setupBoxes();
     await writeMirrorLink(spareBefore.node, standby.nodeId, {
       originUrl: "http://127.0.0.1:1/",
@@ -374,5 +374,5 @@ export function placedSpareFixture(boxes: {
       ...keys,
     };
   }
-  return { setupBoxes, placeRealCopy, stoppedBeforePlacing, placeEmergencyCopy };
+  return { setupBoxes, placeRealCopy, stoppedBeforePlacing, placeSpareEmergencyCopy };
 }

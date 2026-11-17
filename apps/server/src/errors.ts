@@ -112,6 +112,8 @@ declare module "@waitron/shared" {
     /** A `-wal` or `-journal` beside the placed file. */
     "emergency_copy.journal_present": Record<string, never>;
     "emergency_copy.node_db_present": Record<string, never>;
+    /** The `node.db` beside the file records the placement of a different binding. */
+    "emergency_copy.other_binding_placed": Record<string, never>;
     "emergency_copy.hash_mismatch": Record<string, never>;
     "emergency_copy.integrity_failed": Record<string, never>;
     "emergency_copy.environment_mismatch": {
@@ -125,6 +127,18 @@ declare module "@waitron/shared" {
     "emergency_copy.chart_unverified": Record<string, never>;
     "emergency_copy.copy_node_known": Record<string, never>;
     "emergency_copy.chain_broken": { module: string };
+    /** Vault key variables this process's environment sets, which would win over the copy's ring. */
+    "emergency_copy.vault_key_in_environment": { variables: string[] };
+    /** An existing `trading.env` names a node other than the copy. */
+    "emergency_copy.trading_node_differs": Record<string, never>;
+    /** An existing `trading.env` names an environment other than the binding's. */
+    "emergency_copy.trading_environment_differs": Record<string, never>;
+    /** Vault key variables an existing `trading.env` sets, which would replace the copy's ring. */
+    "emergency_copy.vault_key_in_trading_env": { variables: string[] };
+    /** A copy is placed, but the state folder holds no `trading.env`. */
+    "emergency_copy.trading_env_missing": Record<string, never>;
+    /** A copy is placed, but the ring in the state folder's `secrets.env`, if any, does not open its key. */
+    "emergency_copy.placed_key_unopenable": Record<string, never>;
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };
