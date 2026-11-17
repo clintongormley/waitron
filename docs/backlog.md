@@ -1837,18 +1837,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   export from a box running other modules now has its own code, `setup.configuration_parts_differ`
   (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
-- **A1544. Measure whether a year or two of history slows the sale on a box with little memory
-  to spare.** A1531's probe (one synthetic table, Docker on a Mac) found that a year of rows makes a
-  10-row write about 10% slower while the table fits in memory, but about twice as slow, and a read
-  by key about twenty times slower, with memory capped at about an eighth of the table. At the bench's
-  250 bills a day, a year of data is about 6.1 GB and the box floor is 8 GB of memory
-  (`docs/superpowers/plans/2026-10-26-b3-usb-installer.md:60`), so the database outgrows memory in
-  its second year; whether the sale's requests then slow down is not measured. Run a bench build of
-  more than a year and `measure` it twice, once with the box's memory and once limited to what a
-  box leaves the database, on `node:26-slim`'s SQLite (CLAUDE.md §4); about a day of machine time.
-  Also find how much of a box's memory the database's cache really gets. This is the one figure
-  that could change A1531's advice not to archive fiscal records now.
-  [A1531 design](superpowers/specs/2026-11-14-a1531-archive-closed-records-design.md#does-a-year-of-history-slow-the-sale-down-aim-2)
+- **A1544. Finish the year-history memory comparison and measure the real box's cache allowance.**
+  The 366-day / 91,500-sale history and uncapped reference are complete. Full 7 GiB and 8 GiB
+  conditions remain unfinished after a priority change and shutdown. Run 7 GiB first,
+  then 8 GiB, and measure actual appliance service use separately. No archiving decision changes.
+  [Dataset, reference timings and resume state](developers/a1544-memory-measurement.md).
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.

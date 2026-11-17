@@ -303,6 +303,10 @@ may reach that point; that is unmeasured. Archiving would relieve it only for th
 Most of the growth is in working tables an archive of immutable records would not move, so the
 trim is also the main lever for speed.
 
+**2026-11-17 measurement checkpoint:** A1544 now has a 366-day history and completed uncapped
+reference. A priority change and shutdown left the capped runs unfinished, so that question remains
+open. [Results and remaining measurement](../../developers/a1544-memory-measurement.md).
+
 ## The recommended next item: trim finished working rows
 
 **2026-11-15:** [A1543's proposal](2026-11-15-a1543-working-records-proposal.md) now separates the
