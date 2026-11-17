@@ -342,7 +342,7 @@ describe("selected-hour admission before archive placement", () => {
         });
         await client.start();
         await client.restore(async (request) => {
-          await restoreFromArtifact({ ...common, ...request });
+          await restoreFromArtifactFile({ ...common, ...request });
         }, pointId);
       } else {
         await restoreFromArtifact(common);

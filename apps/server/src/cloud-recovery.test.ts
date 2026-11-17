@@ -116,6 +116,16 @@ describe("Cloud recovery target", () => {
     expect(JSON.stringify(view)).not.toContain("store.example.test");
   });
 
+  it("refuses an approved point over 2 GiB before requesting a download grant", async () => {
+    const f = await fixture({ ...point, size: 2_147_483_649 });
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow();
+    await expect(client.restore(async () => {}, point.id)).rejects.toThrow(
+      "Cloud recovery is unavailable",
+    );
+    expect(f.calls.map((call) => call.action)).toEqual(["start", "status", "info"]);
+  });
+
   it("validates bytes and rechecks owner authority before staging", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
