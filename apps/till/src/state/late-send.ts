@@ -128,7 +128,7 @@ export function storedLateSendAsked(
 }
 
 /** {@link storedLateSendAsked} over any stored line, read through `idOf` and `offerOf`. */
-export function storedLinesAsked<L>(
+function storedLinesAsked<L>(
   error: unknown,
   lines: readonly L[],
   idOf: (line: L) => string | undefined,

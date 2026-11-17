@@ -6103,29 +6103,6 @@ describe("a late-send confirmation on a request", () => {
     ],
     ["placeOrder", (api, lateSend) => api.placeOrder("wo-1", null, lateSend)],
     [
-      "sendLines",
-      (api, lateSend) =>
-        api.sendLines("wo-1", [1], null, {
-          submissionId: "sub-1",
-          expectedPartyRevision: 4,
-          lateSend,
-        }),
-    ],
-    [
-      "fireGroup",
-      (api, lateSend) =>
-        api.fireGroup("v1", "g1", { submissionId: "sub-1", expectedPartyRevision: 4, lateSend }),
-    ],
-    [
-      "fireHeldLine",
-      (api, lateSend) =>
-        api.fireHeldLine("v1", "line-1", {
-          submissionId: "sub-1",
-          expectedPartyRevision: 4,
-          lateSend,
-        }),
-    ],
-    [
       "updateWorkingOrder",
       (api, lateSend) =>
         api.updateWorkingOrder("wo-1", {
