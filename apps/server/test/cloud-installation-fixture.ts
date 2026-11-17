@@ -10,6 +10,7 @@ export async function installationFixture(
     translation?: MachineHandler;
     email?: MachineHandler;
     emailConfiguration?: true;
+    managementOrigin?: string;
     environment?: "test" | "production";
     billing?: MachineHandler;
     emergency?: MachineHandler;
@@ -39,6 +40,9 @@ export async function installationFixture(
     : [
         "{}",
         '{"servicesVersion":2}',
+        ...(options.managementOrigin
+          ? [JSON.stringify({ servicesVersion: 2, managementOrigin: options.managementOrigin })]
+          : []),
       ];
   const services = (four: boolean) => [
     ...["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
@@ -186,7 +190,11 @@ export async function installationFixture(
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ...(replies.get(operation) as object), ...patch }));
   }, options.environment);
-  const client = createCloudConnection(f.options);
+  const connectionOptions = {
+    ...f.options,
+    ...(options.managementOrigin ? { managementOrigin: options.managementOrigin } : {}),
+  };
+  const client = createCloudConnection(connectionOptions);
   await client.start();
   f.approve();
   const approved = await client.check();
@@ -200,6 +208,7 @@ export async function installationFixture(
   );
   return {
     ...f,
+    options: connectionOptions,
     client,
     requests,
     replies,

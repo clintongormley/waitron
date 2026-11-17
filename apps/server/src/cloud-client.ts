@@ -91,6 +91,7 @@ export interface CloudChoice {
   legalBusinessId: string;
 }
 export interface CloudConnectionOptions {
+  managementOrigin?: string;
   onEmergencyHintsError?: (error: unknown) => void;
   stateDir: string;
   tunnelDir?: string;
@@ -493,7 +494,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       let used: SavedCloudState;
       try {
         used = await leaseState(signal);
-        grant = await fetchCloudEmailGrant(used, signal);
+        grant = await fetchCloudEmailGrant(used, signal, options.managementOrigin);
       } catch (error) {
         if ((await read())?.emailRelayEnabled) throw error;
         return null;

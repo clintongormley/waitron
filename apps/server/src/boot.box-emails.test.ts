@@ -257,6 +257,7 @@ describe("the running server's notice and email checks", () => {
       let submitted: Record<string, unknown> | undefined;
       const f = await installationFixture(undefined, {
         emailConfiguration: true,
+        managementOrigin: "http://localhost:5191",
         email: async (v, _saved, _req, res) => {
           submitted = JSON.parse(String(v[7]));
           res.end(
@@ -308,6 +309,13 @@ describe("the running server's notice and email checks", () => {
         );
         expect(await holder.managementMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
         expect(await holder.profileMode!()).toBe(relay === "on" ? "cloud" : "local_capture");
+        expect(
+          f.requests.some(
+            (v) =>
+              v[2] === "configuration" &&
+              v[7] === '{"servicesVersion":2,"managementOrigin":"http://localhost:5191"}',
+          ),
+        ).toBe(true);
         await runMailPass(holder.mail!);
         if (relay === "on") {
           expect(submitted).toMatchObject({ class: "password_reset", locale: "en-GB" });

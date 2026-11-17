@@ -52,6 +52,24 @@ it("restores SMTP after a confirmed local pairing revoke", async () => {
   }
 });
 
+it("states the management origin only on the grant lookup's canonical test configuration", async () => {
+  const f = await installationFixture(undefined, {
+    emailConfiguration: true,
+    managementOrigin: "https://waitron.local:3000",
+  });
+  try {
+    f.patch({ emailRelay: { version: 1, grant: grant() } });
+    await f.client.emailRelay();
+    expect(f.requests.at(-1)?.[7]).toBe(
+      '{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}',
+    );
+    await f.client.refresh();
+    expect(f.requests.at(-1)?.[7]).toBe('{"servicesVersion":2}');
+  } finally {
+    await f.close();
+  }
+});
+
 it("reads fresh email authority over configuration and uses only explicit off for SMTP", async () => {
   const f = await installationFixture(undefined, { emailConfiguration: true });
   try {

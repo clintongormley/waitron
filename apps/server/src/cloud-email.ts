@@ -75,12 +75,13 @@ async function emailExchange(
 export async function fetchCloudEmailGrant(
   state: SavedCloudState,
   signal?: AbortSignal,
+  managementOrigin?: string,
 ) {
   const { response, value } = await emailExchange(
     state,
     "configuration",
     randomUUID(),
-    '{"servicesVersion":2}',
+    JSON.stringify({ servicesVersion: 2, ...(managementOrigin ? { managementOrigin } : {}) }),
     signal,
   );
   const registration = state.view!.registration!;

@@ -2553,6 +2553,7 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        managementOrigin: config.managementOrigin,
         onEmergencyHintsError: (error) =>
           log("warn", "cloud.emergency_state_failed", {
             errorCode: codeOf(error),
