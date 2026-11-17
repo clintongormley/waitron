@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import type { BackupQuery } from "@waitron/store";
+import type { BackupQuery, BackupRow } from "@waitron/store";
 import { openLockedCopy } from "./cloud-locked-start.js";
 import { bindingFor, copyId, seedEmergencyCopySource } from "./testing/emergency-copy-source.js";
 import { sha } from "./testing/place-copy-box.js";
@@ -47,7 +47,9 @@ async function placement() {
 }
 
 async function rows(query: BackupQuery, sql: string) {
-  return Array.fromAsync(query.rows(sql));
+  const result: BackupRow[] = [];
+  for await (const row of query.rows(sql)) result.push(row);
+  return result;
 }
 
 function outsideLock() {
