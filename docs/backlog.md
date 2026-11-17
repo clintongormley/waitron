@@ -569,7 +569,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
   the owner's call. [Detail](backlog/menu.md#from-541s-review-neither-blocking)
 
-- **Dishes sold by measure and their extras** (bundle of 3, at least 1 important, size M). [Detail](backlog/menu.md#bundle-dishes-sold-by-measure-and-their-extras)
+- **Dishes sold by measure and their extras** (1 entry, important, size M). [Detail](backlog/menu.md#bundle-dishes-sold-by-measure-and-their-extras)
 
 - **The extras form cannot pick a variant**, though the menu accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next

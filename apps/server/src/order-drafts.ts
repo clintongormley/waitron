@@ -1445,13 +1445,6 @@ async function offersFor(
   return new Map(offers.map((offer) => [offer.id, offer]));
 }
 
-/**
- * True when the line's menu item has no offer; the dish cannot be sold, or is not sold on its own;
- * its variant cannot be sold; an extras pick is not an available item of that extras list on the
- * offer; or an option answer is not an available label of that options list on the offer. Each of
- * those is refused when the line is priced. An options list the line leaves unanswered is not
- * checked.
- */
 function unavailable(line: FreshDraftLine, offer: ZoneMenuOffer | undefined): boolean {
   if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
     return true;
@@ -1461,6 +1454,7 @@ function unavailable(line: FreshDraftLine, offer: ZoneMenuOffer | undefined): bo
   ) {
     return true;
   }
+  if (soldMeasured(offer) && line.extras.some(({ picks }) => picks.length > 0)) return true;
   const offered = new Set(
     offer.offeredModifiers.flatMap((list) =>
       (list.kind === "extras"

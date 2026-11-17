@@ -2387,6 +2387,41 @@ describe("unavailable lines (spec §10)", () => {
     );
   });
 
+  it.each([
+    { precision: 0, measure: true },
+    { precision: 2, measure: false },
+  ])(
+    "marks an extras pick on a measured dish before pricing (%j), retaining valid options",
+    async (unitInput) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const ordinary = await save(v, partyId, ALEX, null, 0, [
+        item(v, "burger", { extras: withSauce(v), options: [v.rare] }),
+      ]);
+      expect(ordinary.lines[0]!.unavailable).toBe(false);
+      await inTx(async (tx) => {
+        const unit = await createUnit(
+          tx,
+          {
+            staffName: "Measure",
+            staffAbbreviation: "m",
+            name: {},
+            abbreviation: {},
+            ...unitInput,
+          },
+          LOCALE,
+        );
+        await assignProductUnit(tx, v.productId.burger, unit.id);
+        await publishWorkingMenu(tx, v.menuId);
+      });
+      const saved = await save(v, partyId, ALEX, ordinary.id, ordinary.revision, [
+        item(v, "burger", { extras: withSauce(v), options: [v.rare] }),
+        item(v, "burger", { options: [v.well] }),
+      ]);
+      expect(saved.lines.map((line) => line.unavailable)).toEqual([true, false]);
+    },
+  );
+
   it("marks a line whose extras pick sells out", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);

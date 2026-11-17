@@ -493,18 +493,12 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: Dishes sold by measure and their extras
 
-3 entries, size M.
+1 entry, size M.
 
 - **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
   tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
   a decimal unit does is the owner's call.
   [Detail](menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
-- **Switching a unit to a measure gives no warning** (A821f) that the dishes in that unit lose
-  their extras lists at the next publish.
-- **Customer order drafts never look at a dish's unit** (A821f): `unavailable`
-  (`apps/server/src/order-drafts.ts:970`) checks an extras pick against the offer's lists only, so
-  an extra on a dish sold in a measure is flagged only when the draft is priced — as for a dish
-  with decimals or on a scale today. Read, not run.
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 

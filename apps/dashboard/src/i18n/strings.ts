@@ -1737,6 +1737,12 @@ export const en = {
     "Changing precision affects portions in these extras lists and menus:",
   "units.precision_usage_unavailable":
     "Could not check which extras lists and menus use this unit.",
+  "units.measure_usage_warning":
+    "{count} dishes in this unit have extras lists. Once it is a measure, the till will not offer them after you publish.",
+  "units.measure_usage_warning_one":
+    "{count} dish in this unit has extras lists. Once it is a measure, the till will not offer them after you publish.",
+  "units.measure_usage_unavailable":
+    "Could not count dishes with extras lists. Once this unit is a measure, the till will not offer their extras after you publish.",
   "units.measure": "Measures a quantity (ml, g…) — no extras",
   "units.measure_column": "Measure",
   "units.yes": "Yes",
@@ -6156,6 +6162,12 @@ export const es: Record<StringKey, string> = {
     "Cambiar la precisión afecta a las porciones de estas listas de extras y cartas:",
   "units.precision_usage_unavailable":
     "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
+  "units.measure_usage_warning":
+    "{count} platos con esta unidad tienen listas de extras. Al convertirla en medida, el TPV dejará de ofrecer sus extras después de publicar.",
+  "units.measure_usage_warning_one":
+    "{count} plato con esta unidad tiene listas de extras. Al convertirla en medida, el TPV dejará de ofrecer sus extras después de publicar.",
+  "units.measure_usage_unavailable":
+    "No se han podido contar los platos con listas de extras. Al convertir esta unidad en medida, el TPV dejará de ofrecer sus extras después de publicar.",
   "units.measure": "Mide una cantidad (ml, g…) — sin extras",
   "units.measure_column": "Medida",
   "units.yes": "Sí",

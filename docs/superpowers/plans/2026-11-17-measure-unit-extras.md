@@ -1,10 +1,10 @@
 # Measure-unit extras — implementation plan
 
 **Ask:** Lane H `queue.md`, MEASURE-UNIT-EXTRAS (17 November 2026).
-**Status:** Separate Sol high-effort draft, shortened by the Codex driver; Claude review and
-watcher build clearance pending. Claude first read complete (266 s); watcher cleared its simpler
+**Status:** Built and undergoing finish-branch. Separate Sol high-effort draft, shortened by the Codex driver; Claude review and
+watcher build clearance recorded below. Claude first read complete (266 s); watcher cleared its simpler
 inline route at 07:18 on 17 November (Lane H questions.md). No owner design approval is claimed.
-The one correction read is complete (246 s); all findings taken. Build only after settled plan clearance.
+The one correction read is complete (246 s); all findings taken. Watcher cleared the settled plan at 07:28 on 17 November (Lane H questions.md): “Cleared with the explicit fast-Save rule (0 submits; a positive count shows and waits for a new Save; a failed count shows the generic warning and allows the next Save), a separate read generation cleared on switch-off. No further read; build.”
 
 ## Finish line and reuse
 
@@ -22,11 +22,11 @@ keep its meaning and consumers. The new read counts dishes CARRYING attachments.
 
 ## Build test-first
 
-- [ ] **Reproduce:** `apps/dashboard/src/screens/units-screen.test.ts`, real switch then Save,
+- [x] **Reproduce:** `apps/dashboard/src/screens/units-screen.test.ts`, real switch then Save,
   count 2: inline warning appears before update, Cancel leaves the saved unit unchanged. Observe
   the missing-warning failure before changing production. Default the screen API stub count to 0,
   override to 2 here, and retain the existing zero-impact save assertion and ordinary Cancel path.
-- [ ] **Menu count:** add `countProductsWithAttachedExtras(tx: Transaction, unitId: string):
+- [x] **Menu count:** add `countProductsWithAttachedExtras(tx: Transaction, unitId: string):
   Promise<number>` in `packages/menu/src/units.ts` (already exported). Reuse `productsUsingUnit`
   and `readProductModifiers`; count each parent with an extras attachment once, including archived
   dishes/inactive attached lists, regardless of menu placement. Variants inherit their parent's
@@ -34,13 +34,13 @@ keep its meaning and consumers. The new read counts dishes CARRYING attachments.
   `units.operations.test.ts`: one fixture expecting 2 combines two dishes/multiple lists,
   options-only, other-unit and inverse-usage controls, including archived/inactive attachments;
   an empty unit returns 0. Existing parent-unit behavior owns variant inheritance.
-- [ ] **API:** add `GET /management-api/units/:id/attached-extras-count` → `{ dishCount: number }`
+- [x] **API:** add `GET /management-api/units/:id/attached-extras-count` → `{ dishCount: number }`
   in `apps/server/src/units-api.ts`, using existing `gated` menu.manage authorization, UUID parsing
   and `getUnit` refusal. `units-api.test.ts` owns 200/body and 404, not the shared access/UUID checks
   or the menu count matrix.
   Add `getUnitAttachedExtrasCount(id)` in `apps/dashboard/src/api/client.ts`, with the sibling GET/body
   case in `api/client-routes.test.ts`; leave the old precision read untouched.
-- [ ] **Form/screen:** `widgets/unit-form.ts` reads on an eligible measure switch and shows the
+- [x] **Form/screen:** `widgets/unit-form.ts` reads on an eligible measure switch and shows the
   count beside it; extend its API Pick with the new method. Await that same pending read on Save/
   Enter: zero submits; a positive count or failed read shows its warning without submitting, and
   the next Save submits. Failed reads use a generic no-count warning. Reuse the precision read's
@@ -51,7 +51,7 @@ keep its meaning and consumers. The new read counts dishes CARRYING attachments.
   0 → one submit), switch-off clearing in that case, failed-read next-Save and a decimal/scale stored
   unit switched on with no count read/warning. Do not repeat the screen's positive-warning test. Existing screen integration
   owns write and Cancel; no duplicate unsaved or separate-dialog a11y tests.
-- [ ] **Conditional draft fix:** in `apps/server/src/order-drafts.db.test.ts`, reuse venue/save
+- [x] **Conditional draft fix:** in `apps/server/src/order-drafts.db.test.ts`, reuse venue/save
   helpers: publish Burger in a precision-0 measure unit, pick its sauce, assert `unavailable: true`
   before pricing; include a decimal- or scale-unit pick in the same case, since `soldMeasured`
   excludes all three. Controls: ordinary allowed pick; measured dish without extras and valid options.

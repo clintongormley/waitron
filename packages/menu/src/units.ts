@@ -7,6 +7,7 @@ import {
   units,
   type Transaction,
 } from "@waitron/db";
+import { readProductModifiers } from "./product-modifiers.js";
 import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
@@ -268,6 +269,19 @@ export async function productsUsingUnit(
     .from(products)
     .where(and(eq(products.unitId, unitId), isTopLevelProduct))
     .orderBy(asc(products.id));
+}
+
+export async function countProductsWithAttachedExtras(
+  tx: Transaction,
+  unitId: string,
+): Promise<number> {
+  const dishes = await productsUsingUnit(tx, unitId);
+  const modifiers = await readProductModifiers(
+    tx,
+    dishes.map((dish) => dish.id),
+  );
+  return dishes.filter((dish) => modifiers.get(dish.id)?.some((list) => list.kind === "extras"))
+    .length;
 }
 
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {

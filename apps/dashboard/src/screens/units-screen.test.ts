@@ -67,6 +67,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       abbreviation: { es: "cj" },
       precision: 0,
     }),
+    getUnitAttachedExtrasCount: vi.fn().mockResolvedValue({ dishCount: 0 }),
     updateUnit: vi.fn().mockResolvedValue(units[0]),
     deleteUnit: vi.fn().mockResolvedValue(undefined),
     reassignProductsUnit: vi.fn().mockResolvedValue([]),
@@ -1180,6 +1181,39 @@ describe("units-screen", () => {
     expect(api.createUnit).not.toHaveBeenCalled();
     expect(table.rows).toEqual([saved, units[1]]);
     refresh.resolve(units);
+  });
+
+  it("warns about attached extras before saving a measure switch and Cancel keeps the unit", async () => {
+    setLocale("en-GB");
+    const api = stubApi({
+      getUnitAttachedExtrasCount: vi.fn().mockResolvedValue({ dishCount: 2 }),
+    });
+    const el = await mount(api);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-u1]")!.click();
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await form.updateComplete;
+    const toggle = form.shadowRoot!.querySelector("wt-switch")!;
+    await toggle.updateComplete;
+    await userEvent.click(toggle.shadowRoot!.querySelector("label")!);
+    await vi.waitFor(() =>
+      expect(
+        form.shadowRoot!.querySelector("[data-test=measure-usage-warning]")?.textContent,
+      ).toContain("2 dishes"),
+    );
+    expect(
+      form.shadowRoot!.querySelector("[data-test=measure-usage-warning]")!.textContent,
+    ).toContain("after you publish");
+    expect(api.updateUnit).not.toHaveBeenCalled();
+    const cancelled = new Promise<void>((resolve) =>
+      form.addEventListener("wt-cancel", () => resolve(), { once: true }),
+    );
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await cancelled;
+    expect(api.updateUnit).not.toHaveBeenCalled();
+    expect(table.rows).toEqual(units);
   });
 
   it("saves an edited unit with the measure switch turned on", async () => {
