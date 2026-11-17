@@ -68,3 +68,9 @@ describe("person comparison keys", () => {
     });
   });
 });
+
+function suppliedNameType() {
+  // @ts-expect-error a supplied display-name comparison key cannot be null
+  withFoldedPersonKeys({ displayName: "Ada", displayNameFolded: null });
+}
+void suppliedNameType;

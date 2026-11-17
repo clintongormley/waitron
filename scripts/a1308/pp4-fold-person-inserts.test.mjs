@@ -89,12 +89,13 @@ it("refuses malformed source naming the file before any write", () => {
   expect(readFileSync(join(root, path), "utf8")).toBe(source);
 });
 
-it.each(["db.insert(persons).values()", "db.update(persons).set(...changes)"])(
-  "refuses an unwrappable argument: %s",
-  (call) => {
-    expect(() => rewrite(imports + call, path)).toThrow(`${path}: cannot wrap person`);
-  },
-);
+it.each([
+  "db.insert(persons).values()",
+  "db.insert(persons).values(first, second)",
+  "db.update(persons).set(...changes)",
+])("refuses an unwrappable argument: %s", (call) => {
+  expect(() => rewrite(imports + call, path)).toThrow(`${path}: cannot wrap person`);
+});
 it("prints rewritten tracked paths through the command entry point", async () => {
   const root = fixture(imports + "db.insert(persons).values(row);");
   const cwd = process.cwd(),

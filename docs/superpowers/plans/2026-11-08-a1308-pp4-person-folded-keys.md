@@ -37,9 +37,10 @@ script's parsing.
 so the unique indexes can read the folded column directly"), §5 (`persons` rows), §6 item 7.
 
 **First line of the pull request:** "Every venue is reset: core; backups from before this cannot
-be restored." Configuration format 45 is unchanged; an older export with null or missing folded
-keys cannot be imported into the tightened schema. This applies the watcher's 2026-11-16 18:28
-standing wording exception for slices whose exported shape is unchanged.
+be restored, and older configuration exports with null or missing folded person keys cannot be
+imported." Configuration format 45 is unchanged; exported rows already carrying complete folded
+keys keep the same shape. The wording names the actual constraint break without implying that
+all older format-45 exports are refused.
 
 **Who lands:** the lane (rules §6). The script and the raw-SQL edits touch test files under
 `packages/fiscal-verifactu/src/` only to add the folded name to a person insert; no fiscal code or
