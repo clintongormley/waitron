@@ -1357,6 +1357,7 @@ Not in any track until the standalone primary is done.
 - **A1018: physical-box qualification remains the owner's.** The local two-box test covers a
   controlled handover and a reset/rejoin emergency takeover with Veri*Factu. Cloud emergency start
   stays with A1188; Cloud-to-box handover stays with A1505.
+  A1505 has a [dependency-gated plan](superpowers/plans/2026-11-17-a1505-cloud-to-box.md); implementation waits for P6 and the joint hosted formats.
   [Local receipts and remaining qualification](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
