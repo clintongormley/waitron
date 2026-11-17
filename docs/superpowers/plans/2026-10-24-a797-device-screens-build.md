@@ -430,6 +430,9 @@ applied only in the till app; the floor read returns the profile's zones whateve
   `:604`), which this slice does not change. (Observed, not changed: on a handheld that list holds
   only the profile's counter zones, because the route's `zones` are counters only, `till-api.ts:1537-1541`,
   `:1566-1568`; on a till it holds every profile zone. Task 5 files it in the backlog.)
+  > **2026-11-17 (A1052):** on a handheld the accept list is now the device's zone read, every zone
+  > the profile allows, as on a till; it falls back to `profileServiceZones` only while that read
+  > has failed.
 - **D5. No route stops refusing or starts serving; the zones read gains one field (D2b).**
   `GET`/`PUT /api/device/zones` have no form-factor gate
   (`device-api.ts:362-394`, read), and a handheld already saves through them: the case

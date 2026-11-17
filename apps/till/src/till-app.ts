@@ -23984,7 +23984,7 @@ export class TillApp extends LitElement {
                               : html`<till-department-transfers
                                   .currentTabId=${this.#currentTransferTabId()}
                                   .currentTabLabel=${this.#store.label ?? ""}
-                                  .serviceZones=${this.profileServiceZones}
+                                  .serviceZones=${this.deviceZoneSelection?.zones ?? this.profileServiceZones}
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}
                                   .snapshot=${this.transferSnapshot}
