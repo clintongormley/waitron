@@ -1,6 +1,6 @@
 # CI test leftovers
 
-**Status:** Codex draft reviewed by Claude on 17 November (218 s); corrections incorporated, awaiting watcher clearance. Baseline: five server files / 509 tests passed, 11.84 s wall; unchanged hash-helper tests: six passed. No owner design approval claimed.
+**Status:** Codex draft reviewed by Claude on 17 November (218 s); corrections incorporated, cleared by the watcher at 01:54 (Lane I questions.md), with one sentence retaining uninspected stored-secret setup. Baseline: five server files / 509 tests passed, 11.84 s wall; unchanged hash-helper tests: six passed. No owner design approval claimed.
 **Smallest result:** One PR ends unfinished IPP polling calls during test teardown and reuses stored-secret hashes in exactly five server suites, preserving every assertion, deadline, real sign-in and verification call.
 **Rules read:** `CLAUDE.md` and `docs/developers/{testing-guide,ci-and-gates,workflow-guide,writing-claims}.md`. Read the TDD skill before test edits; follow campaign scope.
 
