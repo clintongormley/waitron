@@ -1,4 +1,4 @@
-# A1308 pp7 — a shift is one row, always on a rota week, and the convenio is one row: implementation plan
+# A1308 pp7 — a shift is one row, always on a rota week: implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
@@ -11,7 +11,8 @@
 A1002 role merge: shifts keep job roles from core's `staff_roles`, separate from access roles.
 The watcher cleared this correction in `/Users/clintongormley/waitron-campaign-e/questions.md:340-341`
 (2026-11-17 04:26).
-The driver obtains one Claude read of the corrected section only; build waits until pp5 lands.
+Claude read this correction on 2026-11-17 (130 seconds); the driver applied its documentation fixes.
+The report is `receipts/a1308-pp7/plan-correction-review.md` in the lane folder. Build waits until pp5 lands.
 Rebuild the starting migration per `CLAUDE.md` §3, never add a migration.
 
 **Goal:** `shift_assignments` (one optional row per shift naming its role and area) folds into
@@ -21,7 +22,7 @@ rules) already has its singleton CHECK, so Task 4 skips under its existing condi
 
 **Words used here.** A *rota week* is a `roster_versions` row: one week's planned shifts, draft,
 published or superseded. A shift's *area* is the department (front of house) or kitchen station it
-fills; a shift with no role fills no slot ("not in a slot", `staffing.ts:149`).
+fills; a shift with no role fills no slot ("not in a slot", `staffing.ts:103` at `93a8d857ee`).
 
 **Architecture:** three columns and one CHECK on `shifts`; every reader that joined
 `shift_assignments` reads the shift's own columns; the code that handled a shift with no rota week
@@ -34,14 +35,15 @@ fills; a shift with no role fills no slot ("not in a slot", `staffing.ts:149`).
 **Spec:** [README](../specs/2026-11-02-rationalisation/README.md) §3 R1; [people
 appendix](../specs/2026-11-02-rationalisation/tables-people.md) §1 `shifts`, `convenio_config`,
 `staffing_blocks`; §4 and §5 (rows for `shifts`, `shift_assignments`, `convenio_config`,
-`staffing_blocks`).
+`staffing_blocks`), except the role column and `staffing_blocks` rename: the correction above
+follows the replacement role design instead.
 
 **First line of the pull request:** "Every venue is reset: workforce; backups and
 exports from before this cannot be restored or imported." (rules §2; Task 4 skips)
 
 **Who lands:** the lane (rules §6: nothing fiscal).
 
-**Cites** read at `a086eedfb7`, except the dated correction above; slice 5 removed `location_id`.
+**Cites** read at `a086eedfb7`, except the dated correction and explicit `93a8d857ee` citations above; slice 5 removed `location_id`.
 
 ---
 
@@ -49,13 +51,13 @@ exports from before this cannot be restored or imported." (rules §2; Task 4 ski
 
 - `shifts` (`packages/workforce/src/schema/shifts.ts`) gains:
   - `staff_role_id`/`staffRoleId` `id`, null, `shifts_role_fk` → core `staff_roles(id)` via
-    `@waitron/db`'s `staffRoles`, on delete restrict. Keep existing key names where possible;
+    `@waitron/db`'s `staffRoles`, on delete restrict.
     `deleteStaffRole` hides a used job role (`packages/staffing/src/staff-roles.ts:281-304`).
   - `department_id` `id`, null, `shifts_department_fk` → `departments(id)` on delete **restrict**.
   - `station_id` `id`, null, `shifts_station_fk` → `kitchen_stations(id)` on delete **restrict**.
   - `shifts_one_area_ck`: `(staff_role_id is null and department_id is null and station_id is null) or
     (staff_role_id is not null and (department_id is null) <> (station_id is null))` — the old
-    `shift_assignments_one_area_ck` (`staffing.ts:180-183`), extended for "no slot".
+    `shift_assignments_one_area_ck` (`staffing.ts:133-136` at `93a8d857ee`), extended for "no slot".
 - `roster_version_id` not null; `shifts_roster_version_fk` on delete cascade (was set null,
   `shifts.ts:38-42`).
 - `shift_assignments` deleted, with its classification row (`packages/workforce/src/classification.ts`
@@ -132,15 +134,14 @@ cascade, only the two key actions and their protection-list lines change.
 
 | Part | Counted lines (estimate) |
 | --- | --- |
-| Schema: three columns, CHECK, two key changes, convenio id | 40 |
+| Schema: three columns, CHECK, two key changes | 40 |
 | Writers and readers in staffing, the raw-SQL week copy | 120 |
 | Workforce publish and server read deletions' replacements (if any remain) | 20 |
-| Convenio lookup | 15 |
 | Classification, exports, live queries, backup check, personal data | 40 |
 | Fixture versions (`seedRosterWeek` and its uses) | 90 |
-| New tests: CHECK, keys, cascade, convenio singleton, slot writes | 200 |
+| New tests: CHECK, keys, cascade, slot writes | 200 |
 | Re-pointed tests (assignment rows read from `shifts`) | 80 |
-| **Total** | **≈ 615** |
+| **Total** | **≈ 590** |
 
 Uncounted: deleted code (`unattachedWeek`, the attach step, the unattached reads,
 `shiftAssignments`) and generated files.
@@ -152,7 +153,6 @@ pnpm --filter @waitron/staffing exec vitest run
 pnpm --filter @waitron/workforce exec vitest run src/scheduling.test.ts src/clocking.test.ts \
   src/attendance-rota.test.ts src/index.test.ts src/staffing-migrations.test.ts src/schema-ownership.test.ts \
   src/personal-data.test.ts
-pnpm --filter @waitron/workforce-es exec vitest run src/convenio.test.ts src/convenio-roster.test.ts src/schema-ownership.test.ts
 pnpm --filter @waitron/server exec vitest run src/workforce-api.test.ts src/attendance-rota.test.ts \
   src/personal-data-export-api.workforce.test.ts src/boot.shift-descriptions.test.ts
 pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts \
@@ -185,14 +185,11 @@ Any other line is a stop. Compare against the base after pp5 lands.
    Task 3).
 3. A1002's used-job-role query reads `shift_assignments` in a way that does not translate to one
    `shifts.staffRoleId` read (for example it counts assignments per week): stop and ask.
-4. A1406-2 (paid breaks and split limits, `docs/superpowers/plans/2026-11-08-a1406-work-time-policies.md`)
-   adds `convenio_config` columns. If it is in flight when this plan starts, wait (rules §8); if it
-   landed, Task 4 still skips: pp7 does not rebuild workforce-es.
 
 ## Needs
 
 - A1002 replacement design (core job roles and the staffing role code); batch 1 (slice 5, 1a).
-- pp5 must land before pp7 is built; one Claude read of this correction comes first (watcher, above).
+- pp5 must land before pp7 is built (watcher, above).
 - pp6 only for workforce's starting migration order (both rebuild `--set workforce`; either order
   works by rules §2.4).
 
@@ -219,9 +216,8 @@ Any other line is a stop. Compare against the base after pp5 lands.
 `docs/superpowers/specs/2026-11-11-a1002-roles-redesign-design.md:12-15` and §2, as cleared by the
 watcher (`/Users/clintongormley/waitron-campaign-e/questions.md:340-341`, 2026-11-17 04:26).
 Move the existing `staff_role_id`/`staffRoleId` to `shifts`, referencing core `staff_roles` via
-`@waitron/db`'s `staffRoles`; keep `shifts_role_fk` and leave `staffing_blocks.staff_role_id` and
-its key unchanged. Preserve the one-area rule and readers' assertions. The driver's single Claude
-read of the corrected section and pp5 landing precede this build.
+`@waitron/db`'s `staffRoles`; name its key `shifts_role_fk` and leave
+`staffing_blocks.staff_role_id` and its key unchanged. Preserve the one-area rule and readers' assertions.
 
 **Files:** `shifts.ts`, `staffing.ts`, `rota.ts`, `rota-data.ts`, `describe-shifts.ts`,
 `personal-data.ts` (staffing), `staff-roles.ts`, `live-queries.ts`, staffing's backup check and
