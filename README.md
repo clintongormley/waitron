@@ -84,7 +84,7 @@ starts all three processes in parallel:
 | Process   | Default URL                                     |
 | --------- | ----------------------------------------------- |
 | Till      | http://localhost:5190/till/                     |
-| Dashboard | http://localhost:5191/                   |
+| Dashboard | http://localhost:5191/                          |
 | Server    | http://localhost:8080 or https://localhost:8080 |
 
 A fresh demo server uses HTTP. If the shared development state already contains a box certificate,
