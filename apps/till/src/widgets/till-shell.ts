@@ -358,6 +358,10 @@ export class TillShell extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
+      .till-strip .bar-action[data-attention]:focus-visible {
+        outline-offset: calc(-2 * var(--wt-focus-offset));
+      }
+
       [data-counter-zone] {
         display: flex;
         align-items: center;

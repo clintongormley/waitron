@@ -6192,6 +6192,8 @@ carry their counts. Waiting draws attention while nonempty and stops when empty;
 removes the animation. The Help switch, the operator and More remain reachable while the strip scrolls. Selecting
 Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
 Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
+Strip controls draw their keyboard focus ring inside their edges so scrolling does not clip it;
+Waiting leaves its attention border visible outside that ring.
 While a venue logo is in use and has loaded, it is drawn first in the bar (`wt-venue-logo`,
 `size="bar"`, alt the legal name, no fallback) while every strip control fits beside it; otherwise
 the box stays in the page, out of the row and hidden, so it keeps its image and its retry. Nothing
