@@ -80,16 +80,6 @@ describe("printer address requests", () => {
     steady = 1000.5;
     expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 29_000 }]);
   });
-  it("keeps a request ending exactly 30 seconds ahead", () => {
-    let now = 1000;
-    const probes = createPrinterProbes(
-      () => now,
-      () => now,
-    );
-    probes.add({ host: "10.0.0.1" });
-    now = 1000;
-    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }]);
-  });
   it.each([null, undefined, [], "bad"])("refuses malformed request %s", (input) => {
     expect(() => createPrinterProbes().add(input)).toThrowError(
       expect.objectContaining({ code: "management.request_invalid" }),

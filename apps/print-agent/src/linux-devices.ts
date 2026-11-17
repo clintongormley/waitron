@@ -38,7 +38,7 @@ export interface LinuxDeviceOptions {
   /** Wall clock, for the network scan's deadline only. */
   now?: () => number;
   /** Elapsed time for the Bluetooth waits. */
-  steadyNow?: () => number;
+  steady?: () => number;
 }
 
 /** An unavailable Bluetooth side is asked again this often rather than on every poll, because the
@@ -83,7 +83,7 @@ export function createLinuxDevices(
     });
   const now = opts.now ?? Date.now;
   // This app does not depend on `@waitron/shared`, so it reads the steady clock itself.
-  const steadyNow = opts.steadyNow ?? ((): number => performance.now());
+  const steadyNow = opts.steady ?? ((): number => performance.now());
   const scanNetworkImpl =
     opts.scanNetwork ??
     ((deadline?: number) => scanNetwork(deadline, { ...opts.networkScanDeps, now }));
@@ -93,7 +93,6 @@ export function createLinuxDevices(
   let listingForgets = 0;
   let recentPaired:
     { startedAt: number; forgetsBefore: number; devices: BluetoothDevice[] } | undefined;
-  // Counted rather than timed, so a listing started before a forget is never taken as after it.
   let forgets = 0;
   let lastScanFailure: string | undefined;
 

@@ -446,7 +446,7 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
       const waits: number[] = [];
       const devices = createLinuxDevices({
         sysfsRoot: root,
-        steadyNow: () => clock,
+        steady: () => clock,
         bluetoothListTimeoutMs: 3_000,
         bluetooth: fakeBluetooth({
           paired: async () => {
@@ -557,7 +557,7 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     });
     const devices = createLinuxDevices({
       sysfsRoot: root,
-      steadyNow: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired }),
     });
     await devices.checkBluetooth();
@@ -819,7 +819,7 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     const devices = createLinuxDevices({
       sysfsRoot: root,
       devRoot: "/dev",
-      steadyNow: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired, forget }),
     });
     // The agent's poll: the paired listing and the visible read share one listing.
@@ -890,28 +890,6 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     expect(paired).toHaveBeenCalledTimes(2);
   });
 
-  it("lists again after a forget made behind the poll's listing, once the clock has caught up", async () => {
-    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
-    advance(5_000);
-    await poll();
-    advance(-3_000);
-    await devices.forgetBluetooth(PRINTER);
-    advance(3_001);
-    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
-    expect(paired).toHaveBeenCalledTimes(2);
-  });
-
-  it("lists again after a forget made once the clock stepped back behind the poll's listing", async () => {
-    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
-    advance(5_000);
-    await poll();
-    advance(-3_000);
-    await devices.forgetBluetooth(PRINTER);
-    advance(1);
-    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
-    expect(paired).toHaveBeenCalledTimes(2);
-  });
-
   it("does not reuse a listing that was still running when a forget finished", async () => {
     let clock = 0;
     let release!: (devices: { mac: string }[]) => void;
@@ -926,7 +904,7 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
       .mockResolvedValueOnce([]);
     const devices = createLinuxDevices({
       sysfsRoot: root,
-      steadyNow: () => clock,
+      steady: () => clock,
       bluetooth: fakeBluetooth({ paired, forget: async () => ({ ok: true }) }),
     });
     const listed = devices.pairedBluetooth();

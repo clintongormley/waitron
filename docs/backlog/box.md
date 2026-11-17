@@ -13,7 +13,7 @@ applies today; behaviour is kept site by site. Raised by #2331's review.
 
 **Still open:** apply the shared elapsed-time source to the remaining sites below, after deciding
 which rules measure an elapsed wait and which compare persisted dates, ordering or calendar time.
-The sign-in/account limiter families are outside this open inventory; the persisted PIN helper
+The sign-in/account limiter and printing families are outside this open inventory; the persisted PIN helper
 exception is recorded under [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ### Inventory scope
@@ -22,8 +22,9 @@ Source inspection on 2026-11-16 at `99a2f741c6694f5b8914bcdf47fd863e341c12d1`, n
 verification. Reproduce the source search with
 `git grep -n -i -E 'went backwards|step(s|ped)? back|backward' -- apps packages scripts ':!*.test.*' ':!*.spec.*'`.
 Multiple guards in one file share a row. The original first slice accounted for
-`pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`;
-their open rows have been removed. The tables account for the remaining matched files and exclusions.
+`pin-throttle.ts`, `password-throttle.ts`, `account-rate-limit.ts` and `enrol-rate-limit.ts`, and
+the printing slice for `printer-probes.ts`, `printer-bluetooth-commands.ts`,
+`apps/print-agent/src/server-ca.ts` and `linux-devices.ts`; their open rows have been removed. The tables account for the remaining matched files and exclusions.
 This search does not discover every timer: split-line wording and guards with other words can be missed.
 
 Already-steady readers such as `apps/server/src/live-operation-rate-limit.ts` and
