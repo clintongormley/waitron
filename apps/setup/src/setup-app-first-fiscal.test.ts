@@ -846,7 +846,7 @@ it.each([false, true])(
   },
 );
 
-it("keeps a fresh Live choice after Start empty discards the previous draft", async () => {
+it("keeps a fresh Live choice when Start empty goes straight on from an untouched import screen", async () => {
   const { app, requests } = await mount();
   const mode = await screen(app, "mode");
   const nativeClick = async (owner: HTMLElement, selector: string) => {
@@ -862,9 +862,8 @@ it("keeps a fresh Live choice after Start empty discards the previous draft", as
   const warning = app.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
     "wt-unsaved-changes",
   )!;
-  await expect.poll(() => warning.open).toBe(true);
-  await nativeClick(warning, "[data-choice=discard]");
   await screen(app, "admin");
+  expect(warning.open).toBe(false);
   expect((app as unknown as { draft: { mode: string } }).draft.mode).toBe("live");
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });

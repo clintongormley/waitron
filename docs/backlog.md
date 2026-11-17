@@ -431,9 +431,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   mode and the server refuses the plain provision with `setup.owner_required`.
   [Detail](backlog/setup.md#a-dev-stack-cannot-finish-a-live-setup)
 
-- **Start empty asks to discard changes nobody made** on the untouched Import a configuration
-  screen. [Detail](backlog/setup.md#start-empty-asks-to-discard-changes-nobody-made)
-
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
