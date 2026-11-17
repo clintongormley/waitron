@@ -546,7 +546,7 @@ describe("A669 candidate sets", () => {
     const p = await party();
     await v.db
       .update(workingOrders)
-      .set({ partyId: null, deliveryTableId: p.tableId })
+      .set({ partyId: null, billNumber: null, deliveryTableId: p.tableId })
       .where(eq(workingOrders.id, p.tabId));
     await expect(
       view(p.partyId, { kind: "lines", orderId: p.tabId, lineNos: [] }),

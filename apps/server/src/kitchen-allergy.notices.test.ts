@@ -541,7 +541,7 @@ describe("A669 notices", () => {
       read.mockRestore();
     }
   });
-  it("a paid bill retained by a merged party follows the surviving party's correction", async () => {
+  it("a paid bill brought across by a merge follows the surviving party's correction", async () => {
     const p = await sent();
     await v.db
       .update(workingOrders)
@@ -558,7 +558,7 @@ describe("A669 notices", () => {
       }),
     );
     const [bill] = await v.db.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
-    expect(bill!.partyId).toBe(p.partyId);
+    expect(bill!.partyId).toBe(into.partyId);
     await edit({ ...p, partyId: into.partyId }, patch(p, { note: "Fresh tools" }));
     expect(
       (await notices())

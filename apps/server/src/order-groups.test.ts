@@ -6224,7 +6224,7 @@ describe("Fire now on one held dish", () => {
     ]);
   });
 
-  it("fires a held dish on a merged-in party's paid bill", async () => {
+  it("fires a held dish on a paid bill brought across by a merge", async () => {
     const { v, s, rows, steak, extra } = await fixture(false);
     await db
       .update(workingOrders)
@@ -6241,7 +6241,7 @@ describe("Fire now on one held dish", () => {
     );
     const command = await args(into.partyId);
     await inTx((tx) => fireHeldLine(tx, v.cfg, into.partyId, steak.id, command));
-    expect(await firedTicketLineIds(s.partyId)).toEqual([steak.id, extra.id].sort());
+    expect(await firedTicketLineIds(into.partyId)).toEqual([steak.id, extra.id].sort());
     expect(
       (await groupsOf(into.partyId)).groups.map((g) => [g.displayNumber, g.state, g.lineIds]),
     ).toEqual([

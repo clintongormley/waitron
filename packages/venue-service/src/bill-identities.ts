@@ -20,7 +20,7 @@ export async function allocateBillNumber(
   return number;
 }
 
-/** The caller captures number order before clearing numbers and moving the bills. */
+/** Preserve the order captured before the old numbers were cleared. */
 export async function rescopeBillNumbers(
   tx: Transaction,
   billIds: readonly string[],

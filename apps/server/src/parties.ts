@@ -73,7 +73,6 @@ export interface PartyBill {
     identifierType?: RecipientIdentifierType;
     identifierCountryCode?: string;
   } | null;
-  /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
   label: string | null;
   /**

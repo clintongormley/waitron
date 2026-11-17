@@ -21,7 +21,6 @@ export const partyState = enumType(["open", "closed"]);
 /**
  * One seated party, from seating until its table is finished: it holds the party's tab, every bill
  * split from it (`working_orders.party_id`) and the tables it sits at (`party_tables`).
- *
  */
 export const parties = table(
   "parties",

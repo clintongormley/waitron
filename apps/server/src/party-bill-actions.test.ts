@@ -1632,7 +1632,10 @@ describe("two tills at once", () => {
     const read = await commandFor(v, partyId);
     // Stands in for moving the bill to the counter, which no route does yet.
     await inTx(v, (tx) =>
-      tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, second)),
+      tx
+        .update(workingOrders)
+        .set({ partyId: null, billNumber: null })
+        .where(eq(workingOrders.id, second)),
     );
     const before = await snapshot(partyId, [second]);
 

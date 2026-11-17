@@ -209,7 +209,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/department-transfers/:id/accept                 | body destination zone   | department-transfer-api.test.ts: refuses a receiving zone outside the designated profile |
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
- * | PUT  /api/bills/:id/name | numbering party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill a merged party kept" |
+ * | PUT  /api/bills/:id/name | bill's party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill after a party merge" |
  * | POST /api/bills/:id/move-dishes                         | order; body order      | refuses POST /api/bills/:id/move-dishes (from), (to) |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
@@ -1699,8 +1699,8 @@ describe("a Restaurant profile on another department's zone", () => {
   });
 });
 
-describe("naming a paid bill a merged party kept", () => {
-  it("reads the zone of the party now numbering it, not the bill's own", async () => {
+describe("naming a paid bill after a party merge", () => {
+  it("checks the receiving party's zone", async () => {
     const source = await seat(v, await v.table("Merged source", f.restTables));
     await order(v, source.tabId, "Water", "Flan");
     await split(v, source.partyId, source.tabId, [2]);

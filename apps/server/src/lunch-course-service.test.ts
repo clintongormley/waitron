@@ -737,7 +737,12 @@ describe("set lunch course service", () => {
       const lines = await rows(tx, id);
       await tx
         .update(workingOrders)
-        .set({ partyId: null, status: "settled", settledAt: new Date().toISOString() })
+        .set({
+          partyId: null,
+          billNumber: null,
+          status: "settled",
+          settledAt: new Date().toISOString(),
+        })
         .where(eq(workingOrders.id, id));
       return {
         starter: lines.find((line) => line.productId === venue.products.cheese)!.id,
