@@ -249,6 +249,7 @@ export class ProductBrowser extends LitElement {
         "operationSelection",
         "categories",
         "products",
+        "routing",
         "summaryLoading",
         "summaryFailed",
         "operationBusy",
@@ -380,7 +381,7 @@ export class ProductBrowser extends LitElement {
   async #readRoutingPreview(): Promise<void> {
     const read = ++this.#previewRead;
     const change = this.#routingChange();
-    this.routingPreview = null;
+    if (change === null) this.routingPreview = null;
     this.previewError = "";
     this.previewRetry = false;
     this.previewBusy = change !== null;

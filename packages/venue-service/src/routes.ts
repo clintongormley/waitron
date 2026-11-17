@@ -720,6 +720,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             await authorizeManager(tx, {
               managementSessionId: sessionId,
               permission: "menu.manage",
+              touch: false,
             });
             return previewProductItemsRouting(tx, change);
           }),

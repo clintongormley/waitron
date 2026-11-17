@@ -2143,6 +2143,7 @@ it("moves products to the explicitly chosen top level", async () => {
       null,
     ),
   );
+  expect(el.api.previewProductItemsRouting).not.toHaveBeenCalled();
 });
 it("deletes only completely summarised empty folders without asking", async () => {
   const el = await mountBrowser();
@@ -5016,6 +5017,12 @@ it("previews the current folder move, ignores replaced reads and waits before co
   expect(preview.textContent).toContain("Patio");
   expect(preview.textContent).toContain("Bar");
   expect(preview.textContent).toContain("Kitchen");
+  el.routing = routingWith({ defaultStationId: null });
+  await vi.waitFor(() => expect(reads).toHaveLength(3));
+  expect(confirm().disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("size")).toBe("wide");
+  reads[2]!({ moves: [], stations: [], periods: [] });
+  await vi.waitFor(() => expect(confirm().disabled).toBe(false));
   await userEvent.click(confirm());
   await vi.waitFor(() =>
     expect(el.api.moveProductItems).toHaveBeenCalledWith(

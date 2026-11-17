@@ -3828,6 +3828,20 @@ describe("folder routing previews", () => {
       expect(preview.periods).toEqual([{ id: lunch, name: "Lunch", departmentName: "Dining" }]);
       expect(preview.stations).toContainEqual({ id: f.terraceBar, name: "Terrace Bar" });
       expect(await loadRoutingRules(tx, null)).toEqual(before);
+      await addProductToMenu(tx, { menuId: f.menu, productId: f.bread });
+      const direct = await previewProductItemsRouting(tx, {
+        kind: "move",
+        selection: { productIds: [f.bread], categoryIds: [f.beer] },
+        to: f.food,
+      });
+      expect(direct.moves).toEqual([
+        expect.objectContaining({
+          productId: f.bread,
+          from: station(f.bar),
+          to: station(f.terraceBar),
+          periodIds: [lunch],
+        }),
+      ]);
     }));
 
   it.each(["move_up", "delete"] as const)(

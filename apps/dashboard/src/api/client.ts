@@ -3613,6 +3613,7 @@ export class DashboardApi {
       "/management-api/venue-service/routing/product-items-preview",
       "POST",
       change,
+      { activity: "none" },
     );
   }
   moveProductItems(selection: ProductSelection, to: string | null): Promise<void> {

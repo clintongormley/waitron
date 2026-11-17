@@ -4052,6 +4052,8 @@ describe("folder routing preview route", () => {
       to: null,
     };
     const before = await db.select().from(routingCells);
+    const lastSeen = new Date(Date.now() - 60_000).toISOString();
+    await db.run(sql`update dashboard_sessions set last_seen_at = ${lastSeen}`);
     const response = await send(f.app, "POST", path, f.managerCookie, change);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -4059,6 +4061,9 @@ describe("folder routing preview route", () => {
       stations: [{ id: f.stationId, name: "Terrace bar" }],
       periods: [],
     });
+    expect(await db.all(sql`select distinct last_seen_at from dashboard_sessions`)).toEqual([
+      { last_seen_at: lastSeen },
+    ]);
     const mutation = await send(f.app, "POST", path, f.managerCookie, {
       ...change,
       target: { kind: "no_preparation" },

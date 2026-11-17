@@ -5015,7 +5015,7 @@ export const es: Record<StringKey, string> = {
   "folders.no_active_station": "Ninguna estación activa asignada",
   "folders.routing_unavailable":
     "Envío a la estación no disponible: las categorías sin estación no se marcan. Inténtalo más tarde.",
-  "folders.preview_loading": "Comprobando qué productos cambian de puesto…",
+  "folders.preview_loading": "Comprobando qué productos cambian de estación…",
   "folders.preview_error":
     "No se ha podido cargar la vista previa de los destinos. Vuelve a intentarlo o cancela.",
   "folders.preview_retry": "Reintentar vista previa",
