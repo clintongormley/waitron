@@ -1547,7 +1547,9 @@ Otherwise a table is never narrower than its headings and cell text laid out on 
 where a cell caps its own width, and its box scrolls sideways when that is wider than the box. A table given `wrapToFit` (the `wrap-to-fit` attribute) lets its
 headings and cell text wrap at spaces first, so it scrolls only when even its longest words and its
 `white-space: nowrap` items do not fit. Structure uses this below 800 px of table width, with
-anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults to `--wt-space-3`; Structure sets it to `--wt-space-1` at 440 px or less, for cells and the tree toggle’s reach, leaving vertical and toolbar spacing unchanged. The Menus
+anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults to
+`--wt-space-3`; Structure sets it to `--wt-space-1` at 440 px or less, for cells and the
+tree toggle’s reach, leaving vertical and toolbar spacing unchanged and the heading over the root name. The Menus
 list wraps below its wide layout. Products keeps its separately fitted names and default table scrolling. The primitive is checked by the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
 

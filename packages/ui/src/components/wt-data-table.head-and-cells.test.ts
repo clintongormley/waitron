@@ -438,6 +438,9 @@ test("cell inline spacing preserves the narrow tree target and leaves other spac
   const toolbar = root.querySelector<HTMLElement>(".table-toolbar")!;
   const toolbarGap = getComputedStyle(toolbar).gap;
   expect(getComputedStyle(cell).paddingInlineStart).toBe("12px");
+  el.style.setProperty("--wt-space-3", "16px");
+  expect(getComputedStyle(cell).paddingInlineStart).toBe("16px");
+  el.style.removeProperty("--wt-space-3");
   el.style.setProperty("--wt-table-cell-padding-inline", "var(--wt-space-1)");
   for (const painted of root.querySelectorAll("th, td")) {
     expect(getComputedStyle(painted).paddingInlineStart).toBe("4px");

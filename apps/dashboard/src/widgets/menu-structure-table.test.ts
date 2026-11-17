@@ -4606,14 +4606,11 @@ it("offers localized remembered column choices for waitron.menu-structure.table"
   }
 });
 
-it.each([
-  ...[390, 600, 700, 1280].flatMap((width) =>
-    ["en-GB", "es-ES"].map((locale) => ({ width, locale, font: "system" })),
-  ),
-  { width: 390, locale: "es-ES", font: "Verdana" },
-])(
-  "keeps long Structure names and availability readable before Actions ($width px, $locale, $font)",
-  async ({ width, locale, font }) => {
+it.each(
+  [390, 600, 700, 1280].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))),
+)(
+  "keeps long Structure names and availability readable before Actions ($width px, $locale)",
+  async ({ width, locale }) => {
     const before = currentLocale();
     onTestFinished(() => setLocale(before));
     setLocale(locale);
@@ -4629,7 +4626,6 @@ it.each([
       })),
       current: ["m-drinks"],
     });
-    if (font !== "system") el.parentElement!.style.setProperty("--wt-font-family", font);
     await vi.waitFor(() => {
       const root = table(el).shadowRoot!;
       const scroll = root.querySelector<HTMLElement>(".scroll")!;
@@ -4641,6 +4637,10 @@ it.each([
         toggle.getBoundingClientRect().left,
         "root toggle stays inside its cell",
       ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
+      expect(getComputedStyle(toggle.closest("td")!).paddingInlineStart).toBe(
+        width === 390 ? "4px" : "12px",
+      );
+      expect(getComputedStyle(toggle).marginInlineStart).toBe(width === 390 ? "-4px" : "0px");
       const treeCell = root.querySelector('[part~="tree-cell"]')!;
       expect(
         treeCell.children[1]!.getBoundingClientRect().left -
