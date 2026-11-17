@@ -1,7 +1,8 @@
 # Set menus (A1515): design
 
-Status: written 17 November 2026 from the owner's decisions in conversation that day; awaiting the
-owner's approval. Replaces the set-lunch design in
+Status: approved by the owner in conversation, 17 November 2026 ("yes"), after reading the list
+of the writer's calls; the calls stay marked **my call** below. Plans: one per piece, under
+"The pieces, for planning". Replaces the set-lunch design in
 [2026-11-12-a1515-set-lunch-proposal.md](2026-11-12-a1515-set-lunch-proposal.md), whose build is
 being removed first (A1515-REMOVE, queued on lane D).
 
