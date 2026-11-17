@@ -7,8 +7,13 @@ export type BackupRow = Readonly<Record<string, BackupValue>>;
 export interface BackupQuery {
   rows(sql: string, values?: readonly BackupValue[]): AsyncIterable<BackupRow>;
 }
-function target(path: string, options: { immutable?: boolean }): string | URL {
-  if (options.immutable !== true) return path;
+
+/**
+ * The address that opens the file at `path` read-only and immutable: SQLite reads the main file
+ * alone and writes nothing beside it. Only for a caller that has already refused a `-wal` or a
+ * `-journal` there, or that means to read past them.
+ */
+export function immutableFileUrl(path: string): URL {
   const url = pathToFileURL(path);
   url.searchParams.set("mode", "ro");
   url.searchParams.set("immutable", "1");
@@ -16,10 +21,7 @@ function target(path: string, options: { immutable?: boolean }): string | URL {
 }
 
 const PURE_FUNCTIONS = new Set(["count", "max", "min", "length", "hex", "coalesce", "json_valid"]);
-/**
- * `immutable` opens a file to read its main file alone, leaving no `-wal` or `-shm` beside it; it is
- * only for a caller that has already refused a `-wal` or a `-journal` there. Bytes ignore it.
- */
+/** `immutable` opens a file through {@link immutableFileUrl}; bytes ignore it. */
 export async function openBackupQuery(
   databasePath: string | Uint8Array,
   options: { immutable?: boolean } = {},
@@ -28,7 +30,7 @@ export async function openBackupQuery(
   close(): Promise<void>;
 }> {
   const fromBytes = databasePath instanceof Uint8Array;
-  const database = new DatabaseSync(fromBytes ? ":memory:" : target(databasePath, options), {
+  const database = new DatabaseSync(fromBytes ? ":memory:" : options.immutable === true ? immutableFileUrl(databasePath) : databasePath, {
     readOnly: !fromBytes,
     allowExtension: false,
   });

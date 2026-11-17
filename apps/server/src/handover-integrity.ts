@@ -1,5 +1,6 @@
 import { resolve as resolvePath } from "node:path";
 import { AppError } from "@waitron/shared";
+import { immutableFileUrl } from "@waitron/store";
 import "./errors.js";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 
@@ -12,16 +13,9 @@ import { Worker, type WorkerOptions } from "node:worker_threads";
 const INTEGRITY_SOURCE = String.raw`
 const { workerData, parentPort } = process.getBuiltinModule("node:worker_threads");
 const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
-const { pathToFileURL } = process.getBuiltinModule("node:url");
 let intact = false;
 try {
-  let target = workerData.path;
-  if (workerData.immutable) {
-    target = pathToFileURL(workerData.path);
-    target.searchParams.set("mode", "ro");
-    target.searchParams.set("immutable", "1");
-  }
-  const db = new DatabaseSync(target, { readOnly: true, allowExtension: false });
+  const db = new DatabaseSync(workerData.path, { readOnly: true, allowExtension: false });
   try {
     db.exec("pragma query_only=on");
     const checks = db.prepare("pragma integrity_check").all();
@@ -86,8 +80,7 @@ export async function checkCopyIntegrity(
  * Whether `pragma integrity_check` and `pragma foreign_key_check` both pass on `path`, on a thread
  * of its own: on a venue-sized file they take long enough that the box would answer nothing
  * meanwhile. A thread that fails or ends without answering rejects, because that says nothing about
- * the file. `immutable` reads the main file alone and leaves no `-wal` or `-shm` beside it; it is
- * only for a caller that has already refused a `-wal` or a `-journal` there.
+ * the file. `immutable` opens it through `immutableFileUrl`.
  */
 export function isCopyIntact(
   path: string,
@@ -109,7 +102,11 @@ export function isCopyIntact(
     const key = resolvePath(path);
     if (runningChecks.has(key))
       throw new AppError("handover.copy_check_failed", { module: "core" });
-    const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path, immutable } });
+    const worker = startWorker(INTEGRITY_SOURCE, {
+      eval: true,
+      // As text: a URL object cannot cross to the thread.
+      workerData: { path: immutable ? immutableFileUrl(path).href : path },
+    });
     runningChecks.add(key);
     let stopWait: NodeJS.Timeout | undefined;
     const stop = () => {
