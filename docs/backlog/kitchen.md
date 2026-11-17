@@ -72,8 +72,8 @@ Left open:
 
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
 
-The Counter still reads an unused kitchen queue; a failed read can show its retry notice even
-though the Counter has no prep-queue card. The till's API client has no general request timeout
+The Counter still reads an unused kitchen queue; a failed read can show its retry notices,
+including after a hand-over, even though the Counter has no prep-queue card. The till's API client has no general request timeout
 (only the kitchen refresh and menu-state reads are bounded, at 25 seconds, and a table's round
 sends and offer reloads, at 150 seconds). A refusal that lands after the tab is paid, or after a
 server switch, shows the ordinary unnamed message.
