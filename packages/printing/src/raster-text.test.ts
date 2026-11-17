@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { GLYPHS } from "./glyphs.js";
 import { SETTING_WIDTHS, gridForWidth, textGrid } from "./layout.js";
-import { TEXT_BAND_HEIGHT, drawTextBand, readRasterText, textBandHeight } from "./raster-text.js";
+import {
+  TEXT_BAND_HEIGHT,
+  drawRuleBand,
+  drawTextBand,
+  readRasterText,
+  ruleBandFor,
+  textBandHeight,
+} from "./raster-text.js";
 import { cellsFrom as at, expectedBand as band } from "../test/expected-band.js";
 
 /** Characters drawn identically to an earlier one in the table, and the one the reader returns. */
@@ -152,6 +159,18 @@ describe("rules", () => {
     expect(readRasterText(widthDots, 28, ruleBand(widthDots))).toBe(
       "-".repeat(gridForWidth(widthDots).columns),
     );
+  });
+
+  it.each(SETTING_WIDTHS)(
+    "compares against one rule band drawn once for $widthDots dots",
+    ({ widthDots }) => {
+      expect(ruleBandFor(widthDots)).toBe(ruleBandFor(widthDots));
+      expect(ruleBandFor(widthDots)).toEqual(drawRuleBand(gridForWidth(widthDots)));
+    },
+  );
+
+  it("draws the rule band of a width no printer setting uses on its grid", () => {
+    expect(ruleBandFor(365)).toEqual(drawRuleBand(gridForWidth(365)));
   });
 
   it("reads a rule across a width that is not whole bytes", () => {

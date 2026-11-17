@@ -1,5 +1,5 @@
 import { GLYPH_HEIGHT, GLYPH_WIDTH, GLYPHS } from "./glyphs.js";
-import { gridForWidth, type TextGrid } from "./layout.js";
+import { SETTING_WIDTHS, gridForWidth, type TextGrid } from "./layout.js";
 import { glyphRows, prepareText } from "./text.js";
 
 /**
@@ -86,6 +86,15 @@ export function drawRuleBand(grid: TextGrid): Uint8Array {
   return data;
 }
 
+const RULE_BANDS: ReadonlyMap<number, Uint8Array> = new Map(
+  SETTING_WIDTHS.map(({ widthDots }) => [widthDots, drawRuleBand(gridForWidth(widthDots))]),
+);
+
+/** The {@link drawRuleBand} band of `widthDots`' grid, drawn once for each printer setting's width. */
+export function ruleBandFor(widthDots: number): Uint8Array {
+  return RULE_BANDS.get(widthDots) ?? drawRuleBand(gridForWidth(widthDots));
+}
+
 function glyphPictures(): [string, number[]][] {
   return GLYPHS.map(([codePoint, hex]) => [
     String.fromCodePoint(codePoint),
@@ -140,8 +149,9 @@ export function readRasterText(
   const stride = Math.ceil(widthDots / 8);
   if (data.length !== stride * heightDots) return undefined;
   if (heightDots === TEXT_BAND_HEIGHT) {
-    const grid = gridForWidth(widthDots);
-    if (drawRuleBand(grid).every((byte, i) => byte === data[i])) return "-".repeat(grid.columns);
+    if (ruleBandFor(widthDots).every((byte, i) => byte === data[i])) {
+      return "-".repeat(gridForWidth(widthDots).columns);
+    }
     return readLine(widthDots, stride, data);
   }
   if (heightDots === TEXT_BAND_HEIGHT * 2 && widthDots % 8 === 0) {

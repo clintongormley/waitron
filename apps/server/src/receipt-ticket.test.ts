@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { drawReceipt, formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
+import { formatAmount, formatVatRate } from "./receipt-money.js";
 import {
   bytesInclude,
   decodeTicket,
@@ -4274,10 +4275,12 @@ describe("simplified receipt: tax table", () => {
     printedLines(
       formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", printer }),
     );
-  const taxTable = (lines: string[]): string[] => {
-    const total = lines.findIndex((line) => line.startsWith("TOTAL"));
-    const start = total + 2;
-    return lines.slice(start, lines.indexOf(lines[total + 1]!, start));
+  const taxTable = (lines: string[], totalLabel = "TOTAL"): string[] => {
+    const total = lines.findIndex((line) => line.startsWith(totalLabel));
+    const ruleAfter = (from: number): number =>
+      lines.findIndex((line, at) => at > from && /^-+$/u.test(line));
+    const start = ruleAfter(total);
+    return lines.slice(start + 1, ruleAfter(start));
   };
 
   it.each([PRINTER_80, PRINTER_58])(
@@ -4328,6 +4331,55 @@ describe("simplified receipt: tax table", () => {
     ]);
     for (const line of table) expect(line).toHaveLength(columns);
   });
+
+  it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "prints every figure of a mixed-rate refund of about 3,000 a rate whole on 58 mm (%s)",
+    (invoiceLocale) => {
+      const refund: TillSaleResult = {
+        ...mixed,
+        invoiceType: "R5",
+        corrects: { invoiceNumber: "T-2026-000041", issuedAt: "2026-10-14T20:00:00.000Z" },
+        total: "-6000.00",
+        vatBreakdown: [
+          { rate: "10", base: "-2727.27", tax: "-272.73" },
+          { rate: "21", base: "-2479.34", tax: "-520.66" },
+        ],
+        lines: [
+          { ...mixed.lines[0]!, quantity: "-1", gross: "-3000.00" },
+          { ...mixed.lines[1]!, quantity: "-1", gross: "-3000.00" },
+        ],
+      };
+      const lines = printedLines(
+        formatReceipt({
+          result: refund,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale,
+          printer: PRINTER_58,
+        }),
+      );
+      const labels = receiptLabelsFor(invoiceLocale);
+      const table = taxTable(lines, labels.total);
+      const words = [
+        labels.taxRateColumn,
+        labels.taxBaseColumn,
+        labels.taxAmountColumn,
+        labels.taxTotalColumn,
+        `A ${formatVatRate("10", invoiceLocale)}`,
+        `B ${formatVatRate("21", invoiceLocale)}`,
+        ...["-2727.27", "-272.73", "-2479.34", "-520.66", "-3000.00"].map((amount) =>
+          formatAmount(amount, invoiceLocale),
+        ),
+      ];
+      for (const word of words) {
+        expect(
+          table.some((line) => ` ${line} `.includes(` ${word} `)),
+          `${word} in\n${table.join("\n")}`,
+        ).toBe(true);
+      }
+      for (const line of table) expect(line.length).toBeLessThanOrEqual(30);
+    },
+  );
 
   it("prints no tax table when the sale has no tax summary", () => {
     const lines = print({ ...santet, total: "0.00", vatBreakdown: [] }, PRINTER_80);

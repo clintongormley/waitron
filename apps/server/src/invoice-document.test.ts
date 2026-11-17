@@ -46,6 +46,7 @@ import {
   setDepartmentSalePolicyField,
 } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
+import { formatAmount } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { INVOICE_PAGE_WIDTH, invoiceTextWidth, layoutInvoicePages } from "./invoice-page.js";
@@ -1278,4 +1279,49 @@ describe("the simplified receipt's A4 tax table", () => {
     }
     expect(texts.some(({ text }) => text.startsWith("Base imponible"))).toBe(false);
   });
+
+  it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "keeps a mixed-rate refund of 3,000 a rate inside the page, no cell over another (%s)",
+    (invoiceLocale) => {
+      const result = {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        invoiceType: "R5" as const,
+        recipient: undefined,
+        total: "-6000.00",
+        vatBreakdown: [
+          { rate: "10", base: "-2727.27", tax: "-272.73" },
+          { rate: "21", base: "-2479.34", tax: "-520.66" },
+        ],
+        lines: FULL_INVOICE_DOCUMENT_FIXTURE.result.lines.map(({ net, ...line }) => ({
+          ...line,
+          quantity: "-1",
+          gross: "-3000.00",
+          vatRate: `${net!.rate}.00`,
+        })),
+      };
+      const [page] = layoutInvoicePages({
+        ...FULL_INVOICE_DOCUMENT_FIXTURE,
+        result,
+        invoiceLocale,
+      });
+      const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
+      const heading = texts.findIndex(
+        ({ text }) => text === receiptLabelsFor(invoiceLocale).taxRateColumn,
+      );
+      const amounts = ["-2727.27", "-272.73", "-2479.34", "-520.66", "-3000.00"].map((amount) =>
+        formatAmount(amount, invoiceLocale),
+      );
+      const table = texts.slice(heading, heading + 12);
+      for (const amount of amounts) expect(table.map(({ text }) => text)).toContain(amount);
+      for (let row = 0; row < 3; row++) {
+        const cells = table.slice(row * 4, row * 4 + 4);
+        expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
+        expect(cells[0]!.x).toBeGreaterThanOrEqual(36);
+        const right = (cell: (typeof cells)[number]): number =>
+          cell.x + invoiceTextWidth(cell.text, cell.size);
+        for (let at = 1; at < 4; at++) expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
+        expect(right(cells[3]!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
+      }
+    },
+  );
 });
