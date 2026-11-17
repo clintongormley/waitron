@@ -1,5 +1,17 @@
 # A1308 jr7 — the daily tidy-up job, `housekeeping` — Implementation Plan
 
+**2026-11-17 current-main port, cleared by the watcher at 16:33 and 17:11 in Lane E's
+questions.md:** extend the existing job and its tests. Keep its catch-up one second after start,
+then daily 04:00 schedule, and keep the activity-log clock gate. Boot already registers the job;
+the build order still defers the live-promotion case. Measure 10 uses a locally built 30-day copy,
+with garbage seeded and command pruning enabled only in a throwaway copy, for the two five-minute
+runs. The year-scale figure waits for the next periodic bench run; do not build a year here.
+The disabled command step uses `parties.closed_at` and `working_orders.settled_at`, strictly more
+than 24 hours old. It keeps abandoned-bill and missing-scope answers because neither has a reliable
+close time. If the orders slice adds a bill close time, that branch switches to it then. The step
+stays off until the latest possible till retry is confirmed (M10). These corrections supersede
+the corresponding instructions below; no owner approval of this slice's design is claimed.
+
 **2026-11-14 update:** [A1532](2026-11-14-a1532-print-payload-retention.md) supplies the
 `housekeeping` job with its one-week print-payload step. Add this plan's remaining steps to that
 seat; the earlier “print job payloads” exclusion below is superseded by the owner's chosen period.
