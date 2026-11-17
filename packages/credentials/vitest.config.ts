@@ -21,9 +21,6 @@ export default defineConfig({
         "drizzle/**",
         // Test-only plumbing shared by this package's suites.
         "src/testing/**",
-        // A re-export barrel, on which v8 reports phantom uncovered branches. Its surface is
-        // asserted by index.test.ts.
-        "src/index.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

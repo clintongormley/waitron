@@ -63,8 +63,6 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "src/index.ts",
-        "src/dashboard/index.ts",
         // Test-only mount/cleanup helper.
         "src/dashboard/test-helpers.ts",
         // The real HTTP boundary to SumUp. Its hermetic tests are in src/sumup-client.test.ts.

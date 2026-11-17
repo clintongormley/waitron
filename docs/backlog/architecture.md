@@ -63,13 +63,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   "the whole point of the savepoint"; a test name in
   `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
   transaction" (a test title, which a comments-only change cannot touch).
-  The reason "v8 reports phantom uncovered branches" given for excluding
-  barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
-  both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
-  excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
-  given in the configs of workforce, credentials, bookings, workforce-es, server-kit,
-  dashboard-kit and fiscal-none (not re-measured there); `payments-sumup` keeps its
-  `src/dashboard/index.ts` exclude with the reason deleted by #597, also not measured.
 
 ## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
 
