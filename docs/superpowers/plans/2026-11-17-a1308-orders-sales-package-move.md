@@ -1,42 +1,39 @@
-# A1308 orders and sales package move: decision draft
+# A1308 orders and sales package move: decision for the watcher
 
-**Authority and state:** watcher request, Lane H questions.md, 2026-11-17 17:58. Written by a separate Sol-high invocation and checked by the driver; Claude review and watcher clearance remain. No owner approval of this design is claimed. **Base:** `d47b99294b` (os1 #3670).
+**State:** no implementation is cleared. Watcher requested this plan on 2026-11-17 at 17:58; a separate Sol-high writer drafted it, the driver checked it, and Claude’s first read found the scope decision below. No owner approval of this design is claimed. **Base:** `d47b99294b` (os1 #3670). **Who lands an eventual relocation-only move:** the lane; fiscal/behaviour changes stop it.
 
-**Finish line:** before os2, the files named in [os1’s Area files](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move) and their tests live in one `@waitron/orders-sales` package; the server composes its exports and CI selects its tests independently. Reuse functions, signatures, assertions, Hono mounts, `useVenueDb`, error declarations and the duration sequencer. Change no behaviour, table, fiscal writer or transaction boundary. Add no module descriptor, registry or framework. [Build order, Batch 2](2026-11-08-a1308-build-order.md#batch-2--area-slices) supplies the request; its ~860 seconds per PR is a November 8 model, not a measured saving from this move. [Slice rules](2026-11-08-a1308-slice-rules.md) apply.
+**Requested result:** before os2, put [os1’s listed area files and tests](2026-11-08-a1308-os1-order-numbers.md#area-files-for-the-package-move) into one `@waitron/orders-sales` package, with independent CI selection. Keep functions, signatures, assertions, tables, transactions and behaviour unchanged; add no framework. [Build order, Batch 2](2026-11-08-a1308-build-order.md#batch-2--area-slices) models ~860 seconds saved per PR, not a measured result. [Slice rules](2026-11-08-a1308-slice-rules.md) apply.
 
-## Decision needed before build
+## Measured source boundary and choice
 
-A file move and import rewrite leaves these dependencies crossing back into the app. Putting `@waitron/server` in the new package’s dependencies, including test dependencies, creates a workspace cycle; relative imports into the app conceal that same dependency.
+The driver’s static TypeScript import inventory finds **77 host modules imported by area production, 157 including tests/support**. The per-module importer counts, type-only/value distinction, direct back-edges and source lists are retained in Lane H’s `receipts/orders-sales-package-plan/boundary-inventory.{md,json}` and supplied to Claude. This is source evidence, not an executed module graph.
 
-| Source at this base | Boundary to settle |
+- `bill-payments-api.ts:22–28` imports till helpers/types; `till-api.ts:213` imports its mount back. `working-order.ts:142–154` calls parties; `parties.ts:39–47` calls order creation/payments/drafts back. Kitchen has similar back-edges.
+- `errors.ts` augments the shared registry and imports area types. Area production references 124 host-declared codes as literals, directly constructs 121 of them, and has one dynamic AppError construction. A full move must settle registry ownership, preserving the rule that throwing files import their registry.
+- `testing/bill-venue.ts:49` mounts the full till; 62 selected area tests use that helper directly. `bill-payments-loop.test.ts:29` uses boot. Shared support/fixture splits would exceed an import-only move.
+
+| Route | What it buys and costs |
 | --- | --- |
-| `bill-payments-api.ts:22–28` reads runtime helpers and types from `till-api.ts`, which imports its mount at `:213`. | Relocate the existing parsers, collector and dependency types into shared support; retain HTTP composition at the host. |
-| `working-order.ts:142–154` uses party functions; `parties.ts:39–47` calls order creation, payments and drafts back. `kitchen-print.ts:62–79` also reads area functions. | Name which existing floor/kitchen functions become shared. Moving whole parties/kitchen files expands os1’s explicitly excluded list. |
-| `testing/order-venue.ts` uses `bill-venue`, which mounts the full till (`testing/bill-venue.ts:49`); `bill-payments-loop.test.ts:29` imports boot. | Keep full-host cases at the host or split their fixtures without replacing real mounts with fakes. This requires an exception to moving every named suite. |
+| Leaf-only move | The closed set of relative imports is just **13 production files / 932 lines and five sibling tests / 610 lines**, before asset/coverage qualification. Most requested files stay in the server. |
+| Support extraction, then full move | Requires concrete shared-helper/registry/fixture designs and separately sized slices; neither is provided or authorised here. Previous effort ranges were unmeasured guesses and are withdrawn. |
+| **Defer the move until after os11, before os12** | os1:211–213 provides this later position conditionally. No package CI saving during os2–os11; their changes remain in the existing server package. **Recommended**, given the small leaf set. Watcher must clear changing the sequence. |
 
-Other support includes session/admission checks, `TradingContext`, errors, report helpers and shared PDF/font utilities. Trace those consumers before choosing shared homes; `server-kit` must not become a container for server composition. **Recommendation:** clear separately scoped support/boundary prerequisites, then the mechanical move. This draft does not yet specify those cuts well enough to build them. Ask the watcher to settle the expanded scope or defer the move; do not start os2 across this unanswered boundary.
+## Full-move inventory and later acceptance
 
-## Files and size
-
-Move os1’s four production groups to `packages/orders-sales/src/`, retaining basenames, and its six helpers under `src/testing/`. Tests match the listed globs or `<production-stem>.*.test.ts`. Keep the historical 27 boot and 22 till-api unassigned suites, and current host composition suites, in `apps/server`; those old counts are not today’s inventory. `draft-recall.ts`/`draft-source.ts` were retired in `a9e8f379b7`; do not recreate them. Seven related hyphenated/delivery suites outside these matches remain at the host with imports ported.
-
-| Relocation at the base, before boundary exceptions | Files | Lines added / removed |
+| Relocation at this base, before fixture exceptions | Files | Lines added / removed |
 | --- | ---: | ---: |
 | Production | 103 | +38,528 / −38,528 |
 | Tests | 141 | +131,095 / −131,095 |
-| Test support | 6 | +1,558 / −1,558 |
+| Six named support files | 6 | +1,558 / −1,558 |
 
-Counts come from expanding os1’s globs against `apps/server/src` and counting file lines; repeat before build. Estimated additional handwritten edits: production support 800–1,300 lines, tests/support 400–700, tooling/configuration/guards 600–1,000, plus mechanical import edits. These are gross changed-line estimates, not completed diffs. Generated lockfile importer changes are separate (roughly 100–250 lines); fonts/goldens are separate binary relocations. Estimated total 6–10 hours plus review/CI: **not one three-hour slice**. Each prerequisite needs its own concrete files, size and checks before clearance.
+Keep the host’s **68 `boot.*` (including boot.test.ts), six `boot-*`, and 44 `till-api.*` (including till-api.test.ts)** suites there. The seven additional retained suites are `orders-invoice-deliveries{,.issue-clock}`, `till-sale-integrated{,.db}`, `till-sale-reconciliation`, `till-sale-tender-block`, and `unpaid-invoice-delivery` (all `.test.ts`). `draft-recall`/`draft-source` were retired in `a9e8f379b7`; do not recreate them. Invoice/receipt print and delivery files matched by os1 move once; dv11–dv14/dv17 edit them in their resulting package.
 
-## Execution once the cuts are cleared
+Before any full move is cleared, its executable plan must settle:
 
-- [ ] Capture base protection lists and focused checks; preserve every behavioural assertion. Commit an idempotent `scripts/a1308/move-orders-sales.mjs` map, including incoming imports, mocks and source-path consumers; list handwritten edits separately.
-- [ ] Add `packages/orders-sales/{package.json,tsconfig.json,vitest.config.ts,test-durations.json}` with explicit per-file exports; port `apps/server/package.json`, duration keys and lockfile. Reuse exact existing dependency ranges. Carry producer env, timeouts, byte-equality/derived-key-cache/tab-person setup and real venue fixtures into their cleared shared homes. Keep coverage `98/98/98/95`; exclude no reachable production code.
-- [ ] Port font/golden readers, `apps/server/scripts/copy-migrations.mjs`, deployment source checks, `order-groups.test.ts`’s till URL and the host’s zone-process child’s imports/file-root pairs. Preserve shipped `/app/assets`, subprocess working directories and assertions.
-- [ ] Wire `scripts/changed-scope.mjs`, `.github/workflows/ci.yml` and root-consumer/shard lists; transfer duration keys and use existing shard/merge conventions. Port source guards’ path entries: write-path, alerts, correctives, menu neutrality, English vocabulary, PostgreSQL residue and module seams. Preserve personal-log, errors, transaction and subscription enforcement. Update active move/backlog pointers; leave later os slices open. Historical plans get dated pointers.
+- [ ] Exact shared homes, explicit package exports and handwritten production/test/support sizes, separately from mechanical imports, moved lines, binaries and generated lockfile changes; slices each fit the three-hour rule.
+- [ ] Preserve server Vitest setup and real mounts/fixtures, font/golden paths, subprocess roots and working directories. Reuse the duration sequencer; port manifests, duration keys, scope/CI shard and merge wiring, and existing source-guard path lists. No new registry framework or weakened checks.
+- [ ] Qualify moved tests alone against moved-source coverage. Below **98/98/98/95** stops the move; no new excludes. Package coverage cannot be promised from today’s combined server run.
+- [ ] Name retained host checks for later slices: `till-api.{drafts,groups,move-bill,receipt,reprint,bill-actions,fiscal-sale-paths,presented-bill-zone}` and affected bill-venue cases. Package-only PR CI omits host dependents; run affected host checks locally under slice rules §4. Some modelled saving is removed test execution, not faster tests. Deferral avoids this split during os2–os11.
+- [ ] Keep behavioural assertions and the queue’s unedited fiscal/menu gates. **Expected protection-list difference: none**, both compositions, all phases/databases. No sale-path read changes. Two contract-trigger Claude run-it reads, one fixes read, normal push hook and current-head CI precede landing.
 
-**Checks by layer:** area suites retain ordering/draft/payment/refund/receipt assertions (`working-order`, `order-drafts.db`, `order-groups`, `bill-payments-api`, `bill-payments-loop`, `tender-refunds`, `receipt-document`, `receipt-ticket`, `invoice-raster-encode`, `orders-list.reads`). Host suites retain permission/person checks, clock refusal, real zone subprocesses and boot lifecycle (`till-api.profile-{actions,zones}`, `till-api.session-person`, `clock-unconfirmed-gate`, `zone-process-matrix*`, `till-sale-integrated*`, `boot.restricted-quiet`). Run touched root guards for cycles, scope/CI/coverage, source paths and deployment; typecheck all affected packages. Run the queue’s unchanged fiscal write-path/inmutabilidad, server sell-published and till menu-refresh gates. Use focused `pnpm --filter <owner> exec vitest run <files>` with nonzero Tests counts, never a whole local server suite solely to finish.
-
-**Expected protection-list difference:** none in either composition, all three phases and both databases; compare base/branch lists from `apps/server` and stop on any difference. `Sale-path read changed: no; relocation/imports only`. Implementation gets two Claude run-it reads for its package contract, one fixes read, the normal push hook and current-head CI selecting both packages; full-run coverage keeps the same thresholds. No implementation validation is claimed by this document.
-
-**Next areas copy:** the proven move/import map, explicit exports, shared-helper ownership, preserved test setup and paths, duration transfer, CI selection and source-guard ports. They do not copy an unresolved boundary or claim the modelled saving as measured.
+**Later areas can reuse:** inventory back-edges first; keep HTTP glue at the host as adjustments does; account for host suites leaving package-only PR CI, per-package coverage and registry ownership. No move tooling or measured saving exists yet. This decision page does not replace the executable move plan once the watcher settles its scope and timing.
