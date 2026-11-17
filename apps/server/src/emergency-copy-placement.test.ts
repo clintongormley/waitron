@@ -98,6 +98,30 @@ const readPlacedNode = <T>(read: (node: NodeDatabase) => Promise<T>) =>
 
 const listing = async (dir: string) => (await readdir(dir)).sort();
 
+/** Every file in both folders, by name and bytes, and what the scratch folder holds (null: none). */
+async function bothFolders() {
+  const read = async (dir: string) =>
+    Object.fromEntries(
+      await Promise.all(
+        (await listing(dir))
+          .filter((name) => name !== "scratch")
+          .map(async (name) => [name, await readFile(join(dir, name))] as const),
+      ),
+    );
+  const scratch = join(stateDir, "scratch");
+  return {
+    venue: await read(venueDir),
+    state: await read(stateDir),
+    scratch: existsSync(scratch) ? await listing(scratch) : null,
+  };
+}
+
+/** `before`, plus the venue lock a first placement takes before it checks anything. */
+const withLockTaken = (before: Awaited<ReturnType<typeof bothFolders>>) => ({
+  ...before,
+  venue: { ...before.venue, "venue.lock": expect.any(Buffer) },
+});
+
 /** `node.db` beside the venue file, the env files in the state folder, and no scratch left over. */
 async function expectPlacedLayout() {
   expect(await listing(venueDir)).toEqual(["node.db", "venue.db", "venue.lock"]);
@@ -108,6 +132,10 @@ async function expectPlacedLayout() {
 
 const writtenRing = () =>
   loadKeyRing(parseEnvFile(readFileSync(join(stateDir, "secrets.env"), "utf8")));
+
+const placedKey = () => readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+
+const keptTrading = (lines: string) => `WAITRON_NODE_ID=${copyId}\n${lines}`;
 
 const beforeExpiry = () => new Date("2026-11-17T10:10:00.000Z");
 
@@ -133,8 +161,7 @@ it("a placed copy has its own key and the venue file is byte for byte the one Cl
   const binding = await placedBinding();
   await place(binding);
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
 });
 
@@ -222,11 +249,11 @@ it("reads null from a node.db holding no placed copy", async () => {
 
 it("leaves nothing beside the venue file when the check refuses it", async () => {
   const binding = await placedBinding();
+  const before = await bothFolders();
   await expect(place(bindingFor("0".repeat(64)))).rejects.toMatchObject({
     code: "emergency_copy.hash_mismatch",
   });
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual([]);
+  expect(await bothFolders()).toEqual(withLockTaken(before));
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
@@ -239,42 +266,42 @@ it("leaves no node.db beside the venue file when a write before the move fails",
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
-it("refuses a trading.env naming another node, writing nothing", async () => {
-  const binding = await placedBinding();
-  const other = "WAITRON_NODE_ID=e7000000-0000-4000-8000-0000000000ff\n";
-  await writeFile(join(stateDir, "trading.env"), other);
-  await expect(place(binding)).rejects.toMatchObject({
+it.each<{ name: string; content: string; code: string; params?: object }>([
+  {
+    name: "naming another node",
+    content: "WAITRON_NODE_ID=e7000000-0000-4000-8000-0000000000ff\n",
     code: "emergency_copy.trading_node_differs",
-  });
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual(["trading.env"]);
-  expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(other);
+  },
+  ...["WAITRON_ENV=production\n", "WAITRON_ENV=staging\n"].map((line) => ({
+    name: `naming another environment (${JSON.stringify(line)})`,
+    content: keptTrading(line),
+    code: "emergency_copy.trading_environment_differs",
+  })),
+  ...[
+    ...KEY_RING_VARIABLES.map((variable) => [variable, `${variable}=1\n`] as const),
+    ["WAITRON_CREDENTIALS_KEY", "WAITRON_CREDENTIALS_KEY=\n"] as const,
+  ].map(([variable, line]) => ({
+    name: `setting ${variable}, which the next start reads after secrets.env (${JSON.stringify(line)})`,
+    content: keptTrading(line),
+    code: "emergency_copy.vault_key_in_trading_env",
+    params: { variables: [variable] },
+  })),
+])("refuses a trading.env $name, writing nothing", async ({ content, code, params }) => {
+  const binding = await placedBinding();
+  await writeFile(join(stateDir, "trading.env"), content);
+  const before = await bothFolders();
+  await expect(place(binding)).rejects.toMatchObject(params ? { code, params } : { code });
+  expect(await bothFolders()).toEqual(withLockTaken(before));
 });
 
 it("keeps a trading.env that already names the copy as it is", async () => {
   const binding = await placedBinding();
-  const own = `WAITRON_NODE_ID=${copyId}\nWAITRON_ACCOUNT_KEY=kept\n`;
+  const own = keptTrading("WAITRON_ACCOUNT_KEY=kept\n");
   await writeFile(join(stateDir, "trading.env"), own);
   await place(binding);
   expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
   expect(existsSync(join(venueDir, NODE_FILE))).toBe(true);
 });
-
-const keptTrading = (lines: string) => `WAITRON_NODE_ID=${copyId}\n${lines}`;
-
-it.each(["WAITRON_ENV=production\n", "WAITRON_ENV=staging\n"])(
-  "refuses a kept trading.env naming another environment (%j), writing nothing",
-  async (line) => {
-    const binding = await placedBinding();
-    await writeFile(join(stateDir, "trading.env"), keptTrading(line));
-    await expect(place(binding)).rejects.toMatchObject({
-      code: "emergency_copy.trading_environment_differs",
-    });
-    expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-    expect(await listing(stateDir)).toEqual(["trading.env"]);
-    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(keptTrading(line));
-  },
-);
 
 it.each(["WAITRON_ENV=preproduction\n", "WAITRON_ENV=\n", "WAITRON_ENV=dev\n"])(
   "keeps a trading.env whose environment (%j) is the binding's",
@@ -301,75 +328,34 @@ it("reads a kept trading.env with no WAITRON_ENV as preproduction, so a producti
   });
 });
 
-it.each([
-  ...KEY_RING_VARIABLES.map((name) => [name, `${name}=1\n`] as const),
-  ["WAITRON_CREDENTIALS_KEY", "WAITRON_CREDENTIALS_KEY=\n"] as const,
-])(
-  "refuses a kept trading.env setting %s, which the next start reads after secrets.env (%j)",
-  async (name, line) => {
-    const binding = await placedBinding();
-    await writeFile(join(stateDir, "trading.env"), keptTrading(line));
-    await expect(place(binding)).rejects.toMatchObject({
-      code: "emergency_copy.vault_key_in_trading_env",
-      params: { variables: [name] },
-    });
-    expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-    expect(await listing(stateDir)).toEqual(["trading.env"]);
-    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(keptTrading(line));
-  },
-);
-
 it("refuses when this process's environment sets the vault key, which would win over the copy's ring", async () => {
   const binding = await placedBinding();
+  const before = await bothFolders();
   await expect(
     place(binding, { WAITRON_CREDENTIALS_KEY: generateKeyRing().key, WAITRON_ACCOUNT_KEY: "a" }),
   ).rejects.toMatchObject({
     code: "emergency_copy.vault_key_in_environment",
     params: { variables: ["WAITRON_CREDENTIALS_KEY"] },
   });
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual([]);
-});
-
-const placedFiles = async () => ({
-  secrets: await readFile(join(stateDir, "secrets.env")),
-  trading: await readFile(join(stateDir, "trading.env")),
-  node: await readFile(join(venueDir, NODE_FILE)),
+  expect(await bothFolders()).toEqual(withLockTaken(before));
 });
 
 it("a repeat with the same binding makes no new key and rewrites nothing", async () => {
   const binding = await placedBinding();
   await place(binding);
-  const before = await placedFiles();
+  const before = await bothFolders();
   const publicKey = async () => {
-    const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
+    const key = await placedKey();
     expect(key).toEqual(expect.any(String));
     return nodeSigningPublicKey(key!);
   };
   const keyBefore = await publicKey();
   await expect(place(binding)).resolves.toBeUndefined();
-  expect(await placedFiles()).toEqual(before);
+  expect(await bothFolders()).toEqual(before);
   expect(await publicKey()).toBe(keyBefore);
   await expectPlacedLayout();
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
-
-/** Every file in both folders, by name and bytes, and what the scratch folder holds. */
-async function bothFolders() {
-  const read = async (dir: string) =>
-    Object.fromEntries(
-      await Promise.all(
-        (await listing(dir))
-          .filter((name) => name !== "scratch")
-          .map(async (name) => [name, await readFile(join(dir, name))] as const),
-      ),
-    );
-  return {
-    venue: await read(venueDir),
-    state: await read(stateDir),
-    scratch: await listing(join(stateDir, "scratch")),
-  };
-}
 
 const anotherRing = () => {
   const ring = generateKeyRing();
@@ -424,8 +410,7 @@ it("a retry after a stop between writing the env files and the move places the c
 
   await place(binding);
 
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   expect(await readFile(join(stateDir, "trading.env"))).toEqual(trading);
   expect(await listing(venueDir)).toEqual(["node.db", "venue.db", "venue.lock"]);
   expect(await listing(join(stateDir, "scratch"))).toEqual(["emergency-copy-stale"]);
@@ -436,11 +421,11 @@ it("a retry after a stop between writing the env files and the move places the c
 it("refuses another binding once a copy is placed, writing nothing", async () => {
   const binding = await placedBinding();
   await place(binding);
-  const before = await placedFiles();
+  const before = await bothFolders();
   await expect(
     place({ ...binding, copyOperationId: "e7000000-0000-4000-8000-0000000000ee" }),
   ).rejects.toMatchObject({ code: "emergency_copy.other_binding_placed" });
-  expect(await placedFiles()).toEqual(before);
+  expect(await bothFolders()).toEqual(before);
 });
 
 /** A clock that reads `at` once the copy's chain check, the check's last step, has run. */
@@ -461,12 +446,12 @@ function clockMovedByTheCheck(at: string) {
 
 it("refuses a binding that expires while the checks run, writing nothing", async () => {
   const binding = await placedBinding();
+  const before = await bothFolders();
   await expect(place(binding, {}, clockMovedByTheCheck(binding.expiresAt))).rejects.toMatchObject({
     code: "emergency_copy.binding_expired",
     params: { expiresAt: binding.expiresAt },
   });
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual([]);
+  expect(await bothFolders()).toEqual(withLockTaken(before));
 });
 
 it("places a binding the checks finish a moment before it expires", async () => {
@@ -479,8 +464,7 @@ it("places node.db when the state folder and the venue folder are on different f
   const binding = await placedBinding();
   faults.separateFilesystems = [stateDir, venueDir];
   await place(binding);
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
 });
 
@@ -488,13 +472,13 @@ it("replaces a half-copied node.db a stopped placement left in the venue folder"
   const binding = await placedBinding();
   await writeFile(join(venueDir, `${NODE_FILE}${INCOMING_SUFFIX}`), "half copied");
   await place(binding);
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
 });
 
 it("writes nothing when the signal aborts as the checks finish", async () => {
   const binding = await placedBinding();
+  const before = await bothFolders();
   const controller = new AbortController();
   const stopped = new Error("stopped");
   const now = () => {
@@ -502,15 +486,14 @@ it("writes nothing when the signal aborts as the checks finish", async () => {
     return beforeExpiry();
   };
   await expect(place(binding, {}, { signal: controller.signal, now })).rejects.toBe(stopped);
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual([]);
+  expect(await bothFolders()).toEqual(withLockTaken(before));
 });
 
 it("throws rather than place when this machine's clock is not a time, writing nothing", async () => {
   const binding = await placedBinding();
+  const before = await bothFolders();
   await expect(place(binding, {}, { now: () => new Date(Number.NaN) })).rejects.toThrow(TypeError);
-  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
-  expect(await listing(stateDir)).toEqual([]);
+  expect(await bothFolders()).toEqual(withLockTaken(before));
 });
 
 /**
@@ -546,8 +529,7 @@ it("two overlapping placements of the same binding leave a key the saved ring op
   const binding = await placedBinding();
   const outcomes = await overlapping(binding, binding);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
   await expect(place(binding)).resolves.toBeUndefined();
 });
@@ -562,7 +544,6 @@ it("of two overlapping placements of different bindings, the second is refused a
     reason: { code: "emergency_copy.other_binding_placed" },
   });
   expect(await readPlacedNode((node) => readPlacedEmergencyCopy(node))).toEqual(binding);
-  const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
-  expect(key).toEqual(expect.any(String));
+  expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
 });
