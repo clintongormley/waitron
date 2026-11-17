@@ -1,4 +1,4 @@
-import { asc, eq, ne, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, ne, isNotNull, or } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   parties,
@@ -24,7 +24,7 @@ export async function numbersOf(
         name: workingOrders.billName,
       })
       .from(workingOrders)
-      .where(eq(workingOrders.partyId, partyId))
+      .where(and(eq(workingOrders.partyId, partyId), isNotNull(workingOrders.billNumber)))
       .orderBy(asc(workingOrders.billNumber)),
   );
   return rows.map((row) => [row.billId, row.number, row.name]);

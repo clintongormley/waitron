@@ -125,7 +125,8 @@ export async function moveGuests(
       await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
     }
     await leaveMergeOf(tx, toTableId, held);
-    for (const expected of options.expectedEdits)
+    const relocating = await billsTaking(tx, partyId, ["open", "placed", "settled"]);
+    for (const expected of options.expectedEdits.filter((edit) => relocating.includes(edit.billId)))
       await relocateBillEditor(tx, expected.billId, expected);
     return { partyId, billIds: await shownBillIds(tx, cfg, partyId) };
   });
@@ -409,7 +410,10 @@ export async function splitTable(
     tableId,
   });
   await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
-  for (const { billId } of leaving) await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
+  for (const { billId } of leaving) {
+    await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+    await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
+  }
   const arriving = [...leaving];
   let newBill: string | null = null;
   if (looseMoves.length > 0) {
@@ -441,7 +445,6 @@ export async function splitTable(
   );
   if (arriving.length === 0) await insertPartyBill(tx, cfg, newParty);
   for (const { billId } of leaving) {
-    await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
     await moveBillDraftsToParty(
       tx,
       billId,

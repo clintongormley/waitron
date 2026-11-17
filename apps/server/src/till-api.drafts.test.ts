@@ -188,6 +188,10 @@ describe("draft metadata for closing a joined party", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
+        .set({ editorId: null, editorVersion: 6 })
+        .where(eq(workingOrders.id, historical.tabId));
+      await tx
+        .update(workingOrders)
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, historical.tabId));
       await tx
@@ -198,10 +202,6 @@ describe("draft metadata for closing a joined party", () => {
           mergedIntoPartyId: current.partyId,
         })
         .where(eq(parties.id, historical.partyId));
-      await tx
-        .update(workingOrders)
-        .set({ editorId: null, editorVersion: 6 })
-        .where(eq(workingOrders.id, historical.tabId));
     });
     const before = await snapshot();
     const read = await anna("GET", `/api/parties/${current.partyId}/drafts`);

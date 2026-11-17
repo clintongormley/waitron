@@ -528,7 +528,7 @@ describe("A803 bill numbers: tables", () => {
     await everyPartyBillNumbered();
   });
 
-  it("moving guests onto a seated table gives our bills that table's next numbers, including a paid bill that stays on our closed party", async () => {
+  it("moving guests onto a seated table gives our bills that table's next numbers, including a paid bill that moves to the surviving party", async () => {
     const anna = await seat(v, await v.table("S4 ana"));
     const lewisTable = await v.table("S4 luis");
     const lewis = await seat(v, lewisTable);
@@ -542,7 +542,7 @@ describe("A803 bill numbers: tables", () => {
 
     expect(await billRow(v, anna.tabId)).toMatchObject({
       status: "settled",
-      partyId: anna.partyId,
+      partyId: lewis.partyId,
     });
     expect(await numbersOf(v, lewis.partyId)).toEqual([
       [lewis.tabId, 1, null],
@@ -631,7 +631,7 @@ describe("A803 bill numbers: tables", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a paid bill left on a party merged twice is numbered in the last party that shows it", async () => {
+  it("a paid bill moved through two merges is numbered in the last party that shows it", async () => {
     const aTable = await v.table("S10 a");
     const bTable = await v.table("S10 b");
     const cTable = await v.table("S10 c");

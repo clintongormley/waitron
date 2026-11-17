@@ -157,6 +157,8 @@ venue-service's backup check that treated `bill_number_allocations` as immutable
   only. Today nothing guards `bill_edit_states`, so such a write would have passed silently.
 - A suite shows a settled bill changing `revision`, `zone`, or any column other than the five.
 
+Watcher clearance, 2026-11-17 20:16 (Lane H questions.md): the free-table move keeps its full editor-authority comparison but relocates only non-abandoned bills, leaving abandoned editor facts unchanged. Repair split ordering so taking a bill into its new party precedes allocating its number.
+
 ## Assertions that change, by design (rules §4)
 
 Each is named here in advance; any other changed assertion is a stop.

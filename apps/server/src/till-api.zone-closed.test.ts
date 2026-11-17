@@ -563,6 +563,9 @@ describe("existing service in a closed zone", () => {
         expect(saved.status).toBe(200);
         draft = (saved.json as unknown as { draft: typeof draft }).draft;
       }
+      const editorBeforeRefusal = await withTransaction(suite.db, (tx) =>
+        readBillEditState(tx, seated.tabId),
+      );
       const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
       at("23:45");
       const answer =
@@ -595,7 +598,17 @@ describe("existing service in a closed zone", () => {
           ? { status: 409, json: { code: "tab.not_open", params: { tabId: seated.tabId } } }
           : refused(v),
       );
-      expect(await orderRows()).toEqual(before);
+      expect(await orderRows()).toEqual(
+        before.map((row) =>
+          row.id === seated.tabId
+            ? {
+                ...row,
+                editorId: editorBeforeRefusal.editorId,
+                editorVersion: editorBeforeRefusal.editorVersion,
+              }
+            : row,
+        ),
+      );
       expect(
         await suite.db
           .select({ id: workingOrders.id })
