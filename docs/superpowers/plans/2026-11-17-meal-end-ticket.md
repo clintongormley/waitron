@@ -176,7 +176,9 @@ may still be eating. For that bill, in one transaction, it:
 1. refuses as the departure does for a stale screen, someone else's unsent dishes and a payment in
    flight (`checkAndBumpParty`, `requireBillEditors`, `assertBillHasNoUnsent`,
    `refusePaymentInFlight`, `refusePlacedPaymentInFlight`: `unpaid-departure.ts:94-117`), and
-   refuses `meal_end.already_issued` when the bill already has a ticket;
+   refuses `meal_end.already_issued` when the bill already has a ticket, then
+   `bill.nothing_outstanding` when the departure's `billOwes` says it owes nothing (a bill with no
+   dishes, or one cancelled with Cancel order);
 2. after step 3's paper checks (so a till that cannot print is refused before staff are asked to
    print anyway), unless the request says `printAnyway: true`, refuses `meal_end.unserved_dishes`, listing them,
    while any line on the bill is not fully served and not cancelled (the same reckoning as Finish:
@@ -197,7 +199,10 @@ may still be eating. For that bill, in one transaction, it:
 5. queues the bill's **original** receipt on that printer (`enqueueOriginalReceipt`,
    `receipt-print.ts:540`, built by `readSettledTicket`, `till-sale.ts:897-966`), except a full
    invoice staged for A4 or email, which `issueUnpaidInvoice` already reserved
-   (`reserveStagedInvoiceDelivery`, `apps/server/src/invoice-choice-delivery.ts:68`);
+   (`reserveStagedInvoiceDelivery`, `apps/server/src/invoice-choice-delivery.ts:68`). When that
+   delivery is not queued (an A4 printer switched off since it was chosen, or a failed reservation)
+   it refuses `meal_end.delivery_unavailable { workingOrderId, medium }` and the whole issue rolls
+   back (review finding, 17 November);
 6. leaves the party open and its tables held. **Finish table** still frees the table once every bill
    is paid or left unpaid, as today.
 
@@ -510,9 +515,10 @@ through `runServiceCommand` with scope `{ kind: "party", partyId }` and kind `"p
   going on, and build nothing for it meanwhile.
 - [ ] **Step 2: run** `pnpm --filter @waitron/server exec vitest run src/meal-end.test.ts` — expect FAIL
   (module missing).
-- [ ] **Step 3: implement** §2.1 steps 1, 2, 4 and 6, with `requireEconomicWrite`,
-  `backend.refuseUntilRecordable` first, as `recordUnpaidDeparture` (`unpaid-departure.ts:87-93`)
-  does. `owed` is amount due less net received, as Task 2.
+- [ ] **Step 3: implement** §2.1 steps 1, 2, 4 and 6, with `requireEconomicWrite` and
+  `backend.refuseUntilRecordable` after the saved answer for the submission id is looked up, so a
+  resend gets its first answer while the start waits for its time (as `bill-payments.ts`,
+  `deferred-close.ts` and `till-sale.ts` do; review finding, 17 November). `owed` is amount due less net received, as Task 2.
 - [ ] **Step 4: run** the file and the fiscal pair — expect PASS.
 - [ ] **Step 5: commit** `git commit -s -m "Printing a bill issues its receipt, warning of dishes not yet served"`.
 
@@ -574,7 +580,10 @@ tests `apps/server/src/meal-end.test.ts`, `apps/server/src/counter-handover.test
 **Interface:** `POST /api/parties/:id/end-meal`, body `{ billId, expectedPartyRevision,
 expectedEdits, submissionId, printAnyway? }`. Session with `action: "take-orders"` and `permission:
 "payment.take"` (issuing the ticket is the first step of taking payment); zones checked for the
-party; `withIssuanceTransaction`, as `unpaid-departure-api.ts:54-84`.
+party; `withIssuanceTransaction`, as `unpaid-departure-api.ts:54-84`. The session, the device on an
+unretired profile allowing `take-orders`, the person's admission to it, `payment.take` and the zone
+are checked again inside the write, as `deferred-close-api.ts`'s `stillAllowed` does (review
+finding, 17 November).
 
 - [ ] **Step 1: failing tests:** the route's answer and each refusal over HTTP; a person without
   `payment.take` is refused; a profile without `take-orders` is refused (inventory row and refusing
@@ -652,7 +661,7 @@ id per press, `#resend` under `TABLE_REQUEST_LIMIT_MS`, nothing sent when the sc
   `hand-over-orders`) and **Print anyway** (sends `printAnyway: true`, one new submission id), and a
   press of Print the bill after serving them prints; **Full invoice** is not offered in **Bill ⋯** for
   a bill with an `invoiceNumber` (if it is today, hide it); `meal_end.no_printer`,
-  `meal_end.already_issued`, `bill.unsent_dishes` and `party.out_of_date` show their messages (the
+  `meal_end.delivery_unavailable`, `meal_end.already_issued`, `bill.unsent_dishes` and `party.out_of_date` show their messages (the
   last reloads the table); a lost answer resent answers once; Finish table's refusal shows **Print the
   bill** beside **Take payment** for the named bill when it has no `invoiceNumber`, and not when it
   has one.
@@ -697,6 +706,7 @@ it) and `apps/server/src/find-bill-api.test.ts`.
 | code `meal_end.unserved_dishes` | Some dishes on this bill are not marked served. Mark served what has been served, or print anyway: a dish that never comes is refunded after payment with Correct invoice. | Algunos platos de esta cuenta no están marcados como servidos. Marca como servido lo que se ha servido, o imprime igualmente: un plato que no llegue se devuelve después del cobro con Rectificar factura. |
 | code `meal_end.already_issued` | This bill already has its receipt. Take payment, or print a receipt copy. | Esta cuenta ya tiene su tique. Cóbrala o imprime una copia del tique. |
 | code `meal_end.no_printer` | This device has no receipt printer. Choose one in Equipment, then print the bill. | Este dispositivo no tiene impresora de tiques. Elige una en Equipo y luego imprime la cuenta. |
+| code `meal_end.delivery_unavailable` | This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill. | Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta. |
 | code `bill.presented` (changed) | This bill has been presented, so it cannot be changed. Put anything more on a new bill. | Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva. |
 
 `codes.test.ts:307-312` asserts today's `bill.presented` text: **before** "…so it cannot be changed";
