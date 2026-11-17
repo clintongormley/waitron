@@ -163,13 +163,12 @@ function goesWith(card: KitchenCard): TemplateResult | typeof nothing {
   </p>`;
 }
 
-/** A card with no dish released yet that holds both a Requested dish and a held one: each dish says its
- * own state and the heading says none. */
+/** A card with no dish released yet holding both a Requested dish and a held one. */
 function mixedHeld(card: KitchenCard): boolean {
   return (
     card.since === null &&
     card.items.some((item) => item.phase === "requested") &&
-    card.items.some((item) => item.phase !== "requested")
+    card.items.some((item) => item.phase === "held")
   );
 }
 
@@ -1249,8 +1248,8 @@ export class TillStationQueue extends LitElement {
     return html`<span class="whole-ticket" data-whole-ticket>${t("station.whole_ticket")}</span>`;
   }
 
-  /** A dish at its card's column says nothing, the column does; one further on says its state, and a
-   * held or Requested dish on a released card or a `mixedHeld` one says so (D12). */
+  /** A dish says nothing where its card's column or heading already says its state (D12); a
+   * mixedHeld card's heading says none. */
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
     let word: string | undefined;
     if (item.firedAt === null) {

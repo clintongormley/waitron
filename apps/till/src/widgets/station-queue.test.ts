@@ -5303,7 +5303,7 @@ describe("A773 held column", () => {
     expect(ordersIn(el, "held")).toEqual(["1", "2"]);
     expect(note(el, 1)).toBe(t("pass.waiting_for_pass"));
     expect(shadow(el).querySelector('[data-card][data-order="2"]')).not.toBeNull();
-    expect(shadow(el).querySelector('[data-card][data-order="2"] [data-group-held]')).toBeNull();
+    expect(note(el, 2)).toBeUndefined();
     cleanupWidgets();
 
     const heldOnly = await mountBoard(scene(), APART);
@@ -5340,7 +5340,7 @@ describe("A773 held column", () => {
         es["pass.column.held"],
       );
       expect(note(el, 1)).toBe(es["pass.waiting_for_pass"]);
-      expect(shadow(el).querySelector('[data-card][data-order="2"] [data-group-held]')).toBeNull();
+      expect(note(el, 2)).toBeUndefined();
       expect(lineWord(el, "mixed-asked")).toBe(es["pass.waiting_for_pass"]);
       expect(lineWord(el, "mixed-kept")).toBe(es["station.group_held"]);
       expect(lineWord(el, "line-asked")).toBe(es["pass.waiting_for_pass"]);
