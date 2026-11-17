@@ -1485,7 +1485,7 @@ function browserPackages() {
 }
 
 describe("the browser-mode packages' vite", () => {
-  it("every package that declares the browser provider declares packages/ui's vite range", () => {
+  it("every package that declares the browser provider declares packages/ui's vite range, compared as exact text", () => {
     const uiManifest = JSON.parse(readFileSync(join(repoRoot, "packages/ui/package.json"), "utf8"));
     const range = uiManifest.devDependencies?.vite;
     expect(range).toEqual(expect.any(String));
