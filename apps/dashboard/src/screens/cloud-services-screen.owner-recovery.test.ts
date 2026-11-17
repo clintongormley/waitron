@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { DashboardApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { CloudServicesScreen } from "./cloud-services-screen.js";
 const previousLocale = currentLocale();
 afterEach(() => {
@@ -158,7 +159,9 @@ it("offers administrator sign-in and an actionable retry for Cloud not ready yet
   });
   await userEvent.click(f.find("recovery-sign-in"));
   expect(signIn).toBe(1);
-  expect(f.el.shadowRoot!.textContent).toContain("administrador del equipo");
+  expect(f.el.shadowRoot!.textContent).toContain(
+    codeMessage("cloud.owner_recovery_admin_required"),
+  );
   f.answer(async () =>
     Response.json(
       { error: { code: "cloud.owner_recovery_not_available", params: {} } },
@@ -166,7 +169,9 @@ it("offers administrator sign-in and an actionable retry for Cloud not ready yet
     ),
   );
   await userEvent.click(f.find("recovery-load"));
-  await expect.poll(() => f.el.shadowRoot!.textContent).toContain("aún no está disponible");
+  await expect
+    .poll(() => f.el.shadowRoot!.textContent)
+    .toContain(codeMessage("cloud.owner_recovery_not_available"));
   expect((f.find("recovery-load") as unknown as { disabled: boolean }).disabled).toBe(false);
 });
 
@@ -251,4 +256,119 @@ it("refuses foreign request details before showing saved organisation labels", a
   await expect.poll(() => f.el.shadowRoot!.textContent).toContain("connection details changed");
   expect(f.el.shadowRoot!.textContent).not.toContain("foreign@example.test");
   expect(f.find("recovery-approve")).toBeNull();
+});
+
+it("keeps Cancel and Escape from suggesting withdrawal while a decision sends", async () => {
+  const f = await fixture();
+  await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+  await userEvent.click(f.find("recovery-load"));
+  await expect.poll(() => f.find("recovery-approve")).not.toBeNull();
+  let release!: (response: Response) => void;
+  f.answer(async (action) =>
+    action === "read"
+      ? Response.json({ requests: [] })
+      : new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+  );
+  await userEvent.click(f.find("recovery-approve"));
+  await userEvent.click(f.find("recovery-confirm"));
+  await expect.poll(() => f.calls.length).toBe(2);
+  try {
+    expect((f.find("recovery-cancel") as unknown as { disabled: boolean }).disabled).toBe(true);
+    await userEvent.keyboard("{Escape}{Escape}");
+    expect(f.find("recovery-dialog").shadowRoot!.querySelector("dialog")?.open).toBe(true);
+  } finally {
+    release(Response.json({ requestId: request.requestId, state: "approved" }));
+  }
+  await expect.poll(() => f.el.shadowRoot!.textContent).toContain("Cloud recorded the approval");
+});
+
+it("keeps a decision failure visible alongside a new read's administrator sign-in", async () => {
+  const f = await fixture();
+  await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+  await userEvent.click(f.find("recovery-load"));
+  await expect.poll(() => f.find("recovery-approve")).not.toBeNull();
+  f.answer(async (action) =>
+    Response.json(
+      {
+        error: {
+          code: action === "read" ? "cloud.owner_recovery_admin_required" : "cloud.unavailable",
+          params: {},
+        },
+      },
+      { status: action === "read" ? 403 : 503 },
+    ),
+  );
+  await userEvent.click(f.find("recovery-approve"));
+  await userEvent.click(f.find("recovery-confirm"));
+  await expect
+    .poll(() => f.find("recovery-dialog").textContent)
+    .toContain(codeMessage("cloud.unavailable"));
+  const closed = new Promise((resolve) =>
+    f.find("recovery-dialog").addEventListener("wt-close", resolve, { once: true }),
+  );
+  await userEvent.click(f.find("recovery-cancel"));
+  await closed;
+  await userEvent.click(f.find("recovery-load"));
+  await expect
+    .poll(() => f.el.shadowRoot!.textContent)
+    .toContain(codeMessage("cloud.owner_recovery_admin_required"));
+  expect(f.el.shadowRoot!.textContent).toContain(codeMessage("cloud.unavailable"));
+  expect(f.find("recovery-sign-in")).not.toBeNull();
+});
+
+it("closes and removes a request Cloud says is no longer available", async () => {
+  const f = await fixture();
+  await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+  await userEvent.click(f.find("recovery-load"));
+  await expect.poll(() => f.find("recovery-approve")).not.toBeNull();
+  f.answer(async () =>
+    Response.json({ error: { code: "cloud.request_unavailable", params: {} } }, { status: 409 }),
+  );
+  await userEvent.click(f.find("recovery-approve"));
+  await userEvent.click(f.find("recovery-confirm"));
+  await expect
+    .poll(() => f.find("recovery-dialog").shadowRoot!.querySelector("dialog")?.open)
+    .toBe(false);
+  expect(f.find("recovery-approve")).toBeNull();
+  expect(f.el.shadowRoot!.textContent).toContain(t("cloud.recovery_changed"));
+});
+
+it.each(["load", "decision"] as const)(
+  "clears an old approval notice on a new explicit %s",
+  async (next) => {
+    const f = await fixture();
+    await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+    await userEvent.click(f.find("recovery-load"));
+    await expect.poll(() => f.find("recovery-approve")).not.toBeNull();
+    await userEvent.click(f.find("recovery-approve"));
+    await userEvent.click(f.find("recovery-confirm"));
+    await expect.poll(() => f.el.shadowRoot!.textContent).toContain(t("cloud.recovery_approved"));
+    await expect
+      .poll(() => (f.find("recovery-load") as unknown as { disabled: boolean }).disabled)
+      .toBe(false);
+    f.answer(async () =>
+      Response.json({ error: { code: "cloud.unavailable", params: {} } }, { status: 503 }),
+    );
+    if (next === "load") await userEvent.click(f.find("recovery-load"));
+    else {
+      await userEvent.click(f.find("recovery-approve"));
+      await userEvent.click(f.find("recovery-confirm"));
+    }
+    await expect
+      .poll(() => f.el.shadowRoot!.textContent)
+      .toContain(codeMessage("cloud.unavailable"));
+    expect(f.el.shadowRoot!.textContent).not.toContain(t("cloud.recovery_approved"));
+  },
+);
+
+it("offers only venue instructions through remote staff access", async () => {
+  const f = await fixture();
+  await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+  f.status.isRemote = true;
+  await userEvent.click(f.find("refresh"));
+  await expect.poll(() => f.el.shadowRoot!.textContent).toContain(t("cloud.recovery_local"));
+  expect(f.find("recovery-load")).toBeNull();
+  expect(f.calls).toEqual([]);
 });

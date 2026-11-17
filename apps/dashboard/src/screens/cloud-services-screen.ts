@@ -203,7 +203,7 @@ export class CloudServicesScreen extends LitElement {
     if (!choice || !key || this.recoveryBusy) return;
     const generation = ++this.#recoveryGeneration;
     this.recoveryBusy = true;
-    this.recoveryActionError = undefined;
+    this.recoveryActionError = this.recoveryNotice = undefined;
     let saved = false;
     try {
       await this.api.decideCloudOwnerRecovery(choice.action, choice.request);
@@ -213,7 +213,15 @@ export class CloudServicesScreen extends LitElement {
         choice.action === "approve" ? "cloud.recovery_approved" : "cloud.recovery_refused";
       saved = true;
     } catch (error) {
-      if (generation === this.#recoveryGeneration) this.recoveryActionError = codeOf(error);
+      if (generation === this.#recoveryGeneration) {
+        this.recoveryActionError = codeOf(error);
+        if (this.recoveryActionError === "cloud.request_unavailable") {
+          this.recoveryChoice = undefined;
+          this.recoveryRequests = this.recoveryRequests?.filter(
+            (r) => r.requestId !== choice.request.requestId,
+          );
+        }
+      }
     } finally {
       if (generation === this.#recoveryGeneration) this.recoveryBusy = false;
     }
@@ -238,14 +246,17 @@ export class CloudServicesScreen extends LitElement {
     </dl>`;
   }
   #recoveryPanel(s: CloudConnectionStatus) {
-    const failure = this.recoveryActionError || this.recoveryReadError;
+    const failures = [...new Set([this.recoveryActionError, this.recoveryReadError])].filter(
+      (v): v is string => v !== undefined,
+    );
     const choice = this.recoveryChoice;
-    const error = failure
-      ? html`<p class="error" role="alert">
-            ${failure === "cloud.request_unavailable" ? t("cloud.recovery_changed") : codeMessage(failure)}
-          </p>
-          ${failure === "cloud.owner_recovery_admin_required" ? html`<wt-button id="recovery-sign-in" @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}>${t("cloud.recovery_sign_in")}</wt-button>` : nothing}`
-      : nothing;
+    const error = html`${failures.map(
+      (failure) =>
+        html`<p class="error" role="alert">
+          ${failure === "cloud.request_unavailable" ? t("cloud.recovery_changed") : codeMessage(failure)}
+        </p>`,
+    )}
+    ${failures.includes("cloud.owner_recovery_admin_required") ? html`<wt-button id="recovery-sign-in" @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}>${t("cloud.recovery_sign_in")}</wt-button>` : nothing}`;
     return html`<section>
       <h2>${t("cloud.recovery_title")}</h2>
       <p>${t(s.isRemote ? "cloud.recovery_local" : "cloud.recovery_help")}</p>
@@ -256,7 +267,10 @@ export class CloudServicesScreen extends LitElement {
                 id="recovery-load"
                 variant="primary"
                 .disabled=${this.recoveryBusy}
-                @click=${() => void this.#loadRecovery()}
+                @click=${() => {
+                  this.recoveryNotice = undefined;
+                  void this.#loadRecovery();
+                }}
                 >${t("cloud.recovery_load")}</wt-button
               >
               ${this.recoveryNotice ? html`<p role="status">${t(this.recoveryNotice)}</p>` : nothing}
@@ -295,6 +309,7 @@ export class CloudServicesScreen extends LitElement {
               <wt-dialog
                 id="recovery-dialog"
                 .open=${!!choice}
+                .dismissible=${!this.recoveryBusy}
                 heading=${t(choice?.action === "refuse" ? "cloud.recovery_refuse" : "cloud.recovery_approve")}
                 @wt-close=${(e: Event) => {
                   e.stopPropagation();
@@ -313,6 +328,7 @@ export class CloudServicesScreen extends LitElement {
                 <wt-button
                   slot="footer"
                   id="recovery-cancel"
+                  .disabled=${this.recoveryBusy}
                   @click=${() => {
                     this.recoveryChoice = undefined;
                   }}
