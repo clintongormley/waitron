@@ -88,6 +88,7 @@ export interface BucketRestoreInput {
 }
 
 function recoveryCredentials(
+  recoveryOperationPath: string | undefined,
   operation: unknown,
   secret: unknown,
   context?: unknown,
@@ -96,7 +97,10 @@ function recoveryCredentials(
   nodeRecoverySecret?: string;
   recoveryContext?: RecoveryEntryContext;
 } {
-  if (operation === undefined && secret === undefined && context === undefined) return {};
+  if (operation === undefined && secret === undefined && context === undefined) {
+    if (isUnset(recoveryOperationPath)) invalidRequest("recoveryOperation");
+    return {};
+  }
   const parsed = parseRecoveryOperationInput(operation);
   if (
     parsed === null ||
@@ -113,14 +117,6 @@ function recoveryCredentials(
     nodeRecoverySecret: secret,
     ...(selected === undefined ? {} : { recoveryContext: selected }),
   };
-}
-
-function assertRecoveryOperationAvailable(
-  credentials: { recoveryOperation?: RecoveryOperationInput },
-  recoveryOperationPath: string | undefined,
-): void {
-  if (credentials.recoveryOperation === undefined && isUnset(recoveryOperationPath))
-    invalidRequest("recoveryOperation");
 }
 
 /**
@@ -1240,11 +1236,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("oldBoxGone");
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           body.recoveryOperation,
           body.nodeRecoverySecret,
           body.recoveryContext,
         );
-        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const pointId = body.pointId;
         const oldBoxGone = body.oldBoxGone === true;
@@ -1413,6 +1409,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           headerEnvironment !== "preproduction"
         )
           invalidRequest("environment");
+        // A raw upload carries no recovery details, so this refuses it before its body is received.
+        if (!multipart) recoveryCredentials(deps.recoveryOperationPath, undefined, undefined);
         upload = await deps.receiveArchive!(c.req.raw, {
           fields: [
             "recoveryKey",
@@ -1448,6 +1446,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           }
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           suppliedOperation,
           form?.get("nodeRecoverySecret") ?? undefined,
           (() => {
@@ -1462,7 +1461,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             }
           })(),
         );
-        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const hash = createHash("sha256")
           .update(rawEnvironment)
@@ -1547,11 +1545,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           invalidRequest("venueConfirmed");
         }
         const credentials = recoveryCredentials(
+          deps.recoveryOperationPath,
           body.recoveryOperation,
           body.nodeRecoverySecret,
           body.recoveryContext,
         );
-        assertRecoveryOperationAvailable(credentials, deps.recoveryOperationPath);
         c.header("Cache-Control", "no-store");
         const input: BucketRestoreInput = {
           ...credentials,

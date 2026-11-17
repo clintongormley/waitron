@@ -425,6 +425,39 @@ it.each(["recoveryKey", "environment"])(
   },
 );
 
+it("refuses a raw upload before receiving it when the box has no operation file", async () => {
+  const app = new Hono();
+  const receiveArchive = vi.fn(async () => {
+    throw new Error("body was read");
+  });
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      stageRestore: async () => {},
+      requestRestart: () => {},
+      receiveArchive,
+    },
+    () => {},
+  );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await app.request("/setup-api/restore", {
+      method: "POST",
+      body: new Uint8Array([1, 2]),
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "key",
+        "x-waitron-restore-environment": "preproduction",
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "recoveryOperation" } },
+    });
+  }
+  expect(receiveArchive).not.toHaveBeenCalled();
+});
+
 it.each([false, true])("removes received ciphertext after restore refusal=%s", async (refused) => {
   const app = new Hono();
   let path: string | undefined;
