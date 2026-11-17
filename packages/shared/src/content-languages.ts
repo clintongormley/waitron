@@ -20,7 +20,10 @@ export interface ContentLanguageRules {
   };
 }
 
-const VALENCIAN = "ca-ES-valencia";
+export interface ContentLanguagePresentation {
+  readonly officialLocales: readonly string[];
+  readonly names: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
 
 const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 
@@ -37,45 +40,65 @@ function languageNamesFor(locale: string): Intl.DisplayNames {
 
 const choicesByLocale = new Map<string, readonly { code: string; name: string }[]>();
 
-/** The picker uses the runtime's named canonical language codes, including three-letter codes. */
-export function contentLanguageChoices(displayLocale: string): { code: string; name: string }[] {
-  const cached = choicesByLocale.get(displayLocale);
-  if (cached) return cached.map((choice) => ({ ...choice }));
-  const names = languageNamesFor(displayLocale);
-  const choices: { code: string; name: string }[] = [];
-  const add = (code: string): void => {
-    if (["und", "mul", "zxx"].includes(code)) return;
-    const name = names.of(code);
-    if (name !== undefined && new Intl.Locale(code).language === code)
-      choices.push({ code, name: capitaliseFirst(name, displayLocale) });
-  };
-  for (let first = 97; first <= 122; first++) {
-    for (let second = 97; second <= 122; second++) {
-      const prefix = String.fromCharCode(first, second);
-      add(prefix);
-      for (let third = 97; third <= 122; third++) add(prefix + String.fromCharCode(third));
+export function contentLanguageChoices(
+  displayLocale: string,
+  presentation?: ContentLanguagePresentation,
+): { code: string; name: string }[] {
+  let cached = choicesByLocale.get(displayLocale);
+  if (!cached) {
+    const names = languageNamesFor(displayLocale);
+    const choices: { code: string; name: string }[] = [];
+    const add = (code: string): void => {
+      if (["und", "mul", "zxx"].includes(code)) return;
+      const name = names.of(code);
+      if (name !== undefined && new Intl.Locale(code).language === code)
+        choices.push({ code, name: capitaliseFirst(name, displayLocale) });
+    };
+    for (let first = 97; first <= 122; first++) {
+      for (let second = 97; second <= 122; second++) {
+        const prefix = String.fromCharCode(first, second);
+        add(prefix);
+        for (let third = 97; third <= 122; third++) add(prefix + String.fromCharCode(third));
+      }
     }
+    choices.sort((a, b) => a.name.localeCompare(b.name, displayLocale));
+    choicesByLocale.set(displayLocale, choices);
+    cached = choices;
   }
-  choices.push({ code: VALENCIAN, name: languageDisplayName(VALENCIAN, displayLocale) });
-  choices.sort((a, b) => a.name.localeCompare(b.name, displayLocale));
-  choicesByLocale.set(displayLocale, choices);
-  return choices.map((choice) => ({ ...choice }));
+  const choices = cached.map((choice) => ({ ...choice }));
+  for (const tag of presentation?.officialLocales ?? []) {
+    const code = contentLanguageCode(tag);
+    if (code !== new Intl.Locale(tag).language && !choices.some((choice) => choice.code === code))
+      choices.push({ code, name: contentLanguageDisplayName(code, displayLocale, presentation) });
+  }
+  if (presentation) choices.sort((a, b) => a.name.localeCompare(b.name, displayLocale));
+  return choices;
+}
+
+function tagWithoutExtensions(locale: Intl.Locale): string {
+  // Runtime aliases can leave extensions in baseName.
+  return locale.toString().split(/-[a-z0-9]-/i, 1)[0]!;
 }
 
 export function contentLanguageCode(value: string): string {
-  let language: string;
+  let locale: Intl.Locale;
   try {
-    const locale = new Intl.Locale(value);
-    if (locale.language === "ca" && locale.baseName.split("-").includes("valencia"))
-      return VALENCIAN;
-    language = locale.language;
+    locale = new Intl.Locale(value);
   } catch {
     throw new AppError("content.language_invalid", {});
   }
-  if (["und", "mul", "zxx"].includes(language) || languageNames.of(language) === undefined) {
+  if (
+    ["und", "mul", "zxx"].includes(locale.language) ||
+    languageNames.of(locale.language) === undefined
+  ) {
     throw new AppError("content.language_invalid", {});
   }
-  return language;
+  const tag = tagWithoutExtensions(locale);
+  const variant = tag
+    .split("-")
+    .slice(1)
+    .some((part) => /^(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3})$/i.test(part));
+  return variant ? tag : locale.language;
 }
 
 export function isRegionalContentLanguage(tag: string): boolean {
@@ -91,13 +114,18 @@ export function mainContentLanguages(languages: readonly string[]): string[] {
 }
 
 export function contentLanguageTag(value: string): string {
-  const language = contentLanguageCode(value);
-  return language === VALENCIAN ? language : new Intl.Locale(value).baseName;
+  contentLanguageCode(value);
+  return tagWithoutExtensions(new Intl.Locale(value));
 }
 
 /** A tag's language named in `locale`, capitalised when it stands alone rather than inside a
  * sentence. A tag that is not a language, or that `locale` has no name for, comes back as it is. */
-export function languageDisplayName(tag: string, locale: string, standalone = true): string {
+export function languageDisplayName(
+  tag: string,
+  locale: string,
+  standalone = true,
+  presentation?: ContentLanguagePresentation,
+): string {
   let code: string;
   try {
     code = contentLanguageCode(tag);
@@ -105,18 +133,17 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
     return tag;
   }
   const displayLanguage = new Intl.Locale(locale).language;
-  const name =
-    code === VALENCIAN && (displayLanguage === "en" || displayLanguage === "es")
-      ? displayLanguage === "en"
-        ? "Valencian"
-        : "valenciano"
-      : languageNamesFor(locale).of(code);
+  const name = presentation?.names[code]?.[displayLanguage] ?? languageNamesFor(locale).of(code);
   if (name === undefined) return tag;
   return standalone ? capitaliseFirst(name, locale) : name;
 }
 
-export function contentLanguageDisplayName(tag: string, locale: string): string {
-  const name = languageDisplayName(tag, locale);
+export function contentLanguageDisplayName(
+  tag: string,
+  locale: string,
+  presentation?: ContentLanguagePresentation,
+): string {
+  const name = languageDisplayName(tag, locale, true, presentation);
   if (!isRegionalContentLanguage(tag)) return name;
   const region = new Intl.Locale(tag).region;
   if (region === undefined) return name;

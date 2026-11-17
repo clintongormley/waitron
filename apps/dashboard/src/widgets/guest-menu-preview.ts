@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor, type LeaveReason } from "@waitron/ui";
@@ -191,7 +192,7 @@ export class GuestMenuPreview extends LitElement {
                   name="guest-language"
                   label=${t("menus.guest_language")}
                   .value=${this.#language ?? this.answer.language}
-                  .options=${this.answer.languages.map((value) => ({ value, label: contentLanguageDisplayName(value, currentLocale()) }))}
+                  .options=${this.answer.languages.map((value) => ({ value, label: contentLanguageDisplayName(value, currentLocale(), installedContentLanguagePresentation()) }))}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     void this.#load(event.detail.value);

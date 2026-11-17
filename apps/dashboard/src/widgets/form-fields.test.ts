@@ -665,7 +665,7 @@ it("retains deletion of legacy malformed regional keys when their language is ed
   ).toEqual({ en: "English", "en-GB": "Regional" });
 });
 
-it("replaces alternate Valencian keys without deleting Catalan", () => {
+it("keeps independent variant keys when another variant is edited", () => {
   expect(
     withLanguageText(
       {
@@ -676,7 +676,12 @@ it("replaces alternate Valencian keys without deleting Catalan", () => {
       "ca-ES-valencia",
       "New Valencian",
     ),
-  ).toEqual({ ca: "Catalan", "ca-ES-valencia": "New Valencian" });
+  ).toEqual({
+    ca: "Catalan",
+    "ca-valencia": "Old Valencian",
+    "ca-Latn-ES-valencia": "Regional Valencian",
+    "ca-ES-valencia": "New Valencian",
+  });
 });
 
 it("keeps regional name edits sparse and hints their own main language before the venue default", async () => {

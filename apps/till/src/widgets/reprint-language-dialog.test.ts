@@ -167,3 +167,11 @@ describe("till-reprint-language-dialog", () => {
     }
   });
 });
+
+it("shows the pack's short variant name when that tag is supplied", async () => {
+  const el = await mountDialog({
+    languages: ["ca-ES-valencia"],
+    defaultLanguage: "ca-ES-valencia",
+  });
+  expect(optionTexts(el)).toEqual(["Valencian"]);
+});

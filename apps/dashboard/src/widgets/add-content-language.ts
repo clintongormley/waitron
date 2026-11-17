@@ -5,7 +5,10 @@ import {
   contentLanguageDisplayName,
   type ContentLanguages,
 } from "@waitron/shared";
-import { RECIPIENT_COUNTRY_CODES } from "@waitron/country-packs";
+import {
+  RECIPIENT_COUNTRY_CODES,
+  installedContentLanguagePresentation,
+} from "@waitron/country-packs";
 import { baseStyles, FormFeedback } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -73,9 +76,16 @@ export class AddContentLanguageDialog extends LitElement {
       this.baseLanguage
         ? RECIPIENT_COUNTRY_CODES.map((region) => {
             const code = `${this.baseLanguage}-${region}`;
-            return { code, name: contentLanguageDisplayName(code, currentLocale()) };
+            return {
+              code,
+              name: contentLanguageDisplayName(
+                code,
+                currentLocale(),
+                installedContentLanguagePresentation(),
+              ),
+            };
           }).sort((a, b) => a.name.localeCompare(b.name, currentLocale()))
-        : contentLanguageChoices(currentLocale())
+        : contentLanguageChoices(currentLocale(), installedContentLanguagePresentation())
     ).filter(({ code }) => !this.config.languages.includes(code));
     const official = choices.filter(({ code }) => this.official.includes(code));
     const grouped = official.length > 0;

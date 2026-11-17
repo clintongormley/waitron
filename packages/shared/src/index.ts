@@ -137,7 +137,11 @@ export {
   resolveEnabledContentText,
   resolveSnapshotText,
 } from "./content-languages.js";
-export type { ContentLanguageRules, ContentLanguages } from "./content-languages.js";
+export type {
+  ContentLanguageRules,
+  ContentLanguagePresentation,
+  ContentLanguages,
+} from "./content-languages.js";
 export { capitaliseFirst } from "./capitalise.js";
 export { conjunctionList } from "./list.js";
 export {

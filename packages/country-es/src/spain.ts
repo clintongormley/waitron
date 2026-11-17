@@ -322,6 +322,7 @@ export const SPAIN: CountryPack = {
   receiptLabels: SPAIN_RECEIPT_LABELS,
   receiptSampleItems: SPAIN_RECEIPT_SAMPLE_ITEMS,
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
+  contentLanguageNames: { "ca-ES-valencia": { en: "Valencian", es: "valenciano" } },
   requiredContentLocales: ["es-ES"],
   moduleIds: ["workforce-es"],
   starterCourses: [

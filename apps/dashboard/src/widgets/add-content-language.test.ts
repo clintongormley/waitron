@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -92,9 +93,10 @@ describe("add content language dialog: the shared dropdown", () => {
     expect(language.required).toBe(true);
     expect(language.search).toBe("auto");
     expect(language.placeholder).toBe(t("content_languages.choose"));
-    const others = contentLanguageChoices(currentLocale()).filter(
-      ({ code }) => !["es", "en", "ca", "eu", "gl"].includes(code),
-    );
+    const others = contentLanguageChoices(
+      currentLocale(),
+      installedContentLanguagePresentation(),
+    ).filter(({ code }) => !["es", "en", "ca", "eu", "gl"].includes(code));
     expect(language.options).toEqual([
       { value: "ca", label: "Catalán", group: t("content_languages.official_group") },
       { value: "eu", label: "Euskera", group: t("content_languages.official_group") },
@@ -124,7 +126,7 @@ describe("add content language dialog: official languages first", () => {
     expect(groups(el)[1]).toBe(t("content_languages.other_group"));
     expect(codesIn(inGroup(el, 0))).toEqual(["ca", "eu", "gl"]);
     expect(inGroup(el, 0).map((o) => o.label)).toEqual(["Catalán", "Euskera", "Gallego"]);
-    const others = contentLanguageChoices(currentLocale())
+    const others = contentLanguageChoices(currentLocale(), installedContentLanguagePresentation())
       .map(({ code }) => code)
       .filter((code) => !["es", "en", "ca", "eu", "gl"].includes(code));
     expect(codesIn(inGroup(el, 1))).toEqual(others);
@@ -148,7 +150,7 @@ describe("add content language dialog: official languages first", () => {
     const { el } = await mount();
     expect(groups(el)).toHaveLength(0);
     expect(codesIn(field(el).options)).toEqual([
-      ...contentLanguageChoices(currentLocale())
+      ...contentLanguageChoices(currentLocale(), installedContentLanguagePresentation())
         .map(({ code }) => code)
         .filter((code) => !["es", "en"].includes(code)),
     ]);
@@ -480,6 +482,20 @@ it("adds a regional version beside its enabled main using the shared picker", as
     expect(save).toHaveBeenCalledExactlyOnceWith({
       defaultLanguage: "es",
       languages: ["es", "en", "en-US"],
+    }),
+  );
+});
+
+it("adds the pack's independent Valencian language without Catalan", async () => {
+  setLocale("en-GB");
+  const save = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mount(save);
+  expect(box(el).options.find(({ value }) => value === "ca-ES-valencia")?.label).toBe("Valencian");
+  await choose(el, "ca-ES-valencia");
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      defaultLanguage: "es",
+      languages: ["es", "en", "ca-ES-valencia"],
     }),
   );
 });

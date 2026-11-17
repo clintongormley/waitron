@@ -662,3 +662,19 @@ describe("bounded translation field view", () => {
     expect(drafts.submission()).toEqual({ edits: [] });
   });
 });
+
+it("uses the pack's short name on a translation field", async () => {
+  setLocale("es-ES");
+  const language = "ca-ES-valencia";
+  const row = { ...item(), cells: [cell({ language })] };
+  const drafts = new TranslationDrafts(
+    { defaultLanguage: language, languages: [language] },
+    row.cells,
+  );
+  const { el } = await mountWidget<ContentTranslationWindow>(
+    "dashboard-content-translation-window",
+    { rows: [row], languages: [language], anchor: language, drafts },
+  );
+  await fieldsReady(el);
+  expect(field(el, language).label).toBe("Valenciano");
+});

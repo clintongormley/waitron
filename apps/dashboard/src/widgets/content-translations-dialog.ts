@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -780,7 +781,12 @@ export class ContentTranslationsDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("translations-closed", { bubbles: true, composed: true }));
   }
   #name(language: string): string {
-    return languageDisplayName(language, currentLocale());
+    return languageDisplayName(
+      language,
+      currentLocale(),
+      true,
+      installedContentLanguagePresentation(),
+    );
   }
   #filter(
     name: string,
@@ -978,7 +984,7 @@ export class ContentTranslationsDialog extends LitElement {
                 }}
               ></dashboard-content-translation-window>
               ${this.#reviews()} ${this.#suggestionNotes()}
-              ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${this.search.trim() || this.kind || this.staged || !config.languages.includes(this.missing) ? tableNoMatches() : fill("content_gaps.complete", { language: languageDisplayName(this.missing, currentLocale(), false) })}</p>` : nothing}
+              ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${this.search.trim() || this.kind || this.staged || !config.languages.includes(this.missing) ? tableNoMatches() : fill("content_gaps.complete", { language: languageDisplayName(this.missing, currentLocale(), false, installedContentLanguagePresentation()) })}</p>` : nothing}
               <div class="pages">
                 <wt-button
                   data-test="previous"

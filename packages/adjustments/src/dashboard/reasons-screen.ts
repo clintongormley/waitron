@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -154,7 +155,7 @@ function localDecimal(value: string): string {
 }
 
 function languageName(code: string): string {
-  return languageDisplayName(code, currentLocale(), false);
+  return languageDisplayName(code, currentLocale(), false, installedContentLanguagePresentation());
 }
 
 @customElement("dashboard-adjustment-reasons-screen")

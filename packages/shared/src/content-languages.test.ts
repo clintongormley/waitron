@@ -3,6 +3,9 @@ import { capitaliseFirst } from "./capitalise.js";
 import {
   contentLanguageCode,
   contentLanguageChoices,
+  contentLanguageTag,
+  contentLanguageDisplayName,
+  isRegionalContentLanguage,
   languageDisplayName,
   resolveContentText,
   resolveEnabledContentText,
@@ -27,16 +30,8 @@ describe("content languages", () => {
     const names = new Intl.DisplayNames(["en-GB"], { type: "language", fallback: "none" });
     for (const choice of choices) {
       expect(choice).toEqual({ code: expect.any(String), name: expect.any(String) });
-      expect(choice.code).toBe(
-        choice.code === "ca-ES-valencia"
-          ? new Intl.Locale(choice.code).baseName
-          : new Intl.Locale(choice.code).language,
-      );
-      expect(choice.name).toBe(
-        choice.code === "ca-ES-valencia"
-          ? "Valencian"
-          : capitaliseFirst(names.of(choice.code)!, "en-GB"),
-      );
+      expect(choice.code).toBe(new Intl.Locale(choice.code).language);
+      expect(choice.name).toBe(capitaliseFirst(names.of(choice.code)!, "en-GB"));
       expect(["und", "mul", "zxx", "zz"]).not.toContain(choice.code);
     }
     expect(choices.map(({ name }) => name)).toEqual(
@@ -231,6 +226,11 @@ describe("language display name", () => {
   });
 });
 
+const presentation = {
+  officialLocales: ["ca-ES-valencia"],
+  names: { "ca-ES-valencia": { en: "Valencian", es: "valenciano" } },
+};
+
 describe("Valencian content language", () => {
   const valencian = "ca-ES-valencia";
   it("keeps the canonical Valencian variant apart from Catalan", () => {
@@ -242,9 +242,9 @@ describe("Valencian content language", () => {
     ["en", "Valencian"],
     ["es", "Valenciano"],
   ])("offers and names Valencian in %s", (locale, name) => {
-    expect(contentLanguageChoices(locale)).toContainEqual({ code: valencian, name });
-    expect(languageDisplayName(valencian, locale)).toBe(name);
-    expect(languageDisplayName(valencian, locale, false)).toBe(
+    expect(contentLanguageChoices(locale, presentation)).toContainEqual({ code: valencian, name });
+    expect(languageDisplayName(valencian, locale, true, presentation)).toBe(name);
+    expect(languageDisplayName(valencian, locale, false, presentation)).toBe(
       locale === "es" ? "valenciano" : "Valencian",
     );
   });
@@ -286,33 +286,33 @@ it("retains matching of a legacy malformed regional key", () => {
 });
 
 it.each(["ca-valencia", "ca-Latn-ES-valencia", "ca-AD-valencia", "ca-ES-fonipa-valencia"])(
-  "keeps the Valencian variant in %s",
+  "keeps %s as its own independent variant",
   (tag) => {
-    expect(contentLanguageCode(tag)).toBe("ca-ES-valencia");
+    expect(contentLanguageCode(tag)).toBe(tag);
     expect(
       resolveContentText(
         { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
         tag,
         "es",
       ),
-    ).toBe("Valencian");
+    ).toBe("Spanish");
     expect(
       resolveEnabledContentText(
         { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
         tag,
         { defaultLanguage: "es", languages: ["ca", "ca-ES-valencia", "es"] },
       ),
-    ).toBe("Valencian");
+    ).toBe("Spanish");
   },
 );
-it("matches a Valencian map stored with another valid variant tag", () => {
+it("keeps alternate variant maps independent", () => {
   expect(
     resolveContentText(
       { "ca-valencia": "Valencian", ca: "Catalan", es: "Spanish" },
       "ca-ES-valencia",
       "es",
     ),
-  ).toBe("Valencian");
+  ).toBe("Spanish");
   expect(resolveContentText({ "ca-valencia": "Valencian", es: "Spanish" }, "ca", "es")).toBe(
     "Spanish",
   );
@@ -328,4 +328,52 @@ it("keeps regional overrides out of live main/default fallback and removed-regio
   expect(resolveEnabledContentText(map, "en-US", { ...config, languages: ["en", "es"] })).toBe("");
   expect(resolveSnapshotText(map, "en", "en")).toBe("fries");
   expect(resolveContentText(map, "en", "en")).toBe("fries");
+});
+
+it.each([
+  ["sl-rozaj", "sl-rozaj"],
+  ["de-1901", "de-1901"],
+  ["CA-latn-es-VALENCIA-u-nu-latn", "ca-Latn-ES-valencia"],
+  ["en-Latn-US-u-nu-latn", "en"],
+])("derives main-language identity for %s", (tag, expected) => {
+  expect(contentLanguageCode(tag)).toBe(expected);
+});
+it("keeps canonical variants and strips extensions from content tags", () => {
+  expect(contentLanguageTag("sl-ROZAJ-u-nu-latn")).toBe("sl-rozaj");
+  for (const tag of ["en-US-t-es", "en-US-x-guest", "en-US-9-demo"]) {
+    expect(contentLanguageTag(tag)).toBe("en-US");
+  }
+  expect(contentLanguageTag("ca-AD-valencia")).toBe("ca-AD-valencia");
+});
+it("adds pack variants with short names without caching another pack's labels", () => {
+  const data = {
+    officialLocales: ["sl-rozaj", "sl-rozaj", "en-US"],
+    names: { "sl-rozaj": { en: "Pack variant", es: "short variant" } },
+  };
+  const choices = contentLanguageChoices("en-GB", data);
+  expect(choices.filter(({ code }) => code === "sl-rozaj")).toEqual([
+    { code: "sl-rozaj", name: "Pack variant" },
+  ]);
+  const names = choices.map(({ name }) => name);
+  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "en-GB")));
+  expect(languageDisplayName("sl-rozaj", "es-ES", false, data)).toBe("short variant");
+  expect(contentLanguageDisplayName("sl-rozaj", "es-ES", data)).toBe("Short variant");
+  expect(contentLanguageChoices("en-GB").some(({ code }) => code === "sl-rozaj")).toBe(false);
+  expect(
+    contentLanguageChoices("en-GB", {
+      ...data,
+      names: { "sl-rozaj": { en: "Another name" } },
+    }).find(({ code }) => code === "sl-rozaj")?.name,
+  ).toBe("Another name");
+  expect(contentLanguageChoices("en-GB", data).some(({ code }) => code === "en-US")).toBe(false);
+  expect(languageDisplayName("sl-rozaj", "fr", false, data)).toBe(
+    new Intl.DisplayNames(["fr"], { type: "language", fallback: "none" }).of("sl-rozaj"),
+  );
+});
+
+it("keeps aliases that canonicalize to extensions out of main variant identity", () => {
+  expect(contentLanguageCode("en-US-posix")).toBe("en");
+  expect(contentLanguageTag("en-US-posix")).toBe("en-US");
+  expect(isRegionalContentLanguage("en-US-posix")).toBe(true);
+  expect(contentLanguageCode("en-US-u-va-posix")).toBe("en");
 });

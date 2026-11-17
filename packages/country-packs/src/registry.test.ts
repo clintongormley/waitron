@@ -1,3 +1,4 @@
+import { contentLanguageChoices, languageDisplayName } from "@waitron/shared";
 import { SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { countryNameFor, receiptCountryNameFor } from "./registry.js";
@@ -462,4 +463,16 @@ describe("country time-zone policy", () => {
     });
     expect(() => registry.requireCountryTimeZone("ES", "Europe/Madrid")).toThrow(failure);
   });
+});
+
+it("supplies pack-owned short variant names to the language picker", () => {
+  expect(getCountryPack("ES")!.contentLanguageNames).toEqual({
+    "ca-ES-valencia": { en: "Valencian", es: "valenciano" },
+  });
+  const presentation = registry.installedContentLanguagePresentation();
+  expect(contentLanguageChoices("en-GB", presentation)).toContainEqual({
+    code: "ca-ES-valencia",
+    name: "Valencian",
+  });
+  expect(languageDisplayName("ca-ES-valencia", "es-ES", false, presentation)).toBe("valenciano");
 });

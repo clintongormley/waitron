@@ -65,3 +65,13 @@ it("accepts exactly 200 distinct named languages", async () => {
     languages: [languages[199]!, ...languages.slice(0, 199)],
   });
 });
+
+it("saves an independent variant as the main language without enabling its base", async () => {
+  await withTransaction(suite.db, (tx) =>
+    writeContentLanguages(tx, { defaultLanguage: "sl-rozaj", languages: ["en", "sl-rozaj"] }),
+  );
+  expect(await readContentLanguages(suite.db, "en")).toEqual({
+    defaultLanguage: "sl-rozaj",
+    languages: ["sl-rozaj", "en"],
+  });
+});

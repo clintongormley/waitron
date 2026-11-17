@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -180,7 +181,7 @@ export class MenuDocumentTree extends LitElement {
       aria-current=${row.key === this.highlightedKey ? "true" : nothing}
     >
       <span data-test="name" lang=${text.language ?? ""}>${text.text}</span>
-      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", languageDisplayName(this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage, currentLocale(), false))}</span>` : nothing}
+      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", languageDisplayName(this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage, currentLocale(), false, installedContentLanguagePresentation()))}</span>` : nothing}
     </span>`;
     const media =
       member.kind === "section"

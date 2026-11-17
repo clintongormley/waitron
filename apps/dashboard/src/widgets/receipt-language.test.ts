@@ -1,7 +1,7 @@
 import { render } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { receiptLanguageWarning } from "./receipt-language.js";
+import { receiptLanguageWarning, receiptLanguageName } from "./receipt-language.js";
 
 const before = currentLocale();
 const mounted: HTMLElement[] = [];
@@ -29,4 +29,9 @@ it.each([
     host,
   );
   expect(host.querySelector("[data-test=receipt-language-warning]")!.textContent).toBe(expected);
+});
+
+it("uses the pack's short name for receipt-language wording", () => {
+  setLocale("en-GB");
+  expect(receiptLanguageName("ca-ES-valencia")).toBe("Valencian");
 });

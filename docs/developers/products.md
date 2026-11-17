@@ -394,6 +394,16 @@ happened on the server.
 
 ## Content languages per region
 
+A canonical tag containing a variant, such as `sl-rozaj` or `ca-ES-valencia`, is an independent
+main content language. You can enable it and choose it as the default without enabling its base.
+Tags with only a region or script remain versions of their base language: `en-US` still needs `en`.
+Alternate variant tags remain independent, so editing one leaves the others stored separately.
+Country packs supply the picker’s tagged variants through `officialLocales`, and may supply short
+names through `contentLanguageNames`. Staff screens pass this installed pack data to the shared
+naming helpers; absent a pack name for the interface language, the runtime’s name is used.
+The shared helpers contain no named-language exceptions. Spain supplies “Valencian” and
+“valenciano”, preserving its existing setup defaults, enabled tags and receipt choices.
+
 When you copy a Prepare configuration into a fresh Live venue, the imported content-language
 setting must keep the languages required by the bundle's country and province enabled. You can
 still choose another enabled main language as the default. The menu checks the saved setting

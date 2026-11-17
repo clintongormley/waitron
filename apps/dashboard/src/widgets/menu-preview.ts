@@ -1,3 +1,4 @@
+import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -923,7 +924,11 @@ export class MenuPreviewPanel extends LitElement {
             { value: "internal", fixed: true, label: t("customer_menu.internal") },
             ...config.languages.map((language) => ({
               value: language,
-              label: contentLanguageDisplayName(language, currentLocale()),
+              label: contentLanguageDisplayName(
+                language,
+                currentLocale(),
+                installedContentLanguagePresentation(),
+              ),
             })),
           ]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
