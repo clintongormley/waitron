@@ -10,7 +10,7 @@ import { steadyNow } from "@waitron/shared";
  * `openSince` follows a backward wall step, never a forward one: `discardLapsedDeviceRequests`
  * deletes a device request stamped before it, and the knock route reads it before stamping, so a
  * request made after the step is kept. `opening` counts the times the window went from shut to
- * open, so the knock route tells openings apart without reading either clock.
+ * open, so the knock route tells openings apart.
  */
 export const PAIRING_HOLD_MS = 3 * 60 * 1000;
 

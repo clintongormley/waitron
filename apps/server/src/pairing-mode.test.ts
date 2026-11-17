@@ -151,9 +151,8 @@ describe("createPairingMode", () => {
     const mode = createPairingMode({ now: () => wall, steady: () => 1_000, newId: ids() });
     mode.open();
     const first = mode.opening();
-    const since = mode.openSince();
     wall = 1_000;
-    expect(mode.openSince()).not.toBe(since);
+    expect(mode.openSince()).toBe(new Date(1_000).toISOString());
     expect(mode.opening()).toBe(first);
   });
 

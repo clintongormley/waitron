@@ -1800,7 +1800,6 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-name").error).toBe("");
     expect(await bottom(el)).toBe(t("form.fix_fields"));
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
-    // The save itself does not read the list again; the live notice does.
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r2");
     await flush(el);

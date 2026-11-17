@@ -1709,7 +1709,8 @@ except that it no longer waits on the retired split and transfer routes (A1196).
     disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W105 (#1235): review suggestions #1235 did not take that are still open: the edit route's
-    checks and request body, two table options that could be one, and repeated request building.
+    checks, request body and repeated writes of the device row, two table options that could be one,
+    and repeated request building.
     [Detail](till.md#what-w105-left-open-1235)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
