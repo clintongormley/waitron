@@ -838,8 +838,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa mesa está unida a otra. Sepárala primero",
   },
   "table.taken_off": {
-    en: "That table is off today's plan. Put it back first",
-    es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",
+    en: "That table is off today's plan. Put it back from the till, then try again",
+    es: "Esa mesa está quitada hoy. Vuelve a ponerla desde la caja e inténtalo de nuevo",
   },
   "merge.seats_required": {
     en: "Enter the seats for this merge",

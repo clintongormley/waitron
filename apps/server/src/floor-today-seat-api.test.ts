@@ -9,7 +9,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { diningTables, floorResetTables, parties, partyTables, workingOrders } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { moduleCoreServices } from "./parties.js";
@@ -431,12 +430,10 @@ describe("seating from the dashboard at a table taken off", () => {
     const { a } = await threeTables();
     await takeOff(a);
 
-    const refused = await dashboardSeat(a, NOW).then(
-      () => null,
-      (error: unknown) => error,
-    );
-    expect(refused).toBeInstanceOf(AppError);
-    expect(refused).toMatchObject({ code: "table.taken_off", params: { tableId: a } });
+    await expect(dashboardSeat(a, NOW)).rejects.toMatchObject({
+      code: "table.taken_off",
+      params: { tableId: a },
+    });
     expect(await heldRows(a)).toBe(0);
   });
 
@@ -447,7 +444,6 @@ describe("seating from the dashboard at a table taken off", () => {
     expect(await heldRows(a)).toBe(1);
   });
 
-  // Moves its zone to the next business day, so it runs last.
   it("seats a table taken off on an earlier business day", async () => {
     const { a } = await threeTables();
     await takeOff(a);

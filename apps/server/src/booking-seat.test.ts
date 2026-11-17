@@ -27,7 +27,7 @@ import {
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { ensureToday, resetZone } from "./floor-today-store.js";
+import { ensureToday, resetZone, takeOffToday } from "./floor-today-store.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -48,6 +48,7 @@ beforeAll(() => {
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
 const LOCALE = "es-ES";
+const NOW = new Date("2026-08-20T12:00:00Z");
 const noopLog: Logger = () => {};
 
 interface Venue {
@@ -84,7 +85,7 @@ async function setupVenue(): Promise<Venue> {
     db,
     cfg: {},
     // What boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
-    core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES), () => new Date()),
+    core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES), () => NOW),
   };
   return {
     tillCfg,
@@ -289,7 +290,7 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const removals = enabledTableRemovals(ALL_MODULES);
-    const now = new Date();
+    const now = NOW;
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id: zoneId } = await createZone(tx, { name: "Terrace" });
       const layout = await defaultLayout(tx, v.tillCfg, zoneId);
@@ -357,6 +358,64 @@ describe("bookings seat route → real seatTable", () => {
         sql`select status, tab_id from bookings where id = ${bookingId}`,
       );
       expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      const open = await tx.execute<{ n: number }>(
+        sql`select count(*) as n from parties where state = 'open'`,
+      );
+      expect(open.rows[0]!.n).toBe(0);
+    });
+  });
+
+  it("refuses seating a booking at a table taken off today with 409 table.taken_off", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const removals = enabledTableRemovals(ALL_MODULES);
+    const tableId = await withTransaction(db, async (tx: Transaction) => {
+      const { id: zoneId } = await createZone(tx, { name: "Patio" });
+      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const { ids } = await saveLayout(tx, removals, layout, {
+        revision: 0,
+        tables: [
+          {
+            key: "t",
+            label: "10",
+            seats: 4,
+            fixed: false,
+            placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partKeys: [],
+          },
+        ],
+      });
+      const plan = await readLayout(tx, layout);
+      const id = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
+      await ensureToday(tx, removals, NOW);
+      await takeOffToday(tx, id);
+      return id;
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "21:00",
+      partySize: 2,
+      contactName: "López",
+      tableId,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.taken_off", params: { tableId } },
+    });
+    await withTransaction(db, async (tx) => {
+      const booking = await tx.execute<{ status: string; tab_id: string | null }>(
+        sql`select status, tab_id from bookings where id = ${bookingId}`,
+      );
+      expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      const held = await tx.execute<{ n: number }>(
+        sql`select count(*) as n from party_tables where table_id = ${tableId}`,
+      );
+      expect(held.rows[0]!.n).toBe(0);
       const open = await tx.execute<{ n: number }>(
         sql`select count(*) as n from parties where state = 'open'`,
       );
