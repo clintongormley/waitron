@@ -227,8 +227,6 @@ as **Goes with Grill and Pastry**
 
 ## Work the pass {#pass-screen}
 
-Beside its name, the pass lists the stations it covers, then its zones if it covers only some.
-
 The pass shows a card for each group of dishes a table sends, across all of its bills, and one for
 each counter order. At first it shows the columns **To fire**, **In progress** and **Ready**, and a
 card moves along them as its dishes do. A card whose dishes are all held sits at the bottom of

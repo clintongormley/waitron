@@ -255,8 +255,6 @@ al pase](kitchen-service.md#station-waits)).
 
 ## Trabaja en el pase {#pass-screen}
 
-Junto a su nombre, el pase indica las estaciones que cubre y, si solo cubre algunas zonas, cuáles.
-
 El pase muestra una tarjeta por cada grupo de platos que envía una mesa, en todas sus cuentas, y una
 por cada pedido de mostrador. Al principio muestra las columnas **Por marchar**, **En curso** y
 **Listo**, y una tarjeta avanza por ellas como sus platos. Una tarjeta cuyos platos están todos en

@@ -70,7 +70,6 @@ function lostLines(screen: Pick<DevicePassBoard, "stations" | "zones">): string[
   ];
 }
 
-/** The available stations, then the available zones under a zone filter; "" when none. */
 function coversLine(screen: Pick<DevicePassBoard, "stations" | "zones">): string {
   const named = (slots: readonly { name: string; available: boolean }[]) =>
     slots
@@ -628,7 +627,7 @@ export class TillPassScreen extends LitElement {
   }
 
   #covers(slot?: "lead"): TemplateResult | typeof nothing {
-    const line = coversLine(this.slots);
+    const line = this.#shows() ? coversLine(this.slots) : "";
     return line === ""
       ? nothing
       : html`<p class="covers" data-covers slot=${slot ?? nothing}>${line}</p>`;
