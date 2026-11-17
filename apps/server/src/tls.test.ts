@@ -7,7 +7,7 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { buildServeOptions } from "./tls.js";
+import { buildServeOptions, validateTlsIdentity } from "./tls.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 describe("buildServeOptions", () => {
@@ -168,4 +168,31 @@ it("repeats a persistent reload failure after five minutes instead of suppressin
     clock.mockRestore();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+describe("validateTlsIdentity", () => {
+  const material = mintMtlsMaterial();
+  const key = Buffer.from(material.serverKeyPem);
+  const cert = Buffer.from(material.serverCertPem);
+  const during = new Date(2027, 0, 1).getTime();
+  const expiry = new Date(2030, 0, 1).getTime();
+
+  it.each(["localhost", "127.0.0.1"])("returns the validated expiry for %s", (hostname) => {
+    expect(validateTlsIdentity(key, cert, hostname, during)).toBe(expiry);
+  });
+
+  it.each([
+    ["other.example.test", during],
+    ["localhost", new Date(2025, 0, 1).getTime()],
+    ["localhost", expiry],
+  ])("refuses a wrong name or a certificate outside its validity (%s, %s)", (hostname, now) => {
+    expect(() => validateTlsIdentity(key, cert, hostname, now)).toThrow("TLS certificate invalid");
+  });
+
+  it("refuses a certificate paired with another private key", () => {
+    const other = mintMtlsMaterial();
+    expect(() =>
+      validateTlsIdentity(Buffer.from(other.serverKeyPem), cert, "localhost", during),
+    ).toThrow(/key values mismatch/);
+  });
 });
