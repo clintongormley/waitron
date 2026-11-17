@@ -43,8 +43,8 @@ vi.mock("./box-secrets.js", async (original) => {
   };
 });
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -62,7 +62,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { box, NODE_MIGRATIONS, nodeHandoverEvents, readNodeMode } from "@waitron/node-db";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { generateKeyRing } from "@waitron/provisioning";
-import { INCOMING_SUFFIX, NODE_FILE } from "@waitron/store";
+import { INCOMING_SUFFIX, NODE_FILE, VENUE_FILE } from "@waitron/store";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import { PLACED, readImmutableNodeDb, readPlacedEmergencyCopy } from "./emergency-copy-check.js";
@@ -489,10 +489,13 @@ it("replaces a half-copied node.db a stopped placement left in the venue folder"
   await expectPlacedLayout();
 });
 
-it("replaces a folder left where node.db is copied in", async () => {
+it("copies node.db in past a link left at its incoming name, leaving the venue file alone", async () => {
   const binding = await placedBinding();
-  await mkdir(join(venueDir, `${NODE_FILE}${INCOMING_SUFFIX}`, "inside"), { recursive: true });
+  const venueBytes = await readFile(join(venueDir, VENUE_FILE));
+  await symlink(join(venueDir, VENUE_FILE), join(venueDir, `${NODE_FILE}${INCOMING_SUFFIX}`));
   await place(binding);
+  expect(await readFile(join(venueDir, VENUE_FILE))).toEqual(venueBytes);
+  expect(lstatSync(join(venueDir, NODE_FILE)).isFile()).toBe(true);
   expect(await placedKey()).toEqual(expect.any(String));
   await expectPlacedLayout();
 });
@@ -520,7 +523,8 @@ it("throws rather than place when this machine's clock is not a time, writing no
 /**
  * Starts a placement of `second` once a placement of `first` has saved its ring and is held before
  * it moves its node.db, then lets the first carry on. `checksBeforeRelease` counts the placed-copy
- * checks begun while the first was held: 1 when the second waits its turn.
+ * checks begun by the time the first is released: only the first's own when the second waits its
+ * turn.
  */
 async function overlapping(first: EmergencyCopyBinding, second: EmergencyCopyBinding) {
   let firstSaved!: () => void;

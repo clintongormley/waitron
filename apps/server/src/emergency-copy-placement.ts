@@ -95,7 +95,7 @@ async function assertSavedRingOpensKey(stateDir: string, nodePath: string, nodeI
 async function publishNodeDb(staged: string, venueDir: string): Promise<void> {
   const live = join(venueDir, NODE_FILE);
   const incoming = `${live}${INCOMING_SUFFIX}`;
-  await rm(incoming, { recursive: true, force: true });
+  await rm(incoming, { force: true });
   await copyFile(staged, incoming);
   await chmod(incoming, VENUE_FILE_MODE);
   await reachDisk(incoming);
