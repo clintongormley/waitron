@@ -13,8 +13,8 @@ export async function resealTwoStepSecrets(db: Database, ring: KeyRing): Promise
     .select({ id: signInChallenges.id, stored: signInChallenges.encryptedSecret })
     .from(signInChallenges)
     .where(eq(signInChallenges.kind, "totp_enrolment"));
-  // Each row commits separately. A new enrolment can run between rows; re-read inside the turn
-  // and compare with the snapshot so rotation never replaces a person's new secret.
+  // Each row commits separately so enrolment can continue between rows. Re-read under the
+  // write lock so rotation never seals an earlier enrolment over its replacement.
   for (const source of [
     { rows: people, person: true },
     { rows: pending, person: false },

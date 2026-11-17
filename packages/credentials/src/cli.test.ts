@@ -1,6 +1,6 @@
 import { getCredential, putCredential } from "./store.js";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   withNodeTransaction,
@@ -345,11 +345,7 @@ describe("waitron-credentials rotate", () => {
       async (db, ring) => {
         expect(
           await withTransaction(db, (tx) =>
-            getCredential(
-              tx,
-              { current: ring.current },
-              { purpose: "payments.stripe" },
-            ),
+            getCredential(tx, { current: ring.current }, { purpose: "payments.stripe" }),
           ),
         ).toMatchObject({ secretKey: "sk_test_cli" });
         order.push(1);
@@ -416,9 +412,12 @@ describe("waitron-credentials rotate", () => {
       await withNodeTransaction(suite.node, (tx) => writePairLinkTx(tx, RING, NODE, LINK));
 
       const h = harness("", {}, ROTATED_RING);
+      const reseal = vi.fn(async () => ({ rotated: 0, alreadyCurrent: 0, unopened: 0 }));
+      h.deps.resealers = [reseal];
       const code = await runCli(["rotate"], h.deps);
 
       expect(code).toBe(1);
+      expect(reseal).not.toHaveBeenCalled();
       expect(h.out).toEqual([]);
       expect(h.err).toEqual([
         'credentials.rotation_spare_joined {"role":"streams"}',
@@ -437,9 +436,12 @@ describe("waitron-credentials rotate", () => {
       );
 
       const h = harness("", {}, ROTATED_RING);
+      const reseal = vi.fn(async () => ({ rotated: 0, alreadyCurrent: 0, unopened: 0 }));
+      h.deps.resealers = [reseal];
       const code = await runCli(["rotate"], h.deps);
 
       expect(code).toBe(1);
+      expect(reseal).not.toHaveBeenCalled();
       expect(h.out).toEqual([]);
       expect(h.err).toEqual([
         'credentials.rotation_spare_joined {"role":"serves"}',

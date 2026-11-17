@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { openText, sealText, type KeyRing } from "@waitron/credentials";
-import { runCli } from "@waitron/credentials/src/cli.js";
+import { openText, sealText, encodeKeyRing, keyRingEnv, type KeyRing } from "@waitron/credentials";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { dirname, join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { openFreshManagementSession } from "../test/fixtures.js";
 import { beginOwnTotpEnrollment, finishOwnTotpEnrollment } from "./profile.js";
 import { loginManagerById } from "./manager-login.js";
@@ -13,6 +17,21 @@ import { issueAccountAction, confirmEmailChangeByCode } from "./account-action.j
 import * as identity from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
+let commandDir: string | undefined;
+let command: string;
+beforeAll(async () => {
+  commandDir = await mkdtemp(join(tmpdir(), "identity-command-"));
+  command = join(commandDir, "credentials.mjs");
+  await promisify(execFile)(
+    process.execPath,
+    ["../../scripts/bundle-node.mjs", `src/credentials-bin.ts=${command}`],
+    { timeout: 30_000 },
+  );
+});
+afterAll(async () => {
+  if (commandDir !== undefined) await rm(commandDir, { recursive: true, force: true });
+});
+
 const first: KeyRing = { current: { version: 1, key: Buffer.alloc(32, 31) } };
 const next: KeyRing = {
   current: { version: 2, key: Buffer.alloc(32, 32) },
@@ -27,22 +46,15 @@ async function enrollment() {
   return { owner, pending };
 }
 async function rotate() {
-  const out: string[] = [];
-  expect(
-    await runCli(["rotate"], {
-      db: suite.db,
-      node: suite.node,
-      ring: next,
-      resealers: [identity.resealTwoStepSecrets],
-      io: {
-        stdout: (line) => out.push(line),
-        stderr: (line) => out.push(line),
-        readStdin: async () => "",
-      },
-      readFile: async () => "",
-    }),
-  ).toBe(0);
-  return out;
+  const file = suite.db
+    .all<{ file: string }>(sql`pragma database_list`)
+    .find((row) => row.file.endsWith("venue.db"))!.file;
+  const result = await promisify(execFile)(process.execPath, [command, "rotate"], {
+    env: { ...process.env, ...keyRingEnv(encodeKeyRing(next)), WAITRON_VENUE_DIR: dirname(file) },
+    timeout: 30_000,
+  });
+  expect(result.stderr).toBe("");
+  expect(result.stdout).toMatch(/^rotated \d+, already current \d+, unopened 0\n$/);
 }
 async function emailCode() {
   const { personId } = await openFreshManagementSession(suite.db);

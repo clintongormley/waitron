@@ -31,6 +31,7 @@ export function openText(
 ): { value: string; keyVersion: number } | null {
   const parts = stored.split(".");
   if (parts.length !== 5 || parts[0] !== "v2") return null;
+  if (!/^[1-9]\d*$/.test(parts[1]!)) return null;
   const keyVersion = Number(parts[1]);
   if (!Number.isInteger(keyVersion)) return null;
   const key = keyForVersion(ring, keyVersion);

@@ -319,6 +319,16 @@ describe("identity offline backup owner", () => {
       await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
     },
   );
+  it.each(["", "-7", "7e0", "07"])(
+    "marks a malformed stored version invalid: %s",
+    async (version) => {
+      const parts = encrypted.split(".");
+      parts[1] = version;
+      damage(`update persons set totp_secret='${parts.join(".")}'`);
+      expect(await run()).toEqual(verdict("passed", "invalid"));
+    },
+  );
+
   it.each(["v1.1.a.b.c", "v3.x.a.b.c"])(
     "unknown encrypted TOTP format stays unsupported: %s",
     async (value) => {
@@ -357,7 +367,7 @@ describe("identity offline backup owner", () => {
     "short",
     Buffer.alloc(31).toString("base64"),
     Buffer.alloc(32).toString("base64").replace(/=$/, ""),
-  ])("malformed explicit vault key is unavailable: %s", async (value) => {
+  ])("returns decryption unavailable for unusable vault-key input: %s", async (value) => {
     await expect(
       run({ ...entries(), "secrets/trading.env": `WAITRON_CREDENTIALS_KEY=${value}` }),
     ).rejects.toMatchObject({ reason: "decryption_unavailable" });

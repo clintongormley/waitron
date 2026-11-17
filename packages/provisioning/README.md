@@ -1,6 +1,6 @@
 # `@waitron/provisioning`
 
-Two commands under one bundle, `waitron-provision`, matching how `@waitron/credentials` names
+Two commands under one bundle, `waitron-provision`, matching how `@waitron/identity` names
 `waitron-credentials`. Neither is an executable on your PATH: both are bundles you build and run by
 path (below), so each manifest declares its name under `waitron.commands` rather than `bin` —
 `scripts/manifest-commands.test.ts` records why.

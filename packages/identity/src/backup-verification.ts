@@ -94,6 +94,7 @@ function totp(value: BackupValue | undefined, ring: KeyRing): BackupModuleStatus
   const [format, version, iv, tag, ciphertext, ...extra] = value.split(".");
   if (format !== "v2") return "unsupported";
   if (
+    !/^[1-9]\d*$/.test(version ?? "") ||
     !Number.isInteger(Number(version)) ||
     extra.length !== 0 ||
     base64url(iv)?.length !== 12 ||

@@ -33,7 +33,7 @@ it("selects real build scripts for every shipped application without tolerating 
     return match ? [{ step, name: match[1] }] : [];
   });
   const applications = [
-    "packages/credentials",
+    "packages/identity",
     "apps/server",
     "apps/print-agent",
     "packages/provisioning",

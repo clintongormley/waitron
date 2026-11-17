@@ -41,7 +41,6 @@
   "scripts/throwaway-venue.test.ts": 2.3,
   "scripts/venue-dir.test.ts": 2.7,
   "src/account-email.test.ts": 0.8,
-  "src/account-key.test.ts": 0.1,
   "src/account-rate-limit.test.ts": 0.1,
   "src/adjustments-api.test.ts": 6.2,
   "src/adjustments-apply.test.ts": 13.6,

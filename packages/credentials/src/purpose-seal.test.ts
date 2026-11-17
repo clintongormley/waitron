@@ -10,6 +10,12 @@ const firstKey = "479a4818435668c1a3f3f30ad7204823ef6c5cbc1328bcacc9d45f315ee160
 const secondKey = "db0016a1eb32c44082ba76462d0a6873fdd76240f89bd2e8d25f7d3f42094737";
 
 describe("text sealed for a purpose", () => {
+  it.each(["02", "+2", " 2", "0x2", "2e0"])("refuses a noncanonical key version: %s", (version) => {
+    const parts = sealText(ring, "totp", "synthetic-value").split(".");
+    parts[1] = version;
+    expect(openText(ring, "totp", parts.join("."))).toBeNull();
+  });
+
   it("seals and opens text under the same purpose", () => {
     expect(openText(ring, "totp", sealText(ring, "totp", "synthetic-value"))).toEqual({
       value: "synthetic-value",
