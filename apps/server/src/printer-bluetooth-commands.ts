@@ -47,9 +47,14 @@ const RESULT_TTL_MS = 60_000;
  * after the interval. */
 const SWEEP_INTERVAL_MS = 60_000;
 
+/** Capped because floating-point subtraction can overshoot the command's own lifetime. */
+function msLeft(expiresAt: number, instant: number): number {
+  return Math.min(COMMAND_TTL_MS, Math.ceil(expiresAt - instant));
+}
+
 function statusOf({ command, expiresAt }: Pending, instant: number): BluetoothCommandStatus {
   const { id, kind, address } = command;
-  return { id, kind, address, state: "pending", expiresInMs: Math.ceil(expiresAt - instant) };
+  return { id, kind, address, state: "pending", expiresInMs: msLeft(expiresAt, instant) };
 }
 
 /** A pending pair holds the operator's PIN in memory only, so each pull can resend it until the
@@ -116,7 +121,7 @@ export function createPrinterBluetoothCommands(
       if (running)
         throw new AppError("printer.bluetooth_command_busy", {
           kind: running.command.kind,
-          seconds: Math.ceil((running.expiresAt - instant) / 1000),
+          seconds: Math.ceil(msLeft(running.expiresAt, instant) / 1000),
         });
       const command: BluetoothCommand = { id: newId(), kind, address };
       if (heldPin !== undefined) command.pin = heldPin;

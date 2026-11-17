@@ -27,8 +27,9 @@ export function createPrinterProbes(
     return [...targets.values()].map(({ host, port, endsAt }) => ({
       host,
       port,
-      // Whole milliseconds, so the agent's own deadline arithmetic stays exact.
-      expiresInMs: Math.ceil(endsAt - instant),
+      // Whole milliseconds, so the agent's own deadline arithmetic stays exact; capped because
+      // floating-point subtraction can overshoot the 30-second bound the agent accepts.
+      expiresInMs: Math.min(PROBE_MS, Math.ceil(endsAt - instant)),
     }));
   };
   return {

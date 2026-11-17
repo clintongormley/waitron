@@ -80,6 +80,15 @@ describe("printer address requests", () => {
     steady = 1000.5;
     expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 29_000 }]);
   });
+  it("never hands out more than 30 seconds when a fractional steady clock reads the same twice", () => {
+    // 2768.05 + 30000 - 2768.05 is 30000.000000000004 in floating point.
+    const probes = createPrinterProbes(
+      () => 1000,
+      () => 2768.05,
+    );
+    probes.add({ host: "10.0.0.1" });
+    expect(probes.current()).toEqual([{ host: "10.0.0.1", port: 9100, expiresInMs: 30_000 }]);
+  });
   it.each([null, undefined, [], "bad"])("refuses malformed request %s", (input) => {
     expect(() => createPrinterProbes().add(input)).toThrowError(
       expect.objectContaining({ code: "management.request_invalid" }),

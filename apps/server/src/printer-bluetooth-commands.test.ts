@@ -418,6 +418,16 @@ describe("printer Bluetooth commands", () => {
     expect(commands.latest("agent-1", A)).toMatchObject({ expiresInMs: 119_000 });
   });
 
+  it("never tells more than two minutes left, in milliseconds or seconds, from a fractional clock", () => {
+    // 11072.26 + 120000 - 11072.26 is 120000.00000000001 in floating point.
+    const commands = createPrinterBluetoothCommands({ now: () => 11072.26 });
+    expect(commands.enqueue("agent-1", "pair", A, "0000")).toMatchObject({ expiresInMs: 120_000 });
+    expect(commands.latest("agent-1", A)).toMatchObject({ expiresInMs: 120_000 });
+    expect(() => commands.enqueue("agent-1", "forget", B)).toThrowError(
+      expect.objectContaining({ params: { kind: "pair", seconds: 120 } }),
+    );
+  });
+
   it("uses the real clock and random ids by default", () => {
     const commands = createPrinterBluetoothCommands();
     const first = commands.enqueue("agent-1", "forget", A);
