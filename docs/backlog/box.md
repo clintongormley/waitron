@@ -1319,6 +1319,8 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: What pack part 1's reviews left
 
+2 entries, size S.
+
 - **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old
