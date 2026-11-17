@@ -310,30 +310,37 @@ const unreachable: IppPrintOutcome = { status: "failed", failureCode: "printer_u
 const aborted: IppPrintOutcome = { status: "unknown", failureCode: "printer_aborted" };
 const timedOut: IppPrintOutcome = { status: "unknown", failureCode: "timeout" };
 
-it("ends an unfinished print before closing its printer after an outcome wait fails", async () => {
-  const printer = await fakePrinter((req, res) => res.end(accepted(req)));
-  const controller = new AbortController();
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  let outcome: IppPrintOutcome | undefined;
-  let settledBeforeClose = false;
-  const finished = startPrint(printer.port, {
-    signal: controller.signal,
-  }).then((result) => (outcome = result));
-  beforeServerClose.push(() => (settledBeforeClose = outcome !== undefined));
-  onTestFinished(async () => {
-    try {
-      expect(settledBeforeClose).toBe(true);
-      expect(outcome).toEqual(timedOut);
-    } finally {
-      controller.abort();
-      await finished;
-    }
-  });
-  await until(() => printer.polls().length === 1);
-  const waitFailure = new Error("outcome wait failed");
-  await expect(Promise.race([finished, Promise.reject(waitFailure)])).rejects.toBe(waitFailure);
-  expect(outcome).toBeUndefined();
-});
+it.each(["submission", "polling"])(
+  "ends an unfinished %s before closing its printer after an outcome wait fails",
+  async (stage) => {
+    const printer = await fakePrinter((req, res) => {
+      if (stage === "polling") res.end(accepted(req));
+    });
+    const controller = new AbortController();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let outcome: IppPrintOutcome | undefined;
+    let settledBeforeClose = false;
+    const finished = startPrint(printer.port, {
+      signal: controller.signal,
+    }).then((result) => (outcome = result));
+    beforeServerClose.push(() => (settledBeforeClose = outcome !== undefined));
+    onTestFinished(async () => {
+      try {
+        expect(settledBeforeClose).toBe(true);
+        expect(outcome).toEqual(timedOut);
+      } finally {
+        controller.abort();
+        await finished;
+      }
+    });
+    await until(() =>
+      stage === "submission" ? printer.printJobs().length === 1 : printer.polls().length === 1,
+    );
+    const waitFailure = new Error("outcome wait failed");
+    await expect(Promise.race([finished, Promise.reject(waitFailure)])).rejects.toBe(waitFailure);
+    expect(outcome).toBeUndefined();
+  },
+);
 
 describe("printOverIpp — submission", () => {
   it("sends one Print-Job with the stored format, a fixed job name and the document, then polls that job until it completes", async () => {

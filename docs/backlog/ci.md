@@ -955,7 +955,7 @@ cause is thin ground for a house rule. The owner decides.
 
 ## Finish reusing fixed-secret hashes in remaining server test setup
 
-Inspect other repeated stored-secret setup: broad hash searches also include once-per-file setup and hashing-subject tests.
+Inspect candidates from `rg -l 'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'` for repeated stored-secret setup that can reuse `fixturePinHash`/`fixturePasswordHash` in `apps/server/src/testing/known-secret-hashes.ts`, keeping hashing-subject tests and real sign-in/verification calls unchanged.
 
 ## `packages/db`'s static mutants are not in its mutation score
 
