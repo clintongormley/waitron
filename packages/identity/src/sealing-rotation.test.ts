@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { dirname, join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { openFreshManagementSession } from "../test/fixtures.js";
 import { beginOwnTotpEnrollment, finishOwnTotpEnrollment } from "./profile.js";
 import { loginManagerById } from "./manager-login.js";
@@ -23,9 +24,9 @@ beforeAll(async () => {
   commandDir = await mkdtemp(join(tmpdir(), "identity-command-"));
   command = join(commandDir, "credentials.mjs");
   await promisify(execFile)(
-    process.execPath,
-    ["../../scripts/bundle-node.mjs", `src/credentials-bin.ts=${command}`],
-    { timeout: 30_000 },
+    "pnpm",
+    ["exec", "node", "../../scripts/bundle-node.mjs", `src/credentials-bin.ts=${command}`],
+    { cwd: fileURLToPath(new URL("..", import.meta.url)), timeout: 30_000 },
   );
 });
 afterAll(async () => {
