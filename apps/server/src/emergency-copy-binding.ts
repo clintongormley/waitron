@@ -76,7 +76,7 @@ export function parseEmergencyCopyBinding(input: unknown, now: Date): EmergencyC
   const top = exactObject(input, "binding", BINDING_KEYS);
   const copyOperationId = uuidV4(top.copyOperationId, "copyOperationId");
   const venueId = nonEmpty(top.venueId, "venueId");
-  if (!isUuid(venueId)) refuse("venueId");
+  if (!isUuid(venueId) || venueId !== venueId.toLowerCase()) refuse("venueId");
   const environment = top.environment;
   if (environment !== "production" && environment !== "preproduction") refuse("environment");
   const sourceNodeId = uuidV4(top.sourceNodeId, "sourceNodeId");

@@ -120,6 +120,12 @@ describe("parseEmergencyCopyBinding", () => {
     expect(refusal({ ...valid, venueId: "venue-1" })).toEqual(invalid("venueId"));
   });
 
+  it("refuses an uppercase venue id", () => {
+    const venueId = "aaaabbbb-cccc-4ddd-8eee-ffff00001111";
+    expect(parseEmergencyCopyBinding({ ...valid, venueId }, NOW).venueId).toBe(venueId);
+    expect(refusal({ ...valid, venueId: venueId.toUpperCase() })).toEqual(invalid("venueId"));
+  });
+
   it("refuses an environment the database cannot hold", () => {
     expect(refusal({ ...valid, environment: "dev" })).toEqual(invalid("environment"));
     expect(refusal({ ...valid, environment: "" })).toEqual(invalid("environment"));
