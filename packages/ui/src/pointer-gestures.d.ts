@@ -2,7 +2,7 @@ import type {
   MouseDragOptions,
   MouseMoveOptions,
   TouchGesture,
-} from "@waitron/ui/src/vitest-pointer-gestures.js";
+} from "./vitest-pointer-gesture-types.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
