@@ -686,7 +686,7 @@ describe("changing a published rota week", () => {
     await tx((t) => backend.publishRoster(t, { versionId: result.versionId }));
     expect((await own()).map((s) => s.id)).toEqual([copyId]);
   });
-  it("moves every shift's assignment to its copy with one read, whatever the week's size", async () => {
+  it("copies a week's shifts and assignments in as many database calls, whatever the week's size", async () => {
     const v = await venue();
     const cook = await tx(async (t) => {
       const [r] = await t.insert(staffRoles).values({ name: "Cook" }).returning();
@@ -713,15 +713,19 @@ describe("changing a published rota week", () => {
           .then((rows) => Object.fromEntries(rows.map((r) => [r.shifts.id, r.shift_assignments]))),
       );
     const before = await assignments();
-    const selectsFor = (week: string) =>
+    const callsFor = (week: string) =>
       tx(async (t) => {
-        const spy = vi.spyOn(t, "select");
-        await api.changeRotaWeek(t, week);
-        const calls = spy.mock.calls.length;
-        spy.mockRestore();
-        return calls;
+        const methods = ["select", "selectDistinct", "insert", "update", "delete"] as const;
+        const raw = ["execute", "run", "all", "get", "values"] as const;
+        const spies = [...methods, ...raw].map((method) => vi.spyOn(t, method));
+        try {
+          await api.changeRotaWeek(t, week);
+          return spies.reduce((n, spy) => n + spy.mock.calls.length, 0);
+        } finally {
+          for (const spy of spies) spy.mockRestore();
+        }
       });
-    expect(await selectsFor("2026-11-30")).toBe(await selectsFor("2026-12-07"));
+    expect(await callsFor("2026-11-30")).toBe(await callsFor("2026-12-07"));
     const copied = (await read()).shifts;
     expect(copied).toHaveLength(4);
     const byDay = Object.fromEntries(copied.map((s) => [s.businessDay, s]));

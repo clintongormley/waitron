@@ -1,5 +1,12 @@
-import { sql } from "drizzle-orm";
-import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
+import { asc, eq, sql } from "drizzle-orm";
+import {
+  insertInChunks,
+  isUniqueViolation,
+  newId,
+  nowIso,
+  statementChunks,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { assertPersonExists } from "./body-ids.js";
@@ -21,6 +28,8 @@ export type {
   CorrectionDecisionInput,
 } from "./corrections.js";
 import { recordAutomaticClose, confirmAutomaticEntry } from "./automatic-entries.js";
+import { shiftSwaps } from "./schema/shift-swaps.js";
+import { shifts } from "./schema/shifts.js";
 import type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
 export type { AutomaticCloseInput, AutomaticConfirmationInput } from "./automatic-entries.js";
 import { readTimeRecord, type TimeRecordQuery } from "./record-reads.js";
@@ -326,39 +335,43 @@ export class WorkforceBackend {
     const versionId = newId();
     await tx.execute(sql`insert into roster_versions (id, period_start, period_end, created_at)
       values (${versionId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
-    const originalShifts = await this.shiftsForVersion(tx, source.id);
-    const shiftIds = new Map<string, string>();
-    for (const shift of originalShifts) {
-      const copyId = newId();
-      await tx.execute(sql`insert into shifts (id, person_id, starts_at, starts_offset_minutes,
-        ends_at, ends_offset_minutes, roster_version_id, created_at)
-        select ${copyId}, person_id, starts_at, starts_offset_minutes,
-          ends_at, ends_offset_minutes, ${versionId}, created_at from shifts where id=${shift.id}`);
-      shiftIds.set(shift.id, copyId);
-    }
-    const openSwaps: { swapId: string; fromShiftId: string }[] = [];
-    if (shiftIds.size > 0) {
-      const ids = sql.join(
-        [...shiftIds.keys()].map((id) => sql`${id}`),
+    const originals = await tx
+      .select()
+      .from(shifts)
+      .where(eq(shifts.rosterVersionId, source.id))
+      .orderBy(asc(shifts.startsAt));
+    const copies = originals.map((shift) => ({
+      ...shift,
+      id: newId(),
+      rosterVersionId: versionId,
+    }));
+    await insertInChunks(tx, shifts, copies);
+    const shiftIds = new Map(originals.map((shift, i) => [shift.id, copies[i]!.id]));
+    const { rows: swaps } = await tx.execute<{
+      id: string;
+      from_shift_id: string;
+      to_shift_id: string | null;
+    }>(sql`
+      select id, from_shift_id, to_shift_id from shift_swaps where status in ('requested', 'accepted')
+        and (from_shift_id in (select id from shifts where roster_version_id = ${source.id})
+          or to_shift_id in (select id from shifts where roster_version_id = ${source.id}))
+        order by id`);
+    const moved = swaps.map((swap) => ({
+      id: swap.id,
+      fromShiftId: shiftIds.get(swap.from_shift_id) ?? swap.from_shift_id,
+      toShiftId:
+        swap.to_shift_id === null ? null : (shiftIds.get(swap.to_shift_id) ?? swap.to_shift_id),
+    }));
+    for (const chunk of statementChunks(shiftSwaps, moved)) {
+      const values = sql.join(
+        chunk.map((swap) => sql`(${swap.id}, ${swap.fromShiftId}, ${swap.toShiftId})`),
         sql`, `,
       );
-      const { rows: swaps } = await tx.execute<{
-        id: string;
-        from_shift_id: string;
-        to_shift_id: string | null;
-      }>(sql`
-        select id, from_shift_id, to_shift_id from shift_swaps where status in ('requested', 'accepted')
-          and (from_shift_id in (${ids}) or to_shift_id in (${ids})) order by id`);
-      for (const swap of swaps) {
-        const fromShiftId = shiftIds.get(swap.from_shift_id) ?? swap.from_shift_id;
-        const toShiftId =
-          swap.to_shift_id === null ? null : (shiftIds.get(swap.to_shift_id) ?? swap.to_shift_id);
-        await tx.execute(
-          sql`update shift_swaps set from_shift_id=${fromShiftId}, to_shift_id=${toShiftId} where id=${swap.id}`,
-        );
-        openSwaps.push({ swapId: swap.id, fromShiftId });
-      }
+      await tx.execute(sql`with moved(id, from_shift_id, to_shift_id) as (values ${values})
+        update shift_swaps set from_shift_id = moved.from_shift_id, to_shift_id = moved.to_shift_id
+        from moved where shift_swaps.id = moved.id`);
     }
+    const openSwaps = moved.map((swap) => ({ swapId: swap.id, fromShiftId: swap.fromShiftId }));
     return { versionId, shiftIds, openSwaps };
   }
 
