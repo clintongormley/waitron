@@ -721,11 +721,15 @@ Tapping a parent sold in whole units, and not tied to a scale, opens the picker 
 tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
 `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
-variants were sent in). The first available one is chosen to start with, except on a reopened unsent
-line, which starts on its own variant even when that is no longer available; an unavailable one stays
-listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
-("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
-the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
+variants were sent in). The first available one is chosen to start with, except on a reopened line
+not yet stored on an order, which starts on its own variant even when that is no longer available and
+saves only once an available one is chosen; an unavailable one stays listed, drawn disabled; each is
+labelled with its difference from the parent's price on that menu ("+€1.50") where it has one
+(`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`; the difference is worked out in
+`apps/till/src/api/client.ts`). A line of a held order, read back from the server, carries no list of
+variants, so its window offers no variant choice and saves a note or answer change on its own
+variant, even one sold out since ("reopens with no variant choice and saves a changed note, keeping
+the variant" in `apps/till/src/till-app.test.ts`). A product none of whose variants is
 available on that menu keeps its button, greyed (`hasSomethingToSell`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/menu/src/offered-modifiers.ts`),
 since the order path refuses one picked as an extra (below). The menu refuses both ways of
@@ -751,7 +755,16 @@ prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 it is refused `product.variant_required`, as a raise of a line whose product has become archived or
 Unavailable is refused. An unsent line the edit names with a different variant is not kept: it
 becomes a new line, at that variant's price and name ("keeps a new variant sent for a saved,
-unsent line" in `apps/server/src/working-order.test.ts`). Paying a held order bills its stored lines at their stored prices and
+unsent line" in `apps/server/src/working-order.test.ts`). One that names its own variant, now
+Unavailable, keeps its line, id and price when only its note or answers change, or when a portion is
+dropped or an extra removed; a raise of it, an extra added or changed on it, or a switch to another
+Unavailable variant is refused `product.variant_unavailable` ("keeps a saved, unsent line on its
+variant that has since become Unavailable" and "with two portions saved on a variant that has since
+become Unavailable" there). The till sends such a raise to the server and shows the refusal in its
+own words ("sends a raise to the server, and words the server's refusal" in
+`apps/till/src/till-app.test.ts`); the counter does not mark that line. A table round refused
+`product.variant_unavailable` has its line marked from the offers read again ("says a sold-out
+variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices and
 at the stored VAT class the order's way of selling picks, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;

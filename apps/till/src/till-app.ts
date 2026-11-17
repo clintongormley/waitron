@@ -1047,6 +1047,7 @@ function partyChangeMessage(change: PartyChange): string {
  * operator can still do. */
 const LINE_REFUSALS = new Set([
   "product.unavailable",
+  "product.variant_unavailable",
   "product.not_sold_separately",
   "extras.unsupported_product",
   "ticket.already_started",
@@ -1089,6 +1090,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "device.profile_changed",
   "order.payment_in_flight",
   "product.unavailable",
+  "product.variant_unavailable",
   "product.not_sold_separately",
   "extras.unsupported_product",
   "sale.total_exceeds_simplified_limit",
@@ -1158,7 +1160,11 @@ const HAND_OVER_REFUSALS = new Set([
 ]);
 
 /** Refusals naming a line the table's offers can mark once they are read again. */
-const UNSELLABLE_LINE_REFUSALS = new Set(["product.unavailable", "product.not_sold_separately"]);
+const UNSELLABLE_LINE_REFUSALS = new Set([
+  "product.unavailable",
+  "product.variant_unavailable",
+  "product.not_sold_separately",
+]);
 
 function periodRefusal(error: unknown): CounterError | undefined {
   const { code, menuId } = (error ?? {}) as { code?: unknown; menuId?: unknown };

@@ -1490,7 +1490,7 @@ describe("a sign-in whose offers fail to load", () => {
 // ── Fix round 2 ──────────────────────────────────────────────────────────────────────────────────
 
 type RoundStore = {
-  lines: { quantity: string; blocked?: string }[];
+  lines: { quantity: string; blocked?: string; product: { variantId?: string } }[];
   lineCount: number;
   setLineQuantity(index: number, quantity: string): void;
   removeLine(index: number): void;
@@ -1565,6 +1565,63 @@ describe("a table round refused for another reason", () => {
 
     expect(banner(el)!.textContent).toContain(codeMessage("product.unavailable"));
     expect(roundStore(el).lineCount).toBe(1);
+  });
+
+  it("says a sold-out variant in its own words, keeps the round, and marks the line from the offers read again", async () => {
+    const lemonade = (smallAvailable: boolean) =>
+      offer("offer-lemonade", "Lemonade", "3.00", {
+        variants: [
+          {
+            ...offer("offer-lemonade", "Small", "3.00"),
+            id: "lemonade-small",
+            menuPrice: null,
+            pricingUnit: "each",
+            available: smallAvailable,
+          },
+          {
+            ...offer("offer-lemonade", "Large", "4.00"),
+            id: "lemonade-large",
+            menuPrice: null,
+            pricingUnit: "each",
+            available: true,
+          },
+        ],
+      });
+    const atOpen = { ...DINING, offers: [lemonade(true), burgerOffer()] };
+    const { el } = await mountApp(
+      tableStubs(
+        { ...DINING, offers: [lemonade(false), burgerOffer()] },
+        {
+          listZoneOffers: vi.fn((zoneId: string) =>
+            Promise.resolve(zoneId === "zone-dining" ? atOpen : V1),
+          ),
+          submitDraft: vi.fn().mockRejectedValue({
+            code: "product.variant_unavailable",
+            status: 409,
+            variantId: "lemonade-small",
+          }),
+        },
+      ),
+    );
+    await toTable(el);
+    const tileButton = [
+      ...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
+    ].find((button) => button.querySelector(".name")!.textContent === "Lemonade")!;
+    tileButton.click();
+    await flush(el);
+    const picker = roundGrid(el).shadowRoot!.querySelector("till-modifier-picker")!;
+    picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="lemonade-small"]')!.click();
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await flush(el);
+    expect(roundStore(el).lines[0]!.product.variantId).toBe("lemonade-small");
+    expect(roundStore(el).lines[0]!.blocked).toBeUndefined();
+    pressSendAll(el);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("product.variant_unavailable"));
+    expect(roundStore(el).lineCount).toBe(1);
+    expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
   });
 
   it("says a dish sold only as an extra in its own words, keeps the round, and marks the line from the offers read again", async () => {

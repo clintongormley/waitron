@@ -737,6 +737,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "An item on this order is no longer available. Remove it and try again",
     es: "Un artículo de este pedido ya no está disponible. Quítalo e inténtalo de nuevo",
   },
+  "product.variant_unavailable": {
+    en: "A variant on this order is no longer available. Change or remove that item and try again",
+    es: "Una variante de este pedido ya no está disponible. Cambia o quita ese artículo e inténtalo de nuevo",
+  },
   "product.not_sold_separately": {
     en: "An item on this order can only be added as an extra to another dish. Remove it and try again",
     es: "Un artículo de este pedido solo se puede añadir como extra de otro plato. Quítalo e inténtalo de nuevo",

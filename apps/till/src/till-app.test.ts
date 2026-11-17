@@ -18328,9 +18328,9 @@ describe("a failed list refresh after a successful write", () => {
 });
 
 describe("a counter pay, place or hold refused for a reason the operator can act on", () => {
-  // Each of these refusals names what to do (wait for the card, remove the sold-out item, the one
-  // sold only as an extra, or the extras on a dish not sold in whole portions); the generic "try again"
-  // would send the operator round the same refusal.
+  // Each of these refusals names what to do (wait for the card, remove the sold-out item, change or
+  // remove the one on a sold-out variant, remove the one sold only as an extra, or the extras on a dish
+  // not sold in whole portions); the generic "try again" would send the operator round the same refusal.
   const actions = [
     ["confirm-payment", { method: "cash", amount: "5" }, "recordSale", undefined, "sale.error"],
     ["collect-card", {}, "pay", undefined, "sale.error"],
@@ -18340,6 +18340,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
   for (const code of [
     "order.payment_in_flight",
     "product.unavailable",
+    "product.variant_unavailable",
     "product.not_sold_separately",
     "extras.unsupported_product",
   ]) {
@@ -26815,4 +26816,156 @@ describe("request-device refusals keep their recovery instruction", () => {
 it("opts into native system text scaling where supported", () => {
   const page = new DOMParser().parseFromString(indexHtml, "text/html");
   expect(page.querySelector('meta[name="text-scale"]')?.getAttribute("content")).toBe("scale");
+});
+
+describe("a held counter line whose variant has sold out since it was held", () => {
+  /** Today's café offer: "Normal" sells, "Doble" has sold out. */
+  function soldOutDobleOffers(): ZoneOffers {
+    const zone = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
+    const offer = zone.offers[0]!;
+    const variant = (id: string, name: string, unitPrice: string, available: boolean) => ({
+      id,
+      name,
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice,
+      menuPrice: null,
+      available,
+      unit: offer.unit,
+      pricingUnit: "each" as const,
+      vatClass: offer.vatClass,
+      takeawayVatClass: offer.takeawayVatClass,
+      category: offer.category,
+      allergens: offer.allergens,
+      diet: offer.diet,
+      dietOverride: offer.dietOverride,
+      dietaryDeclarations: offer.dietaryDeclarations,
+      courseId: offer.courseId,
+    });
+    zone.offers[0] = {
+      ...offer,
+      variants: [
+        variant("cafe-normal", "Normal", "1.50", true),
+        variant("cafe-doble", "Doble", "2.00", false),
+      ],
+    };
+    return zone;
+  }
+
+  /** The order as the server's held-order read answers it: the line's product names its variant
+   * and carries no list of variants. */
+  function heldDobleOrder() {
+    return {
+      zoneId: null,
+      kitchenNote: {
+        scope: { workingOrderId: "wo-doble" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
+      id: "wo-doble",
+      orderNumber: 9,
+      label: "Takeaway",
+      revision: 0,
+      lines: [
+        {
+          workingOrderLineId: "line-doble",
+          menuItemId: coffee.menuItemId,
+          productId: "cafe",
+          variantId: "cafe-doble",
+          quantity: "1.000",
+          note: "No sugar",
+          product: {
+            ...coffee,
+            productId: "cafe",
+            variantId: "cafe-doble",
+            variantName: "Doble",
+            unitPrice: "2.00",
+          },
+        },
+      ],
+    };
+  }
+
+  async function retrieveDoble(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(soldOutDobleOffers()),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldDobleOrder()),
+      ...overrides,
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-doble" });
+    await flush(el);
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
+    return { el, counter, basket };
+  }
+
+  it("reopens with no variant choice and saves a changed note, keeping the variant", async () => {
+    const { el, counter, basket } = await retrieveDoble();
+    expect(counter.store.lines[0]!.product.variants).toBeUndefined();
+
+    await userEvent.click(basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="0"]')!);
+    await flush(el);
+    const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelectorAll('input[name="product-variant"]')).toHaveLength(0);
+    picker
+      .shadowRoot!.querySelector("wt-textarea")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No milk" } }));
+    await picker.updateComplete;
+    const save = picker.shadowRoot!.querySelector<HTMLButtonElement>(".confirm")!;
+    expect(save.disabled).toBe(false);
+    await userEvent.click(save);
+    await flush(el);
+    expect(basket.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+    expect(counter.store.lines[0]!.note).toBe("No milk");
+    expect(counter.store.lines[0]!.product.variantId).toBe("cafe-doble");
+
+    emit(counter, "park-order", { label: undefined });
+    await flush(el);
+    expect(vi.mocked(currentApi.updateWorkingOrder).mock.calls[0]![1].lines).toEqual([
+      {
+        workingOrderLineId: "line-doble",
+        menuItemId: coffee.menuItemId,
+        variantId: "cafe-doble",
+        quantity: "1",
+        makeAt: null,
+        note: "No milk",
+      },
+    ]);
+  });
+
+  it("sends a raise to the server, and words the server's refusal", async () => {
+    const { el, counter, basket } = await retrieveDoble({
+      updateWorkingOrder: vi.fn().mockRejectedValue({
+        code: "product.variant_unavailable",
+        status: 409,
+        variantId: "cafe-doble",
+      }),
+    });
+    const raise = basket.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      ".step-inc",
+    )!;
+    expect(raise.disabled).toBe(false);
+    await userEvent.click(raise);
+    await flush(el);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+
+    emit(counter, "park-order", { label: undefined });
+    await flush(el);
+    expect(vi.mocked(currentApi.updateWorkingOrder).mock.calls[0]![1].lines).toEqual([
+      {
+        workingOrderLineId: "line-doble",
+        menuItemId: coffee.menuItemId,
+        variantId: "cafe-doble",
+        quantity: "2",
+        makeAt: null,
+        note: "No sugar",
+      },
+    ]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      codeMessage("product.variant_unavailable"),
+    );
+  });
 });

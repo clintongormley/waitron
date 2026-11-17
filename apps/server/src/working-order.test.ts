@@ -3287,6 +3287,194 @@ describe("updateHeldOrder", () => {
     expect(after[0]!.id).not.toBe(lineId);
   });
 
+  it("keeps a saved, unsent line on its variant that has since become Unavailable when only its note or answer changes, and refuses a raise of it, an added extra and a switch to an Unavailable variant", async () => {
+    const { cfg, zoneId, menuId } = await setupVenue();
+    const { seeded, extra, served } = await withTransaction(db, async (tx) => {
+      const variantOffer = await seedVariantOffer(tx, menuId);
+      const attached = await addExtraList(tx, variantOffer.productId, "Syrup", { price: "0.50" });
+      const asked = await addOptionList(tx, variantOffer.productId, "Served", ["Hot", "Iced"]);
+      await republishMenus(tx);
+      return { seeded: variantOffer, extra: attached, served: asked };
+    });
+    const answer = (labelId: string) => [{ listId: served.listId, labelId }];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: seeded.offerId,
+          variantId: seeded.variantId,
+          quantity: "1",
+          options: answer(served.labelIds[0]!),
+        },
+      ],
+    });
+    const read = () =>
+      db.execute<{
+        id: string;
+        product_id: string;
+        variant_name: string | null;
+        unit_price_gross: number;
+        note: string | null;
+        answered: string;
+      }>(sql`
+        select id, product_id, variant_name, cast(unit_price_gross as int) as unit_price_gross, note,
+          option_snapshots ->> '$[0].labelKitchenName' as answered
+        from working_order_lines where working_order_id = ${id} order by line_no`);
+    const parked = (await read()).rows[0]!;
+    expect(parked.answered).toBe("Hot kitchen");
+    const lineId = parked.id;
+    await withTransaction(db, async (tx) => {
+      await menu.updateProduct(tx, seeded.variantId, { available: false });
+      await menu.updateProduct(tx, seeded.smallVariantId, { available: false });
+    });
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+      revision: await revisionOf(id),
+      lines: [
+        {
+          workingOrderLineId: lineId,
+          menuItemId: seeded.offerId,
+          variantId: seeded.variantId,
+          quantity: "1",
+          note: "No foam",
+          options: answer(served.labelIds[1]!),
+        },
+      ],
+    });
+
+    const kept = (await read()).rows;
+    expect(kept).toEqual([
+      {
+        id: lineId,
+        product_id: seeded.variantId,
+        variant_name: "Large",
+        unit_price_gross: 320,
+        note: "No foam",
+        answered: "Iced kitchen",
+      },
+    ]);
+
+    const edit = async (change: {
+      variantId?: string;
+      quantity?: string;
+      extras?: { listId: string; picks: { productId: string; quantity: number }[] }[];
+    }) =>
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [
+          {
+            workingOrderLineId: lineId,
+            menuItemId: seeded.offerId,
+            variantId: seeded.variantId,
+            quantity: "1",
+            note: "No foam",
+            options: answer(served.labelIds[1]!),
+            ...change,
+          },
+        ],
+      });
+
+    await expect(edit({ quantity: "2" })).rejects.toMatchObject({
+      code: "product.variant_unavailable",
+      params: { variantId: seeded.variantId },
+    });
+    expect((await read()).rows).toEqual(kept);
+
+    await expect(
+      edit({
+        extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }],
+      }),
+    ).rejects.toMatchObject({
+      code: "product.variant_unavailable",
+      params: { variantId: seeded.variantId },
+    });
+    expect((await read()).rows).toEqual(kept);
+
+    await expect(edit({ variantId: seeded.smallVariantId })).rejects.toMatchObject({
+      code: "product.variant_unavailable",
+      params: { variantId: seeded.smallVariantId },
+    });
+    expect((await read()).rows).toEqual(kept);
+  });
+
+  it("with two portions saved on a variant that has since become Unavailable, refuses a lowered extra, and keeps dropping one portion or removing an extra", async () => {
+    const { cfg, zoneId, menuId } = await setupVenue();
+    const { seeded, extra } = await withTransaction(db, async (tx) => {
+      const variantOffer = await seedVariantOffer(tx, menuId);
+      const attached = await addExtraList(tx, variantOffer.productId, "Syrup", {
+        price: "0.50",
+        maxQuantity: 3,
+      });
+      await republishMenus(tx);
+      return { seeded: variantOffer, extra: attached };
+    });
+    const id = randomUUID();
+    const syrup = (quantity: number) => [
+      { listId: extra.listId, picks: [{ productId: extra.productId, quantity }] },
+    ];
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: seeded.offerId,
+          variantId: seeded.variantId,
+          quantity: "2",
+          extras: syrup(2),
+        },
+      ],
+    });
+    const held = await getHeldOrder({ db }, id);
+    expect(held.lines.map((line) => [line.quantity, line.extras?.[0]?.quantity])).toEqual([
+      ["1.000", 2],
+      ["1.000", 2],
+    ]);
+    await withTransaction(db, async (tx) => {
+      await menu.updateProduct(tx, seeded.variantId, { available: false });
+    });
+    const dishes = () =>
+      db.execute<{ id: string; product_id: string }>(sql`
+        select id, product_id from working_order_lines
+        where working_order_id = ${id} and parent_line_id is null order by line_no`);
+    const extrasNow = () =>
+      db.execute<{ quantity: number }>(sql`
+        select cast(quantity as int) as quantity from working_order_lines
+        where working_order_id = ${id} and parent_line_id is not null order by line_no`);
+    const edit = async (lines: { lineId: string; extras: ExtraSelection[] }[]) =>
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: lines.map(({ lineId, extras }) => ({
+          workingOrderLineId: lineId,
+          menuItemId: seeded.offerId,
+          variantId: seeded.variantId,
+          quantity: "1",
+          extras,
+        })),
+      });
+    const [first, second] = held.lines.map((line) => line.workingOrderLineId);
+
+    await expect(
+      edit([
+        { lineId: first!, extras: syrup(1) },
+        { lineId: second!, extras: syrup(1) },
+      ]),
+    ).rejects.toMatchObject({
+      code: "product.variant_unavailable",
+      params: { variantId: seeded.variantId },
+    });
+    expect((await extrasNow()).rows).toEqual([{ quantity: 2000 }, { quantity: 2000 }]);
+
+    await expect(edit([{ lineId: second!, extras: syrup(2) }])).resolves.toBeDefined();
+    expect((await dishes()).rows).toEqual([{ id: second!, product_id: seeded.variantId }]);
+    expect((await extrasNow()).rows).toEqual([{ quantity: 2000 }]);
+
+    await expect(edit([{ lineId: second!, extras: [] }])).resolves.toBeDefined();
+    expect((await dishes()).rows).toEqual([{ id: second!, product_id: seeded.variantId }]);
+    expect((await extrasNow()).rows).toEqual([]);
+  });
+
   it("replaces an offer line using the order's stored zone and refreshes its attribution", async () => {
     const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
     const id = randomUUID();
