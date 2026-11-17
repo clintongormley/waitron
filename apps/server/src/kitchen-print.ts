@@ -2659,6 +2659,7 @@ interface KitchenProblemLink {
 
 /** Moved dishes need their own later paper; a copied bill link is never itself a Reprint. */
 async function printedMovedDishes(tx: Transaction, links: readonly { printJobId: string }[]) {
+  if (links.length === 0) return () => false;
   const lines = await tx
     .select({
       printJobId: kitchenPrintJobLines.printJobId,
@@ -2706,13 +2707,19 @@ async function printedMovedDishes(tx: Transaction, links: readonly { printJobId:
   }
   const relevant = new Map<string, typeof lines>();
   for (const row of lines) {
-    const key = `${row.printJobId}|${row.workingOrderId}|${row.stationId}`;
-    const own = relevant.get(key);
-    if (own === undefined) relevant.set(key, [row]);
-    else own.push(row);
+    for (const key of [
+      `${row.printJobId}|${row.workingOrderId}|${row.stationId}`,
+      `${row.printJobId}|${row.stationId}`,
+    ]) {
+      const own = relevant.get(key);
+      if (own === undefined) relevant.set(key, [row]);
+      else own.push(row);
+    }
   }
   return (link: KitchenProblemLink): boolean => {
-    const own = relevant.get(`${link.printJobId}|${link.workingOrderId}|${link.stationId}`);
+    const own =
+      relevant.get(`${link.printJobId}|${link.workingOrderId}|${link.stationId}`) ??
+      relevant.get(`${link.printJobId}|${link.stationId}`);
     return (
       own !== undefined &&
       own.every(
@@ -2724,7 +2731,6 @@ async function printedMovedDishes(tx: Transaction, links: readonly { printJobId:
 
 /**
  * Same-bill coverage uses link order; moved-dish coverage uses original job order.
- * Empty dish sets still use readReprintTargets for voided work and detached printers.
  */
 async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promise<PrintProblem[]> {
   const troubled = printJobInTrouble(now);
@@ -2793,12 +2799,7 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
   );
 }
 
-/**
- * Of `jobs`, the ones that leave nothing waiting at `printerId`, each judged by the links of
- * `sourceId`: every link is covered by a later printed reprint on `printerId`, or a Reprint of its
- * bill would link nothing on `printerId` to its station. A job whose source has no links is never in
- * the answer.
- */
+/** A job without kitchen links stays in the printer alert. */
 export async function kitchenJobsNotWaiting(
   tx: Transaction,
   jobs: readonly { id: string; printerId: string; sourceId: string }[],
@@ -2820,7 +2821,6 @@ export async function kitchenJobsNotWaiting(
       ),
     );
   if (links.length === 0) return settled;
-  const movedPaperPrinted = await printedMovedDishes(tx, links);
   const orderIds = links.map((row) => row.workingOrderId);
   const reprints = await tx
     .select({
@@ -2862,9 +2862,9 @@ export async function kitchenJobsNotWaiting(
       ),
     );
   }
-  const waitingOrders = [
-    ...new Set([...uncleared.values()].flat().map((row) => row.workingOrderId)),
-  ];
+  const waitingLinks = [...uncleared.values()].flat();
+  const movedPaperPrinted = await printedMovedDishes(tx, waitingLinks);
+  const waitingOrders = [...new Set(waitingLinks.map((row) => row.workingOrderId))];
   const targets =
     waitingOrders.length === 0
       ? new Map<string, Set<string>>()
@@ -2952,11 +2952,7 @@ async function writeLinksAfter(
   );
 }
 
-/**
- * Carry `fromOrderId`'s kitchen tickets onto `intoOrderId` when its dishes move there whole. A
- * ticket a printed reprint already covered stays behind with its reprint, since nothing is left
- * missing. The rest are written again ({@link writeLinksAfter}).
- */
+/** Preserve source Reprint identity without letting its copy cover unrelated destination dishes. */
 export async function moveKitchenPrintLinks(
   tx: Transaction,
   fromOrderId: string,

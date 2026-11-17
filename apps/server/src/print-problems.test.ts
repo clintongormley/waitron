@@ -1602,6 +1602,59 @@ describe("a printing problem whose dishes move to another bill", () => {
     expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
   });
 
+  it("clears the source warning only after its moved dish prints, while another printed round stays", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Table 4");
+    await setJob(await jobFor(source.tabId, v.kitchenPrinterId), exhausted);
+    await submit(v, source.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+    const destination = await seated(v, "Table 5");
+    await transferDish(v, source, destination, "burger");
+    expect(await problemsOf(source.partyId)).toHaveLength(1);
+    expect(await stationSees(v.kitchenStationId, source.tabId)).toBe(true);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+
+    await reprintPrinted(v, destination.tabId);
+
+    expect(await problemsOf(source.partyId)).toEqual([]);
+    expect(await stationSees(v.kitchenStationId, source.tabId)).toBe(false);
+    expect(await problemsOf(destination.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("keeps the warning when a second missing dish follows a dish already reprinted", async () => {
+    const v = await setupVenue();
+    const source = await firedTable(v, "Table 4", ["burger", "fish"]);
+    const destination = await seated(v, "Table 5");
+    await setJob(await jobFor(source.tabId, v.kitchenPrinterId), exhausted);
+    await transferDish(v, source, destination, "burger");
+    await reprintPrinted(v, destination.tabId);
+    expect(await problemsOf(destination.partyId)).toEqual([]);
+
+    await transferDish(v, source, destination, "fish");
+
+    expect(await problemsOf(destination.partyId)).toHaveLength(1);
+    expect(await stationSees(v.kitchenStationId, destination.tabId)).toBe(true);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+  });
+
+  it("does not treat an ordinary printed fire ticket as a Reprint of failed HOLD paper", async () => {
+    const v = await holdingVenue();
+    const source = await seated(v, "Table 4");
+    const { groups } = await submit(v, source.partyId, [
+      { release: "hold", lines: [line(v, "burger")] },
+    ]);
+    await setJob(await jobFor(source.tabId, v.kitchenPrinterId), exhausted);
+    await inTx(async (tx) =>
+      fireGroup(tx, v.cfg, source.partyId, groups[0]!.id, await command(source.partyId)),
+    );
+    await setJob((await links()).at(-1)!.printJobId, { status: "done" });
+
+    expect(await problemsOf(source.partyId)).toHaveLength(1);
+    expect(await stationSees(v.kitchenStationId, source.tabId)).toBe(true);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+  });
+
   it("shows a failed ticket on the check its dish was split off to, and clears it by the check's Reprint", async () => {
     const v = await setupVenue();
     const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);

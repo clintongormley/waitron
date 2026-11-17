@@ -43,8 +43,7 @@ export function printedOrResent(job: typeof printJobs | typeof reprintJob): SQL 
  * A document job not printed after {@link JOBS_WAITING_MS}, or given up on (failed with no delivery
  * attempts left) however recent, until a later job standing in for it has printed: a resend of
  * the same job; for a kitchen ticket, a Reprint on the same printer for every bill and station the
- * ticket is linked to, printed itself or through a resend ({@link printedOrResent}), which is how
- * `readPrintProblems` (apps/server/src/kitchen-print.ts) clears each link; for a receipt, another
+ * ticket is linked to, printed itself or through a resend ({@link printedOrResent}); for a receipt, another
  * receipt of the same sale on the same printer. A drawer pulse never counts. The printer's alert
  * ({@link printersInTrouble}) and a table's printing problem both read this.
  * "After" is `rowid` (for a kitchen ticket, its link row's), not `created_at`, which two jobs can
