@@ -154,7 +154,7 @@ try {
     const context = {
       db: store.venue,
       cfg: { contentDefaultLanguage: "es-ES" },
-      core: moduleCoreServices(cfg, enabledTableRemovals(ALL_MODULES)),
+      core: moduleCoreServices(cfg, enabledTableRemovals(ALL_MODULES), () => new Date()),
     };
     for (const module of ALL_MODULES) module.routes?.mount(app, context, log);
     mountManagementApi(

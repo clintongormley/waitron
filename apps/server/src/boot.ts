@@ -3424,7 +3424,7 @@ async function bootServer(
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     renderReceiptLogo: drawLogoRasters,
-    core: moduleCoreServices(tradingContext, tableRemovals),
+    core: moduleCoreServices(tradingContext, tableRemovals, () => tillClock.now().instant),
     fiscalDrain: {
       filing: filesRecords,
       awaitingCertificate: () => awaitingFiscalCert.current,

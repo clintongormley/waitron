@@ -128,11 +128,6 @@ Left open by A429 slice 3.
 Left open by A429 slice 4
 (#1526).
 
-- A booking seated from the dashboard is believed to skip the taken-off check: the bookings
-  module seats through `core.seatTable` (`moduleCoreServices`, `apps/server/src/boot.ts`), while
-  the till's seat, join, Move guests and bill-move routes refuse a table taken off for today with
-  `table.taken_off` (`refuseTakenOff`, `apps/server/src/floor-today-table.ts`). Found by the
-  review reading the code; not run.
 - `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
   versions were tried and each picked a different table (one failed an existing test, the other
   a probe), so the faster version still needs a way that keeps the same answer.

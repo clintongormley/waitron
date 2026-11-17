@@ -7311,7 +7311,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
-      moduleCoreServices(cfg, removals).floorDeletion,
+      moduleCoreServices(cfg, removals, () => new Date()).floorDeletion,
       old.id,
       new Date("2026-10-11T12:00:00Z"),
     );

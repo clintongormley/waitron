@@ -84,7 +84,7 @@ async function setupVenue(): Promise<Venue> {
     db,
     cfg: {},
     // What boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
-    core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES)),
+    core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES), () => new Date()),
   };
   return {
     tillCfg,

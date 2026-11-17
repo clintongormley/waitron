@@ -107,7 +107,7 @@ beforeEach(async () => {
   );
   VENUE_SERVICE_ROUTES.mount(
     app,
-    { db: v.db, cfg: v.cfg, core: moduleCoreServices(v.cfg, removals) },
+    { db: v.db, cfg: v.cfg, core: moduleCoreServices(v.cfg, removals, () => new Date()) },
     () => {},
   );
 });
@@ -392,7 +392,11 @@ it.each([
       if (code === "zone.table_in_use")
         await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table!.id));
       if (code === "zone.table_in_use")
-        await moduleCoreServices(v.cfg, enabledTableRemovals(ALL_MODULES)).seatTable(tx, {
+        await moduleCoreServices(
+          v.cfg,
+          enabledTableRemovals(ALL_MODULES),
+          () => new Date(),
+        ).seatTable(tx, {
           tableId: table!.id,
           guestCount: 2,
           operatorId: v.operator.personId,

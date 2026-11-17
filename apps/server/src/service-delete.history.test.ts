@@ -165,7 +165,8 @@ it("deleted department reprints its original receipt configuration and frozen he
   await run((tx) =>
     deleteDepartment(
       tx,
-      moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES)).floorDeletion,
+      moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES), () => new Date())
+        .floorDeletion,
       departmentId,
       new Date("2026-10-11T12:00:00Z"),
     ),
