@@ -626,6 +626,9 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new."party_id" IS old."party_id"
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -655,6 +658,9 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new."party_id" IS old."party_id"
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -674,6 +680,9 @@ BEGIN
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new.status IS old.status
         AND new.opened_at IS old.opened_at
         AND new.settled_at IS old.settled_at
@@ -716,6 +725,9 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
         AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

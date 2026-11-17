@@ -18,7 +18,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedPerson, seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedPerson, seedDevice, seedNode, seedVenue, seedZone } from "../testing/seed.js";
 import { products } from "./menus.js";
 import { parties } from "./parties.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
@@ -121,6 +121,72 @@ describe("working_orders", () => {
   beforeEach(async () => {
     db = suite.db;
     await seed(db);
+  });
+
+  describe("a bill's service context", () => {
+    function setContext(
+      id: string,
+      zoneId: string | null,
+      departmentId: string | null,
+      mode: string | null,
+    ) {
+      return db.execute(sql`update working_orders
+        set zone_id = ${zoneId}, department_id = ${departmentId}, service_mode = ${mode}
+        where id = ${id}`);
+    }
+
+    it("requires the zone, department and mode together", async () => {
+      const id = await openOrder(db);
+      const zone = await seedZone(db, { name: "Terrace" });
+      for (const [zoneId, departmentId, mode] of [
+        [zone.id, null, null],
+        [null, zone.departmentId, null],
+        [null, null, "table_tab"],
+        [zone.id, zone.departmentId, null],
+        [zone.id, null, "table_tab"],
+        [null, zone.departmentId, "table_tab"],
+      ] as const) {
+        const error = await captureError(() => setContext(id, zoneId, departmentId, mode));
+        expect(engineErrorMessage(error)).toContain("working_orders_service_context_ck");
+      }
+      await setContext(id, zone.id, zone.departmentId, "table_tab");
+      expect(
+        await rows(
+          db,
+          sql`select zone_id, department_id, service_mode from working_orders
+          where id = ${id}`,
+        ),
+      ).toEqual([
+        { zone_id: zone.id, department_id: zone.departmentId, service_mode: "table_tab" },
+      ]);
+      await setContext(id, null, null, null);
+      expect(
+        await rows(
+          db,
+          sql`select zone_id, department_id, service_mode from working_orders
+          where id = ${id}`,
+        ),
+      ).toEqual([{ zone_id: null, department_id: null, service_mode: null }]);
+    });
+
+    it("refuses a mode outside the three service modes", async () => {
+      const zone = await seedZone(db, { name: "Terrace" });
+      const id = await openOrder(db);
+      const error = await captureError(() => setContext(id, zone.id, zone.departmentId, "unknown"));
+      expect(engineErrorMessage(error)).toContain("working_orders_service_mode_ck");
+    });
+
+    it("refuses a zone or department that does not exist", async () => {
+      const zone = await seedZone(db, { name: "Terrace" });
+      const id = await openOrder(db);
+      for (const [zoneId, departmentId] of [
+        ["missing-zone", zone.departmentId],
+        [zone.id, "missing-department"],
+      ]) {
+        const error = await captureError(() => setContext(id, zoneId, departmentId, "prepay"));
+        expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+      }
+    });
   });
 
   describe("a bill's identity columns", () => {

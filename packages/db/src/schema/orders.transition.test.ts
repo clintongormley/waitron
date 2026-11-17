@@ -6,7 +6,7 @@ import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { OPEN_PARENT_REFUSAL, TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedZone } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { products } from "./menus.js";
@@ -14,6 +14,7 @@ import { workingOrderLines, workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
+import { departments } from "./venue-service/service.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
@@ -139,6 +140,76 @@ describe("working_orders state machine (enforce_transition)", () => {
       })
       .returning({ id: products.id });
     productA = product!.id;
+  });
+
+  describe("a bill's service context", () => {
+    let zoneId: string;
+    let departmentId: string;
+    let otherZoneId: string;
+    let otherDepartmentId: string;
+
+    beforeAll(async () => {
+      const zone = await seedZone(suite.db, { name: "Dining room" });
+      const [department] = await suite.db
+        .insert(departments)
+        .values({ name: "Counter", tradingName: "Counter" })
+        .returning({ id: departments.id });
+      const otherZone = await seedZone(suite.db, { name: "Terrace", departmentId: department!.id });
+      ({ id: zoneId, departmentId } = zone);
+      ({ id: otherZoneId, departmentId: otherDepartmentId } = otherZone);
+    });
+
+    async function bill(status: "placed" | "settled") {
+      const id = await open();
+      await suite.db.execute(sql`update working_orders
+        set zone_id = ${zoneId}, department_id = ${departmentId}, service_mode = 'table_tab'
+        where id = ${id}`);
+      await suite.db
+        .update(workingOrders)
+        .set({ status, settledAt: status === "settled" ? AT : null })
+        .where(eq(workingOrders.id, id));
+      return id;
+    }
+
+    const changes = [
+      ["zone", "zone_id", () => sql`zone_id = ${otherZoneId}`, () => otherZoneId],
+      [
+        "department",
+        "department_id",
+        () => sql`department_id = ${otherDepartmentId}`,
+        () => otherDepartmentId,
+      ],
+      ["mode", "service_mode", () => sql`service_mode = 'prepay'`, () => "prepay"],
+    ] as const;
+
+    it.each(changes)("a placed bill may change its %s", async (_name, column, change, expected) => {
+      const id = await bill("placed");
+      await suite.db.execute(sql`update working_orders set ${change()} where id = ${id}`);
+      const { rows } = await suite.db.execute(sql`select zone_id, department_id, service_mode
+        from working_orders where id = ${id}`);
+      expect(rows[0]![column]).toBe(expected());
+    });
+
+    it.each(changes)("a settled bill keeps its %s", async (_name, _column, change) => {
+      const id = await bill("settled");
+      const error = await captureError(() =>
+        suite.db.execute(sql`update working_orders
+        set bill_name = 'Collected', ${change()} where id = ${id}`),
+      );
+      expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+    });
+
+    it.each(["placed", "settled"] as const)(
+      "a %s handover stamp cannot also change the zone",
+      async (status) => {
+        const id = await bill(status);
+        const error = await captureError(() =>
+          suite.db.execute(sql`update working_orders
+        set collected_at = ${AT}, zone_id = ${otherZoneId} where id = ${id}`),
+        );
+        expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+      },
+    );
   });
 
   it("permits open → placed, placed → settled, and open → open (label edit)", async () => {

@@ -724,7 +724,7 @@ describe("working_orders_dining_fixed", () => {
 
 /**
  * The columns of `working_orders` the placed → placed exception's list does not name: `status`,
- * which it requires to stay `placed`, and the three a move may change.
+ * which it requires to stay `placed`, and the columns a move may change.
  */
 const MOVABLE_ORDER_COLUMNS = new Set([
   "status",
@@ -735,6 +735,9 @@ const MOVABLE_ORDER_COLUMNS = new Set([
   "bill_name",
   "editor_id",
   "editor_version",
+  "zone_id",
+  "department_id",
+  "service_mode",
 ]);
 /** Every column of `working_orders` a presented bill's move must leave as it is. */
 const FROZEN_PLACED_ORDER_COLUMNS = connection

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2ad652f4-d28a-476b-a865-db2878d5c3ce",
+  "id": "a905a2d1-b6e2-4dcb-b462-c5c51a3ea619",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1038,6 +1038,27 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "service_mode": {
+          "name": "service_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1152,6 +1173,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "working_orders_zone_fk": {
+          "name": "working_orders_zone_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "floor_zones",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_orders_department_fk": {
+          "name": "working_orders_department_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1176,6 +1223,14 @@
         "working_orders_dining_ck": {
           "name": "working_orders_dining_ck",
           "value": "\"working_orders\".\"dining\" in ('eat_in', 'takeaway')"
+        },
+        "working_orders_service_mode_ck": {
+          "name": "working_orders_service_mode_ck",
+          "value": "\"working_orders\".\"service_mode\" is null or \"working_orders\".\"service_mode\" in ('table_tab','prepay','ticket_then_pay')"
+        },
+        "working_orders_service_context_ck": {
+          "name": "working_orders_service_context_ck",
+          "value": "(\"working_orders\".\"zone_id\" is null and \"working_orders\".\"department_id\" is null and \"working_orders\".\"service_mode\" is null)\n        or (\"working_orders\".\"zone_id\" is not null and \"working_orders\".\"department_id\" is not null and \"working_orders\".\"service_mode\" is not null)"
         },
         "working_orders_source_ck": {
           "name": "working_orders_source_ck",
