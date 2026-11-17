@@ -81,6 +81,7 @@ const FILED_WITHOUT_TEXT: TillSaleResult = {
       descriptions: { "es-ES": "Agua mineral", "en-GB": "Mineral water" },
       quantity: "2",
       gross: "8.80",
+      unitPriceGross: "4.40",
     },
   ],
   tender: { method: "cash", change: "9.10" },
@@ -2300,6 +2301,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         descriptions: { "es-ES": "Agua mineral" },
         quantity: "2",
         gross: "4.00",
+        unitPriceGross: "2.00",
         parentLineNo: null,
       },
       {
@@ -2322,6 +2324,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         quantity: "3",
         gross: "9.00",
         listGross: "9.99",
+        listUnitPriceGross: "3.33",
         parentLineNo: null,
         adjustments: [{ kind: "discount", amount: "0.99" }],
       },
@@ -2340,6 +2343,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         quantity: "2",
         gross: "3.50",
         listGross: "4.00",
+        listUnitPriceGross: "2.00",
         parentLineNo: null,
       },
       {
@@ -2488,6 +2492,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
               quantity: "12",
               gross: "1111.11",
               listGross: "1234.56",
+              listUnitPriceGross: "102.88",
               parentLineNo: null,
               adjustments: [{ kind: "discount", percentBp: 1000, amount: "123.45" }],
             },
@@ -3613,6 +3618,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         unitName: { es: "ud" },
         quantity: "4",
         gross: "24.00",
+        unitPriceGross: "6.00",
       },
     ],
     tender: { method: "cash", change: "11.00" },
@@ -4009,10 +4015,15 @@ describe("simplified receipt: price each and rate letters", () => {
     lines[lines.findIndex((line) => line.includes(name)) + 1]!;
   const lineWith = (lines: string[], text: string): string =>
     lines.find((line) => line.includes(text))!;
-  const mahou = (quantity: string, gross: string): TillSaleResult["lines"][number] => ({
+  const mahou = (
+    quantity: string,
+    gross: string,
+    unitPriceGross = "2.70",
+  ): TillSaleResult["lines"][number] => ({
     descriptions: { "es-ES": "Mahou caña" },
     quantity,
     gross,
+    unitPriceGross,
     parentLineNo: null,
   });
   const mixed: TillSaleResult["lines"] = [
@@ -4048,6 +4059,7 @@ describe("simplified receipt: price each and rate letters", () => {
           quantity: "0.5",
           unitName: { "es-ES": "kg" },
           gross: "12.00",
+          unitPriceGross: "24.00",
           parentLineNo: null,
         },
       ]),
@@ -4061,7 +4073,7 @@ describe("simplified receipt: price each and rate letters", () => {
   });
 
   it("prints no price each when it does not divide exactly", () => {
-    expect(print(simplified([mahou("3", "10.00")])).join("\n")).not.toContain("por unidad");
+    expect(print(simplified([mahou("3", "10.00", "3.33")])).join("\n")).not.toContain("por unidad");
   });
 
   it("prints no price each for one", () => {
@@ -4076,6 +4088,7 @@ describe("simplified receipt: price each and rate letters", () => {
           quantity: "0.333",
           unitName: { "es-ES": "kg" },
           gross: "7.99",
+          unitPriceGross: "24.00",
           parentLineNo: null,
         },
       ]),
@@ -4084,7 +4097,7 @@ describe("simplified receipt: price each and rate letters", () => {
   });
 
   it("prints no price each for a free line", () => {
-    expect(print(simplified([mahou("2", "0.00")])).join("\n")).not.toContain("por unidad");
+    expect(print(simplified([mahou("2", "0.00", "0.00")])).join("\n")).not.toContain("por unidad");
   });
 
   it.each([
@@ -4092,7 +4105,15 @@ describe("simplified receipt: price each and rate letters", () => {
     ["in part", "-3.00"],
   ])("prints no price each on a corrective that returns money %s", (_, gross) => {
     const corrective = simplified(
-      [{ descriptions: { "es-ES": "Croquetas" }, quantity: "-1", gross, parentLineNo: null }],
+      [
+        {
+          descriptions: { "es-ES": "Croquetas" },
+          quantity: "-1",
+          gross,
+          unitPriceGross: gross.slice(1),
+          parentLineNo: null,
+        },
+      ],
       ONE_RATE,
       {
         invoiceType: "R5",
@@ -4110,6 +4131,7 @@ describe("simplified receipt: price each and rate letters", () => {
         {
           ...mahou("2", "5.40"),
           listGross: "6.00",
+          listUnitPriceGross: "3.00",
           adjustments: [{ kind: "discount", amount: "0.60" }],
         },
       ]),

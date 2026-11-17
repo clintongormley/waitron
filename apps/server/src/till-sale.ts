@@ -278,10 +278,17 @@ export interface TillSaleLine {
    */
   listGross?: string;
   /**
-   * The unit price with VAT per price quantity before any comp or discount, read from the filed
-   * sale line; present only with listGross, on a full invoice.
+   * The unit price with VAT per price quantity before any comp or discount; present only with
+   * listGross. A full invoice reads it from the filed sale line, a simplified one from the order line.
    */
   listUnitPriceGross?: string;
+  /**
+   * Simplified receipts only: the unit price with VAT per price quantity the line was sold at, from
+   * the stored order line; absent where the receipt is rebuilt from the sale's rows alone.
+   */
+  unitPriceGross?: string;
+  /** What `unitPriceGross` and `listUnitPriceGross` are priced per; absent means one. */
+  priceQuantity?: string;
   /**
    * Presentation only. On a full invoice's line whose order line an adjustment on this bill split
    * into several dish rows: the index in lines of the family's first row. The family shares its
@@ -1045,7 +1052,7 @@ async function fileImmediateSale(
     kind: "order",
     orderId: workingOrderId,
   });
-  const { priced, clock } = issueMoment(
+  const { priced, clock, gross } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, workingOrderId, order),
     deps.backend,
@@ -1140,7 +1147,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, workingOrderId, priced, order.identities, saleId)),
+    ...(await receiptLines(tx, workingOrderId, gross, order.identities, saleId)),
     tender: tenderBlock,
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
@@ -1778,7 +1785,7 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
       await requireEconomicWrite(tx, cfg, deps.admission);
-      const { priced, clock } = issueMoment(
+      const { priced, clock, gross } = issueMoment(
         await prepareIssueClock(tx, cfg, deps.clock),
         grossInP1,
         deps.backend,
@@ -1865,7 +1872,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, req.id, priced, identities, saleId)),
+        ...(await receiptLines(tx, req.id, gross, identities, saleId)),
         tender: tenderBlock,
         ...receiptQr(deps.backend, fiscal.verificationUrl),
       };
@@ -1906,7 +1913,7 @@ async function finalizeRecovery(
       const order = await priceStoredOrderForIssuance(tx, req.id, {
         refuseUnsentUnavailable: false,
       });
-      const { priced, clock } = issueMoment(
+      const { priced, clock, gross } = issueMoment(
         await prepareIssueClock(tx, cfg, deps.clock),
         await issuancePass(tx, req.id, order),
         deps.backend,
@@ -2019,7 +2026,7 @@ async function finalizeRecovery(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await receiptLines(tx, req.id, priced, order.identities, saleId)),
+        ...(await receiptLines(tx, req.id, gross, order.identities, saleId)),
         tender: tenderBlock,
         ...receiptQr(deps.backend, fiscal.verificationUrl),
       };

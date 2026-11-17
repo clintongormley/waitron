@@ -1,4 +1,5 @@
 import { getCountryPack, receiptLabelsFor } from "@waitron/country-packs";
+import { grossLockedLines, type LockedLine } from "@waitron/menu";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -19,6 +20,7 @@ import {
   receiptDayNumeric,
 } from "./receipt-dates.js";
 import { formatAmount, formatMoney } from "./receipt-money.js";
+import { ticketLinesFrom } from "./receipt-lines.js";
 
 describe("format-neutral invoice content", () => {
   it.each([false, true])(
@@ -578,6 +580,64 @@ describe("the simplified receipt's own layout (A663)", () => {
     expect(printed).toContain("Pago aplazado");
     for (const word of ["Tarjeta", "Cobrado", "Ref.", "Efectivo"])
       expect(printed).not.toContain(word);
+  });
+});
+
+describe("the simplified receipt's price each is the price the line was sold at", () => {
+  const SIMPLIFIED = {
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" as const },
+  };
+  const locked = (overrides: Partial<LockedLine>): LockedLine => ({
+    grossUnitPrice: "1.00",
+    quantity: "1",
+    vatClass: "reduced",
+    name: "Jamón",
+    descriptions: { "es-ES": "Jamón" },
+    category: null,
+    unitName: { es: "kg" },
+    unitPrecision: 3,
+    ...overrides,
+  });
+  // The stored line as the till's receipt reads it: through the lock and onto the receipt.
+  const texts = (line: LockedLine): string[] => {
+    const gross = grossLockedLines([line]);
+    const input = structuredClone(SIMPLIFIED);
+    input.result.lines = ticketLinesFrom(gross, [{ listUnitGross: null }]);
+    return buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "text" ? [e.text.trim()] : [],
+    );
+  };
+
+  it("prints none for 0,01 kg sold at 6,60 € / kg and charged 0,07 €", () => {
+    const line = locked({ grossUnitPrice: "6.60", quantity: "0.010" });
+    expect(grossLockedLines([line]).lines[0]!.lineGross).toBe("0.07");
+    expect(texts(line).filter((text) => text.includes("€"))).toEqual([]);
+  });
+
+  it("prints 12,00 € / kg for half a kilo sold at 12,00 € / kg", () => {
+    expect(texts(locked({ grossUnitPrice: "12.00", quantity: "0.500" }))).toContain("12,00 € / kg");
+  });
+
+  it("prints a counted line's price each", () => {
+    expect(
+      texts(locked({ grossUnitPrice: "2.70", quantity: "2", unitName: null, unitPrecision: null })),
+    ).toContain("2,70 € por unidad");
+  });
+
+  it("prints none for a price recorded per a quantity other than one", () => {
+    const line = locked({ grossUnitPrice: "1.20", quantity: "0.500", priceQuantity: "0.100" });
+    expect(grossLockedLines([line]).lines[0]!.lineGross).toBe("6.00");
+    expect(texts(line).filter((text) => text.includes("€"))).toEqual([]);
+  });
+
+  it("prints none for a line that carries no recorded price", () => {
+    const input = structuredClone(SIMPLIFIED);
+    input.result.lines = [{ descriptions: { "es-ES": "Caña" }, quantity: "2", gross: "5.40" }];
+    const printed = buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "text" ? [e.text] : [],
+    );
+    expect(printed.join("\n")).not.toContain("por unidad");
   });
 });
 

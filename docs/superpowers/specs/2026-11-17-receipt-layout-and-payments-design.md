@@ -108,8 +108,11 @@ to say what is still owed.
 
 - Goal 4 is read as "solid lines in the existing places", not "more lines".
 - The tax table applies to every simplified receipt, single-rate included.
-- The unit-price line prints only when the price × quantity equals the printed amount to the
-  cent; otherwise none. A weighed item usually divides inexactly and then gets no line.
+- The unit-price line prints the price the item was sold at, as its order line recorded it, and
+  only when that price is per one unit and × quantity equals the printed amount to the cent;
+  otherwise none. It is never worked out from the amount: 0,01 kg sold at 6,60 €/kg is charged
+  0,07 €, and the line is left out rather than printed as 7,00 €/kg. A receipt line with no recorded
+  price prints none.
 - Rate letters run A, B, C… in the order of the tax summary (`vatBreakdown`).
 - Column headings of the tax table are short per-language words (Spanish: `Tipo`, `Base`, `IVA`,
   `Total`); amounts in the table carry no `€`.

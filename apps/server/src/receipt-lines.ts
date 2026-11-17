@@ -32,7 +32,9 @@ export type ReceiptSource = Pick<
   | "unitPrecision"
   | "lineGross"
   | "parentLineNo"
->;
+> &
+  // A stored order line holds the price it was sold at; a line rebuilt from a sale's rows does not.
+  Partial<Pick<GrossLine, "grossUnitPrice">>;
 
 /**
  * Project the FILED lines onto the receipt, so it prints the invoiced composition, never the
@@ -59,9 +61,30 @@ export function ticketLinesFrom(
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
     gross: line.lineGross,
-    ...listGrossOf(line, identities[i]!.listUnitGross),
+    ...soldAt(line, identities[i]!.listUnitGross),
     parentLineNo: line.parentLineNo ?? null,
   }));
+}
+
+/** The list total, and the gross unit prices the line was sold and listed at, where recorded. */
+function soldAt(
+  line: ReceiptSource,
+  listUnit: Decimal | null,
+): Pick<TillSaleLine, "listGross" | "listUnitPriceGross" | "unitPriceGross" | "priceQuantity"> {
+  const list = listGrossOf(line, listUnit);
+  const prices = {
+    ...(line.grossUnitPrice === undefined ? {} : { unitPriceGross: line.grossUnitPrice }),
+    ...(list.listGross === undefined ? {} : { listUnitPriceGross: listUnit! }),
+  };
+  return {
+    ...list,
+    ...prices,
+    ...(Object.keys(prices).length === 0 ||
+    line.priceQuantity === undefined ||
+    compareDecimal(decimal(line.priceQuantity), decimal("1")) === 0
+      ? {}
+      : { priceQuantity: line.priceQuantity }),
+  };
 }
 
 export function withReceiptListPrices<T extends ReceiptSource>(
@@ -142,11 +165,24 @@ export function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: bool
 }
 
 function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
-  return {
+  const merged = {
     ...left,
     quantity: String(Number(left.quantity) + Number(right.quantity)),
     gross: addDecimal(decimal(left.gross), decimal(right.gross)),
   };
+  if (!samePrice(left, right)) {
+    delete merged.unitPriceGross;
+    delete merged.priceQuantity;
+  }
+  return merged;
+}
+
+function samePrice(a: TillSaleLine, b: TillSaleLine): boolean {
+  if (a.unitPriceGross === undefined || b.unitPriceGross === undefined) return false;
+  return (
+    compareDecimal(decimal(a.unitPriceGross), decimal(b.unitPriceGross)) === 0 &&
+    compareDecimal(decimal(a.priceQuantity ?? "1"), decimal(b.priceQuantity ?? "1")) === 0
+  );
 }
 
 function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {

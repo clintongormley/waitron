@@ -168,6 +168,25 @@ describe("ticketLinesFrom", () => {
     expect(lines.map((line) => Object.hasOwn(line, "listGross"))).toEqual([false, false, true]);
   });
 
+  it("carries the gross unit price and price quantity a stored line was sold at, and none without one", () => {
+    const [sold, perPortion, rebuilt] = ticketLinesFrom(
+      {
+        lines: [
+          { ...filed("0.010", "0.07"), grossUnitPrice: decimal("6.60"), priceQuantity: "1.000" },
+          { ...filed("0.500", "6.00"), grossUnitPrice: decimal("1.20"), priceQuantity: "0.100" },
+          { ...filed("0.010", "0.07"), priceQuantity: "0.100" },
+        ],
+      },
+      [{ listUnitGross: null }, { listUnitGross: null }, { listUnitGross: null }],
+    );
+
+    expect(sold).toMatchObject({ unitPriceGross: "6.60" });
+    expect(sold).not.toHaveProperty("priceQuantity");
+    expect(perPortion).toMatchObject({ unitPriceGross: "1.20", priceQuantity: "0.100" });
+    for (const key of ["unitPriceGross", "listUnitPriceGross", "priceQuantity"])
+      expect(rebuilt).not.toHaveProperty(key);
+  });
+
   it("shows the list total for a discounted extra priced by frozen portions", () => {
     const child = {
       ...filed("0.150", "0.02"),
@@ -181,13 +200,12 @@ describe("ticketLinesFrom", () => {
     expect(line).toMatchObject({ quantity: "0.150", gross: "0.02", listGross: "0.03" });
   });
 
-  it("gives the screen and the simplified receipt the list total but not the unit price behind it", () => {
+  it("gives the screen and the simplified receipt the list total and the unit price behind it", () => {
     const [line] = ticketLinesFrom({ lines: [filed("0.123", "2.66")] }, [
       { listUnitGross: decimal("24.00") },
     ]);
 
-    expect(line).toMatchObject({ listGross: "2.95" });
-    expect(line).not.toHaveProperty("listUnitPriceGross");
+    expect(line).toMatchObject({ listGross: "2.95", listUnitPriceGross: "24.00" });
   });
 });
 
@@ -218,6 +236,21 @@ describe("mergeIdenticalGroups", () => {
       ["Beer", "2", "3.00"],
       ["Anchovies", "1", "6.00"],
     ]);
+  });
+
+  it("keeps the recorded price each on merged rows only when every row was sold at it", () => {
+    const merged = (prices: (string | undefined)[]) =>
+      mergeIdenticalGroups(
+        groupByParent(
+          prices.map((unitPriceGross) =>
+            row("Beer", "1", "1.50", unitPriceGross === undefined ? {} : { unitPriceGross }),
+          ),
+        ),
+        true,
+      ).map(({ dish }) => [dish.quantity, dish.unitPriceGross]);
+    expect(merged(["1.50", "1.50"])).toEqual([["2", "1.50"]]);
+    expect(merged(["1.50", undefined])).toEqual([["2", undefined]]);
+    expect(merged([undefined, "1.50"])).toEqual([["2", undefined]]);
   });
 
   it("A803 portion grouping: rows at one unit price group whatever each row's count", () => {

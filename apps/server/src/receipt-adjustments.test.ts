@@ -20,7 +20,7 @@ import { decimal, decimalToCents, sumDecimals } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { beforeVatFigures, isFiled } from "./receipt-figures.js";
-import { ticketLinesFrom } from "./receipt-lines.js";
+import { ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -34,6 +34,7 @@ import {
 } from "./testing/adjustment-venue.js";
 import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
 import { readStoredOrder } from "./working-order.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { ReceiptAdjustment } from "./till-sale.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
@@ -991,5 +992,46 @@ describe("receiptLines", () => {
       false,
     );
     for (const line of lines) expect(line).not.toHaveProperty("dishFamily");
+  });
+});
+
+describe("a receipt rebuilt from a sale's rows", () => {
+  it("prints the price each the original printed, and none for a row its order line no longer matches", async () => {
+    const billId = await bill([
+      { name: "Ham", quantity: "0.250" },
+      { name: "Croquettes", quantity: "3" },
+    ]);
+    const original = await payWorkingOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "20.00" }, lines: [] },
+    );
+    expect(original.lines.map((line) => line.unitPriceGross)).toEqual(["24.00", "3.33"]);
+
+    await inTx(venue, async (tx) => {
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      const reprint = await readTransactionReceipt(venue.backend, tx, venue.cfg, sale!.id);
+      expect(reprint.lines).toEqual(original.lines);
+
+      const stored = await readStoredOrder(tx, billId);
+      const rows: ReceiptSource[] = stored.gross.lines.map((line) => {
+        const row: ReceiptSource = { ...line };
+        delete row.grossUnitPrice;
+        return row;
+      });
+      const rebuilt = await receiptLines(
+        tx,
+        billId,
+        { lines: [rows[0]!, { ...rows[1]!, lineGross: decimal("9.98") }] },
+        stored.identities,
+        sale!.id,
+      );
+      expect(rebuilt.lines.map((line) => line.unitPriceGross)).toEqual(["24.00", undefined]);
+    });
   });
 });

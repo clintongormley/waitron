@@ -139,6 +139,8 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
   `` `${formatMoney(unit)} / ${unitName}` `` for a line with a unit name that is not `soldInEach`.
   When `rateLetters(result.vatBreakdown)` is not null, append `` ` ${letter}` `` to the amount of
   each dish, extra and line-discount row (by that line's `vatRate`); bill-wide adjustments get none.
+  (2026-11-17, after review: the price each now comes from the line's recorded `unitPriceGross` or
+  `listUnitPriceGross`, never from this division; see the spec's author's calls.)
 - [ ] **Step 4: Run** the Step 2 command — expect PASS. Then run the whole
   `src/receipt-ticket.test.ts` and `src/receipt-document.test.ts` (no `-t`): existing cases must
   still pass unchanged.

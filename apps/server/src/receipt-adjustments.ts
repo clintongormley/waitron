@@ -17,7 +17,36 @@ import {
 import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
-import type { OrderLineIdentity } from "./working-order.js";
+import { readStoredOrder, type OrderLineIdentity } from "./working-order.js";
+
+/**
+ * `lines`, each holding the gross unit price it was sold at: a line rebuilt from a sale's rows takes
+ * it from its order's stored line of the same number, and only while that line still has the same
+ * quantity, price quantity and total; otherwise it gets none.
+ */
+async function withSoldPrices(
+  tx: Transaction,
+  workingOrderId: string | null,
+  lines: readonly ReceiptSource[],
+): Promise<readonly ReceiptSource[]> {
+  if (workingOrderId === null || lines.every((line) => line.grossUnitPrice !== undefined)) {
+    return lines;
+  }
+  const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
+  const stored = new Map(
+    (await readStoredOrder(tx, workingOrderId)).gross.lines.map((line) => [line.lineNo, line]),
+  );
+  return lines.map((line) => {
+    const order = stored.get(line.lineNo);
+    return line.grossUnitPrice === undefined &&
+      order !== undefined &&
+      same(order.quantity, line.quantity) &&
+      same(order.priceQuantity ?? "1", line.priceQuantity ?? "1") &&
+      same(order.lineGross, line.lineGross)
+      ? { ...line, grossUnitPrice: order.grossUnitPrice }
+      : line;
+  });
+}
 
 /**
  * The receipt's lines for `priced` (`ticketLinesFrom`), with the comps and discounts it prints as
@@ -37,9 +66,10 @@ export async function receiptLines(
     tx,
     identities.flatMap((identity, i) => (priced.lines[i]?.unitName != null ? [identity.id] : [])),
   );
-  let lines = ticketLinesFrom(priced, identities).map((line, i) =>
-    each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line,
-  );
+  let lines = ticketLinesFrom(
+    { lines: await withSoldPrices(tx, workingOrderId, priced.lines) },
+    identities,
+  ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
   if (saleId !== undefined) {
     const filed = await tx
       .select({
@@ -99,6 +129,9 @@ export async function receiptLines(
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };
         delete display.listGross;
+        delete display.listUnitPriceGross;
+        delete display.unitPriceGross;
+        delete display.priceQuantity;
         return {
           ...display,
           ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),

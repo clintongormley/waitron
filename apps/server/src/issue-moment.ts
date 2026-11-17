@@ -5,6 +5,8 @@ import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fisca
 /** An invoice's lines at the rates of the day it is issued, and the clock that issues it. */
 export interface IssueMoment {
   priced: PricedLines;
+  /** The lines `priced` was rated from, still holding the gross unit prices they were sold at. */
+  gross: GrossLines;
   /** Answers the one reading the lines were rated at on every `now()`, so `recordSale` dates the
    * invoice on the day whose rates it files, even when the request runs across midnight. */
   clock: TrustedClock;
@@ -23,6 +25,7 @@ export function issueMoment(
   fiscal.assertRecordableAt(reading);
   return {
     priced: rateLines(gross, localCalendarDate(reading.instant, reading.offsetMinutes)),
+    gross,
     clock: pinnedAt(clock, reading),
   };
 }

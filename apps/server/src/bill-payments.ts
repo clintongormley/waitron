@@ -784,7 +784,7 @@ async function issueWhenFullyPaid(
   const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
     refuseUnsentUnavailable: options.moneyMoved !== true,
   });
-  const { priced, clock } = issueMoment(
+  const { priced, clock, gross } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, workingOrderId, stored),
     deps.backend,
@@ -883,7 +883,7 @@ async function issueWhenFullyPaid(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, workingOrderId, priced, stored.identities, saleId)),
+    ...(await receiptLines(tx, workingOrderId, gross, stored.identities, saleId)),
     tender: await readTenderBlock(tx, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
     ...receiptQr(deps.backend, fiscal.verificationUrl),
