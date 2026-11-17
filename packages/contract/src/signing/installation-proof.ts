@@ -21,6 +21,9 @@ export type MachineAction =
   | "email-submit"
   | "email-status"
   | "email-cancel"
+  | "owner-recovery-read"
+  | "owner-recovery-approve"
+  | "owner-recovery-refuse"
   | "translation-submit"
   | "translation-status"
   | "translation-collect"
@@ -155,6 +158,9 @@ export function readMachineClaims(value: unknown): MachineClaims {
         "email-submit",
         "email-status",
         "email-cancel",
+        "owner-recovery-read",
+        "owner-recovery-approve",
+        "owner-recovery-refuse",
         "translation-submit",
         "translation-status",
         "translation-collect",

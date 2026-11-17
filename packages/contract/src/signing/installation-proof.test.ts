@@ -234,3 +234,23 @@ it.each(["emergency-hosting-display", "emergency-hosting-code"] as const)(
     ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
   },
 );
+
+it.each(["owner-recovery-read", "owner-recovery-approve", "owner-recovery-refuse"] as const)(
+  "authenticates %s without allowing another recovery action",
+  (action) => {
+    const value = { ...claims, action },
+      signed = proof(value);
+    expect(verifyMachine(signed, publicKey, claims.origin, action, now)).toEqual(value);
+    for (const otherAction of [
+      "configuration",
+      "owner-recovery-read",
+      "owner-recovery-approve",
+      "owner-recovery-refuse",
+    ] as const) {
+      if (otherAction !== action)
+        expect(() =>
+          verifyMachine(signed, publicKey, claims.origin, otherAction, now),
+        ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
+    }
+  },
+);
