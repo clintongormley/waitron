@@ -8081,6 +8081,74 @@ describe("till-app", () => {
     expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
   });
 
+  it.each([
+    { kitchen: "sent", sentAt: "2026-11-17T20:00:00.000Z", firedAt: null, banner: false },
+    { kitchen: "fired", sentAt: null, firedAt: "2026-11-17T20:00:00.000Z", banner: false },
+    { kitchen: "not sent", sentAt: null, firedAt: null, banner: true },
+  ])(
+    "asks to choose a renamed answer again only on a line not yet sent: $kitchen",
+    async ({ sentAt, firedAt, banner }) => {
+      const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
+      const renamed = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
+      const listed: TabLine = {
+        changesAfterSending: "held-or-waiting",
+        stationId: null,
+        movable: false,
+        id: "line-answered",
+        groupId: null,
+        lineNo: 1,
+        productId: "cafe",
+        quantity: "2.000",
+        unitPriceGross: "1.50",
+        servedAt: null,
+        courseId: null,
+        sentAt,
+        firedAt,
+        state: null,
+        note: null,
+        listId: null,
+        menuItemId: "menu-item-cafe-0",
+        parentProductId: null,
+      };
+      const { el } = await mountApp({
+        listDefaultZoneOffers: vi
+          .fn()
+          .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+        retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamed)),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [listed], revision: 0 }),
+      });
+      const counter = await toCounter(el);
+
+      emit(counter, "retrieve-order", { id: "wo-answered" });
+      await flush(el);
+
+      expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamed]);
+      if (banner) expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
+      else expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+    },
+  );
+
+  it("asks to read the order again, not to choose again, when it cannot tell which lines were sent", async () => {
+    // Re-picking a renamed answer on a dish already sent recalls it, or is refused once started.
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
+    const renamed = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamed)),
+      getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamed]);
+    expect(el.shadowRoot!.textContent).toContain(t("held.reread_failed"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+  });
+
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
     // A lost-response retry, or the LOSER of a two-till concurrent pay on the same parked order, finds
     // the order ALREADY settled. The edit-gated re-sync then throws `working_order.not_open` — which must

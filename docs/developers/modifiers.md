@@ -298,12 +298,23 @@ ids, so the wording is the only evidence the line carries about what was chosen,
 be told from a different answer. Giving the comparison an id to use would mean putting one on the
 line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
 list was renamed between the two sends, freezing the new name"
-(`apps/server/src/working-order.test.ts`). On a line the kitchen already has, a changed answer is a
-change like any other: the kitchen gets a recall notice and a new ticket, unless the kitchen has started it, any of it has been served, or its stations'
-Changes after sending refuse it (`ticket.already_started`, `ticket.already_served`,
-`ticket.already_fired`). An EXTRAS list is different: its children are compared by
-the list's and the picked product's ids, so renaming the list — or the product — disturbs nothing and
-the line is preserved.
+(`apps/server/src/working-order.test.ts`). A line already sent (it or one of its extras sent, or
+either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
+`updateHeldOrder` passes `keepSentAnswers` to `applyLineEdits`, which keeps that line's options
+answer as it was sent, neither checked against today's menu nor frozen again, while the request names
+no answer the line does not already hold by the staff names of its list and label
+(`asksNoNewAnswer`, `apps/server/src/modifier-selection.ts`). That is what the till sends for a line
+nobody changed: it matches by staff name, and leaves out a list it cannot match. Pinned by "saves the
+whole order around a $state dish whose option's $renamed was renamed, keeping what was sent" and
+"keeps a sent dish's answer from an options list deleted since". A request naming any other answer
+is a change like any other, on a whole-order save as through `updateOrderLine`: the kitchen gets a
+recall notice and a new ticket, unless the kitchen has started it, any of it has been served, or its
+stations' Changes after sending refuse it (`ticket.already_started`, `ticket.already_served`,
+`ticket.already_fired`), pinned by "saves a different answer picked for a fired, not-started dish by
+recalling and resending it", "refuses a different answer picked for a started dish when $renamed
+was renamed" and "still recalls and resends a fired dish whose options answer one dish's change
+replaces". An EXTRAS list is different: its children are compared by the list's and the picked
+product's ids, so renaming the list — or the product — disturbs nothing and the line is preserved.
 
 For a parked-order edit, the till sends one `options` entry per answered list and one `extras` entry
 per list picked from. It reads a line's frozen answers back as `optionSnapshots`
@@ -311,13 +322,16 @@ per list picked from. It reads a line's frozen answers back as `optionSnapshots`
 than by a null product. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
 six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
 answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
-which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
-`options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
+which it has to, because leaving out an answer for an ACTIVE list on a line not yet sent refuses the
+whole edit with `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
 the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
-the server then freezes the new wording on that line, as it does for any other changed wording. What it will not
+the server then freezes the new wording on that line if it is not yet sent. What it will not
 do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
 tells the operator to open the line and choose again rather than substituting the list's own
-default.
+default — on a line not yet sent only (`#basketLinesOf`, `apps/till/src/till-app.ts`). The basket
+makes a sent line read-only (`#lineReadOnly`, `apps/till/src/widgets/basket.ts`) only when it could
+read which lines were sent; when it could not, a different answer picked on a sent line reaches the
+server as a change and is checked as one.
 
 ## What a till is offered
 
