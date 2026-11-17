@@ -812,6 +812,43 @@ back: on a phone, type the node recovery key on the waiting page and confirm: **
 A wrong key: **expect** the refusal line beside the field. (3) Again, pressing nothing: unblock UDP
 123 and report the time to placement. Report from the log the time from each press to placement.
 
+### As run on the test box, 2026-11-16 and 2026-11-17
+
+On the Debian 13 test box (192.168.10.10), lane B, with a Live venue kept pre-production by a
+`compose.override.yml` setting `WAITRON_ENV=dev` (`/setup-api/status` read "preproduction" before
+every restore and setup). Main a0316db9bc on 16 November; main 9911ca5ee9 on 17 November, after
+#3584. The firewall rules were `nft` drops on UDP 123 (and, for PR 4 (1), outbound TCP 443 off the
+local network), kept across reboots by a temporary boot unit; "reboot" is `sudo systemctl reboot`.
+Times are from the box log. Every check below was met; none found a defect except PR 3b2 (2) on
+16 November, fixed by #3584 and met on the re-run.
+
+| Check | Result |
+| --- | --- |
+| PR 4 (1): 443 blocked, UDP 123 open, reboot after "Restore backup" | Met: placed with no press, 8.3 s after the time service synchronised (65.6 s from the press, about 33 s of it rebooting) |
+| PR 4 (2) | Replaced by PR 3a (every series page asks): a laptop's matching time did not carry the page on; it asked for Confirm the time |
+| PR 4 (3): UDP 123 open, the laptop's clock 2 min fast (measured 120.0 s in the page), first setup | Met: no clock question; series named after the settle wait |
+| PR 3a: UDP 123 blocked, restore | Met: both times and Confirm the time, nothing chosen before the press; after a two-minute wait and the press, series named after the settle wait (about 2.5 min, `hour-selection.ts`'s settle step) |
+| PR 3a: UDP 123 blocked, first setup | Met: "Check that both times below are right before you press Proceed." with both times above Proceed; nothing chosen before the press |
+| PR 3a: UDP 123 unblocked, restore | Met: no Confirm the time |
+| PR 3a: the watcher's 23:00 example (a phone's handover page) | Not run: it needs a second box |
+| PR 3b1: UDP 123 blocked, Confirm, "Restore backup" | Met: placed 4.4 s after the press, same boot |
+| PR 3b2 (1): reboot with the restore page open | Met: the open page showed the clock step; other pages at the box's address showed the waiting page with the key field; `failures` 0 and no log line for ten minutes; one `server.start_waiting_for_clock`; Confirm the time to placement 11.2 s |
+| PR 3b2 (2): tab closed, a phone types the server key | 16 Nov: a wrong key got the refusal line, but the key as printed was refused too (the page compared the printed text with the decoded secret). Fixed by #3584. 17 Nov: met; the key typed as printed, spaces and line wrap included, led to the clock step; Confirm the time to placement 15.4 s |
+| PR 3b2 (3): press nothing, unblock UDP 123 | Met: placed 24.3 s after the unblock, 6.5 s after the time service synchronised |
+
+Seen on the way, none of them a failed expectation:
+- Each restore's own restart counts once in `recovery.json`'s `failures` (`server.boot_incomplete`)
+  and clears after a few healthy minutes; three quick restarts in a row put the box on its recovery page.
+- After a restore confirmed on the page while the time service is unsynchronised, the trading start
+  still waits for its own time confirmation (`clock_start.waiting`), as the start rule says.
+- The two times on a series page are drawn once and do not refresh while the page waits. When the two
+  readings fall in different minutes they are shown without seconds ("16:50" and "16:51"), which can
+  look like a minute's difference when the clocks agree to the second.
+- The settle wait reads "Waiting to confirm the time" even when the time service has confirmed it.
+- Nothing in the box log records a series being named on the setup page.
+- A backup made on 16 November could not be restored by 9911ca5ee9 (`migrations.apply_failed`; the
+  starting migrations were rebuilt in between), as expected before go-live.
+
 ## Size (estimates; production and tests apart)
 
 | PR | Production | Tests | Docs |
