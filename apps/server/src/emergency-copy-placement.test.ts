@@ -31,11 +31,17 @@ import { sha } from "./testing/place-copy-box.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 let root: string;
+let venueDir: string;
+let stateDir: string;
 let venuePath: string;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "emergency-copy-placement-"));
-  venuePath = join(root, "venue.db");
+  venueDir = join(root, "venue");
+  stateDir = join(root, "state");
+  await mkdir(venueDir);
+  await mkdir(stateDir);
+  venuePath = join(venueDir, "venue.db");
   await seedEmergencyCopySource(suite.db);
 });
 afterEach(async () => {
@@ -49,7 +55,7 @@ async function placedBinding(): Promise<EmergencyCopyBinding> {
 
 /** Immutable, so the probe sees only what reached node.db itself, never a `-wal` beside it. */
 async function readPlacedNode<T>(read: (node: NodeDatabase) => Promise<T>): Promise<T> {
-  const connection = openImmutable(join(root, "node.db"));
+  const connection = openImmutable(join(venueDir, "node.db"));
   try {
     return await read(
       drizzleNodeSqlite(connectionPair(connection, connection), {
@@ -61,8 +67,17 @@ async function readPlacedNode<T>(read: (node: NodeDatabase) => Promise<T>): Prom
   }
 }
 
+const listing = async (dir: string) => (await readdir(dir)).sort();
+
+/** `node.db` beside the venue file, the env files in the state folder, and no scratch left over. */
+async function expectPlacedLayout() {
+  expect(await listing(venueDir)).toEqual(["node.db", "venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual(["scratch", "secrets.env", "trading.env"]);
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+}
+
 const writtenRing = () =>
-  loadKeyRing(parseEnvFile(readFileSync(join(root, "secrets.env"), "utf8")));
+  loadKeyRing(parseEnvFile(readFileSync(join(stateDir, "secrets.env"), "utf8")));
 
 const beforeExpiry = () => new Date("2026-11-17T10:10:00.000Z");
 
@@ -73,8 +88,8 @@ function place(
 ) {
   return placeEmergencyCopy({
     binding,
-    venueDir: root,
-    stateDir: root,
+    venueDir,
+    stateDir,
     environment: "preproduction",
     processEnv,
     migrationsRoot: null,
@@ -90,6 +105,7 @@ it("a placed copy has its own key and the venue file is byte for byte the one Cl
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
   const key = await readPlacedNode((node) => readNodeSigningKey(node, writtenRing(), copyId));
   expect(key).toEqual(expect.any(String));
+  await expectPlacedLayout();
 });
 
 it("seals the key so it opens only under the copy's id and on the copy's own ring", async () => {
@@ -151,7 +167,7 @@ it("records the copy as a mirror, so no reader sees a box that sells", async () 
 it("names the copy in trading.env", async () => {
   const binding = await placedBinding();
   await place(binding);
-  expect(parseEnvFile(await readFile(join(root, "trading.env"), "utf8"))).toMatchObject({
+  expect(parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"))).toMatchObject({
     WAITRON_NODE_ID: copyId,
     WAITRON_ENV: "preproduction",
   });
@@ -179,37 +195,39 @@ it("leaves nothing beside the venue file when the check refuses it", async () =>
   await expect(place(bindingFor("0".repeat(64)))).rejects.toMatchObject({
     code: "emergency_copy.hash_mismatch",
   });
-  expect((await readdir(root)).sort()).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual([]);
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
 it("leaves no node.db beside the venue file when a write before the move fails", async () => {
   const binding = await placedBinding();
-  await mkdir(join(root, "secrets.env", "in-the-way"), { recursive: true });
+  await mkdir(join(stateDir, "secrets.env", "in-the-way"), { recursive: true });
   await expect(place(binding)).rejects.toThrow();
-  expect(existsSync(join(root, "node.db"))).toBe(false);
-  expect(await readdir(join(root, "scratch"))).toEqual([]);
+  expect(existsSync(join(venueDir, "node.db"))).toBe(false);
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
 it("refuses a trading.env naming another node, writing nothing", async () => {
   const binding = await placedBinding();
   const other = "WAITRON_NODE_ID=e7000000-0000-4000-8000-0000000000ff\n";
-  await writeFile(join(root, "trading.env"), other);
+  await writeFile(join(stateDir, "trading.env"), other);
   await expect(place(binding)).rejects.toMatchObject({
     code: "emergency_copy.trading_node_differs",
   });
-  expect((await readdir(root)).sort()).toEqual(["trading.env", "venue.db", "venue.lock"]);
-  expect(await readFile(join(root, "trading.env"), "utf8")).toBe(other);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual(["trading.env"]);
+  expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(other);
 });
 
 it("keeps a trading.env that already names the copy as it is", async () => {
   const binding = await placedBinding();
   const own = `WAITRON_NODE_ID=${copyId}\nWAITRON_ACCOUNT_KEY=kept\n`;
-  await writeFile(join(root, "trading.env"), own);
+  await writeFile(join(stateDir, "trading.env"), own);
   await place(binding);
-  expect(await readFile(join(root, "trading.env"), "utf8")).toBe(own);
-  expect(existsSync(join(root, "node.db"))).toBe(true);
+  expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
+  expect(existsSync(join(venueDir, "node.db"))).toBe(true);
 });
 
 it("refuses when this process's environment sets the vault key, which would win over the copy's ring", async () => {
@@ -220,13 +238,14 @@ it("refuses when this process's environment sets the vault key, which would win 
     code: "emergency_copy.vault_key_in_environment",
     params: { variables: ["WAITRON_CREDENTIALS_KEY"] },
   });
-  expect((await readdir(root)).sort()).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual([]);
 });
 
 const placedFiles = async () => ({
-  secrets: await readFile(join(root, "secrets.env")),
-  trading: await readFile(join(root, "trading.env")),
-  node: await readFile(join(root, "node.db")),
+  secrets: await readFile(join(stateDir, "secrets.env")),
+  trading: await readFile(join(stateDir, "trading.env")),
+  node: await readFile(join(venueDir, "node.db")),
 });
 
 it("a repeat with the same binding makes no new key and rewrites nothing", async () => {
@@ -242,6 +261,7 @@ it("a repeat with the same binding makes no new key and rewrites nothing", async
   await expect(place(binding)).resolves.toBeUndefined();
   expect(await placedFiles()).toEqual(before);
   expect(await publicKey()).toBe(keyBefore);
+  await expectPlacedLayout();
   expect(sha(venuePath)).toBe(binding.selectedStream.databaseSha256);
 });
 
@@ -277,11 +297,12 @@ it("refuses a binding that expires while the checks run, writing nothing", async
     code: "emergency_copy.binding_expired",
     params: { expiresAt: binding.expiresAt },
   });
-  expect((await readdir(root)).sort()).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(venueDir)).toEqual(["venue.db", "venue.lock"]);
+  expect(await listing(stateDir)).toEqual([]);
 });
 
 it("places a binding the checks finish a moment before it expires", async () => {
   const binding = await placedBinding();
   await place(binding, {}, clockMovedByTheCheck("2026-11-17T10:29:59.999Z"));
-  expect(existsSync(join(root, "node.db"))).toBe(true);
+  expect(existsSync(join(venueDir, "node.db"))).toBe(true);
 });
