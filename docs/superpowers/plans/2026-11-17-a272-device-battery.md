@@ -1,6 +1,6 @@
 # A272: device low-battery alerts
 
-**Status:** Claude-reviewed approach, corrected for its findings; watcher clearance pending. No owner approval of this design is claimed.
+**Status:** Corrections reread by Claude; watcher clearance pending. No owner approval of this design is claimed.
 **Authority:** Lane F `questions.md`, watcher 2026-11-17 17:33: “A272 (device low-battery alert) is eligible now: plan first.” Exact ask is A272 in that lane’s `queue.md`; it requests a battery alert, English/Spanish wording, one guide line per language, no database change, and backlog deletion.
 
 ## Usable result and reuse
@@ -13,13 +13,13 @@ A report is fresh through exactly 600,000 ms old, matching `devices-screen.ts:26
 
 ## Build and verify with failing tests first
 
-1. **Source owns decisions.** In `apps/server/src/alert-sources.test.ts`, use `useVenueDb`, the existing `seedDevice` (`@waitron/db/testing/seed.js`) and a fixed clock. Table-test 0/10/11/20/21%; test charging, never-reported, exactly ten minutes versus ten minutes plus 1 ms, inactive/deleted exclusion, distinct keys for two devices, and a stable key on rename. One reread after charging proves removal. Assert full alerts and source permission/area. Run `pnpm --filter @waitron/server exec vitest run src/alert-sources.test.ts -t deviceBatteryAlertSource`, observe failure, implement the factory in `apps/server/src/alert-sources.ts` and params in `apps/server/src/errors.ts`, then require a counted pass.
+1. **Source owns decisions.** In `apps/server/src/alert-sources.test.ts`, use `useVenueDb`, the existing `seedDevice` (`@waitron/db/testing/seed.js`) and a fixed clock; set battery fields by direct test-body updates. Table-test 0/10/11/20/21%; test charging, never-reported, exactly ten minutes versus ten minutes plus 1 ms, inactive/deleted exclusion, distinct keys for two devices, and a stable key on rename. One reread after charging proves removal. Assert full alerts and source permission/area. Run `pnpm --filter @waitron/server exec vitest run src/alert-sources.test.ts -t deviceBatteryAlertSource`, observe failure, implement the factory in `apps/server/src/alert-sources.ts` and params in `apps/server/src/errors.ts`, then require a counted pass.
 
 2. **Boot owns wiring.** Extend the existing Payments-Off fixture in `apps/server/src/boot.payments-off-alerts.test.ts`: seed a fresh low device before start and assert its full alert from `/management-api/alerts`, preserving absent-reader assertions. Run that file to fail, register the factory in `apps/server/src/boot.ts`, then rerun to pass. Its existing cases cover absent and retained Payments tables.
 
 3. **Dashboard owns wording/labels.** Add bilingual interpolation/charging-instruction cases in `apps/dashboard/src/i18n/alerts.test.ts` and area-label cases in `apps/dashboard/src/widgets/alert-format.test.ts`, restoring language afterwards. Run both to fail; add `device.battery_low` to `apps/dashboard/src/i18n/alert-messages.ts` and “Devices”/“Dispositivos” to `apps/dashboard/src/i18n/strings.ts`; rerun to pass. Wording names `{device}`, `{percent}` and says to charge it. Run `pnpm exec vitest run scripts/ongoing-alert-codes.test.ts scripts/alert-codes.test.ts` unchanged.
 
-4. **Guide and backlog.** No Devices guide exists on base `cac9f098`. Reuse the Devices-table paragraphs in `apps/server/src/guide/{en,es}/printers.md#printer-details`, as Claude recommends, with one actionable sentence: “When a low-battery alert names a device, charge it; if Devices has no recent battery reading, check its charge on the device itself.” Add its Spanish twin. Do not explain automatic threshold/charging decisions, per `conventions-ui.md:122–132`. Run existing server `src/guide-content.test.ts` and `src/guide-pages.test.ts`; inspect both rendered languages in both themes at phone width. Remove only A272’s backlog entry and adjoining spare blank line (three lines).
+4. **Guide and backlog.** No Devices guide exists on base `cac9f098`. Reuse the Devices-table paragraphs in `apps/server/src/guide/{en,es}/printers.md#printer-details`, as Claude recommends, after the existing Devices-table paragraph (EN line 53, ES line 58), with one actionable sentence: “If a device’s battery reading in **Devices** is grey, check its charge on the device itself.” Spanish: “Si la lectura de batería de un dispositivo en **Dispositivos** está en gris, comprueba su carga en el propio dispositivo.” Do not explain automatic threshold/charging decisions, per `conventions-ui.md:122–132`. Run existing server `src/guide-content.test.ts` and `src/guide-pages.test.ts`; inspect both rendered languages in both themes at phone width. Remove only A272’s backlog entry and adjoining spare blank line (three lines).
 
 ## Bounds and size
 
