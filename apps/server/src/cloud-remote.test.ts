@@ -326,14 +326,18 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
       "spareStorePort",
       "spareStoreLoopbackPort",
     ] as const) {
+      const ownLines: Parameters<Logger>[] = [];
       const conflict = startStaffListener(
         { staff: { host: "127.0.0.1", port }, stateDir: root, [ownPort]: port },
         app,
-        (...args) => lines.push(args),
+        (...args) => ownLines.push(args),
         async () => true,
       );
       try {
         expect(conflict).toBeUndefined();
+        expect(ownLines).toEqual([
+          ["warn", "server.listen_failed", { listener: "staff", port, code: "EADDRINUSE" }],
+        ]);
       } finally {
         await conflict?.close();
       }
