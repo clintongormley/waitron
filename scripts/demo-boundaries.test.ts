@@ -11,12 +11,17 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("typescript", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("typescript")>();
+  return { default: { ...actual.default } };
+});
 
 // Static edges and literal dynamic imports are followed; computed imports and bundler plugins are outside this source check.
 const ROOT = resolve(import.meta.dirname, "..");
 function runtimeImports(source: string): string[] {
-  const file = ts.createSourceFile("input.ts", source, ts.ScriptTarget.Latest, true);
+  const file = ts.createSourceFile("input.ts", source, ts.ScriptTarget.Latest, false);
   const found: string[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
@@ -278,4 +283,16 @@ it("allows browser type-only demo imports without reaching their data", () => {
       browserImportResolver(),
     ),
   ).toEqual([]);
+});
+
+it("parses runtime imports without allocating unused parent links", () => {
+  const parse = vi.spyOn(ts, "createSourceFile");
+  try {
+    expect(runtimeImports("import './helper.ts';")).toEqual(["./helper.ts"]);
+    expect(parse).toHaveBeenCalledOnce();
+    const parsed = parse.mock.results[0]!.value;
+    expect(parsed.statements[0]!.parent).toBeUndefined();
+  } finally {
+    parse.mockRestore();
+  }
 });

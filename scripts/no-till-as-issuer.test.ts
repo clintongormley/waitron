@@ -1,8 +1,14 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual };
+});
 import { useVenueDb } from "../packages/db/src/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
@@ -290,3 +296,29 @@ it.each(["deploy/example.json", "deploy/example.yml", "deploy/example.sh", "docs
     expect(inspectSource(path, '"A=1\\nWAITRON_NODE_ID=2"')).toEqual([]);
   },
 );
+
+it("does not read ignored histories or migrations beside a checked live document", () => {
+  const dir = mkdtempSync(join(tmpdir(), "issuer-ignored-read-"));
+  const live = "docs/operations/current.md";
+  const ignored = [
+    "docs/superpowers/plans/old.md",
+    "docs/compliance/asesor-questions.md",
+    "packages/fiscal-verifactu/drizzle/0000_baseline.sql",
+    "apps/server/drizzle/0000.sql",
+  ];
+  const read = vi.spyOn(fs, "readFileSync");
+  try {
+    for (const path of [live, ...ignored]) {
+      const full = join(dir, path);
+      mkdirSync(join(full, ".."), { recursive: true });
+      writeFileSync(full, command);
+    }
+    expect(sourceFilesIn(dir)).toEqual([live, ...ignored].sort());
+    read.mockClear();
+    expect(scanTree(dir)).toEqual([`${live}: retired ${command}`]);
+    expect(read.mock.calls.map(([path]) => String(path))).toEqual([join(dir, live)]);
+  } finally {
+    read.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

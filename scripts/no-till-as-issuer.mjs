@@ -62,7 +62,7 @@ const retiredIn = (text) => retiredSpellings.flatMap((pattern) => text.match(pat
 const escapeSequence =
   /\\(?:x([\dA-Fa-f]{2})|u\{([\dA-Fa-f]+)\}|u([\dA-Fa-f]{4})|([0-3][0-7]{0,2}|[4-7][0-7]?)|(\r\n|[\n\r\u2028\u2029])|([^]))/g;
 const singleEscapes = { b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" };
-function decodeEscapes(source) {
+export function decodeEscapes(source) {
   return source.replace(escapeSequence, (_, hex, braced, unicode, octal, lineBreak, other) => {
     if (lineBreak) return "";
     if (other) return singleEscapes[other] ?? (/[xu89]/.test(other) ? `\\${other}` : other);
@@ -72,13 +72,16 @@ function decodeEscapes(source) {
   });
 }
 
-export function inspectSource(path, source) {
-  if (
+function ignoredSource(path) {
+  return (
     path.startsWith("docs/superpowers/") ||
     historicalFiles.has(path) ||
     /^(?:packages|apps)\/[^/]+\/drizzle\//.test(path)
-  )
-    return [];
+  );
+}
+
+export function inspectSource(path, source) {
+  if (ignoredSource(path)) return [];
   const failures = [];
   const checkSpellings = (text) => {
     for (const spelling of retiredIn(text)) {
@@ -110,9 +113,9 @@ export function inspectSource(path, source) {
 }
 
 export function scanTree(root) {
-  return sourceFilesIn(root).flatMap((path) =>
-    inspectSource(path, readFileSync(join(root, path), "utf8")),
-  );
+  return sourceFilesIn(root)
+    .filter((path) => !ignoredSource(path))
+    .flatMap((path) => inspectSource(path, readFileSync(join(root, path), "utf8")));
 }
 
 export function inspectTables(tables) {
