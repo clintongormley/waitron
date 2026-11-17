@@ -6631,3 +6631,39 @@ it("refreshes live price unit labels after a content default change with the sam
     setLocale(before);
   }
 });
+
+it.each(
+  [390, 600, 700, 1280].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))),
+)(
+  "keeps category rename counts and routing marks before Actions ($width px, $locale)",
+  async ({ width, locale }) => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale(locale);
+    await page.viewport(width, 844);
+    const { el, table, root } = await mountTree({ unroutedFolderIds: ["d"] });
+    table.setExpanded("folder:d", true);
+    await table.updateComplete;
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await el.updateComplete;
+    await table.updateComplete;
+    await vi.waitFor(() =>
+      expect(root.querySelector('wt-input[name="category-name"]')).not.toBeNull(),
+    );
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width === 390));
+    await vi.waitFor(() => {
+      const row = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"]')!;
+      const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+      const selectors =
+        width === 390 ? '[data-test="unrouted-folder"]' : '[part~="name-after"] > span';
+      const markers = [...row.querySelectorAll<HTMLElement>(selectors)];
+      expect(markers).toHaveLength(width === 390 ? 1 : 2);
+      for (const marker of markers) {
+        const range = document.createRange();
+        range.selectNodeContents(marker);
+        for (const rect of range.getClientRects())
+          expect(rect.right).toBeLessThanOrEqual(pinned + 1);
+      }
+    });
+  },
+);

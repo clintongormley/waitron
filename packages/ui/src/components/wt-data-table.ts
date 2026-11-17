@@ -181,6 +181,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         flex-direction: column;
         min-width: 0;
         max-block-size: var(--wt-table-max);
+        --wt-table-cell-padding-inline: var(--wt-space-3);
       }
 
       .pagination {
@@ -273,6 +274,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       th,
       td {
         padding: var(--wt-space-3);
+        padding-inline: var(--wt-table-cell-padding-inline);
         border-bottom: 1px solid var(--wt-color-border);
         text-align: start;
         vertical-align: baseline;
@@ -778,7 +780,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       :host([narrow]) {
-        --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-3));
+        --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-table-cell-padding-inline));
       }
 
       .tree-toggle {

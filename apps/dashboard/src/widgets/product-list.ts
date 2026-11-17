@@ -148,6 +148,7 @@ export class ProductList extends LitElement {
       /* The name box's room is a flex basis; the phone's grid rule below still wins. */
       wt-data-table::part(naming) {
         display: flex;
+        max-inline-size: var(--name-room);
         align-items: center;
       }
       wt-data-table::part(folder-frame) {
@@ -802,7 +803,7 @@ export class ProductList extends LitElement {
     const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
     const names = [
       ...root.querySelectorAll<HTMLElement>(
-        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"], [part~="search-name-line"]',
+        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"], [part~="search-name-line"], [part~="naming"]',
       ),
     ];
     const fitted = box ? [...names, box] : names;

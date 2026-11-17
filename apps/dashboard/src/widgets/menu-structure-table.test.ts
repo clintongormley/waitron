@@ -767,7 +767,6 @@ it("focuses the empty box's first add when the menu is empty", async () => {
   }
 });
 
-/** Sixty characters and no space, so the table scrolls sideways to show it. */
 const LONG_MENU_NAME = "Lunch-menu-served-from-Monday-to-Friday-with-cake-and-coffee";
 
 it("keeps every row's menu on a phone's screen", async () => {
@@ -785,7 +784,7 @@ it("keeps every row's menu on a phone's screen", async () => {
     // Nine rows, the menu's own among them, fit in the phone's height, so each menu can be found
     // where it is drawn.
     expect(drawn(el)).toHaveLength(9);
-    expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]');
+    expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]', false);
     expect(inTable(el, '[data-test="actions-root"]')).not.toBeNull();
   } finally {
     await page.viewport(width, height);
@@ -3787,8 +3786,6 @@ describe("the menu's own row", () => {
     expect(marks().map((mark) => mark.closest("tr")!.dataset.rowKey)).toEqual(["m-drinks"]);
   });
 
-  // The table is as wide as its widest unbroken line until a filter locks its columns, so a name
-  // with no space scrolls the table rather than wrapping; the ⋮, pinned at the end, stays on screen.
   it("draws a long menu name whole inside its own cell on a phone, keeping its ⋮ on screen", async () => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -3825,6 +3822,8 @@ describe("the menu's own row", () => {
     try {
       await page.viewport(390, 844);
       const el = await mount({ menuName: LONG_MENU_NAME });
+      inTable(el, '[data-test="root-name"]')!.parentElement!.style.cssText =
+        "white-space: nowrap; display: inline-block";
       await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
       const count = inTable(el, '[data-test="count-root"]')!;
       expect(count.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
@@ -4606,3 +4605,90 @@ it("offers localized remembered column choices for waitron.menu-structure.table"
     setLocale(previous);
   }
 });
+
+it.each(
+  [390, 600, 700, 1280].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))),
+)(
+  "keeps long Structure names and availability readable before Actions ($width px, $locale)",
+  async ({ width, locale }) => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale(locale);
+    await page.viewport(width, 844);
+    const el = await mount({
+      menuName: "Weekday lunch from Monday to Friday with cakes and drinks included ".repeat(
+        width === 1280 ? 4 : 1,
+      ),
+      nodes: [{ ...drinksNode("m-drinks"), internalName: LONG_MENU_NAME }],
+      products: products.map((p) => ({
+        ...p,
+        name: "UnbrokenProductNameThatAManagerMustReadWithoutScrolling",
+      })),
+      current: ["m-drinks"],
+    });
+    await vi.waitFor(() => {
+      const root = table(el).shadowRoot!;
+      const scroll = root.querySelector<HTMLElement>(".scroll")!;
+      const pinned = root
+        .querySelector('thead th[data-pinned="end"]')!
+        .getBoundingClientRect().left;
+      const toggle = root.querySelector('tr[data-row-key="root"] .tree-toggle')!;
+      expect(
+        toggle.getBoundingClientRect().left,
+        "root toggle stays inside its cell",
+      ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
+      expect(getComputedStyle(toggle.closest("td")!).paddingInlineStart).toBe(
+        width === 390 ? "4px" : "12px",
+      );
+      expect(getComputedStyle(toggle).marginInlineStart).toBe(width === 390 ? "-4px" : "0px");
+      const treeCell = root.querySelector('[part~="tree-cell"]')!;
+      expect(
+        treeCell.children[1]!.getBoundingClientRect().left -
+          treeCell.closest("td")!.getBoundingClientRect().left,
+      ).toBe(width === 390 ? 44 : 56);
+      const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
+      expect(names.length).toBeGreaterThan(2);
+      if (width < 800) {
+        for (const name of names) {
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          for (const line of range.getClientRects()) {
+            expect(line.right, name.textContent!).toBeLessThanOrEqual(pinned + 1);
+            expect(line.width).toBeGreaterThan(0);
+          }
+        }
+        const heading = [...root.querySelectorAll("thead th")].find(
+          (th) => th.textContent!.trim() === t("editor.available"),
+        )!;
+        expect(heading).toBeDefined();
+        const range = document.createRange();
+        range.selectNodeContents(heading);
+        expect(range.getBoundingClientRect().right, "availability heading").toBeLessThanOrEqual(
+          pinned + 1,
+        );
+        for (const label of [heading, root.querySelector('thead th[data-pinned="end"]')!]) {
+          range.selectNodeContents(label);
+          const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+          expect(new Set(lines.map((rect) => rect.top)).size, label.textContent!).toBe(1);
+        }
+        expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+      } else {
+        expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+        const range = document.createRange();
+        range.selectNodeContents(names[0]!);
+        expect(new Set([...range.getClientRects()].map((rect) => rect.top)).size).toBe(1);
+      }
+    });
+    const menu = inTable(el, '[data-test="actions-root"]')!;
+    const trigger = menu.shadowRoot!.querySelector("button")!;
+    await vi.waitFor(() => {
+      const box = trigger.getBoundingClientRect();
+      expect(
+        trigger.contains(
+          menu.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+        ),
+        JSON.stringify({ x: box.x, y: box.y, width: box.width, height: box.height }),
+      ).toBe(true);
+    });
+  },
+);

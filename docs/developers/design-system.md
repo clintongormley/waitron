@@ -1546,7 +1546,11 @@ four start on one line, whether or not the state has a second line. Guards: the 
 Otherwise a table is never narrower than its headings and cell text laid out on one line, except
 where a cell caps its own width, and its box scrolls sideways when that is wider than the box. A table given `wrapToFit` (the `wrap-to-fit` attribute) lets its
 headings and cell text wrap at spaces first, so it scrolls only when even its longest words and its
-`white-space: nowrap` items do not fit. Guard: the `wrapToFit` case in
+`white-space: nowrap` items do not fit. Structure uses this below 800 px of table width, with
+anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults to
+`--wt-space-3`; Structure sets it to `--wt-space-1` at 440 px or less, for cells and the
+tree toggle’s reach, leaving vertical and toolbar spacing unchanged and the heading over the root name. The Menus
+list wraps below its wide layout. Products keeps its separately fitted names and default table scrolling. The primitive is checked by the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
 
 A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
@@ -1591,9 +1595,8 @@ queries on probe elements:
   line under the state in the Status cell, so wherever the state shows, the link is under it. A
   click on the Status cell's blank space opens nothing, as one beside the link under Changes does;
   a click on the link opens only its Preview tab. The name wraps within the list's width less three
-  `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. A long name can still make
-  the table wider than its box, and the end of the version's time then scrolls under the pinned
-  Actions column; the link stays in view. With Status its only movable column, this layout has no Customise
+  `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. Wrapping lets the name
+  column shrink further so the state and the live version's time stay before Actions. With Status its only movable column, this layout has no Customise
   columns button.
 - At `30rem` or less, the state and then the link stack under the name, as the variants table's
   prices do (above). A click on the Name cell's blank space opens nothing; the name's button, the
@@ -1603,14 +1606,10 @@ The two name widths come from container queries of their own rather than from th
 probes choose, so they already apply in the frame before the probes are read; set from the chosen
 layout, a 600 px list was briefly drawn with four columns and the wide width, and fitted its box.
 
-The breakpoint and the two widths were measured in Chromium with the names
-"Menú-del-mediodía-de-lunes-a-viernes-con-postre", "Menú del mediodía de lunes a viernes, con
-postre y bebida incluidos" and "Menúdelmediodíadelunesaviernesconpostreybebidaincluidos", in
-English and Spanish (W87, 2026-10-04): at 800 px the four columns needed at most 774 px of a 798 px
-box; at 600 px the link ended 18 px (Spanish) and 22 px (English) before the row menu while the
-table overflowed by 29 and 20 px. Guards: the "between the phone layout and a wide list" and "on a
-wide list" cases in `apps/dashboard/src/screens/menus-screen.test.ts`, which run at 600, 700, 790,
-816 and 1280 px only. The list keeps its column choices under `waitron.menus.list.table`, shared by
+The narrow and middle layouts' names, status and live time are checked at 390/600/700 px in
+English and Spanish by the "fits menu names, status and live time before Actions" cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`; its 1280 px cases keep the wide layout.
+The list keeps its column choices under `waitron.menus.list.table`, shared by
 the two wider layouts: a choice made on a wide list does not hide Status or the link in the middle
 layout, and applies again once the list is wide. The key changed when Changes was added, so a choice
 saved before it, when Status was the only movable column, is not read.
@@ -1776,8 +1775,8 @@ while a search is typed, even one that matches itself, and what passes the filte
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
 match's place is held open. A tree whose box is 440px wide or less indents each level
 `--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
-one cell padding (`--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
-`--wt-tap-min` wide by reaching back over the 12 px before it, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
+one cell padding (`--wt-table-cell-padding-inline`, normally `--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
+`--wt-tap-min` wide by reaching back over that padding, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
 whole; its focus ring is then drawn inside the button, because a top-level
 one can sit against the scrolling box's edge. The table publishes
 the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
@@ -2250,9 +2249,9 @@ category with no active station; a product's variant count), takes
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one
 line (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`). The box that names a new category
-or renames one is capped at the same room, though never below `--wt-tap-min`. The one exception,
-while the table does not carry `narrow`: while a category is being renamed, its count and asterisk
-follow the name box and are not capped. At phone width (while the table carries `narrow`) the name
+or renames one is capped at the same room, though never below `--wt-tap-min`. A category rename's
+whole naming row is also capped before Actions, so its count and asterisk wrap when needed.
+At phone width (while the table carries `narrow`) the name
 box of a category being renamed or added goes on a line of its own under the row's first slot
 instead, starting in the name column after the tree arrow,
 taking the room from there to the pinned cell. Keep the grip in its leading column and a renamed category's asterisk on

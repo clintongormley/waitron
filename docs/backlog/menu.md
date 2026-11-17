@@ -51,28 +51,10 @@ whether one rule should govern every menu price, and if so which — and check e
 form against it before changing the server, since a server stricter than its own form is the
 failure #485 met.
 
-## Menus list Changes column and top-aligned rows (W87, #1191): left open
-
-Left open by W87: between 30rem
-and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
-2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
-unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated one did not
-overflow), so the end of the live version's time scrolls under the pinned Actions column; the link
-and the row menu stay in view. The existing 600 px case "keeps every menu row's menu on screen and
-uncovered while the other columns scroll sideways" in
-`apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. The contrast of
-that link on a highlighted row is fixed (A306, #1336).
-
 ## A product has one colour everywhere (W92, #1250): left open
 
 Left open:
 
-- At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
-  swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
-  on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
-  _(2026-10-06, A294: a section's square now sits before its name, so this no longer applies to
-  sections — A294's look pass saw a long-named section's square at 390 px; a product's square still
-  trails its name, so it stays open for products)_.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
@@ -121,9 +103,7 @@ contract are in [design-system.md](../developers/design-system.md)._
 
 ## Products: Filters and Select at the start of the table's toolbar (W83, #1193): left open
 
-A desktop window narrow enough to leave the table under
-768px gets the full-screen panel — at which window width that happens with the sidebar shown was
-not measured. The 768px side-panel threshold is tied by hand to token sizes
+The 768px side-panel threshold is tied by hand to token sizes
 (768 − 7×44 − 12 = 448, just above the table's 440px narrow-tree width).
 
 ## Products at phone width: a long name runs under the pinned Actions column (W85b, W85c, W85e): left open
@@ -131,19 +111,13 @@ not measured. The 768px side-panel threshold is tied by hand to token sizes
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
-- Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
-  box and are not capped _(2026-10-05: since W72g only at desktop width; at phone width they sit on
-  the line above the box and wrap in what the grip and folder icon leave of the room before the
-  pinned column; since A294 the count is hidden at phone width, and the folder icon's slot is
-  blank)_.
 - The owner answered W85b's open point (a name got about 46 px at 390 px) "maybe (b) and (c)" (b:
   drop the product photo at phone width; c: narrow the tree's leading slots), and **W85e** (#1275,
   2026-10-06) did (b) and narrowed the arrow slot of (c). Categories kept their folder icon, so at
   phone width a product's name started one folder slot before a sibling category's. _(2026-10-06:
   A294 removed the folder icon, but its slot stays and holds the category's colour square, so at
   phone width a product's name still starts one slot before a sibling category's.)_ The grip and the
-  8 px indent step were left as they were. The Structure tree's long names still clip at 390 px
-  (W92's open point above).
+  8 px indent step were left as they were.
   Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
   folder icon too at phone width so product and category names line up again (since A294 that
   slot holds the category's colour square, so this now means moving or hiding the square); narrow the indent
@@ -325,22 +299,6 @@ the 2026-09-30 folders design; what remains:
   The case "leaves a menu out of also-on when its own matching change is its own setting" in
   `packages/menu/src/menu-publication.test.ts` pins today's answer.
 
-## In the real dashboard at a 390px window the table is 358px wide
-
-- Open: in the real dashboard at a 390px window the table is 358px wide (read once in the
-  dashboard's test browser; no test pins it). Whether one-word names keep their line there while no field shows a
-  range has not been measured; with the full 390px a longer word such as "Hamburguesa" (about
-  90px, against 76px kept for a name) breaks. Options for more room: less page padding on phones,
-  or a shorter Actions heading.
-
-## On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮
-
-- Open, believed to predate A348: on the Structure tab at 390px the tree's own box scrolls
-  sideways under the pinned ⋮, by design (`pinned: "end"`); in Spanish the Tipo column already
-  sat under Acciones before A348 (measured at the commit before it), and Disponible now sits
-  wholly behind it until the tree is scrolled. Letting long names wrap at narrow widths may free
-  the room; not tried.
-
 ## What #1151 left open (2026-10-03)
 
 - **A very long number is cut off in the narrower box.** The request check accepts up to
@@ -483,16 +441,6 @@ These are watcher-cleared plan decisions, not owner approval of the plan. The
 [online](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
 [paper](../superpowers/specs/2026-11-13-a670-printed-template-study.md) studies retain their dated proposals.
 
-## The Products tree's hidden counts may be placed against the page at narrow width
-
-**The Products tree's hidden counts may be placed against the page at narrow width** — not
-measured; left open by A453. At 440px or less the tree hides its counts visually
-(`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's
-Structure tab does. A453 found the Structure tab's hidden root count was positioned against the
-page, not the table's scroll box, and gave its root label `position: relative`; Products' root
-label has no such rule. **Next action:** measure at phone width with a long name before changing
-anything.
-
 ## A case the content-language decisions leave open, built with the plan's default unless the owner says otherwise
 
 **A case the content-language decisions leave open, built with the plan's default unless the owner
@@ -549,19 +497,6 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
   field it saved.
 
-## Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit product, #1408)
-
-- At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides tab.
-- In the real dashboard at a 390px window the table is 358px wide (read once in the dashboard's
-  test browser; no test pins it). Whether one-word names keep their line there while no field
-  shows a range has not been measured. Options for more room: less page padding on phones, or a
-  shorter Actions heading.
-  [Detail](menu.md#in-the-real-dashboard-at-a-390px-window-the-table-is-358px-wide)
-- On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮, by
-  design (`pinned: "end"`); in Spanish Disponible now sits wholly behind it until the tree is
-  scrolled. Letting long names wrap at narrow widths may free the room; not tried.
-  [Detail](menu.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
-
 ## Bundle: Dishes sold by measure and their extras
 
 3 entries, size M.
@@ -579,21 +514,13 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-7 entries, size M.
+4 entries, size M.
 
-- **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
-  [Detail](menu.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
-- **Loose ends left by W87 (#1191).**
-  [Detail](menu.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
 - **Other loose ends left by W92 (#1250).**
   [Detail](menu.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
 - **Products at phone width: what W85e left for the owner**
   [Detail](menu.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
-- **Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit
-  product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
-  tab.
-  [Detail](menu.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
-- **Products' full-screen Filters threshold remains unmeasured with the sidebar shown and tied to token sizes.**
+- **Products' full-screen Filters threshold is tied to token sizes.**
   [Detail](menu.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
@@ -683,6 +610,13 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- **WT-TABLE-NARROW, 2026-11-17:** Products' root count uses BODY as its positioning ancestor,
+  but long-name probes at 390/600/700 px in English and Spanish kept the page within its viewport.
+  At 390 px its right-edge x coordinate was 195 px in English and 250 px in Spanish. The watcher
+  cleared leaving its positioning alone. The real dashboard's Filters transition was measured
+  at 1099 px (full screen) and 1100 px (side panel), both languages; a 1024 px window's collapsed
+  sidebar also left room for the side panel. These measurements do not settle the token coupling.
 
 - **Folded customer names** (owner, 2026-10-04, W77/#1197): show every language's name, with inherited ones in italic. The Product editor's Descriptors section has a Name row saying “None specified” for a blank language by A211's decision; left as it is (asked of the owner, 2026-10-04).
 

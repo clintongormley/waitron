@@ -44,17 +44,20 @@ export async function mountInShadowRoot(html: string): Promise<HTMLElement> {
 }
 
 /**
- * Holds that `table` (a `wt-data-table`) is wider than its box, is unscrolled, and shows each of its
+ * Holds that `table` (a `wt-data-table`) is unscrolled and shows each of its
  * `rows` row menus inside the box and the window with nothing painted over the menu's button.
  * `menu` is the CSS selector for the row menu element the table renders.
+ * Unless `overflow` is false, also requires the table to be wider than its box.
  */
 export function expectRowMenusOnScreen(
   table: Element,
   rows: number,
   menu = "wt-row-actions",
+  overflow = true,
 ): void {
   const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  if (overflow)
+    expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
   expect(scroll.scrollLeft).toBe(0);
   const box = scroll.getBoundingClientRect();
   const menus = [...table.shadowRoot!.querySelectorAll(menu)];

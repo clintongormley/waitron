@@ -2577,6 +2577,7 @@ export class MenusScreen extends LitElement {
                 searchLabel=${t("menus.search")}
                 data-test="menus"
                 class=${this.layout}
+                .wrapToFit=${this.layout !== "wide"}
                 aria-label=${t("menus.title")}
                 top-aligned
                 viewKey="waitron.menus.list.table"
