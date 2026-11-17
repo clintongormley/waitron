@@ -1,3 +1,4 @@
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp, cancelItemRequest } from "./testing/cancel-line.js";
@@ -51,7 +52,7 @@ import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@w
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import {
   cardReaders,
   insertCapturedPayment,
@@ -228,8 +229,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -264,7 +265,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await seedPersons(tx, {
       displayName: "Ann",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     const [profile] = await seedDeviceProfiles(tx, {
@@ -3969,7 +3970,7 @@ describe("who can approve a refund (GET /api/refund-authorizers)", () => {
     const [person] = await inTx((tx) =>
       seedPersons(tx, {
         displayName: `${role}-${randomUUID().slice(0, 8)}`,
-        pinHash: hashPin("5555"),
+        pinHash: fixturePinHash("5555"),
         role,
         status: status as "active" | "suspended",
       }),
@@ -5457,14 +5458,14 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
         .update(persons)
         .set({
           ...(values.status === undefined ? {} : { status: values.status }),
-          ...(values.pin === undefined ? {} : { pinHash: hashPin(values.pin) }),
+          ...(values.pin === undefined ? {} : { pinHash: fixturePinHash(values.pin) }),
         })
         .where(eq(persons.id, venue.adminId)),
     );
   }
 
   it("gives unknown, suspended and wrong-PIN refund overrides one answer and one derivation", async () => {
-    const pinHash = hashPin("5555");
+    const pinHash = fixturePinHash("5555");
     const [suspended, active] = await inTx((tx) =>
       seedPersons(tx, [
         { displayName: "Suspended refund manager", role: "manager", status: "suspended", pinHash },
@@ -5496,7 +5497,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
   });
 
   it("gives unknown, suspended and wrong-PIN manual-refund confirmers one answer and one derivation", async () => {
-    const pinHash = hashPin("5555");
+    const pinHash = fixturePinHash("5555");
     const [suspended, active] = await inTx((tx) =>
       seedPersons(tx, [
         { displayName: "Suspended confirmer", role: "manager", status: "suspended", pinHash },

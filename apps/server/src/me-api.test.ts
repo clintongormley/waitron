@@ -1,3 +1,4 @@
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -13,11 +14,9 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  hashPin,
   registerModulePermissions,
   startManagementSession,
   encryptTotpSecret,
-  hashPassword,
   hashSessionToken,
   persons,
   verifyPin,
@@ -71,25 +70,25 @@ const suite = useVenueDb({
     });
     const [meRow] = await seedPersons(db, {
       displayName: "Me",
-      pinHash: hashPin("1111"),
+      pinHash: fixturePinHash("1111"),
       role: "staff",
     });
     me = meRow!.id;
     const [colRow] = await seedPersons(db, {
       displayName: "Colleague",
-      pinHash: hashPin("2222"),
+      pinHash: fixturePinHash("2222"),
       role: "staff",
     });
     colleague = colRow!.id;
     const [mgrRow] = await seedPersons(db, {
       displayName: "Manager",
-      pinHash: hashPin("3333"),
+      pinHash: fixturePinHash("3333"),
       role: "manager",
     });
     manager = mgrRow!.id;
     const [localedRow] = await seedPersons(db, {
       displayName: "Localed",
-      pinHash: hashPin("4444"),
+      pinHash: fixturePinHash("4444"),
       role: "staff",
       locale: "es-ES",
     });
@@ -441,7 +440,7 @@ describe("mountMeApi — profile credentials", () => {
     const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
     await suite.db.execute(sql`
       update persons
-      set password_hash=${hashPassword("current password")},
+      set password_hash=${fixturePasswordHash("current password")},
           totp_secret=${encryptTotpSecret(secret, PROFILE_KEY_RING.current)}
       where id=${me}`);
 
@@ -459,7 +458,7 @@ describe("mountMeApi — profile credentials", () => {
   it("keeps the old login email until the code sent to the replacement is confirmed", async () => {
     await suite.db.execute(sql`
       update persons set email='old@example.com', pending_email=null,
-        password_hash=${hashPassword("current password")}, totp_secret=null where id=${me}`);
+        password_hash=${fixturePasswordHash("current password")}, totp_secret=null where id=${me}`);
     const sent: string[] = [];
     const codeKey = Buffer.alloc(32, 21);
     const app = mountApp({
@@ -1011,7 +1010,7 @@ describe("mountMeApi — set your own locale", () => {
   async function freshPerson(pin: string): Promise<string> {
     const [row] = await seedPersons(suite.db, {
       displayName: "Locale User",
-      pinHash: hashPin(pin),
+      pinHash: fixturePinHash(pin),
       role: "staff",
     });
     return row!.id;
@@ -1127,9 +1126,9 @@ describe("mountMeApi — own credentials and second factor", () => {
     personCount += 1;
     const [row] = await seedPersons(suite.db, {
       displayName: `Credential User ${personCount}`,
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: fixturePasswordHash(PASSWORD),
       ...extra,
     });
     return row!.id;
@@ -1456,9 +1455,9 @@ describe("mountMeApi — account request refusal ordering", () => {
     const [row] = await seedPersons(suite.db, {
       displayName: `Lock User ${count}`,
       email: `lock-user-${count}@example.com`,
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: fixturePasswordHash(PASSWORD),
       googleSubject: `google-lock-user-${count}`,
     });
     return row!.id;
@@ -1575,7 +1574,7 @@ describe("session proof routes", () => {
     const cookie = await cookieFor(manager);
     await suite.db
       .update(persons)
-      .set({ passwordHash: hashPassword("fresh password") })
+      .set({ passwordHash: fixturePasswordHash("fresh password") })
       .where(eq(persons.id, manager));
     const app = mountApp();
     const path = "/management-api/session/me/fresh-sign-in";
@@ -1601,7 +1600,7 @@ describe("session proof routes", () => {
     const cookie = await cookieFor(manager);
     await suite.db
       .update(persons)
-      .set({ passwordHash: hashPassword("fresh password") })
+      .set({ passwordHash: fixturePasswordHash("fresh password") })
       .where(eq(persons.id, manager));
     // A chart with no body: listing its servers throws, as any failed chart read would.
     await writeNodeMembership(suite.db, { body: null } as never);
@@ -1633,7 +1632,7 @@ describe("session proof routes", () => {
   it("answers 409 when the signed-in person asks for passkey options with none registered", async () => {
     const [row] = await seedPersons(suite.db, {
       displayName: "No Passkey",
-      pinHash: hashPin("6666"),
+      pinHash: fixturePinHash("6666"),
       role: "staff",
     });
     const response = await send(

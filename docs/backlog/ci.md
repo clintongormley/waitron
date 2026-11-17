@@ -272,15 +272,6 @@ Investigate the monitor's observed phase timing and its
 missing diagnostic match separately from the mutation fixture's elapsed-time limit. The new
 failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
-## IPP timing fixture completion after its wait fails
-
-A1251’s review of the #2092 cleanup repair observed no print outcome for the 2100 ms reply
-case before the rest of the suite finished. A driver probe observed the same absence on the
-repair’s parent, while both ordinary reply variants logged their outcomes. Check whether the
-fixture must abort and await that call during teardown. Those runs did not establish whether it
-sends any further requests after the fake printer closes or retains a live resource; do not
-infer either from the missing outcome alone.
-
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
@@ -382,7 +373,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 
-3 entries, size L. The fixed-secret entry covers held, unconverted and uninspected setup.
+3 entries, size L. The fixed-secret entry covers uninspected setup.
 
 - **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
@@ -390,7 +381,7 @@ supply no full-day queue or speed result. Keep the corrected v41 controller and 
 - **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
   the remaining wider memo work stays open.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
-- **Finish reusing fixed-secret hashes in remaining server test setup.**
+- **Inspect other repeated stored-secret setup.**
   [Detail](ci.md#finish-reusing-fixed-secret-hashes-in-remaining-server-test-setup).
 
 ## Bundle: Vitest settings: remaining measurements
@@ -964,17 +955,7 @@ cause is thin ground for a house rule. The owner decides.
 
 ## Finish reusing fixed-secret hashes in remaining server test setup
 
-Use `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
-for the remaining repeated stored-secret setup; keep hashing-subject tests and real sign-in
-checks unchanged. Another inspected subset is needed: the broad search also includes setup run
-once per file and tests about hashing. Find candidates with `rg -l 'hashPin\(|hashPassword\(' apps/server
--g '*.test.ts' -g '**/testing/**'`, then inspect their call sites.
-
-Unconverted files include `src/till-api.test.ts`, `src/me-api.test.ts`,
-`src/bill-payments-api.test.ts`, `src/personal-data-export-api.workforce.test.ts`
-and `src/device-zones-api.test.ts`. Convert their stored-secret setup after the sign-in
-refactor lands; keep their real sign-in and verification calls.
-
+Inspect candidates from `rg -l 'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'` for repeated stored-secret setup that can reuse `fixturePinHash`/`fixturePasswordHash` in `apps/server/src/testing/known-secret-hashes.ts`, keeping hashing-subject tests and real sign-in/verification calls unchanged.
 
 ## `packages/db`'s static mutants are not in its mutation score
 

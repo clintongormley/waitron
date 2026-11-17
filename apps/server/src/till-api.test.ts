@@ -1,3 +1,4 @@
+import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
@@ -48,11 +49,9 @@ import {
 import {
   createPinThrottle,
   deactivatePerson,
-  hashPassword,
   deviceProfileAdmissionRoles,
   endSession,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
-  hashPin,
   hashSessionToken,
   loginWithPin,
   persons,
@@ -182,23 +181,22 @@ const suite = useVenueDb({
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
-    // Anna's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const [person] = await seedPersons(db, {
       displayName: "Anna",
-      pinHash: hashPin("5555"),
+      pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     anna = { id: person!.id };
     // Abel: ACTIVE, inserted after Anna but sorts before her. Zoe: SUSPENDED, must be excluded.
     const [abelRow] = await seedPersons(db, {
       displayName: "Abel",
-      pinHash: hashPin("1111"),
+      pinHash: fixturePinHash("1111"),
       role: "staff",
     });
     abel = { id: abelRow!.id };
     await seedPersons(db, {
       displayName: "Zoe",
-      pinHash: hashPin("2222"),
+      pinHash: fixturePinHash("2222"),
       role: "staff",
       status: "suspended",
     });
@@ -465,7 +463,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const [mgr] = await seedPersons(suite.db, {
       displayName: "Martha",
-      pinHash: hashPin("9999"),
+      pinHash: fixturePinHash("9999"),
       role: "manager",
     });
     const managerId = mgr!.id;
@@ -496,7 +494,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const [row] = await seedPersons(suite.db, {
       displayName: "Beatrice",
-      pinHash: hashPin("7777"),
+      pinHash: fixturePinHash("7777"),
       role: "staff",
       locale: "en-GB",
     });
@@ -1336,15 +1334,15 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     const deviceId = await seedSessionDevice(suite.db);
     const [admin] = await seedPersons(suite.db, {
       displayName: "Admin",
-      pinHash: hashPin("8181"),
-      passwordHash: hashPassword("admin password"),
+      pinHash: fixturePinHash("8181"),
+      passwordHash: fixturePasswordHash("admin password"),
       role: "admin",
     });
     let token: string;
     try {
       const [leaver] = await seedPersons(suite.db, {
         displayName: "Leaver",
-        pinHash: hashPin("8282"),
+        pinHash: fixturePinHash("8282"),
         role: "staff",
       });
       ({ token } = await withTransaction(suite.db, (tx) =>
@@ -1428,7 +1426,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   async function loginFresh(pin: string): Promise<{ personId: string; token: string }> {
     const [row] = await seedPersons(suite.db, {
       displayName: "Locale User",
-      pinHash: hashPin(pin),
+      pinHash: fixturePinHash(pin),
       role: "staff",
     });
     const personId = row!.id;
