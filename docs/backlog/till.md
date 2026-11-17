@@ -1421,11 +1421,8 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 
 ## Bundle: One rule for a booking when the evening's layout changes
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out
-  its target the slow way, and smaller gaps. Left open by A429 slice 4 (#1526).
-  [Detail](till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 - **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
   plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part.
   Next: decide whether the save refuses it, as a delete is refused, or only warns.
@@ -1433,6 +1430,7 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 - **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Nothing compares
   the table with the layout due at the booking's time.
   [Detail](till.md#a857-a-booking-can-take-a-table-the-evenings-layout-puts-away-2026-10-18)
+
 ## Bundle: What an open till picks up from a setup change
 
 1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).

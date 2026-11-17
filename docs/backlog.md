@@ -769,7 +769,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   today's row.
   [Detail](backlog/till.md#loose-ends-left-by-a429-slice-5)
 
-- **One rule for a booking when the evening's layout changes** (bundle of 3, 1 important, size M, needs the owner). Holds A474, A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
+- **One rule for a booking when the evening's layout changes** (bundle of 2, size S, needs the owner). Holds A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
+
+- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out
+  its target the slow way, and smaller gaps. Left open by A429 slice 4 (#1526).
+  [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
 
