@@ -216,6 +216,34 @@ describe("approveCorrection", () => {
     ).rejects.toMatchObject({ code: "correction.invalid", params: { reason: "unmatched_out" } });
   });
 
+  it("refuses to move a later shift's clock-out onto the earlier reversed shift", async () => {
+    const personId = await seedPerson(suite.db, "later shift after step");
+    await run((tx) => backend.clockIn(tx, event(personId, "2026-01-05T21:00:00Z")));
+    await run((tx) => backend.clockOut(tx, event(personId, "2026-01-05T20:30:00Z")));
+    await run((tx) => backend.clockIn(tx, event(personId, "2026-01-07T09:00:00Z")));
+    await run((tx) => backend.clockOut(tx, event(personId, "2026-01-07T17:00:00Z")));
+    const { rows } = await suite.db.execute<{ id: string }>(sql`
+      select id from time_entries
+      where person_id = ${personId} and event_at = '2026-01-07T17:00:00.000Z'
+    `);
+    const outEntryId = rows[0]!.id;
+
+    await expect(
+      run((tx) =>
+        backend.requestCorrection(tx, {
+          nodeId,
+          correctsEntryId: outEntryId,
+          at: "2026-01-07T08:00:00Z",
+          offsetMinutes: 0,
+          reason: "Wrong time",
+          actorPersonId: personId,
+          origin: jobOrigin("dashboard"),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "correction.invalid", params: { reason: "unmatched_out" } });
+    expect(await workedMinutes(personId)).toBe(480);
+  });
+
   it("records the request where it was captured and the approval as the dashboard's", async () => {
     const { personId, outEntryId } = await nineToFive("appr-origin");
     const sup = await supervisor("appr-origin-sup");

@@ -217,7 +217,10 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 The owner chose “Small fix (Recommended)” in the watcher window on 18 November 2026 at 10:13 CET,
 as recorded in Lane I’s questions. A correction can go through when the worker’s record already
-contains a sequence fault. Waitron still refuses a new fault introduced by the correction.
+contains a sequence fault. Waitron still refuses a new fault introduced by the correction,
+including a clock-out retime that leaves a completed shift open. A missing shift in the gap
+after a reversed shift can still be refused when the reversed shift's clock-in looks open
+(watcher, 18 November 2026 at 11:31 CET).
 
 Hours still pair by the recorded times. A shift whose clock-out sorts before its clock-in can be
 missing from hours until you correct the recorded time.

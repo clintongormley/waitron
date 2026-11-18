@@ -93,17 +93,23 @@ export async function recordEntryById(tx: Transaction, id: string): Promise<Time
 function correctionInvalid(reason: string): never {
   throw new AppError("correction.invalid", { reason });
 }
-function sequenceFaults(entries: readonly TimeEntryRecord[]): Map<string, string> {
+function scanSequence(entries: readonly TimeEntryRecord[]) {
   const faults = new Map<string, string>();
+  const completedStarts = new Set<string>();
+  let latestStart: string | undefined;
   let state: "out" | "working" | "on_break" = "out";
   for (const e of [...entries].sort(compareEvents)) {
     if (e.entryKind === "in") {
+      // Hours use the latest clock-in even when the validator sees a duplicate.
+      latestStart = e.entryId;
       if (state !== "out") faults.set(e.entryId, "duplicate_in");
       else state = "working";
     }
     if (e.entryKind === "out") {
       if (state === "out") faults.set(e.entryId, "unmatched_out");
       else state = "out";
+      if (latestStart !== undefined) completedStarts.add(latestStart);
+      latestStart = undefined;
     }
     if (e.entryKind === "break_start") {
       if (state !== "working") faults.set(e.entryId, "unmatched_break_start");
@@ -114,17 +120,23 @@ function sequenceFaults(entries: readonly TimeEntryRecord[]): Map<string, string
       else state = "working";
     }
   }
-  return faults;
+  return { faults, completedStarts };
 }
 function validateSequenceChange(
   before: readonly TimeEntryRecord[],
   after: readonly TimeEntryRecord[],
+  retimesClockOut = false,
 ): void {
-  const faults = sequenceFaults(after);
-  if (faults.size === 0) return;
-  const existing = sequenceFaults(before);
-  for (const [entryId, reason] of faults) {
-    if (existing.get(entryId) !== reason) correctionInvalid(reason);
+  const candidate = scanSequence(after);
+  if (candidate.faults.size === 0) return;
+  const existing = scanSequence(before);
+  for (const [entryId, reason] of candidate.faults) {
+    if (existing.faults.get(entryId) !== reason) correctionInvalid(reason);
+  }
+  if (retimesClockOut) {
+    for (const start of existing.completedStarts) {
+      if (!candidate.completedStarts.has(start)) correctionInvalid("unmatched_out");
+    }
   }
 }
 function isMissingPair(requests: readonly TimeEntryRecord[]): boolean {
@@ -197,10 +209,11 @@ export function correctionGroupCanApply(
     additions.push({ ...request, entryId: target?.entryId ?? request.entryId, entryKind: kind });
   }
   try {
-    validateSequenceChange(effective, [
-      ...effective.filter((e) => !targets.has(e.entryId)),
-      ...additions,
-    ]);
+    validateSequenceChange(
+      effective,
+      [...effective.filter((e) => !targets.has(e.entryId)), ...additions],
+      additions.some((entry) => entry.correctsEntryId && entry.entryKind === "out"),
+    );
     return true;
   } catch (error) {
     if (error instanceof AppError && error.code === "correction.invalid") return false;
@@ -222,6 +235,7 @@ function validateChange(
       effective.map((e) =>
         e === target ? { ...e, eventAt: change.eventAt, offsetMinutes: change.offsetMinutes } : e,
       ),
+      target.entryKind === "out",
     );
   } else {
     if (!settling && effective.length === 0 && change.extension?.missingEntryKind !== "in") return;
