@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { CORE_MIGRATIONS, printAgents, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -220,9 +220,13 @@ describe("runAgentOnce (pull → push → report)", () => {
     }
   });
 
-  it("retries a failed job on a later run, up to the attempt cap", async () => {
+  it("delivers a failed job on a later run once its retry is due", async () => {
     await setup();
     const agentId = await seedAgent();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([7]));
@@ -236,6 +240,7 @@ describe("runAgentOnce (pull → push → report)", () => {
       expect(await jobRow(tx, jobId).then((r) => r.status)).toBe("failed");
       expect(await jobRow(tx, jobId).then((r) => r.attempts)).toBe(1);
 
+      vi.setSystemTime(Date.now() + 5_000);
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,

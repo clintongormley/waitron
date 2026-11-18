@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1e662249-f67c-4a8c-b187-c55c97353785",
+  "id": "0cb38c47-b72f-43be-b70e-cf0c0aa4fb8d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5659,8 +5659,15 @@
           "notNull": false,
           "autoincrement": false
         },
-        "receipt_handover": {
-          "name": "receipt_handover",
+        "handed_over_by": {
+          "name": "handed_over_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "handed_over_at": {
+          "name": "handed_over_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -5684,6 +5691,13 @@
         },
         "last_error": {
           "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -5791,6 +5805,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "print_jobs_handed_over_by_persons_id_fk": {
+          "name": "print_jobs_handed_over_by_persons_id_fk",
+          "tableFrom": "print_jobs",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "handed_over_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "print_jobs_resend_of_print_jobs_id_fk": {
           "name": "print_jobs_resend_of_print_jobs_id_fk",
           "tableFrom": "print_jobs",
@@ -5841,6 +5868,10 @@
         "print_jobs_status_ck": {
           "name": "print_jobs_status_ck",
           "value": "\"print_jobs\".\"status\" in ('queued', 'printing', 'done', 'failed')"
+        },
+        "print_jobs_handover_pair_ck": {
+          "name": "print_jobs_handover_pair_ck",
+          "value": "(\"print_jobs\".\"handed_over_by\" is null) = (\"print_jobs\".\"handed_over_at\" is null)"
         }
       }
     },

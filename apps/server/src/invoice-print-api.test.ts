@@ -4,7 +4,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
@@ -586,12 +586,17 @@ describe("invoice receipt API attempt boundary", () => {
     const pulled = await ctx.pull();
     expect(pulled.map((job) => job.id)).toEqual([ordinary.jobId]);
     expect(pulled[0]).not.toHaveProperty("invoiceClaim");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     expect(
       (await ctx.result({ status: "failed", error: "printer offline" }, ordinary.jobId)).status,
     ).toBe(204);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
     ).toMatchObject({ status: "failed", attempts: 1, lastError: "printer offline" });
+    vi.setSystemTime(Date.now() + 5_000);
     const retry = await ctx.pull();
     expect(retry.map((job) => job.id)).toEqual([ordinary.jobId]);
     expect(retry[0]).not.toHaveProperty("invoiceClaim");

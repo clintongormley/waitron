@@ -886,10 +886,12 @@ CREATE TABLE `print_jobs` (
 	`payload` blob NOT NULL,
 	`kind` text DEFAULT 'document' NOT NULL,
 	`receipt_copy` integer,
-	`receipt_handover` text,
+	`handed_over_by` text,
+	`handed_over_at` text,
 	`status` text DEFAULT 'queued' NOT NULL,
 	`attempts` integer DEFAULT 0 NOT NULL,
 	`last_error` text,
+	`next_attempt_at` text,
 	`created_at` text NOT NULL,
 	`claimed_at` text,
 	`delivered_at` text,
@@ -898,11 +900,13 @@ CREATE TABLE `print_jobs` (
 	`tender_refund_id` text,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`claimed_by`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`handed_over_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`resend_of`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer')),
-	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed'))
+	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed')),
+	CONSTRAINT "print_jobs_handover_pair_ck" CHECK(("print_jobs"."handed_over_by" is null) = ("print_jobs"."handed_over_at" is null))
 );
 --> statement-breakpoint
 CREATE INDEX `print_jobs_pull_idx` ON `print_jobs` (`printer_id`,`status`);--> statement-breakpoint

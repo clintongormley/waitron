@@ -871,8 +871,10 @@ also qualifies the historical operation-description references in this section.
   A one-box till pauses primary-server probes while its
   device connection is ready and the last probe found a primary, resuming immediately when it drops;
   lists with more than one box keep probing and handing on membership charts.
-  The print agent waits on held requests for receipt and office-print work. Drawer expiry and
-  claim leases shorten that wait; pending page work and discovery retain their two-second cadence.
+  The print agent waits on held requests for receipt and office-print work. Drawer expiry,
+  claim leases and a document's next retry can shorten that wait. Pending page work and discovery
+  retain their two-second cadence. Receipt handover records the staff member and time on the print
+  job.
   Handhelds and kitchen displays keep timed reads under
   jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
   jr13's SIGSTOP probe is a stand-in only. 111 product
@@ -941,8 +943,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
-- Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
-  burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
 - **Finish the remaining person-id foreign keys.**
   Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
   (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another

@@ -103,7 +103,7 @@ export const PRINT_JOB_MOVED = "print_job.moved";
 export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<boolean> {
   const ended = await tx.execute<{ id: string }>(sql`
     update print_jobs set status = 'failed', attempts = ${MAX_DELIVERY_ATTEMPTS},
-      last_error = ${PRINT_JOB_MOVED}
+      last_error = ${PRINT_JOB_MOVED}, next_attempt_at = null
     where id = ${jobId} and kind = 'document'
       and (status = 'queued' or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))
     returning id`);

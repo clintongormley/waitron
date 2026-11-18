@@ -472,7 +472,8 @@ export async function readOriginalReceiptPrints(
       attempts: printJobs.attempts,
       kind: printJobs.kind,
       lastError: printJobs.lastError,
-      handover: printJobs.receiptHandover,
+      handedOverBy: printJobs.handedOverBy,
+      handedOverAt: printJobs.handedOverAt,
       printerDeletedAt: printers.deletedAt,
     })
     .from(printJobs)
@@ -502,21 +503,24 @@ function originalReceiptOf(
     attempts: number;
     kind: "document" | "drawer";
     lastError: string | null;
-    handover: { personId: string; confirmedAt: string } | null;
+    handedOverBy: string | null;
+    handedOverAt: string | null;
     printerDeletedAt: string | null;
   }[],
 ): OriginalReceiptPrint {
   // A completed original attempt remains complete even if a later resend fails.
   const job = jobs.find((candidate) => candidate.status === "done") ?? jobs[0];
   if (job === undefined) return { status: "not_queued" };
-  const handover = jobs.find((candidate) => candidate.handover !== null)?.handover;
+  const handedOver = jobs.find((candidate) => candidate.handedOverBy !== null);
   const targetDeleted = job.printerDeletedAt !== null;
   return {
     status: job.status,
     jobId: job.id,
     canRetry: job.status === "failed" && !targetDeleted && canResendPrintJob(job),
     ...(job.status === "failed" && targetDeleted ? { failureCode: PRINTER_DELETED } : {}),
-    ...(handover == null ? {} : { handover }),
+    ...(handedOver
+      ? { handover: { personId: handedOver.handedOverBy!, confirmedAt: handedOver.handedOverAt! } }
+      : {}),
   };
 }
 
@@ -531,7 +535,8 @@ export async function confirmReceiptHandover(
   await tx
     .update(printJobs)
     .set({
-      receiptHandover: { personId, confirmedAt: new Date().toISOString() },
+      handedOverBy: personId,
+      handedOverAt: new Date().toISOString(),
     })
     .where(eq(printJobs.id, original.jobId));
   return readOriginalReceiptPrint(tx, saleId);

@@ -865,7 +865,6 @@ describe("receipt delivery reservation", () => {
     expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
       status: "done",
       receiptCopy: false,
-      receiptHandover: null,
     });
   });
 
@@ -894,11 +893,9 @@ describe("receipt delivery reservation", () => {
   it("correlates the existing queued original without another job or handover snapshot", async () => {
     const sale = await issue();
     const job = await receiptJob(sale.saleId);
-    const handover = { personId: "staff-two", confirmedAt: "2026-10-07T12:00:00.000Z" };
-    await suite.db
-      .update(printJobs)
-      .set({ receiptHandover: handover })
-      .where(eq(printJobs.id, job.jobId));
+    await seedPerson(suite.db, { id: "staff-two", displayName: "Receipt handover staff" });
+    const handover = { handedOverBy: "staff-two", handedOverAt: "2026-10-07T12:00:00.000Z" };
+    await suite.db.update(printJobs).set(handover).where(eq(printJobs.id, job.jobId));
     const input = request(job.jobId);
     const delivery = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, input),
@@ -917,7 +914,7 @@ describe("receipt delivery reservation", () => {
     expect(replay.id).toBe(delivery.id);
     expect(await rows()).toHaveLength(1);
     expect(await suite.db.select().from(printJobs)).toMatchObject([
-      { id: job.jobId, status: "queued", receiptHandover: handover, receiptCopy: false },
+      { id: job.jobId, status: "queued", ...handover, receiptCopy: false },
     ]);
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
@@ -1145,7 +1142,6 @@ describe("receipt delivery reservation", () => {
       const [job] = await suite.db.select().from(printJobs);
       expect(job).toMatchObject({
         status: status === "sent" ? "done" : "failed",
-        receiptHandover: null,
         attempts: status === "sent" ? 0 : 5,
         deliveredAt: status === "sent" ? start.toISOString() : null,
         lastError: status === "sent" ? null : "transport_failed",

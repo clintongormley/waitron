@@ -349,6 +349,10 @@ trigger on `devices` (§1.1) and the writers of the JSON lists.
 
 ### 1.7 `print_jobs` — `state`, not append-only (an outbox)
 
+**2026-11-18, dv11 Part A.** Ordinary receipt-printer documents have a `next_attempt_at` for
+automatic retry. The invoice queue discussion below predates that change. See the
+[dv11 plan](../../plans/2026-11-08-a1308-dv11-print-job-claims.md#part-a--handover-retry-spacing-m1).
+
 Every print goes through this table, A4 included (owner, 2026-11-04).
 
 | column | type | key / null |

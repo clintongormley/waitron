@@ -714,7 +714,16 @@ describe("print-agent end to end", () => {
       expect(test.status).toBe(202);
       const { jobId } = (await test.json()) as { jobId: string };
 
-      for (let attempt = 0; attempt < MAX_DELIVERY_ATTEMPTS; attempt++) await agent.runOnce();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        await agent.runOnce();
+        for (const wait of [5_000, 15_000, 30_000, 60_000]) {
+          vi.setSystemTime(Date.now() + wait);
+          await agent.runOnce();
+        }
+      } finally {
+        vi.useRealTimers();
+      }
 
       const jobs = (await (
         await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie })

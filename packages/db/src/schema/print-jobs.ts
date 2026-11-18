@@ -8,13 +8,13 @@ import {
   enumType,
   flag,
   id,
-  json,
   label,
   newId,
   nowIso,
   table,
   tsString,
 } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { printAgents } from "./print-agents.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
@@ -48,10 +48,12 @@ export const printJobs = table(
     // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
     receiptCopy: flag("receipt_copy"),
     // Staff confirmation of customer handover, separate from the agent's delivered_at stamp.
-    receiptHandover: json<{ personId: string; confirmedAt: string }>("receipt_handover"),
+    handedOverBy: id("handed_over_by").references(() => persons.id, { onDelete: "restrict" }),
+    handedOverAt: tsString("handed_over_at"),
     status: printJobStatus("status").notNull().default("queued"),
     attempts: count("attempts").notNull().default(0),
     lastError: label("last_error"),
+    nextAttemptAt: tsString("next_attempt_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     // The claim lease anchor, stamped on each claim and by the functions `claimed_by` names. A
     // `printing` document whose lease has expired, or whose `claimed_at` is NULL, is re-claimed.
@@ -77,5 +79,9 @@ export const printJobs = table(
     index("print_jobs_sale_id_idx").on(t.saleId),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
     check("print_jobs_status_ck", enumCheck(t.status)),
+    check(
+      "print_jobs_handover_pair_ck",
+      sql`(${t.handedOverBy} is null) = (${t.handedOverAt} is null)`,
+    ),
   ],
 );

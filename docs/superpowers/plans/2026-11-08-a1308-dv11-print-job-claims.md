@@ -4,7 +4,17 @@
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.
 
-**One pull request, two parts** (merged on 2026-11-08 from two smaller plans to keep the area's PR
+**2026-11-18 execution update.** The watcher assigned dv11 to Lane E at 20:04 and cleared two pull
+requests because the combined estimate exceeds three hours. Part A ships the handover columns and
+retry spacing with the existing agent message. Part B follows it. Each part gets its own protection
+comparison. At 20:40 the watcher cleared waking a held pull at the next retry, moving two retry
+tests' clocks to the retry boundary, and pointing exact handover tests at the two new columns.
+At 21:04 the watcher cleared removing the retry time when a job is moved or its printer is deleted.
+Part B keeps the tested receipt delivery due-time check until dv14 and uses one expiry predicate
+for the job's claim and the till's read-only checks. M1 was recorded separately in the
+[printers backlog](../../backlog/printers.md#the-virtual-pdf-printer).
+
+**Original plan: one pull request, two parts** (merged on 2026-11-08 from two smaller plans to keep the area's PR
 count down after dv4 split; both change only `print_jobs` and the code around it, and part B uses
 part A's `next_attempt_at`). Build part A's tasks, then part B's, in one branch; run the protection
 list once, at the end, against the combined prediction (part A's lines plus part B's).

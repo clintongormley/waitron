@@ -26,7 +26,7 @@ export async function readPrinterDeleteJobIds(
 export async function endDeletedPrinterJobs(tx: Transaction, printerId: string): Promise<string[]> {
   const ended = await tx.execute<{ id: string }>(sql`
     update print_jobs set status = 'failed', attempts = ${MAX_DELIVERY_ATTEMPTS},
-      last_error = ${PRINTER_DELETED}
+      last_error = ${PRINTER_DELETED}, next_attempt_at = null
     where ${printerDeleteJobPredicate(printerId)} returning id`);
   return ended.rows.map((row) => row.id);
 }

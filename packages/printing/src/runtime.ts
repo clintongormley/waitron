@@ -6,6 +6,8 @@ import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-ag
 export const PULL_BATCH_LIMIT = 50;
 
 export const MAX_DELIVERY_ATTEMPTS = 5;
+const PRINT_RETRY_WAITS_MS = [5_000, 15_000, 30_000, 60_000] as const;
+export const PRINT_RETRY_MAX_WAIT_MS = Math.max(...PRINT_RETRY_WAITS_MS);
 
 /** A lost document report may reprint rather than drop a ticket; an uncertain drawer pulse must
  * not be repeated automatically. */
@@ -47,7 +49,7 @@ export type ClaimedJob = {
 export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
 
 /** The claim stamp, and the predicate, against the alias `j`, that a job is due now. */
-function dueNow(): { claimedAt: string; due: SQL } {
+function dueNow({ waitForRetry }: { waitForRetry: boolean }) {
   // `claimed_at` is text, so `<` is a string comparison, a correct time order only for the
   // `toISOString()` spelling `nowIso` writes; the cutoff is computed here to keep one spelling. Stamp
   // and cutoff read the clock of the one process that holds the venue file.
@@ -55,11 +57,19 @@ function dueNow(): { claimedAt: string; due: SQL } {
   const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
   // A claim further ahead than the lease was stamped before the clock stepped back.
   const leaseAhead = new Date(Date.parse(claimedAt) + PRINT_JOB_LEASE_MS).toISOString();
+  const retryAhead = new Date(Date.parse(claimedAt) + PRINT_RETRY_MAX_WAIT_MS).toISOString();
   return {
     claimedAt,
+    retryAhead,
     due: sql`(
         j.status = 'queued'
-        or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
+        or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS}
+            ${
+              waitForRetry
+                ? sql`and (j.next_attempt_at is null or j.next_attempt_at <= ${claimedAt}
+                 or j.next_attempt_at > ${retryAhead})`
+                : sql``
+            })
         or (j.status = 'printing'
             and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}
                  or j.claimed_at > ${leaseAhead}))
@@ -103,7 +113,7 @@ export async function claimPrintJobs(
   },
 ): Promise<ClaimedJob[]> {
   await endStaleDrawerJobs(tx);
-  const { claimedAt, due } = dueNow();
+  const { claimedAt, retryAhead, due } = dueNow({ waitForRetry: true });
   const usbBt =
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
@@ -138,7 +148,15 @@ export async function claimPrintJobs(
       )
       and ${invoiceDue(sql`j.id`)}
       and (j.kind = 'document' or j.status = 'queued')
-      and ${due}`,
+      and ${due}
+      and (j.kind <> 'document' or not exists (
+        select 1 from print_jobs w indexed by print_jobs_pull_idx
+        where w.printer_id = j.printer_id and w.kind = 'document' and w.status = 'failed'
+          and w.attempts < ${MAX_DELIVERY_ATTEMPTS}
+          and w.next_attempt_at > ${claimedAt} and w.next_attempt_at <= ${retryAhead}
+          and (w.created_at < j.created_at or (w.created_at = j.created_at and w.rowid < j.rowid))
+          and ${invoiceDue(sql`w.id`)}
+      ))`,
     order: sql`case when j.status = 'failed' or exists (
         select 1 from print_jobs f indexed by print_jobs_pull_idx
         where f.printer_id = j.printer_id and f.kind = 'document'
@@ -179,11 +197,11 @@ export async function endUnpairedPrinterJobs(
   addresses: string[],
 ): Promise<string[]> {
   if (addresses.length === 0) return [];
-  const { claimedAt, due } = dueNow();
+  const { claimedAt, due } = dueNow({ waitForRetry: false });
   const ended = await tx.execute<{ id: string }>(sql`
     update print_jobs as j
     set status = 'failed', last_error = ${PRINTER_UNPAIRED}, attempts = ${MAX_DELIVERY_ATTEMPTS},
-      claimed_at = ${claimedAt}, claimed_by = ${agentId}
+      claimed_at = ${claimedAt}, claimed_by = ${agentId}, next_attempt_at = null
     where j.printer_id in (
         select p.id from printers p
         where p.kind = 'receipt' and p.transport = 'bluetooth' and p.local_key in ${addresses}
@@ -199,10 +217,17 @@ export async function reportPrintJob(
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
   const { agentId, jobId, outcome } = input;
+  const now = nowIso();
+  const retryTimes = PRINT_RETRY_WAITS_MS.map(
+    (wait, attempt) => sql`when ${attempt} then ${new Date(Date.parse(now) + wait).toISOString()}`,
+  );
   const setClause =
     outcome.status === "done"
-      ? sql`status = 'done', delivered_at = ${nowIso()}`
-      : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
+      ? sql`status = 'done', delivered_at = ${now}, next_attempt_at = null`
+      : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1,
+        next_attempt_at = case when print_jobs.kind = 'document' then
+          case print_jobs.attempts ${sql.join(retryTimes, sql` `)} end
+        end`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
     where print_jobs.id = ${jobId}
