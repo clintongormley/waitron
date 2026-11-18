@@ -1607,7 +1607,28 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   certificate and key named in `WAITRON_TLS_CERT_FILE` and `WAITRON_TLS_KEY_FILE`
   (`apps/server/src/config.ts:425`), else the box's own certificate in its state folder
   (`mintedBoxLeaf`, `apps/server/src/box-secrets.ts:70`); with neither, plain HTTP. Whether a
-  set-up production box can start with neither was not established here. Outside development mode a copy can ask only while the venue's join window is open,
+  set-up production box can start with neither was tried on 2026-11-18 (lane B). What was run: the
+  built `node-entry.js`, the box image's entry (`deploy/Dockerfile:344`), stamped as a release and
+  started as its own process on a Mac, not inside the image, on a venue marked production that
+  test helpers seeded, not the setup pages. Its state folder held the `tls/` folder and
+  `secrets.env` that a setup start writes (`ensureBoxSecrets`) and a `trading.env` naming the node
+  and `WAITRON_ENV=production`. Each start was asked for `/health`, `/api/locales`, `/api/staff`
+  and `/api/till` over HTTPS and over plain HTTP. Untouched, it answered all four over HTTPS and
+  dropped plain HTTP. With `tls/server.pem` deleted, made unreadable or overwritten with other
+  text, or with the whole `tls/` folder deleted, it answered all four with 404 over plain HTTP and
+  served only the page titled "Waitron — Set up secure connection": the entry checks the
+  certificate before it starts the server (`needsConnectionBootstrap`,
+  `apps/server/src/node-entry.ts:447`). With `tls/` and `secrets.env` both deleted the start ended
+  with `credentials.key_missing`, and with the state folder emptied it ended with
+  `deployment.environment_mismatch`; neither listened on the port. One start did answer the four
+  over plain HTTP: an emptied state folder, with the node's id, `WAITRON_ENV=production` and the
+  box's key (`WAITRON_CREDENTIALS_KEY` and its version) handed to the process as environment
+  variables. The box's own install hands the server none of those three (`deploy/compose.yml`,
+  `deploy/Dockerfile` and `deploy/waitron.sh`, searched for the three names), so that start is a
+  server somebody runs by hand, not an installed box. Not tried: a certificate that goes missing
+  while the server is running, what a box serves after several failed starts in a row, and the
+  image itself. The probe was a throwaway test file and is
+  not in the tree. Outside development mode a copy can ask only while the venue's join window is open,
   "held open by the dashboard dialogs that are open" (`apps/server/src/pairing-mode.ts`); with it
   shut the ask is refused `device.pairing_closed` and replaces nothing ("with no Add a device dialog
   open, a disabled device's knock is refused and changes nothing" in
