@@ -104,17 +104,17 @@ function checkPlacement(
 }
 
 describe("fitSetMenus", () => {
-  it("finds the 72-euro bill from the design's worked example", () => {
-    const fit = fitSetMenus(worked);
+  const expensivePrevious = {
+    offerBySetMenu: new Map(worked.setMenus.map(({ id }) => [id, "special"])),
+    placeByDish: new Map(),
+  };
+  it.each([null, expensivePrevious])("finds the 72-euro bill with previous %j", (previous) => {
+    const fit = fitSetMenus({ ...worked, previous });
     expect(fit.kind).toBe("fitted");
     if (fit.kind !== "fitted") return;
     expect(fit.totalCents).toBe(7200);
-    expect(fit.setMenus.map(({ offerId }) => offerId).sort()).toEqual([
-      "daily",
-      "daily",
-      "daily",
-      "special",
-    ]);
+    const offerIds = fit.setMenus.map(({ offerId }) => offerId).sort();
+    expect(offerIds).toEqual(["daily", "daily", "daily", "special"]);
     const specialId = fit.setMenus.find(({ offerId }) => offerId === "special")!.id;
     expect(fit.dishes.find(({ id }) => id === "bass")).toEqual({
       id: "bass",

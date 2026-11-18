@@ -72,7 +72,11 @@ export type SetMenuFit =
         readonly surchargeCents: number;
       }[];
     }
-  | { readonly kind: "uncovered"; readonly setMenusNeeded: number | null }
+  | {
+      readonly kind: "uncovered";
+      /** A sufficient total, which can exceed the minimum when the mix cap limits the search. */
+      readonly setMenusNeeded: number | null;
+    }
   | { readonly kind: "too_large" };
 
 interface Pair extends SetMenuOfferLine {
