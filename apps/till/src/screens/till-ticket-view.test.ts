@@ -404,6 +404,18 @@ describe("till-ticket-view", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });
 
+  it("keeps the logo no wider than the ticket and no taller than its own bound", async () => {
+    const { el } = await mount({
+      receiptTrim: { logo: "venue.png" },
+      receiptPreview: [{ kind: "logo" }],
+    });
+    const logo = el.shadowRoot!.querySelector<HTMLImageElement>("article img.logo")!;
+    const style = getComputedStyle(logo);
+    expect(style.maxWidth).toBe("100%");
+    expect(style.maxHeight).not.toBe("none");
+    expect(style.objectFit).toBe("contain");
+  });
+
   it("renders the supplied QR and centers it between its caption and legend", async () => {
     const url = "https://example.test/verify/17";
     const { el } = await mount({
