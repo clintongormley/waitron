@@ -76,7 +76,12 @@ import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import { extraWithAllergens, kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
 import { readLineNutrition } from "./line-nutrition.js";
-import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
+import type {
+  KitchenTicketItem,
+  KitchenTicketStation,
+  MovedSlip,
+  OtherStationItem,
+} from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
 import { passStationsByGroup } from "./working-order.js";
 import "./errors.js";
@@ -600,6 +605,8 @@ interface KnownStations {
   stations: Awaited<ReturnType<typeof readStations>>;
 }
 
+type FirePaper = { heldPaper: ReadonlySet<string> } | { heldLines: ReadonlySet<string> };
+
 async function planKitchenTickets(
   tx: Transaction,
   cfg: TradingContext,
@@ -617,7 +624,7 @@ async function planKitchenTickets(
     reprint: boolean;
     reprintedAt?: Date;
     mark?: "HOLD";
-    fire?: { heldPaper: ReadonlySet<string> };
+    fire?: FirePaper;
     from?: string;
     papers?: ReadonlyMap<string, PaperRest>;
     known?: KnownStations;
@@ -667,6 +674,7 @@ async function planKitchenTickets(
       lineNo: number;
       position: number | null;
       item: KitchenTicketItem;
+      fire: boolean;
     }[]
   >();
   for (const fired of firedItems) {
@@ -682,23 +690,30 @@ async function planKitchenTickets(
       lineNo: entry.lineNo,
       position: entry.position,
       item: entry.group === null ? item : { ...item, group: entry.group },
+      fire:
+        fire !== undefined &&
+        ("heldPaper" in fire
+          ? fire.heldPaper.has(fired.stationId)
+          : fire.heldLines.has(fired.workingOrderLineId)),
     });
     itemsByStation.set(fired.stationId, bucket);
   }
 
   const stations = [...stationNames.entries()]
-    .map(([id, station]) => ({
-      id,
-      name: station.name,
-      showsRestOfOrder: station.showsRestOfOrder,
-      items: arrangeTicketItems(
-        itemsByStation
-          .get(id)!
-          .sort(byGroupThenLine)
-          .map((entry) => entry.item),
-        station.ticketGrouping,
-      ),
-    }))
+    .map(([id, station]) => {
+      const lines = itemsByStation.get(id)!.sort(byGroupThenLine);
+      const sections: KitchenTicketStation[] = [];
+      for (const marked of [false, true]) {
+        const items = lines.filter((line) => line.fire === marked).map((line) => line.item);
+        if (items.length > 0)
+          sections.push({
+            stationName: station.name,
+            items: arrangeTicketItems(items, station.ticketGrouping),
+            ...(marked ? { mark: "FIRE" } : {}),
+          });
+      }
+      return { id, name: station.name, showsRestOfOrder: station.showsRestOfOrder, sections };
+    })
     .sort((a, b) => compareStationNames(a.name, b.name));
   const stationById = new Map(stations.map((station) => [station.id, station]));
 
@@ -760,7 +775,8 @@ async function planKitchenTickets(
     takeAway: order.takeAway,
   };
   for (const route of routes) {
-    const onTicket = route.stationIds.map((id) => stationById.get(id)!);
+    const sections = route.stationIds.flatMap((id) => stationById.get(id)!.sections);
+    const only = sections.length === 1 ? sections[0]! : undefined;
     const onRoute = firedItems.filter((fired) => route.stationIds.includes(fired.stationId));
     // A reprint prints the earliest of its dishes' send times, compared as times, not as text.
     const firedAt = reprint
@@ -776,23 +792,10 @@ async function planKitchenTickets(
         {
           ...head,
           firedAt,
-          mark:
-            mark ??
-            (onTicket.length === 1 &&
-            fire !== undefined &&
-            route.stationIds.some((id) => fire.heldPaper.has(id))
-              ? "FIRE"
-              : undefined),
-          ...(onTicket.length === 1
-            ? { scope: "station", stationName: onTicket[0]!.name, items: onTicket[0]!.items }
-            : {
-                scope: "stations",
-                stations: onTicket.map((station) => ({
-                  stationName: station.name,
-                  items: station.items,
-                  mark: fire?.heldPaper.has(station.id) === true ? ("FIRE" as const) : undefined,
-                })),
-              }),
+          mark: mark ?? only?.mark,
+          ...(only === undefined
+            ? { scope: "stations", stations: sections }
+            : { scope: "station", stationName: only.stationName, items: only.items }),
           ...(leavesOut !== null
             ? {
                 alsoOnOrder: {
@@ -891,11 +894,7 @@ export async function enqueueKitchenTickets(
   cfg: TradingContext,
   orderId: string,
   firedItems: FiredItem[],
-  {
-    mark,
-    fire,
-    from,
-  }: { mark?: "HOLD"; fire?: { heldPaper: ReadonlySet<string> }; from?: string } = {},
+  { mark, fire, from }: { mark?: "HOLD"; fire?: FirePaper; from?: string } = {},
 ): Promise<ReadonlySet<string>> {
   const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, {
     reprint: false,

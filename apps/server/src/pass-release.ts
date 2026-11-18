@@ -137,8 +137,7 @@ async function release(
   return { releasedTicketItemIds: offered.ticketItemIds };
 }
 
-/** D50, D52: one ticket per bill at each output, FIRE where the group's HOLD paper printed, then
- *  the allergy notice, read after the stamp so a released dish's slip carries no HOLD label. */
+/** Read after the release stamp so the allergy notice carries no HOLD label. */
 async function printRelease(
   tx: Transaction,
   cfg: TradingContext,
@@ -147,17 +146,25 @@ async function printRelease(
   releasedIds: readonly string[],
 ): Promise<void> {
   const ids = new Set(releasedIds);
-  const heldPaper =
+  const fire =
     target.kind === "group"
-      ? ((await heldPaperStations(tx, [target.groupId])).get(target.groupId) ?? new Set<string>())
-      : new Set(
-          (
-            await tx
-              .selectDistinct({ stationId: ticketItems.stationId })
-              .from(ticketItems)
-              .where(and(inIds(ticketItems.id, releasedIds), eq(ticketItems.holdPaperQueued, true)))
-          ).map((item) => item.stationId),
-        );
+      ? {
+          heldPaper:
+            (await heldPaperStations(tx, [target.groupId])).get(target.groupId) ??
+            new Set<string>(),
+        }
+      : {
+          heldLines: new Set(
+            (
+              await tx
+                .select({ lineId: ticketItems.workingOrderLineId })
+                .from(ticketItems)
+                .where(
+                  and(inIds(ticketItems.id, releasedIds), eq(ticketItems.holdPaperQueued, true)),
+                )
+            ).map((item) => item.lineId),
+          ),
+        };
   const byOrder = new Map<string, FiredItem[]>();
   for (const row of cardRows) {
     if (!ids.has(row.item.id)) continue;
@@ -170,7 +177,7 @@ async function printRelease(
     byOrder.set(row.orderId, items);
   }
   for (const [orderId, items] of byOrder)
-    await enqueueKitchenTickets(tx, cfg, orderId, items, { fire: { heldPaper } });
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { fire });
   await notifyKitchenAllergyDestination(tx, cfg, releasedIds);
 }
 

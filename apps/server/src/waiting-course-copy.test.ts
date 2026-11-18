@@ -2391,6 +2391,36 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
     });
 
+    it("A1368: releasing a mixed counter bill marks FIRE only for the dish on HOLD paper", async () => {
+      const t = await waitingTable();
+      await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, t.partyId, {
+          groups: [
+            {
+              release: "fire",
+              lines: [{ menuItemId: v.item("Burger"), quantity: "1", courseId: null }],
+            },
+          ],
+          operatorId: OPERATOR,
+          billId: t.bill2,
+        }),
+      );
+      await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
+
+      const slips = await releaseCake(t);
+
+      expect(slips).toHaveLength(1);
+      const [slip] = slips;
+      const fire = slip!.indexOf(`*** ${words.fire} ***`);
+      const ordinary = slip!.slice(0, fire);
+      const onHoldPaper = slip!.slice(fire + 1);
+      expect(fire).toBeGreaterThan(0);
+      expect(ordinary).toContain("1 x BURG");
+      expect(ordinary).not.toContain("1 x TARTA");
+      expect(onHoldPaper).toContain("1 x TARTA");
+      expect(onHoldPaper).not.toContain("1 x BURG");
+    });
+
     it("A1368: moving an open bill to the counter lists the waiting tarta and marks its release FIRE", async () => {
       const t = await waitingTable();
       const mark = (await printed(t.grill.printer)).length;
