@@ -21,12 +21,6 @@ The final policy and any additional required format remain the advisor's decisio
 Ask the gestoría which payroll package and import format it accepts before building a payroll export.
 Keep that separate from the working-time PDF/CSV. Build shift-template and availability features as separate scheduling work.
 
-## Hours open and outstanding work
-
-Selecting a week, month or pay period in Hours still loads the person's full clock history once
-to find open shifts, pending corrections and unconfirmed automatic ends. Narrow this read while
-keeping older outstanding work visible in any selected period.
-
 ## A708. Special-day staffing on a date with its own changeover
 
 The special-day staffing painter draws every date's column, and the blocks in it, on the read's one
@@ -210,6 +204,10 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 
 ## Decisions and deliberate limits
+
+- Hours keeps the full history for a person with a correction awaiting a decision, to check
+  whether it can still be applied. Open shifts, disputed corrections, unanswered questions
+  and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
 
 - Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Special days and longer-than-day staffing remain A708/A644.
 
