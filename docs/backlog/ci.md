@@ -315,6 +315,8 @@ The [browser qualification record](../developers/ci-and-gates.md#disposable-serv
 combines a passing disposable-runner workload with venue-service diagnostics from a failed run.
 Those runs tested different product heads. Whether they used the same disposable guest image
 build remains unverified.
+The [CI-only split qualification](../developers/ci-and-gates.md#disposable-server-test-runners)
+records the planned and actual placements from a passing full run with both runner pools.
 The bundle still needs a full-day queue measurement. Keep the corrected v41 controller and the
 [13 November measured-memory decision](#decisions-and-deliberate-limits).
 
@@ -322,7 +324,6 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 
 - **A1424 / A1440: remaining real-run qualification.** Each line names the evidence that would close that gap; do not drain other lanes or repeat the completed rescue drill.
   - Image guest: one separately cleared disposable-guest image-smoke run passes the Bluetooth check and full smoke. Retained runs 42550200310 and 42525659420 stop at `dbus_unreachable`; keep image smoke hosted meanwhile (watcher, 2026-11-09 08:20).
-  - Per-job overflow: retain one untouched mixed CI run with the planner's selected batch, workflow and module commits, controller source, run/attempt/job and runner identities, and passing selected checks. The CI split uses the existing capacity snapshot. The 13 November no-op forward-move drill had no product checks. Reverse movement was dropped by the owner.
   - Remaining workflows: retain a real selected run for each still-unqualified workflow with source, runner, selected checks and aggregate; a CI-only record cannot qualify other workflows.
   - Full-day capacity/queue target: one full-day ordinary-traffic measurement must account for waits and available capacity throughout; no single isolated CI run or episodic status sample can close it. A1461's smaller run sizes do not replace this measurement.
   - Historical planner 43278084012: recover that run's contemporaneous admission/recovery logs; a new run cannot establish why its untouched planner waited 32 minutes without running the ratio.

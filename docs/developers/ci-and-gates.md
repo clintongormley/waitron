@@ -518,6 +518,22 @@ check passed on GitHub runner `1000364914`, and image smoke passed on GitHub run
 [final CI check](https://github.com/clintongormley/waitron/actions/runs/44254371098/job/134642443589),
 [image smoke](https://github.com/clintongormley/waitron/actions/runs/44254371098/job/134632612875).
 
+**18 November, CI-only split.** A dispatch of the ordinary full CI workflow on #3755's head
+`8dfcc941398364e1abcf5552104f3134e175e708` passed all 87 selected jobs. The attempt names that
+workflow commit, and the planner loads its routing module from the same commit. Planner job `134716256770` on GitHub runner
+`1000365222` logged 12 server slots, five running and none waiting, from an observation 30,988 ms
+old. Its seven selections matched the actual disposable job labels. In order, typecheck, root
+guards, lint and server shards 1–4 ran on runners `29249`, `29248`, `29246`, `29252`, `29251`,
+`29250` and `29247`. The other 80 jobs used GitHub, including all seven coverage merges, the
+mutation aggregate and the final check. The installed controller's `control.mjs` and
+`ci-canary.mjs` matched Cloud commit `bd4b2ee130b1e2a75cd3e9711cfa2b8c743fc25d`. This run
+qualifies first-attempt placement and the hosted merges. Rerun placement, simultaneous planners
+and all-day queue times were outside this run.
+[Full run 44279533864/1](https://github.com/clintongormley/waitron/actions/runs/44279533864/attempts/1),
+[planner](https://github.com/clintongormley/waitron/actions/runs/44279533864/job/134716256770),
+[server coverage merge](https://github.com/clintongormley/waitron/actions/runs/44279533864/job/134722858283),
+[final CI check](https://github.com/clintongormley/waitron/actions/runs/44279533864/job/134723669741).
+
 Successful nightly
 [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
 coverage merges and aggregate on GitHub. Three executed idle checks in six scheduled health
