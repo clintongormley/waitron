@@ -90,6 +90,12 @@ describe("device zone selection", () => {
     const f = await fixture();
     const before = await read(f);
     expect(before.saved).toBe(false);
+    await run((tx) =>
+      tx
+        .insert(deviceApprovedProfiles)
+        .values({ deviceId: f.deviceId, deviceProfileId: f.profileId }),
+    );
+    expect(await read(f)).toEqual(before);
     const after = await save(f, [f.dining, f.terrace], f.dining);
     expect(after).toMatchObject({
       saved: true,

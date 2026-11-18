@@ -5,13 +5,15 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { floorZones } from "./floor-zones.js";
 
+/** The active profile counts as approved by itself. Its row holds its saved zone choice. */
 export const deviceApprovedProfiles = table(
   "device_approved_profiles",
   {
     deviceId: id("device_id").notNull(),
     deviceProfileId: id("device_profile_id").notNull(),
     startingZoneId: id("starting_zone_id"),
-    // A saved list can be empty after a zone is deleted. Null means no choice was saved.
+    // setDeviceZoneSelection checks which zones can be saved. Zone Delete removes ids from the list.
+    // Null means no choice was saved. The saved list can be empty after a zone is deleted.
     zoneIds: json<string[]>("zone_ids"),
   },
   (t) => [

@@ -327,15 +327,19 @@ describe("a device's saved zones under approved profiles", () => {
           await tx.update(devices).set({ deviceProfileId: to }).where(eq(devices.id, deviceId));
           await keepApprovedAfterSwitch(tx, deviceId, from, to);
         };
+        const saveCurrentZones = async () => {
+          const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
+          await VENUE_SERVICE.setDeviceZoneSelection(tx, deviceId, {
+            profileId: current.profileId,
+            snapshot: current.snapshot,
+            selectedZoneIds: [zoneId],
+            startingZoneId: zoneId,
+          });
+        };
+        await saveCurrentZones();
         await approveDeviceProfiles(tx, deviceId, [alternative]);
         await switchTo(active, alternative);
-        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
-        await VENUE_SERVICE.setDeviceZoneSelection(tx, deviceId, {
-          profileId: alternative,
-          snapshot: current.snapshot,
-          selectedZoneIds: [zoneId],
-          startingZoneId: zoneId,
-        });
+        await saveCurrentZones();
         expect((await readApprovedProfiles(tx, deviceId)).map(({ id }) => id)).toEqual([
           alternative,
           active,
@@ -343,6 +347,11 @@ describe("a device's saved zones under approved profiles", () => {
 
         await switchTo(alternative, active);
         await approveDeviceProfiles(tx, deviceId, retained ? [alternative] : []);
+        expect(await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId)).toMatchObject({
+          profileId: active,
+          saved: true,
+          selectedZoneIds: [zoneId],
+        });
         if (!retained) await approveDeviceProfiles(tx, deviceId, [alternative]);
         await switchTo(active, alternative);
 
