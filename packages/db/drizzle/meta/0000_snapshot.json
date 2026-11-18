@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4e3cf8f5-6f93-4433-b3bc-b037162cd40e",
+  "id": "d9ead682-c133-4bcb-aee8-226ec23d41d6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5081,6 +5081,20 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "starting_zone_id": {
+          "name": "starting_zone_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "zone_ids": {
+          "name": "zone_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -5110,6 +5124,19 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "device_approved_profiles_start_fk": {
+          "name": "device_approved_profiles_start_fk",
+          "tableFrom": "device_approved_profiles",
+          "tableTo": "floor_zones",
+          "columnsFrom": [
+            "starting_zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5122,7 +5149,16 @@
         }
       },
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "device_approved_profiles_start_ck": {
+          "name": "device_approved_profiles_start_ck",
+          "value": "\"device_approved_profiles\".\"starting_zone_id\" is null or \"device_approved_profiles\".\"zone_ids\" is not null"
+        },
+        "device_approved_profiles_zone_ids_ck": {
+          "name": "device_approved_profiles_zone_ids_ck",
+          "value": "json_valid(\"device_approved_profiles\".\"zone_ids\") and json_type(\"device_approved_profiles\".\"zone_ids\") = 'array'"
+        }
+      }
     },
     "join_requests": {
       "name": "join_requests",
@@ -16727,154 +16763,6 @@
           "value": "\"party_allergy_guests\".\"note\" is null or length(\"party_allergy_guests\".\"note\") <= 2000"
         }
       }
-    },
-    "device_zone_selection_zones": {
-      "name": "device_zone_selection_zones",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_profile_id": {
-          "name": "device_profile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_zone_selection_zones_selection_fk": {
-          "name": "device_zone_selection_zones_selection_fk",
-          "tableFrom": "device_zone_selection_zones",
-          "tableTo": "device_zone_selections",
-          "columnsFrom": [
-            "device_id",
-            "device_profile_id"
-          ],
-          "columnsTo": [
-            "device_id",
-            "device_profile_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_zone_selection_zones_zone_fk": {
-          "name": "device_zone_selection_zones_zone_fk",
-          "tableFrom": "device_zone_selection_zones",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_zone_selection_zones_pk": {
-          "columns": [
-            "device_id",
-            "device_profile_id",
-            "zone_id"
-          ],
-          "name": "device_zone_selection_zones_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "device_zone_selections": {
-      "name": "device_zone_selections",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_profile_id": {
-          "name": "device_profile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "starting_zone_id": {
-          "name": "starting_zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_zone_selections_device_fk": {
-          "name": "device_zone_selections_device_fk",
-          "tableFrom": "device_zone_selections",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "device_zone_selections_profile_fk": {
-          "name": "device_zone_selections_profile_fk",
-          "tableFrom": "device_zone_selections",
-          "tableTo": "device_profiles",
-          "columnsFrom": [
-            "device_profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_zone_selections_start_fk": {
-          "name": "device_zone_selections_start_fk",
-          "tableFrom": "device_zone_selections",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "starting_zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_zone_selections_pk": {
-          "columns": [
-            "device_id",
-            "device_profile_id"
-          ],
-          "name": "device_zone_selections_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "service_step_completions": {
       "name": "service_step_completions",

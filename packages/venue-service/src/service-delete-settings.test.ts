@@ -10,8 +10,7 @@ import {
   departmentTransferDestinations,
   deviceProfiles,
   devices,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
+  deviceApprovedProfiles,
   floorZones,
   kitchenStations,
   menuPeriods,
@@ -696,11 +695,13 @@ it("zone deletion reports device choices and clears only the deleted zone refere
       targets: [{ id: device!.id, name: "Restaurant till" }],
     });
     await clearServiceDeleteSettings(tx, [f.gone], null);
-    expect(await tx.select().from(deviceZoneSelections)).toEqual([
-      { deviceId: device!.id, deviceProfileId: f.explicit, startingZoneId: null },
-    ]);
-    expect(await tx.select().from(deviceZoneSelectionZones)).toEqual([
-      { deviceId: device!.id, deviceProfileId: f.explicit, zoneId: f.allowed },
+    expect(await tx.select().from(deviceApprovedProfiles)).toEqual([
+      {
+        deviceId: device!.id,
+        deviceProfileId: f.explicit,
+        startingZoneId: null,
+        zoneIds: [f.allowed],
+      },
     ]);
     await tx.delete(floorZones).where(eq(floorZones.id, f.gone));
     expect(await VENUE_SERVICE.readDeviceZoneSelection(tx, device!.id)).toMatchObject({

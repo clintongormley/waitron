@@ -1186,12 +1186,6 @@ describe("what can refuse a write to device_profiles", () => {
         on_delete: "NO ACTION",
       },
       {
-        child: "device_zone_selections",
-        column: "device_profile_id",
-        parent: "device_profiles",
-        on_delete: "CASCADE",
-      },
-      {
         child: "devices",
         column: "device_profile_id",
         parent: "device_profiles",

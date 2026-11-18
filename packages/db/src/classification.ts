@@ -310,8 +310,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("department_transfer_destinations", "state", SERVICE_STATE),
   classify("department_transfer_requests", "state", SERVICE_STATE),
   classify("menu_periods", "state", SERVICE_STATE),
-  classify("device_zone_selections", "state", SERVICE_STATE),
-  classify("device_zone_selection_zones", "state", SERVICE_STATE),
   classify("routing_cells", "state", SERVICE_STATE),
   classify("routing_cell_periods", "state", SERVICE_STATE),
   classify("kitchen_notices", "state", SERVICE_STATE),

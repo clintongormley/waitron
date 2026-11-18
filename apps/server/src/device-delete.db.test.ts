@@ -2,14 +2,13 @@ import { setMadeHere } from "./testing/made-here-fixture.js";
 import { holdPrinterForTest, seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   billPaymentRefunds,
   billPayments,
   deviceApprovedProfiles,
-  deviceZoneSelections,
   devices,
   drawerOpens,
   installChangeFeed,
@@ -744,8 +743,10 @@ it("device deletion keeps all saved profile zone selections, retaining other dev
     (
       await suite.db
         .select()
-        .from(deviceZoneSelections)
-        .where(eq(deviceZoneSelections.deviceId, one))
+        .from(deviceApprovedProfiles)
+        .where(
+          and(eq(deviceApprovedProfiles.deviceId, one), isNotNull(deviceApprovedProfiles.zoneIds)),
+        )
     ).length,
   ).toBe(2);
   const impact = await inTx((tx) => readDeviceDeleteImpact(tx, venue.cfg, one));
@@ -763,16 +764,20 @@ it("device deletion keeps all saved profile zone selections, retaining other dev
     (
       await suite.db
         .select()
-        .from(deviceZoneSelections)
-        .where(eq(deviceZoneSelections.deviceId, one))
+        .from(deviceApprovedProfiles)
+        .where(
+          and(eq(deviceApprovedProfiles.deviceId, one), isNotNull(deviceApprovedProfiles.zoneIds)),
+        )
     ).length,
   ).toBe(2);
   expect(
     (
       await suite.db
         .select()
-        .from(deviceZoneSelections)
-        .where(eq(deviceZoneSelections.deviceId, two))
+        .from(deviceApprovedProfiles)
+        .where(
+          and(eq(deviceApprovedProfiles.deviceId, two), isNotNull(deviceApprovedProfiles.zoneIds)),
+        )
     ).length,
   ).toBe(1);
 });

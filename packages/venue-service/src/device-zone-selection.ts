@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import {
+  deviceApprovedProfiles,
   deviceNotDeleted,
   deviceProfiles,
   devices,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
   type Transaction,
 } from "@waitron/db";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";
@@ -51,27 +50,19 @@ export async function readDeviceZoneSelection(
       departmentName,
     }));
   const [stored] = await tx
-    .select()
-    .from(deviceZoneSelections)
+    .select({
+      startingZoneId: deviceApprovedProfiles.startingZoneId,
+      zoneIds: deviceApprovedProfiles.zoneIds,
+    })
+    .from(deviceApprovedProfiles)
     .where(
       and(
-        eq(deviceZoneSelections.deviceId, deviceId),
-        eq(deviceZoneSelections.deviceProfileId, profile.id),
+        eq(deviceApprovedProfiles.deviceId, deviceId),
+        eq(deviceApprovedProfiles.deviceProfileId, profile.id),
+        isNotNull(deviceApprovedProfiles.zoneIds),
       ),
     );
-  const savedIds = (
-    await tx
-      .select({ id: deviceZoneSelectionZones.zoneId })
-      .from(deviceZoneSelectionZones)
-      .where(
-        and(
-          eq(deviceZoneSelectionZones.deviceId, deviceId),
-          eq(deviceZoneSelectionZones.deviceProfileId, profile.id),
-        ),
-      )
-  )
-    .map((row) => row.id)
-    .sort();
+  const savedIds = [...(stored?.zoneIds ?? [])].sort();
   let selectedZoneIds = zones
     .filter((zone) => stored === undefined || savedIds.includes(zone.id))
     .map((zone) => zone.id);
@@ -136,22 +127,11 @@ export async function setDeviceZoneSelection(
   if (ids.some((id) => !current.zones.some((zone) => zone.id === id))) invalid("selectedZoneIds");
   if (!ids.includes(start)) invalid("startingZoneId");
   await tx
-    .insert(deviceZoneSelections)
-    .values({ deviceId, deviceProfileId: profileId, startingZoneId: start })
+    .insert(deviceApprovedProfiles)
+    .values({ deviceId, deviceProfileId: profileId, startingZoneId: start, zoneIds: ids })
     .onConflictDoUpdate({
-      target: [deviceZoneSelections.deviceId, deviceZoneSelections.deviceProfileId],
-      set: { startingZoneId: start },
+      target: [deviceApprovedProfiles.deviceId, deviceApprovedProfiles.deviceProfileId],
+      set: { startingZoneId: start, zoneIds: ids },
     });
-  await tx
-    .delete(deviceZoneSelectionZones)
-    .where(
-      and(
-        eq(deviceZoneSelectionZones.deviceId, deviceId),
-        eq(deviceZoneSelectionZones.deviceProfileId, profileId),
-      ),
-    );
-  await tx
-    .insert(deviceZoneSelectionZones)
-    .values(ids.map((zoneId) => ({ deviceId, deviceProfileId: profileId, zoneId })));
   return readDeviceZoneSelection(tx, deviceId);
 }

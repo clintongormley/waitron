@@ -4,6 +4,7 @@ import { and, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
+  deviceApprovedProfiles,
   deviceNotDeleted,
   deviceProfiles,
   devices,
@@ -519,7 +520,12 @@ export async function acceptDeviceJoinRequest(
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
   const [existing] = await tx
-    .select({ id: devices.id, active: devices.active, deletedAt: devices.deletedAt })
+    .select({
+      id: devices.id,
+      active: devices.active,
+      deletedAt: devices.deletedAt,
+      profileId: devices.deviceProfileId,
+    })
     .from(devices)
     .where(eq(devices.id, row.id));
   if (existing !== undefined && existing.deletedAt !== null)
@@ -535,6 +541,17 @@ export async function acceptDeviceJoinRequest(
       { label: input.label, profileId: input.profileId },
       { active: true, tokenHash: row.tokenHash },
     );
+    if (existing.profileId !== input.profileId) {
+      // The manager chose a replacement profile, so the former active profile loses its approval.
+      await tx
+        .delete(deviceApprovedProfiles)
+        .where(
+          and(
+            eq(deviceApprovedProfiles.deviceId, row.id),
+            eq(deviceApprovedProfiles.deviceProfileId, existing.profileId),
+          ),
+        );
+    }
     // A device switched off outside Delete may still have open sessions.
     await endDeviceSessions(tx, row.id);
     return { deviceId: row.id, name: input.label, formFactor };

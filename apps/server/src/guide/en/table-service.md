@@ -752,8 +752,9 @@ phone or tablet opens where it always has; after that it opens on your **Opens f
 you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
 
 The choice belongs to this device and the profile it is signed in on, so another device on the same
-profile keeps its own, and switching profile brings back that profile's choice. It never gives this
-device a zone its profile does not allow. If a phone or tablet cannot read its choice when you sign
+profile keeps its own, and switching profile brings back that profile's choice. If a manager
+withdraws a profile's approval for this device, choose its zones again if that profile returns.
+You can choose only from the zones the current profile allows. If a phone or tablet cannot read its choice when you sign
 in, it says so and shows every zone its profile allows until it can.
 
 A table in a zone this device does not show takes no new dishes here, and its unsent dishes cannot

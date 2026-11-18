@@ -66,7 +66,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { loadKeyRing } from "@waitron/credentials";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   uploadImage,
   readImageBytes,
@@ -90,7 +90,7 @@ import {
   saveVenueFields,
   readVenueSettings,
   categories,
-  deviceZoneSelections,
+  deviceApprovedProfiles,
   deviceProfiles,
   devices,
   diningTables,
@@ -8511,8 +8511,13 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
       (
         await tx
           .select()
-          .from(deviceZoneSelections)
-          .where(eq(deviceZoneSelections.deviceId, device!.id))
+          .from(deviceApprovedProfiles)
+          .where(
+            and(
+              eq(deviceApprovedProfiles.deviceId, device!.id),
+              isNotNull(deviceApprovedProfiles.zoneIds),
+            ),
+          )
       ).length,
     ).toBe(1);
   });
@@ -8526,8 +8531,7 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
       }),
     ]),
   );
-  expect(exported.tables).not.toHaveProperty("device_zone_selections");
-  expect(exported.tables).not.toHaveProperty("device_zone_selection_zones");
+  expect(exported.tables).not.toHaveProperty("device_approved_profiles");
 });
 
 it("round-trips explicit unit staff identity, empty and disabled translations and seed markers", async () => {

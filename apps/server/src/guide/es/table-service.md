@@ -808,8 +808,9 @@ después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
 [Volver a tus mesas con platos sin enviar](table-service.md#unsent-tables).
 
 La elección es de este dispositivo y del perfil con el que ha entrado, así que otro dispositivo con
-el mismo perfil conserva la suya, y al cambiar de perfil vuelve la elección de ese perfil. Nunca da a
-este dispositivo una zona que su perfil no permite. Si un móvil o una tableta no puede consultar su
+el mismo perfil conserva la suya, y al cambiar de perfil vuelve la elección de ese perfil. Si un
+responsable retira la aprobación de un perfil para este dispositivo, vuelve a elegir las zonas
+si recuperas ese perfil. Solo puedes elegir las zonas que permite el perfil actual. Si un móvil o una tableta no puede consultar su
 elección al entrar, lo indica y muestra todas las zonas que permite su perfil hasta que puede.
 
 Una mesa de una zona que este dispositivo no muestra no admite platos nuevos aquí, y sus platos sin

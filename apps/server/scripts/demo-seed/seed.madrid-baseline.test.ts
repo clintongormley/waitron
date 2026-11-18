@@ -348,6 +348,8 @@ const REMOVED_TABLES = [
   "device_profile_kitchen_screens",
   "device_profile_kitchen_screen_stations",
   "device_profile_kitchen_screen_zones",
+  "device_zone_selections",
+  "device_zone_selection_zones",
   "device_profile_admission_persons",
   "floor_plan_table_parts",
   "floor_plan_table_sizes",
@@ -2396,6 +2398,33 @@ for (const locale of ["en", "es"] as const) {
       deviceTable.foreignKeys = deviceTable.foreignKeys
         .filter((key) => key.from !== "card_reader_id")
         .map((key) => ({ ...key, id: key.id - 1 }));
+      const approvals = expected[phase].tables.device_approved_profiles!;
+      approvals.columns.push(
+        ...["starting_zone_id", "zone_ids"].map((name) => ({
+          name,
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        })),
+      );
+      approvals.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "floor_zones",
+          from: "starting_zone_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        ...approvals.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
+      for (const row of Object.values(approvals.rows)) {
+        row.starting_zone_id = null;
+        row.zone_ids = null;
+      }
       const profileTable = expected[phase].tables.device_profiles!;
       const scopes = expected[phase].tables.device_profile_service_access!;
       const profileZones = expected[phase].tables.device_profile_zones!;

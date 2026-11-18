@@ -3,10 +3,10 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  deviceZoneSelections,
+  deviceApprovedProfiles,
   devices,
   floorZones,
   workingOrders,
@@ -119,8 +119,10 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 const count = (f: Fixture, deviceId = f.deviceId) =>
   suite.db
     .select()
-    .from(deviceZoneSelections)
-    .where(eq(deviceZoneSelections.deviceId, deviceId))
+    .from(deviceApprovedProfiles)
+    .where(
+      and(eq(deviceApprovedProfiles.deviceId, deviceId), isNotNull(deviceApprovedProfiles.zoneIds)),
+    )
     .then((rows) => rows.length);
 
 describe("the device's zone preferences", () => {

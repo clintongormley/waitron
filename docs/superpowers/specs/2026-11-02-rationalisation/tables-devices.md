@@ -4,6 +4,10 @@
 > devices. Device screen choices, narrowing history and the four device-screen tables are retired.
 > See [the remaining-device plan](../../plans/2026-11-15-a1534-remaining-devices.md).
 
+> **18 November 2026 — A1308 dv10:** Device Delete keeps the device and its settings. The device
+> foreign key on `device_approved_profiles` still cascades on a physical delete, superseding the
+> key described in §§1.3 and 5 below. See [the dv10 preflight decision](../../plans/2026-11-08-a1308-dv10-approved-profile-zones.md).
+
 # Target design: devices, device profiles and printers
 
 Area: devices, join requests, device profiles and everything hanging off them, print agents,

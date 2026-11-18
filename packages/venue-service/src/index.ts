@@ -6,8 +6,6 @@ export {
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
   KITCHEN_NOTICE_DIRECTIONS,
   KITCHEN_SCREEN_KINDS,
   kitchenAllergyBlockCheck,

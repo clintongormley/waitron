@@ -5,10 +5,9 @@ import {
   departments,
   departmentCourses,
   departmentTransferDestinations,
+  deviceApprovedProfiles,
   deviceProfiles,
   devices,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
   floorZones,
   menuPeriods,
   routingCellPeriods,
@@ -162,27 +161,30 @@ async function settings(
   const deviceChoices = await tx
     .select({
       deviceId: devices.id,
-      profileId: deviceZoneSelectionZones.deviceProfileId,
-      zoneId: deviceZoneSelectionZones.zoneId,
+      profileId: deviceApprovedProfiles.deviceProfileId,
+      zoneId: sql<string>`chosen_zone.value`,
       name: devices.label,
       deletedAt: devices.deletedAt,
       active: devices.active,
     })
-    .from(deviceZoneSelectionZones)
-    .innerJoin(devices, eq(devices.id, deviceZoneSelectionZones.deviceId))
-    .where(inArray(deviceZoneSelectionZones.zoneId, zoneIds));
+    .from(deviceApprovedProfiles)
+    .innerJoin(devices, eq(devices.id, deviceApprovedProfiles.deviceId))
+    .innerJoin(
+      sql`json_each(${deviceApprovedProfiles.zoneIds}) as chosen_zone`,
+      inArray(sql<string>`chosen_zone.value`, zoneIds),
+    );
   const deviceStarts = await tx
     .select({
       deviceId: devices.id,
-      profileId: deviceZoneSelections.deviceProfileId,
-      zoneId: deviceZoneSelections.startingZoneId,
+      profileId: deviceApprovedProfiles.deviceProfileId,
+      zoneId: deviceApprovedProfiles.startingZoneId,
       name: devices.label,
       deletedAt: devices.deletedAt,
       active: devices.active,
     })
-    .from(deviceZoneSelections)
-    .innerJoin(devices, eq(devices.id, deviceZoneSelections.deviceId))
-    .where(inArray(deviceZoneSelections.startingZoneId, zoneIds));
+    .from(deviceApprovedProfiles)
+    .innerJoin(devices, eq(devices.id, deviceApprovedProfiles.deviceId))
+    .where(inArray(deviceApprovedProfiles.startingZoneId, zoneIds));
   const deviceZoneReferences = [
     ...new Map(
       [...deviceChoices, ...deviceStarts].map((row) => [
@@ -302,13 +304,11 @@ export async function clearServiceDeleteSettings(
     .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
     .where(inArray(deviceProfiles.id, selected.obsoleteIds));
   await removeIdsFromJson(tx, deviceProfiles.orderZoneIds, selected.zoneIds);
+  await removeIdsFromJson(tx, deviceApprovedProfiles.zoneIds, selected.zoneIds);
   await tx
-    .delete(deviceZoneSelectionZones)
-    .where(inArray(deviceZoneSelectionZones.zoneId, selected.zoneIds));
-  await tx
-    .update(deviceZoneSelections)
+    .update(deviceApprovedProfiles)
     .set({ startingZoneId: null })
-    .where(inArray(deviceZoneSelections.startingZoneId, selected.zoneIds));
+    .where(inArray(deviceApprovedProfiles.startingZoneId, selected.zoneIds));
   await removeIdsFromJson(tx, deviceProfiles.kitchenViews, selected.zoneIds);
   await tx
     .update(floorZones)

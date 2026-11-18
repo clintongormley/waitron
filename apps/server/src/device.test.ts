@@ -3,18 +3,24 @@ import type { TradingContext } from "./trading-context.js";
  * Device join-and-accept, plus direct cases over `resolveDeviceKitchenScreens` and `insertDevice`.
  */
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { devices, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { nodeId as brandNodeId } from "@waitron/shared";
 
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { insertDevice, requireDeviceProfile } from "./device.js";
+import {
+  approveDeviceProfiles,
+  insertDevice,
+  keepApprovedAfterSwitch,
+  readApprovedProfiles,
+  requireDeviceProfile,
+} from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -298,4 +304,61 @@ describe("requireDeviceProfile and insertDevice, called directly", () => {
       await suite.db.execute(sql`drop index devices_one_per_profile_expr`);
     }
   });
+});
+
+describe("a device's saved zones under approved profiles", () => {
+  async function fixture() {
+    await setupVenue();
+    const active = await seedProfile("till", "Active till");
+    const alternative = await seedProfile("till", "Alternative till");
+    const { id: zoneId } = await seedZone(suite.db, { name: "Terrace" });
+    const device = deviceValues(active, "Bar till");
+    await withTransaction(suite.db, (tx) => insertDevice(tx, device));
+
+    return { active, alternative, deviceId: device.id, zoneId };
+  }
+
+  it.each([true, false])(
+    "keeps active zones and remembers an alternative's zones while approved (retained=%s)",
+    async (retained) => {
+      const { active, alternative, deviceId, zoneId } = await fixture();
+      await withTransaction(suite.db, async (tx) => {
+        const switchTo = async (from: string, to: string) => {
+          await tx.update(devices).set({ deviceProfileId: to }).where(eq(devices.id, deviceId));
+          await keepApprovedAfterSwitch(tx, deviceId, from, to);
+        };
+        const saveCurrentZones = async () => {
+          const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
+          await VENUE_SERVICE.setDeviceZoneSelection(tx, deviceId, {
+            profileId: current.profileId,
+            snapshot: current.snapshot,
+            selectedZoneIds: [zoneId],
+            startingZoneId: zoneId,
+          });
+        };
+        await saveCurrentZones();
+        await approveDeviceProfiles(tx, deviceId, [alternative]);
+        await switchTo(active, alternative);
+        await saveCurrentZones();
+        expect((await readApprovedProfiles(tx, deviceId)).map(({ id }) => id)).toEqual([
+          alternative,
+          active,
+        ]);
+
+        await switchTo(alternative, active);
+        await approveDeviceProfiles(tx, deviceId, retained ? [alternative] : []);
+        expect(await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId)).toMatchObject({
+          profileId: active,
+          saved: true,
+          selectedZoneIds: [zoneId],
+        });
+        if (!retained) await approveDeviceProfiles(tx, deviceId, [alternative]);
+        await switchTo(active, alternative);
+
+        const restored = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
+        expect(restored.saved).toBe(retained);
+        if (retained) expect(restored.selectedZoneIds).toEqual([zoneId]);
+      });
+    },
+  );
 });

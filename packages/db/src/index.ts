@@ -411,8 +411,6 @@ export {
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
   kitchenNoticeKind,
   kitchenNotices,
   menuPeriods,
