@@ -784,12 +784,12 @@ export class TillMenuBrowser extends LitElement {
    * unfiltered index holds, else nothing; `opens` is the path a section tile opens. A structural
    * section is drawn from itself, a section shortcut from the copy it opens. */
   #tile(
-    ref: DocumentTile | DocumentMember,
+    ref: DocumentTile | ReturnType<typeof shownMembers>[number],
     opens: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
-    if (ref.kind === "empty" || ref.kind === "set_menu") return nothing;
+    if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
@@ -807,7 +807,7 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #listTiles(
-    list: readonly DocumentMember[],
+    list: ReturnType<typeof shownMembers>,
     path: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,

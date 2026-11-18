@@ -1018,6 +1018,9 @@ export interface PublishedSetMenu {
   - `"a set menu placed inside an included menu is copied into the including menu"`: Lunch includes
     "Specials", which holds Daily menu → `setMenus[dailyMenu]` is in Lunch's document.
   - `"an inactive set menu leaves no copy and Lunch still publishes"`.
+  - `"a set menu placed in two lists publishes one copy and appears in both"`: publish Lunch
+    with Daily menu in its root and in Deals. The published document has one copy keyed by
+    Daily menu's id, and both lists hold a set-menu member naming that id.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.test.ts`
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the file, then `menu-publication.test.ts` and `menu-document.test.ts` (grep
@@ -1051,8 +1054,9 @@ export interface PublishedSetMenu {
   `setMenu: { id, name }`, `alsoOn` naming the other published full menus that hold the set menu,
   and the target `navigateMenuChanges` (`menu-navigation.ts`) gives the set-menu member. It has no
   undo: `menu-undo.ts` treats it as not undoable, and the preview links to the set menu's page
-  instead (**my call**: the change is made there). Placing or removing a set menu shows as the
-  member change it already is. The dashboard's `widgets/menu-preview.ts` and `strings.ts` word the
+  instead (**my call**: the change is made there). Compare set-menu members in each list and
+  show their placement or removal in Preview here. The ordinary member diff handles products and
+  sections. The dashboard's `widgets/menu-preview.ts` and `strings.ts` word the
   new kind and source in the same change as the shared types. Check the change words, editor
   link and absence of an undo in the Preview test.
 
@@ -1065,6 +1069,9 @@ export interface PublishedSetMenu {
   - `"a queued version takes its copy when it is queued"`: queue Lunch, then change a surcharge →
     the queued document still has the old surcharge and the old `changedAt`.
   - `"a set menu has no preview"`: `previewMenu(dailyMenu)` refuses `set_menu.wrong_place`.
+  - `"placing or removing a set menu shows in Preview"`: publish Lunch, place Daily menu in Deals
+    and preview, publish again, then remove that placement and preview. Each preview names the
+    placement change.
   - `"a surcharge change shows as set_menu_changed with fields dishes"`: Sirloin +€5 → +€6 →
     `previewMenu(Lunch)` has exactly one `set_menu_changed` naming Daily menu with
     `fields: ["dishes"]`.
@@ -1561,7 +1568,9 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 
 **Interfaces:**
 - The Structure tab's **Add** gains **Set menu…** (`"add-set-menu"`), listing
-  `placeableSetMenus`; choosing one places it in the list being viewed. A placed set menu's row
+  `placeableSetMenus` for the list being viewed. A set menu can appear once per list and in more
+  than one list of the same full menu (watcher, 18 November). Choosing one puts it in the
+  current list. A placed set menu's row
   shows its name, "Set menu" and its price, opens the set menu's editor when clicked, and offers
   Move and Remove like an include. It has no folder settings in this piece.
 - **Add menu** offers **Menu** or **Set menu** using the existing `wt-*` controls. Menu opens

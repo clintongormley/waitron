@@ -5,10 +5,11 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
 import { validateMenuConfiguration } from "./configuration-transfer.js";
-import { buildMenuDocument } from "./menu-document.js";
+import { buildMenuDocument, documentOffers } from "./menu-document.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addShortcut } from "./menu-home.js";
 import { includableMenus } from "./menu-inclusion.js";
+import { indexMenuOccurrences } from "./menu-navigation.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { createMenu, createProduct, listMenuOffers, menuPrices } from "./operations.js";
 import { loadSectionGraph, menusContaining, sectionPathName } from "./section-graph.js";
@@ -167,7 +168,7 @@ it("offers active set menus for placement separately from ordinary includes", as
 });
 
 it("names the active set menu in the full menu's document without expanding its list", async () => {
-  const { full, fullRoot, set, setRef } = await dishesFixture();
+  const { full, fullRoot, set, setRef, steak } = await dishesFixture();
   await app((tx) => addMember(tx, fullRoot, setRef));
   const built = await app((tx) => buildMenuDocument(tx, full.id));
   expect(built.document.root.members.map((member) => member.kind)).toEqual(["product", "set_menu"]);
@@ -177,6 +178,10 @@ it("names the active set menu in the full menu's document without expanding its 
     name: "Daily menu",
   });
   expect(built.clashes).toEqual([]);
+  expect(documentOffers(built.document).map(({ productId }) => productId)).toEqual([steak.id]);
+  expect(indexMenuOccurrences(built.document).map(({ target }) => target.kind)).toEqual([
+    "product",
+  ]);
 });
 
 it("omits an inactive set menu from the full menu's document", async () => {
@@ -187,24 +192,64 @@ it("omits an inactive set menu from the full menu's document", async () => {
   expect(built.document.root.members).toEqual([]);
 });
 
+it("holds the same set menu in two lists of one full menu", async () => {
+  await app(async (tx) => {
+    const { full, fullRoot, set, setRef } = await menusFixture(tx);
+    const section = await createSectionIn(tx, fullRoot, { internalName: "Lunch deals" });
+    await addMember(tx, fullRoot, setRef);
+    await addMember(tx, section.id, setRef);
+    await expect(addMember(tx, fullRoot, setRef)).rejects.toMatchObject({
+      code: "menu_section.member_duplicate",
+      params: { sectionId: fullRoot },
+    });
+    const { document } = await buildMenuDocument(tx, full.id);
+    const member = { kind: "set_menu", menuId: set.id, name: "Daily menu" };
+    expect(document.root.members).toEqual([
+      expect.objectContaining({ kind: "section", sectionId: section.id, members: [member] }),
+      member,
+    ]);
+  });
+});
+
+const importMenus = {
+  menus: [
+    { id: "lunch", name: "Lunch" },
+    { id: "daily", name: "Daily menu", kind: "set_menu", set_price: 1400 },
+  ],
+  sections: [
+    { id: "lunch-root", owner_menu_id: "lunch", role: "menu_root" },
+    { id: "lunch-home", owner_menu_id: "lunch", role: "home_layout", internal_name: "Home" },
+    { id: "daily-root", owner_menu_id: "daily", role: "menu_root" },
+    { id: "daily-section", owner_menu_id: "daily", role: "section", internal_name: "Desserts" },
+  ],
+};
+
+it.each([
+  ["include in a set menu", "daily-root", "lunch-root"],
+  ["child section in a set menu", "daily-root", "daily-section"],
+  ["set menu on Device Home", "lunch-home", "daily-root"],
+])("refuses importing a %s", (_placement, section_id, child_section_id) => {
+  expect(() =>
+    validateMenuConfiguration({
+      ...importMenus,
+      section_members: [{ section_id, child_section_id, position: 0 }],
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "section_members.child_section_id" },
+    }),
+  );
+});
+
 it("imports a set-menu placement, and refuses ordinary folder settings on it", () => {
-  const tables = {
-    menus: [
-      { id: "lunch", name: "Lunch" },
-      { id: "daily", name: "Daily menu", kind: "set_menu", set_price: 1400 },
-    ],
-    sections: [
-      { id: "lunch-root", owner_menu_id: "lunch", role: "menu_root" },
-      { id: "daily-root", owner_menu_id: "daily", role: "menu_root" },
-    ],
-  };
   const placement = { section_id: "lunch-root", child_section_id: "daily-root", position: 0 };
   expect(() =>
-    validateMenuConfiguration({ ...tables, section_members: [placement] }),
+    validateMenuConfiguration({ ...importMenus, section_members: [placement] }),
   ).not.toThrow();
   expect(() =>
     validateMenuConfiguration({
-      ...tables,
+      ...importMenus,
       section_members: [{ ...placement, show_as_folder: 0 }],
     }),
   ).toThrowError(
@@ -247,5 +292,16 @@ it("does not offer translations for a set-menu placement as an included menu", a
     expect(gaps.find(({ language }) => language === "es")!.gaps).not.toContainEqual(
       expect.objectContaining({ id: placement!.id, kind: "included_menu" }),
     );
+  });
+});
+
+it("offers ordinary includes only for menus that accept them", async () => {
+  await app(async (tx) => {
+    const { full, set } = await menusFixture(tx);
+    const specials = await createMenu(tx, { name: "Specials" });
+    expect((await readMenuStructure(tx, full.id)).includable.map(({ id }) => id)).toEqual([
+      specials.id,
+    ]);
+    expect((await readMenuStructure(tx, set.id)).includable).toEqual([]);
   });
 });

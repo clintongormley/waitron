@@ -3228,7 +3228,10 @@ describe("A461 served-menu section search", () => {
   const cake = product("cake", "Coffee cake", { menuId: "other" });
   const current = lunch({ structure: { members: [member("cafe")] }, ...withShortcuts([]) });
   const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
-  const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+  const second = section("copy", "internal", { en: "Coffee second" }, [
+    { kind: "set_menu", menuId: "daily", name: "Daily menu" },
+    member("cake"),
+  ]);
   const other = {
     ...current,
     id: "other",

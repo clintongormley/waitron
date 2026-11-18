@@ -862,12 +862,12 @@ export class DeviceHomePreview extends LitElement {
    * section tile opens. A structural member is drawn from itself, a shortcut from the copy it
    * opens. */
   #tile(
-    ref: DocumentTile | DocumentMember,
+    ref: DocumentTile | ReturnType<typeof shownMembers>[number],
     opens: SectionStep[],
     index: PreviewIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
-    if (ref.kind === "empty" || ref.kind === "set_menu") return nothing;
+    if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       if (!index.sections.has(ref.sectionId)) return nothing;
       const section = "members" in ref ? ref : openedSection(ref.sectionId, index)!;
@@ -878,7 +878,7 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #listTiles(
-    list: readonly DocumentMember[],
+    list: ReturnType<typeof shownMembers>,
     path: SectionStep[],
     index: PreviewIndex,
     mode: HomeTileMode,

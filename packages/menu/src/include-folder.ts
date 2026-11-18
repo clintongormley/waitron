@@ -185,14 +185,20 @@ export function checkIncludeFolderRows(
     if (![undefined, 0, 1, true, false].includes(show as never))
       throw new AppError("setup.request_invalid", { field: "section_members.show_as_folder" });
     const overrides = importedOverrides(row);
-    const parentRole = byId.get(row.section_id)?.role;
+    const parent = byId.get(row.section_id);
     const child = byId.get(row.child_section_id);
+    const isSetMenu = child?.role === "menu_root" && sets.has(child.owner_menu_id);
+    if (
+      typeof row.child_section_id === "string" &&
+      (sets.has(parent?.owner_menu_id) || (parent?.role === "home_layout" && isSetMenu))
+    )
+      throw new AppError("setup.request_invalid", { field: "section_members.child_section_id" });
     const isInclude =
       typeof row.child_section_id === "string" &&
       child?.role === "menu_root" &&
-      !sets.has(child.owner_menu_id) &&
-      parentRole !== undefined &&
-      parentRole !== "home_layout";
+      !isSetMenu &&
+      parent !== undefined &&
+      parent.role !== "home_layout";
     if (isInclude) continue;
     if (show === 0 || show === false)
       throw new AppError("setup.request_invalid", { field: "section_members.show_as_folder" });

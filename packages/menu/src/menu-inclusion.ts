@@ -69,6 +69,7 @@ export function placesOf(
 }
 
 export function includableMenus(graph: SectionGraph, menuId: string): string[] {
+  if (graph.menu(menuId)?.kind === "set_menu") return [];
   const root = rootOf(graph, menuId);
   if (root === undefined) return [];
   return graph

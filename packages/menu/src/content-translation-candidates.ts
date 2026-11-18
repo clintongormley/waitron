@@ -92,11 +92,12 @@ export function namedRows(
     from sections s left join menus c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
     union all select 'included_menu', m.id, coalesce(s.internal_name, a.name), m.folder_names,
       s.names, l.owner_menu_id, c.name, m.section_id, m.child_section_id, s.owner_menu_id,
-      s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), l.role, coalesce(a.active, 0), null
+      case when a.kind = 'set_menu' and s.role = 'menu_root' then 'set_menu' else s.role end,
+      1, coalesce(c.active, 0), (s.role = 'menu_root'), l.role, coalesce(a.active, 0), null
     from section_members m left join sections s on s.id = m.child_section_id
       left join sections l on l.id = m.section_id left join menus c on c.id = l.owner_menu_id
       left join menus a on a.id = s.owner_menu_id
-    where a.kind = 'menu' and ${filter("included_menu", sql`m.id`)}
+    where ${filter("included_menu", sql`m.id`)}
     union all select 'unit', u.id, u.staff_name, u.name, null, null, null,
       null, null, null, null, 1, 1, 1, null, 1, u.abbreviation
     from units u where ${filter("unit", sql`u.id`)}
