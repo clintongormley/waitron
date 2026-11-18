@@ -110,6 +110,12 @@ describe("health state", () => {
     expect(snap.body).toMatchObject({ ok: false, lastPassAt: null });
   });
 
+  it("names the card-payment check without a provider", () => {
+    const snap = healthSnapshot(createHealthState(BOOT), AT);
+    const body = snap.body as { duties: Record<string, unknown> };
+    expect(Object.keys(body.duties)).toEqual(["fiscal.drain", "payments.reconcile"]);
+  });
+
   it("is unhealthy on a null lastPassAt alone, even when every duty is fresh", () => {
     // At boot every duty is also stale, so this isolates the `lastPassAt` clause; `recordPass`
     // cannot reach this state, hence the direct write.

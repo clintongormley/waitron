@@ -3,11 +3,10 @@ import type { RunRecord, TickResult } from "@waitron/payments";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
-/** This host's own label for the fiscal drainer. It has no `reconciliation_runs` name because it is not
- * a ledger duty (`packages/payments/src/reconciliation-schedule/duty.ts` says why). */
+/** This host's own label for the fiscal drainer. */
 export const DRAIN_DUTY = "fiscal.drain";
 /** Aggregate payment-audit health label; scheduled runs keep their provider-specific duty names. */
-export const RECONCILE_DUTY = "payments.reconcile.stripe";
+export const RECONCILE_DUTY = "payments.reconcile";
 
 /** Consumers that must cover every duty (`health.ts`'s `DUTY_BUDGET_MS`) key off `Duty`, so adding a
  * duty here without updating them is a compile error. */

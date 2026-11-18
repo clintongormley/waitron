@@ -610,7 +610,7 @@ otherwise:
       "parked": 0,
       "stale": true
     },
-    "payments.reconcile.stripe": {
+    "payments.reconcile": {
       "lastOkAt": "2026-07-26T09:14:02Z",
       "consecutiveFailures": 0,
       "skipped": 0,
@@ -714,13 +714,13 @@ three ways, one visible in the body above, two that need the logs:
 **`skipped` > 0 is not a `503` by itself while the duty's last success is within its budget.** A
 duty that has skipped on every pass since this process started has no `lastOkAt`, so it reads stale
 and answers `503` at once. A skip means this database's due fiscal
-work (or, for `payments.reconcile.stripe`, one duty's sweep) could not be attempted THIS pass,
+work (or, for `payments.reconcile`, one duty's sweep) could not be attempted THIS pass,
 even though the pass itself completed and the other duty was served. `consecutiveFailures`
 increments and `lastOkAt` does not advance for as long as anything is skipped. Find why
 via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
 common cause is a missing, unreadable, or stale-shaped credential.
 
-**`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself while the duty's last
+**`parked` > 0, `payments.reconcile` only, is not a `503` by itself while the duty's last
 success is within its budget.** The pass that parks counts as a failure (`consecutiveFailures` goes
 up and `lastOkAt` does not advance), and the next clean pass clears it. The status code turns `503`
 when no clean pass comes within the duty's 26-hour budget, or at once if the duty has had no clean
@@ -740,12 +740,13 @@ the run's code, gets the filing case and no incident; a record held behind it ge
 the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
 carries the duty, period and `errorCode`.
 
-`payments.reconcile.stripe` uses the identical `skipped`/`parked` mechanism with a 26-hour staleness
+`payments.reconcile` uses the identical `skipped`/`parked` mechanism with a 26-hour staleness
 budget (a daily period plus slack) rather than drain's ~75 minutes, so the same reading applies to
-it for payment audits instead of a fiscal submission. This health label covers the selected
-Stripe and SumUp duties together, retaining its existing name and budget. `reconciliation_runs.duty`
-keeps `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each runs only while the
-`payments` module is on and its own credential is provisioned; credentials are checked each pass.
+it for payment audits instead of a fiscal submission. This `/health` label covers the selected
+Stripe and SumUp duties together. Each run's row in `reconciliation_runs` keeps its provider's own
+`duty` key, `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each provider's check runs
+only while the `payments` module is on and its own credential is provisioned; credentials are
+checked each pass.
 
 The SumUp audit compares gross EUR charges with local captures and looks up locally failed
 payments by their saved references. An alert can identify a charge whose reply was lost, but the
@@ -813,7 +814,7 @@ The ones worth grepping for:
   due a day later. This is what `/health`'s
   `parked` count (above) is counting.
 - **`duty.failed`** (`error`) — `{ duty, errorCode }`. The WHOLE duty threw for this pass (not a
-  contained skip) — `fiscal.drain` or `payments.reconcile.stripe` itself.
+  contained skip) — `fiscal.drain` or `payments.reconcile` itself.
 - **`duty.degraded`** (`error` when the duty is stale, `warn` otherwise) —
   `{ duty, consecutiveFailures, skipped, parked, stale, lastOkAt }`. One line per DEGRADED duty,
   per pass —
