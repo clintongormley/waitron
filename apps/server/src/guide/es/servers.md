@@ -37,12 +37,12 @@ Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexió
 muestra después de **Use this box's own address**. Elige **Unirse o recuperar** y después
 **Añadir un nodo réplica**.
 
-Introduce la dirección HTTPS del servidor principal y elige **Continuar**. En un dispositivo que ya
+Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige **Continuar**; su dirección IP, como `https://192.168.1.10`, se rechaza. En un dispositivo que ya
 tenga la sesión iniciada en el panel del servidor principal, abre **Sistema → Servidores** y compara
 **Huella del certificado público de este servidor** con la que muestra el servidor nuevo. Elige
 **Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
 servidor nuevo recibe su primera copia por la red del local y se reinicia solo como servidor de
-reserva.
+reserva. La página del servidor nuevo se queda en **Este servidor se está uniendo** y no cambia.
 
 En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
 Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
@@ -62,8 +62,7 @@ conectado a la red del local para abrir su [página de cambio](servers.md#emerge
 ## Retirar un servidor de reserva {#remove-a-spare}
 
 En el servidor principal, abre **Sistema → Servidores**, abre el menú de la fila del servidor de
-reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que no hay
-otra recuperación en curso; después activa las dos declaraciones. Una vez retirado, el servidor principal
+reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que nadie está restaurando el local desde una copia de seguridad ni pasándolo a otro servidor; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
 volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva.
 

@@ -34,11 +34,11 @@ Connect the new box to the venue's network and switch it on; it needs no interne
 Because `waitron.local` reaches the main box, open the address that the new box's screen lists
 after **Use this box's own address**. Choose **Join or recover**, then **Add a mirror node**.
 
-Enter the main box's HTTPS address and choose **Continue**. On a device already signed in to the
+Enter the main box's address by its name, `https://waitron.local`, and choose **Continue**; its IP address, such as `https://192.168.1.10`, is refused. On a device already signed in to the
 main box's dashboard, open **System → Servers** and compare **This server's public certificate
 fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
 Then enter the account's details and choose **Connect**. The new box takes its first copy over the
-venue's network and restarts by itself as the spare.
+venue's network and restarts by itself as the spare. The new box's page stays on **This server is joining** and does not change.
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
@@ -57,8 +57,7 @@ network to open its [switch page](servers.md#emergency).
 ## Remove a spare box {#remove-a-spare}
 
 On the main box, open **System → Servers**, open the spare's row menu and choose **Remove**. For a
-spare that has finished joining, first switch it off and make sure no other recovery is in
-progress, then turn on both statements. Once it is removed, the main box stops waiting for it at
+spare that has finished joining, first switch it off and make sure nobody is restoring the venue from a backup or switching it to another box, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
 it and add it as a new spare.
 

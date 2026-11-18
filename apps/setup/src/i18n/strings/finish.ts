@@ -85,7 +85,7 @@ export const finishEn = {
   "done.break_glass.heading": "Save your server key now",
   "done.break_glass.key_name": "Server key {date} · {code}",
   "done.break_glass.backups":
-    "Older backups need the key from that time. Keep it until those backups are deleted.",
+    "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
   "done.break_glass.warning":
     "Write this down and store it offline. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
@@ -99,8 +99,10 @@ export const finishEn = {
   "done.joining.heading": "This server is joining",
   "done.joining.body":
     "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.",
+  "done.joining.next":
+    "This page will not change. To see when this server has joined, open the primary's dashboard, then System, then Servers, and look for Last copy received in this server's row.",
   "done.joining.switch_label":
-    "Print a switch label for each server: open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+    "Once this server has joined, print a switch label for each server and stick it on that server. If the primary fails, scanning the standby's label with a till or phone on the restaurant's network opens the page that switches the restaurant over to it. To print the labels, open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -191,7 +193,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":
-    "Las copias antiguas necesitan la clave de entonces. Consérvala hasta que se borren esas copias.",
+    "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
   "done.break_glass.warning":
     "Anótala y guárdala fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
@@ -206,6 +208,8 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joining.body":
     "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",
+  "done.joining.next":
+    "Esta página no cambiará. Para ver cuándo se ha unido este servidor, abre el panel del servidor principal, luego Sistema y luego Servidores, y busca Última copia recibida en la fila de este servidor.",
   "done.joining.switch_label":
-    "Imprime una etiqueta de cambio para cada servidor: abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+    "Cuando este servidor se haya unido, imprime una etiqueta de cambio para cada servidor y pégala en ese servidor. Si el principal falla, al escanear la etiqueta del servidor en espera con una caja o un móvil conectado a la red del restaurante se abre la página que pasa el restaurante a ese servidor. Para imprimirlas, abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
 };

@@ -45,6 +45,9 @@ async function alerts(el: SetupConnectScreen): Promise<Element[]> {
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
+const ADDRESS_REFUSED =
+  "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.";
+
 const VALID: Record<string, string> = {
   primaryUrl: "https://waitron.local",
   email: "op1@example.com",
@@ -114,7 +117,7 @@ describe("setup-connect-screen", () => {
     [
       "en-GB",
       {
-        primaryUrl: "Full HTTPS address of the primary server",
+        primaryUrl: "For example https://waitron.local",
         email: "An admin's sign-in email on the primary server",
         password: "That admin's dashboard password",
         totp: "Current code, if this admin uses an authenticator",
@@ -123,7 +126,7 @@ describe("setup-connect-screen", () => {
     [
       "es-ES",
       {
-        primaryUrl: "Dirección HTTPS completa del servidor principal",
+        primaryUrl: "Por ejemplo https://waitron.local",
         email: "Correo de acceso de un administrador del servidor principal",
         password: "La contraseña del panel de ese administrador",
         totp: "El código que muestra ahora el autenticador",
@@ -346,7 +349,7 @@ describe("setup-connect-screen", () => {
     await new Promise((resolve) => setTimeout(resolve));
     const url = q(el, "[data-test=primaryUrl]")!;
     expect(url.hasAttribute("invalid")).toBe(true);
-    expect(url.getAttribute("error")).toBe("Check the primary server address.");
+    expect(url.getAttribute("error")).toBe(ADDRESS_REFUSED);
     expect(url.shadowRoot!.activeElement).toBe(url.shadowRoot!.querySelector("input"));
     expect(q(el, "[data-test=email]")).toBeNull();
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
@@ -637,9 +640,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await type(el, "primaryUrl", "ftp://waitron.local");
     await pressed(el, "continue");
     const url = q(el, "[data-test=primaryUrl]")!;
-    await vi.waitFor(() =>
-      expect(url.getAttribute("error")).toBe("Check the primary server address."),
-    );
+    await vi.waitFor(() => expect(url.getAttribute("error")).toBe(ADDRESS_REFUSED));
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
@@ -737,7 +738,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     });
     const events = collect(host);
     expect(q(el, "[data-test=connect]")).not.toBeNull();
-    expect(text(q(el, "[data-test=check-address]")!)).toBe("Check the address");
+    expect(text(q(el, "[data-test=check-address]")!)).toBe("Change the address");
 
     await pressed(el, "check-address");
     const url = q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string };
@@ -866,7 +867,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(await bottomOf(el)).toBe(
       "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
     );
-    expect(text(q(el, "[data-test=check-address]")!)).toBe("Revisar la dirección");
+    expect(text(q(el, "[data-test=check-address]")!)).toBe("Cambiar la dirección");
   });
 });
 
@@ -888,6 +889,25 @@ describe("setup-connect-screen in Spanish", () => {
     expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe(
       "Revisa el correo del administrador.",
     );
+  });
+
+  it("says under the address, in Spanish, that the server refused it and to enter the name", async () => {
+    setLocale("es-ES");
+    const api = {
+      primaryCertificate: vi
+        .fn()
+        .mockRejectedValue({ code: "mirror.primary_url_invalid", params: {}, status: 400 }),
+    };
+    const { el } = await mount({ api });
+    await type(el, "primaryUrl", "https://192.168.10.10");
+    q(el, "[data-test=continue]")!.click();
+    const url = q(el, "[data-test=primaryUrl]")!;
+    await vi.waitFor(() =>
+      expect(url.getAttribute("error")).toBe(
+        "Esta dirección no se puede usar. Introduce el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del restaurante, como https://192.168.1.10.",
+      ),
+    );
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   it("switches language while mounted and keeps what was typed", async () => {

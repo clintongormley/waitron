@@ -74,7 +74,9 @@ export const startEn = {
     "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. To restore a backup instead, choose Back.",
   "connect.primary_url.label": "Primary server address",
   "connect.primary_url.error": "Check the primary server address.",
-  "connect.primary_url.hint": "Full HTTPS address of the primary server",
+  "connect.primary_url.refused":
+    "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
+  "connect.primary_url.hint": "For example https://waitron.local",
   "connect.email.label": "Admin email",
   "connect.email.error": "Check the admin email.",
   "connect.email.hint": "An admin's sign-in email on the primary server",
@@ -97,7 +99,7 @@ export const startEn = {
   "connect.compare.mismatch": "It doesn't match",
   "connect.stopped":
     "The fingerprints don't match, so this may not be your primary server. Nothing was sent to it. Check the address and compare again, or go back.",
-  "connect.check_address": "Check the address",
+  "connect.check_address": "Change the address",
 
   "mode.heading": "Set up this Waitron server",
   "mode.intro":
@@ -246,7 +248,9 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Este servidor se une al principal y guarda una copia de los datos del restaurante. Cuando termina de unirse, puede sustituirlo: con un traspaso desde la página Servidores del principal, o con un cambio de emergencia si el principal falla. Para restaurar una copia de seguridad, elige Volver.",
   "connect.primary_url.label": "Dirección del servidor principal",
   "connect.primary_url.error": "Revisa la dirección del servidor principal.",
-  "connect.primary_url.hint": "Dirección HTTPS completa del servidor principal",
+  "connect.primary_url.refused":
+    "Esta dirección no se puede usar. Introduce el nombre del servidor principal, empezando por https://, por ejemplo https://waitron.local. No se acepta una dirección IP de la red del restaurante, como https://192.168.1.10.",
+  "connect.primary_url.hint": "Por ejemplo https://waitron.local",
   "connect.email.label": "Correo del administrador",
   "connect.email.error": "Revisa el correo del administrador.",
   "connect.email.hint": "Correo de acceso de un administrador del servidor principal",
@@ -269,7 +273,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.compare.mismatch": "No coincide",
   "connect.stopped":
     "Las huellas no coinciden, así que puede que este no sea tu servidor principal. No se le ha enviado nada. Revisa la dirección y vuelve a comparar, o vuelve atrás.",
-  "connect.check_address": "Revisar la dirección",
+  "connect.check_address": "Cambiar la dirección",
 
   "mode.heading": "Configura este servidor Waitron",
   "mode.intro":

@@ -2266,9 +2266,10 @@ export const en = {
   "servers.remove_explanation":
     "This marks it removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
   "servers.declare_explanation":
-    "Confirm that this spare is switched off and no other recovery is in progress.",
+    "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now.",
   "servers.declare_switched_off": "This spare is switched off",
-  "servers.declare_no_recovery": "No other recovery is in progress",
+  "servers.declare_no_recovery":
+    "Nobody is restoring this venue from a backup or switching it to another server right now",
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
@@ -6760,9 +6761,10 @@ export const es: Record<StringKey, string> = {
   "servers.remove_explanation":
     "Esto lo marca como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
   "servers.declare_explanation":
-    "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
+    "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
   "servers.declare_switched_off": "Este servidor en espera está apagado",
-  "servers.declare_no_recovery": "No hay otra recuperación en curso",
+  "servers.declare_no_recovery":
+    "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":
