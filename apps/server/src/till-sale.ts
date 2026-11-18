@@ -21,6 +21,7 @@ import "./errors.js";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   addDecimal,
   AppError,
@@ -57,6 +58,7 @@ import {
 import type {
   CaptureMismatch,
   CapturedPaymentForOrder,
+  CardDetails,
   PaymentProvider,
   PaymentResult,
 } from "@waitron/payments";
@@ -318,7 +320,6 @@ export interface ReceiptAdjustment {
   amount: string;
 }
 
-/** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */
 export type TenderBlock =
   | { method: "unpaid" }
   | { method: "deferred" }
@@ -330,6 +331,7 @@ export type TenderBlock =
       reference: string | null;
       externalProvider?: "connected_account" | "other";
       externalMachine?: string;
+      card?: CardDetails;
     };
 
 /**
@@ -339,7 +341,13 @@ export type TenderBlock =
  */
 export type BillTenderLine = (
   | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | ({ method: "card"; amount: string; tip: string; reference: string | null } & OutsideCardDetails)
+  | ({
+      method: "card";
+      amount: string;
+      tip: string;
+      reference: string | null;
+      card?: CardDetails;
+    } & OutsideCardDetails)
 ) & { refunds: BillTenderRefund[] };
 
 /** Money given back from a bill payment before the invoice: a `completed` refund, oldest first. */
@@ -414,7 +422,6 @@ export function receiptQr(
   return { qr, qrText: { ...backend.receiptQrText } };
 }
 
-/** Read the persisted amounts and manual terminal reference; card identity belongs on the slip. */
 export async function readTenderBlock(
   tx: Transaction,
   saleId: SaleId,
@@ -426,6 +433,7 @@ export async function readTenderBlock(
       amount: tenders.amount,
       tip: tenders.tipAmount,
       cashTendered: tenders.cashTendered,
+      billPaymentId: tenders.billPaymentId,
     })
     .from(tenders)
     .where(eq(tenders.saleId, saleId))
@@ -465,14 +473,64 @@ export async function readTenderBlock(
       ),
     )
     .limit(1);
+  const [captured] = await tx
+    .select(CARD_COLUMNS)
+    .from(payments)
+    .where(
+      and(
+        eq(payments.saleId, saleId),
+        tender.billPaymentId === null
+          ? isNull(payments.billPaymentId)
+          : eq(payments.billPaymentId, tender.billPaymentId),
+        inArray(payments.state, MONEY_TAKEN),
+      ),
+    )
+    .orderBy(payments.settledAt, sql`${payments}.rowid`)
+    .limit(1);
   return {
     method: "card",
     charged: tender.amount,
     tip: tender.tip,
     reference: payment?.externalRef ?? null,
     ...outsideCardDetails(payment ?? {}),
+    ...cardOf(captured),
   };
 }
+
+/** A payment that charged the card, whatever was given back afterwards. */
+const MONEY_TAKEN = ["captured", "partially_refunded", "refunded"] as const;
+
+const CARD_COLUMNS = {
+  scheme: payments.cardScheme,
+  last4: payments.cardLast4,
+  entryMode: payments.cardEntryMode,
+  authCode: payments.cardAuthCode,
+};
+
+function cardOf(
+  row:
+    | {
+        scheme: string | null;
+        last4: string | null;
+        entryMode: string | null;
+        authCode: string | null;
+      }
+    | undefined,
+): { card?: CardDetails } {
+  if (row === undefined || row.scheme === null || row.last4 === null || row.entryMode === null)
+    return {};
+  return {
+    card: {
+      scheme: row.scheme,
+      last4: row.last4,
+      // `payments_card_entry_mode_ck` admits only CardDetails' entry modes.
+      entryMode: row.entryMode as CardDetails["entryMode"],
+      authCode: row.authCode,
+    },
+  };
+}
+
+const capturedCards = alias(payments, "captured_card");
 
 /** The payments of a sale whose tenders were taken as bill payments, in the order they were taken. */
 export async function readBillTenderLines(
@@ -491,12 +549,23 @@ export async function readBillTenderLines(
       reference: payments.externalRef,
       externalProvider: payments.externalProvider,
       externalMachine: payments.externalMachine,
+      scheme: capturedCards.cardScheme,
+      last4: capturedCards.cardLast4,
+      entryMode: capturedCards.cardEntryMode,
+      authCode: capturedCards.cardAuthCode,
     })
     .from(tenders)
     .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
     .leftJoin(
       payments,
       and(eq(payments.billPaymentId, billPayments.id), eq(payments.provider, "manual")),
+    )
+    .leftJoin(
+      capturedCards,
+      and(
+        eq(capturedCards.billPaymentId, billPayments.id),
+        inArray(capturedCards.state, MONEY_TAKEN),
+      ),
     )
     .where(eq(tenders.saleId, saleId))
     // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
@@ -548,6 +617,7 @@ export async function readBillTenderLines(
       tip,
       reference: row.reference ?? null,
       ...outsideCardDetails(row),
+      ...cardOf(row),
       refunds,
     };
   });

@@ -3474,3 +3474,70 @@ describe("receipt lines' VAT rates", () => {
     }
   });
 });
+
+describe("card details on the receipt", () => {
+  async function cardSale(externalRef?: string) {
+    const { cfg, each, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const workingOrderId = randomUUID();
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        dining: "eat_in",
+        workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50", ...(externalRef ? { externalRef } : {}) },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const sold = (await res.json()) as TillSaleResult;
+    const [sale] = await suite.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    const tickets = async () => [
+      await withTransaction(suite.db, (tx) => readSettledTicket(backend, tx, cfg, workingOrderId)),
+      await withTransaction(suite.db, (tx) => readTransactionReceipt(backend, tx, cfg, sale!.id)),
+    ];
+    return { sold, workingOrderId, tickets };
+  }
+
+  it("a connected-reader card payment's brand and last four reach the reprint", async () => {
+    const { workingOrderId, tickets } = await cardSale();
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'contactless', card_auth_code = '354739' where working_order_id = ${workingOrderId}`,
+      ),
+    );
+    for (const ticket of await tickets()) {
+      expect(ticket.tender).toEqual({
+        method: "card",
+        charged: "1.50",
+        tip: "0.00",
+        reference: null,
+        card: { scheme: "VISA", last4: "4034", entryMode: "contactless", authCode: "354739" },
+      });
+    }
+  });
+
+  it("a card payment that was not captured names no card", async () => {
+    const { workingOrderId, tickets } = await cardSale();
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', state = 'voided', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'chip', card_auth_code = null where working_order_id = ${workingOrderId}`,
+      ),
+    );
+    for (const ticket of await tickets()) expect(ticket.tender).not.toHaveProperty("card");
+  });
+
+  it("a hand-keyed card with no card row prints no card", async () => {
+    const { sold, tickets } = await cardSale("OP-77");
+    for (const ticket of [sold, ...(await tickets())]) {
+      expect(ticket.tender).toMatchObject({ method: "card", reference: "OP-77" });
+      expect(ticket.tender).not.toHaveProperty("card");
+    }
+  });
+});
