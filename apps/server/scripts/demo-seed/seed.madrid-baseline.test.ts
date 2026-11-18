@@ -260,7 +260,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   device_profile_admission_roles: ["role"],
   nodes: ["location_id"],
   adjustment_reasons: ["apply_roles", "approver_roles"],
-  devices: ["location_id"],
+  devices: ["location_id", "created_at"],
   working_orders: ["location_id"],
   tender_refunds: ["location_id"],
   join_requests: ["location_id"],

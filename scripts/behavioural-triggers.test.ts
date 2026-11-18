@@ -211,8 +211,8 @@ function workingOrder(id, status, extra = {}) {
 /** A device enrolled at `STAMP`. */
 function device(id, profileId, label, active) {
   return (
-    `insert into devices (id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-    `values ('${id}', '${profileId}', '${label}', 'hash', ${active ? 1 : 0}, '${STAMP}', '${STAMP}')`
+    `insert into devices (id, device_profile_id, label, token_hash, active, enrolled_at) ` +
+    `values ('${id}', '${profileId}', '${label}', 'hash', ${active ? 1 : 0}, '${STAMP}')`
   );
 }
 

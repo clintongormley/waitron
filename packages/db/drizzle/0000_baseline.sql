@@ -745,13 +745,14 @@ CREATE TABLE `devices` (
 	`battery_charging` integer,
 	`battery_reported_at` text,
 	`enrolled_at` text NOT NULL,
-	`created_at` text NOT NULL,
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`receipt_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`payment_slip_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`cash_drawer_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`invoice_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "devices_battery_level_ck" CHECK("devices"."battery_level" is null or "devices"."battery_level" between 0 and 100),
+	CONSTRAINT "devices_deleted_ck" CHECK("devices"."deleted_at" is null or "devices"."active" = 0)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `devices_label_active_key` ON `devices` (`label`) WHERE "devices"."active" = 1;--> statement-breakpoint

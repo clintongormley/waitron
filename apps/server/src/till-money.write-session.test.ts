@@ -216,7 +216,7 @@ async function revoke(change: Revocation) {
   else
     await suite.db
       .update(devices)
-      .set(change === "deleted" ? { deletedAt: new Date().toISOString() } : { active: false })
+      .set({ active: false, ...(change === "deleted" && { deletedAt: new Date().toISOString() }) })
       .where(eq(devices.id, venue.deviceId));
 }
 

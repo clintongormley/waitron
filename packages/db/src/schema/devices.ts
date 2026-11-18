@@ -1,5 +1,5 @@
 import { isNull, sql, type SQL } from "drizzle-orm";
-import { uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { pagePrinters } from "./page-printers.js";
@@ -52,16 +52,18 @@ export const devices = table(
     active: flag("active").notNull().default(true),
     deletedAt: tsString("deleted_at"),
     lastSeenAt: tsString("last_seen_at"),
-    // A whole percent, 0 to 100, not basis points like the `rate()` columns. The range is held by
-    // `PUT /api/device/battery`: a CHECK would make drizzle-kit rebuild `devices` (add-a-device
-    // spec §6).
+    // A whole percent.
     batteryLevel: smallCount("battery_level"),
     batteryCharging: flag("battery_charging"),
     batteryReportedAt: tsString("battery_reported_at"),
     enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    check(
+      "devices_battery_level_ck",
+      sql`${t.batteryLevel} is null or ${t.batteryLevel} between 0 and 100`,
+    ),
+    check("devices_deleted_ck", sql`${t.deletedAt} is null or ${t.active} = 0`),
     uniqueIndex("devices_label_active_key")
       .on(t.label)
       .where(sql`${t.active} = 1`),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d0dc150b-fe5b-4235-ba93-53ba5da63b62",
+  "id": "ebe35a24-bd61-4cca-8058-2ee21257a0cd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4892,13 +4892,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -4993,7 +4986,16 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "devices_battery_level_ck": {
+          "name": "devices_battery_level_ck",
+          "value": "\"devices\".\"battery_level\" is null or \"devices\".\"battery_level\" between 0 and 100"
+        },
+        "devices_deleted_ck": {
+          "name": "devices_deleted_ck",
+          "value": "\"devices\".\"deleted_at\" is null or \"devices\".\"active\" = 0"
+        }
+      }
     },
     "device_made_here_stations": {
       "name": "device_made_here_stations",
