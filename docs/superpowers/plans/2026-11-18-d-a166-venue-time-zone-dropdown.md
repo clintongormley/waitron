@@ -27,7 +27,9 @@ the country package, eg Spain has two time zones, one for mainland and one for l
   visible and quiet until explicitly replaced. In `venue-details-panel.ts`,
   reuse the labelled `wt-combobox` from zone repair with pack order and automatic
   search. Show an equivalent valid alias as its listed option and an off-list
-  saved value as a disabled current option. Keep the existing preview and
+  saved value as a current option disabled while selected. After a choice,
+  the manager can select the saved value to undo just the zone edit (watcher,
+  18 November 02:53). Keep the existing preview and
   explicit Save flow. Add optional zone names to `CountryPack` in
   `packages/country/src/country.ts` and supply English and Spanish names in
   `packages/country-es/src/spain.ts`. Use the dashboard language for labels

@@ -174,6 +174,33 @@ it("shows the off-list saved zone as a disabled choice and keeps Save quiet", as
   expect(save(el).disabled).toBe(true);
   expect(r.api.getVenueClockPreview).not.toHaveBeenCalled();
 });
+
+it("undoes a proposed replacement of an off-list zone and saves only the address edit", async () => {
+  setLocale("en-GB");
+  const r = rig(venueDetailsFixture({ timeZone: "UTC" }));
+  const el = await editing(r.api);
+  change(el, "addressLine1", "New street");
+  const picker = page.getByRole("combobox", { name: /Time zone/ });
+  await userEvent.click(picker);
+  await userEvent.click(page.getByRole("option", { name: "Canary Islands (Atlantic/Canary)" }));
+  await flush(el);
+  expect(q(el, "[data-test=clock-preview]")).not.toBeNull();
+  await userEvent.click(picker);
+  const current = page.getByRole("option", { name: "UTC (current)" });
+  expect(
+    [...q(el, 'wt-combobox[name="timeZone"]')!.shadowRoot!.querySelectorAll('[role="option"]')].map(
+      (option) => option.textContent?.trim(),
+    ),
+  ).toContain("UTC (current)");
+  await userEvent.click(current);
+  await flush(el);
+  expect(q(el, "[data-test=clock-preview]")).toBeNull();
+  await click(el, "[data-test=save]");
+  expect(r.api.patchVenueDetails).toHaveBeenCalledExactlyOnceWith({
+    changes: { addressLine1: "New street" },
+    expected: r.model.details,
+  });
+});
 it("requires acknowledgement of a changed normalized patch and resets it on a later edit", async () => {
   setLocale("en-GB");
   const { api, model } = rig();

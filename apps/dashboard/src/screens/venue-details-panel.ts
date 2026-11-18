@@ -8,6 +8,7 @@ import {
   submitOnEnter,
   type AddressChosenDetail,
   type AddressLookupProvider,
+  type ComboboxOption,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -573,25 +574,28 @@ export class VenueDetailsPanel extends LitElement {
     const { issuer, timeZones } = this.model!;
     const names = getCountryPack(issuer.country)?.timeZoneNames;
     const locale = currentLocale();
-    const options = timeZones.map((zone) => {
+    const options = timeZones.map<ComboboxOption>((zone) => {
       const name = names?.[zone]?.[locale];
       return { value: zone, label: name ? `${name} (${zone})` : zone };
     });
-    const saved = classifySavedTimeZone(value);
-    const equivalent =
-      saved.kind === "valid" &&
-      options.find((option) => {
-        const zone = classifySavedTimeZone(option.value);
+    const listedZone = (value: string) => {
+      const saved = classifySavedTimeZone(value);
+      if (saved.kind !== "valid") return undefined;
+      return timeZones.find((id) => {
+        const zone = classifySavedTimeZone(id);
         return zone.kind === "valid" && zone.timeZone === saved.timeZone;
       });
-    if (equivalent) return { value: equivalent.value, options };
-    return {
-      value,
-      options: [
-        { value, label: fill("venue_details.time_zone_current", { zone: value }), disabled: true },
-        ...options,
-      ],
     };
+    const selected = listedZone(value);
+    const current = this.#expected!.timeZone;
+    const listedCurrent = value === current ? selected : listedZone(current);
+    if (current !== "" && listedCurrent === undefined)
+      options.unshift({
+        value: current,
+        label: fill("venue_details.time_zone_current", { zone: current }),
+        disabled: value === current,
+      });
+    return { value: selected ?? value, options };
   }
   #field(field: VenueDetailField): TemplateResult {
     const expected = this.#expected;
