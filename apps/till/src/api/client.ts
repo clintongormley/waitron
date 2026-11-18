@@ -286,7 +286,7 @@ export interface StaffMember {
 export interface SessionResult {
   personId: string;
   permissions: string[];
-  /** The operator's stored UI locale, or `null` when they have never set one (the venue default applies). */
+  /** The operator's stored UI locale, or `null` when they have never set one. */
   locale: string | null;
 }
 

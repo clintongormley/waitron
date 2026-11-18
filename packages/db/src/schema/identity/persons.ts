@@ -23,7 +23,7 @@ export const persons = table(
     passwordHash: label("password_hash"),
     /** AES-256-GCM ciphertext of the TOTP secret (`packages/identity/src/mfa.ts`). */
     totpSecret: label("totp_secret"),
-    /** A SUPPORTED_LOCALES code, or null for no preference (the venue default applies). Validated
+    /** A SUPPORTED_LOCALES code, or null for no preference. Validated
      * by the writers, not by a DB enum, so a new locale needs no migration; the only constraint
      * here is non-empty. */
     locale: label("locale"),

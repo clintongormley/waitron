@@ -16,7 +16,7 @@ export interface Session {
   personId: string;
   deviceId: string;
   authority: PersonAuthority;
-  /** `null` means no preference: fall back to the venue default. */
+  /** `null` means no preference. */
   locale: string | null;
 }
 

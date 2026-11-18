@@ -2279,7 +2279,6 @@ describe("till-app", () => {
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
       getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
-      // The enrolled display has no operator and has kept no language, so boot applies the venue language.
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
@@ -2377,7 +2376,7 @@ describe("till-app", () => {
     }
   });
 
-  it("keeps an enrolled kitchen display in the venue language when its browser prefers another", async () => {
+  it("shows an enrolled kitchen display in its browser's language when nothing was picked on it", async () => {
     const { el } = await mountApp({
       getLocales: vi.fn().mockResolvedValue({
         locales: [],
@@ -2415,7 +2414,7 @@ describe("till-app", () => {
     });
     await flush(el);
     expect(station(el)).not.toBeNull();
-    expect(currentLocale()).toBe("es-ES");
+    expect(currentLocale()).toBe("en-GB");
   });
 
   it.each([false, true])(
@@ -15348,8 +15347,8 @@ describe("till-app", () => {
   });
 
   describe("per-user locale", () => {
-    /** Boots, then logs a person in carrying `locale` in the `logged-in` detail — leaving the app on
-     * the counter with the UI switched per `resolveActiveLocale(locale, venueDefault)`. */
+    /** Boots, then logs a person in carrying `locale` in the `logged-in` detail, leaving the app on
+     * the counter. */
     async function toCounterAs(el: TillApp, locale: string | null): Promise<TillCounterScreen> {
       await flush(el);
       emit(lock(el)!, "logged-in", {
@@ -15592,11 +15591,65 @@ describe("till-app", () => {
       expect(currentLocale()).toBe("en-GB"); // operator locale preserved, NOT clobbered to the venue default
     });
 
-    it("a null stored locale falls back to the venue default on login", async () => {
-      // resolveActiveLocale(null, "es-ES") === "es-ES": an operator with no preference gets the venue UI.
+    it("a null stored locale gets the venue's language on login when the browser's match is the venue's", async () => {
       const { el } = await mountApp();
       await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
+    });
+
+    /** The server's answer for a browser whose language is `loginDefault`, in a Spanish venue. */
+    const browserSpeaking = (loginDefault: string) =>
+      vi.fn().mockResolvedValue({
+        locales: [
+          { code: "es-ES", label: "Español" },
+          { code: "en-GB", label: "English" },
+        ],
+        venueDefault: "es-ES",
+        loginDefault,
+      });
+
+    it("shows the browser's language after a sign-in by a person with no saved language", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("shows a person's saved language after sign-in, whatever the browser's", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await toCounterAs(el, "es-ES");
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("keeps a language picked on the sign-in screen after a sign-in by a person with no saved language", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      emit(lock(el)!, "wt-locale-selected", { code: "es-ES" });
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("shows a person's saved language after sign-in, whatever was picked on the sign-in screen", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await flush(el);
+      emit(lock(el)!, "wt-locale-selected", { code: "es-ES" });
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+      await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+    });
+
+    it("shows the venue's language after a sign-in with no saved language when the browser matches nothing", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "en-GB",
+          loginDefault: "en-GB",
+        }),
+      });
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("en-GB");
     });
 
     it("logout reverts the UI to the venue default", async () => {
@@ -15625,7 +15678,7 @@ describe("till-app", () => {
     it("wt-locale-selected while LOGGED IN persists (putLocale) then switches (setLocale)", async () => {
       const putLocale = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" });
@@ -15640,7 +15693,7 @@ describe("till-app", () => {
       // a non-fatal banner appears — never the raw code.
       const putLocale = vi.fn().mockRejectedValue({ code: "locale.unsupported" });
       const { el } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" });
@@ -15693,7 +15746,7 @@ describe("till-app", () => {
     });
 
     it("does not revert the locale if the app disconnects mid-logout", async () => {
-      // #onLogout's `setLocale(this.#venueLocale)` runs AFTER `await api.logout()`, so a teardown during
+      // #onLogout's `setLocale` runs AFTER `await api.logout()`, so a teardown during
       // that round trip must not repaint a live sibling's module-global locale — the same guard #boot
       // carries. Log in as an en-GB operator (UI → English), start logout with `logout()` in flight,
       // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED.
@@ -15719,7 +15772,7 @@ describe("till-app", () => {
       let resolvePut!: () => void;
       const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
       const { el, host } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" }); // putLocale now pending
@@ -15824,7 +15877,47 @@ describe("till-app", () => {
       expect(currentLocale()).toBe("en-GB");
     });
 
-    it("falls back to the venue's language when the stored pick is no longer offered", async () => {
+    /** The same display in a Spanish venue, opened in a browser whose language is `loginDefault`. */
+    const mountSpanishDisplay = (loginDefault: string) =>
+      mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "es-ES",
+          formFactor: kdsFormFactor,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [
+            { code: "es-ES", label: "Español" },
+            { code: "en-GB", label: "English" },
+            { code: "fr-FR", label: "Français" },
+          ],
+          venueDefault: "es-ES",
+          loginDefault,
+        }),
+      });
+
+    it("shows the language picked on the display, whatever the browser's", async () => {
+      localStorage.setItem("waitron.kitchenDisplayLanguage.dev-1", "fr-FR");
+      const { el } = await mountSpanishDisplay("en-GB");
+      await flush(el);
+      expect(currentLocale()).toBe("fr-FR");
+    });
+
+    it("shows the venue's language when nothing was picked and the browser matches nothing", async () => {
+      setLocale("fr-FR");
+      const { el } = await mountSpanishDisplay("es-ES");
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("ignores a stored pick that is no longer offered", async () => {
       localStorage.setItem("waitron.kitchenDisplayLanguage.dev-1", "fr-FR");
       const { el } = await mountDisplay("dev-1");
       await flush(el);

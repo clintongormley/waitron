@@ -2970,7 +2970,6 @@ export class TillApp extends LitElement {
    * every render. */
   #affordanceList: ShellAffordance[] = [];
 
-  /** The venue's default UI locale, used when no operator's preference applies. */
   #venueLocale = "es-ES";
   #browserLocale?: string;
   #browserLocaleVenue?: string;
@@ -2995,7 +2994,12 @@ export class TillApp extends LitElement {
   #preLoginLocale(): string {
     if (!this.#venueLocaleReady)
       return this.#browserLocale ?? this.#browserLocaleVenue ?? this.#venueLocale;
-    if (this.deviceMode) return this.#storedDisplayLanguage() ?? this.#venueLocale;
+    if (this.deviceMode) return this.#storedDisplayLanguage() ?? this.#unchosenLocale();
+    return this.#unchosenLocale();
+  }
+
+  /** Where nobody has chosen a language: the browser's, as the server matched it for this venue. */
+  #unchosenLocale(): string {
     return this.#browserLocaleVenue === this.#venueLocale
       ? (this.#browserLocale ?? this.#venueLocale)
       : this.#venueLocale;
@@ -6021,7 +6025,7 @@ export class TillApp extends LitElement {
 
   async #onLoggedIn(event: Event): Promise<void> {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
-    setLocale(resolveActiveLocale(locale, this.#venueLocale));
+    setLocale(resolveActiveLocale(locale, this.#preLoginChoice ?? this.#unchosenLocale()));
     this.#preLoginChoice = undefined;
     this.#tabPerson = { personId: signedIn.personId };
     await this.#enterSignedIn(signedIn);

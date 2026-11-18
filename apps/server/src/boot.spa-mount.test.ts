@@ -81,4 +81,10 @@ describe("SPA mounting alongside API routes (boot order)", () => {
     expect(await (await app.request("/till/")).text()).toBe("<html>till</html>");
     expect(await (await app.request("/assets/d-1.js")).text()).toContain("dashboard asset");
   });
+
+  it("serves the till at /till, without the trailing slash", async () => {
+    const res = await build().request("/till");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>till</html>");
+  });
 });
