@@ -589,7 +589,7 @@ export function buildReceiptDocument({
     text(label.deferredPayment);
   } else if (t.method === "card") {
     if (t.card === undefined) text(label.card);
-    else cardRows(t.card, subtractDecimal(decimal(t.charged), decimal(t.tip)));
+    else cardRows(t.card, decimal(t.charged));
     if (t.reference !== null) text(`${label.reference} ${t.reference}`);
     if (t.tip !== "0.00") {
       row(label.tip, formatMoney(t.tip, locale));

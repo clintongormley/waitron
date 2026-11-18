@@ -2266,13 +2266,13 @@ describe("names the card on a card payment", () => {
     expect(printed).toContain("American Express ****4034 (Chip) 26,50 €");
   });
 
-  it("names the card on a card payment: the card row holds the bill, the tip prints apart", () => {
+  it("names the card on a card payment: the card row holds what went on the card, tip included", () => {
     const printed = lines({
       ...CARD_SALE,
       tender: { method: "card", charged: "28.50", tip: "2.00", reference: null, card: CARD },
     });
-    expect(after(printed, "Visa ****4034 (Sin contacto) 26,50 €", 4)).toEqual([
-      "Visa ****4034 (Sin contacto) 26,50 €",
+    expect(after(printed, "Visa ****4034 (Sin contacto) 28,50 €", 4)).toEqual([
+      "Visa ****4034 (Sin contacto) 28,50 €",
       "Autorización 354739",
       "Propina 2,00 €",
       "Cobrado 28,50 €",
