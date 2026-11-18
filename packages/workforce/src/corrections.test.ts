@@ -349,7 +349,7 @@ describe("approveCorrection", () => {
   });
 });
 
-describe("cross-node correction precedence (§4.2, reprojection)", () => {
+describe("cross-node correction precedence (reprojection)", () => {
   it("reprojects the later recorded_at approved correction when two chains correct one target", async () => {
     // The cloud row was recorded later but carries the lower sequence_no, so a sequence_no-only rule
     // would give 540, not 570.

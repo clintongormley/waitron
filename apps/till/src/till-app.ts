@@ -23341,7 +23341,7 @@ export class TillApp extends LitElement {
               ></till-cloud-emergency-dialog>`
             : nothing
         }
-        <!-- The reusable supervisor-override dialog (cash-drawer-authorization §5), present only while an
+        <!-- The reusable supervisor-override dialog, present only while an
              override is in flight. It takes the eligible authorizers + the retry error as PROPS and emits
              override-confirm/override-cancel (wired on the app wrapper above) — the app owns the request. -->
         ${

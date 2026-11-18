@@ -91,7 +91,7 @@ async function attemptAppend(
   const eventAt = truncateToWholeSecond(entry.eventAt);
   // Clamped to the chain's high-water mark, so a wall clock that steps backward still yields a
   // non-decreasing `recorded_at` per chain and the cross-node correction order agrees with
-  // `sequence_no` within one chain (spec §4.1).
+  // `sequence_no` within one chain.
   const nowMs = clock().getTime();
   const clampedMs =
     head.lastRecordedAt === null ? nowMs : Math.max(nowMs, Date.parse(head.lastRecordedAt));

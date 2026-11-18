@@ -1019,7 +1019,7 @@ describe("till-station-queue", () => {
     expect(el.shadowRoot!.querySelector('[data-order="5"] [data-collect]')).toBeNull();
   });
 
-  it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
+  it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups, // groupB (wo-2) is settled → normally collectable
       stationId: "st-1",
@@ -1214,7 +1214,7 @@ const coursedOrder: StationQueueGroup = {
   ],
 };
 
-describe("till-station-queue — KDS-2 courses & fire", () => {
+describe("till-station-queue — courses & fire", () => {
   it("does not start held food from the station queue", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder, partyOrder],
@@ -1284,7 +1284,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rail: a FIRED course's line stays advanceable (KDS-1 behaviour is unchanged for fired items)", async () => {
+  it("rail: a FIRED course's line stays advanceable (behaviour is unchanged for fired items)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",

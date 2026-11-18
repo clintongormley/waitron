@@ -10735,7 +10735,7 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("submit-draft forwards a per-line course OVERRIDE verbatim with the draft (KDS-2 §5b)", async () => {
+      it("submit-draft forwards a per-line course OVERRIDE verbatim with the draft", async () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
           readPartyAllergy: vi.fn().mockResolvedValue(tableWithoutAllergies()),
@@ -14827,7 +14827,7 @@ describe("till-app", () => {
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
 
-    it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds (§5.3)", async () => {
+    it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds", async () => {
       const hidden = await mountApp({
         getTill: vi
           .fn()
