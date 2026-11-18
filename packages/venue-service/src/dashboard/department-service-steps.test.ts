@@ -504,15 +504,21 @@ it("visibly marks Step, Starts and Minutes as required", async () => {
   );
 });
 
-it("names the Minutes and Actions columns for screen readers without drawing the words", async () => {
+it("draws Minutes beside its required mark and keeps Actions available to screen readers", async () => {
   const el = await mount();
-  const labels = [...el.shadowRoot!.querySelectorAll<HTMLElement>("thead .visually-hidden")];
-  expect(labels.map((label) => label.textContent)).toEqual(["Minutes", "Actions"]);
-  for (const label of labels) {
-    expect(label.checkVisibility(), label.textContent!).toBe(true);
-    const box = label.getBoundingClientRect();
-    expect(box.width * box.height, label.textContent!).toBeLessThanOrEqual(1);
-  }
+  expect(heads(el)).toEqual(["Step", "Starts", "Minutes"]);
+  const heading = q(el, "thead .minutes")!;
+  const label = new Range();
+  label.selectNodeContents(heading);
+  const box = label.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(
+    heading.querySelector(".required")!.getBoundingClientRect().width,
+  );
+  const actions = q(el, "thead .actions-cell")!.querySelector<HTMLElement>(".visually-hidden")!;
+  expect(actions.textContent).toBe("Actions");
+  expect(actions.checkVisibility()).toBe(true);
+  const hidden = actions.getBoundingClientRect();
+  expect(hidden.width * hidden.height).toBeLessThanOrEqual(1);
 });
 
 it("reads a course or step name holding a replacement pattern literally", async () => {

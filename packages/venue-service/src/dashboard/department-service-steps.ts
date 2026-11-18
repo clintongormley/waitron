@@ -304,10 +304,11 @@ export class DepartmentServiceSteps extends LitElement {
                     >*</span
                   ></span
                 >
-                <span class="minutes" data-head>
-                  <span class="visually-hidden">${t("venue.service_step_minutes")}</span
-                  ><span class="required" aria-hidden="true">*</span>
-                </span>
+                <span class="minutes" data-head
+                  >${t("venue.service_step_minutes")}<span class="required" aria-hidden="true"
+                    >*</span
+                  ></span
+                >
               </div>
             </th>
             ${
