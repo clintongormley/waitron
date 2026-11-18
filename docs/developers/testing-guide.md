@@ -1236,7 +1236,8 @@ With a 16 MiB test limit and synthetic 4 KiB inserts paced by 20 ms waits:
 
 No pause was forced. These are synthetic inserts, not sale times or venue rates. Starting during
 an outage, other network failure modes, physical box storage and a bound on local level-0 growth
-remain unmeasured. The first attempt's wrapper rejected SQLite's null-prototype integrity row
+remain unmeasured. (18 November 2026: a start, and a restart of Litestream, during an outage are
+[measured below](#a-start-or-a-restart-of-litestream-during-an-outage-on-linux).) The first attempt's wrapper rejected SQLite's null-prototype integrity row
 against a plain object; an independent Linux read matched all 7,965 rows and the `ok` field.
 After correcting that assertion, the complete fresh run above passed.
 
@@ -1282,6 +1283,110 @@ Source, samples, child output, the failed wait and the independent restore resul
 locally under `~/waitron-campaign-j/receipts/level0-growth-bound-20261116/`. The owned runtime,
 containers and private networks were removed. No size warning or limit was implemented in this run.
 
+
+## A start, or a restart of Litestream, during an outage on Linux
+
+On 18 November 2026, on source `f70a09fc09`, five runs in Docker Desktop's aarch64 Linux VM each
+ran the production stream supervisor (`StreamSupervisor`, `packages/stream/src/supervisor.ts`) in
+a disposable `node:26-slim` container (Node 26.13.1) with Litestream 0.5.18, against versitygw
+1.8.0 in a second container on a private Docker network. The database was on the container's own
+filesystem. Each run wrote synthetic 4 KiB rows paced by 20 ms waits through an outage of about
+200 seconds, under a 16 MiB test limit on the side file (a box's is 256 MiB,
+`DEFAULT_WAL_LIMIT_BYTES`). It then ended the outage, wrote 100 more rows, waited for the
+supervisor to report `streaming` with nothing waiting, stopped it, restored the generation and
+compared every row and column with the source.
+
+Three runs started the supervisor with the bucket already out of reach:
+
+| The bucket when the supervisor started | Container frozen (`docker pause`) | Disconnected from the network | Its name not resolving |
+| --- | --- | --- | --- |
+| What a plain `fetch` of the bucket met first | no answer in 3 s | `EHOSTUNREACH` | `ENOTFOUND` |
+| Litestream started during the outage | 0 | 0 | 0 |
+| Supervisor state sampled during the outage | `off` at the first sample, then `opening` | `off` at the first sample, then `opening` | `off` at the first sample, then `opening` |
+| `stream.open_failed` lines during the outage | 1 | 5 | 7 |
+| Peak sampled side file during the outage | 4,128,272 bytes | 4,128,272 bytes | 4,128,272 bytes |
+| Rows acknowledged during the outage | 8,528 | 8,286 | 8,311 |
+| From the outage's end to `streaming` | 2.1 s | 2.1 s | 12.5 s |
+| Restored rows, every column compared | 8,728 | 8,486 | 8,511 |
+| Restored integrity check | `ok` | `ok` | `ok` |
+
+Two runs reached `streaming` first, began the outage, then killed Litestream with SIGKILL. The
+supervisor started it again one second later, into the outage:
+
+| The bucket when Litestream was started again | Container frozen | Disconnected from the network |
+| --- | --- | --- |
+| What the restarted Litestream printed about the bucket | nothing while it ran; `shutdown timed out after 4.5s: context deadline exceeded` when the supervisor stopped it | nothing while it ran; when stopped, a `sync error` from `check database behind replica` ending `connect: no route to host` |
+| Litestream starts during the outage | 1 | 1 |
+| Peak sampled side file | 33,619,232 bytes | 30,809,392 bytes |
+| `stream.paused` lines (`side_file_limit`) | 1, 56 s after that start, at 31,608,672 bytes | 1, 56 s after that start, at 31,542,752 bytes |
+| Sampled side file while paused | 33,619,232 bytes 4 s after the pause, 2,187,752 at 9 s, then 4,120,032 to 4,132,392 | 811,672 bytes 4 s after the pause, 3,621,512 at 9 s, then 4,120,032 to 4,128,272 |
+| Rows acknowledged during the outage | 8,483 | 8,510 |
+| From the outage's end to `streaming` | 19.9 s | `stream.resumed` was logged as the network was reconnected |
+| Restored rows, every column compared | 8,683 | 8,710 |
+| Restored integrity check | `ok` | `ok` |
+
+In the three start runs no Litestream ran while the bucket was out of reach: the supervisor asks
+the bucket before it starts one (`#open`). In the two restart runs the side file grew for as long
+as the restarted Litestream ran, and passed the test limit before the supervisor's next reading of
+it paused the stream; the supervisor reads the side file once a minute while streaming
+(`TICK_MS`). Every log line an unreachable bucket caused (`stream.open_failed`,
+`stream.prune_failed`, `stream.pause_check_failed`) carried `errorCode`
+`backup.stream_request_failed` with no `status` or `errorName`.
+
+These are synthetic inserts in Docker's VM, not sale times, a venue's rate or a physical box's
+disk, and the outages were made by Docker, not by a venue's line. The 256 MiB limit was not
+reached or tried, and no run restarted Litestream while the bucket's name did not resolve. The
+name-lookup run reached its bucket by name over HTTPS, under a certificate made for the run, and
+the other four by a private numeric address over plain HTTP: a first name-lookup run over plain
+HTTP could not stream once the name resolved, because Litestream 0.5.18 refuses an encryption key
+sent over plain HTTP to a named host (`s3: sse-customer-key requires HTTPS endpoint`).
+
+The times to `streaming` depend on where the supervisor's retry stood when the outage ended. By
+the logs' times, in the frozen and disconnected start runs the next attempt had begun before the
+outage ended; failed attempts were about 39 seconds apart in the disconnected start run and 30 in
+the name-lookup run. A paused stream asks the bucket once a minute (`TICK_MS`): the frozen restart
+run's question at 14:56:35 UTC failed and its next one, a minute later, resumed the stream.
+
+An earlier attempt at the disconnected and name-lookup start runs is discarded. Its disconnected
+run's `fetch` met `ECONNREFUSED`, not an unreachable address, and Docker refused to reconnect
+either bucket (`Address already in use`); that fits Docker having given the writer's container the
+bucket's freed address, which no receipt records. The runs above gave the bucket and the writer
+fixed, separate addresses.
+
+The probe, each run's raw output and samples, and the result files are local receipts under
+`~/waitron-campaign-b/receipts/bucket-copy-limits-20261118/`; the command was
+`python3 orchestrate.py <run> <tools folder>` there. The saved scripts are their last version:
+the frozen start run and both restart runs ran before the fixed addresses, the 10-second `fetch`
+and the HTTPS bucket were added. The containers, networks and runtime folders were removed.
+
+### The bucket's refusals as the production store reports them, 18 November 2026
+
+A log line of the stream takes its `status` and `errorName` from one place, the
+`backup.stream_request_failed` error the store threw (`failureFields`,
+`packages/stream/src/supervisor.ts`). This run shows what the store throws; that a log line then
+carries it was shown by reading and by the supervisor's tests with injected errors, except Amazon
+S3's 403 to the pause check, logged on 14 October 2026 with `AccessDenied`
+([receipts](../receipts/a538/README.md)). `createS3ObjectStore` was run from macOS against versitygw
+1.8.0 on loopback, and against Amazon S3 in `eu-west-1` with a made-up access key and a made-up
+bucket name:
+
+| Server | Request | Status | Name on the error |
+| --- | --- | --- | --- |
+| versitygw | list or write with a wrong secret | 403 | `SignatureDoesNotMatch` |
+| versitygw | list with an unknown access key | 404 | `other` |
+| versitygw | list, read, write, delete, or delete several, in a missing bucket | 404 | `NoSuchBucket` |
+| versitygw | write to a key of 1,100 characters | 400 | `KeyTooLongError` |
+| versitygw | create-only write over an existing object; write expecting another version | none | none: `backup.stream_precondition_failed` |
+| Amazon S3 | list, write or read with the made-up key | 403 | `InvalidAccessKeyId` |
+
+Two controls answered without an error: a listing with the right key, and a read of a missing
+object (null). versitygw 1.8.0's `s3err/s3err.go` defines 75 distinct error codes; 42 are on the
+list a log line may carry (`packages/stream/src/bucket-error-names.ts`), and the other 33 are
+logged as `other`. Other providers, and Amazon's refusals to a real account's key, were not run.
+Measured on 14 November 2026 with versitygw 1.8.0 and carried here from the backlog: starting the
+supervisor against a missing bucket reported `stream.bucket_unusable` with reason `write_failed`,
+without starting replication.
+The script and its output are `error-names.mts` and `error-names.log` in the same receipts folder.
 
 ## The stream loop test skips locally without its two binaries, and a skip reads as a pass
 

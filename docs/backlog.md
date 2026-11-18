@@ -1252,7 +1252,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **Closing a pay period trusts the box's clock.**
   [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)
 
-- **Remaining bucket-copy limits** (outage starts, venue conditions and pause/error qualification; bundle of 2, size S). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
+- **Remaining bucket-copy limits** (an outage on a physical box at a venue's rate of sales; bundle of 1, size S, needs a physical box). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
 
 - **Qualify clock confirmation through remote access** (bundle of 1, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 

@@ -308,16 +308,6 @@ Left open by A39 (#671): each stop is written twice, once in the failed-start un
 list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
 (`background-duties.ts`), whose order `background-duties.test.ts` pins.
 
-## The status and `errorName` on the stream's log lines other than the pause check's 403 were shown by reading
-
-- On 2026-10-14 Amazon S3's 403 to the paused supervisor's listing was logged as
-  `stream.pause_check_failed` with `errorCode` `backup.stream_request_failed`, `status` 403 and
-  `errorName` `AccessDenied` (A538-10, [receipts](../receipts/a538/README.md)). The status and
-  `errorName` on the stream's other log lines were shown by reading, by the store's scripted HTTP
-  answers and by the supervisor's injected errors, not against a real bucket; A60's `errorName` list
-  (`packages/stream/src/bucket-error-names.ts`) was checked against Amazon's reference only, not
-  against the names versitygw gives its errors.
-
 ## Backup & restore — carry-forwards (B2)
 
 The image ships with backups OFF, deliberately.
@@ -472,74 +462,6 @@ interval. Litestream uploaded a level-2 file at 11:50 while those sampled file r
 unchanged; a known write afterwards changed the header/hash and produced new level-0 objects.
 This establishes uploads during that sampled idle period, not continuous file immobility, daily
 snapshots or longer compaction intervals.
-
-## Loose ends left by A549.
-
-Measured on Linux/aarch64 on 16 November 2026: 180 four-item cash sales through `/api/sales`
-over 900.018 seconds grew `.venue.db-litestream/ltx/0/` by 42,504,922 bytes. The assumed
-720-sales/hour load projects to 4.08–5.23 GB/day; it excludes background filing/printing and
-does not qualify a full day or physical-box storage. The 180-second catch-up wait failed during
-Litestream's five-minute backoff. After normal stop, a separate restore matched all 206 tables,
-7,268 rows and 186 sales, every column, with integrity `ok`. [Measurement and limits](../developers/testing-guide.md#local-level-0-growth-at-a-stated-counter-sale-rate-16-november-2026).
-
-The remaining qualification is starting during an outage and venue conditions. No additional
-size warning or cap is planned; see [the decision](#local-copy-growth-uses-the-existing-backup-and-disk-warnings).
-
-- Starting Litestream during a real network outage still needs a Linux measurement. A549
-  stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
-  errors and drops its read transaction to retry (`db.go`, `init`, the same in v0.5.17 and
-  v0.5.18). On 0.5.18 a refused connection gets there after about 7 seconds, so a Litestream
-  started during such an outage did not bring the side file to the limit in the rig's paced runs
-  (87 and 134 MB after 40,000 sales, with SQLite's automatic fold-back on); selling flat out
-  reached 236 MB in a shorter run. A connection accepted and never answered gave no error in 200
-  seconds on either version, and the side file kept growing
-  ([measured 2026-11-06](../research/2026-09-16-sqlite-failover-prototype.md#re-run-on-litestream-0518-2026-11-06)).
-
-Measured 2026-11-14 on macOS arm64 with the production supervisor, Litestream 0.5.18,
-versitygw 1.8.0, a 16 MiB test limit and synthetic 4 KiB row inserts paced by 80 ms waits:
-
-| Already streaming when the outage began | Frozen bucket, 200,078 ms | Refused connections, 200,018 ms |
-| --- | --- | --- |
-| Writes during outage | 2,347 | 2,327 |
-| Peak side file | 4,243,632 bytes | 4,239,512 bytes |
-| Side-file header resets | 7 | 7 |
-| Local level-0 bytes at end | 578,787 | 577,115 |
-| Natural child exits / restarts / pauses | 0 / 0 / 0 | 0 / 0 / 0 |
-| Longest measured insert | 48.95 ms | 57.20 ms |
-| Rows restored and compared, every column | 2,368 | 2,348 |
-
-Both restores reported `integrity_check: ok`. The frozen arm waited six seconds after reconnection;
-the refusal arm waited 150 seconds because a separate six-second attempt restored only the
-pre-outage rows while Litestream's log showed a 128-second retry delay. That earlier attempt
-measured 2,308 outage writes and a 1,510,476-byte local level-0 folder; it did not establish recovery.
-These insert times are not sale times. The existing route-based loop and forced-restart pause
-rigs also passed with both pinned binaries. This leaves the real-network outage question above
-open: frozen/refused loopback connections do not qualify dropped attempts, unreachable hosts,
-DNS, Linux or venue conditions, and this measured no bound on the local level-0 folder.
-
-Update, 2026-11-16: the already-streaming Linux unreachable-host case is now
-[measured](../developers/testing-guide.md#a-real-unreachable-bucket-on-linux-already-streaming).
-The 201.471-second network disconnection produced no natural pause; all 7,958 rows matched after
-restore and integrity was `ok`. This is Docker Desktop's Linux VM and a numeric-IP outage, not
-physical box storage, DNS or venue-rate qualification. No limit on local level-0 growth was measured.
-
-## Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
-
-- The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
-  502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
-  code also covers a bad value in the recovery kit, where 400 is right.
-- The status and `errorName` on the stream's log lines other than the pause check's 403 were
-  shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
-  errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
-  `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
-  [Detail](../backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
-
-Measured 2026-11-14 with versitygw 1.8.0: claiming a generation in a missing bucket returned
-`backup.stream_request_failed`, HTTP 404 and `NoSuchBucket`. Starting the supervisor against that
-bucket reported `stream.bucket_unusable` with reason `write_failed`, without starting replication.
-A listing with an unknown access key returned HTTP 404, named `XAdminUserNotFound` by versitygw;
-the client retained `other` as the fixed-list error name. These observations qualify those two
-loopback responses only; other providers and the remaining log paths above remain unqualified.
 
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
@@ -1333,13 +1255,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: Remaining bucket-copy limits
 
-2 entries, size S.
-- **Loose ends left by A549.**
-  Qualify starts during an outage and venue conditions.
-  [Detail](box.md#loose-ends-left-by-a549)
-- **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
-  reports).**
-  [Detail](box.md#loose-ends-left-by-668-686-a57-a60-and-723-the-pause-test-and-the-buckets-error-reports)
+1 entry, size S, needs a physical box.
+
+- **The bucket copy through an internet outage has not been measured on a physical box.** The
+  runs so far were in Docker's Linux machine: sales through the real route at an assumed rate
+  ([16 November](../developers/testing-guide.md#local-level-0-growth-at-a-stated-counter-sale-rate-16-november-2026)),
+  and made-up writes
+  ([18 November](../developers/testing-guide.md#a-start-or-a-restart-of-litestream-during-an-outage-on-linux)).
+  Not measured: a physical box's own disk, a venue's real rate of sales, an outage of a venue's
+  own line, and the side file reaching a box's 256 MiB limit.
 
 ## Bundle: Backups screen leftovers
 
@@ -1406,7 +1330,9 @@ after time-ordered ids and real venue measurements (17 November 2026, 23:16 and 
 The watcher decided on 16 November 2026, after the two Claude run-it reviews, to keep the existing
 bucket-behind and low-free-space warnings rather than add a local-copy size scan and sentence.
 The size sentence would arrive after the bucket warning and add no remedy or cap. The proposed
-implementation was discarded before publication. The Linux measurement above establishes growth,
+implementation was discarded before publication. The
+[Linux measurement](../developers/testing-guide.md#local-level-0-growth-at-a-stated-counter-sale-rate-16-november-2026)
+establishes growth,
 not whether the low-free-space warning leaves enough time during a long outage; no such timing
 qualification is claimed.
 
