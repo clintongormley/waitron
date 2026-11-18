@@ -743,16 +743,6 @@ that follows a Done ("Coffee?"), including a Done copied with a bill that has si
 showing "Coffee?").
 
 
-## A Spanish invoice recipient's locality or province holding a comma is refused only at the server.
-
-The server checks a Spanish recipient's joined address by splitting it on commas
-(`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
-locality is refused as `address`, while the till's own check (`recipientAddressErrors`) passes
-it (run 2026-10-29 in a throwaway till test: "Centro, Madrid" gave no till error and failed the
-server's check; "Madrid" passed both). The address search writes a comma-free province, but a
-provider's locality could still hold one. Left open by A1171 part 3.
-
-
 ## A1421. The Downstairs map drawn tiny at phone width
 
 Seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots in

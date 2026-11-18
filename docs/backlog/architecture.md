@@ -155,16 +155,7 @@ are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every ite
 for its own diff (grep it for non-English text before pushing — the guard does not read a file
 listed in `scripts/english-only-still-to-clean.ts` line by line).
 
-- **Full-invoice locality/province commas.** On A963's `e5693d460`,
-  `recipientAddressErrors` accepts a nonblank Spanish locality/province containing a comma, but
-  `checkedInvoiceRecipient` refuses the composed address with `invoice.recipient_invalid`,
-  `field: address`. A street ending in a comma also takes that path; an internal street comma
-  is accepted. Align structured and server checks and field recovery without dropping completeness
-  checks. Driver probe: `pnpm --filter @waitron/server exec vitest run src/a963-driver-review-probe.test.ts`
-  in the owned installed candidate, two passing cases including the accepted street control.
-  Receipt: `~/waitron-campaign-e/receipts/a963-task8-20261028/review-findings-probe.log`.
-  The base version was not run, so this receipt makes no regression classification.
-- **Name special invoice-document issuing codes.** The same probe finds exactly
+- **Name special invoice-document issuing codes.** A963's review (on `e5693d460`) reported exactly
   `QU`, `XB`, `XG`, `XN`, `XU` returned unchanged by `countryNameFor` in English and Spanish.
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
@@ -1009,14 +1000,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   Check whether a product path produces those ties before choosing a stable tie-breaker.
 
 
-## Bundle: Full-invoice recipient: comma refusal and country code names
+## Bundle: Full-invoice recipient: country code names
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **Full-invoice locality/province commas.** Align the till's structured address checks and
-  the server's Spanish completeness rule, and put a refusal under the field that needs changing.
-  A locality or province containing a comma currently passes the till check and is refused as a
-  street-address error. [Detail](architecture.md#a913s-fix-items-general-code-english-only)
 - **Name special invoice-document issuing codes.** Both recipient dialogs currently show
   `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
   treating them as postal countries. [Detail](architecture.md#a913s-fix-items-general-code-english-only)

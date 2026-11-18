@@ -725,3 +725,53 @@ describe("country-free recipient input", () => {
     },
   );
 });
+
+describe("till-invoice-recipient-dialog Spanish locality and province commas", () => {
+  it.each([
+    ["en", "locality", "Centro, Madrid", "invoice.locality_comma"],
+    ["en", "province", "Balears, Illes", "invoice.province_comma"],
+    ["es-ES", "locality", "Centro, Madrid", "invoice.locality_comma"],
+    ["es-ES", "province", "Balears, Illes", "invoice.province_comma"],
+  ] as const)(
+    "marks a %s %s comma the server refuses under its field and recovers inline",
+    async (locale, field, value, key) => {
+      setLocale(locale);
+      const el = await mountDialog();
+      const sent = confirmations(el);
+      await fillValid(el);
+      await fill(el, field, value);
+      save(el);
+      await el.updateComplete;
+
+      expect(sent).toEqual([]);
+      const errors = Object.fromEntries(
+        ["address", "postalCode", "locality", "province"].map((name) => [
+          name,
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`wt-input[name=${name}]`)!
+            .error,
+        ]),
+      );
+      expect(errors).toEqual({
+        address: "",
+        postalCode: "",
+        locality: "",
+        province: "",
+        [field]: t(key),
+      });
+      if (locale === "es-ES")
+        expect(errors[field]).toBe(
+          field === "locality"
+            ? "Quita la coma de la localidad."
+            : "Quita la coma de la provincia.",
+        );
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-invoice-save]")!
+          .disabled,
+      ).toBe(true);
+      await fill(el, field, value.replace(",", ""));
+      save(el);
+      expect(sent).toHaveLength(1);
+    },
+  );
+});

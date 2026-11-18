@@ -657,10 +657,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
-- **A Spanish invoice recipient's locality or province holding a comma is refused only at the
-  server.** Left open by A1171 part 3.
-  [Detail](backlog/till.md#a-spanish-invoice-recipients-locality-or-province-holding-a-comma-is-refused-only-at-the-server)
-
 - **Small till and floor wording fixes** (bundle of 5, size M, 4 wait for the owner's table-screen redesign). Holds A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
@@ -1628,7 +1624,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#go-live-day-steps).
 
 
-- **Full-invoice recipient: comma refusal and country code names** (bundle of 2, 1 important, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-comma-refusal-and-country-code-names)
+- **Full-invoice recipient: country code names** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-country-code-names)
 
 - **Spanish text in a server test venue, for A913's English-only audit.**
   `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
