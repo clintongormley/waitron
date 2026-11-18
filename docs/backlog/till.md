@@ -21,8 +21,8 @@ their full text.
   not reported as a zone fault; `setTablePlacement`'s raw read is typed `boolean | null` where the
   engine returns 1/0/null (it only tests truthiness). The SQL `--` comments inside
   `listTablesWithState`'s template text still carry "measured 2026-09-22", PostgreSQL's "LATERAL
-  form" and aggregate-pair history and a "KDS-1 §3d" pointer. Stale test titles: "recordSale UNCHANGED" in `tabs.filing.test.ts`; many
-  "(KDS-…)" and "(A1)"-style plan tags.
+  form" and aggregate-pair history and a "KDS-1 §3d" pointer. Stale test titles: "recordSale
+  UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style plan tags.
 
 ## Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still pending review?
 

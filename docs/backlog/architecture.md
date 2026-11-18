@@ -1020,9 +1020,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
   the comment (a comment in a fiscal test, not the fiscal core).
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
-- **Server comment pruning notes** — found by
-  #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
-  option should go is open.
+- **Server comment pruning notes** — found by #656 while pruning comments.
   [Detail](box.md#server-comment-pruning-notes)
 
 - **Schema files keep `v8 ignore` pairs with no stated reason.**
