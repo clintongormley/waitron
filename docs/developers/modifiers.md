@@ -291,8 +291,8 @@ it moves to another list offering the same product: it is a new pick" and "price
 when two lists offering the same product exchange their counts: each is a new pick", which assert
 the BILL.
 
-An OPTIONS list RENAMED between the two sends does make the two sides differ, so the renamed answer
-is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
+An OPTIONS list RENAMED between the two sends, when the request still names that list and label,
+does make the two sides differ, so the renamed answer is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
 line is touched. That is a decision, not an omission: an options answer freezes six names and no
 ids, so the wording is the only evidence the line carries about what was chosen, and a rename cannot
 be told from a different answer. Giving the comparison an id to use would mean putting one on the
@@ -300,7 +300,7 @@ line, and an options answer deliberately carries none. Pinned by "keeps the pric
 list was renamed between the two sends, freezing the new name"
 (`apps/server/src/working-order.test.ts`). A line already sent (it or one of its extras sent, or
 either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
-`updateHeldOrder` passes `keepSentAnswers` to `applyLineEdits`, which keeps that line's options
+`updateHeldOrder` passes `keepRecordedAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names
 no answer the line does not already hold by the staff names of its list and label
 (`asksNoNewAnswer`, `apps/server/src/modifier-selection.ts`). That is what the till sends for a line
@@ -316,19 +316,55 @@ was renamed" and "still recalls and resends a fired dish whose options answer on
 replaces". An EXTRAS list is different: its children are compared by the list's and the picked
 product's ids, so renaming the list — or the product — disturbs nothing and the line is preserved.
 
+A line NOT yet sent goes through `editUnsentLineOptions` on a whole-order save
+(`apps/server/src/modifier-selection.ts`); `updateOrderLine` does not. A stored answer is unmatched
+when, with stored answers paired one to one with active lists holding an available label of the same
+staff names, it is left over. The unmatched answers stay as stored when
+`onlyStoredAnswersUnmatched` holds: the request names no answer the line does not hold
+(`asksNoNewAnswer`), at least one answer is unmatched, the request answers with an available label as
+many active lists as there are matched answers, and the dish has no more active lists than the line
+holds answers. The count is deliberate: two lists can share a staff name, and the till may give an
+answer to the other one. A re-sent answer is then compared and frozen as on any edit, in its stored
+place, and when none differs the line keeps its stored value and no change is recorded. So a rename,
+a withdrawn label and a deleted list keep the answer, while leaving out an answer the menu still
+matches is refused with `options.label_required`, as is a list beyond the answers the line holds.
+
+Any other request is validated and applied as usual. Each active list is then paired with one stored
+answer under its staff name, the answers the edit keeps first, and the answers left over follow the
+new ones, unless an active list finds none: that list may be a gone one renamed, so none is carried.
+Of two stored answers under one staff name, either may be the one left over, because a frozen answer
+has no ids (`answersOfGoneLists`). Because of that too, an
+unmatched answer is treated as possibly the renamed form of any unanswered list, so a list added after
+an answer's list was deleted, in the same publish or a later one, is not asked for. Pinned by "keeps
+the answer and records no change when $change", "still refuses a list added after parking that nothing
+recorded could have answered", "refuses leaving out an answer the menu still matches beside one it no
+longer does", "saves the new wording of a re-sent answer beside one the menu no longer matches" and
+"keeps the answer of a deleted list when staff change another answer"
+(`apps/server/src/working-order.test.ts`), and by "keeps exactly one of their answers beside the
+changed one" and "does not carry a second copy of the answer the request re-sends"
+(`apps/server/src/modifier-selection.test.ts`).
+
+The window that changes an answer gives the row only the answers of lists still on the dish. After a
+save, the till reads the order back when the stored line it last read holds more answers than the
+row (`#syncIfDirty`, `apps/till/src/till-app.ts`), so the basket shows an answer the server kept.
+Pinned by "shows the answer the server kept for a deleted list" (`apps/till/src/till-app.test.ts`).
+
 For a parked-order edit, the till sends one `options` entry per answered list and one `extras` entry
 per list picked from. It reads a line's frozen answers back as `optionSnapshots`
 (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by `parentLineNo` rather
 than by a null product. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
 six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
 answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
-which it has to, because leaving out an answer for an ACTIVE list on a line not yet sent refuses the
-whole edit with `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
+which it has to, because leaving out an answer the menu still matches on a line not yet sent refuses
+the whole edit with `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
 the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
 the server then freezes the new wording on that line if it is not yet sent. What it will not
-do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
-tells the operator to open the line and choose again rather than substituting the list's own
-default — on a line not yet sent only (`#basketLinesOf`, `apps/till/src/till-app.ts`). The basket
+do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, so the till
+leaves that answer out of the save, rather than substituting the list's own default. The till asks
+the operator to open the line and choose only when more lists are unanswered than frozen answers went
+unmatched, which for a dish the live menu still offers is the server's own test, and on a line not yet
+sent only
+(`#basketLinesOf`, `apps/till/src/till-app.ts`). The basket
 makes a sent line read-only (`#lineReadOnly`, `apps/till/src/widgets/basket.ts`) only when it could
 read which lines were sent; when it could not, a different answer picked on a sent line reaches the
 server as a change and is checked as one.

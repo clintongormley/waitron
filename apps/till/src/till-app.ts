@@ -8353,8 +8353,13 @@ export class TillApp extends LitElement {
           line.firedAt === null &&
           !listed.some((extra) => extra.parentLineNo === line.lineNo && extra.firedAt !== null),
       );
-    const movesIds =
+    const mustReadBack =
       rows.some((row) => row.portionLineIds !== undefined) ||
+      // The server can keep an answer the row no longer shows: one from a list gone from the dish.
+      rows.some((row) => {
+        const stored = listed.find((line) => line.id === row.workingOrderLineId);
+        return (stored?.optionSnapshots?.length ?? 0) > (row.optionSnapshots?.length ?? 0);
+      }) ||
       sent.some((wire) => {
         const lineId = wire.workingOrderLineId;
         if (lineId === undefined) return true;
@@ -8366,7 +8371,7 @@ export class TillApp extends LitElement {
           !risesInPlace(lineId)
         );
       });
-    return !movesIds || (await this.#readBackSaved(id, session, visit));
+    return !mustReadBack || (await this.#readBackSaved(id, session, visit));
   }
 
   /** The basket takes the order `id` as stored after its own save, so a later save names every
@@ -10082,12 +10087,13 @@ export class TillApp extends LitElement {
       // Each pick goes back to the list it was taken from, if the live offer still has it there.
       const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
       if (picks.notOffered.length > 0) extraNotOffered = true;
-      // On a line not yet sent, a still-offered list that nothing matched must be answered again:
-      // the server refuses the edit until it is, and falling back to the list's default would change
-      // what the diner asked for. A whole-order save keeps a sent line's answer.
+      // For a dish the live menu still offers, the server's test on a whole-order save: unanswered
+      // lists no unmatched frozen answer can stand for are new, and it refuses the line until they
+      // are answered. A sent line keeps its answers.
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
       const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
+      const unmatched = (line.optionSnapshots?.length ?? 0) - answers.options.length;
+      if (answers.unanswered.length > unmatched && !sent) mustChooseAgain = true;
       lines.push({
         product,
         quantity: displayQuantity(product, line.quantity),

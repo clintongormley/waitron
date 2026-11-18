@@ -1576,6 +1576,67 @@ describe("WorkingOrderStore.lastAdded when the order's lines are replaced", () =
     expect(s.lastAdded).toBeUndefined();
   });
 
+  describe("on an order read back from the server", () => {
+    const answer = {
+      listName: { en: "Cooking" },
+      listCustomerName: null,
+      listKitchenName: null,
+      labelName: { en: "Medium rare" },
+      labelCustomerName: null,
+      labelKitchenName: null,
+    };
+    const held = (): OrderLine => ({
+      product: beer,
+      quantity: "1",
+      workingOrderLineId: "held-row",
+      optionSnapshots: [answer],
+    });
+    const saved = (): OrderLine => ({
+      product: beer,
+      quantity: "1",
+      workingOrderLineId: "new-row",
+    });
+    const withFreshLine = () => {
+      const s = new WorkingOrderStore();
+      s.loadFrom("order", [held()]);
+      s.addProduct(beer, "1");
+      return s;
+    };
+
+    it("follows a fresh line to its new saved row, past a row that was already saved", () => {
+      const s = withFreshLine();
+      s.loadFrom(s.id, [held(), saved()]);
+      expect(s.lastAdded).toBe(s.lines[1]);
+    });
+
+    it("stays on a saved row by its id when the rows come back in another order", () => {
+      const s = withFreshLine();
+      s.loadFrom(s.id, [saved(), held()]);
+      expect(s.lastAdded?.workingOrderLineId).toBe("new-row");
+      s.loadFrom(s.id, [held(), saved()]);
+      expect(s.lastAdded?.workingOrderLineId).toBe("new-row");
+    });
+
+    it("follows a fresh line into the row of portions it was folded into", () => {
+      const s = withFreshLine();
+      s.loadFrom(s.id, [{ ...held(), quantity: "2", portionLineIds: ["held-row", "new-row"] }]);
+      expect(s.lastAdded).toBe(s.lines[0]);
+    });
+
+    it("follows a saved row into a row of portions by any of its ids", () => {
+      const s = withFreshLine();
+      s.loadFrom(s.id, [held(), saved()]);
+      s.loadFrom(s.id, [{ ...held(), quantity: "2", portionLineIds: ["held-row", "new-row"] }]);
+      expect(s.lastAdded).toBe(s.lines[0]);
+    });
+
+    it("is nothing when the fresh line did not reach the server", () => {
+      const s = withFreshLine();
+      s.loadFrom(s.id, [held()]);
+      expect(s.lastAdded).toBeUndefined();
+    });
+  });
+
   it("is nothing once Split quantity has split its line", () => {
     const s = new WorkingOrderStore();
     s.addMerging(beer, "3");

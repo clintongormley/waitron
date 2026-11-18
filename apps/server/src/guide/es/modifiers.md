@@ -53,9 +53,9 @@ cada idioma de contenido, son opcionales y recurren al nombre del personal cuand
 blanco. Las respuestas nuevas guardan los nombres para el cliente de la lista y de la opción
 en el idioma predeterminado. Si falta alguno, guardan su propio nombre del personal; tener texto
 solo en otro idioma no rellena el predeterminado. Las respuestas ya registradas conservan sus
-nombres guardados. El nombre para el cliente de una lista
-de extras no se imprime hoy en ningún sitio. Mientras un nombre está en blanco, su campo muestra en
-su lugar el nombre al que recurre.
+nombres guardados, salvo lo que explica [la sección de la caja](modifiers.md#till). El nombre para
+el cliente de una lista de extras no se imprime hoy en ningún sitio. Mientras un nombre está en
+blanco, su campo muestra en su lugar el nombre al que recurre.
 
 En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de estación de preparación**
 y después el encabezado **Nombres para el cliente**, con todos los campos de idioma ya visibles.
@@ -115,11 +115,10 @@ esos productos antes de que confirmes. No se puede deshacer.
 
 **Un pedido abierto no impide eliminarla, y nadie te pide que lo termines o lo anules.** Eliminarla
 no cambia por sí sola nada de un pedido abierto: una selección de extras es su propia línea del
-pedido, y una respuesta de opciones se guarda como el texto que se eligió. El siguiente guardado de
-un pedido aparcado de caja descarta, en los platos aún no enviados, las respuestas de las listas de
-opciones eliminadas. Un extra elegido de una lista eliminada sigue en un pedido aparcado de caja, con
-su cargo, hasta que el personal abra el plato que lo lleva y guarde un cambio, lo que lo quita;
-mientras tanto, + no puede aumentar la cantidad de ese plato.
+pedido, y una respuesta de opciones se guarda como el texto que se eligió. Un extra elegido de una
+lista eliminada sigue en un pedido aparcado de caja, con su cargo, hasta que el personal abra el
+plato que lo lleva y guarde un cambio, lo que lo quita; mientras tanto, + no puede aumentar la
+cantidad de ese plato.
 
 Para quitar también una lista eliminada de la carta para clientes, vuelve a publicar esa carta.
 
@@ -160,17 +159,17 @@ Cada extra elegido se convierte en su propia línea sangrada bajo el plato en la
 precio y sus propios alérgenos y etiquetas dietéticas, nunca sumados a los del plato. Una respuesta de
 opciones no cuesta nada y acompaña como texto a la línea del plato.
 
-Un pedido guarda las respuestas que recibió. Un pedido aparcado tiene que volver a emparejarse con las
-listas actuales del plato antes de poder cambiarlo. Una respuesta de opciones se guarda como texto, los
-tres nombres de la lista y los tres de la opción elegida, y la caja empareja por el nombre del personal
-de cada una. Un extra conserva el producto y la lista de la que se eligió, así que otra lista que ofrece
-el mismo producto no puede ocupar su lugar sin avisar.
+Un pedido guarda las respuestas que recibió. Un extra conserva el producto y la lista de la que se
+eligió, así que otra lista que ofrece el mismo producto no puede ocupar su lugar sin avisar.
 
 Renombrar una lista o una opción deja un plato ya enviado a su estación tal como se envió, en su
 comanda, su cuenta y su ticket.
 
-En un pedido aparcado de caja, si cambias el nombre del personal de una lista o de una opción, o
-desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: en una
-línea que aún no se ha enviado, pide al operador que abra esa línea y vuelva a elegir antes de poder
-enviar el pedido. Una lista de extras es la excepción, porque un extra se empareja por su producto:
-renombrar una lista de extras, o el producto que contiene, no afecta a un pedido aparcado.
+Un pedido aparcado de caja conserva lo que se pidió si cambias el nombre del personal de una lista o
+de una opción, desactivas una opción o eliminas la lista. Una línea aún no enviada toma el nombre
+nuevo para el cliente o de estación de su lista u opción con el siguiente cambio del pedido. Cuando
+la caja pide al personal que abra una línea aún no enviada y elija, el plato tiene una lista nueva
+desde que se aparcó el pedido. Esa ventana pregunta todas las listas del plato, así que el personal
+también vuelve a elegir en las listas cuya respuesta guardada ya no coincide con la carta. Al guardar
+esa ventana se quita cualquier respuesta de una lista eliminada. Renombrar una lista de extras, o el
+producto que contiene, tampoco afecta a un pedido aparcado.

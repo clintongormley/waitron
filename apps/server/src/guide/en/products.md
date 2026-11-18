@@ -359,10 +359,9 @@ value → the new one. Choose **Keep editing** to go back, or **Put live now**. 
   from then on use the corrected values. Lines already on open orders keep their old price and VAT
   class.
 - On a parked counter order, renaming an options list or one of its choices does what it does after
-  a publish, as [What the till does with a list](modifiers.md#till) describes: a new staff name
-  makes the till ask for that answer to be chosen again, and a new customer-facing or prep station name
-  is saved onto those lines at the next change to the order, which can send a line the station
-  already has to it again as a new ticket. Those lines keep their prices.
+  a publish, as [What the till does with a list](modifiers.md#till) describes: with a new staff name
+  the order keeps the answer it holds, and a new customer-facing or prep station name
+  is saved onto lines not yet sent at the next change to the order. Those lines keep their prices.
 - It changes nothing else: not the products, not the menu's own items and sections, not your other
   menus. A product on two menus is patched on each one.
 - A version scheduled to go live later keeps its date and its content, and goes live then without
@@ -386,7 +385,9 @@ limits, and extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, prep station name,
 prices and modifier answers. Later menu edits apply to new selections. The parked order,
-station ticket, receipt and reprint continue to show the facts saved with that order.
+station ticket, receipt and reprint continue to show the facts saved with that order. A line not yet
+sent takes the new customer-facing or prep station name of an options list or option at the next
+change to the order.
 
 When you set up a Madrid demo in English, its staff and prep station names are in English. The till shows
 **Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the prep station name

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { customerOptionSnapshotLabels } from "@waitron/menu/src/option-snapshot-labels.js";
 import { deriveOptionSelections, optionSnapshotOf, sameOptionSelections } from "./held-options.js";
+import { withUnavailable } from "./menu-refresh.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { OfferedModifier } from "../api/client.js";
+import type { OfferedModifier, TillMenuOffer } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** The list's three names, and each label's three, DIFFER, so a match made on the wrong one of the
@@ -93,6 +94,17 @@ describe("a newly prepared option answer", () => {
 });
 
 describe("deriveOptionSelections", () => {
+  it("does not match a label the live offer has since marked unavailable", () => {
+    const offer = { productId: "dish", variants: [], offeredModifiers: [doneness] };
+    const [live] = withUnavailable([offer as unknown as TillMenuOffer], {
+      products: [],
+      optionLabels: ["label-rare"],
+    });
+    expect(deriveOptionSelections(live!.offeredModifiers, [frozen("Punto", "Poco hecho")])).toEqual(
+      { options: [], unanswered: ["list-punto"] },
+    );
+  });
+
   it("names the list and the label whose staff names the answer froze", () => {
     expect(deriveOptionSelections([doneness], [frozen("Punto", "Poco hecho")])).toEqual({
       options: [{ listId: "list-punto", labelId: "label-rare" }],

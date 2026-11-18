@@ -48,9 +48,10 @@ directly under it, and a **Customer-facing name**, with one field per content la
 optional and fall back to the staff name when you leave them blank. On a receipt, an options
 list's and an option's new answers keep the default language's text, falling back independently
 to their staff names when it is blank. Text in another language alone does not fill that default.
-Previously recorded answers keep their saved names; an extras
-list's own customer-facing name is not printed anywhere today. While a name is blank, its field
-shows, in place of the blank, the name it falls back to.
+Previously recorded answers keep their saved names, except as
+[the till section](modifiers.md#till) describes; an extras list's own customer-facing name is not
+printed anywhere today. While a name is blank, its field shows, in place of the blank, the name it
+falls back to.
 
 In an options list and each option's own window, you see **Name**, then **Prep station name**, then a
 plain **Customer-facing names** heading with every language's field already shown. You can compare
@@ -104,10 +105,9 @@ products before you confirm. Deleting cannot be undone.
 
 **An open order does not block a delete, and you are not told to finish or void one.** The delete
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
-answer is stored as the wording that was chosen. The next save of a parked counter order drops
-answers from deleted options lists on dishes not yet sent. An extra picked from a deleted list stays
-on a parked counter order, with its charge, until staff open the dish it is on and save a change
-there, which takes it off; until then, + cannot raise that dish's count.
+answer is stored as the wording that was chosen. An extra picked from a deleted list stays on a
+parked counter order, with its charge, until staff open the dish it is on and save a change there,
+which takes it off; until then, + cannot raise that dish's count.
 
 To remove a deleted list from the guest menu too, publish that menu again.
 
@@ -147,17 +147,16 @@ Each extra picked becomes its own indented line under the dish in the basket, wi
 and its own allergens and dietary labels — never folded into the dish's. An options answer costs
 nothing and rides along as wording on the dish's line.
 
-An order stores the answers it was given. A parked order has to be matched up with the dish's
-current lists again before it can be changed. An options answer
-is stored as wording, all three names of the list and all three of the chosen option, and the till
-matches on the staff name of each. An extra keeps the product and the list it was picked from, so
-another list offering the same product cannot silently take its place.
+An order stores the answers it was given. An extra keeps the product and the list it was picked
+from, so another list offering the same product cannot silently take its place.
 
 Renaming a list or an option leaves a dish already sent to its station as it was sent, on its
 ticket, bill and receipt.
 
-On a parked counter order, changing the staff name of a list or an option, or turning an option off,
-means an options answer no longer matches. The till will not guess: on a line not yet sent, it asks
-the operator to open that line and choose again before the order can be sent. An extras list is the
-exception, because an extra is matched by its product: renaming an extras list, or the product on
-it, leaves a parked order alone.
+A parked counter order keeps what was asked for when you change the staff name of a list or an
+option, turn an option off, or delete the list. A line not yet sent takes a new customer-facing or
+prep station name of its list or option at the next change to the order. When the till asks staff to
+open a line not yet sent and choose, the dish has gained a list since the order was parked. That
+window asks every list on the dish, so staff also choose again on any list whose recorded answer no
+longer matches the menu. Saving that window removes any answer from a deleted list. Renaming an
+extras list, or the product on it, also leaves a parked order alone.

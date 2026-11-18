@@ -98,7 +98,8 @@ export interface OrderLine {
   endedPeriod?: EndedPeriod;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
-   * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
+   * frozen wording (`deriveOptionSelections`), so an answer the menu no longer matches is missing here
+   * and stays only in `optionSnapshots`.
    */
   options?: OptionSelection[];
   /** Never sent on the wire. */
@@ -208,6 +209,35 @@ function mergingWith(lines: readonly OrderLine[], kept: OrderLine): OrderLine | 
     if (keptKey === undefined) keptKey = orderLineMergeKey(kept);
     return keptKey !== null && orderLineMergeKey(line) === keptKey;
   });
+}
+
+/** Every stored dish line a row stands for. */
+function savedLineIds(line: OrderLine): readonly string[] {
+  if (line.portionLineIds !== undefined) return line.portionLineIds;
+  return line.workingOrderLineId === undefined ? [] : [line.workingOrderLineId];
+}
+
+/** Where `last` went when the order's rows `before` were replaced by `after`. A line never saved
+ * cannot have become a row whose stored lines `before` all held: the draft merge rule cannot tell it
+ * from such a row. */
+function reloadedLine(
+  last: OrderLine,
+  before: readonly OrderLine[],
+  after: readonly OrderLine[],
+): OrderLine | undefined {
+  if (last.draftLineId !== undefined)
+    return after.find((line) => line.draftLineId === last.draftLineId);
+  const ids = savedLineIds(last);
+  if (ids.length > 0)
+    return after.find((line) => savedLineIds(line).some((id) => ids.includes(id)));
+  const known = new Set(before.flatMap(savedLineIds));
+  return mergingWith(
+    after.filter((line) => {
+      const saved = savedLineIds(line);
+      return saved.length === 0 || saved.some((id) => !known.has(id));
+    }),
+    last,
+  );
 }
 
 /** The picker hands back a product for every line; only one naming another variant replaces the
@@ -976,7 +1006,7 @@ export class WorkingOrderStore {
   }
 
   /** A saved line's id survives replacement even when its quantity or being kept separate prevents
-   * merging. Without a saved id, only the draft merge rule can identify the last-added line. */
+   * merging. */
   loadFrom(
     id: string,
     lines: OrderLine[],
@@ -991,12 +1021,7 @@ export class WorkingOrderStore {
     dining?: Dining,
   ): void {
     const last = id === this.#id ? this.lastAdded : undefined;
-    this.#lastAdded =
-      last === undefined
-        ? undefined
-        : last.draftLineId === undefined
-          ? mergingWith(lines, last)
-          : lines.find((line) => line.draftLineId === last.draftLineId);
+    this.#lastAdded = last === undefined ? undefined : reloadedLine(last, this.#lines, lines);
     this.#id = id;
     this.#fullInvoiceOrderId = undefined;
     this.#revision = revision;
