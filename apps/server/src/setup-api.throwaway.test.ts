@@ -1,7 +1,9 @@
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TLSSocket } from "node:tls";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +13,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
+import { NODE_FILE, VENUE_FILE } from "@waitron/store";
+import { FISCAL_SERVER_KEY_AS_TYPED } from "@waitron/fiscal-verifactu";
+import { readRecoveryKeyName } from "@waitron/node-db";
+import { buildManifest } from "./backup-manifest.js";
+import { verifyBreakGlass } from "./break-glass.js";
+import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput } from "./fiscal-readiness-runner.js";
@@ -24,6 +32,8 @@ import {
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import * as breakGlass from "./break-glass.js";
+import { STUB_NODE } from "./testing/node-copy.js";
 
 type Mode = "demo" | "prepare" | "live";
 type Box = { environment: DeploymentEnvironment; devMode: boolean; installationOrigin?: "usb" };
@@ -37,6 +47,11 @@ afterEach(() => vi.useRealTimers());
 const PRODUCTION_BOX: Box = { environment: "production", devMode: false };
 const PREPRODUCTION_BOX: Box = { environment: "preproduction", devMode: false };
 const DEV_BOX: Box = { environment: "preproduction", devMode: true };
+let secureSocket: TLSSocket;
+beforeEach(() => {
+  secureSocket = new TLSSocket(new Socket());
+});
+afterEach(() => secureSocket.destroy());
 
 const certificate = makeCertificateAuthority().issue({ passphrase: "cert-secret" });
 const CERT = {
@@ -129,6 +144,7 @@ function harness(box: Box, provision?: (req: ProvisionRequest) => Promise<VenueR
     establishIdentity: vi.fn(async () => {}),
     seedMembership: vi.fn(async () => {}),
     db: { withWriteLock: async () => {} } as unknown as Database,
+    node: STUB_NODE,
     ring: {} as unknown as KeyRing,
     persistTrading: vi.fn(async () => {}),
     requestRestart: vi.fn(),
@@ -137,16 +153,28 @@ function harness(box: Box, provision?: (req: ProvisionRequest) => Promise<VenueR
   const app = new Hono();
   mountSetup(app, deps, log);
   const post = (payload: unknown) =>
-    app.request("/setup-api/provision", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    app.request(
+      "https://box.test/setup-api/provision",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      { incoming: { socket: secureSocket } },
+    );
   const throwawayLines = () => lines.filter((line) => line.event === "setup.throwaway_allocation");
   return { post, received, throwawayLines, deps };
 }
 
 describe("POST /setup-api/provision — which requests the route marks for a throwaway allocation", () => {
+  beforeEach(() => {
+    vi.spyOn(breakGlass, "mintBreakGlassKey").mockResolvedValue({
+      secret: Buffer.alloc(24, 7).toString("base64url"),
+      name: "2026-10-16 · ABCD",
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
   it.each([false, true])(
     "refuses USB Demo before provisioning or seeding (supplied operations: %s)",
     async (supplied) => {
@@ -384,9 +412,11 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     {
       fiscalGate = "box",
       provision = (req: ProvisionRequest) => provisionVenue(provisionDeps(), req),
+      persistTrading = async () => {},
     }: {
       fiscalGate?: "box" | "passed";
       provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+      persistTrading?: SetupDeps["persistTrading"];
     } = {},
   ) {
     const app = new Hono();
@@ -404,7 +434,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         seedDemo: async () => {},
         establishIdentity: async () => {},
         seedMembership: async () => {},
-        persistTrading: async () => {},
+        persistTrading,
         requestRestart: () => {},
         assertFiscalReady:
           fiscalGate === "passed"
@@ -426,23 +456,117 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       },
       () => {},
     );
-    return (payload: unknown) =>
-      app.request("/setup-api/provision", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    return (payload: unknown, { secure = true, origin = "https://box.test" } = {}) =>
+      app.request(
+        `${secure ? "https" : "http"}://box.test/setup-api/provision`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body: JSON.stringify(payload),
+        },
+        { incoming: { socket: secure ? secureSocket : undefined } },
+      );
   }
 
-  it.each<[string, Mode]>([
-    ["Demo", "demo"],
-    ["Preparation", "prepare"],
-  ])("%s with no initialOperations makes a throwaway venue", async (_l, mode) => {
-    const res = await realApp(PREPRODUCTION_BOX)(body(mode));
+  it("Demo with no initialOperations makes a throwaway venue without a server key", async () => {
+    const res = await realApp(PREPRODUCTION_BOX)(body("demo"));
 
     expect(res.status, await res.clone().text()).toBe(200);
     expect(await res.json()).toEqual({ provisioned: true, restarting: true });
     expectThrowawayVenue("preproduction");
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    expect(await readRecoveryKeyName(venueDb.node, id)).toBeNull();
+  });
+
+  it("gives Preparation a named server key its backup can use, shown only on first success", async () => {
+    const request = body("prepare");
+    const res = await realApp(PREPRODUCTION_BOX)(request);
+    expect(res.status).toBe(200);
+    expectThrowawayVenue("preproduction");
+    const { breakGlassSecret, breakGlassKeyName, ...result } = await res.json();
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    expect(typeof breakGlassKeyName).toBe("string");
+    const secret = FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret);
+    expect(typeof secret).toBe("string");
+    expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+
+    const copyDir = join(stateDir, "selected");
+    await mkdir(copyDir);
+    const databasePath = join(copyDir, VENUE_FILE);
+    const nodePath = join(copyDir, NODE_FILE);
+    await venueDb.db.archiveTo(databasePath);
+    await venueDb.node.archiveTo(nodePath);
+    const manifest = await buildManifest({
+      db: venueDb.db,
+      node: venueDb.node,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      now: new Date(),
+    });
+    expect(
+      await readRecoveryCopyPreview(
+        {
+          databasePath,
+          manifest,
+          nodeDump: await readFile(nodePath),
+          discard: async () => {},
+          secretEntries: [
+            { name: "secrets/trading.env", bytes: Buffer.from(`WAITRON_NODE_ID=${id}\n`) },
+          ],
+        },
+        "selected",
+        { modules: ALL_MODULES, migrationsRoot: null },
+      ),
+    ).toMatchObject({
+      nodeRecoveryKeyName: breakGlassKeyName,
+      fiscalSelection: {
+        country: "ES",
+        fiscalTerritory: "ES-common",
+        module: "fiscal-verifactu",
+        timeZone: "Europe/Madrid",
+      },
+    });
+
+    expect(result).toEqual({ provisioned: true, restarting: true, breakGlassKeyInBackups: true });
+    expect((await createSetupOperationStore(stateDir).read())?.data).toEqual(result);
+    const replayed = await realApp(PREPRODUCTION_BOX)(request);
+    expect(replayed.status).toBe(200);
+    expect(await replayed.json()).toEqual(result);
+    expect(await readRecoveryKeyName(venueDb.node, id)).toBe(breakGlassKeyName);
+  });
+
+  it.each([
+    [false, "http://box.test", "setup.connection_insecure"],
+    [true, "https://other.test", "setup.owner_required"],
+  ])("refuses Preparation before writing on secure=%s from %s", async (secure, origin, code) => {
+    const response = await realApp(PREPRODUCTION_BOX)(body("prepare"), { secure, origin });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: { code, params: {} } });
+    emptyVenue();
+    expect(await createSetupOperationStore(stateDir).read()).toBeNull();
+  });
+
+  it("returns a usable Preparation key after retrying a failure before publication", async () => {
+    const request = body("prepare");
+    const post = realApp(PREPRODUCTION_BOX, {
+      persistTrading: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("write refused"))
+        .mockResolvedValue(undefined),
+    });
+    const refused = await post(request);
+    expect(refused.status).toBe(500);
+    expect(await refused.json()).not.toHaveProperty("breakGlassSecret");
+
+    const retried = await post(request);
+    expect(retried.status).toBe(200);
+    const { breakGlassSecret } = await retried.json();
+    expect(typeof breakGlassSecret).toBe("string");
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    expect(
+      await verifyBreakGlass(venueDb.node, id, FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret)!),
+    ).toBe(true);
   });
 
   it("Live on a dev box with no initialOperations makes a throwaway venue", async () => {

@@ -420,6 +420,10 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   ready when its start failed, and the restore forms take the copy's own environment from Review
   (#3702).
 
+- **Preparation bucket restores** use the named key shown at the end of a new Preparation setup.
+  Write it on a recovery sheet and keep it with the bucket recovery pack. This applies to new
+  setups under the pre-production reset rule in [CLAUDE.md](../../CLAUDE.md).
+
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
   19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
   refuse to send without them, and the setup server refuses a restore without them unless the box

@@ -121,6 +121,9 @@ export interface ProvisionResult {
   provisioned: true;
   restarting: true;
   openingHours?: { departmentId: string };
+  breakGlassSecret?: string;
+  breakGlassKeyName?: string;
+  breakGlassKeyInBackups?: true;
 }
 
 export interface AdoptBody {

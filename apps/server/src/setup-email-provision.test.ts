@@ -2,10 +2,12 @@ import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verif
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { settings as documents, taxpayer, withTransaction } from "@waitron/db";
+import { settings as documents, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -97,6 +99,7 @@ function mount(overrides: Partial<SetupDeps> = {}) {
       ring,
       provision: async () => {
         calls.push("provision");
+        await stampDeployment(suite.db, "preproduction");
         return result;
       },
       recoverProvision: async () => {
@@ -120,12 +123,22 @@ function mount(overrides: Partial<SetupDeps> = {}) {
   );
   return { app, calls, logs };
 }
-const post = (app: Hono, value: unknown, path = "/setup-api/provision") =>
-  app.request(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(value),
-  });
+const post = async (app: Hono, value: unknown, path = "/setup-api/provision") => {
+  const socket = new TLSSocket(new Socket());
+  try {
+    return await app.request(
+      `https://box.test${path}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(value),
+      },
+      { incoming: { socket } },
+    );
+  } finally {
+    socket.destroy();
+  }
+};
 beforeEach(async () => {
   await seedVenue(suite.db, { name: "Sala" });
   await withTransaction(suite.db, async (tx) => {
@@ -150,7 +163,17 @@ describe("setup provision email credential", () => {
       });
       const response = await post(made.app, { ...body(mode), email });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+      expect(await response.json()).toEqual({
+        provisioned: true,
+        restarting: true,
+        ...(mode === "prepare"
+          ? {
+              breakGlassSecret: expect.any(String),
+              breakGlassKeyName: expect.any(String),
+              breakGlassKeyInBackups: true,
+            }
+          : {}),
+      });
       expect(
         await withTransaction(suite.db, (tx) =>
           tryGetCredential(tx, ring, { purpose: "email.smtp" }),

@@ -4,7 +4,8 @@ import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createHash, X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AddressInfo } from "node:net";
+import { Socket, type AddressInfo } from "node:net";
+import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
@@ -30,6 +31,15 @@ import {
   type BoxServer,
 } from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
+import { STUB_NODE } from "./testing/node-copy.js";
+
+vi.mock("./break-glass.js", async (original) => ({
+  ...(await original<typeof import("./break-glass.js")>()),
+  mintBreakGlassKey: async () => ({
+    secret: Buffer.alloc(24, 7).toString("base64url"),
+    name: "2026-10-16 · ABCD",
+  }),
+}));
 
 const receiveArchive = useSetupArchiveUpload();
 function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {
@@ -285,6 +295,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     establishIdentity,
     seedMembership,
     db,
+    node: STUB_NODE,
     ring,
     persistTrading,
     requestRestart,
@@ -310,11 +321,20 @@ async function postProvision(
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<Response> {
-  return app.request("/setup-api/provision", {
-    method: "POST",
-    headers: { "content-type": "application/json", ...headers },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    return await app.request(
+      "https://box.test/setup-api/provision",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      },
+      { incoming: { socket } },
+    );
+  } finally {
+    socket.destroy();
+  }
 }
 
 /** Yield one macrotask, so a `setTimeout(…, 0)`-scheduled restart has fired. */
@@ -334,7 +354,13 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     mountSetup(app, deps.deps, noopLog);
     const response = await postProvision(app, prepareBody());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+    expect(await response.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      breakGlassSecret: expect.any(String),
+      breakGlassKeyName: expect.any(String),
+      breakGlassKeyInBackups: true,
+    });
     await vi.waitFor(() => expect(deps.requestRestart).toHaveBeenCalledOnce());
   });
 
@@ -353,6 +379,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         provisioned: true,
         restarting: true,
         openingHours: { departmentId: "first-department" },
+        breakGlassSecret: expect.any(String),
+        breakGlassKeyName: expect.any(String),
+        breakGlassKeyInBackups: true,
       });
       const restarted = new Hono();
       mountSetup(restarted, makeDeps({ operations: createSetupOperationStore(dir) }).deps, noopLog);
@@ -360,6 +389,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         provisioned: true,
         restarting: true,
         openingHours: { departmentId: "first-department" },
+        breakGlassKeyInBackups: true,
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
