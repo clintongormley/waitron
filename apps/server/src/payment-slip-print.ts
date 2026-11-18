@@ -1,17 +1,14 @@
 import "./errors.js";
 import type { Logger } from "./logger.js";
-import { and, eq, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { and, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import {
-  billPaymentRefunds,
   billPayments,
-  correctivesOf,
   workingOrders,
   devices,
   deviceProfiles,
   readTaxpayer,
+  saleSettlements,
   sales,
-  tenderRefunds,
   tenders,
   withTransaction,
   type Database,
@@ -180,19 +177,29 @@ export async function readSalePaymentSlips(
 }
 
 async function readSaleSlipCards(tx: Transaction, saleId: string, workingOrderId: string) {
-  const corrective = alias(sales, "corrective");
-  const [corrected] = await tx
-    .select({ id: corrective.id })
-    .from(corrective)
-    .where(correctivesOf(sql`${corrective}`, sql`${saleId}`));
-  if (corrected !== undefined) return [];
+  // An unpaid invoice already holds the bill's cards, and a deferred close can hold a refunded one.
+  const [paid] = await tx
+    .select({ id: saleSettlements.id })
+    .from(saleSettlements)
+    .where(
+      and(
+        eq(saleSettlements.saleId, saleId),
+        notExists(
+          tx
+            .select({ id: tenders.id })
+            .from(tenders)
+            .where(and(eq(tenders.saleId, saleId), eq(tenders.method, "deferred"))),
+        ),
+      ),
+    );
+  if (paid === undefined) return [];
   return (
     tx
       .select({
         id: payments.id,
         charged: payments.amount,
         paidAt: payments.settledAt,
-        tip: tenders.tipAmount,
+        tip: sql<number>`coalesce(${billPayments.tip}, ${tenders.tipAmount})`,
         remaining: sql<
           number | null
         >`case when ${payments.billPaymentId} is null then 0 else ${billPayments.remainingAfter} end`,
@@ -202,19 +209,16 @@ async function readSaleSlipCards(tx: Transaction, saleId: string, workingOrderId
         authCode: payments.cardAuthCode,
       })
       .from(payments)
-      .innerJoin(
+      .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
+      .leftJoin(
         tenders,
         and(
           eq(tenders.saleId, payments.saleId),
           eq(tenders.method, "card"),
-          // A bill paid by several cards: each payment's own tender carries its own tip.
-          or(
-            eq(tenders.billPaymentId, payments.billPaymentId),
-            and(isNull(tenders.billPaymentId), isNull(payments.billPaymentId)),
-          ),
+          isNull(tenders.billPaymentId),
+          isNull(payments.billPaymentId),
         ),
       )
-      .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
       .leftJoin(cardReaders, eq(cardReaders.id, payments.readerId))
       .where(
         and(
@@ -222,28 +226,14 @@ async function readSaleSlipCards(tx: Transaction, saleId: string, workingOrderId
           eq(payments.saleId, saleId),
           eq(payments.workingOrderId, workingOrderId),
           ne(payments.provider, "manual"),
-          eq(payments.state, "captured"),
+          // A copy reproduces the original slip, whatever has been refunded since.
+          inArray(payments.state, ["captured", "partially_refunded", "refunded"]),
           // An associated capture carries its settlement instant; do not invent a payment date.
           isNotNull(payments.settledAt),
-          // A refund still being sent counts as money given back; a failed one does not.
-          notExists(
-            tx
-              .select({ id: billPaymentRefunds.id })
-              .from(billPaymentRefunds)
-              .where(
-                and(
-                  eq(billPaymentRefunds.billPaymentId, payments.billPaymentId),
-                  ne(billPaymentRefunds.state, "failed"),
-                ),
-              ),
-          ),
-          notExists(
-            tx
-              .select({ id: tenderRefunds.id })
-              .from(tenderRefunds)
-              .where(
-                and(eq(tenderRefunds.tenderId, tenders.id), ne(tenderRefunds.state, "failed")),
-              ),
+          // A bill payment refunded in full before the sale has no tender, so its own row decides.
+          or(
+            and(eq(billPayments.method, "card"), eq(billPayments.state, "received")),
+            isNotNull(tenders.id),
           ),
         ),
       )
