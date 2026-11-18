@@ -44,6 +44,8 @@ it("leaves normalized zone aliases, cutover spellings and unchanged legacy inval
   ).toEqual({});
   const legacy = venueDetailsFixture({ timeZone: "legacy-invalid" }).details;
   expect(venueDetailPatch(legacy, { ...legacy, name: "Changed" })).toEqual({ name: "Changed" });
+  const madrid = venueDetailsFixture().details;
+  expect(venueDetailPatch(madrid, { ...madrid, timeZone: " Europe/Madrid " })).toEqual({});
 });
 
 it("keeps proposed clock and city fields relative to the opening snapshot", () => {

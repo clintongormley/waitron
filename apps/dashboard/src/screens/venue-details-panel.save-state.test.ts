@@ -108,7 +108,7 @@ it("a record with unset address values opens with Save quiet", async () => {
   expect(await state(el)).toEqual(quiet);
 });
 
-it("one edit wakes Save, and typing the stored value back, in any stored spelling, quiets it", async () => {
+it("wakes Save after an edit and quiets it when the stored value is restored", async () => {
   const { el } = await mountOpen();
   await type(el, "addressLine1", "Calle Mayor 2");
   expect(await state(el)).toEqual(ready);
@@ -118,7 +118,12 @@ it("one edit wakes Save, and typing the stored value back, in any stored spellin
   expect(await state(el)).toEqual(ready);
   await type(el, "addressLine2", "Piso 2");
   expect(await state(el)).toEqual(quiet);
-  await type(el, "timeZone", " Europe/Madrid ");
+  const picker = page.getByRole("combobox", { name: /Time zone/ });
+  await userEvent.click(picker);
+  await userEvent.click(page.getByRole("option", { name: "Canary Islands (Atlantic/Canary)" }));
+  expect(await state(el)).toEqual(blocked);
+  await userEvent.click(picker);
+  await userEvent.click(page.getByRole("option", { name: "Mainland Spain (Europe/Madrid)" }));
   expect(await state(el)).toEqual(quiet);
 });
 
