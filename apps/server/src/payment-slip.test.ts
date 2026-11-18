@@ -110,6 +110,13 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toMatch(/^\s*(?:Factura|Serie|Número de factura)\s*[:#]?\s*\S+/im);
     expect(commandNames(bytes)).not.toContain("GS ( k");
   });
+  it("names a card of unknown type with the slip's own word for card", () => {
+    const text = decodeTicket(
+      formatPaymentSlip({ ...input, card: { ...input.card, scheme: "UNKNOWN" } }),
+    );
+    expect(text).toContain("Tarjeta ****5838");
+    expect(text).not.toMatch(/unknown/i);
+  });
   it("prints the payment time with a two-digit hour", () => {
     const paidAt = new Date(2026, 8, 12, 9, 5).toISOString();
     expect(decodeTicket(formatPaymentSlip({ ...input, paidAt }))).toContain("12 sept 2026, 09:05");

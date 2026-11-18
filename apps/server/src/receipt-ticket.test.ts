@@ -1603,6 +1603,27 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(decodeTicket(bytes)).not.toContain("MASTERCARD");
   });
 
+  it("names a card of unknown type with the receipt's own word for card", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "UNKNOWN", last4: "5838", entryMode: "chip", authCode: null },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    });
+    expect(paymentLines(bytes)).toContain("Tarjeta ****5838 (Chip) 20,90 €");
+    expect(decodeTicket(bytes)).not.toMatch(/unknown/i);
+  });
+
   it("names a card whose entry mode is unknown without a bracket or authorisation", () => {
     const bytes = formatReceipt({
       result: {

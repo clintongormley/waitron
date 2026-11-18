@@ -18,10 +18,16 @@ export function cardDetailsOf(row: StoredCard): CardDetails | null {
   };
 }
 
-/** How every paper names the card: `Visa ****4034`. */
-export function cardName(card: CardDetails): string {
-  const scheme = card.scheme
-    .toLowerCase()
-    .replace(/(^|\s)\p{L}/gu, (initial) => initial.toUpperCase());
+/** How the receipt, the invoice and the payment slip name the card: `Visa ****4034`. */
+export function cardName(card: CardDetails, cardWord: string): string {
+  const scheme =
+    card.scheme.trim().toUpperCase() === "UNKNOWN"
+      ? cardWord
+      : card.scheme.replace(/\S+/gu, (word) => {
+          const letters = [...word];
+          // A network's acronym: JCB, CUP, VR.
+          if (letters.length <= 3) return word.toUpperCase();
+          return letters[0]!.toUpperCase() + letters.slice(1).join("").toLowerCase();
+        });
   return `${scheme} ****${card.last4}`;
 }

@@ -42,7 +42,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   text([input.orderLabel, `${labels.order} ${input.orderNumber}`].filter(Boolean).join(" · "));
   b.line();
   if (input.card !== null) {
-    row(labels.card, cardName(input.card));
+    row(labels.card, cardName(input.card, labels.card));
     const entries: Partial<Record<CardDetails["entryMode"], string>> = {
       contactless: labels.paymentContactless,
       chip: labels.paymentChip,

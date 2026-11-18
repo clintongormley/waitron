@@ -558,7 +558,7 @@ export function buildReceiptDocument({
       swipe: ` (${label.paymentSwipe})`,
       unknown: "",
     }[card.entryMode];
-    row(`${cardName(card)}${presented}`, formatMoney(amount, locale));
+    row(`${cardName(card, label.card)}${presented}`, formatMoney(amount, locale));
     if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
   };
   if (result.payments !== undefined && result.payments.length > 0) {
