@@ -271,21 +271,25 @@ refusal names its dishes and says what to do: cancel them, or move them to anoth
 
 ### 3. Placing a dish: the calculation
 
-**One function, two uses.** The calculation already on `main`
-(`packages/shared/src/set-menu-fit.ts`, piece 3, #3730) does both, with every set menu on the bill
-fixed to its type:
-- **Placing a dish:** every dish already placed is pinned to its place, and the new dish is free.
-  The answer is the new dish's cheapest open place, or none.
-- **The suggested move:** no dish is pinned except those carrying a discount, a comp or a payment.
-  The cheapest arrangement, compared with today's places, names the dishes that would move; the
-  fit's preference for the arrangement closest to the current one keeps the moves few.
+**Placing a dish, and the suggested move.**
+- **Placing a dish:** a small shared function, the same in the till and the server, puts each new
+  dish in its cheapest open place in the order the dishes were added, leaving every dish already
+  placed where it is; between equally cheap places it follows section 2's rule (fewer courses,
+  then the set menu added first). The till runs it to preview; the server runs it when dishes are
+  sent, and its answer is the one stored (**my call**). The landed calculation is not used for
+  this, because its tie-break goes by id, not by section 2's rule (piece 2's plan, **my call**).
+- **The suggested move:** the calculation already on `main` (`packages/shared/src/set-menu-fit.ts`,
+  piece 3, #3730), with every set menu on the bill fixed to its type and no dish pinned except
+  those carrying a discount, a comp or a payment. The cheapest arrangement, compared with today's
+  places, names the dishes that would move; the fit's preference for the arrangement closest to
+  the current one keeps the moves few. Only the till runs it; when the waiter accepts a move, the
+  server checks that the moved dishes have open places before saving it.
 
-With every type fixed there is one mix to consider, so the size bound the fit was built for is not
-reached. Keeping the full calculation leaves the door open to the owner's "we may yet come back
-to automatically reassigning plates". The till runs it to preview and to ask; the server runs it
-when dishes are sent and its answer is the one stored (**my call**). What a dish counts as comes
-from the set menu, so each offered dish in the calculation carries its own counts-as course; this
-is a small change to the landed function.
+With every type fixed there is one mix to consider, so the size bound the calculation was built
+for is not reached. Keeping it leaves the door open to the owner's "we may yet come back to
+automatically reassigning plates". What a dish counts as comes from the set menu, so each offered
+dish in the calculation carries its own counts-as course; this is a small change to the landed
+function.
 
 **Which set menus a bill may use.** A bill records one copy of each set menu: the newest on sale
 in its zone when that set menu is first added to the bill (**owner**, 18 November, "ok", after the
