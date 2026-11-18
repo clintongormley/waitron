@@ -833,7 +833,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("the reprint board (per-order Reprint wt-button on each card, KDS-4) has no violations", async () => {
+  it("the reprint board (per-order Reprint wt-button on each card) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups, stationId: "st-1", showReprint: true },

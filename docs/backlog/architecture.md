@@ -69,15 +69,13 @@ checked, and the dead ones dropped, in `apps/till`, `apps/dashboard`, `packages/
 and in `packages/db`'s `join-requests.ts`, `orders.test.ts` and `ticket-items.test.ts`; the hits left
 there name documents that still exist. Three places were left out on purpose and are
 still to check: `apps/till/src/screens/till-table-order-screen.ts`, the bill-pay dialog files
-(`apps/till/src/widgets/bill-pay-dialog*`) and `packages/menu`. `apps/server` and every other
-package, `scripts` and `bench` are still to check too. Find the rest with
+(`apps/till/src/widgets/bill-pay-dialog*`) and `packages/menu`. `apps/server`, the other apps and
+packages, `scripts` and `bench` are still to check too. Find the rest with
 `git grep -nIE -e "§[0-9]" --and --not -e "CLAUDE\.md.? §" -- apps packages scripts bench ':!apps/till' ':!apps/dashboard' ':!packages/adjustments' ':!packages/bookings' ':!packages/identity' ':!packages/layouts' ':!packages/payments' ':!packages/reporting' ':!packages/ui' ':!packages/shared' ':!packages/module' ':!packages/workforce' ':!packages/db/src/schema/join-requests.ts' ':!packages/db/src/schema/orders.test.ts' ':!packages/db/src/schema/ticket-items.test.ts'`,
 plus the same search over the left-out `apps/till` files. It also finds sections of outside standards
 (RFCs, AEAT's documents, GPL) and of kept specs (menus, service and billing, sales classification,
-the SQLite topology), which stay, so check which document each one names before cutting it. One was
-left on purpose: `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could
-not be traced to a deleted document. **Next action:** fold into the comment-pruning sweeps: drop the
-tag, or re-point it to the pull request that built the work. A test title is not a comment, so
+the SQLite topology), which stay, so check which document each one names before cutting it.
+**Next action:** fold into the comment-pruning sweeps: drop the tag, or re-point it to the pull request that built the work. A test title is not a comment, so
 changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
 
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE

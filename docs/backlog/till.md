@@ -29,10 +29,8 @@ their full text.
 - Found by #621 (the rest of `apps/till`). A question the prune moved
   here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
   dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
-  known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
-  pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
-  titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)",
-  "(SP-B2.1)").
+  known to contain the tag. Many `till-app.test.ts` titles carry plan and review labels
+  ("(Finding 2)", "(P6)", "(FP-1)").
 
 ## Till widget points from #616 that were read but not run
 

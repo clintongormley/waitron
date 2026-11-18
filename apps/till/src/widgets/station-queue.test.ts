@@ -1284,7 +1284,7 @@ describe("till-station-queue — courses & fire", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("rail: a FIRED course's line stays advanceable (behaviour is unchanged for fired items)", async () => {
+  it("rail: a FIRED course's line stays advanceable", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder],
       stationId: "st-1",

@@ -1468,7 +1468,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
   });
 });
 
-describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
+describe("DashboardApi — kitchen stations + routing", () => {
   it("listStations GETs /management-api/stations with credentials", async () => {
     const rows = [{ id: "s1", name: "Kitchen", displayOrder: 0, isDefault: true, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));

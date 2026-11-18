@@ -7252,7 +7252,7 @@ describe("till-app", () => {
   });
 
   it("a save refused as out of date reloads the order and says it changed on another till, paying nothing", async () => {
-    // Spec §10.7 example 2: the second save is refused, and that till reloads the order.
+    // Menus spec §10.7 example 2: the second save is refused, and that till reloads the order.
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
@@ -15018,7 +15018,7 @@ describe("till-app", () => {
     });
   });
 
-  describe("drill-in stack (SP-B2.1)", () => {
+  describe("drill-in stack", () => {
     const shellFormFactor: FormFactor = "till";
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
@@ -15082,7 +15082,7 @@ describe("till-app", () => {
       expect(shell(el)!.activeScreen).toBe("floor");
     });
 
-    it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
+    it("refreshes floor occupancy when the drill pops back to the floor tab (no stale floor)", async () => {
       // A round and other table-service actions do NOT update `this.tables`, so after a waiter adds a
       // round and taps Back, the floor tab must RE-READ occupancy or it re-renders a stale read-model.
       // So this asserts FRESHNESS — the floor reflects the read taken after Back.
@@ -15282,7 +15282,7 @@ describe("till-app", () => {
       expect(floorScreen!.zones).toEqual([floorZone]);
     });
 
-    it("clears the open drill and resets the active tab on logout (Finding 2 — no stale receipt into the next shift)", async () => {
+    it("clears the open drill and resets the active tab on logout (no stale receipt into the next shift)", async () => {
       // Operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout (NOT New sale)
       // from the non-inert shell header. Assert the STATE is cleared (not merely that the shell
       // unmounted at `lock`, which would mask it).
@@ -15329,7 +15329,7 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
     });
 
-    it("dismisses an open drill when a tab is selected (Finding 3)", async () => {
+    it("dismisses an open drill when a tab is selected", async () => {
       // The tab bar is in the non-inert header, so a tab tap while a drill is open must DISMISS the
       // drill, not switch the surface underneath it.
       const el = await toShellCounter();

@@ -2719,7 +2719,7 @@ describe("till-menu-browser", () => {
     });
   });
 
-  describe("an open section the menu no longer holds (§9)", () => {
+  describe("an open section the menu no longer holds (menus spec §9)", () => {
     it("says Not found and returns home when a new menu drops the open section", async () => {
       const { el } = await mount();
       await tap(el, entry(el, "structure", "Drinks (EN)"));
