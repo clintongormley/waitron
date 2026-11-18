@@ -290,10 +290,7 @@ carry none.
 
 ## Server comment pruning notes
 
-- Test titles that still say "R3" or "rejoin", though rejoin no longer calls `restore.ts`
-  (`rejoin-command.ts` does not import it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
-  `restore steps (R3 composition)` describes and its three `skipSecrets` "rejoin" cases, and
-  `restore-fiscal-e2e.test.ts`'s "skipSecrets:true (the rejoin shape)" control. No production
+- No production
   caller sets `skipSecrets` any more, so whether the option should go is open. **Decided (owner,
   2026-09-25): leave `keyFingerprint` as it is** — the first 8 hex characters of the recovery
   key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
@@ -1136,10 +1133,6 @@ client. No screen calls them yet.
   the wire, narrowing spec §8's "carries the person and permission" (D7); a join takes WPA2 and
   WPA3 personal networks only, so open, OWE and enterprise networks cannot be joined from Red (D9);
   `tag.write` takes no person actor, narrowing spec §8's "carries the person" (D6).
-- `scripts/box/wifi-boot-copy.test.mjs`'s last case, "the copy's states and failures match what the
-  cases observe", skips itself when any other case in the file is not set to run, so a `.skip` or
-  `.only` left in that file turns it off with no failure. Left open by #2474's review, which
-  suggested failing instead of skipping when `CI` is set.
 
 **For later slices, from PR 8's [re-map against main](../superpowers/plans/2026-11-06-b3-8-host-client.md#re-map-against-main-on-2026-11-06):**
 
