@@ -836,6 +836,22 @@ function wholeTabErrorOf(
   return isPaymentsReceived(error) ? "bill.pay_with_bill_payments" : settlingErrorOf(error);
 }
 
+/** Refusals of a card slip copy that say more than "try again". */
+const SLIP_COPY_REFUSALS: ReadonlySet<unknown> = new Set([
+  "storage.disk_full",
+  "bill.payment_slip_no_printer",
+  "bill.payment_slip_unavailable",
+]);
+
+/** While part of the bill is owed the Pay window lists Print a copy. Once paid it is closed, and
+ * a bill still at its table is not in Find a bill's list of orders waiting to be handed over. */
+const slipFailureKey = (partPaid: boolean, surface: PayingOrder["surface"]): StringKey => {
+  if (partPaid) return "payment_slip.capture_failed";
+  return surface === "table"
+    ? "payment_slip.capture_failed_table"
+    : "payment_slip.capture_failed_paid";
+};
+
 /** The sheet's words for a card the reader did not charge. */
 const PRESENTED_CARD_REFUSALS = {
   declined: "declined",
@@ -7525,15 +7541,17 @@ export class TillApp extends LitElement {
       );
       this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
-      if (out.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
+      if (out.slipPrintFailed) this.errorKey = slipFailureKey(out.outcome === "partial", "counter");
       if (out.outcome === "partial") {
         await this.#reloadCounterOrder(id, session);
         if (this.#hasLeftCounterOrder(id, session)) return;
-        await this.#openBillPaying(
-          "contribution",
-          payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-          out.balance.outstanding,
-          { surface: "counter", billId: id, visit: session },
+        this.#moveSlipFailureIntoPay(
+          await this.#openBillPaying(
+            "contribution",
+            payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+            out.balance.outstanding,
+            { surface: "counter", billId: id, visit: session },
+          ),
         );
         return;
       }
@@ -10853,17 +10871,16 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Enqueue the separate card payment slip. Presentation failure cannot affect the filed sale. */
-  async #onPaymentSlip(event: CustomEvent<{ paymentId: string }>): Promise<void> {
+  /** Print a marked copy of the chosen card's slip. Presentation failure cannot affect the filed sale. */
+  async #onPaymentSlip(event: CustomEvent<{ capturedPaymentId: string }>): Promise<void> {
     if (this.ticketWorkingOrderId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.printPaymentSlip(this.ticketWorkingOrderId, event.detail.paymentId);
+      await this.api.printPaymentSlip(this.ticketWorkingOrderId, event.detail.capturedPaymentId);
     } catch (error) {
+      const code = (error as { code?: string } | undefined)?.code;
       this.errorKey =
-        (error as { code?: string } | undefined)?.code === "storage.disk_full"
-          ? { code: "storage.disk_full" }
-          : "payment_slip.error";
+        code !== undefined && SLIP_COPY_REFUSALS.has(code) ? { code } : "payment_slip.error";
     }
   }
 
@@ -20774,12 +20791,15 @@ export class TillApp extends LitElement {
         billId,
       );
       if (left()) return;
-      if (out.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
+      if (out.slipPrintFailed) this.errorKey = slipFailureKey(out.outcome === "partial", "table");
       if (out.outcome === "partial") {
         this.#closePresented(id);
         this.billBalance = out.balance;
         await this.#loadPartyBills();
-        if (!left()) await this.#openBillPaying("whole", this.#payLinesOnScreen());
+        if (!left())
+          this.#moveSlipFailureIntoPay(
+            await this.#openBillPaying("whole", this.#payLinesOnScreen()),
+          );
         return;
       }
       this.captureWarning = out.captureWarning ?? null;
@@ -21489,8 +21509,10 @@ export class TillApp extends LitElement {
         if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
         settle(undefined, result.payment.state === "pending");
         await this.#onBillPaid(open, result, readerName);
-        if (result.slipPrintFailed && session === this.#operatorSession)
-          this.errorKey = "payment_slip.capture_failed";
+        if (result.slipPrintFailed && session === this.#operatorSession) {
+          this.errorKey = slipFailureKey(result.invoice === undefined, open.surface);
+          this.#moveSlipFailureIntoPay(open);
+        }
       } catch (error) {
         const notChecked =
           (keyed.request.submissionId === previous?.request.submissionId || noAnswer) &&
@@ -21742,6 +21764,16 @@ export class TillApp extends LitElement {
     this.#closeBillRefunding();
   }
 
+  /** The Pay window can cover the page's message, so a part payment's failed slip is said inside
+   * it. The message stays on the page when that window has gone or already shows a refusal. */
+  #moveSlipFailureIntoPay(open: BillPaying | null): void {
+    const code = "payment_slip.capture_failed";
+    const now = open === null ? null : this.#billPayingNow(open.id);
+    if (now === null || now.refusal !== null || this.errorKey !== code) return;
+    this.errorKey = undefined;
+    this.billPaying = { ...now, refusal: { code, text: t(code) } };
+  }
+
   async #onBillSlipCopy(paymentId: string): Promise<void> {
     const open = this.billPaying;
     if (open === null || open.busy) return;
@@ -21750,12 +21782,13 @@ export class TillApp extends LitElement {
       await this.api!.printBillPaymentSlip(open.billId, paymentId);
     } catch (error) {
       const now = this.#billPayingNow(open.id);
+      const code = (error as { code?: string } | undefined)?.code;
       if (now !== null)
         this.billPaying = {
           ...now,
           refusal:
-            (error as { code?: string } | undefined)?.code === "storage.disk_full"
-              ? { code: "storage.disk_full", text: codeMessage("storage.disk_full") }
+            code !== undefined && SLIP_COPY_REFUSALS.has(code)
+              ? { code, text: codeMessage(code) }
               : { code: "payment_slip.error", text: t("payment_slip.error") },
         };
     } finally {
@@ -22997,7 +23030,7 @@ export class TillApp extends LitElement {
         @retry-email=${() => void this.#onRetryEmail()}
         @invoice-email-send=${(event: Event) => void this.#onSendEmail(event)}
         @invoice-email-cancel=${() => this.#onEmailCancel()}
-        @payment-slip=${(event: CustomEvent<{ paymentId: string }>) => void this.#onPaymentSlip(event)}
+        @payment-slip=${(event: CustomEvent<{ capturedPaymentId: string }>) => void this.#onPaymentSlip(event)}
         @open-drawer=${() => void this.#onOpenDrawer()}
         @find-bill=${() =>
           this.#requestLeave(() => {

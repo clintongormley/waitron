@@ -1633,8 +1633,12 @@ export const en = {
   "receipt.guests_none": "No line",
   "payment_slip.error": "Could not print the payment slip, try again",
   "payment_slip.request": "Print card slip",
+  "payment_slip.card_n": "Card {n}",
   "payment_slip.capture_failed":
-    "Payment received, but the card slip could not print. Use Print a copy in Payments, or Payment slip on the paid bill.",
+    "Payment received, but the card slip could not print. Use Print a copy in Payments.",
+  "payment_slip.capture_failed_table": "Payment received, but the card slip could not print.",
+  "payment_slip.capture_failed_paid":
+    "Payment received, but the card slip could not print. If the order is waiting to be handed over, use Payment slip in Find a bill on a device with a payment slip printer.",
   "drawer.error": "Could not open the cash drawer, try again",
   "staff_notice.print_job.drawer_expired": "Drawer didn’t open",
   "drawer.not_attached": "No cash drawer is attached to this printer",
@@ -3737,8 +3741,12 @@ export const es: Record<StringKey, string> = {
   "receipt.guests_none": "Sin línea",
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
   "payment_slip.request": "Imprimir justificante de tarjeta",
+  "payment_slip.card_n": "Tarjeta {n}",
   "payment_slip.capture_failed":
-    "Pago recibido, pero no se pudo imprimir el justificante. Usa Imprimir una copia en Pagos, o Justificante de pago en la cuenta cobrada.",
+    "Pago recibido, pero no se pudo imprimir el justificante. Usa Imprimir una copia en Pagos.",
+  "payment_slip.capture_failed_table": "Pago recibido, pero no se pudo imprimir el justificante.",
+  "payment_slip.capture_failed_paid":
+    "Pago recibido, pero no se pudo imprimir el justificante. Si el pedido espera la entrega, usa Justificante de pago en Buscar cuenta en un dispositivo con impresora de justificantes de pago.",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "staff_notice.print_job.drawer_expired": "El cajón no se abrió",
   "drawer.not_attached": "Esta impresora no tiene un cajón conectado",

@@ -430,10 +430,39 @@ describe("a presented bill on a handheld", () => {
     });
     await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
     expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
-    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toContain(
-      t("payment_slip.capture_failed"),
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
+      t("payment_slip.capture_failed_table"),
     );
     expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
+  });
+
+  it("points at Print a copy when a short presented capture's slip could not print", async () => {
+    const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
+    const { el } = await openPresented({
+      getBillBalance: vi.fn().mockResolvedValue(balance),
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPrintFailed: true }),
+    });
+    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
+    expect(presented(el)).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("payment_slip.capture_failed"));
+  });
+
+  it("keeps a failed balance read in the Pay window and the slip failure on the page", async () => {
+    const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
+    const getBillBalance = vi.fn().mockResolvedValue(balance);
+    const { el } = await openPresented({
+      getBillBalance,
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPrintFailed: true }),
+    });
+    getBillBalance.mockRejectedValue(new Error("offline"));
+    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
+    expect(dialog(el)).not.toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.read_failed"));
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
+      t("payment_slip.capture_failed"),
+    );
   });
 
   it("a takeaway presented bill is charged on the reader as takeaway (A1522)", async () => {
@@ -2475,6 +2504,33 @@ describe("till-app: a sticker's notice inside the sheet", () => {
 
 describe("till-app: the next guest on a handheld", () => {
   const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
+
+  it("says on the next guest's step when the share just paid could not print its slip", async () => {
+    const { el } = await mountApp(
+      onPhone({
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf(
+            { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+            { received: "40.00", outstanding: "80.00" },
+          ),
+          slipPrintFailed: true,
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-next]")).not.toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("payment_slip.capture_failed"));
+  });
 
   it("after the first of three shares, the sheet offers the second, which previews a share among two", async () => {
     const { el } = await mountApp(

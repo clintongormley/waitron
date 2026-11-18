@@ -13,6 +13,7 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -174,7 +175,7 @@ it("copies a reader payment before settlement and keeps its original balance aft
   expect(text).toContain("20,00");
 });
 
-it("rejects a payment on another bill and offers no copy for an own-slip reader", async () => {
+it("rejects a payment on another bill and refuses a copy for an own-slip reader", async () => {
   const billId = await tabWith(venue, "Red wine bottle");
   const otherId = await tabWith(venue, "Tarta");
   const paid = await send(
@@ -226,7 +227,8 @@ it("rejects a payment on another bill and offers no copy for an own-slip reader"
     `/api/working-orders/${billId}/payments/${withoutBalance}/slip-copy`,
     {},
   );
-  expect(missing.status).toBe(200);
+  expect(missing.status).toBe(409);
+  expect(missing.json).toMatchObject({ code: "bill.payment_slip_unavailable" });
   const legacyBalance = await send(
     venue.app,
     venue.cookie,
@@ -249,7 +251,11 @@ it("rejects a payment on another bill and offers no copy for an own-slip reader"
     `/api/working-orders/${billId}/payments/${paymentId}/slip-copy`,
     {},
   );
-  expect(own.status).toBe(200);
+  expect(own.status).toBe(409);
+  expect(own.json).toMatchObject({
+    code: "bill.payment_slip_unavailable",
+    params: { paymentId },
+  });
   const balance = await send(
     venue.app,
     venue.cookie,
@@ -380,6 +386,8 @@ it.each(["whole", "short", "presented", "issued"])(
     });
     expect(paid.status).toBe(200);
     expect(paid.json).toMatchObject({ outcome: kind === "short" ? "partial" : "captured" });
+    if (kind === "short")
+      expect(paid.json).toMatchObject({ balance: { payments: [{ canCopySlip: true }] } });
     const jobs = await venue.db.select().from(printJobs);
     const slips = jobs
       .slice(before)
@@ -475,6 +483,117 @@ it("keeps the order language chosen before the reader answers", async () => {
   expect(decodeTicket(jobs.at(-1)!.payload)).not.toContain(
     receiptLabelsFor("en-GB").paymentRemaining,
   );
+});
+
+/** The language of each payment slip printed since `before`, told by its heading. */
+async function slipLanguagesSince(before: number): Promise<string[]> {
+  const jobs = await venue.db
+    .select()
+    .from(printJobs)
+    .orderBy(sql`${printJobs}.rowid`);
+  return jobs.slice(before).flatMap((job) => {
+    const text = decodeTicket(job.payload);
+    return ["es-ES", "en-GB"].filter((locale) =>
+      text.includes(receiptLabelsFor(locale).paymentHeading),
+    );
+  });
+}
+
+function restoreVenueLanguageAfterTest() {
+  onTestFinished(() =>
+    withTransaction(venue.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["es-ES"] })),
+  );
+}
+
+async function readerPaymentOn(billId: string, extra: Record<string, unknown> = {}) {
+  const paid = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/payments`,
+    { submissionId: randomUUID(), ...readerContribution, ...extra },
+  );
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  return (paid.json as { payment: { id: string } }).payment.id;
+}
+
+/** Prints a copy of the payment's slip and returns the language of what came out. */
+async function languagesOfSlipCopy(billId: string, paymentId: string): Promise<string[]> {
+  const before = (await venue.db.select().from(printJobs)).length;
+  const copy = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/payments/${paymentId}/slip-copy`,
+    {},
+  );
+  expect(copy.status, JSON.stringify(copy.json)).toBe(200);
+  return slipLanguagesSince(before);
+}
+
+describe("a copy of a bill payment's slip with no sale yet", () => {
+  it("prints in the order's language when it has one", async () => {
+    restoreVenueLanguageAfterTest();
+    await withTransaction(venue.db, (tx) =>
+      seedVenueSettings(tx, { invoiceLocales: ["es-ES", "en-GB"] }),
+    );
+    const id = await tabWith(venue, "Red wine bottle");
+    const paymentId = await readerPaymentOn(id);
+    await withTransaction(venue.db, (tx) =>
+      tx.update(workingOrders).set({ receiptLocale: "en-GB" }).where(eq(workingOrders.id, id)),
+    );
+
+    expect(await languagesOfSlipCopy(id, paymentId)).toEqual(["en-GB"]);
+    expect(await venue.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([]);
+  });
+
+  it("prints in the venue's current language when the order has none", async () => {
+    restoreVenueLanguageAfterTest();
+    const id = await tabWith(venue, "Red wine bottle");
+    const paymentId = await readerPaymentOn(id);
+    await withTransaction(venue.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["en-GB"] }));
+    const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.receiptLocale).toBeNull();
+
+    expect(await languagesOfSlipCopy(id, paymentId)).toEqual(["en-GB"]);
+  });
+});
+
+describe("a payment after the ticket was issued", () => {
+  const issuedBill = async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(sale!.locale).toBe("es-ES");
+    const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.receiptLocale).toBeNull();
+    return id;
+  };
+
+  it("prints its requested slip in the sale's language after the venue's changes", async () => {
+    const id = await issuedBill();
+    restoreVenueLanguageAfterTest();
+    await withTransaction(venue.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["en-GB"] }));
+    const before = (await venue.db.select().from(printJobs)).length;
+
+    await readerPaymentOn(id, { printCardSlip: true });
+
+    expect(await slipLanguagesSince(before)).toEqual(["es-ES"]);
+  });
+
+  it("a copy of a bill payment's slip prints in the sale's language after the venue's changes", async () => {
+    const id = await issuedBill();
+    const paymentId = await readerPaymentOn(id);
+    restoreVenueLanguageAfterTest();
+    await withTransaction(venue.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["en-GB"] }));
+
+    expect(await languagesOfSlipCopy(id, paymentId)).toEqual(["es-ES"]);
+  });
 });
 
 it.each(["cash", "manual"])("rejects a slip field on %s payments", async (method) => {
@@ -759,11 +878,31 @@ describe("the Payment slip button on a paid sale", () => {
   const printACopy = (billId: string, billPaymentId: string) =>
     printedBy(`/api/working-orders/${billId}/payments/${billPaymentId}/slip-copy`);
 
+  const expectRefused = async (
+    { answer, printed }: Awaited<ReturnType<typeof printedBy>>,
+    code: string,
+    paymentId: string,
+  ) => {
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code, params: { paymentId } });
+    expect(printed).toEqual([]);
+  };
+
+  const expectSlipUnavailable = async (billId: string, paymentId: string) =>
+    expectRefused(await press(billId, paymentId), "bill.payment_slip_unavailable", paymentId);
+
+  const expectCopyUnavailable = async (billId: string, billPaymentId: string) =>
+    expectRefused(
+      await printACopy(billId, billPaymentId),
+      "bill.payment_slip_unavailable",
+      billPaymentId,
+    );
+
   it("prints only the chosen card, marked as a copy, on a sale split across two cards", async () => {
     const { billId, first, second } = await twoCardSale();
     expect(await offered(billId)).toEqual([
-      { id: first.id, amount: "10.00", last4: "1111" },
-      { id: second.id, amount: "20.00", last4: "2222" },
+      { id: first.id, charged: "10.00", last4: "1111" },
+      { id: second.id, charged: "20.00", last4: "2222" },
     ]);
     const records = fiscalRecordCount(venue);
     for (const [payment, own, other, remaining] of [
@@ -888,8 +1027,8 @@ describe("the Payment slip button on a paid sale", () => {
     const { billId, first, second } = await twoCardSale();
     await refund(billId, first.billPaymentId!);
     expect(await offered(billId)).toEqual([
-      { id: first.id, amount: "10.00", last4: "1111" },
-      { id: second.id, amount: "20.00", last4: "2222" },
+      { id: first.id, charged: "10.00", last4: "1111" },
+      { id: second.id, charged: "20.00", last4: "2222" },
     ]);
     const { answer, printed } = await press(billId, first.id);
     expect(answer.status).toBe(200);
@@ -929,15 +1068,15 @@ describe("the Payment slip button on a paid sale", () => {
       venue.db.update(payments).set({ state: "voided" }).where(eq(payments.id, first.id)),
     );
     expect((await offered(billId)).map((slip) => slip.id)).toEqual([second.id]);
-    expect((await press(billId, first.id)).printed).toEqual([]);
+    await expectSlipUnavailable(billId, first.id);
   });
 
   it("gives the same copies as Print a copy once the sale is corrected", async () => {
     const { billId, first, second } = await twoCardSale();
     await credit(venue, billId, "5.00", "-6.05");
     expect(await offered(billId)).toEqual([
-      { id: first.id, amount: "10.00", last4: "1111" },
-      { id: second.id, amount: "20.00", last4: "2222" },
+      { id: first.id, charged: "10.00", last4: "1111" },
+      { id: second.id, charged: "20.00", last4: "2222" },
     ]);
     for (const [payment, card, charged] of [
       [first, "Visa ****1111", "10,00"],
@@ -953,6 +1092,26 @@ describe("the Payment slip button on a paid sale", () => {
       const copy = await printACopy(billId, payment.billPaymentId!);
       expect(text).toBe(decodeTicket(copy.printed[0]!.payload));
     }
+  });
+
+  it("prints the same language and duplicate word as Print a copy after the venue's language changes", async () => {
+    const { billId, first } = await twoCardSale();
+    restoreVenueLanguageAfterTest();
+    await withTransaction(venue.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["en-GB"] }));
+
+    const slip = await press(billId, first.id);
+    const copy = await printACopy(billId, first.billPaymentId!);
+
+    expect(slip.answer.status).toBe(200);
+    expect(copy.answer.status).toBe(200);
+    const [slipText, copyText] = [slip.printed, copy.printed].map((jobs) => {
+      expect(jobs).toHaveLength(1);
+      return decodeTicket(jobs[0]!.payload);
+    });
+    expect(copyText).toContain(labels.paymentHeading);
+    expect(copyText).toContain(duplicate);
+    expect(copyText).not.toContain(receiptLabelsFor("en-GB").paymentHeading);
+    expect(slipText).toBe(copyText);
   });
 
   describe("after a real refund of a card with a tip", () => {
@@ -1037,7 +1196,7 @@ describe("the Payment slip button on a paid sale", () => {
       billId: string,
       card: { id: string; billPaymentId: string | null },
     ) => {
-      expect(await offered(billId)).toEqual([{ id: card.id, amount: "11.00", last4: null }]);
+      expect(await offered(billId)).toEqual([{ id: card.id, charged: "11.00", last4: null }]);
       const records = fiscalRecordCount(venue);
       const { answer, printed } = await press(billId, card.id);
       expect(answer.status).toBe(200);
@@ -1114,9 +1273,7 @@ describe("the Payment slip button on a paid sale", () => {
       const [linked] = await venue.db.select().from(payments).where(eq(payments.id, cardId));
       expect(linked!.saleId).not.toBeNull();
       expect(await offered(billId)).toEqual([]);
-      const { answer, printed } = await press(billId, cardId);
-      expect(answer.status).toBe(200);
-      expect(printed).toEqual([]);
+      await expectSlipUnavailable(billId, cardId);
     };
 
     it("gives no copy of a card on an issued invoice until the bill is paid", async () => {
@@ -1171,7 +1328,7 @@ describe("the Payment slip button on a paid sale", () => {
         expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
         const [now] = await venue.db.select().from(payments).where(eq(payments.id, card!.id));
         expect(now!.state).toBe(state);
-        expect(await offered(id)).toEqual([{ id: card!.id, amount: "30.00", last4: null }]);
+        expect(await offered(id)).toEqual([{ id: card!.id, charged: "30.00", last4: null }]);
         const { printed } = await press(id, card!.id);
         expect(printed).toHaveLength(1);
         const text = decodeTicket(printed[0]!.payload);
@@ -1206,7 +1363,7 @@ describe("the Payment slip button on a paid sale", () => {
     return id;
   };
 
-  it("offers and prints nothing for a sale paid in cash", async () => {
+  it("offers nothing for a sale paid in cash and refuses a press or a copy", async () => {
     const billId = await tabWith(venue, "Red wine bottle");
     const paid = await send(
       venue.app,
@@ -1226,18 +1383,18 @@ describe("the Payment slip button on a paid sale", () => {
     expect(paid.status).toBe(200);
     expect(await offered(billId)).toEqual([]);
 
-    const stray = await strayCapture(billId, (paid.json as { payment: { id: string } }).payment.id);
+    const cashPaymentId = (paid.json as { payment: { id: string } }).payment.id;
+    const stray = await strayCapture(billId, cashPaymentId);
     expect(await offered(billId)).toEqual([]);
-    const { answer, printed } = await press(billId, stray);
-    expect(answer.status).toBe(200);
-    expect(printed).toEqual([]);
+    await expectSlipUnavailable(billId, stray);
+    await expectCopyUnavailable(billId, cashPaymentId);
   });
 
   it.each<[string, Record<string, string>]>([
     ["with no reference", {}],
     ["with an operation number", { externalRef: "OP-400" }],
     ["on an outside machine", { externalProvider: "other", externalMachine: "Bank counter" }],
-  ])("offers nothing and prints nothing for a hand-keyed card %s", async (_, extra) => {
+  ])("offers nothing and refuses a press or a copy for a hand-keyed card %s", async (_, extra) => {
     const billId = await tabWith(venue, "Red wine bottle");
     await take(billId, "30.00", "manual", extra);
     const [keyed] = await venue.db
@@ -1245,9 +1402,8 @@ describe("the Payment slip button on a paid sale", () => {
       .from(payments)
       .where(eq(payments.workingOrderId, billId));
     expect(await offered(billId)).toEqual([]);
-    const { answer, printed } = await press(billId, keyed!.id);
-    expect(answer.status).toBe(200);
-    expect(printed).toEqual([]);
+    await expectSlipUnavailable(billId, keyed!.id);
+    await expectCopyUnavailable(billId, keyed!.billPaymentId!);
   });
 
   it("offers only the reader card of a sale also paid by cash and a hand-keyed card", async () => {
@@ -1272,7 +1428,76 @@ describe("the Payment slip button on a paid sale", () => {
     await take(billId, "20.00");
     const rows = await venue.db.select().from(payments).where(eq(payments.workingOrderId, billId));
     const reader = rows.find((row) => row.provider !== "manual")!;
-    expect(await offered(billId)).toEqual([{ id: reader.id, amount: "20.00", last4: null }]);
+    expect(await offered(billId)).toEqual([{ id: reader.id, charged: "20.00", last4: null }]);
+  });
+
+  it.each<[string, (billId: string) => Promise<void>]>([
+    [
+      "cash",
+      async (billId) => {
+        const cash = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${billId}/payments`,
+          {
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "10.00",
+            method: "cash",
+            tendered: "10.00",
+            applied: "10.00",
+            tip: "0.00",
+          },
+        );
+        expect(cash.status, JSON.stringify(cash.json)).toBe(200);
+      },
+    ],
+    [
+      "an outside-machine card",
+      (billId) =>
+        take(billId, "10.00", "manual", {
+          externalProvider: "other",
+          externalMachine: "Bank counter",
+        }),
+    ],
+  ])("lists only the reader cards' amounts and last four after %s", async (_, takeFirst) => {
+    const billId = await tabWith(venue, "Red wine bottle");
+    await takeFirst(billId);
+    await take(billId, "5.00");
+    await take(billId, "15.00");
+    const readers = (
+      await venue.db
+        .select()
+        .from(payments)
+        .where(eq(payments.workingOrderId, billId))
+        .orderBy(sql`rowid`)
+    ).filter((row) => row.provider !== "manual");
+    await liftPaymentGuard(venue.db, async () => {
+      for (const [index, row] of readers.entries())
+        await venue.db
+          .update(payments)
+          .set({ cardScheme: "VISA", cardLast4: `000${index + 1}` })
+          .where(eq(payments.id, row.id));
+    });
+
+    const ticket = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/sales/${billId}?receiptPreview=1`,
+    );
+
+    expect(ticket.status).toBe(200);
+    const { payments: lines, paymentSlips: slips } = ticket.json as {
+      payments: unknown[];
+      paymentSlips: unknown[];
+    };
+    expect(lines).toHaveLength(3);
+    expect(slips).toEqual([
+      { id: readers[0]!.id, charged: "5.00", last4: "0001" },
+      { id: readers[1]!.id, charged: "15.00", last4: "0002" },
+    ]);
   });
 
   describe("on a sale with no card money", () => {
@@ -1300,7 +1525,7 @@ describe("the Payment slip button on a paid sale", () => {
     it.each([
       ["unpaid", issuedUnpaid],
       ["deferred", closedDeferred],
-    ] as const)("offers and prints nothing on a %s sale", async (method, sale) => {
+    ] as const)("offers nothing on a %s sale and refuses a press", async (method, sale) => {
       const id = await sale();
       const ticket = await send(
         venue.app,
@@ -1316,9 +1541,7 @@ describe("the Payment slip button on a paid sale", () => {
 
       const stray = await strayCapture(id);
       expect(await offered(id)).toEqual([]);
-      const { answer, printed } = await press(id, stray);
-      expect(answer.status).toBe(200);
-      expect(printed).toEqual([]);
+      await expectSlipUnavailable(id, stray);
     });
 
     it("refuses a card taken towards an issued invoice that is not paid off yet", async () => {
@@ -1334,19 +1557,19 @@ describe("the Payment slip button on a paid sale", () => {
     });
   });
 
-  it("offers nothing and prints nothing for a reader that prints its own slip", async () => {
-    const { billId, first } = await twoCardSale();
+  it("refuses a press offered before the reader began printing its own slips", async () => {
+    const { billId, first, second } = await twoCardSale();
+    expect((await offered(billId)).map((slip) => slip.id)).toEqual([first.id, second.id]);
     await withTransaction(venue.db, (tx) =>
       tx.update(cardReaders).set({ printsOwnSlipAutomatically: true }),
     );
+    await expectSlipUnavailable(billId, first.id);
     expect(await offered(billId)).toEqual([]);
-    const { answer, printed } = await press(billId, first.id);
-    expect(answer.status).toBe(200);
-    expect(printed).toEqual([]);
   });
 
-  it("offers nothing and prints nothing on a device with no slip printer", async () => {
-    const { billId, first } = await twoCardSale();
+  it("says the device has no slip printer, for a press and for Print a copy", async () => {
+    const { billId, first, second } = await twoCardSale();
+    expect((await offered(billId)).map((slip) => slip.id)).toEqual([first.id, second.id]);
     const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
     onTestFinished(async () => {
       await withTransaction(venue.db, (tx) =>
@@ -1359,9 +1582,23 @@ describe("the Payment slip button on a paid sale", () => {
     await withTransaction(venue.db, (tx) =>
       tx.update(devices).set({ paymentSlipPrinterId: null }).where(eq(devices.id, venue.deviceId)),
     );
+    const noPrinter = "bill.payment_slip_no_printer";
+    await expectRefused(await press(billId, first.id), noPrinter, first.id);
+    await expectRefused(
+      await printACopy(billId, first.billPaymentId!),
+      noPrinter,
+      first.billPaymentId!,
+    );
     expect(await offered(billId)).toEqual([]);
-    const { answer, printed } = await press(billId, first.id);
-    expect(answer.status).toBe(200);
-    expect(printed).toEqual([]);
+
+    // The printer is asked about first: this card has no copy on any device.
+    await liftPaymentGuard(venue.db, () =>
+      venue.db.update(payments).set({ state: "voided" }).where(eq(payments.id, second.id)),
+    );
+    await expectRefused(await press(billId, second.id), noPrinter, second.id);
+
+    const unknown = await press(billId, randomUUID());
+    expect(unknown.answer.status).toBe(404);
+    expect(unknown.answer.json).toMatchObject({ code: "bill.payment_not_found" });
   });
 });

@@ -6439,7 +6439,7 @@ describe("till-app", () => {
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
 
-  it("a card completion can request its separate payment slip", async () => {
+  it("the payment-slip event prints the card payment it names", async () => {
     const filed: TillSaleResult = {
       ...saleResult,
       tender: { method: "card", charged: "3.50", tip: "0.50", reference: null },
@@ -6455,7 +6455,7 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "card", amount: "3.00" });
     await flush(el);
 
-    emit(ticket(el)!, "payment-slip", { paymentId: "pay-1" });
+    emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
     await flush(el);
     expect(printPaymentSlip).toHaveBeenCalledWith(workingOrderId, "pay-1");
     expect(ticket(el)).not.toBeNull();
@@ -6465,7 +6465,7 @@ describe("till-app", () => {
     const filed: TillSaleResult = {
       ...saleResult,
       tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
-      paymentSlips: [{ id: "pay-1", amount: "3.00", last4: "1111" }],
+      paymentSlips: [{ id: "pay-1", charged: "3.00", last4: "1111" }],
     };
     const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
     const c = await toCounter(el);
@@ -25627,8 +25627,8 @@ describe("A737 Find a bill page", () => {
       getFiledTicket: vi.fn().mockResolvedValue({
         ...saleResult,
         paymentSlips: [
-          { id: "pay-1", amount: "10.00", last4: "1111" },
-          { id: "pay-2", amount: "15.10", last4: "2222" },
+          { id: "pay-1", charged: "10.00", last4: "1111" },
+          { id: "pay-2", charged: "15.10", last4: "2222" },
         ],
       }),
       printPaymentSlip,

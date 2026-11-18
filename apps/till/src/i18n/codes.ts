@@ -565,6 +565,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That payment is no longer on this bill. Reload the bill and try again",
     es: "Ese pago ya no está en esta cuenta. Vuelve a cargar la cuenta e inténtalo de nuevo",
   },
+  "bill.payment_slip_no_printer": {
+    en: "This device has no payment slip printer it can use, so nothing was printed. If one is listed under More, Settings, Equipment (on a handheld, More, Equipment), choose it and try again",
+    es: "Este dispositivo no tiene una impresora de justificantes de pago que pueda usar, así que no se imprimió nada. Si aparece una en Más, Ajustes, Equipo (en un dispositivo de mano, Más, Equipo), elígela e inténtalo de nuevo",
+  },
+  "bill.payment_slip_unavailable": {
+    en: "No copy of this card's slip is available, so nothing was printed. Its reader may print its own slips, or the payment may have changed since this screen opened. Open the bill again to see what can be printed",
+    es: "No hay copia del justificante de esta tarjeta, así que no se imprimió nada. Su lector puede imprimir sus propios justificantes o el pago puede haber cambiado desde que se abrió esta pantalla. Vuelve a abrir la cuenta para ver qué se puede imprimir",
+  },
   "bill.refund_exceeds_payment": {
     en: "That is more than can be refunded from this payment. A tip is refunded only with the whole payment",
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",

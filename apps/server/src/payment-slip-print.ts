@@ -29,7 +29,7 @@ import { readReceiptLanguage } from "@waitron/menu";
 import { cardDetailsOf } from "./card-details.js";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { resolvePaymentSlipPrinter } from "./receipt-print.js";
+import { resolvePaymentSlipPrinter, type DevicePrinter } from "./receipt-print.js";
 import type { OriginConfig } from "./trading-context.js";
 
 type CardSlipRequest = { printerId: string; locale: string } | null | undefined;
@@ -58,11 +58,21 @@ export async function freezeCardSlip(
   }
   const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
   if (printer === undefined) return null;
+  return { printerId: printer.id, locale: await orderSlipLocale(tx, workingOrderId) };
+}
+
+async function orderSlipLocale(tx: Transaction, workingOrderId: string): Promise<string> {
+  // `sales_working_order_id_key` allows one sale per order; correctives carry no order id.
+  const [sale] = await tx
+    .select({ locale: sales.locale })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId));
+  if (sale !== undefined) return sale.locale;
   const [order] = await tx
     .select({ locale: workingOrders.receiptLocale })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  return { printerId: printer.id, locale: order?.locale ?? (await readReceiptLanguage(tx)).locale };
+  return order?.locale ?? (await readReceiptLanguage(tx)).locale;
 }
 
 export async function printCapturedCardSlip(
@@ -104,7 +114,7 @@ export async function printCapturedCardSlip(
               .where(eq(billPayments.id, payment.billPaymentId));
       await enqueueSlips(
         tx,
-        cfg,
+        printer,
         workingOrderId,
         [
           {
@@ -129,12 +139,26 @@ export async function printCapturedCardSlip(
   }
 }
 
-/** Prints a copy of one card payment's slip; one the sale has no copy for prints nothing. */
+/** Queues one marked copy of `cards`, which hold the named payment only when a copy is offered. */
+async function printSlipCopy(
+  tx: Transaction,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  paymentId: string,
+  cards: Parameters<typeof enqueueSlips>[3],
+  locale: string,
+): Promise<void> {
+  const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
+  if (printer === undefined) throw new AppError("bill.payment_slip_no_printer", { paymentId });
+  const queued = await enqueueSlips(tx, printer, workingOrderId, cards, locale, true);
+  if (queued === 0) throw new AppError("bill.payment_slip_unavailable", { paymentId });
+}
+
 export async function printSalePaymentSlip(
   db: Database,
   cfg: OriginConfig,
   workingOrderId: string,
-  paymentId: string,
+  capturedPaymentId: string,
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
     const [sale] = await tx
@@ -147,16 +171,17 @@ export async function printSalePaymentSlip(
       .from(payments)
       .where(
         and(
-          eq(payments.id, paymentId),
+          eq(payments.id, capturedPaymentId),
           eq(payments.saleId, sale.id),
           eq(payments.workingOrderId, workingOrderId),
         ),
       );
-    if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+    if (payment === undefined)
+      throw new AppError("bill.payment_not_found", { paymentId: capturedPaymentId });
     const cards = (await readSaleSlipCards(tx, sale.id, workingOrderId)).filter(
-      (card) => card.id === paymentId,
+      (card) => card.id === capturedPaymentId,
     );
-    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale, true);
+    await printSlipCopy(tx, cfg, workingOrderId, capturedPaymentId, cards, sale.locale);
   });
 }
 
@@ -171,7 +196,7 @@ export async function readSalePaymentSlips(
   const cards = await readSaleSlipCards(tx, saleId, workingOrderId);
   return cards.map((card) => ({
     id: card.id,
-    amount: centsToDecimal(card.charged),
+    charged: centsToDecimal(card.charged),
     last4: card.last4,
   }));
 }
@@ -230,7 +255,7 @@ async function readSaleSlipCards(tx: Transaction, saleId: string, workingOrderId
           inArray(payments.state, ["captured", "partially_refunded", "refunded"]),
           // An associated capture carries its settlement instant; do not invent a payment date.
           isNotNull(payments.settledAt),
-          // A bill payment refunded in full before the sale has no tender, so its own row decides.
+          // A bill payment is judged by its own row; only a card paid with the sale is matched to its tender.
           or(
             and(eq(billPayments.method, "card"), eq(billPayments.state, "received")),
             isNotNull(tenders.id),
@@ -286,20 +311,20 @@ export async function printBillPaymentSlip(
     const cards = (await readBillSlipPayments(tx, workingOrderId)).filter(
       (card) => card.id === paymentId,
     );
-    await enqueueSlips(
+    await printSlipCopy(
       tx,
       cfg,
       workingOrderId,
+      paymentId,
       cards,
-      (await readReceiptLanguage(tx)).locale,
-      true,
+      await orderSlipLocale(tx, workingOrderId),
     );
   });
 }
 
 async function enqueueSlips(
   tx: Transaction,
-  cfg: OriginConfig,
+  printer: DevicePrinter,
   workingOrderId: string,
   cards: readonly {
     charged: number;
@@ -313,12 +338,10 @@ async function enqueueSlips(
   }[],
   locale: string,
   copy: boolean,
-): Promise<void> {
-  const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
-  if (printer === undefined) return;
+): Promise<number> {
   const taxpayer = await readTaxpayer(tx);
   /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
-  if (taxpayer === null) return;
+  if (taxpayer === null) return 0;
   /* v8 ignore stop */
   const order = await readReceiptOrder(tx, workingOrderId);
   for (const payment of cards) {
@@ -339,4 +362,5 @@ async function enqueueSlips(
     });
     await enqueuePrintJob(tx, printer.id, payload, "document");
   }
+  return cards.length;
 }

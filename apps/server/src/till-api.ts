@@ -652,6 +652,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.other_party": 409,
   "bill.merge_invoice_choice_required": 409,
   "bill.payment_not_found": 404,
+  "bill.payment_slip_no_printer": 409,
+  "bill.payment_slip_unavailable": 409,
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
   "bill.refund_unsupported": 422,

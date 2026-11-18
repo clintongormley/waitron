@@ -730,28 +730,42 @@ export class TillTicketView extends LitElement {
     this.dispatchEvent(new CustomEvent("print-receipt", { bubbles: true, composed: true }));
   }
 
-  #printPaymentSlip(paymentId: string): void {
+  #printPaymentSlip(capturedPaymentId: string): void {
     this.dispatchEvent(
-      new CustomEvent("payment-slip", { detail: { paymentId }, bubbles: true, composed: true }),
+      new CustomEvent("payment-slip", {
+        detail: { capturedPaymentId },
+        bubbles: true,
+        composed: true,
+      }),
     );
   }
 
   #renderPaymentSlipChoices(slips: readonly PaymentSlipChoice[]) {
     if (slips.length < 2) return nothing;
+    const labelOf = (slip: PaymentSlipChoice, card: string) =>
+      [card, slip.last4, formatMoney(slip.charged, currentLocale())].filter(Boolean).join(" · ");
+    const plain = slips.map((slip) => labelOf(slip, t("tender.card")));
+    const repeats = new Map<string, number>();
+    for (const label of plain) repeats.set(label, (repeats.get(label) ?? 0) + 1);
+    const positions = new Map<string, number>();
+    const labels = slips.map((slip, index) => {
+      const label = plain[index]!;
+      if (repeats.get(label) === 1) return label;
+      const position = (positions.get(label) ?? 0) + 1;
+      positions.set(label, position);
+      return labelOf(slip, t("payment_slip.card_n").replace("{n}", String(position)));
+    });
     return html`<div class="payment-slips" role="group" aria-labelledby="payment-slips-title">
       <span id="payment-slips-title" class="payment-slips-title">${t("action.payment_slip")}</span>
-      ${slips.map((slip, index) => {
-        const card = `${t("tender.card")}${slip.last4 ? ` · ${slip.last4}` : ""}`;
-        return html`<wt-button
-          variant="secondary"
-          data-test="payment-slip"
-          @click=${() => this.#printPaymentSlip(slip.id)}
-          >${t("bill_pay.payment")
-            .replace("{n}", String(index + 1))
-            .replace("{method}", () => card)}
-          · ${formatMoney(slip.amount, currentLocale())}</wt-button
-        >`;
-      })}
+      ${slips.map(
+        (slip, index) =>
+          html`<wt-button
+            variant="secondary"
+            data-test="payment-slip"
+            @click=${() => this.#printPaymentSlip(slip.id)}
+            >${labels[index]}</wt-button
+          >`,
+      )}
     </div>`;
   }
 

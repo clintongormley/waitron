@@ -1049,7 +1049,7 @@ export type TenderBlock =
 
 export interface PaymentSlipChoice {
   id: string;
-  amount: string;
+  charged: string;
   last4: string | null;
 }
 
@@ -3250,9 +3250,13 @@ export class TillApi {
     );
   }
 
-  /** Print the separate card-payment slip for the filed sale's integrated capture, when one exists. */
-  async printPaymentSlip(workingOrderId: string, paymentId: string): Promise<void> {
-    await this.#request<void>(`/api/sales/${workingOrderId}/payment-slip/${paymentId}`, "POST", {});
+  /** Print a marked copy of the named card payment's slip. */
+  async printPaymentSlip(workingOrderId: string, capturedPaymentId: string): Promise<void> {
+    await this.#request<void>(
+      `/api/sales/${workingOrderId}/payment-slip/${capturedPaymentId}`,
+      "POST",
+      {},
+    );
   }
 
   /**

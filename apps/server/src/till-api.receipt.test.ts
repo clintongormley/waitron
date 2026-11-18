@@ -482,6 +482,12 @@ async function ringSale(
   return workingOrderId;
 }
 
+async function expectSlipUnavailable(response: Response): Promise<void> {
+  expect(await response.json()).toMatchObject({
+    error: { code: "bill.payment_slip_unavailable" },
+  });
+}
+
 /** The Payment slip press for a sale's card payment. */
 async function slipPath(workingOrderId: string): Promise<string> {
   const [payment] = await suite.db
@@ -2547,23 +2553,24 @@ describe("payment slip persisted capture facts", () => {
         method: "POST",
         headers: { cookie },
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(automatic ? 409 : 200);
+      if (automatic) await expectSlipUnavailable(response);
       expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
       expect(await fiscalRecordCount()).toBe(1);
       expect(await saleCount()).toBe(1);
     },
   );
 
-  it("does not print a manual card slip", async () => {
+  it("refuses to print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId, "card");
-    expect(
-      (await app.request(await slipPath(id), { method: "POST", headers: { cookie } })).status,
-    ).toBe(200);
+    const res = await app.request(await slipPath(id), { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(409);
+    await expectSlipUnavailable(res);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
   it("lays the payment slip out for the device printer's paper width and resolution", async () => {
@@ -2607,7 +2614,7 @@ describe("payment slip persisted capture facts", () => {
 });
 
 describe("payment slip with nothing to print", () => {
-  it("prints nothing when the device has no payment slip printer", async () => {
+  it("refuses the press when the device has no payment slip printer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: null });
     const app = new Hono();
@@ -2621,11 +2628,14 @@ describe("payment slip with nothing to print", () => {
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "bill.payment_slip_no_printer" },
+    });
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("prints nothing for a capture that records no settlement instant", async () => {
+  it("refuses the press for a capture that records no settlement instant", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
@@ -2641,7 +2651,8 @@ describe("payment slip with nothing to print", () => {
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    await expectSlipUnavailable(res);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 });

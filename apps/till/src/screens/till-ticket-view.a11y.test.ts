@@ -314,8 +314,8 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
         result: {
           ...result,
           paymentSlips: [
-            { id: "pay-1", amount: "4.40", last4: "1111" },
-            { id: "pay-2", amount: "5.00", last4: null },
+            { id: "pay-1", charged: "4.40", last4: "1111" },
+            { id: "pay-2", charged: "5.00", last4: null },
           ].slice(0, count),
         },
       },

@@ -1315,7 +1315,7 @@ export class TillBillPayDialog extends LitElement {
   #nextActions(): SheetView {
     const left = this.taken?.pending === undefined ? this.#sharesLeft() : 0;
     const label = left > 0 ? this.#nextShareLabel(this.#shareRun!) : t("bill_pay.next");
-    const actions = html`<wt-form-actions slot="footer"
+    const actions = html`<wt-form-actions slot="footer" .error=${this.#bottomMessage(new Map())}
       >${recoveryLink(this.#shownRefusal)}
       <wt-button
         slot="cancel"

@@ -135,8 +135,8 @@ for (const language of ["en-GB", "es-ES"])
             tender: { method: "card", charged: "10.00", tip: "0.00", reference: null },
             qr: "",
             paymentSlips: [
-              { id: "pay-1", amount: "10.00", last4: "1111" },
-              { id: "pay-2", amount: "20.00", last4: "2222" },
+              { id: "pay-1", charged: "10.00", last4: "1111" },
+              { id: "pay-2", charged: "20.00", last4: "2222" },
             ].slice(0, slips),
           },
           originalReceiptAvailable: false,

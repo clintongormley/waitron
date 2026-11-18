@@ -1769,13 +1769,35 @@ describe("till-app receipt issuance", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    emit(ticket(el)!, "payment-slip", { paymentId: "pay-1" });
+    emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
     await flush(el);
 
     expect(printPaymentSlip).toHaveBeenCalledOnce();
     expect(banner(el)!.textContent).toContain(t("payment_slip.error"));
     expect(ticket(el)).not.toBeNull();
   });
+
+  it.each(["bill.payment_slip_no_printer", "bill.payment_slip_unavailable"])(
+    "says why a press is refused with %s",
+    async (code) => {
+      const printPaymentSlip = vi.fn().mockRejectedValue({ code });
+      const { el } = await mountApp({ printPaymentSlip });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      const paid = ticket(el)!.result;
+
+      emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
+      await flush(el);
+
+      expect(printPaymentSlip).toHaveBeenCalledOnce();
+      expect(banner(el)!.textContent).toContain(codeMessage(code));
+      expect(banner(el)!.textContent).not.toContain(t("payment_slip.error"));
+      expect(ticket(el)!.result).toEqual(paid);
+    },
+  );
 
   it.each([
     ["reprint", "reprint"],
@@ -1792,7 +1814,7 @@ describe("till-app receipt issuance", () => {
     await flush(el);
     const paid = ticket(el)!.result;
 
-    emit(ticket(el)!, event, { paymentId: "pay-1" });
+    emit(ticket(el)!, event, { capturedPaymentId: "pay-1" });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));

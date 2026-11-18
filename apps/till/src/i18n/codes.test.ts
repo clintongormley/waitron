@@ -25,6 +25,21 @@ it.each([
   }
 });
 
+it("says why a card slip copy was refused and what to do next", () => {
+  expect(codeMessage("bill.payment_slip_no_printer", "en")).toBe(
+    "This device has no payment slip printer it can use, so nothing was printed. If one is listed under More, Settings, Equipment (on a handheld, More, Equipment), choose it and try again",
+  );
+  expect(codeMessage("bill.payment_slip_no_printer", "es")).toBe(
+    "Este dispositivo no tiene una impresora de justificantes de pago que pueda usar, así que no se imprimió nada. Si aparece una en Más, Ajustes, Equipo (en un dispositivo de mano, Más, Equipo), elígela e inténtalo de nuevo",
+  );
+  expect(codeMessage("bill.payment_slip_unavailable", "en")).toBe(
+    "No copy of this card's slip is available, so nothing was printed. Its reader may print its own slips, or the payment may have changed since this screen opened. Open the bill again to see what can be printed",
+  );
+  expect(codeMessage("bill.payment_slip_unavailable", "es")).toBe(
+    "No hay copia del justificante de esta tarjeta, así que no se imprimió nada. Su lector puede imprimir sus propios justificantes o el pago puede haber cambiado desde que se abrió esta pantalla. Vuelve a abrir la cuenta para ver qué se puede imprimir",
+  );
+});
+
 it("words a refund above its cancelled dishes", () => {
   expect(codeMessage("tender.refund_exceeds_cancelled", "en")).toBe(
     "This refund is more than the cancelled dishes' value",
@@ -227,6 +242,8 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "bill.tip_not_allowed",
     "bill.allocation_changed",
     "bill.payment_not_found",
+    "bill.payment_slip_no_printer",
+    "bill.payment_slip_unavailable",
     "bill.refund_exceeds_payment",
     "bill.refund_not_whole",
     "bill.refund_unsupported",
