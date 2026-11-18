@@ -1347,7 +1347,6 @@ test("reports opening before other views render their queued changes", async () 
   const opened = vi.fn();
   el.addEventListener("wt-row-actions-toggle", opened, { once: true });
   el.show();
-  await Promise.resolve();
   expect(popup.matches(":popover-open")).toBe(true);
   expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: { open: true } }));
 });

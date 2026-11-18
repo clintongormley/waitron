@@ -119,6 +119,7 @@ export class WtToast extends LitElement {
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
+    // A queued update can reach here after the toast leaves the page.
     if (!this.isConnected || !this.open || this.held || this.#underModal || this.duration <= 0)
       return;
     if (this.#hovered || this.matches(":focus-within")) return;

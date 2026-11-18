@@ -711,6 +711,7 @@ describe("where the shell draws the notice", () => {
       const menu = el.shadowRoot!.querySelector("[data-test=account-menu]")!;
       await userEvent.click(menu.shadowRoot!.querySelector("button")!);
       await expect.poll(() => alertToast(el).shadowRoot!.querySelector(".toast")).toBeNull();
+      expect(alertToast(el)).toMatchObject({ open: true, held: true });
       const stack = toast(el).parentElement!.getBoundingClientRect();
       expect(boxOf(toast(el)).top).toBeCloseTo(stack.top);
     },
