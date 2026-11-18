@@ -53,6 +53,7 @@ import type {
   KitchenSignal,
   OptionSelection,
   OptionSnapshot,
+  ReceiptElement,
   ReceiptPresentation,
   StationThresholds,
   TableSignal,
@@ -1055,8 +1056,9 @@ export type TenderBlock =
       externalMachine?: string;
     };
 
-/** `POST /api/sales` success — the ticket payload the receipt view renders. */
+/** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
+  receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment?: boolean;
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
@@ -1090,7 +1092,7 @@ export interface TillSaleResult extends ReceiptPresentation {
   issuedAt: string;
   total: string;
   vatBreakdown: VatBreakdownEntry[];
-  /** The filed line list, rendered by the receipt instead of the client basket. */
+  /** The filed line list. */
   lines: TillSaleLine[];
   /** Discounts on the whole bill, shown after the goods; absent when there are none. */
   billAdjustments?: ReceiptAdjustment[];
@@ -3133,8 +3135,12 @@ export class TillApi {
     );
   }
 
-  getFiledTicket(workingOrderId: string): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>(`/api/sales/${workingOrderId}`, "GET");
+  getFiledTicket(
+    workingOrderId: string,
+    { receiptPreview = false }: { receiptPreview?: boolean } = {},
+  ): Promise<TillSaleResult> {
+    const query = receiptPreview ? "?receiptPreview=1" : "";
+    return this.#request<TillSaleResult>(`/api/sales/${workingOrderId}${query}`, "GET");
   }
 
   getReceiptPrintStatus(workingOrderId: string): Promise<OriginalReceiptPrint> {

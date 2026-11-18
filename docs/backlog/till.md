@@ -423,7 +423,7 @@ Open:
   `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total, and
   since C67 the card-reader payment of a bill that owes nothing returns the same. The printed
   receipt and the screen both give the cash line as total plus change
-  (`apps/server/src/receipt-ticket.ts`, `apps/till/src/screens/till-ticket-view.ts`), so it
+  (`apps/server/src/receipt-document.ts`), so it
   overstates what was handed over. **PARKED (owner, 2026-09-29)** until the product can issue a
   corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5,
   above). Also from C67's review (a probe, not a committed test): for a bill corrected to exactly

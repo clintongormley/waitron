@@ -9,6 +9,10 @@ describe("customer ticket metadata boundary", () => {
     const result = {
       orderLabel: null,
       orderNumber: 7,
+      receiptPreview: [
+        { kind: "amount", caption: "A/1", amount: "15 Oct 2026", indent: 0 },
+        { kind: "amount", caption: "House burger", amount: "12.00", indent: 0 },
+      ],
       kitchenNote: "KITCHEN-ONLY train at 14:30",
       receiptTrim: {},
       venueAddress: [],
@@ -23,7 +27,6 @@ describe("customer ticket metadata boundary", () => {
     } satisfies TillSaleResult & { kitchenNote: string };
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result,
-      issuer: { venueName: "House Restaurant", nif: "B12345674" },
       invoiceLocale: "en-GB",
     });
     expect(el.shadowRoot!.textContent).toContain("House burger");

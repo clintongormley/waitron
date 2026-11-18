@@ -134,7 +134,8 @@ once the invoice is issued. With **Receipt printer: print after paying**, press 
 
 ## Choose a document and printer {#invoice-printer}
 
-On a sale’s ticket, choose **Print/Reprint**. For a full invoice, choose **Receipt** for the compact
+Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. The receipt uses
+the language it was issued in. For a paper copy, choose **Print/Reprint**. For a full invoice, choose **Receipt** for the compact
 version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
 printers. Both versions of a full invoice keep the recorded customer details.
 

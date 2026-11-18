@@ -377,10 +377,9 @@ the change (plan PR 8 Decision 1).
   [2026-10-14-a650-moved-slips-design.md](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.
   **2026-10-23 (A756 PR 6):** the venue switch is gone; the station's own choice decides paper alone.
 
-- **Each is decided by the unit's identity.** **Kept as it is, by the owner's choice
-  (2026-09-28):** the till's ticket view (`apps/till/src/screens/till-ticket-view.ts`) still shows
-  the Each unit. The printed receipt prints an Each count bare since A663 Part 2 (owner,
-  2026-10-15).
+- **Each is decided by the unit's identity.** The till kept showing the Each unit after the
+  owner's 2026-09-28 decision. Paper has shown the count alone since A663 Part 2 (owner,
+  2026-10-15). On 2026-11-18 the till adopted the printed layout, including the bare count.
 
 - **A party kitchen-note change prints one slip per affected printer and one notice per station,
   listing its affected bills (owner, 2026-11-06, A1378).** Acknowledging the notice covers every

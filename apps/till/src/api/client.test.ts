@@ -180,6 +180,15 @@ describe("TillApi", () => {
     });
   });
 
+  it("requests the paper layout when opening a paid waiting order", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}));
+    await new TillApi("", fetchStub).getFiledTicket("order-7", { receiptPreview: true });
+    expect(fetchStub).toHaveBeenCalledWith("/api/sales/order-7?receiptPreview=1", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
   it.each([
     [404, "working_order.not_found"],
     [401, "session.required"],

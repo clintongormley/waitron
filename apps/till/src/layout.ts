@@ -3,10 +3,7 @@
  * imported for the bundle reason `api/client.ts` states. Keep in sync with those files.
  */
 
-/**
- * The NON-FISCAL receipt trim, rendered around the mandated core of `till-ticket-view`: no field here
- * may suppress or reorder a mandated element.
- */
+/** Optional receipt trim. The receipt builder decides where each field appears. */
 export interface ReceiptConfig {
   headerSubtitle?: string;
   footerMessage?: string;

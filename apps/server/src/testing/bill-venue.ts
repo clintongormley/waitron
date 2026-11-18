@@ -100,6 +100,7 @@ export interface BillVenue {
     /** In place of the venue's own seat, as a wrapped seat is handed to the routes. */
     backend?: FiscalBackend;
     clockUnconfirmed?: () => boolean;
+    practiceMode?: boolean;
   }): Hono;
   /** The same routes with the venue's tips off. */
   appTipsOff: Hono;
@@ -283,6 +284,7 @@ export async function provisionBillVenue(
     workforceEnabled?: boolean,
     seat: FiscalBackend = backend,
     clockUnconfirmed?: () => boolean,
+    practiceMode?: boolean,
   ): Hono => {
     const app = new Hono();
     mountTillApi(
@@ -292,7 +294,7 @@ export async function provisionBillVenue(
         db,
         backend: seat,
         clock: at,
-        cfg: { ...cfg, tipsEnabled },
+        cfg: { ...cfg, tipsEnabled, practiceMode },
         secureCookies: false,
         venueLocale: LOCALE,
         pool,
@@ -331,6 +333,7 @@ export async function provisionBillVenue(
         opts.workforceEnabled,
         opts.backend,
         opts.clockUnconfirmed,
+        opts.practiceMode,
       ),
     appTipsOff: mount(false),
     cookie: await cookieFor(devices[0]!),

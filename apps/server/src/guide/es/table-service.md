@@ -144,7 +144,8 @@ del pedido lo muestra en el idioma de tu pantalla.
 
 ## Elegir un documento y una impresora {#invoice-printer}
 
-En el ticket de una venta, elige **Imprimir/Reimprimir**. Para una factura completa, elige
+Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.
+El ticket se muestra en el idioma en que se emitió. Para una copia en papel, elige **Imprimir/Reimprimir**. Para una factura completa, elige
 **Recibo** para la versión compacta o **Factura** para el formato de factura. Una factura
 simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.

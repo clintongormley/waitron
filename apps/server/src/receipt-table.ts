@@ -1,21 +1,7 @@
 import { wrapText } from "@waitron/printing";
 
-export interface ReceiptTableRow {
-  units: string;
-  item: string;
-  price: string;
-  amount: string;
-  rate?: string;
-  /** Spaces before the item text. */
-  itemIndent?: number;
-}
-
-export interface ReceiptTable {
-  /** Absent on a table continuing after a line printed outside it. */
-  header?: ReceiptTableRow;
-  rows: readonly ReceiptTableRow[];
-  withRate: boolean;
-}
+import type { ReceiptTable, ReceiptTableRow } from "@waitron/shared";
+export type { ReceiptTable, ReceiptTableRow } from "@waitron/shared";
 
 export interface TableLine {
   text: string;

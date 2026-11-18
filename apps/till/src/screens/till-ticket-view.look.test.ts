@@ -29,7 +29,6 @@ for (const language of ["en-GB", "es-ES"])
           const { el } = await mountWidget<TillTicketView>(
             "till-ticket-view",
             {
-              issuer: { venueName: "Dining Room Ltd", nif: "B12345678" },
               result: {
                 receiptTrim: {},
                 venueAddress: [],

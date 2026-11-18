@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import {
   billPayments,
@@ -28,7 +28,7 @@ import { payments } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setProfileServiceAccess } from "@waitron/venue-service";
+import { setProfileServiceAccess, writeKitchenNote } from "@waitron/venue-service";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -45,6 +45,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { invoiceDeliveryAlertSource } from "./alert-sources.js";
 import { createPageTestPages } from "./page-test-pages.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import * as receiptDocument from "./receipt-document.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -99,6 +100,7 @@ async function jobs() {
 }
 it("reads the filed invoice before collection without settling or enqueuing anything", async () => {
   const order = await placedIssuedBill(venue, "Croquettes");
+  await inTx(venue, (tx) => writeKitchenNote(tx, { workingOrderId: order }, 0, "Train at 14:30"));
   const sale = await saleOf(order);
   await inTx(venue, (tx) =>
     tx.update(products).set({ customerName: { "es-ES": "Renamed after filing" } }),
@@ -117,10 +119,23 @@ it("reads the filed invoice before collection without settling or enqueuing anyt
     issuedAt: new Date(sale.issuedAt).toISOString(),
     lines: [{ descriptions: { "es-ES": "Croquetas de jamón" }, gross: "10.00" }],
   });
+  expect(JSON.stringify(result.receiptPreview)).toContain("Croquetas de jamón");
+  expect(JSON.stringify(result.receiptPreview)).not.toContain("Train at 14:30");
   expect(result.qr).not.toBe("");
   expect(result.issuer).toMatchObject({ venueName: "Tarjetas SL", nif: "61000002T" });
   expect(await snapshot()).toEqual(before);
   expect(await jobs()).toEqual(printed);
+});
+it("keeps the invoice available when its preview cannot be built", async () => {
+  const id = await billlessSale(venue);
+  const preview = vi.spyOn(receiptDocument, "buildReceiptDocument").mockImplementationOnce(() => {
+    throw new Error("preview failed");
+  });
+  onTestFinished(() => preview.mockRestore());
+  const answer = await get(id);
+  expect(answer).toMatchObject({ status: 200, json: { invoiceNumber: "A/1", total: "12.10" } });
+  expect(preview).toHaveBeenCalledOnce();
+  expect(answer.json).not.toHaveProperty("receiptPreview");
 });
 it("reads paid and orderless original sales and a correction by their own identity", async () => {
   const order = await placedIssuedBill(venue, "Caña");
@@ -200,9 +215,17 @@ it("reprints a duplicate document with an audit row and no drawer or fiscal chan
   expect(after.reprints.at(-1)).toMatchObject({ saleId: id, personId: venue.operatorId });
   expect(await snapshot()).toEqual(before);
 });
-it("prints the guests stored with the sale on its copy", async () => {
+it("shows the saved guests in the preview and on the paper copy", async () => {
   const id = await billlessSale(venue);
   await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guestCount: 5 }));
+  const answer = await get(id);
+  expect(answer.status).toBe(200);
+  expect(answer.json).toMatchObject({
+    receiptPreview: expect.arrayContaining([
+      expect.objectContaining({ kind: "amount", caption: "5 comensales · por persona" }),
+      expect.objectContaining({ kind: "text", text: "Tarjetas SL" }),
+    ]),
+  });
   const printed = (await jobs()).prints.length;
   expect((await reprint(id)).status).toBe(200);
   const { prints } = await jobs();
@@ -211,6 +234,20 @@ it("prints the guests stored with the sale on its copy", async () => {
   const copy = decodeTicket(prints.at(-1)!.payload);
   expect(copy).toContain("DUPLICADO");
   expect(copy).toContain("5 comensales · por persona");
+});
+it("marks a practice receipt twice without claiming a cash payment was simulated", async () => {
+  const id = await billlessSale(venue);
+  const app = venue.appWith({ practiceMode: true });
+  const answer = await send(app, venue.cookie, "GET", `/api/transactions/${id}/receipt`);
+  expect(answer.status).toBe(200);
+  const { receiptPreview } = answer.json as unknown as TillSaleResult;
+  const marks = receiptPreview?.filter(
+    (element) => element.kind === "text" && /PRUEBA|COBRO REAL/.test(element.text),
+  );
+  expect(marks).toEqual([
+    { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+    { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+  ]);
 });
 let projectionNumber = 900100;
 async function projectionInvoice(

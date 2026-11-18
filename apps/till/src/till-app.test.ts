@@ -3817,8 +3817,9 @@ describe("till-app", () => {
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
   });
 
-  it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
-    const { el } = await mountApp();
+  it("confirm-payment: records the sale with the mapped lines and tender, then shows the document choices", async () => {
+    const getFiledTicket = vi.fn();
+    const { el } = await mountApp({ getFiledTicket });
     const c = await toCounter(el);
     const store = c.store;
     store.addProduct(coffee, "2");
@@ -3850,7 +3851,8 @@ describe("till-app", () => {
     const view = ticket(el)!;
     expect(view).not.toBeNull();
     expect(view.result).toBe(saleResult);
-    expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
+    expect(view.localName).toBe("till-settlement-document-dialog");
+    expect(getFiledTicket).not.toHaveBeenCalled();
   });
 
   it("opens customer details before a walk-up full invoice choice can pay", async () => {
@@ -4585,20 +4587,26 @@ describe("till-app", () => {
     );
   });
 
-  it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
-    // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
-    // server's filed result reports a different composition (agua×3). The rendered ticket must show the
-    // FILED "Agua"/"3"/"6,00 €" — proof the receipt renders `result.lines`, never the mutable basket, so
-    // a local edit can never make the printed goods list disagree with the invoice.
+  it("shows the server's receipt goods even when the sale fields and basket disagree", async () => {
     const filed: TillSaleResult = {
       ...saleResult,
       total: "6.00",
-      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
+      lines: [{ descriptions: { "es-ES": "Raw sale wording" }, quantity: "3", gross: "6.00" }],
     };
     const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
     const { el } = await mountApp({
       recordSale: vi.fn().mockResolvedValue(filed),
-      getTransactionReceipt: vi.fn().mockResolvedValue(filed),
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        ...filed,
+        receiptPreview: [
+          {
+            kind: "amount",
+            caption: "3  Agua mineral",
+            amount: "6,00 €",
+            indent: { after: "3  " },
+          },
+        ],
+      }),
     });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2"); // client basket — different from the filed lines
@@ -4609,12 +4617,14 @@ describe("till-app", () => {
 
     expect(ticket(el)!.result).toBe(filed);
     await openFiledReceipt(el);
-    const rows = ticket(el)!.shadowRoot!.querySelectorAll(".line");
+    const article = ticket(el)!.shadowRoot!.querySelector("article")!;
+    const rows = article.querySelectorAll("p");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("Agua");
     expect(rows[0]!.textContent).toContain("3");
     expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
-    expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
+    expect(article.textContent).not.toContain("Café");
+    expect(article.textContent).not.toContain("Raw sale wording");
   });
 
   // ── Counter receipt/drawer: the ticket screen's Reprint + Abrir cajón buttons ────────────────
@@ -11835,10 +11845,7 @@ describe("till-app", () => {
           tender: { method: "card" as const, change: "0.00" },
         };
         const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: result });
-        const { el } = await mountApp({
-          pay,
-          getTransactionReceipt: vi.fn().mockResolvedValue(result),
-        });
+        const { el } = await mountApp({ pay });
         const c = await toCounter(el);
         const store = c.store;
         store.addProduct(coffee, "2");
@@ -11859,10 +11866,6 @@ describe("till-app", () => {
         expect(view).not.toBeNull();
         expect(view.result).toBe(result);
         expect(view.simulatedCardPayment).toBe(simulatedCardPayment);
-        await openFiledReceipt(el);
-        expect(
-          el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view")!.simulatedCardPayment,
-        ).toBe(simulatedCardPayment);
       },
     );
 
@@ -14246,30 +14249,19 @@ describe("till-app", () => {
   });
 
   describe("receipt trim", () => {
-    it("shows each successive invoice presentation without boot or previous-answer text", async () => {
-      const presentations = [
-        {
-          receiptTrim: {
-            headerSubtitle: "Terraza",
-            phone: "910001111",
-            footerMessage: "Hasta pronto",
-          },
-          venueAddress: ["Current Street"],
-          receiptSettings: { printAddress: true },
-        },
-        {
-          receiptTrim: { headerSubtitle: "Comedor", email: "comedor@example.com" },
-          venueAddress: ["Edited Street"],
-          receiptSettings: { printAddress: false },
-        },
-        { receiptTrim: {}, venueAddress: [], receiptSettings: { printAddress: false } },
+    it("replaces each received preview without keeping boot or previous receipt text", async () => {
+      const previews = [
+        ["Terraza", "Current Street", "910001111", "Hasta pronto"],
+        ["Comedor", "comedor@example.com"],
+        ["Filed issuer"],
       ];
-      const recordSale = vi.fn();
+      const recordSale = vi.fn().mockResolvedValue(saleResult);
       const getTransactionReceipt = vi.fn();
-      for (const presentation of presentations) {
-        recordSale.mockResolvedValueOnce({ ...saleResult, ...presentation });
-        getTransactionReceipt.mockResolvedValueOnce({ ...saleResult, ...presentation });
-      }
+      for (const words of previews)
+        getTransactionReceipt.mockResolvedValueOnce({
+          ...saleResult,
+          receiptPreview: words.map((text) => ({ kind: "text", text, indent: 0 })),
+        });
       const { el } = await mountApp({
         recordSale,
         getTransactionReceipt,
@@ -14280,35 +14272,18 @@ describe("till-app", () => {
         }),
       });
       await toCounter(el);
-      for (const [index, presentation] of presentations.entries()) {
+      for (const words of previews) {
         const c = counter(el)!;
         c.store.addProduct(coffee, "2");
         await flush(el);
         emit(c, "confirm-payment", { method: "cash", amount: "5" });
         await flush(el);
-        expect(ticket(el)!.result).toMatchObject(presentation);
+        expect(ticket(el)!.result).toEqual(saleResult);
         await openFiledReceipt(el);
         const view = ticket(el)!;
-        expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
-        expect(view.result.receiptSettings).toEqual(presentation.receiptSettings);
-        const printed = view.shadowRoot!.textContent!;
-        expect(printed).not.toContain("Stale boot");
-        expect(printed).not.toContain("Stale boot street");
-        if (index === 0) {
-          expect(printed).toContain("Terraza");
-          expect(printed).toContain("Current Street");
-        } else {
-          expect(printed).not.toContain("Terraza");
-          expect(printed).not.toContain("910001111");
-          expect(printed).not.toContain("Hasta pronto");
-          expect(printed).not.toContain("Current Street");
-          expect(printed).not.toContain("Edited Street");
-          if (index === 1) expect(printed).toContain("Comedor");
-          else {
-            expect(printed).not.toContain("Comedor");
-            expect(printed).not.toContain("comedor@example.com");
-          }
-        }
+        const article = view.shadowRoot!.querySelector("article")!;
+        expect([...article.querySelectorAll("p")].map((p) => p.textContent!.trim())).toEqual(words);
+        expect(article.textContent).not.toContain("Stale boot");
         expect(view.result.tender).toEqual(saleResult.tender);
         emit(view, "new-sale");
         await flush(el);
@@ -24540,9 +24515,12 @@ describe("A737 Find a bill page", () => {
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
   });
   it("reads an orderless historical receipt by sale ID and returns to the same Transactions table without altering the basket", async () => {
-    const getTransactionReceipt = vi
-      .fn()
-      .mockResolvedValue({ ...saleResult, invoiceType: "F1", locale: "es-ES" });
+    const getTransactionReceipt = vi.fn().mockResolvedValue({
+      ...saleResult,
+      invoiceType: "F1",
+      locale: "es-ES",
+      receiptPreview: [{ kind: "text", text: "Recorded customer name", indent: 0 }],
+    });
     const originalRead = vi.fn();
     const listTransactions = vi.fn(async (query: { page: number }) => ({
       ...listPage([transactionRow()], 101, query.page),
@@ -24597,6 +24575,9 @@ describe("A737 Find a bill page", () => {
     expect(getTransactionReceipt.mock.calls[0]![0]).toBe("sale-1");
     const receipt = ticket(el)!;
     await receipt.updateComplete;
+    expect(receipt.shadowRoot!.querySelector("article")?.textContent).toContain(
+      "Recorded customer name",
+    );
     expect(receipt.shadowRoot!.querySelector(".new-sale")).toBeNull();
     expect(receipt.shadowRoot!.querySelector("[data-test=original-delivery]")).not.toBeNull();
     await userEvent.click(
@@ -25222,7 +25203,11 @@ describe("A737 Find a bill page", () => {
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
   });
   it("a paid waiting order opens its receipt without discarding the current basket or handing over", async () => {
-    const getFiledTicket = vi.fn().mockResolvedValue(saleResult);
+    const result = {
+      ...saleResult,
+      receiptPreview: [{ kind: "text", text: "Paid bill customer name", indent: 0 }],
+    };
+    const getFiledTicket = vi.fn().mockResolvedValue(result);
     const { el, view, counter } = await open({
       getFindBill: vi.fn().mockResolvedValue(
         billRow({
@@ -25238,8 +25223,12 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(coffee, "1");
     await flush(el);
     emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-paid" }) });
-    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
-    expect(getFiledTicket).toHaveBeenCalledWith("bill-paid");
+    await vi.waitFor(() =>
+      expect(ticket(el)?.shadowRoot?.querySelector("article")?.textContent).toContain(
+        "Paid bill customer name",
+      ),
+    );
+    expect(getFiledTicket).toHaveBeenCalledWith("bill-paid", { receiptPreview: true });
     expect(counter.store.lines[0]!.quantity).toBe("1");
     expect(currentApi.markCollected).not.toHaveBeenCalled();
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
