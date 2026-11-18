@@ -112,3 +112,14 @@ export const printers = table(
 );
 
 export const isReceiptPrinter = (): SQL => eq(printers.kind, "receipt");
+export const isA4Printer = (): SQL => eq(printers.kind, "a4");
+
+// Use with a receipt-kind filter, which makes both fields required by printers_kind_fields_ck.
+export const receiptRollColumns = {
+  paperWidth: sql<
+    NonNullable<(typeof printers.$inferSelect)["paperWidth"]>
+  >`${printers.paperWidth}`,
+  resolution: sql<
+    NonNullable<(typeof printers.$inferSelect)["resolution"]>
+  >`${printers.resolution}`,
+};

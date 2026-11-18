@@ -1,13 +1,6 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import {
-  devices,
-  invoiceSeries,
-  pagePrinters,
-  isReceiptPrinter,
-  printers,
-  sales,
-} from "@waitron/db";
+import { devices, invoiceSeries, printers, sales } from "@waitron/db";
 import { persons, tillSessions, resolveManagementSession, holds } from "@waitron/identity";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -136,20 +129,11 @@ export async function readDocumentOffers(
   const full = deliversAsFullInvoice(sale);
   if (!full && document !== "receipt")
     throw new AppError("management.request_invalid", { field: "document" });
-  const thermal = await tx
-    .select({ id: printers.id, name: printers.name })
+  // Both kinds can deliver a document. The device's profile narrows the list below.
+  let offered: DocumentOffers["printers"] = await tx
+    .select({ id: printers.id, name: printers.name, kind: printers.kind })
     .from(printers)
-    .where(and(isReceiptPrinter(), eq(printers.active, true)));
-  const pages = await tx
-    .select({ id: pagePrinters.id, name: pagePrinters.name })
-    .from(pagePrinters)
-    .where(eq(pagePrinters.active, true));
-  if (pages.some((page) => thermal.some((printer) => printer.id === page.id)))
-    throw new AppError("invoice_delivery.printer_invalid", {});
-  let offered: DocumentOffers["printers"] = [
-    ...thermal.map((printer) => ({ ...printer, kind: "receipt" as const })),
-    ...pages.map((printer) => ({ ...printer, kind: "a4" as const })),
-  ];
+    .where(eq(printers.active, true));
   let chosenPrinterId: string | null = null;
   let defaultPrinterId: string | null = null;
   let invoiceRevision: number | null = null;

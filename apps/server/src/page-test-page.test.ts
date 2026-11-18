@@ -1,3 +1,5 @@
+import type { PageFormat } from "./page-print-api.js";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -11,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
+  printers,
   printAgents,
   taxpayer,
   withTransaction,
@@ -63,7 +65,7 @@ const clock: TrustedClock = {
 
 type Render = (
   document: ReceiptDocumentInput,
-  format: (typeof pagePrinters.$inferSelect)["documentFormat"],
+  format: PageFormat,
   resolutionDpi: number,
 ) => Promise<Buffer>;
 
@@ -158,24 +160,16 @@ let hostCounter = 20;
 
 async function printer(
   agentId: string | null,
-  extra: Partial<typeof pagePrinters.$inferInsert> = {},
+  extra: Parameters<typeof insertA4Printer>[1] = {},
 ): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Back office",
-      host: `192.0.2.${hostCounter++}`,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf", "image/pwg-raster", "image/urf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-      agentId,
-      ...extra,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Back office",
+    host: `192.0.2.${hostCounter++}`,
+    supportedFormats: ["application/pdf", "image/pwg-raster", "image/urf"],
+    agentId,
+    ...extra,
+  });
+  return printerId;
 }
 
 async function queuedInvoice(v: Venue, pagePrinterId: string): Promise<string> {
@@ -561,10 +555,7 @@ describe("printing a test page", () => {
     const v = await venue();
     const office = await printer(v.agentOne);
     const page = await requested(v, office);
-    await suite.db
-      .update(pagePrinters)
-      .set({ agentId: v.agentTwo })
-      .where(eq(pagePrinters.id, office));
+    await suite.db.update(printers).set({ agentId: v.agentTwo }).where(eq(printers.id, office));
 
     expect(await claim(v)).toBeUndefined();
     expect((await claim(v, v.tokenTwo))?.id).toBe(page.id);
@@ -734,7 +725,7 @@ describe("an agent asking for work", () => {
     let printerReads = 0;
     const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
       const { sql } = args[0] as { sql: string };
-      if (/^select .* from "page_printers"$/.test(sql)) {
+      if (/^select .* from "printers" where "printers"\."kind" = \?$/.test(sql)) {
         printerReads++;
       }
       return prepare(...args);
@@ -809,7 +800,7 @@ describe("a test page's time limits", () => {
     const v = await venue();
     const office = await printer(v.agentOne);
     const page = await requested(v, office);
-    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, office));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, office));
 
     expect(await claim(v)).toBeUndefined();
     expect(await outcome(v, office)).toEqual({

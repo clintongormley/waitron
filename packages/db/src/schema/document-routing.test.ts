@@ -1,3 +1,4 @@
+import { insertA4Printer } from "../testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -9,7 +10,6 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
-import { pagePrinters } from "./page-printers.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const now = "2026-11-04T12:00:00.000Z";
@@ -157,24 +157,16 @@ describe("document routing schema", () => {
         fiscalState: "recorded",
       })
       .returning();
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "10.0.0.9",
-        port: 631,
-        resourcePath: "/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, {
+      name: "Office",
+      host: "10.0.0.9",
+      resourcePath: "/print",
+    });
     const job = randomUUID();
     const audit = randomUUID();
     const person = randomUUID();
     await suite.db.execute(
-      sql`insert into document_page_jobs (id, sale_id, page_printer_id, language, designation, person_id, created_at) values (${job}, ${sale!.id}, ${printer!.id}, 'es', 'duplicate', ${person}, ${now})`,
+      sql`insert into document_page_jobs (id, sale_id, printer_id, language, designation, person_id, created_at) values (${job}, ${sale!.id}, ${printerId}, 'es', 'duplicate', ${person}, ${now})`,
     );
     await suite.db.execute(
       sql`insert into document_page_reprints (id, sale_id, page_job_id, person_id, requested_at) values (${audit}, ${sale!.id}, ${job}, ${person}, ${now})`,

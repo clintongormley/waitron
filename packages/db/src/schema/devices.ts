@@ -14,7 +14,6 @@ import {
   tsString,
 } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
-import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 
 export const devices = table(
@@ -54,7 +53,7 @@ export const devices = table(
     // No key into the switchable payments set; selectDeviceReader checks it and reader deletion clears it.
     cardReaderId: id("card_reader_id"),
     /* v8 ignore start */
-    invoicePagePrinterId: id("invoice_page_printer_id").references(() => pagePrinters.id, {
+    invoicePagePrinterId: id("invoice_page_printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
     /* v8 ignore stop */

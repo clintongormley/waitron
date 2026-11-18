@@ -1,7 +1,8 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { departments, withFoldedPersonChanges } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -9,7 +10,6 @@ import {
   deviceProfilePrinters,
   invoiceSeries,
   sales,
-  pagePrinters,
   printers,
   withTransaction,
   taxpayer,
@@ -91,20 +91,12 @@ beforeEach(async () => {
     .update(deviceProfiles)
     .set({ capabilities: [...till.deviceProof.device.capabilities, "print-receipt"] })
     .where(eq(deviceProfiles.id, till.deviceProof.device.deviceProfileId));
-  const [page] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Office",
-      host: "10.0.0.9",
-      port: 631,
-      resourcePath: "/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-    })
-    .returning();
-  office = page!.id;
+  const pageId = await insertA4Printer(suite.db, {
+    name: "Office",
+    host: "10.0.0.9",
+    resourcePath: "/print",
+  });
+  office = pageId;
   const [portable] = await suite.db
     .insert(printers)
     .values({
@@ -225,7 +217,7 @@ it("device-free dashboard offers all active venue printers for both documents", 
     await suite.db
       .select({ id: printers.id, name: printers.name })
       .from(printers)
-      .where(eq(printers.active, true))
+      .where(and(eq(printers.kind, "receipt"), eq(printers.active, true)))
   ).map((row) => ({ ...row, kind: "receipt" }));
   expected.push({ id: office, name: "Office", kind: "a4" });
   expected.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1));
@@ -365,21 +357,10 @@ it.each(["ended", "suspended", "wrong-device", "disabled", "rotated-token"])(
   },
 );
 
-it("refuses an ambiguous printer id instead of choosing its kind", async () => {
-  await suite.db.insert(pagePrinters).values({
-    id: terrace,
-    name: "Other office",
-    host: "10.0.0.10",
-    port: 631,
-    resourcePath: "/print",
-    documentFormat: "application/pdf",
-    supportedFormats: ["application/pdf"],
-    media: "iso_a4_210x297mm",
-    resolutionDpi: 300,
-  });
-  await expect(offers(dashboard)).rejects.toMatchObject({
-    code: "invoice_delivery.printer_invalid",
-  });
+it("refuses one printer id registering as both receipt and A4", async () => {
+  await expect(
+    insertA4Printer(suite.db, { id: terrace, name: "Other office", host: "10.0.0.10" }),
+  ).rejects.toThrow("UNIQUE constraint failed: printers.id");
 });
 
 async function fullSale() {

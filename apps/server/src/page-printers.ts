@@ -5,7 +5,8 @@ import {
   deviceProfiles,
   devices,
   invoiceDeliveries,
-  pagePrinters,
+  isA4Printer,
+  printers,
   printAgents,
   type Transaction,
 } from "@waitron/db";
@@ -30,16 +31,36 @@ export interface DiscoveryWindow {
   discoveryUntil: number;
 }
 
-export type PagePrinterRow = typeof pagePrinters.$inferSelect & { agentName: string | null };
+export const pagePrinterColumns = {
+  id: printers.id,
+  name: printers.name,
+  host: printers.host,
+  port: printers.port,
+  resourcePath: printers.resourcePath,
+  documentFormat: printers.documentFormat,
+  supportedFormats: printers.supportedFormats,
+  media: printers.media,
+  resolutionDpi: printers.resolutionDpi,
+  active: printers.active,
+  agentId: printers.agentId,
+};
+
+type Printer = Pick<typeof printers.$inferSelect, keyof typeof pagePrinterColumns>;
+// printers_kind_fields_ck requires these fields on every row selected as A4.
+export type PagePrinter = {
+  [Key in Exclude<keyof Printer, "agentId">]: NonNullable<Printer[Key]>;
+} & Pick<Printer, "agentId">;
+
+export type PagePrinterRow = PagePrinter & { agentName: string | null };
 
 export async function listPagePrinters(tx: Transaction): Promise<PagePrinterRow[]> {
   const rows = await tx
-    .select({ printer: pagePrinters, agentName: printAgents.name })
-    .from(pagePrinters)
-    .leftJoin(printAgents, eq(printAgents.id, pagePrinters.agentId))
-    .where(eq(pagePrinters.active, true))
-    .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
-  return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
+    .select({ ...pagePrinterColumns, agentName: printAgents.name })
+    .from(printers)
+    .leftJoin(printAgents, eq(printAgents.id, printers.agentId))
+    .where(and(isA4Printer(), eq(printers.active, true)))
+    .orderBy(asc(printers.name), asc(printers.id));
+  return rows as PagePrinterRow[];
 }
 
 export async function registerPagePrinter(
@@ -67,41 +88,48 @@ export async function registerPagePrinter(
     agentId: entry.agentId,
   };
   const [existing] = await tx
-    .select({ id: pagePrinters.id, active: pagePrinters.active })
-    .from(pagePrinters)
+    .select({ id: printers.id, active: printers.active })
+    .from(printers)
     .where(
       and(
-        sql`lower(${pagePrinters.host}) = lower(${entry.host})`,
-        eq(pagePrinters.port, report.port),
-        eq(pagePrinters.resourcePath, report.resourcePath),
+        isA4Printer(),
+        sql`lower(${printers.host}) = lower(${entry.host})`,
+        eq(printers.port, report.port),
+        eq(printers.resourcePath, report.resourcePath),
       ),
     );
   if (existing !== undefined) {
     await tx
-      .update(pagePrinters)
+      .update(printers)
       .set({ ...capabilities, active: true })
-      .where(eq(pagePrinters.id, existing.id));
+      .where(eq(printers.id, existing.id));
     return { id: existing.id, outcome: existing.active ? "repointed" : "enabled" };
   }
   const [created] = await tx
-    .insert(pagePrinters)
+    .insert(printers)
     .values({
+      kind: "a4",
+      transport: "ipp",
+      paperWidth: null,
+      resolution: null,
+      picksUpReceipts: false,
+      picksUpPaymentSlips: false,
       name: input.name,
       host: entry.host,
       port: report.port,
       resourcePath: report.resourcePath,
       ...capabilities,
     })
-    .returning({ id: pagePrinters.id });
+    .returning({ id: printers.id });
   return { id: created!.id, outcome: "created" };
 }
 
 export async function renamePagePrinter(tx: Transaction, id: string, name: string): Promise<void> {
   const renamed = await tx
-    .update(pagePrinters)
+    .update(printers)
     .set({ name })
-    .where(eq(pagePrinters.id, id))
-    .returning({ id: pagePrinters.id });
+    .where(and(isA4Printer(), eq(printers.id, id)))
+    .returning({ id: printers.id });
   if (renamed.length === 0) throw new AppError("page_printer.not_found", {});
 }
 
@@ -110,16 +138,16 @@ export async function readPagePrinterDeleteImpact(
   id: string,
 ): Promise<DeleteImpact> {
   const [printer] = await tx
-    .select({ id: pagePrinters.id, name: pagePrinters.name })
-    .from(pagePrinters)
-    .where(and(eq(pagePrinters.id, id), eq(pagePrinters.active, true)));
+    .select({ id: printers.id, name: printers.name })
+    .from(printers)
+    .where(and(isA4Printer(), eq(printers.id, id), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("page_printer.not_found", {});
   const deliveries = await tx
     .select({ id: invoiceDeliveries.id })
     .from(invoiceDeliveries)
     .where(
       and(
-        eq(invoiceDeliveries.pagePrinterId, id),
+        eq(invoiceDeliveries.printerId, id),
         sql`${invoiceDeliveries.status} in ('queued', 'sending')`,
       ),
     );
@@ -160,8 +188,11 @@ export async function deletePagePrinter(
 ): Promise<DeleteImpact> {
   const impact = await readPagePrinterDeleteImpact(tx, id);
   await clearDeletedPagePrinter(tx, id);
-  await tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, id));
-  const ofThisPrinter = eq(invoiceDeliveries.pagePrinterId, id);
+  await tx
+    .update(printers)
+    .set({ active: false })
+    .where(and(isA4Printer(), eq(printers.id, id)));
+  const ofThisPrinter = eq(invoiceDeliveries.printerId, id);
   await tx
     .update(invoiceDeliveries)
     .set({ status: "failed", failureCode: "printer_disabled" })

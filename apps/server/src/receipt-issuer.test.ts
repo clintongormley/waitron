@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  receiptRollColumns,
+  isReceiptPrinter,
   deviceProfiles,
   invoiceSeries,
   printers,
@@ -104,7 +106,10 @@ describe("receipt issue facts independent of recipient and current venue zone", 
           const ticket = await readTransactionReceipt(v.backend, tx, v.cfg, sale.saleId);
           expect(ticket.issuedOffsetMinutes).toBe(prepared ? 120 : 0);
           expect(ticket.issuedAt).toBe(AT);
-          const [printer] = await tx.select().from(printers);
+          const [printer] = await tx
+            .select({ id: printers.id, ...receiptRollColumns })
+            .from(printers)
+            .where(isReceiptPrinter());
           const job = await enqueueReceiptCopy(tx, v.cfg, ticket, sale.saleId, printer!, "en-GB");
           expect(job).toBeDefined();
           const [savedJob] = await tx.select().from(printJobs).where(eq(printJobs.id, job!.jobId));

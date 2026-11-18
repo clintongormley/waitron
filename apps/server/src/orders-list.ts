@@ -2,7 +2,7 @@ import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { BusinessDayClock } from "@waitron/shared";
 import { canEmailInvoice } from "./invoice-email-contact.js";
-import { and, asc, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   billPaymentRefunds,
@@ -24,7 +24,6 @@ import {
   printers,
   invoicePdfDownloads,
   orderPortions,
-  pagePrinters,
   workingLinePortions,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -795,20 +794,12 @@ async function readDeliveries(
 
 export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
   return async () => {
-    const receipt = await tx
-      .select({ id: printers.id, name: printers.name })
+    // An invoice can go to either kind. Keep receipt printers ahead of A4 printers.
+    return tx
+      .select({ id: printers.id, name: printers.name, kind: printers.kind })
       .from(printers)
-      .where(and(isReceiptPrinter(), eq(printers.active, true)))
-      .orderBy(asc(printers.name), asc(printers.id));
-    const a4 = await tx
-      .select({ id: pagePrinters.id, name: pagePrinters.name })
-      .from(pagePrinters)
-      .where(eq(pagePrinters.active, true))
-      .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
-    return [
-      ...receipt.map((printer) => ({ ...printer, kind: "receipt" as const })),
-      ...a4.map((printer) => ({ ...printer, kind: "a4" as const })),
-    ];
+      .where(eq(printers.active, true))
+      .orderBy(desc(printers.kind), asc(printers.name), asc(printers.id));
   };
 }
 

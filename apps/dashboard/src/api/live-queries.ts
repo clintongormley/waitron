@@ -89,9 +89,9 @@ export const QUERY_DEPENDENCIES = {
     "departments",
   ],
   listPrinterStationNames: ["kitchen_stations"],
-  listPagePrinters: ["page_printers", "print_agents"],
+  listPagePrinters: ["printers", "print_agents"],
   getPagePrinterDeleteImpact: [
-    "page_printers",
+    "printers",
     "invoice_deliveries",
     "devices",
     "device_profiles",
@@ -260,7 +260,6 @@ export const QUERY_DEPENDENCIES = {
     "invoice_deliveries",
     "invoice_pdf_downloads",
     "outgoing_mail",
-    "page_printers",
     "settings.business_day",
     "day_cutover_changes",
   ],
@@ -384,7 +383,6 @@ export const QUERY_DEPENDENCIES = {
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
     "device_profile_printers",
     "printers",
-    "page_printers",
     "card_readers",
     // Each device's kitchen screens (`readDevicesKitchenScreens`, packages/venue-service).
     "device_profile_kitchen_screens",

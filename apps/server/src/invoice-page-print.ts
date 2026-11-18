@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
-  pagePrinters,
+  isA4Printer,
+  printers,
   type A4FailureCode,
   type A4HoldCode,
   type Transaction,
@@ -15,6 +16,8 @@ import {
   type InvoiceDeliveryClaim,
 } from "./invoice-delivery.js";
 
+import { pagePrinterColumns, type PagePrinter } from "./page-printers.js";
+
 export type A4DeliveryOutcome =
   { status: "sent" } | { status: "failed" | "unknown"; failureCode: A4FailureCode };
 
@@ -27,8 +30,8 @@ export type PagePrintJob = {
     host: string;
     port: number;
     resourcePath: string;
-    documentFormat: (typeof pagePrinters.$inferSelect)["documentFormat"];
-    media: (typeof pagePrinters.$inferSelect)["media"];
+    documentFormat: PagePrinter["documentFormat"];
+    media: PagePrinter["media"];
     resolutionDpi: number;
   };
 };
@@ -48,9 +51,9 @@ export async function claimInvoicePagePrint(
   await expireInvoiceDeliveryClaims(tx, now);
   const busyPrinterIds = (
     await tx
-      .selectDistinct({ id: pagePrinters.id })
+      .selectDistinct({ id: printers.id })
       .from(invoiceDeliveries)
-      .innerJoin(pagePrinters, eq(pagePrinters.id, invoiceDeliveries.pagePrinterId))
+      .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
       .where(and(eq(invoiceDeliveries.medium, "a4"), eq(invoiceDeliveries.status, "sending")))
   ).map(({ id }) => id);
   const skipped = [...busyPrinterIds, ...(ctx.exceptPrinterIds ?? [])];
@@ -62,31 +65,31 @@ export async function claimInvoicePagePrint(
       and(
         due,
         inArray(
-          invoiceDeliveries.pagePrinterId,
+          invoiceDeliveries.printerId,
           tx
-            .select({ id: pagePrinters.id })
-            .from(pagePrinters)
-            .where(eq(pagePrinters.active, false)),
+            .select({ id: printers.id })
+            .from(printers)
+            .where(and(isA4Printer(), eq(printers.active, false))),
         ),
       ),
     );
   const [next] = await tx
-    .select({ delivery: invoiceDeliveries, printer: pagePrinters })
+    .select({ delivery: invoiceDeliveries, printer: pagePrinterColumns })
     .from(invoiceDeliveries)
-    .innerJoin(pagePrinters, eq(pagePrinters.id, invoiceDeliveries.pagePrinterId))
+    .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
     .where(
       and(
         due,
-        eq(pagePrinters.agentId, agentId),
-        eq(pagePrinters.active, true),
-        skipped.length === 0 ? undefined : notInArray(pagePrinters.id, skipped),
+        eq(printers.agentId, agentId),
+        eq(printers.active, true),
+        skipped.length === 0 ? undefined : notInArray(printers.id, skipped),
       ),
     )
     .orderBy(asc(invoiceDeliveries.createdAt), sql`${invoiceDeliveries}.rowid`)
     .limit(1);
   if (next === undefined) return { job: undefined, busyPrinterIds };
   const claim = await claimInvoiceDelivery(tx, next.delivery.id, agentId, now);
-  const { printer } = next;
+  const printer = next.printer as PagePrinter;
   return {
     job: {
       claim: claim!,

@@ -143,7 +143,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 46,
+    version: 47,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -174,7 +174,7 @@ export async function buildConfigurationBundle(
 }
 
 export interface ConfigurationBundle {
-  version: 46;
+  version: 47;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
@@ -568,10 +568,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 46) {
+  if (typeof value.version === "number" && value.version > 47) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 46) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 47) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -942,9 +942,10 @@ export async function importConfigurationTables(
         row.token_hash = `disabled-import:${randomUUID()}`;
         row.active = false;
       }
-      if (declaration.name === "printers" || declaration.name === "page_printers")
+      if (declaration.name === "printers") {
         row.active = false;
-      if (declaration.name === "page_printers") row.agent_id = null;
+        if (row.kind === "a4") row.agent_id = null;
+      }
       // Every key was checked against `pragma_table_info` above, so `sql.identifier` names a real
       // column of a real table; the values bind.
       const fields = Object.keys(row);

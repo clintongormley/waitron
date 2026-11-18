@@ -2,7 +2,14 @@
 import "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isRefusal, isReceiptPrinter, printers } from "@waitron/db";
+import {
+  UNIQUE_VIOLATION,
+  checkFailed,
+  isRefusal,
+  isReceiptPrinter,
+  printers,
+  receiptRollColumns,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { PaperWidth, Resolution } from "./layout.js";
@@ -10,8 +17,8 @@ import type { PaperWidth, Resolution } from "./layout.js";
 /**
  * Maps a refused printer write to a domain code, or rethrows. The CHECK branch names its constraint
  * because `printers` has other CHECKs (e.g. `printers_paper_width_ck`) that are not a missing
- * transport field. The unique branch needs no name: the only other unique key is the `id` primary key,
- * which neither write here supplies.
+ * transport field. The unique branch needs no name: receipt writes here supply no `id` and
+ * cannot reach the A4 endpoint index.
  */
 function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
   if (localKey !== undefined && isRefusal(error, UNIQUE_VIOLATION)) {
@@ -198,8 +205,7 @@ export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
       port: printers.port,
       localKey: printers.localKey,
       pollId: printers.pollId,
-      paperWidth: printers.paperWidth,
-      resolution: printers.resolution,
+      ...receiptRollColumns,
       hasCashDrawer: printers.hasCashDrawer,
       portable: printers.portable,
       picksUpReceipts: printers.picksUpReceipts,
@@ -211,6 +217,8 @@ export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
     .orderBy(printers.name);
   return rows.map(({ picksUpReceipts, picksUpPaymentSlips, ...row }) => ({
     ...row,
+    // The kind filter and printers_kind_fields_ck guarantee these receipt fields.
+    transport: row.transport as PrintTransport,
     pickupRoles: printerPickupRoles(picksUpReceipts, picksUpPaymentSlips),
   }));
 }

@@ -9,7 +9,6 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -62,20 +61,8 @@ async function devicePrinters(deviceId: string) {
 }
 
 async function pagePrinter(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name,
-      host: "10.0.0.9",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, { name, host: "10.0.0.9" });
+  return printerId;
 }
 
 /** The lists of a profile that had none, once the Demo printer listed itself on every role. */

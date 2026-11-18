@@ -1,3 +1,4 @@
+import { insertA4Printer } from "../testing/printers.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -12,7 +13,6 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 
 import { deviceNotDeleted, devices } from "./devices.js";
-import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
@@ -173,16 +173,10 @@ describe("devices schema (columns, FKs, unique)", () => {
         transport: "cloud_poll",
         pollId: "poll-a",
       });
-      await suite.db.insert(pagePrinters).values({
+      await insertA4Printer(suite.db, {
         id: PAGE_PRINTER,
         name: "Office printer",
         host: "10.0.0.9",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
       });
     });
 
@@ -217,7 +211,9 @@ describe("devices schema (columns, FKs, unique)", () => {
           .where(eq(devices.id, id)),
       );
       expect(row!.invoicePagePrinterId).toBe(PAGE_PRINTER);
-      const e = await captureError(() => setChoice(id, { invoicePagePrinterId: RECEIPT_PRINTER }));
+      const e = await captureError(() =>
+        setChoice(id, { invoicePagePrinterId: "unknown-printer" }),
+      );
       expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
     });
 
@@ -231,7 +227,7 @@ describe("devices schema (columns, FKs, unique)", () => {
       );
       expect(restrictRefused(receipt)).toBe(true);
       const page = await captureError(() =>
-        inTx((tx) => tx.delete(pagePrinters).where(eq(pagePrinters.id, PAGE_PRINTER))),
+        inTx((tx) => tx.delete(printers).where(eq(printers.id, PAGE_PRINTER))),
       );
       expect(restrictRefused(page)).toBe(true);
     });

@@ -1,13 +1,7 @@
 // The registry of `printer.not_found`, which this file throws.
 import "@waitron/printing";
 import "./errors.js";
-import {
-  deviceProfilePrinters,
-  deviceProfiles,
-  pagePrinters,
-  isReceiptPrinter,
-  printers,
-} from "@waitron/db";
+import { deviceProfilePrinters, deviceProfiles, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
@@ -190,26 +184,17 @@ async function refuseUnknownPrinters(
     ),
   ];
   if (named.length === 0) return new Set();
+  // The invoice role can use either kind.
+  const rows = await tx
+    .select({ id: printers.id, kind: printers.kind, deletedAt: printers.deletedAt })
+    .from(printers)
+    .where(inArray(printers.id, named));
   const found = new Map(
-    (
-      await tx
-        .select({ id: printers.id, deletedAt: printers.deletedAt })
-        .from(printers)
-        .where(and(isReceiptPrinter(), inArray(printers.id, named)))
-    ).map((row) => [row.id, row.deletedAt] as const),
+    rows.filter((row) => row.kind === "receipt").map((row) => [row.id, row.deletedAt]),
   );
   const deleted = named.find((id) => (found.get(id) ?? null) !== null);
   if (deleted !== undefined) throw new AppError("printer.not_found", { id: deleted });
-  const pageIds = new Set(
-    lists.invoicePrinterIds.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: pagePrinters.id })
-            .from(pagePrinters)
-            .where(inArray(pagePrinters.id, lists.invoicePrinterIds))
-        ).map((row) => row.id),
-  );
+  const pageIds = new Set(rows.filter((row) => row.kind === "a4").map((row) => row.id));
   for (const role of PROFILE_PRINTER_ROLES) {
     const unknown = lists[LIST_KEYS[role].ids].find(
       (id) => !found.has(id) && !(role === "invoice" && pageIds.has(id)),

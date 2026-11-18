@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -35,7 +36,7 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
-  pagePrinters,
+  printers,
   parties,
   personStaffRoles,
   printJobs,
@@ -2132,16 +2133,10 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await unlistFromTill();
       if (kind !== "missing") {
         await inTx((tx) =>
-          tx.insert(pagePrinters).values({
+          insertA4Printer(tx, {
             id: pagePrinterId,
             name: "Office",
             host: pagePrinterId,
-            port: 631,
-            resourcePath: "/ipp/print",
-            documentFormat: "application/pdf",
-            supportedFormats: ["application/pdf"],
-            media: "iso_a4_210x297mm",
-            resolutionDpi: 300,
             active: kind !== "disabled",
           }),
         );
@@ -2186,25 +2181,14 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     }): Promise<string> {
       const id = randomUUID();
       await inTx((tx) =>
-        tx.insert(pagePrinters).values({
-          id,
-          name: values.name,
-          host: id,
-          port: 631,
-          resourcePath: "/ipp/print",
-          documentFormat: "application/pdf",
-          supportedFormats: ["application/pdf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 300,
-          active: values.active ?? true,
-        }),
+        insertA4Printer(tx, { id, name: values.name, host: id, active: values.active ?? true }),
       );
       if (values.onTill) await listOnTill(id);
       return id;
     }
 
     beforeEach(async () => {
-      await inTx((tx) => tx.update(pagePrinters).set({ active: false }));
+      await inTx((tx) => tx.update(printers).set({ active: false }).where(eq(printers.kind, "a4")));
       await unlistFromTill();
       suite.db.run(
         sql`update devices set invoice_printer_id = null, invoice_page_printer_id = null where id = ${venue.deviceId}`,

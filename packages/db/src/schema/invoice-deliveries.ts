@@ -14,7 +14,7 @@ import {
 } from "./columns.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
-import { pagePrinters } from "./page-printers.js";
+import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 
 export const invoiceDeliveryMedium = enumType(["email", "a4", "receipt"]);
@@ -62,7 +62,7 @@ export const invoiceDeliveries = table(
     /* v8 ignore start */
     printJobId: id("print_job_id").references(() => printJobs.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    pagePrinterId: id("page_printer_id").references(() => pagePrinters.id, {
+    printerId: id("printer_id").references(() => printers.id, {
       onDelete: "restrict",
     }),
     requestKey: label("request_key").notNull(),

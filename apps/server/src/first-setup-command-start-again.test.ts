@@ -425,7 +425,7 @@ async function filesBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 46 as const,
+    version: 47 as const,
     contentLanguages: null,
     holidayArea: null,
     settings: {},

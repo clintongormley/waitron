@@ -5,7 +5,8 @@ import { and, eq } from "drizzle-orm";
 import {
   a4HoldCodes,
   invoiceDeliveries,
-  pagePrinters,
+  isA4Printer,
+  printers,
   withTransaction,
   type Database,
   type Transaction,
@@ -40,7 +41,9 @@ import type { ReceiptQrText } from "@waitron/fiscal";
 import type { PageTestPages } from "./page-test-pages.js";
 import { sampleDocument } from "./sample-receipt.js";
 
-export type PageFormat = (typeof pagePrinters.$inferSelect)["documentFormat"];
+import { pagePrinterColumns, type PagePrinter } from "./page-printers.js";
+
+export type PageFormat = PagePrinter["documentFormat"];
 
 export type RenderInvoicePage = (
   document: ReceiptDocumentInput,
@@ -158,10 +161,13 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
           at,
         );
         if (invoice !== undefined || !deps.testPages.anyWaiting()) return invoice;
-        const printers = await tx.select().from(pagePrinters);
-        const page = deps.testPages.claim(agentId, printers, busyPrinterIds);
+        const offices = (await tx
+          .select(pagePrinterColumns)
+          .from(printers)
+          .where(isA4Printer())) as PagePrinter[];
+        const page = deps.testPages.claim(agentId, offices, busyPrinterIds);
         if (page === undefined) return undefined;
-        return { page, printer: printers.find(({ id }) => id === page.pagePrinterId)! };
+        return { page, printer: offices.find(({ id }) => id === page.pagePrinterId)! };
       });
       if (job === undefined) return c.body(null, 204);
       if ("page" in job) {

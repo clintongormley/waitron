@@ -151,10 +151,15 @@ export { deviceApprovedProfiles } from "./schema/device-approved-profiles.js";
 export { joinRequestKind, joinRequests } from "./schema/join-requests.js";
 export { printAgents } from "./schema/print-agents.js";
 export {
+  isA4Printer,
   isReceiptPrinter,
   printPaperWidth,
   printResolution,
   printTransport,
+  receiptPrintTransport,
+  receiptRollColumns,
+  printerDocumentFormat,
+  printerMedia,
   printerKind,
   printers,
 } from "./schema/printers.js";
@@ -355,7 +360,6 @@ export {
   invoiceDeliveryDesignation,
   invoiceDeliveryStatus,
 } from "./schema/invoice-deliveries.js";
-export { pagePrinters, pagePrinterFormat, pagePrinterMedia } from "./schema/page-printers.js";
 
 export { tenderRefunds, tenderRefundState } from "./schema/tender-refunds.js";
 export { nextStationColour } from "./station-colour.js";

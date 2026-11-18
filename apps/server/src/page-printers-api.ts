@@ -3,7 +3,13 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
-import { pagePrinters, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  isA4Printer,
+  printers,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import {
@@ -134,9 +140,9 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
       const { receiptLocale, agentId } = await gated(sessionId, async (tx) => {
         const [printer] = await tx
-          .select({ agentId: pagePrinters.agentId })
-          .from(pagePrinters)
-          .where(and(eq(pagePrinters.id, id), eq(pagePrinters.active, true)));
+          .select({ agentId: printers.agentId })
+          .from(printers)
+          .where(and(isA4Printer(), eq(printers.id, id), eq(printers.active, true)));
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
         if (printer.agentId === null) throw new AppError("page_printer.no_agent", {});
         const { locale } = await readReceiptLanguage(tx);
@@ -155,9 +161,9 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
       await gated(sessionId, async (tx) => {
         // Keep a pending test page's outcome readable after its printer is deleted.
         const [printer] = await tx
-          .select({ id: pagePrinters.id })
-          .from(pagePrinters)
-          .where(eq(pagePrinters.id, id));
+          .select({ id: printers.id })
+          .from(printers)
+          .where(and(isA4Printer(), eq(printers.id, id)));
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
       });
       return c.json(deps.testPages.read(id));

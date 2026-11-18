@@ -2,6 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
+  receiptRollColumns,
   devices,
   printPaperWidth,
   isReceiptPrinter,
@@ -133,7 +134,7 @@ async function activeReceiptSettings(tx: Transaction): Promise<EscSetting[]> {
     .filter((id): id is string => id !== null);
   if (resolved.length === 0) return [];
   const rows = await tx
-    .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .select({ id: printers.id, ...receiptRollColumns })
     .from(printers)
     .where(and(isReceiptPrinter(), inArray(printers.id, resolved), eq(printers.active, true)));
   const byId = new Map(rows.map(({ id, ...setting }) => [id, setting]));

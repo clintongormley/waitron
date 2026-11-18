@@ -158,7 +158,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who moved a dish to another station, live service in flight; copied to a standby, never drained back",
   ),
   classify("printers", "state", STATE),
-  classify("page_printers", "state", STATE),
   classify("print_agents", "state", STATE),
   classify("custom_themes", "state", STATE),
   classify("incidents", "state", STATE),

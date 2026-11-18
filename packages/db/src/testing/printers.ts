@@ -1,16 +1,32 @@
 import type { Transaction } from "../client.js";
 import { printers } from "../schema/printers.js";
 
+type A4FixtureFields = Partial<
+  Pick<
+    typeof printers.$inferInsert,
+    | "id"
+    | "name"
+    | "active"
+    | "host"
+    | "port"
+    | "resourcePath"
+    | "documentFormat"
+    | "supportedFormats"
+    | "media"
+    | "resolutionDpi"
+    | "agentId"
+  >
+>;
+
 export async function insertA4Printer(
   tx: Transaction,
-  fields?: { name?: string; active?: boolean },
+  fields: A4FixtureFields = {},
 ): Promise<string> {
   const [row] = await tx
     .insert(printers)
     .values({
       kind: "a4",
-      name: fields?.name ?? "Office printer",
-      active: fields?.active ?? true,
+      name: "Office printer",
       transport: "ipp",
       host: "10.255.0.4",
       port: 631,
@@ -23,6 +39,7 @@ export async function insertA4Printer(
       resolution: null,
       picksUpReceipts: false,
       picksUpPaymentSlips: false,
+      ...fields,
     })
     .returning({ id: printers.id });
   return row!.id;

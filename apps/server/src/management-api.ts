@@ -38,8 +38,6 @@ import { ownPasswordChanges } from "./own-password-ahead.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   floorZones,
-  pagePrinters,
-  isReceiptPrinter,
   printers,
   readNodeMembership,
   withTransaction,
@@ -656,24 +654,15 @@ async function requireListedPrinters(
   if (ids.length === 0 && invoiceIds.length === 0) return;
   await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
   const all = [...new Set([...ids, ...invoiceIds])];
+  // The invoice list may include both kinds.
   const found = await tx
-    .select({ id: printers.id })
+    .select({ id: printers.id, kind: printers.kind })
     .from(printers)
-    .where(and(isReceiptPrinter(), inArray(printers.id, all), isNull(printers.deletedAt)));
-  const known = new Set(found.map((row) => row.id));
-  const missing = ids.find((id) => !known.has(id));
+    .where(and(inArray(printers.id, all), isNull(printers.deletedAt)));
+  const kinds = new Map(found.map((row) => [row.id, row.kind]));
+  const missing =
+    ids.find((id) => kinds.get(id) !== "receipt") ?? invoiceIds.find((id) => !kinds.has(id));
   if (missing !== undefined) throw new AppError("printer.not_found", { id: missing });
-  const unknownInvoice = invoiceIds.filter((id) => !known.has(id));
-  if (unknownInvoice.length === 0) return;
-  const pages = await tx
-    .select({ id: pagePrinters.id })
-    .from(pagePrinters)
-    .where(inArray(pagePrinters.id, unknownInvoice));
-  const knownPages = new Set(pages.map((row) => row.id));
-  const missingInvoice = unknownInvoice.find((id) => !knownPages.has(id));
-  if (missingInvoice !== undefined) {
-    throw new AppError("printer.not_found", { id: missingInvoice });
-  }
 }
 
 /** A malformed challenge handle would just miss in the `text` id column, so it is refused here. */

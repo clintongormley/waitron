@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "48b61d7d-d6f9-440a-9940-90a5002a5c67",
+  "id": "5a5a2e8f-a509-4421-b770-2c36f833212b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5187,10 +5187,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "devices_invoice_page_printer_id_page_printers_id_fk": {
-          "name": "devices_invoice_page_printer_id_page_printers_id_fk",
+        "devices_invoice_page_printer_id_printers_id_fk": {
+          "name": "devices_invoice_page_printer_id_printers_id_fk",
           "tableFrom": "devices",
-          "tableTo": "page_printers",
+          "tableTo": "printers",
           "columnsFrom": [
             "invoice_page_printer_id"
           ],
@@ -7869,10 +7869,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "device_profile_printers_page_printer_id_page_printers_id_fk": {
-          "name": "device_profile_printers_page_printer_id_page_printers_id_fk",
+        "device_profile_printers_page_printer_id_printers_id_fk": {
+          "name": "device_profile_printers_page_printer_id_printers_id_fk",
           "tableFrom": "device_profile_printers",
-          "tableTo": "page_printers",
+          "tableTo": "printers",
           "columnsFrom": [
             "page_printer_id"
           ],
@@ -10369,8 +10369,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "page_printer_id": {
-          "name": "page_printer_id",
+        "printer_id": {
+          "name": "printer_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -10589,12 +10589,12 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "invoice_deliveries_page_printer_id_page_printers_id_fk": {
-          "name": "invoice_deliveries_page_printer_id_page_printers_id_fk",
+        "invoice_deliveries_printer_id_printers_id_fk": {
+          "name": "invoice_deliveries_printer_id_printers_id_fk",
           "tableFrom": "invoice_deliveries",
-          "tableTo": "page_printers",
+          "tableTo": "printers",
           "columnsFrom": [
-            "page_printer_id"
+            "printer_id"
           ],
           "columnsTo": [
             "id"
@@ -10659,135 +10659,6 @@
         "invoice_deliveries_email_ck": {
           "name": "invoice_deliveries_email_ck",
           "value": "(\"invoice_deliveries\".\"medium\" = 'email') = (\"invoice_deliveries\".\"recipient\" is not null)"
-        }
-      }
-    },
-    "page_printers": {
-      "name": "page_printers",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "host": {
-          "name": "host",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "port": {
-          "name": "port",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resource_path": {
-          "name": "resource_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "document_format": {
-          "name": "document_format",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "supported_formats": {
-          "name": "supported_formats",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "media": {
-          "name": "media",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resolution_dpi": {
-          "name": "resolution_dpi",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "active": {
-          "name": "active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "page_printers_endpoint_uq": {
-          "name": "page_printers_endpoint_uq",
-          "columns": [
-            "host",
-            "port",
-            "resource_path"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "page_printers_agent_id_print_agents_id_fk": {
-          "name": "page_printers_agent_id_print_agents_id_fk",
-          "tableFrom": "page_printers",
-          "tableTo": "print_agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "page_printers_format_ck": {
-          "name": "page_printers_format_ck",
-          "value": "\"page_printers\".\"document_format\" in ('application/pdf', 'image/pwg-raster', 'image/urf')"
-        },
-        "page_printers_media_ck": {
-          "name": "page_printers_media_ck",
-          "value": "\"page_printers\".\"media\" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')"
-        },
-        "page_printers_port_ck": {
-          "name": "page_printers_port_ck",
-          "value": "\"page_printers\".\"port\" between 1 and 65535"
-        },
-        "page_printers_resolution_ck": {
-          "name": "page_printers_resolution_ck",
-          "value": "\"page_printers\".\"resolution_dpi\" > 0"
         }
       }
     },
@@ -18233,8 +18104,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "page_printer_id": {
-          "name": "page_printer_id",
+        "printer_id": {
+          "name": "printer_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -18381,7 +18252,7 @@
         "document_page_jobs_claim_idx": {
           "name": "document_page_jobs_claim_idx",
           "columns": [
-            "page_printer_id",
+            "printer_id",
             "status"
           ],
           "isUnique": false
@@ -18408,12 +18279,12 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "document_page_jobs_page_printer_id_page_printers_id_fk": {
-          "name": "document_page_jobs_page_printer_id_page_printers_id_fk",
+        "document_page_jobs_printer_id_printers_id_fk": {
+          "name": "document_page_jobs_printer_id_printers_id_fk",
           "tableFrom": "document_page_jobs",
-          "tableTo": "page_printers",
+          "tableTo": "printers",
           "columnsFrom": [
-            "page_printer_id"
+            "printer_id"
           ],
           "columnsTo": [
             "id"

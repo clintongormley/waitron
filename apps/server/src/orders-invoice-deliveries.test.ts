@@ -11,7 +11,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -63,21 +62,12 @@ useVenueDb({
         .insert(printAgents)
         .values({ name: "Back office agent", tokenHash: "x" })
         .returning({ id: printAgents.id });
-      const [office] = await tx
-        .insert(pagePrinters)
-        .values({
-          name: "Oficina",
-          host: "192.0.2.20",
-          port: 631,
-          resourcePath: "/ipp/print",
-          documentFormat: "application/pdf",
-          supportedFormats: ["application/pdf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 600,
-          agentId: agent!.id,
-        })
-        .returning({ id: pagePrinters.id });
-      officeId = office!.id;
+      officeId = await insertA4Printer(tx, {
+        name: "Oficina",
+        host: "192.0.2.20",
+        resolutionDpi: 600,
+        agentId: agent!.id,
+      });
       const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
       for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
         await seedDepartmentReceipt(tx, id, receipt);
@@ -160,22 +150,9 @@ const printBody = (requestKey: string = randomUUID(), printerId: string = office
 let hostCounter = 30;
 
 async function extraOffice(name: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx
-      .insert(pagePrinters)
-      .values({
-        name,
-        host: `192.0.2.${hostCounter++}`,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-      })
-      .returning({ id: pagePrinters.id }),
+  return inTx(venue, (tx) =>
+    insertA4Printer(tx, { name, host: `192.0.2.${hostCounter++}`, resolutionDpi: 600 }),
   );
-  return row!.id;
 }
 
 /** Runs `act` with extra A4 printers that are switched off afterwards, for the suites after it. */
@@ -185,13 +162,13 @@ async function withExtraOffices(act: (extra: { upstairs: string; off: string }) 
     off: await extraOffice("Apagada"),
   };
   await inTx(venue, (tx) =>
-    tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, extra.off)),
+    tx.update(printers).set({ active: false }).where(eq(printers.id, extra.off)),
   );
   try {
     await act(extra);
   } finally {
     await inTx(venue, (tx) =>
-      tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, extra.upstairs)),
+      tx.update(printers).set({ active: false }).where(eq(printers.id, extra.upstairs)),
     );
   }
 }
@@ -257,7 +234,7 @@ describe("dashboard Print invoice", () => {
       expect.objectContaining({
         id: (answer.json as { id: string }).id,
         medium: "a4",
-        pagePrinterId: officeId,
+        printerId: officeId,
         personId: venue.operatorId,
       }),
     ]);
@@ -288,7 +265,7 @@ describe("dashboard Print invoice", () => {
         });
       }
       expect(await deliveriesOf(saleId)).toEqual(before);
-      expect(before).toEqual([expect.objectContaining({ medium: "a4", pagePrinterId: officeId })]);
+      expect(before).toEqual([expect.objectContaining({ medium: "a4", printerId: officeId })]);
     });
   });
 
@@ -362,7 +339,7 @@ describe("dashboard Print invoice", () => {
           .status,
       ).toBe(200);
       expect(await deliveriesOf(saleId)).toEqual([
-        expect.objectContaining({ medium: "a4", pagePrinterId: upstairs }),
+        expect.objectContaining({ medium: "a4", printerId: upstairs }),
       ]);
     });
   });
@@ -549,7 +526,7 @@ describe("the order detail's delivery status", () => {
   });
 
   it("offers active receipt printers before venue A4 printers, by name, with the original's printer", async () => {
-    await inTx(venue, insertA4Printer);
+    await inTx(venue, (tx) => insertA4Printer(tx, { active: false }));
     const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(
@@ -1059,13 +1036,7 @@ describe("dashboard print on a receipt printer", () => {
     const activePrinters = await inTx(venue, (tx) =>
       tx.select({ id: printers.id }).from(printers).where(eq(printers.active, true)),
     );
-    const activeOffices = await inTx(venue, (tx) =>
-      tx.select({ id: pagePrinters.id }).from(pagePrinters).where(eq(pagePrinters.active, true)),
-    );
-    await inTx(venue, async (tx) => {
-      await tx.update(printers).set({ active: false });
-      await tx.update(pagePrinters).set({ active: false });
-    });
+    await inTx(venue, (tx) => tx.update(printers).set({ active: false }));
     try {
       expect(
         (await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`))
@@ -1090,15 +1061,6 @@ describe("dashboard print on a receipt printer", () => {
             inArray(
               printers.id,
               activePrinters.map((row) => row.id),
-            ),
-          );
-        await tx
-          .update(pagePrinters)
-          .set({ active: true })
-          .where(
-            inArray(
-              pagePrinters.id,
-              activeOffices.map((row) => row.id),
             ),
           );
       });

@@ -18,7 +18,6 @@ import {
   devices,
   drawerOpens,
   kitchenStations,
-  pagePrinters,
   printers,
   printJobs,
   printAgents,
@@ -108,20 +107,8 @@ async function seedPrinter(
 }
 
 async function seedPagePrinter(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name,
-      host: "10.0.0.8",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, { name, host: "10.0.0.8", resolutionDpi: 600 });
+  return printerId;
 }
 
 async function seedReader(name: string, provider = "fake"): Promise<string> {

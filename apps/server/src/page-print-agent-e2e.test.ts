@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { printOverIpp } from "@waitron/print-agent-app/ipp-print.js";
@@ -7,13 +8,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  invoiceDeliveries,
-  invoiceSeries,
-  pagePrinters,
-  taxpayer,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, printers, taxpayer, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
@@ -501,29 +496,21 @@ async function officePrinter(
   printer: FakeIppPrinter = ipp!,
   name = "Back office",
 ): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name,
-      host: "127.0.0.1",
-      port: printer.port,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-      agentId,
-    })
-    .returning({ id: pagePrinters.id });
+  const printerId = await insertA4Printer(suite.db, {
+    name,
+    host: "127.0.0.1",
+    port: printer.port,
+    agentId,
+  });
   if (printer === ipp)
     await withTransaction(suite.db, (tx) =>
       listInvoicePrinter(tx, {
         profileId: v.tillProfileId,
-        pagePrinterId: row!.id,
+        pagePrinterId: printerId,
         isDefault: true,
       }),
     );
-  return row!.id;
+  return printerId;
 }
 
 /** A synthetic F1 for working order `orderId`, written through the core as part 1's delivery
@@ -725,7 +712,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
         ipp!.requests.filter((r) => r.operation === GET_JOB_ATTRIBUTES && r.url === endpoint.path)
           .length,
       ).toBeGreaterThan(0);
-      expect(await row(deliveries[i]!)).toMatchObject({ status: "sent", pagePrinterId: ids[i] });
+      expect(await row(deliveries[i]!)).toMatchObject({ status: "sent", printerId: ids[i] });
     }
     expect(ipp!.printJobs()[0]!.data.equals(ipp!.printJobs()[1]!.data)).toBe(false);
   });
@@ -734,12 +721,12 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
     const v = await venue();
     const { running, agentId } = await joinedAgent(v);
     const id = await officePrinter(v, agentId);
-    const [before] = await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, id));
+    const [before] = await suite.db.select().from(printers).where(eq(printers.id, id));
     const sale = await fullInvoice(v);
     const delivery = await printOnA4(sale, id);
     await pollUntilIdle(running);
-    expect(await row(delivery.id)).toMatchObject({ status: "sent", pagePrinterId: id });
-    const [after] = await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, id));
+    expect(await row(delivery.id)).toMatchObject({ status: "sent", printerId: id });
+    const [after] = await suite.db.select().from(printers).where(eq(printers.id, id));
     expect(after).toEqual(before);
     expect(ipp!.printJobs()[0]!.url).toBe("/ipp/print");
     expect(ipp!.printJobs()[0]!.data.equals(await originalPdf(v, sale))).toBe(true);
@@ -786,10 +773,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
         const deleted = await request(v, "DELETE", `/management-api/page-printers/${office}`);
         expect(deleted.status).toBe(200);
       } else {
-        await suite.db
-          .update(pagePrinters)
-          .set({ active: false })
-          .where(eq(pagePrinters.id, office));
+        await suite.db.update(printers).set({ active: false }).where(eq(printers.id, office));
         expect(await row(delivery.id)).toMatchObject({ status: "queued" });
       }
 

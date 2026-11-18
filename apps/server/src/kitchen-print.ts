@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-or
 import type { SQL } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
+  receiptRollColumns,
   diningTables,
   insertInChunks,
   kitchenCourses,
@@ -176,8 +177,7 @@ export async function printerMappings(
     .select({
       stationId: stationPrinterPairs.stationId,
       printerId: stationPrinterPairs.printerId,
-      paperWidth: printers.paperWidth,
-      resolution: printers.resolution,
+      ...receiptRollColumns,
     })
     .from(stationPrinterPairs)
     .innerJoin(printers, and(isReceiptPrinter(), eq(stationPrinterPairs.printerId, printers.id)))

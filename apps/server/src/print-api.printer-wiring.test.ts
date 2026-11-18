@@ -9,7 +9,6 @@ import {
   devices,
   kitchenStations,
   nowIso,
-  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -663,25 +662,16 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Invoice offers agent");
     const counter = await createPrinter(app, agent.agentId, "Counter");
-    const [office] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      })
-      .returning({ id: pagePrinters.id });
+    const officeId = await insertA4Printer(suite.db, {
+      name: "Office",
+      host: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
+    });
     const [invoices] = await seedDeviceProfiles(suite.db, {
       name: `Invoices ${randomUUID()}`,
       formFactor: "till",
     });
     await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: invoices!.id, pagePrinterId: office!.id, role: "invoice", position: 0 },
+      { deviceProfileId: invoices!.id, pagePrinterId: officeId, role: "invoice", position: 0 },
       { deviceProfileId: invoices!.id, printerId: counter, role: "invoice", position: 1 },
     ]);
 
@@ -693,7 +683,7 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const row = { profileId: invoices!.id, profileName: invoices!.name, roles: ["invoice"] };
     const noDepartment = { departmentId: null, departmentName: null };
     expect(offers.filter((o) => o.profileId === invoices!.id)).toEqual([
-      { printerId: null, pagePrinterId: office!.id, ...row, ...noDepartment },
+      { printerId: null, pagePrinterId: officeId, ...row, ...noDepartment },
       { printerId: counter, pagePrinterId: null, ...row, ...noDepartment },
     ]);
   });

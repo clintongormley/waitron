@@ -1,10 +1,11 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, pagePrinters, stationPrinterPairs, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, printers, stationPrinterPairs, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
@@ -171,7 +172,7 @@ async function list(app: Hono): Promise<Record<string, unknown>[]> {
 }
 
 async function stored(id: string) {
-  const [row] = await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, id));
+  const [row] = await suite.db.select().from(printers).where(eq(printers.id, id));
   return row;
 }
 
@@ -327,7 +328,7 @@ describe("page-printer management routes", () => {
       expect(res.status, JSON.stringify(body)).toBe(404);
       expect(await res.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
     }
-    expect(await suite.db.select().from(pagePrinters)).toEqual([]);
+    expect(await suite.db.select().from(printers).where(eq(printers.kind, "a4"))).toEqual([]);
   });
 
   it("matches the entry's host without regard to case", async () => {
@@ -377,7 +378,7 @@ describe("page-printer management routes", () => {
     expect(await res.json()).toEqual({
       error: { code: "page_printer.not_printable", params: {} },
     });
-    expect(await suite.db.select().from(pagePrinters)).toEqual([]);
+    expect(await suite.db.select().from(printers).where(eq(printers.kind, "a4"))).toEqual([]);
   });
 
   it("takes a printable report over an unprintable one the same agent sent for the same queue", async () => {
@@ -424,25 +425,18 @@ describe("page-printer management routes", () => {
         error: { code: "management.request_invalid", params: { field } },
       });
     }
-    expect(await suite.db.select().from(pagePrinters)).toEqual([]);
+    expect(await suite.db.select().from(printers).where(eq(printers.kind, "a4"))).toEqual([]);
   });
 
   it("lists each page printer with its recorded agent's id and name, and no announced text", async () => {
     const app = mountApp();
     const { agentId, id } = await onePrinter(app, "10.61.7.1");
-    const [orphan] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Unassigned printer",
-        host: "10.61.7.2",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "image/pwg-raster",
-        supportedFormats: ["image/pwg-raster"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      })
-      .returning({ id: pagePrinters.id });
+    const orphanId = await insertA4Printer(suite.db, {
+      name: "Unassigned printer",
+      host: "10.61.7.2",
+      documentFormat: "image/pwg-raster",
+      supportedFormats: ["image/pwg-raster"],
+    });
 
     const res = await send(app, "GET", "/management-api/page-printers", { cookie: managerCookie });
     const text = await res.text();
@@ -463,7 +457,7 @@ describe("page-printer management routes", () => {
         agentName: "Office agent",
       },
       {
-        id: orphan!.id,
+        id: orphanId,
         name: "Unassigned printer",
         host: "10.61.7.2",
         port: 631,

@@ -114,7 +114,7 @@ export type JobOutcome = ({ status: "done" } | { status: "failed"; error: string
   invoiceClaim?: InvoicePrintClaim;
 };
 
-/** The server's `pagePrinterFormat` and `pagePrinterMedia` (`packages/db`); a server-side case in
+/** The server's `printerDocumentFormat` and `printerMedia` (`packages/db`); a server-side case in
  * `apps/server/src/page-print-api.test.ts` holds them equal. */
 export const PAGE_FORMATS = ["application/pdf", "image/pwg-raster", "image/urf"] as const;
 export const PAGE_MEDIA = ["iso_a4_210x297mm", "na_letter_8.5x11in"] as const;

@@ -84,7 +84,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "print_jobs",
     "outgoing_mail",
     "printers",
-    "page_printers",
     "device_profile_printers",
     "settings.venue",
   ],

@@ -139,11 +139,10 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     {
       name: "printers",
-      omit: ["poll_token_hash", "held_by_device_id", "held_at", "kind"],
+      omit: ["poll_token_hash", "held_by_device_id", "held_at"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     },
-    { name: "page_printers", reconnect: true },
     { name: "device_profile_printers" },
     { name: "custom_themes" },
   ],

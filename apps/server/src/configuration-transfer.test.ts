@@ -105,7 +105,6 @@ import {
   printAgents,
   printers,
   printJobs,
-  pagePrinters,
   deviceProfilePrinters,
   drawerOpens,
   stationPrinterPairs,
@@ -116,6 +115,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
@@ -478,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 46,
+  version: 47,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -747,7 +747,7 @@ describe("configuration transfer database path", () => {
       .insert(printAgents)
       .values({ name: "Back office", tokenHash: "hash" })
       .returning({ id: printAgents.id });
-    await suite.db.insert(pagePrinters).values({
+    await insertA4Printer(suite.db, {
       id: "55555555-aaaa-aaaa-aaaa-555555555555",
       name: "Invoice office",
       host: "192.0.2.20",
@@ -755,7 +755,6 @@ describe("configuration transfer database path", () => {
       resourcePath: "/ipp/printer",
       documentFormat: "image/urf",
       supportedFormats: ["application/pdf", "image/urf"],
-      media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
       agentId: agent!.id,
@@ -772,15 +771,15 @@ describe("configuration transfer database path", () => {
       new Date("2026-10-07T12:00:00.000Z"),
       versions,
     );
-    expect(transferred.tables.page_printers).toHaveLength(1);
-    expect(transferred.reconnect).toContain("page_printers");
+    expect(transferred.tables.printers!.filter((row) => row.kind === "a4")).toHaveLength(1);
+    expect(transferred.reconnect).toContain("printers");
     await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
-    const [imported] = await targetSuite.db.select().from(pagePrinters);
+    const [imported] = await targetSuite.db.select().from(printers).where(eq(printers.kind, "a4"));
     expect(imported).toMatchObject({
       name: "Invoice office",
       host: "192.0.2.20",
@@ -841,7 +840,9 @@ describe("configuration transfer database path", () => {
         resolutionDpi: 300,
       }),
     ]);
-    expect(await targetSuite.db.select().from(printers)).toEqual([]);
+    expect(
+      await targetSuite.db.select().from(printers).where(eq(printers.kind, "receipt")),
+    ).toEqual([]);
   });
 
   it("carries a profile's invoice list naming an A4 printer, pointing at the imported A4 printer", async () => {
@@ -851,17 +852,7 @@ describe("configuration transfer database path", () => {
     });
     const sourcePagePrinterId = "56565656-aaaa-aaaa-aaaa-565656565656";
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(pagePrinters).values({
-        id: sourcePagePrinterId,
-        name: "Office A4",
-        host: "192.0.2.40",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      });
+      await insertA4Printer(tx, { id: sourcePagePrinterId, name: "Office A4", host: "192.0.2.40" });
       const [profile] = await seedDeviceProfiles(tx, { name: "Office till", formFactor: "till" });
       await setProfilePrinterLists(tx, profile!.id, {
         ...emptyPrinterLists(),
@@ -889,9 +880,9 @@ describe("configuration transfer database path", () => {
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const [imported] = await targetSuite.db
-      .select({ id: pagePrinters.id })
-      .from(pagePrinters)
-      .where(eq(pagePrinters.name, "Office A4"));
+      .select({ id: printers.id })
+      .from(printers)
+      .where(eq(printers.name, "Office A4"));
     expect(imported!.id).not.toBe(sourcePagePrinterId);
     const [profile] = await targetSuite.db
       .select({ id: deviceProfiles.id })
@@ -3438,6 +3429,7 @@ it("transfers a printer's pick-up flags, leaves the holder behind and refuses an
       })
       .returning({ id: printers.id });
     await holdPrinterForTest(tx, printer!.id, deviceId);
+    await insertA4Printer(tx);
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -3447,18 +3439,18 @@ it("transfers a printer's pick-up flags, leaves the holder behind and refuses an
     new Date("2026-10-13T10:00:00Z"),
     versions,
   );
-  const exportedPrinter = transferred.tables.printers![0]!;
+  const exportedPrinter = transferred.tables.printers!.find((row) => row.name === "Slip pickup")!;
+  expect(exportedPrinter.kind).toBe("receipt");
+  expect(transferred.tables.printers).toContainEqual(
+    expect.objectContaining({
+      kind: "a4",
+      name: "Office printer",
+      document_format: "application/pdf",
+    }),
+  );
   expect(exportedPrinter).toMatchObject({ picks_up_receipts: 0, picks_up_payment_slips: 1 });
   expect(exportedPrinter).not.toHaveProperty("held_by_device_id");
   expect(exportedPrinter).not.toHaveProperty("held_at");
-  expect(exportedPrinter).not.toHaveProperty("kind");
-  const withKind = {
-    ...transferred,
-    tables: { ...transferred.tables, printers: [{ ...exportedPrinter, kind: "a4" }] },
-  };
-  expect(() => validateConfigurationBundle(withKind, ALL_MODULES, versions)).toThrowError(
-    expect.objectContaining({ code: "setup.request_invalid", params: { field: "printers.kind" } }),
-  );
   const malformed = {
     ...transferred,
     tables: {
@@ -3479,6 +3471,15 @@ it("transfers a printer's pick-up flags, leaves the holder behind and refuses an
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+  });
+  const [office] = await targetSuite.db.select().from(printers).where(eq(printers.kind, "a4"));
+  expect(office).toMatchObject({
+    name: "Office printer",
+    transport: "ipp",
+    active: false,
+    agentId: null,
+    documentFormat: "application/pdf",
+    resourcePath: "/ipp/print",
   });
   const imported = await targetSuite.db
     .select({
@@ -5615,7 +5616,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(46);
+  expect(exported.version).toBe(47);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

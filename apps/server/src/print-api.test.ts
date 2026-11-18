@@ -17,7 +17,6 @@ import {
   deviceProfiles,
   devices,
   joinRequests,
-  pagePrinters,
   installChangeFeed,
   subscribeToChanges,
   nowIso,
@@ -6625,26 +6624,17 @@ describe("held print pulls", () => {
 
   it("an office test page wakes a held receipt pull, then can be claimed", async () => {
     const r = await rig();
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.9",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        agentId: r.agentId,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, {
+      name: "Office",
+      host: "192.0.2.9",
+      agentId: r.agentId,
+    });
     const pending = r.request();
     await held(r.bus);
     const requested = await send(
       r.app,
       "POST",
-      `/management-api/page-printers/${printer!.id}/test-page`,
+      `/management-api/page-printers/${printerId}/test-page`,
       { cookie: managerCookie },
     );
     expect(requested.status).toBe(202);

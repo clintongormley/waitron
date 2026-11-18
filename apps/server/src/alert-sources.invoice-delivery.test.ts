@@ -5,7 +5,6 @@ import {
   type A4HoldCode,
   CORE_MIGRATIONS,
   invoiceDeliveries,
-  pagePrinters,
   printAgents,
   printJobs,
   taxpayer,
@@ -52,20 +51,12 @@ async function venue() {
     .insert(printAgents)
     .values({ name: "Back office agent", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
-  const [office] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Back office",
-      host: "192.0.2.20",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-    })
-    .returning({ id: pagePrinters.id });
-  return { nodeId, agentId: agent!.id, officeId: office!.id };
+  const officeId = await insertA4Printer(suite.db, {
+    name: "Back office",
+    host: "192.0.2.20",
+    resolutionDpi: 600,
+  });
+  return { nodeId, agentId: agent!.id, officeId: officeId };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
@@ -183,20 +174,12 @@ async function heldA4(v: Venue, saleId: string, hold: A4HoldCode, pagePrinterId 
 }
 
 async function secondPrinter(): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Upstairs office",
-      host: "192.0.2.21",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Upstairs office",
+    host: "192.0.2.21",
+    resolutionDpi: 600,
+  });
+  return printerId;
 }
 
 /** A store whose test page on `pagePrinterId` is printing and held for `hold`. */

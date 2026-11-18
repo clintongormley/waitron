@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  receiptRollColumns,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -139,8 +140,7 @@ async function readDevicePrinters(
     .select({
       id: printers.id,
       hasCashDrawer: printers.hasCashDrawer,
-      paperWidth: printers.paperWidth,
-      resolution: printers.resolution,
+      ...receiptRollColumns,
       formFactor: deviceProfiles.formFactor,
       capabilities: deviceProfiles.capabilities,
     })
