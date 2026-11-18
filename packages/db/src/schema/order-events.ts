@@ -78,7 +78,6 @@ export const orderEvents = table(
       foreignColumns: [persons.id],
       name: "order_events_to_person_fk",
     }),
-    index("order_events_actor_at_idx").on(t.actorId, t.at),
     index("order_events_party_idx").on(t.partyId),
     index("order_events_group_idx").on(t.groupId),
     index("order_events_draft_idx").on(t.draftId),

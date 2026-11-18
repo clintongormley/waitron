@@ -256,6 +256,44 @@ CREATE TABLE `order_amendments` (
 --> statement-breakpoint
 CREATE INDEX `order_amendments_order_idx` ON `order_amendments` (`working_order_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `order_amendments_chain_position_key` ON `order_amendments` (`working_order_id`,`sequence_no`);--> statement-breakpoint
+CREATE TABLE `order_events` (
+	`id` text PRIMARY KEY NOT NULL,
+	`kind` text NOT NULL,
+	`at` text NOT NULL,
+	`actor_id` text,
+	`actor_device_id` text,
+	`party_id` text,
+	`group_id` text,
+	`draft_id` text,
+	`line_id` text,
+	`from_order_id` text,
+	`to_order_id` text,
+	`from_person` text,
+	`to_person` text,
+	`detail` text DEFAULT '{}' NOT NULL,
+	FOREIGN KEY (`actor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`actor_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`draft_id`) REFERENCES `order_drafts`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`from_person`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`to_person`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "order_events_kind_ck" CHECK("order_events"."kind" in ('dish.moved', 'dish.cancelled', 'group.submitted', 'group.joined', 'group.fired', 'group.reordered', 'group.lines_moved', 'group.removed', 'draft.created', 'draft.taken_over', 'draft.submitted', 'draft.discarded')),
+	CONSTRAINT "order_events_dish_ck" CHECK("order_events"."kind" not like 'dish.%' or (
+        "order_events"."line_id" is not null and "order_events"."from_order_id" is not null and (
+          ("order_events"."kind" = 'dish.moved' and "order_events"."to_order_id" is not null and "order_events"."to_order_id" <> "order_events"."from_order_id") or
+          ("order_events"."kind" = 'dish.cancelled' and "order_events"."to_order_id" is null)
+        )
+      )),
+	CONSTRAINT "order_events_group_ck" CHECK("order_events"."kind" not like 'group.%' or
+        ("order_events"."party_id" is not null and (("order_events"."actor_id" is null) <> ("order_events"."actor_device_id" is null)))),
+	CONSTRAINT "order_events_draft_ck" CHECK("order_events"."kind" not like 'draft.%' or
+        ("order_events"."draft_id" is not null and "order_events"."actor_id" is not null and "order_events"."to_person" is not null))
+);
+--> statement-breakpoint
+CREATE INDEX `order_events_party_idx` ON `order_events` (`party_id`);--> statement-breakpoint
+CREATE INDEX `order_events_group_idx` ON `order_events` (`group_id`);--> statement-breakpoint
+CREATE INDEX `order_events_draft_idx` ON `order_events` (`draft_id`);--> statement-breakpoint
 CREATE TABLE `sale_line_dishes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_line_id` text NOT NULL,
@@ -266,19 +304,6 @@ CREATE TABLE `sale_line_dishes` (
 --> statement-breakpoint
 CREATE INDEX `sale_line_dishes_dish_line_idx` ON `sale_line_dishes` (`dish_line_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sale_line_dishes_sale_line_dish_key` ON `sale_line_dishes` (`sale_line_id`,`dish_line_id`);--> statement-breakpoint
-CREATE TABLE `order_portion_events` (
-	`id` text PRIMARY KEY NOT NULL,
-	`line_id` text NOT NULL,
-	`detail` text DEFAULT '{}' NOT NULL,
-	`kind` text NOT NULL,
-	`from_order_id` text NOT NULL,
-	`to_order_id` text,
-	`actor_id` text,
-	`at` text NOT NULL,
-	CONSTRAINT "order_portion_events_kind_ck" CHECK("order_portion_events"."kind" in ('moved', 'cancelled')),
-	CONSTRAINT "order_portion_events_destination_ck" CHECK(("order_portion_events"."kind" = 'moved' and "order_portion_events"."to_order_id" is not null and "order_portion_events"."to_order_id" <> "order_portion_events"."from_order_id") or ("order_portion_events"."kind" = 'cancelled' and "order_portion_events"."to_order_id" is null))
-);
---> statement-breakpoint
 CREATE TABLE `dining_tables` (
 	`id` text PRIMARY KEY NOT NULL,
 	`label` text NOT NULL,
@@ -488,24 +513,6 @@ CREATE TABLE `service_commands` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `service_commands_scope_submission_key` ON `service_commands` (`scope_kind`,`scope_id`,`submission_id`);--> statement-breakpoint
-CREATE TABLE `order_group_events` (
-	`id` text PRIMARY KEY NOT NULL,
-	`party_id` text NOT NULL,
-	`group_id` text,
-	`kind` text NOT NULL,
-	`actor_id` text,
-	`actor_device_id` text,
-	`detail` text NOT NULL,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`actor_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_group_events_kind_ck" CHECK("order_group_events"."kind" in ('submitted', 'joined', 'fired', 'reordered', 'lines_moved', 'removed')),
-	CONSTRAINT "order_group_events_actor_ck" CHECK(("order_group_events"."actor_id" is null) <> ("order_group_events"."actor_device_id" is null))
-);
---> statement-breakpoint
-CREATE INDEX `order_group_events_party_idx` ON `order_group_events` (`party_id`);--> statement-breakpoint
-CREATE INDEX `order_group_events_group_idx` ON `order_group_events` (`group_id`);--> statement-breakpoint
 CREATE TABLE `order_groups` (
 	`id` text PRIMARY KEY NOT NULL,
 	`party_id` text NOT NULL,
@@ -539,20 +546,6 @@ CREATE TABLE `order_group_hold_stations` (
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `order_draft_events` (
-	`id` text PRIMARY KEY NOT NULL,
-	`draft_id` text NOT NULL,
-	`kind` text NOT NULL,
-	`from_person` text,
-	`to_person` text NOT NULL,
-	`actor_id` text NOT NULL,
-	`detail` text NOT NULL,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`draft_id`) REFERENCES `order_drafts`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_draft_events_kind_ck" CHECK("order_draft_events"."kind" in ('created', 'taken_over', 'submitted', 'discarded'))
-);
---> statement-breakpoint
-CREATE INDEX `order_draft_events_draft_idx` ON `order_draft_events` (`draft_id`);--> statement-breakpoint
 CREATE TABLE `order_draft_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`draft_id` text NOT NULL,

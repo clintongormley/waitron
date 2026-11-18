@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d226e335-7cac-4d71-96d3-5991c5ea1d8a",
+  "id": "6f96bee7-71f6-4501-bd18-61c892b4f1fa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1677,6 +1677,246 @@
         }
       }
     },
+    "order_events": {
+      "name": "order_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actor_device_id": {
+          "name": "actor_device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "draft_id": {
+          "name": "draft_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "from_order_id": {
+          "name": "from_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "to_order_id": {
+          "name": "to_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "from_person": {
+          "name": "from_person",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "to_person": {
+          "name": "to_person",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        }
+      },
+      "indexes": {
+        "order_events_party_idx": {
+          "name": "order_events_party_idx",
+          "columns": [
+            "party_id"
+          ],
+          "isUnique": false
+        },
+        "order_events_group_idx": {
+          "name": "order_events_group_idx",
+          "columns": [
+            "group_id"
+          ],
+          "isUnique": false
+        },
+        "order_events_draft_idx": {
+          "name": "order_events_draft_idx",
+          "columns": [
+            "draft_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "order_events_actor_fk": {
+          "name": "order_events_actor_fk",
+          "tableFrom": "order_events",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_actor_device_fk": {
+          "name": "order_events_actor_device_fk",
+          "tableFrom": "order_events",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "actor_device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_party_fk": {
+          "name": "order_events_party_fk",
+          "tableFrom": "order_events",
+          "tableTo": "parties",
+          "columnsFrom": [
+            "party_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_group_fk": {
+          "name": "order_events_group_fk",
+          "tableFrom": "order_events",
+          "tableTo": "order_groups",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_draft_fk": {
+          "name": "order_events_draft_fk",
+          "tableFrom": "order_events",
+          "tableTo": "order_drafts",
+          "columnsFrom": [
+            "draft_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_from_person_fk": {
+          "name": "order_events_from_person_fk",
+          "tableFrom": "order_events",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "from_person"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_events_to_person_fk": {
+          "name": "order_events_to_person_fk",
+          "tableFrom": "order_events",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "to_person"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "order_events_kind_ck": {
+          "name": "order_events_kind_ck",
+          "value": "\"order_events\".\"kind\" in ('dish.moved', 'dish.cancelled', 'group.submitted', 'group.joined', 'group.fired', 'group.reordered', 'group.lines_moved', 'group.removed', 'draft.created', 'draft.taken_over', 'draft.submitted', 'draft.discarded')"
+        },
+        "order_events_dish_ck": {
+          "name": "order_events_dish_ck",
+          "value": "\"order_events\".\"kind\" not like 'dish.%' or (\n        \"order_events\".\"line_id\" is not null and \"order_events\".\"from_order_id\" is not null and (\n          (\"order_events\".\"kind\" = 'dish.moved' and \"order_events\".\"to_order_id\" is not null and \"order_events\".\"to_order_id\" <> \"order_events\".\"from_order_id\") or\n          (\"order_events\".\"kind\" = 'dish.cancelled' and \"order_events\".\"to_order_id\" is null)\n        )\n      )"
+        },
+        "order_events_group_ck": {
+          "name": "order_events_group_ck",
+          "value": "\"order_events\".\"kind\" not like 'group.%' or\n        (\"order_events\".\"party_id\" is not null and ((\"order_events\".\"actor_id\" is null) <> (\"order_events\".\"actor_device_id\" is null)))"
+        },
+        "order_events_draft_ck": {
+          "name": "order_events_draft_ck",
+          "value": "\"order_events\".\"kind\" not like 'draft.%' or\n        (\"order_events\".\"draft_id\" is not null and \"order_events\".\"actor_id\" is not null and \"order_events\".\"to_person\" is not null)"
+        }
+      }
+    },
     "sale_line_dishes": {
       "name": "sale_line_dishes",
       "columns": {
@@ -1750,82 +1990,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "order_portion_events": {
-      "name": "order_portion_events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "line_id": {
-          "name": "line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "detail": {
-          "name": "detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'{}'"
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "from_order_id": {
-          "name": "from_order_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "to_order_id": {
-          "name": "to_order_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "at": {
-          "name": "at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "order_portion_events_kind_ck": {
-          "name": "order_portion_events_kind_ck",
-          "value": "\"order_portion_events\".\"kind\" in ('moved', 'cancelled')"
-        },
-        "order_portion_events_destination_ck": {
-          "name": "order_portion_events_destination_ck",
-          "value": "(\"order_portion_events\".\"kind\" = 'moved' and \"order_portion_events\".\"to_order_id\" is not null and \"order_portion_events\".\"to_order_id\" <> \"order_portion_events\".\"from_order_id\") or (\"order_portion_events\".\"kind\" = 'cancelled' and \"order_portion_events\".\"to_order_id\" is null)"
-        }
-      }
     },
     "dining_tables": {
       "name": "dining_tables",
@@ -3237,136 +3401,6 @@
         }
       }
     },
-    "order_group_events": {
-      "name": "order_group_events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "party_id": {
-          "name": "party_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "group_id": {
-          "name": "group_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "actor_device_id": {
-          "name": "actor_device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "detail": {
-          "name": "detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "order_group_events_party_idx": {
-          "name": "order_group_events_party_idx",
-          "columns": [
-            "party_id"
-          ],
-          "isUnique": false
-        },
-        "order_group_events_group_idx": {
-          "name": "order_group_events_group_idx",
-          "columns": [
-            "group_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "order_group_events_party_fk": {
-          "name": "order_group_events_party_fk",
-          "tableFrom": "order_group_events",
-          "tableTo": "parties",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "order_group_events_group_fk": {
-          "name": "order_group_events_group_fk",
-          "tableFrom": "order_group_events",
-          "tableTo": "order_groups",
-          "columnsFrom": [
-            "group_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "order_group_events_actor_device_fk": {
-          "name": "order_group_events_actor_device_fk",
-          "tableFrom": "order_group_events",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "actor_device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "order_group_events_kind_ck": {
-          "name": "order_group_events_kind_ck",
-          "value": "\"order_group_events\".\"kind\" in ('submitted', 'joined', 'fired', 'reordered', 'lines_moved', 'removed')"
-        },
-        "order_group_events_actor_ck": {
-          "name": "order_group_events_actor_ck",
-          "value": "(\"order_group_events\".\"actor_id\" is null) <> (\"order_group_events\".\"actor_device_id\" is null)"
-        }
-      }
-    },
     "order_groups": {
       "name": "order_groups",
       "columns": {
@@ -3603,99 +3637,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "order_draft_events": {
-      "name": "order_draft_events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "draft_id": {
-          "name": "draft_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "from_person": {
-          "name": "from_person",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "to_person": {
-          "name": "to_person",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "detail": {
-          "name": "detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "order_draft_events_draft_idx": {
-          "name": "order_draft_events_draft_idx",
-          "columns": [
-            "draft_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "order_draft_events_draft_fk": {
-          "name": "order_draft_events_draft_fk",
-          "tableFrom": "order_draft_events",
-          "tableTo": "order_drafts",
-          "columnsFrom": [
-            "draft_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "order_draft_events_kind_ck": {
-          "name": "order_draft_events_kind_ck",
-          "value": "\"order_draft_events\".\"kind\" in ('created', 'taken_over', 'submitted', 'discarded')"
-        }
-      }
     },
     "order_draft_lines": {
       "name": "order_draft_lines",
