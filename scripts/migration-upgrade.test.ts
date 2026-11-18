@@ -1439,6 +1439,8 @@ const ONE_ROW: Record<string, string> = {
     "a tender naming a settled sale is refused, so one sale stays open for the tenders",
   menu_item_variant_overrides:
     "its key is a menu item and a variant of that item's product, and the rows hold one such pair",
+  set_menu_variant_exclusions:
+    "the seeded offers and products contain only one matching item and variant pair",
 };
 
 /**

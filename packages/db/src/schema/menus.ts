@@ -26,6 +26,8 @@ import { units } from "./menu/units.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 
+const menuKind = enumType(["menu", "set_menu"]);
+const vatClasses = sql`('general','reduced','super_reduced','zero')`;
 const homeTiles = enumType(HOME_TILE_MODES);
 const homeOrder = enumType(HOME_ORDERS);
 const { handheld, till } = HOME_DISPLAY_DEFAULTS;
@@ -45,6 +47,9 @@ export const menus = table(
     tillColumns: count("till_columns").notNull().default(till.columns),
     tillTiles: homeTiles("till_tiles").notNull().default(till.tiles),
     tillOrder: homeOrder("till_order").notNull().default(till.order),
+    kind: menuKind("kind").notNull().default("menu"),
+    setPrice: money("set_price"),
+    setVatClass: label("set_vat_class"),
   },
   (t) => [
     check(
@@ -59,6 +64,15 @@ export const menus = table(
     check("menus_handheld_order_ck", enumCheck(t.handheldOrder)),
     check("menus_till_tiles_ck", enumCheck(t.tillTiles)),
     check("menus_till_order_ck", enumCheck(t.tillOrder)),
+    check("menus_kind_ck", enumCheck(t.kind)),
+    check(
+      "menus_set_terms_ck",
+      sql`(${t.kind} = 'set_menu' and ${t.setPrice} is not null and ${t.setVatClass} is not null)
+        or (${t.kind} = 'menu' and ${t.setPrice} is null and ${t.setVatClass} is null)`,
+    ),
+    check("menus_set_price_ck", sql`${t.setPrice} is null or ${t.setPrice} >= 0`),
+    check("menus_set_vat_class_ck", sql`${t.setVatClass} in ${vatClasses}`),
+    check("menus_set_not_default_ck", sql`${t.kind} = 'menu' or ${t.isDefault} = 0`),
     uniqueIndex("menus_one_default_uq")
       .on(t.isDefault)
       .where(sql`${t.isDefault} = 1`),
@@ -170,13 +184,7 @@ export const products = table(
       "products_top_level_owns_ck",
       sql`${t.parentId} is not null or (${t.vatClass} is not null and ${t.unitPrice} is not null and ${t.dietaryDeclarations} is not null)`,
     ),
-    check(
-      "products_vat_class_ck",
-      sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
-    ),
-    check(
-      "products_takeaway_vat_class_ck",
-      sql`${t.takeawayVatClass} in ('general','reduced','super_reduced','zero')`,
-    ),
+    check("products_vat_class_ck", sql`${t.vatClass} in ${vatClasses}`),
+    check("products_takeaway_vat_class_ck", sql`${t.takeawayVatClass} in ${vatClasses}`),
   ],
 );

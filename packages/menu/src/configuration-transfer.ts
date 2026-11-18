@@ -3,6 +3,7 @@ import {
   type ContentLanguages,
   colorOrNull,
   HOME_DEVICES,
+  MAX_SET_MENU_AMOUNT_CENTS,
   homeDisplayProblem,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
@@ -71,6 +72,33 @@ function checkActiveOnMenus(
       throw new AppError("setup.request_invalid", {
         field: "menu_item_variant_overrides.variant_id",
       });
+}
+
+function checkSetMenus(tables: Readonly<Record<string, Rows>>): void {
+  const setMenus = (tables.menus ?? []).filter((row) => row.kind === "set_menu");
+  for (const row of setMenus) {
+    const price = row.set_price;
+    if (
+      typeof price !== "number" ||
+      !Number.isInteger(price) ||
+      price < 0 ||
+      price > MAX_SET_MENU_AMOUNT_CENTS
+    )
+      throw new AppError("setup.request_invalid", { field: "menus.set_price" });
+  }
+
+  const setMenuIds = new Set(setMenus.map((row) => row.id));
+  for (const row of tables.set_menu_lines ?? [])
+    if (!setMenuIds.has(row.menu_id))
+      throw new AppError("setup.request_invalid", { field: "set_menu_lines.menu_id" });
+
+  const setMenuItemIds = new Set(
+    (tables.menu_items ?? []).filter((row) => setMenuIds.has(row.menu_id)).map((row) => row.id),
+  );
+  for (const table of ["set_menu_dish_courses", "set_menu_variant_exclusions"] as const)
+    for (const row of tables[table] ?? [])
+      if (!setMenuItemIds.has(row.menu_item_id))
+        throw new AppError("setup.request_invalid", { field: `${table}.menu_item_id` });
 }
 
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
@@ -168,6 +196,7 @@ export function validateMenuConfiguration(
     defaults.add(row.list_id);
   }
   checkHomeDisplays(tables.menus);
+  checkSetMenus(tables);
   checkColors(tables.products, "products");
   checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
@@ -218,6 +247,10 @@ export const MENU_CONFIGURATION_TRANSFER = {
     { name: "units" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
+    { name: "set_menu_lines" },
+    { name: "set_menu_line_courses" },
+    { name: "set_menu_variant_exclusions" },
+    { name: "set_menu_dish_courses" },
     { name: "option_lists" },
     { name: "option_labels" },
     { name: "extra_lists" },

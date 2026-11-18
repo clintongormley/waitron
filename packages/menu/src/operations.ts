@@ -50,6 +50,7 @@ import type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
+  MenuKind,
 } from "@waitron/shared";
 import {
   createMenuShell,
@@ -62,6 +63,7 @@ import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
+import { refuseSetMenu, requireSetMenu, setMenuPriceCents, setMenuVatClass } from "./set-menus.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import { assertFamilyNamesFree, assertUpdatedNamesFree, readUpdatedName } from "./product-names.js";
@@ -104,6 +106,9 @@ export interface Menu {
   id: string;
   name: string;
   active: boolean;
+  kind: MenuKind;
+  setPrice: string | null;
+  setVatClass: VatClass | null;
 }
 
 export interface CreateProductInput {
@@ -174,7 +179,18 @@ const MENU_COLUMNS = {
   id: menus.id,
   name: menus.name,
   active: menus.active,
+  kind: menus.kind,
+  setPrice: menus.setPrice,
+  setVatClass: menus.setVatClass,
 };
+
+function menuSummary(row: Pick<typeof menus.$inferSelect, keyof Menu>): Menu {
+  return {
+    ...row,
+    setPrice: priceOrNull(row.setPrice),
+    setVatClass: row.setVatClass as VatClass | null,
+  };
+}
 
 /** A product's own identity and names, and its EFFECTIVE inherited values: a query selecting these
  * has `.leftJoin(parentProducts, parentJoin)` (`variant-fallback.ts`). */
@@ -322,6 +338,9 @@ export async function createMenu(
     names?: Record<string, string>;
     image?: string | null;
     color?: string | null;
+    kind?: MenuKind;
+    setPrice?: string | null;
+    setVatClass?: VatClass | null;
   },
 ): Promise<Menu> {
   const presentation = await sectionPatchValues(tx, {
@@ -330,20 +349,37 @@ export async function createMenu(
     image: input.image,
     color: input.color,
   });
-  const row = await insertMenu(tx, presentation.internalName!);
+  const terms =
+    input.kind === "set_menu"
+      ? {
+          kind: input.kind,
+          setPrice: setMenuPriceCents(input.setPrice),
+          setVatClass: setMenuVatClass(input.setVatClass),
+        }
+      : undefined;
+  const row = await insertMenu(tx, presentation.internalName!, terms);
   await createMenuShell(tx, row.id, presentation);
   return row;
 }
 
 /** The caller writes the menu's root and Home sections. */
-export async function insertMenu(tx: Transaction, name: string): Promise<Menu> {
+export async function insertMenu(
+  tx: Transaction,
+  name: string,
+  terms?: Pick<typeof menus.$inferInsert, "kind" | "setPrice" | "setVatClass">,
+): Promise<Menu> {
   await assertMenuNameFree(tx, name);
-  const [row] = await tx.insert(menus).values({ name }).returning(MENU_COLUMNS);
-  return row!;
+  const [row] = await tx
+    .insert(menus)
+    .values({ name, ...terms })
+    .returning(MENU_COLUMNS);
+  return menuSummary(row!);
 }
 
 export async function listMenus(tx: Transaction): Promise<Menu[]> {
-  return tx.select(MENU_COLUMNS).from(menus).orderBy(menus.createdAt, menus.id);
+  return (await tx.select(MENU_COLUMNS).from(menus).orderBy(menus.createdAt, menus.id)).map(
+    menuSummary,
+  );
 }
 
 const MENU_ITEM_COLUMNS = {
@@ -720,6 +756,7 @@ async function offersOn(
  * combined decisions and its Active variants. Sold-out ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
+  await refuseSetMenu(tx, menuId);
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
   const roots = new Map([[menuId, rootSectionId]]);
@@ -824,9 +861,13 @@ export async function updateMenuDetails(
     names?: Record<string, string>;
     image?: string | null;
     color?: string | null;
+    setPrice?: string | null;
+    setVatClass?: VatClass | null;
   },
   fallbackLanguage?: string,
 ): Promise<void> {
+  const changesTerms = patch.setPrice !== undefined || patch.setVatClass !== undefined;
+  if (changesTerms) await requireSetMenu(tx, menuId);
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
     patch.names === undefined
@@ -846,11 +887,17 @@ export async function updateMenuDetails(
     fallbackLanguage,
     stored?.names,
   );
-  if (internalName !== undefined) {
-    await assertMenuNameFree(tx, internalName, menuId);
+  if (internalName !== undefined) await assertMenuNameFree(tx, internalName, menuId);
+  if (internalName !== undefined || changesTerms) {
     await tx
       .update(menus)
-      .set({ name: internalName, updatedAt: now() })
+      .set({
+        name: internalName,
+        setPrice: patch.setPrice === undefined ? undefined : setMenuPriceCents(patch.setPrice),
+        setVatClass:
+          patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass),
+        updatedAt: now(),
+      })
       .where(eq(menus.id, menuId));
   }
   if (Object.keys(presentation).length > 0)
@@ -1153,6 +1200,7 @@ export async function assignMenuToVenue(tx: Transaction, menuId: string): Promis
 
 export async function setVenueDefaultMenu(tx: Transaction, menuId: string): Promise<void> {
   await assertMenuExists(tx, menuId);
+  await refuseSetMenu(tx, menuId);
   await assignMenuToVenue(tx, menuId);
 }
 

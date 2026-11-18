@@ -86,7 +86,7 @@ export function validateHolidayConfiguration(
 
 export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
-  const menus = ids(tables.menus);
+  const ordinaryMenuIds = ids(tables.menus?.filter((row) => row.kind !== "set_menu"));
   const setDepartment = new Map<unknown, unknown>();
   const setNames = new Set<string>();
   const defaults = new Map<unknown, number>();
@@ -114,7 +114,7 @@ export function validateMenuTimetables(tables: Tables): void {
     if (names.has(name)) refuse("menu_periods.name");
     names.add(name);
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
-    if (!menus.has(row.menu_id)) refuse("menu_periods.menu_id");
+    if (!ordinaryMenuIds.has(row.menu_id)) refuse("menu_periods.menu_id");
     const field = "menu_periods.staff_menu_ids";
     if (typeof row.staff_menu_ids !== "string") refuse(field);
     let staff: unknown;
@@ -126,7 +126,9 @@ export function validateMenuTimetables(tables: Tables): void {
     }
     if (
       !Array.isArray(staff) ||
-      staff.some((id) => typeof id !== "string" || !menus.has(id) || id === row.menu_id) ||
+      staff.some(
+        (id) => typeof id !== "string" || !ordinaryMenuIds.has(id) || id === row.menu_id,
+      ) ||
       new Set(staff).size !== staff.length
     )
       refuse(field);

@@ -70,8 +70,22 @@ const CHANGED: MenuStatus = {
 function api(
   status: () => Promise<MenuStatus> = async () => CHANGED,
   menus: MenuSummary[] = [
-    { id: "menu-lunch", name: "Lunch Menu", active: true },
-    { id: "menu-dinner", name: "Dinner Menu", active: true },
+    {
+      id: "menu-lunch",
+      name: "Lunch Menu",
+      active: true,
+      kind: "menu",
+      setPrice: null,
+      setVatClass: null,
+    },
+    {
+      id: "menu-dinner",
+      name: "Dinner Menu",
+      active: true,
+      kind: "menu",
+      setPrice: null,
+      setVatClass: null,
+    },
   ],
 ): DashboardApi {
   const preview: MenuPreview = {
@@ -537,7 +551,11 @@ describe("the menu editor's heading", () => {
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
     await page.viewport(390, 844);
-    return mount(api(undefined, [{ id: "menu-lunch", name, active: true }]));
+    return mount(
+      api(undefined, [
+        { id: "menu-lunch", name, active: true, kind: "menu", setPrice: null, setVatClass: null },
+      ]),
+    );
   }
 
   it("keeps the path above a long menu name inside a phone's width without scrolling sideways", async () => {

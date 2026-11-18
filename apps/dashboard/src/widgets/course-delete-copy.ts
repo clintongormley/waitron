@@ -14,13 +14,18 @@ export function courseDeleteCopy(): DeleteDialogCopy {
     confirm: t("action.delete"),
     retry: t("printers.delete_retry"),
     loading: t("printers.delete_loading"),
-    item: (item) =>
-      countOf(
-        item.key === "course_service_steps"
-          ? "kitchen.delete_course_service_steps"
-          : "kitchen.delete_course_products",
-        item.count,
-      ),
+    item: (item) => {
+      switch (item.key) {
+        case "course_service_steps":
+          return countOf("kitchen.delete_course_service_steps", item.count);
+        case "course_set_menu_lines":
+          return countOf("kitchen.delete_course_set_menu_lines", item.count);
+        case "course_set_menu_dishes":
+          return countOf("kitchen.delete_course_set_menu_dishes", item.count);
+        default:
+          return countOf("kitchen.delete_course_products", item.count);
+      }
+    },
     refusal: (item) => codeMessage(item.code),
   };
 }

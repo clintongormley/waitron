@@ -162,6 +162,12 @@ export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { menus, categories, products } from "./schema/menus.js";
+export {
+  setMenuDishCourses,
+  setMenuLineCourses,
+  setMenuLines,
+  setMenuVariantExclusions,
+} from "./schema/menu/set-menus.js";
 export type { AllergenMap } from "@waitron/shared";
 export {
   purchaseInvoiceVat,

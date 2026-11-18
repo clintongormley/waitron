@@ -6,6 +6,8 @@ import {
   departmentCourses,
   orderDraftLines,
   products,
+  setMenuDishCourses,
+  setMenuLineCourses,
   ticketItems,
   workingOrderLines,
   type Transaction,
@@ -22,6 +24,8 @@ import { idsInUse, type Reference } from "./in-use.js";
 /** Retention references; `in-use-references.test.ts` checks declared foreign keys only. */
 export const COURSE_REFERENCES: readonly Reference[] = [
   { table: products, column: products.courseId },
+  { table: setMenuLineCourses, column: setMenuLineCourses.courseId },
+  { table: setMenuDishCourses, column: setMenuDishCourses.courseId },
   { table: departmentCourses, column: departmentCourses.courseId },
   { table: orderDraftLines, column: orderDraftLines.courseId },
   { table: workingOrderLines, column: workingOrderLines.courseId },
@@ -42,12 +46,20 @@ async function courseDeleteRules(
     .from(kitchenCourses)
     .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.active, true)));
   if (!target) throw new AppError("course.not_found", { courseId: id });
-  // A product default or a service step alone retains the row too, though deletion clears both.
+  // Count references before clearing them so course IDs already used remain reserved.
   const retained = (await coursesInUse(tx, [id])).has(id);
   const [defaults] = await tx
     .select({ count: count() })
     .from(products)
     .where(eq(products.courseId, id));
+  const [lines] = await tx
+    .select({ count: count() })
+    .from(setMenuLineCourses)
+    .where(eq(setMenuLineCourses.courseId, id));
+  const [dishes] = await tx
+    .select({ count: count() })
+    .from(setMenuDishCourses)
+    .where(eq(setMenuDishCourses.courseId, id));
   const settings = await readCourseDeleteSettings(tx, id);
   return {
     retained,
@@ -59,6 +71,12 @@ async function courseDeleteRules(
       removes: [
         ...(defaults!.count > 0
           ? [{ key: "course_products", count: defaults!.count, targets: [] }]
+          : []),
+        ...(lines!.count > 0
+          ? [{ key: "course_set_menu_lines", count: lines!.count, targets: [] }]
+          : []),
+        ...(dishes!.count > 0
+          ? [{ key: "course_set_menu_dishes", count: dishes!.count, targets: [] }]
           : []),
         ...courseDeleteSettingsRemoves(settings),
       ],
@@ -73,6 +91,8 @@ export async function readCourseDeleteImpact(tx: Transaction, id: string): Promi
 export async function deleteCourse(tx: Transaction, id: string): Promise<DeleteImpact> {
   const { impact, retained, settings } = await courseDeleteRules(tx, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
+  await tx.delete(setMenuLineCourses).where(eq(setMenuLineCourses.courseId, id));
+  await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.courseId, id));
   await clearCourseDeleteSettings(tx, settings);
   await tx.delete(departmentCourses).where(eq(departmentCourses.courseId, id));
   if (retained) {

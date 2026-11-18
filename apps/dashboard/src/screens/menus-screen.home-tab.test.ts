@@ -77,8 +77,22 @@ const products: Product[] = [
 ];
 
 const menus: MenuSummary[] = [
-  { id: "menu-lunch", name: "Lunch Menu", active: true },
-  { id: "menu-dinner", name: "Dinner Menu", active: true },
+  {
+    id: "menu-lunch",
+    name: "Lunch Menu",
+    active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
+  },
+  {
+    id: "menu-dinner",
+    name: "Dinner Menu",
+    active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
+  },
 ];
 
 const productMember = (id: string, position: number, productId: string): SectionMember => ({

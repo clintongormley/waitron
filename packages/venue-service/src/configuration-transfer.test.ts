@@ -264,6 +264,20 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_periods.staff_menu_ids",
     ],
     [
+      "a set menu as the customer menu",
+      (t: Tables) => {
+        t.menus!.find(({ id }) => id === "m-desayunos")!.kind = "set_menu";
+      },
+      "menu_periods.menu_id",
+    ],
+    [
+      "a set menu as a staff menu",
+      (t: Tables) => {
+        t.menus!.find(({ id }) => id === "m-cafe")!.kind = "set_menu";
+      },
+      "menu_periods.staff_menu_ids",
+    ],
+    [
       "a floor plan set of a department the bundle lacks",
       (t: Tables) => {
         t.floor_plan_sets![2]!.department_id = "d-gone";

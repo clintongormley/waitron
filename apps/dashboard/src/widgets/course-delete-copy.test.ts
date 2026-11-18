@@ -64,3 +64,17 @@ it.each([
     ]).toEqual([oneStep, steps, oneProduct]);
   },
 );
+
+it.each([
+  ["en-GB", "1 set-menu line loses this course.", "2 dishes return to their product's course."],
+  [
+    "es-ES",
+    "1 línea de una carta a precio fijo pierde este curso.",
+    "2 platos vuelven al curso de su producto.",
+  ],
+])("explains removed set-menu course choices in %s", (locale, line, dishes) => {
+  setLocale(locale);
+  const copy = courseDeleteCopy();
+  expect(copy.item({ key: "course_set_menu_lines", count: 1, targets: [] })).toBe(line);
+  expect(copy.item({ key: "course_set_menu_dishes", count: 2, targets: [] })).toBe(dishes);
+});

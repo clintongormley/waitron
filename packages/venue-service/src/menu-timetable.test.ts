@@ -377,6 +377,43 @@ describe("service-period writers", () => {
     ]);
   });
 
+  it("keeps set menus out of both period pickers and refuses them in period writes", async () => {
+    const v = await venue({ timetable: false });
+    const [setMenu] = await db
+      .insert(menus)
+      .values({
+        name: "Daily special",
+        kind: "set_menu",
+        setPrice: 1400,
+        setVatClass: "reduced",
+      })
+      .returning({ id: menus.id });
+    const setMenuId = setMenu!.id;
+    const refusal = { code: "set_menu.wrong_place", params: { menuId: setMenuId } };
+    const at = new Date("2026-11-18T12:00:00Z");
+    const model = await scoped((tx) => readOpeningHoursModel(tx, at));
+    expect(model.menus.map((menu) => menu.id)).toContain(v.menus.Almuerzo);
+    expect(model.menus.map((menu) => menu.id)).not.toContain(setMenuId);
+
+    const lunch = { name: "Lunch", menuId: v.menus.Almuerzo, staffMenuIds: [v.menus.Bebidas] };
+    await expect(
+      scoped((tx) => saveMenuPeriod(tx, v.restaurant, { ...lunch, menuId: setMenuId })),
+    ).rejects.toMatchObject(refusal);
+    await expect(
+      scoped((tx) => saveMenuPeriod(tx, v.restaurant, { ...lunch, staffMenuIds: [setMenuId] })),
+    ).rejects.toMatchObject(refusal);
+
+    const { id } = await scoped((tx) => saveMenuPeriod(tx, v.restaurant, lunch));
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, id, { menuId: setMenuId })),
+    ).rejects.toMatchObject(refusal);
+    await expect(
+      scoped((tx) => updateMenuPeriod(tx, id, { staffMenuIds: [setMenuId] })),
+    ).rejects.toMatchObject(refusal);
+    const [period] = await db.select().from(menuPeriods).where(eq(menuPeriods.id, id));
+    expect(period).toMatchObject({ menuId: v.menus.Almuerzo, staffMenuIds: [v.menus.Bebidas] });
+  });
+
   it.each([null, "beige", 1])("refuses an explicit invalid colour %s", async (colour) => {
     const v = await venue({ timetable: false });
     await expect(

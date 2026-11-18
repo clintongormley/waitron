@@ -25,7 +25,16 @@ it.each(
       {
         open: true,
         menu: { id: "lunch", name: "Lunch menu" },
-        menus: [{ id: "dinner", name: "Dinner menu", active: true }],
+        menus: [
+          {
+            id: "dinner",
+            name: "Dinner menu",
+            active: true,
+            kind: "menu",
+            setPrice: null,
+            setVatClass: null,
+          },
+        ],
         api: { duplicateMenu: vi.fn() },
       },
       theme,
@@ -83,7 +92,16 @@ it("focuses Name after Copy is pressed with an already-used name", async () => {
   const { el: form } = await mountWidget<MenuCopyDialog>("dashboard-menu-copy-dialog", {
     open: true,
     menu: { id: "lunch", name: "Lunch" },
-    menus: [{ id: "dinner", name: "Dinner", active: true }],
+    menus: [
+      {
+        id: "dinner",
+        name: "Dinner",
+        active: true,
+        kind: "menu",
+        setPrice: null,
+        setVatClass: null,
+      },
+    ],
     api: { duplicateMenu: vi.fn() },
   });
   const input = form.shadowRoot!.querySelector("wt-input")!;
@@ -102,7 +120,16 @@ it("starts a different menu without submission messages", async () => {
   const { el: form } = await mountWidget<MenuCopyDialog>("dashboard-menu-copy-dialog", {
     open: true,
     menu: { id: "lunch", name: "Lunch" },
-    menus: [{ id: "dinner", name: "Dinner", active: true }],
+    menus: [
+      {
+        id: "dinner",
+        name: "Dinner",
+        active: true,
+        kind: "menu",
+        setPrice: null,
+        setVatClass: null,
+      },
+    ],
     api: { duplicateMenu: vi.fn() },
   });
   const input = form.shadowRoot!.querySelector("wt-input")!;

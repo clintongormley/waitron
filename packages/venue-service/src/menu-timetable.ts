@@ -19,7 +19,7 @@ import {
   routingCells,
   type Transaction,
 } from "@waitron/db";
-import { directIncludedMenus, loadSectionGraph } from "@waitron/menu";
+import { directIncludedMenus, loadSectionGraph, refuseSetMenu } from "@waitron/menu";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
@@ -367,7 +367,8 @@ async function writeMenuPeriod(
       .select({ id: menus.id })
       .from(menus)
       .where(and(eq(menus.id, menuId), eq(menus.active, true)));
-    if (menu === undefined) throw new AppError("menu.not_found", { menuId: menuId });
+    if (menu === undefined) throw new AppError("menu.not_found", { menuId });
+    await refuseSetMenu(tx, menuId);
   }
   if (periodId !== null) {
     const [own] = await tx
@@ -644,6 +645,7 @@ export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<
   const menuRows = await tx
     .select({ id: menus.id, name: menus.name, active: menus.active })
     .from(menus)
+    .where(eq(menus.kind, "menu"))
     .orderBy(asc(menus.name), asc(menus.id));
   const graph = await loadSectionGraph(tx);
   const menuNames = new Map(menuRows.map((menu) => [menu.id, menu.name]));

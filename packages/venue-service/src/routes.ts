@@ -121,6 +121,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.invalid": 400,
   "zone.name_taken": 409,
   "menu.not_found": 404,
+  "set_menu.wrong_place": 409,
   "category.parent_cycle": 409,
   "category.name_taken": 409,
   "route.subject_not_found": 400,

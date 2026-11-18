@@ -47,8 +47,8 @@ class PlacementLeaveHost extends LitElement {
 customElements.define("placement-leave-test-host", PlacementLeaveHost);
 
 const menus: MenuSummary[] = [
-  { id: "cat-a", name: "Dishes", active: true },
-  { id: "cat-b", name: "ES drinks", active: true },
+  { id: "cat-a", name: "Dishes", active: true, kind: "menu", setPrice: null, setVatClass: null },
+  { id: "cat-b", name: "ES drinks", active: true, kind: "menu", setPrice: null, setVatClass: null },
 ];
 const categories: CategorySummary[] = [
   { id: "c1", name: "Appetizers", parentId: null, color: null },

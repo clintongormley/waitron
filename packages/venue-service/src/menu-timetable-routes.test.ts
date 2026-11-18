@@ -374,6 +374,27 @@ describe("the opening-hours routes", () => {
     expect(await r.model()).toEqual(before);
   });
 
+  it("answers 409 for a set menu sent as a period menu", async () => {
+    const r = await routed();
+    const { id } = await scoped((tx) =>
+      createMenu(tx, {
+        name: "Lunch set",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      }),
+    );
+    await answers(
+      await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+        staffMenuIds: [id],
+        name: "Lunch",
+        menuId: r.coffeeMenu,
+      }),
+      409,
+      { code: "set_menu.wrong_place", params: { menuId: id } },
+    );
+  });
+
   it("answer each refusal with its status and params", async () => {
     const r = await routed();
     const unknown = randomUUID();

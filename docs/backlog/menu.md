@@ -980,7 +980,9 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes are ordered,
 the waiter adds set menus by type, and each dish is placed in a set menu on the bill that lists
-it and stays there (revised 18 November 2026). The remaining work covers dashboard setup, till
-ordering, paying such a bill and its documents, and updating the demo and guides.
+it and stays there (revised 18 November 2026). A set-menu draft has storage for its terms,
+lines and dish choices. Service periods and the venue default take ordinary menus. The
+dashboard editor, placement and publishing, till ordering, paying such a bill and its
+documents, and updating the demo and guides remain open.
 Takeaway/delivery VAT treatment remains with S10/Lane L and adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
