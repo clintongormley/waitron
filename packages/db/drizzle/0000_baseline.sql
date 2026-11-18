@@ -103,18 +103,54 @@ CREATE TABLE `working_order_lines` (
 	`group_id` text,
 	`credited_to` text,
 	`list_unit_price_gross` integer,
+	`menu_item_id` text,
+	`menu_id` text,
+	`menu_name` text,
+	`menu_version_id` text,
+	`offer_department_id` text,
+	`department_name` text,
+	`unit_id` text,
+	`sold_in_each` integer,
+	`hardware_unit` text,
+	`allergens` text,
+	`diet` text,
+	`diet_override` text,
+	`late_period_name` text,
+	`late_confirmed_by` text,
+	`sent_nutrition` text,
+	`offer_unit_name` text,
+	`offer_unit_precision` integer,
+	`offer_vat_class` text,
+	`offer_category_name` text,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`make_at_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`parent_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`late_confirmed_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`credited_to`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_order_lines_unit_precision_ck" CHECK("working_order_lines"."unit_precision" is null or "working_order_lines"."unit_precision" between 0 and 3),
 	CONSTRAINT "working_order_lines_quantity_ck" CHECK("working_order_lines"."quantity" <> 0),
 	CONSTRAINT "working_order_lines_price_quantity_ck" CHECK("working_order_lines"."price_quantity" > 0),
 	CONSTRAINT "working_order_lines_vat_class_ck" CHECK("working_order_lines"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_takeaway_vat_class_ck" CHECK("working_order_lines"."takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
-	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1)
+	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1),
+	CONSTRAINT "working_order_lines_hardware_unit_ck" CHECK("working_order_lines"."hardware_unit" is null or "working_order_lines"."hardware_unit" in ('kg','g','mg')),
+	CONSTRAINT "working_order_lines_offer_unit_precision_ck" CHECK("working_order_lines"."offer_unit_precision" between 0 and 3),
+	CONSTRAINT "working_order_lines_offer_vat_class_ck" CHECK("working_order_lines"."offer_vat_class" in ('general','reduced','super_reduced','zero')),
+	CONSTRAINT "working_order_lines_context_ck" CHECK(("working_order_lines"."menu_id" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."menu_name" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."offer_department_id" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."department_name" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."unit_id" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."sold_in_each" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."offer_unit_name" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."offer_unit_precision" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."offer_vat_class" is null) = ("working_order_lines"."menu_item_id" is null)
+        and ("working_order_lines"."offer_category_name" is null) = ("working_order_lines"."menu_item_id" is null))
 );
 --> statement-breakpoint
 CREATE INDEX `working_order_lines_group_idx` ON `working_order_lines` (`group_id`);--> statement-breakpoint
@@ -3231,6 +3267,25 @@ BEGIN
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      AND new.late_period_name IS old.late_period_name
+      AND new.late_confirmed_by IS old.late_confirmed_by
+      AND new.sent_nutrition IS old.sent_nutrition
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
     OR (
       exists (
@@ -3269,6 +3324,25 @@ BEGIN
       AND new.credited_to IS old.credited_to
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      AND new.late_period_name IS old.late_period_name
+      AND new.late_confirmed_by IS old.late_confirmed_by
+      AND new.sent_nutrition IS old.sent_nutrition
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
     OR (
       exists (
@@ -3308,6 +3382,25 @@ BEGIN
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      AND new.late_period_name IS old.late_period_name
+      AND new.late_confirmed_by IS old.late_confirmed_by
+      AND new.sent_nutrition IS old.sent_nutrition
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
   );
 END;

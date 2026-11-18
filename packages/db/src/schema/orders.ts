@@ -1,10 +1,11 @@
-import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
+import type { AllergenMap, OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
   enumType,
+  flag,
   id,
   json,
   label,
@@ -21,6 +22,8 @@ import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
+import { menuItems } from "./menu/menu.js";
+import { menuVersions } from "./menu/publication.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { originChecks, sourceColumn } from "./origin.js";
@@ -254,11 +257,33 @@ export const workingOrderLines = table(
     // The party's group the line is released with; an extras child carries its dish's. Null on a
     // bill with no party.
     groupId: id("group_id"),
-    // Whose sale the line counts as. A plain person id: no key yet.
+    // Whose sale the line counts as.
     creditedTo: id("credited_to"),
     // The unit price the line had when an adjustment first touched it, never changed after; null
     // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.
     listUnitPriceGross: money("list_unit_price_gross"),
+    menuItemId: id("menu_item_id"),
+    menuId: id("menu_id"),
+    menuName: label("menu_name"),
+    menuVersionId: id("menu_version_id"),
+    // The offer's original department can differ from the bill's after a move.
+    offerDepartmentId: id("offer_department_id"),
+    departmentName: label("department_name"),
+    unitId: id("unit_id"),
+    soldInEach: flag("sold_in_each"),
+    hardwareUnit: label("hardware_unit"),
+    allergens: json<AllergenMap>("allergens"),
+    diet: json<unknown>("diet"),
+    dietOverride: json<unknown>("diet_override"),
+    latePeriodName: label("late_period_name"),
+    lateConfirmedBy: id("late_confirmed_by"),
+    sentNutrition: json<{ allergens: AllergenMap | null; dietaryDeclarations: string[] }>(
+      "sent_nutrition",
+    ),
+    offerUnitName: json<Record<string, string>>("offer_unit_name"),
+    offerUnitPrecision: count("offer_unit_precision"),
+    offerVatClass: label("offer_vat_class"),
+    offerCategoryName: label("offer_category_name"),
   },
   (t) => [
     foreignKey({
@@ -311,5 +336,50 @@ export const workingOrderLines = table(
       sql`${t.takeawayVatClass} in ('general','reduced','super_reduced','zero')`,
     ),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
+    foreignKey({
+      columns: [t.menuItemId],
+      foreignColumns: [menuItems.id],
+      name: "working_order_lines_menu_item_fk",
+    }),
+    foreignKey({
+      columns: [t.menuVersionId],
+      foreignColumns: [menuVersions.id],
+      name: "working_order_lines_menu_version_fk",
+    }),
+    foreignKey({
+      columns: [t.lateConfirmedBy],
+      foreignColumns: [persons.id],
+      name: "working_order_lines_late_confirmed_by_fk",
+    }),
+    foreignKey({
+      columns: [t.creditedTo],
+      foreignColumns: [persons.id],
+      name: "working_order_lines_credited_to_fk",
+    }),
+    check(
+      "working_order_lines_hardware_unit_ck",
+      sql`${t.hardwareUnit} is null or ${t.hardwareUnit} in ('kg','g','mg')`,
+    ),
+    check(
+      "working_order_lines_offer_unit_precision_ck",
+      sql`${t.offerUnitPrecision} between 0 and 3`,
+    ),
+    check(
+      "working_order_lines_offer_vat_class_ck",
+      sql`${t.offerVatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
+    check(
+      "working_order_lines_context_ck",
+      sql`(${t.menuId} is null) = (${t.menuItemId} is null)
+        and (${t.menuName} is null) = (${t.menuItemId} is null)
+        and (${t.offerDepartmentId} is null) = (${t.menuItemId} is null)
+        and (${t.departmentName} is null) = (${t.menuItemId} is null)
+        and (${t.unitId} is null) = (${t.menuItemId} is null)
+        and (${t.soldInEach} is null) = (${t.menuItemId} is null)
+        and (${t.offerUnitName} is null) = (${t.menuItemId} is null)
+        and (${t.offerUnitPrecision} is null) = (${t.menuItemId} is null)
+        and (${t.offerVatClass} is null) = (${t.menuItemId} is null)
+        and (${t.offerCategoryName} is null) = (${t.menuItemId} is null)`,
+    ),
   ],
 );
