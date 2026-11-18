@@ -16,6 +16,7 @@ import {
   buildMenuDocuments,
   diffEntries,
   documentImages,
+  documentSetMenuOffers,
   MENU_DOCUMENT_FORMAT,
   menuDocumentHash,
   removedExtraOnlyProducts,
@@ -418,7 +419,11 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
   // credited to this menu in both is two includes' separate settings.
   if (a.change.kind === "section_changed" && a.change.source === "this_menu") return false;
   const fields = fieldsOf(a.change);
-  return fields === undefined || fields.some((field) => fieldsOf(b.change)!.includes(field));
+  if (fields === undefined) return true;
+  const otherFields = fieldsOf(b.change)!;
+  return fields.length === 0
+    ? otherFields.length === 0
+    : fields.some((field) => otherFields.includes(field));
 }
 
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
@@ -541,7 +546,10 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const unreviewed = new Map(mine.unreviewed.map((product) => [product.id, product]));
   const precisionWarnings: MenuPreview["warnings"] = [];
   const warned = new Set<string>();
-  for (const offer of Object.values(mine.document.offers))
+  for (const offer of [
+    ...Object.values(mine.document.offers),
+    ...documentSetMenuOffers(mine.document),
+  ])
     for (const list of offer.offeredModifiers) {
       if (list.kind !== "extras") continue;
       for (const item of list.items) {

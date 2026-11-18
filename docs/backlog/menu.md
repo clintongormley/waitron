@@ -989,11 +989,12 @@ Dishes and variants can have different rates from the set menu. Draft writes sti
 portion-only units and the surcharge limit. A dish can have its own course in the draft.
 Publishing or scheduling a full menu freezes each set menu it holds and refuses drafts with
 problems. Published copies protect their dishes and photos. Preview reports set-menu placements
-and edits. Live corrections reach copied dishes and modifiers. Extras usage and routing include
-set-menu dishes.
-The dashboard editor and placement controls, showing draft problems in the dashboard,
-serving the copies,
-till ordering and payment, bill documents, and the demo and guides remain open.
+and edits. Its existing allergen review and extras-portion warnings include set-menu offers.
+The live correction dialog starts from the full menu's own dishes and modifiers. Wording, VAT and
+modifier corrections also reach matching dishes and modifiers in the copies. A dish offered only
+by a set menu can be corrected through the API. Extras usage and routing include set-menu dishes.
+The dashboard editor and placement controls, the Preview editor link and draft problems on screen,
+serving the copies, till ordering and payment, bill documents, and the demo and guides remain open.
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

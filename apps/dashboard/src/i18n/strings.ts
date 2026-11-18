@@ -3740,6 +3740,7 @@ export const en = {
   "menu_preview.product_moved": "{name} moved from {from} to {to}",
   "menu_preview.price_changed": "{name} price changed from {from} to {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.set_menu_saved_again": "{name} was saved again",
   "menu_preview.extra_unit_details_changed": "{list}: {name} unit details changed",
   "menu_preview.extra_unit_changed":
     "{list}: {name} unit changed from {from} ({fromPrecision} decimal places) to {to} ({toPrecision} decimal places)",
@@ -8258,6 +8259,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.product_moved": "Se ha movido {name}: antes en {from}; ahora en {to}",
   "menu_preview.price_changed": "Ha cambiado el precio de {name} de {from} a {to}",
   "menu_preview.changed_fields": "{name}: {fields}",
+  "menu_preview.set_menu_saved_again": "Se ha vuelto a guardar {name}",
   "menu_preview.extra_unit_details_changed":
     "{list}: han cambiado los detalles de la unidad de {name}",
   "menu_preview.extra_unit_changed":

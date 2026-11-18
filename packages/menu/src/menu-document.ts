@@ -359,16 +359,28 @@ export async function buildMenuDocuments(
         omittedShortcuts.push({ ref });
       }
     }
+    const setMenuUnreviewed = Object.entries(setMenus).flatMap(([id, copy]) => {
+      const offeredIds = new Set(
+        Object.values(copy.offers).flatMap((offer) => [
+          offer.productId,
+          ...offer.variants.map((variant) => variant.id),
+        ]),
+      );
+      return menuRows.get(id)!.unreviewed.filter((product) => offeredIds.has(product.id));
+    });
     const built = {
       setMenuProblems,
-      unreviewed: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
-        ...(offer.allergens === null
-          ? [{ id: offer.productId, name: offer.name, parentName: null }]
-          : []),
-        ...offer.variants
-          .filter((variant) => variant.allergens === null)
-          .map((variant) => ({ id: variant.id, name: variant.name, parentName: offer.name })),
-      ]),
+      unreviewed: [
+        ...(offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
+          ...(offer.allergens === null
+            ? [{ id: offer.productId, name: offer.name, parentName: null }]
+            : []),
+          ...offer.variants
+            .filter((variant) => variant.allergens === null)
+            .map((variant) => ({ id: variant.id, name: variant.name, parentName: offer.name })),
+        ]),
+        ...setMenuUnreviewed,
+      ],
       rootSectionId: row.rootSectionId,
       clashes: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => clashesOf(offer.combined)),
       combined: new Map(
@@ -1173,7 +1185,7 @@ export function diffEntries(
     if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
     if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
     if (!same(was.offers, copy.offers) || !same(was.root, copy.root)) fields.push("dishes");
-    if (fields.length > 0)
+    if (fields.length > 0 || copy.changedAt !== was.changedAt)
       push({
         kind: "set_menu_changed",
         setMenu: { id, name: copy.name },

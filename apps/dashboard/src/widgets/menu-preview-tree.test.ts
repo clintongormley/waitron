@@ -552,7 +552,7 @@ it.each(
         theme,
         width,
         language: "en",
-        edit: "Edit Daily menu",
+        saved: "Special menu was saved again",
         source: "set menu",
         added: "Daily menu added under Counter drinks",
         removed: "Daily menu removed from Counter cold",
@@ -562,7 +562,7 @@ it.each(
         theme,
         width,
         language: "es-ES",
-        edit: "Editar Daily menu",
+        saved: "Se ha vuelto a guardar Special menu",
         source: "carta a precio fijo",
         added: "Se ha añadido Daily menu en Counter drinks",
         removed: "Se ha quitado Daily menu de Counter cold",
@@ -604,6 +604,14 @@ it.each(
       targets,
       alsoOn: ["Weekend"],
     },
+    {
+      id: "saved",
+      kind: "set_menu_changed",
+      setMenu: { id: "special", name: "Special menu" },
+      fields: [],
+      source: "set_menu",
+      targets,
+    },
   ]);
   const { el, host } = await mountWidget<MenuPreviewPanel>(
     "dashboard-menu-preview",
@@ -616,13 +624,32 @@ it.each(
   expect(row("copy")?.textContent).toContain(display.changed);
   expect(row("copy")?.textContent).toContain(display.source);
   expect(row("copy")?.textContent).toContain("Weekend");
-  const editor = row("copy")?.querySelector<HTMLAnchorElement>("a[data-edit-change]");
-  expect(editor?.textContent).toBe(display.edit);
-  expect(editor?.getAttribute("href")).toBe("/menus/menu/daily/view/set-menu");
+  expect(row("saved")?.textContent).toContain(display.saved);
+  expect(row("copy")?.querySelector("a[data-edit-change]")).toBeNull();
   expect(row("copy")?.querySelector("[data-undo-change]")).toBeNull();
   await expectNoA11yViolations(host);
   await page.screenshot({
     element: host,
     path: `__screenshots__/look/a1515-set-menu-changes-${language}-${theme}-${width}.png`,
   });
+});
+
+it("reveals the surviving list when a set-menu placement was removed", async () => {
+  const p = fixture([
+    {
+      id: "removed-set",
+      kind: "set_menu_removed",
+      setMenu: { id: "daily", name: "Daily menu" },
+      under: ["Counter drinks", "Counter cold"],
+      sectionIds: ["outer", "inner"],
+      source: "this_menu",
+      targets: { before: [{ kind: "list", sectionIds: ["outer", "inner"] }], after: [] },
+    },
+  ]);
+  const el = await mount(p);
+  const node = await tree(el);
+  await userEvent.click(link(el, "removed-set"));
+  await expect
+    .poll(() => rows(node).querySelector('[aria-current="true"]')?.textContent)
+    .toContain("Counter cold");
 });

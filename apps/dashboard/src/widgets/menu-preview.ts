@@ -603,10 +603,12 @@ export class MenuPreviewPanel extends LitElement {
           { name: change.setMenu.name },
         );
       case "set_menu_changed":
-        return fill("menu_preview.changed_fields", {
-          name: change.setMenu.name,
-          fields: change.fields.map((field) => t(SET_MENU_FIELDS[field])).join(", "),
-        });
+        return change.fields.length === 0
+          ? fill("menu_preview.set_menu_saved_again", { name: change.setMenu.name })
+          : fill("menu_preview.changed_fields", {
+              name: change.setMenu.name,
+              fields: change.fields.map((field) => t(SET_MENU_FIELDS[field])).join(", "),
+            });
       case "product_added":
         return this.#at(
           "menu_preview.product_added",
@@ -894,12 +896,6 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #renderEdit(change: MenuChange) {
-    if (change.kind === "set_menu_changed")
-      return html`<a
-        data-edit-change=${change.id}
-        href=${`/menus/menu/${encodeURIComponent(change.setMenu.id)}/view/set-menu`}
-        >${fill("menu_preview.edit_menu", { menu: change.setMenu.name })}</a
-      >`;
     const action = this.#actions.get(change.id);
     switch (action?.kind) {
       case "edit_product":

@@ -14,6 +14,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 import { assertOffPublishedMenus } from "./archive.js";
+import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import {
   buildMenuDocument,
@@ -24,11 +25,18 @@ import {
 import { patchLiveMenu, previewMenu, publishMenu, readLiveMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { menuChangeAction } from "./menu-undo.js";
-import { requireMenuRoot } from "./menu-structure.js";
-import { createMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
+import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
+import { createMenu, updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { addMember, createSectionIn, removeMember } from "./sections.js";
-import { addSetMenuDishes, saveSetMenuDishCourse, saveSetMenuVariantChoices } from "./set-menus.js";
+import { addMember, createSectionIn, moveMember, removeMember } from "./sections.js";
+import {
+  addSetMenuDishes,
+  saveSetMenuDishCourse,
+  saveSetMenuLines,
+  saveSetMenuVariantChoices,
+} from "./set-menus.js";
+
+import { createUnit, updateUnit } from "./units.js";
 
 const suite = useMenuDb();
 const app = <T>(operation: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, operation);
@@ -139,6 +147,12 @@ beforeEach(async () => {
 });
 
 const place = () => app((tx) => addMember(tx, f.lunchRoot, f.dailyRef));
+const placeInNewMenu = (name: string) =>
+  app(async (tx) => {
+    const menu = await createMenu(tx, { name });
+    await addMember(tx, await requireMenuRoot(tx, menu.id), f.dailyRef);
+    return menu.id;
+  });
 const build = () => app((tx) => buildMenuDocument(tx, f.lunch));
 const live = () => app((tx) => readLiveMenu(tx, f.lunch));
 const publish = (menuId: string = f.lunch) =>
@@ -533,11 +547,7 @@ it("names each placement or removal and its list in Preview without a copy edit"
 
 it("shows one surcharge change with the other published menus and no undo", async () => {
   await place();
-  const weekend = await app(async (tx) => {
-    const menu = await createMenu(tx, { name: "Weekend" });
-    await addMember(tx, await requireMenuRoot(tx, menu.id), f.dailyRef);
-    return menu.id;
-  });
+  const weekend = await placeInNewMenu("Weekend");
   await publish();
   await publish(weekend);
   await app((tx) => updateMenuItem(tx, f.daily, f.sirloinItem, { grossPrice: "6.00" }));
@@ -568,7 +578,7 @@ it.each([
   await place();
   await publish();
   await app((tx) => updateMenuDetails(tx, f.daily, patch));
-  expect((await preview()).changes.map(({ kind, ...change }) => ({ kind, ...change }))).toEqual([
+  expect((await preview()).changes).toEqual([
     expect.objectContaining({ kind: "set_menu_changed", fields: [field] }),
   ]);
 });
@@ -713,4 +723,115 @@ it("corrects a matching live variant without replacing its set-menu surcharge", 
   expect((await fromLive())!.offers[f.wineItem]!.variants).toEqual([
     expect.objectContaining({ id: f.glass, name: "Small glass", unitPrice: "1.50" }),
   ]);
+});
+
+it("lists an inclusion-line count edit without listing a dish edit", async () => {
+  await place();
+  await publish();
+  await app((tx) =>
+    saveSetMenuLines(
+      tx,
+      f.daily,
+      f.lines.map(({ count, courseIds }, index) => ({
+        count: index === 1 ? 2 : count,
+        courseIds,
+      })),
+    ),
+  );
+  expect((await preview()).changes).toEqual([
+    expect.objectContaining({ kind: "set_menu_changed", fields: ["lines"] }),
+  ]);
+});
+
+it("lists reordering the same dishes in a set menu", async () => {
+  await place();
+  await publish();
+  await app(async (tx) => {
+    const { rootSectionId, nodes } = await readMenuStructure(tx, f.daily);
+    await moveMember(tx, rootSectionId, nodes[0]!.memberId, 2);
+  });
+  expect((await preview()).changes).toEqual([
+    expect.objectContaining({ kind: "set_menu_changed", fields: ["dishes"] }),
+  ]);
+});
+
+it("lists only the other menus where the same draft field changed", async () => {
+  await place();
+  const weekend = await placeInNewMenu("Weekend");
+  await publish();
+  await app((tx) =>
+    updateMenuDetails(tx, f.daily, { setPrice: "15.00", names: { en: "Set lunch" } }),
+  );
+  await publish(weekend);
+  await app((tx) => updateMenuDetails(tx, f.daily, { names: { en: "Daily menu" } }));
+  const [change] = (await preview()).changes;
+  expect(change).toMatchObject({ kind: "set_menu_changed", fields: ["price"] });
+  expect(change).not.toHaveProperty("alsoOn");
+  expect((await app((tx) => previewMenu(tx, weekend))).changes).toEqual([
+    expect.objectContaining({ kind: "set_menu_changed", fields: ["names"] }),
+  ]);
+});
+
+it("lists a save that returns a shared set menu to its published amounts", async () => {
+  const before = new Date("2026-11-17T11:00:00.000Z");
+  await suite.db.update(menus).set({ updatedAt: before }).where(eq(menus.id, f.daily));
+  await place();
+  const weekend = await placeInNewMenu("Weekend");
+  await publish();
+  await publish(weekend);
+  await app((tx) => updateMenuItem(tx, f.daily, f.sirloinItem, { grossPrice: "6.00" }));
+  await app((tx) => updateMenuItem(tx, f.daily, f.sirloinItem, { grossPrice: "5.00" }));
+  const result = await preview();
+  expect(result.status.state).toBe("changed");
+  expect(result.changes).toEqual([
+    expect.objectContaining({
+      kind: "set_menu_changed",
+      setMenu: { id: f.daily, name: "Daily menu" },
+      fields: [],
+      alsoOn: ["Weekend"],
+    }),
+  ]);
+});
+
+it("warns about an unreviewed set-menu-only dish and names a shared dish once", async () => {
+  await place();
+  const warning = (await preview()).warnings.find(({ kind }) => kind === "allergens_unreviewed");
+  if (warning?.kind !== "allergens_unreviewed") throw new Error("Fixture has no allergen warning");
+  expect(warning.products).toContainEqual({ id: f.soup, name: "Soup", parentName: null });
+  expect(warning.products.filter(({ id }) => id === f.sirloin)).toHaveLength(1);
+  expect(warning.products.map(({ id }) => id)).not.toContain(f.bottle);
+});
+
+it("warns when an extra offered only by a set-menu dish needs more unit precision", async () => {
+  await place();
+  const unitId = await app(async (tx) => {
+    const unit = await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
+      "en",
+    );
+    await updateProduct(tx, f.bravas, { unitId: unit.id });
+    const list = await createExtraList(
+      tx,
+      { name: "Sides", items: [{ productId: f.bravas, portion: "0.055" }] },
+      "en",
+    );
+    await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+    return unit.id;
+  });
+  await app((tx) => updateUnit(tx, unitId, { precision: 2 }, "en"));
+  expect((await preview()).warnings).toContainEqual({
+    kind: "extra_portion_precision",
+    listName: "Sides",
+    name: "Bravas",
+    portion: "0.055",
+    abbreviation: { en: "kg" },
+    precision: 2,
+  });
 });
