@@ -22,6 +22,8 @@ Si puedes elegir **Waitron Cloud**, selecciona **Todos los días** para que Clou
 
 Con las copias activadas, usa **Cambiar el destino o la programación** y **Guardar cambios** para ajustarlas. Revisa la última copia de cada destino y atiende los fallos que muestre.
 
+Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación** y elige **Quitar Waitron Cloud**. Mantén una carpeta o un bucket seleccionado y guarda los cambios.
+
 ## Guarda tus claves {#keys}
 
 Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de recuperación en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.

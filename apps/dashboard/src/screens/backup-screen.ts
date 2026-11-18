@@ -393,7 +393,7 @@ export class BackupScreen extends LitElement {
 
   #fields(): FormFields {
     return {
-      cloudOn: this.#effectiveCloud,
+      cloudOn: this.cloudOn && (this.#cloudAvailable || this.status?.cloud === true),
       folderOn: this.folderOn,
       bucket: this.bucket,
       folder: this.folder,
@@ -649,12 +649,8 @@ export class BackupScreen extends LitElement {
     return this.status?.cloudBackups === "available";
   }
 
-  get #effectiveCloud(): boolean {
-    return this.#cloudAvailable ? this.cloudOn : (this.status?.cloud ?? false);
-  }
-
   get #nothingChosen(): boolean {
-    return !this.#effectiveCloud && !this.folderOn && this.bucket === "none";
+    return !(this.#cloudAvailable && this.cloudOn) && !this.folderOn && this.bucket === "none";
   }
 
   get #destinationInvalid(): boolean {
@@ -789,7 +785,7 @@ export class BackupScreen extends LitElement {
   #applyBody(recoveryKey?: string): BackupApplyBody {
     return {
       destinations: destinationsBody(this.folderOn, this.folder, this.bucket, this.custom),
-      ...(this.#cloudAvailable && this.cloudOn !== (this.status?.cloud ?? false)
+      ...((this.#cloudAvailable || !this.cloudOn) && this.cloudOn !== (this.status?.cloud ?? false)
         ? { cloud: this.cloudOn }
         : {}),
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
@@ -1633,7 +1629,20 @@ export class BackupScreen extends LitElement {
               ></wt-switch>
               ${cloudMessage ? html`<div class="error">${cloudMessage}</div>` : nothing}
             </div>`
-          : nothing
+          : this.status?.cloud && this.cloudOn
+            ? html`<wt-button
+                data-test="remove-cloud"
+                variant="secondary"
+                @click=${() => {
+                  this.cloudOn = false;
+                  this.cloudRefused = null;
+                  this.renderRoot
+                    .querySelector<HTMLElement>("[data-test=archive-destination]")
+                    ?.focus();
+                }}
+                >${t("backup.destination.remove_cloud")}</wt-button
+              >`
+            : nothing
       }
     `;
   }

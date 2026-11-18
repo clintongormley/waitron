@@ -1453,10 +1453,33 @@ describe("backup-screen failures and edit-mode prefill", () => {
     expect(q(el, "[data-destination=cloud]")?.textContent).toContain(
       codeMessage("cloud.unavailable"),
     );
+    const folder = page.getByText(t("backup.destination.choice_local"), { exact: true });
+    await folder.click();
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    await folder.click();
     await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     expect(vi.mocked(api.applyBackup).mock.calls[0]![0]).not.toHaveProperty("cloud");
+  });
+
+  it("removes saved Cloud while unavailable and saves a weekday schedule", async () => {
+    const { el, api } = await enterEdit({ ...ENABLED, cloud: true, cloudBackups: "unavailable" });
+    await vi.waitFor(() => expect(q(el, "[data-test=remove-cloud]")).not.toBeNull());
+    q(el, "[data-test=remove-cloud]")!.click();
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(api.applyBackup).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cloud: false,
+          schedule: { kind: "wall-clock", days: [1, 2, 3, 4, 5], at: "auto" },
+        }),
+      ),
+    );
   });
 
   it("places the daily refusal under the schedule and fixes the draft when asked", async () => {

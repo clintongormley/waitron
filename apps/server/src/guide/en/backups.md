@@ -22,6 +22,8 @@ If you can choose **Waitron Cloud**, select **Every day** so Cloud can receive b
 
 Once backups are on, use **Change destination or schedule** and **Save changes** to adjust them. Check the last backup shown for each destination and act on any failure shown there.
 
+If Cloud becomes unavailable, open **Change destination or schedule** and choose **Remove Waitron Cloud**. Keep a folder or bucket selected and save your changes.
+
 ## Keep your keys {#keys}
 
 Use **Copy** or **Download key file** to keep the recovery key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.

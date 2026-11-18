@@ -1826,6 +1826,14 @@ describe("backup admin routes", () => {
         200,
       );
       expect(await readSealed()).toMatchObject({ cloud: true, destinations });
+      const responseAfterRemoval = await post("/api/backup/apply", {
+        ...archiveSettings,
+        destinations,
+        cloud: false,
+        schedule: weekly,
+      });
+      expect(responseAfterRemoval.status).toBe(200);
+      expect(await readSealed()).toMatchObject({ cloud: false, destinations, schedule: weekly });
     });
 
     const probeCalls = () => {
