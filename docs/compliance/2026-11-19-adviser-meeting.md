@@ -16,8 +16,8 @@ English beside Spanish; this header and everything after Part 2 are not in it.
   new rule. The set-menu plans assume one rate per menu and refuse a dish at another rate
   (`docs/superpowers/plans/2026-11-18-a1515-set-menu-dashboard.md`, Task 3 of
   `docs/superpowers/plans/2026-11-18-a1515-set-menu-bill.md`); revisit them with the answer.
-- Item d) of the declaration lists full invoices as well as simplified ones (question 9).
-  `packages/fiscal-verifactu/declarations/functions.md` still names simplified invoices only.
+- Item d) of the declaration lists full invoices as well as simplified ones (question 9), as
+  `packages/fiscal-verifactu/declarations/functions.md` now does.
 
 **How the quotations were checked.** Every quotation of a law, ruling or FAQ comes from the earlier
 version of this sheet (commit `fccbd09f1a`), whose quotations were matched by script against the

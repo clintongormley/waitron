@@ -17,8 +17,9 @@ Both commands refuse today, on purpose. The declaration's template,
 "release blocker" line, and the package command both release commands call refuses while one is
 present, answering `declaration.release_blocked {"count":1}`.
 
-The line is for the asesor's question Q53. Item d) of the declaration, which lists what the system
-is made of, is still the draft sent to the asesor (the tax adviser) as Q53. Whoever records the
+The line is for question 9 of the [19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md) (Q53
+before it). Item d) of the declaration, which lists what the system is made of, is still an earlier
+draft of the one put to the asesor (the tax adviser) in that question. Whoever records the
 asesor's answer replaces item d) with the answered wording, keeping the cloud-server phrase and the
 spare-server sentence only if the version can do them, and deletes the line.
 
