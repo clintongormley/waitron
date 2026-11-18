@@ -929,7 +929,9 @@ not refused because a business-day start change is waiting: after writing, it ch
 hours as written against each waiting start and refuses `hours.clock_change_conflict` on a clash
 (`assertWaitingChangeFits`, `packages/venue-service/src/business-day-schedule.ts`); cases "refuses
 adding a season while a stored range clashes, since the new season copies it" and "adds a season
-while a change waits when no stored range clashes" in `business-day-schedule.test.ts`. It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
+while a change waits when no stored range clashes" in `business-day-schedule.test.ts`, and "refuses
+deleting a season while another season's hours cross a waiting start, and deletes the one holding
+them" in `seasons.test.ts`. It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
 hold, so a swap of two names or two starts never meets the unique indexes; ids are kept, so each
 season's weeks stay with it. A new season copies the weeks of the season that held its start
 before the call, read before any delete. It answers the venue's seasons by start.

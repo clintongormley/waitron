@@ -585,7 +585,11 @@ describe("every time writer stays open while a change waits", () => {
 });
 
 describe("a waiting change checks the hours written while it waits", () => {
-  async function waiting(_v: Awaited<ReturnType<typeof fixture>>, dayCutover = "03:00") {
+  async function waiting(
+    _v: Awaited<ReturnType<typeof fixture>>,
+    dayCutover = "03:00",
+    later?: { effectiveBusinessDay: string; dayCutover: string },
+  ) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -595,6 +599,11 @@ describe("a waiting change checks the hours written while it waits", () => {
         effectiveBusinessDay: E,
         dayCutover: `${dayCutover}:00`,
       });
+      if (later !== undefined)
+        await tx.insert(dayCutoverChanges).values({
+          effectiveBusinessDay: later.effectiveBusinessDay,
+          dayCutover: `${later.dayCutover}:00`,
+        });
     });
   }
   const weekOf = (
@@ -664,6 +673,62 @@ describe("a waiting change checks the hours written while it waits", () => {
     await waiting(v);
     await expect(writeWeek(v, 6, [range("21:00", "02:45")])).resolves.toBeUndefined();
     expect(await stored(v)).toEqual(["6 21:00:00-02:45:00"]);
+  });
+  it("accepts an unchanged week resubmitted while a range in it clashes with the waiting start", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] }),
+    );
+    await waiting(v);
+    expect(await stored(v)).toEqual(["6 21:00:00-04:30:00"]);
+    await expect(writeWeek(v, 6, [range("21:00", "04:30")])).resolves.toBeUndefined();
+    expect(await stored(v)).toEqual(["6 21:00:00-04:30:00"]);
+  });
+  it("refuses a whole-day range while a change waits, naming it as all day, and writes nothing", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(writeWeek(v, 3, [range("05:00", "05:00")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            weekday: 3,
+            startsAt: "05:00",
+            endsAt: "05:00",
+            reason: "all_day",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+  });
+  it("with two changes waiting, refuses a week crossing only the second, naming it, and stores one fitting both", async () => {
+    const v = await fixture([]);
+    await waiting(v, "03:00", { effectiveBusinessDay: "2026-11-11", dayCutover: "01:00" });
+    await expect(writeWeek(v, 6, [range("21:00", "02:30")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "01:00",
+        timeZone: "Europe/Madrid",
+        startsAt: "2026-11-11T00:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            weekday: 6,
+            startsAt: "21:00",
+            endsAt: "02:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+    await expect(writeWeek(v, 6, [range("21:00", "00:30")])).resolves.toBeUndefined();
+    expect(await stored(v)).toEqual(["6 21:00:00-00:30:00"]);
   });
   it("accepts a period rename beside a stored range that clashes with the waiting start", async () => {
     const v = await fixture([]);
