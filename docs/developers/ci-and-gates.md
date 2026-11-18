@@ -2998,8 +2998,8 @@ jq -sS --rawfile paths "$dir/server-paths" '
 ' "$dir/prior.json" "$dir/measured.json" > "$dir/refreshed.json"
 ```
 
-The bench's `scripts/bench/build-year.test.ts` gets a 37.1-second weight from 35.1, 81.5 and
-37.1 seconds in those nightlies. A replay using four workers and each held-out night's
+The suite `apps/server/scripts/bench/build-year.test.ts` gets a 37.1-second weight from
+35.1, 81.5 and 37.1 seconds in those nightlies. A replay using four workers and each held-out night's
 largest observed setup and teardown overhead put the slowest shard at 185 to 206 seconds
 across the three samples. The cancelled PR shard reported 286.0 seconds for the suite, and
 the nearby passing job reported 43.3. Both used the same layout with coverage off.
