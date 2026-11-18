@@ -834,6 +834,42 @@ describe("GET /api/device/join/status", () => {
     expect((await me.json()) as { deviceId: string }).toMatchObject({ deviceId: joinId });
   });
 
+  it("a disabled device that asks again reaches no device route until its ask is accepted", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    mode.open();
+    const app = mountApp(venue.cfg, undefined, mode);
+    const first = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
+    const { joinId } = (await first.json()) as { joinId: string };
+    const profileId = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) => {
+      return acceptDeviceJoinRequest(tx, venue.cfg, joinId, { label: "Bar till", profileId });
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, joinId));
+
+    const again = await send(app, "POST", "/api/device/join", {
+      body: { name: "Bar till" },
+      cookie: deviceCookieFrom(first),
+    });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { joinId: string }).joinId).toBe(joinId);
+    const jar = deviceCookieFrom(again);
+    expect(jar).not.toBe(deviceCookieFrom(first));
+
+    const waiting = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(waiting.status).toBe(401);
+    expect(((await waiting.json()) as { error: { code: string } }).error.code).toBe(
+      "device.unauthorized",
+    );
+
+    await withTransaction(suite.db, async (tx) => {
+      return acceptDeviceJoinRequest(tx, venue.cfg, joinId, { label: "Bar till", profileId });
+    });
+    const me = await send(app, "GET", "/api/device/me", { cookie: jar });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ deviceId: joinId });
+  });
+
   it("is not_approved once the window has shut", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();

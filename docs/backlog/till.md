@@ -480,10 +480,8 @@ adds the separate durable post-invoice payment-refund path.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
 
-Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) Someone holding a copy
-of a disabled device's current cookie can ask first and so replace that cookie; outside dev mode
-they still cannot get in without a manager tapping the number. (2) If an ask's response is lost
-after the server saved it, the browser's next ask joins as a new device and the old row stays
+Left OPEN by W105b (#1248, a disabled device coming back as itself): (2) If an ask's response is
+lost after the server saved it, the browser's next ask joins as a new device and the old row stays
 disabled. (4) An ask that replaces
 a waiting one always gets a later `createdAt`, but an ask made when no ask is waiting under its
 id, whatever ended the previous one (accepting it included, once the device is later disabled),
@@ -1528,8 +1526,9 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 1 entry, size S.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
-  - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
-    disabled device's current cookie can ask first and so replace that cookie.
+  - W105b (#1248, a disabled device coming back as itself): an ask whose response is lost comes
+    back as a new device, and two asks under one id are not forced to differ in time when no ask is
+    waiting.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
@@ -1588,6 +1587,24 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   owner may overrule).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
   field as optional, as #1235's review suggested: no screen sends a partial edit, so that would add
   a path nothing uses.
+
+- **A copy of a disabled device's cookie can still ask to come back first, and so make the real
+  device's cookie stop working (watcher, 2026-11-18, not the owner; the owner may overrule).** Each
+  ask to come back gives the asking browser a new cookie and makes the old one worthless
+  (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next ask joins
+  as a new device, and a manager gives it its name and profile again. It stays because a page
+  cannot read the cookie (`httpOnly`, `sameSite: "Strict"`, `setDeviceCookie` in
+  `apps/server/src/device-session.ts`): a copy needs hands on the tablet's browser or a compromised
+  tablet, and that person could already act as the device while it was enabled. Keeping the old
+  cookie valid as a second lasting proof would add a credential to guard. Outside development mode
+  an ask only waits: a route that requires the device refuses a disabled one (`requireDeviceProof`,
+  through `readDeviceProof`, reads only `active` devices, `apps/server/src/device-session.ts:197`) until a manager with hardware
+  administration checks the number on the device's screen and accepts
+  (`POST /management-api/device-join-requests/:id/accept`, `apps/server/src/join-api.ts:334`).
+  Pinned by "a disabled device that asks again reaches no device route until its ask is accepted"
+  in `apps/server/src/device-api.test.ts`, for the device's own read (`GET /api/device/me`). In
+  development mode (`devMode`) an ask is accepted at once (the `auto` branch of
+  `POST /api/device/join` in `apps/server/src/device-api.ts`).
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,
