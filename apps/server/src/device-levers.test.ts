@@ -4,11 +4,11 @@ import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   products,
   serviceCommands,
@@ -168,8 +168,8 @@ async function groupRow(groupId: string) {
 async function firedEvent(groupId: string) {
   const [row] = await suite.db
     .select()
-    .from(orderGroupEvents)
-    .where(and(eq(orderGroupEvents.groupId, groupId), eq(orderGroupEvents.kind, "fired")));
+    .from(orderEvents)
+    .where(and(eq(orderEvents.groupId, groupId), eq(orderEvents.kind, "group.fired")));
   return row;
 }
 
@@ -198,7 +198,10 @@ describe("waiter cooking authority", () => {
       const cookie = await tillCookie(f);
       const snapshot = async () => ({
         groups: await suite.db.select().from(orderGroups),
-        events: await suite.db.select().from(orderGroupEvents),
+        events: await suite.db
+          .select()
+          .from(orderEvents)
+          .where(sql`${orderEvents.kind} like 'group.%'`),
         commands: await suite.db.select().from(serviceCommands),
         items: await suite.db.select().from(ticketItems),
         lines: await suite.db.select().from(workingOrderLines),

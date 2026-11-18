@@ -3,9 +3,9 @@ import { oneBill, observedRelocationSender } from "./testing/table-action-fixtur
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   parties,
   partyTables,
@@ -140,7 +140,10 @@ async function state() {
     orders: await suite.db.select().from(workingOrders),
     lines: await suite.db.select().from(workingOrderLines),
     groups: await suite.db.select().from(orderGroups),
-    events: await suite.db.select().from(orderGroupEvents),
+    events: await suite.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'group.%'`),
     parties: await suite.db.select().from(parties),
     tables: await suite.db.select().from(partyTables),
     facts: await suite.db.select().from(staffActivity),

@@ -232,7 +232,7 @@ function movedEvents(portionIds: readonly string[]) {
       to_order_id: string | null;
       actor_id: string | null;
     }>(
-      sql`select line_id, detail, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
+      sql`select line_id, detail, kind, from_order_id, to_order_id, actor_id from order_events where kind like 'dish.%' order by rowid`,
     )
     .filter((event) => portionIds.includes(event.line_id))
     .map(({ detail, ...event }) => ({ ...event, detail: JSON.parse(detail) }));
@@ -361,7 +361,7 @@ describe("A803 move dishes: the moves that succeed", () => {
       {
         line_id: binding!.portion,
         detail: { cohortId: binding!.cohortId, ordinal: binding!.ordinal },
-        kind: "moved",
+        kind: "dish.moved",
         from_order_id: p.bill1,
         to_order_id: p.bill2,
         actor_id: OPERATOR,

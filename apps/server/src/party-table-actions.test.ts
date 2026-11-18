@@ -12,7 +12,7 @@ import {
   captureError,
   diningTables,
   kitchenStations,
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   partyTables,
   printJobs,
@@ -1623,9 +1623,9 @@ describe("split a table", () => {
     expect(await groupOf(source)).toMatchObject({ partyId: anna.partyId, state: "removed" });
     const removed = await act((tx) =>
       tx
-        .select({ partyId: orderGroupEvents.partyId, actorId: orderGroupEvents.actorId })
-        .from(orderGroupEvents)
-        .where(and(eq(orderGroupEvents.groupId, source), eq(orderGroupEvents.kind, "removed"))),
+        .select({ partyId: orderEvents.partyId, actorId: orderEvents.actorId })
+        .from(orderEvents)
+        .where(and(eq(orderEvents.groupId, source), eq(orderEvents.kind, "group.removed"))),
     );
     expect(removed).toEqual([{ partyId: anna.partyId, actorId: OPERATOR }]);
     expect(await flanTicket()).toEqual(ticketBefore);
@@ -2370,12 +2370,12 @@ describe("A803 split", () => {
     expect((await lineRows(b3)).map((line) => line.groupId)).toEqual([copy]);
     const moved = await act((tx) =>
       tx
-        .select({ groupId: orderGroupEvents.groupId, partyId: orderGroupEvents.partyId })
-        .from(orderGroupEvents)
+        .select({ groupId: orderEvents.groupId, partyId: orderEvents.partyId })
+        .from(orderEvents)
         .where(
           and(
-            eq(orderGroupEvents.kind, "lines_moved"),
-            sql`${orderGroupEvents.groupId} in (${source}, ${copy})`,
+            eq(orderEvents.kind, "group.lines_moved"),
+            sql`${orderEvents.groupId} in (${source}, ${copy})`,
           ),
         ),
     );
@@ -2850,7 +2850,7 @@ describe("A803 split", () => {
       "working_order_lines",
       "ticket_items",
       "order_groups",
-      "order_group_events",
+      "order_events",
       "order_drafts",
       "order_draft_lines",
       "party_allergy_guests",
@@ -3250,7 +3250,7 @@ describe("A803 split", () => {
         "working_order_lines",
         "ticket_items",
         "order_groups",
-        "order_group_events",
+        "order_events",
         "kitchen_notices",
       ]);
       const firedAt = async (billId: string, lineId: string) =>

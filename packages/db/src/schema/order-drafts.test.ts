@@ -10,7 +10,8 @@ import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
-import { orderDraftEvents, orderDraftLines, orderDrafts } from "./order-drafts.js";
+import { orderDraftLines, orderDrafts } from "./order-drafts.js";
+import { orderEvents } from "./order-events.js";
 import { orderGroups } from "./order-groups.js";
 import { parties } from "./parties.js";
 
@@ -21,7 +22,7 @@ const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
 
 const OPEN_DRAFT_KEY = { table: "order_drafts", columns: ["bill_id"] };
 
-describe("order_drafts, order_draft_lines and order_draft_events", () => {
+describe("order_drafts, order_draft_lines and order_events", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -29,6 +30,7 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
 
   beforeAll(async () => {
     await seedPerson(suite.db, { id: ALEX });
+    await seedPerson(suite.db, { id: SAM, displayName: "Sam" });
     await seedVenue(suite.db, {
       name: "Dining room",
       invoiceLocales: ["en"],
@@ -381,21 +383,21 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
     });
   });
 
-  describe("order_draft_events", () => {
+  describe("order_events", () => {
     async function event(): Promise<string> {
       const draftId = await draft({ partyId: await party(), ownerId: ALEX });
       return inTx(async (tx) => {
         const [row] = await tx
-          .insert(orderDraftEvents)
+          .insert(orderEvents)
           .values({
             draftId,
-            kind: "taken_over",
+            kind: "draft.taken_over",
             fromPerson: ALEX,
             toPerson: SAM,
             actorId: SAM,
             detail: {},
           })
-          .returning({ id: orderDraftEvents.id });
+          .returning({ id: orderEvents.id });
         return row!.id;
       });
     }
@@ -404,30 +406,23 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
       const id = await event();
       const error = await captureError(() =>
         inTx(async (tx) => {
-          await tx
-            .update(orderDraftEvents)
-            .set({ toPerson: ALEX })
-            .where(eq(orderDraftEvents.id, id));
+          await tx.update(orderEvents).set({ toPerson: ALEX }).where(eq(orderEvents.id, id));
         }),
       );
-      expect(triggerRaised(error, "order_draft_events is append-only")).toBe(true);
-      const [row] = await inTx((tx) =>
-        tx.select().from(orderDraftEvents).where(eq(orderDraftEvents.id, id)),
-      );
-      expect(row).toMatchObject({ kind: "taken_over", fromPerson: ALEX, toPerson: SAM });
+      expect(triggerRaised(error, "order_events is append-only")).toBe(true);
+      const [row] = await inTx((tx) => tx.select().from(orderEvents).where(eq(orderEvents.id, id)));
+      expect(row).toMatchObject({ kind: "draft.taken_over", fromPerson: ALEX, toPerson: SAM });
     });
 
     it("refuses a DELETE and leaves the row in place", async () => {
       const id = await event();
       const error = await captureError(() =>
         inTx(async (tx) => {
-          await tx.delete(orderDraftEvents).where(eq(orderDraftEvents.id, id));
+          await tx.delete(orderEvents).where(eq(orderEvents.id, id));
         }),
       );
-      expect(triggerRaised(error, "order_draft_events is append-only")).toBe(true);
-      const rows = await inTx((tx) =>
-        tx.select().from(orderDraftEvents).where(eq(orderDraftEvents.id, id)),
-      );
+      expect(triggerRaised(error, "order_events is append-only")).toBe(true);
+      const rows = await inTx((tx) => tx.select().from(orderEvents).where(eq(orderEvents.id, id)));
       expect(rows).toHaveLength(1);
     });
 
@@ -435,17 +430,17 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
       const kindError = await captureError(() =>
         inTx(async (tx) => {
           await tx.execute(sql`
-            insert into order_draft_events (id, draft_id, kind, to_person, actor_id, detail, created_at)
+            insert into order_events (id, draft_id, kind, to_person, actor_id, detail, at)
             values (${MISSING}, ${MISSING}, 'renamed', ${ALEX}, ${ALEX}, '{}', ${new Date().toISOString()})
           `);
         }),
       );
-      expect(checkFailed(kindError, "order_draft_events_kind_ck")).toBe(true);
+      expect(checkFailed(kindError, "order_events_kind_ck")).toBe(true);
       const keyError = await captureError(() =>
         inTx((tx) =>
-          tx.insert(orderDraftEvents).values({
+          tx.insert(orderEvents).values({
             draftId: MISSING,
-            kind: "created",
+            kind: "draft.created",
             toPerson: ALEX,
             actorId: ALEX,
             detail: {},

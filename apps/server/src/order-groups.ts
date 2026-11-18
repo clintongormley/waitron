@@ -37,7 +37,7 @@ import {
   kitchenStations,
   lineServiceCancellations,
   nowIso,
-  orderGroupEvents,
+  orderEvents,
   orderGroupHoldStations,
   orderGroups,
   orderDraftLines,
@@ -465,7 +465,7 @@ export async function placeGroups(
       {
         partyId,
         groupId,
-        kind: group.joinGroupId === undefined ? "submitted" : "joined",
+        kind: group.joinGroupId === undefined ? "group.submitted" : "group.joined",
         actorId: operatorId,
         detail: { workingOrderId: tabId, release: group.release },
       },
@@ -642,7 +642,7 @@ export async function fireHeldLine(
         {
           partyId,
           groupId,
-          kind: "fired",
+          kind: "group.fired",
           actorId: args.operatorId,
           detail: { lineId, from: source },
         },
@@ -945,7 +945,7 @@ async function copyGroups(
       {
         partyId: fromPartyId,
         groupId: sourceId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: operatorId,
         detail: { lineIds: source.lineIds, to: copyId },
       },
@@ -956,7 +956,7 @@ async function copyGroups(
       {
         partyId: toPartyId,
         groupId: copyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: operatorId,
         detail: { lineIds: source.lineIds, from: sourceId, arrived: true },
       },
@@ -1152,7 +1152,7 @@ async function releaseGroup(
     {
       partyId,
       groupId,
-      kind: "fired",
+      kind: "group.fired",
       detail,
       ...("deviceId" in firer ? { actorDeviceId: firer.deviceId } : { actorId: firer.personId }),
     },
@@ -1211,7 +1211,7 @@ export async function reorderHeldGroups(
         {
           partyId,
           groupId: null,
-          kind: "reordered",
+          kind: "group.reordered",
           actorId: args.operatorId,
           detail: { heldGroupIds },
         },
@@ -1463,7 +1463,7 @@ export async function moveLinesToGroup(
         {
           partyId,
           groupId: targetId,
-          kind: "lines_moved",
+          kind: "group.lines_moved",
           actorId: args.operatorId,
           detail: { moves, from: [...sources] },
         },
@@ -1527,7 +1527,7 @@ export async function splitHeldLineIntoUnits(
         {
           partyId,
           groupId: line.groupId!,
-          kind: "lines_moved",
+          kind: "group.lines_moved",
           actorId: args.operatorId,
           detail: { splitLineId: lineId },
         },
@@ -1663,7 +1663,7 @@ export async function removeEmptiedHeldGroups(
     if (!emptied.has(groupId)) continue;
     await recordGroupEvent(
       tx,
-      { partyId, groupId, kind: "removed", actorId, detail: {} },
+      { partyId, groupId, kind: "group.removed", actorId, detail: {} },
       attendance,
     );
   }
@@ -2776,13 +2776,13 @@ async function currentRevision(tx: Transaction, partyId: string): Promise<number
 
 export async function recordGroupEvent(
   tx: Transaction,
-  values: typeof orderGroupEvents.$inferInsert,
+  values: typeof orderEvents.$inferInsert & {
+    kind: Extract<(typeof orderEvents.$inferInsert)["kind"], `group.${string}`>;
+    partyId: string;
+  },
   attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
-  const [event] = await tx
-    .insert(orderGroupEvents)
-    .values(values)
-    .returning({ id: orderGroupEvents.id });
+  const [event] = await tx.insert(orderEvents).values(values).returning({ id: orderEvents.id });
   if (attendance === undefined || !values.actorId) return;
   const [order] = await tx
     .select({ id: workingOrders.id })
@@ -2937,7 +2937,7 @@ async function groupArrived(
     {
       partyId,
       groupId,
-      kind: "lines_moved",
+      kind: "group.lines_moved",
       actorId: operatorId,
       detail: { workingOrderId: billId, arrived: true },
     },

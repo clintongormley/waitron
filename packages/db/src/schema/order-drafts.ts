@@ -112,34 +112,3 @@ export const orderDraftLines = table(
     check("order_draft_lines_after_ck", sql`${t.afterGroupId} is null or ${t.slot} >= 1`),
   ],
 );
-
-export const orderDraftEventKind = enumType(["created", "taken_over", "submitted", "discarded"]);
-
-/**
- * Who owned a draft, and what became of it. Declared `appendOnly()` in `../classification.ts`.
- *
- * `to_person` is the owner after the event; `from_person` is the owner before it, null on
- * `created`. Both, and `actor_id`, are plain person ids, as `order_drafts.owner_id` is.
- */
-export const orderDraftEvents = table(
-  "order_draft_events",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    draftId: id("draft_id").notNull(),
-    kind: orderDraftEventKind("kind").notNull(),
-    fromPerson: id("from_person"),
-    toPerson: id("to_person").notNull(),
-    actorId: id("actor_id").notNull(),
-    detail: json<Record<string, unknown>>("detail").notNull(),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.draftId],
-      foreignColumns: [orderDrafts.id],
-      name: "order_draft_events_draft_fk",
-    }),
-    index("order_draft_events_draft_idx").on(t.draftId),
-    check("order_draft_events_kind_ck", enumCheck(t.kind)),
-  ],
-);

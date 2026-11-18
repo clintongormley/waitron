@@ -4,13 +4,13 @@ import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { setLineCourse, placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   newId,
   deviceProfiles,
   devices,
   orderGroups,
-  orderGroupEvents,
+  orderEvents,
   parties,
   printJobs,
   serviceCommands,
@@ -199,7 +199,10 @@ async function state() {
     prints: await suite.db.select().from(printJobs),
     commands: await suite.db.select().from(serviceCommands),
     parties: await suite.db.select().from(parties),
-    groups: await suite.db.select().from(orderGroupEvents),
+    groups: await suite.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'group.%'`),
     orderGroups: await suite.db.select().from(orderGroups),
     moves: await suite.db.select().from(ticketItemMoves),
     facts: await suite.db.select().from(staffActivity),

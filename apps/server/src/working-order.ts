@@ -4259,7 +4259,7 @@ export async function moveOrderLines(
     await stampSentOrderNumber(tx, lineIds, from.orderNumber);
 
     await recordPortionEvents(tx, lineIds, {
-      kind: "moved",
+      kind: "dish.moved",
       fromOrderId: fromTabId,
       toOrderId: toTabId,
       actorId: opts.actorId ?? null,
@@ -6434,7 +6434,7 @@ async function applyLineEdits(
         {
           partyId: order.partyId,
           groupId,
-          kind: "submitted",
+          kind: "group.submitted",
           actorId,
           detail: { workingOrderId: orderId, release: as.kitchen },
         },

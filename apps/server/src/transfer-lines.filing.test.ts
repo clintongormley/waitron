@@ -30,6 +30,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { transferItems } from "./testing/bill-action-fixture.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
@@ -236,7 +237,7 @@ describe("H2 — after a partial transfer, each tab files its OWN single fiscal 
       // A→B: 1 café (partial split).
       await transferItems(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }], {
         expectedPartyRevision: party.revision,
-        operatorId: randomUUID(),
+        operatorId: await ensureOperator(tx, randomUUID()),
       });
     });
 

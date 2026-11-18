@@ -9,7 +9,7 @@ import {
   sales,
   saleLines,
   tenders,
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
   parties,
@@ -156,7 +156,11 @@ async function frozen() {
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
-    events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
+    events: await venue.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'draft.%'`)
+      .orderBy(orderEvents.id),
     parties: await venue.db.select().from(parties).orderBy(parties.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     adjustments: await venue.db.select().from(adjustments).orderBy(adjustments.id),
@@ -282,7 +286,9 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const answer = await discard(p, await request(p), venue.cookie.manager);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(
-      (await frozen()).events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
+      (await frozen()).events.filter(
+        (r) => r.draftId === p.draft.id && r.kind === "draft.discarded",
+      ),
     ).toMatchObject([
       { actorId: venue.managerId, fromPerson: venue.managerId, toPerson: venue.managerId },
     ]);
@@ -357,12 +363,12 @@ describe("Discard resolves the whole owned draft atomically", () => {
       revision: p.draft.revision + 1,
     });
     expect(
-      after.events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
+      after.events.filter((r) => r.draftId === p.draft.id && r.kind === "draft.discarded"),
     ).toMatchObject([
       { actorId: venue.staffId, fromPerson: venue.staffId, toPerson: venue.staffId },
     ]);
     expect(
-      after.events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
+      after.events.filter((r) => r.draftId === p.draft.id && r.kind === "draft.discarded"),
     ).toHaveLength(1);
     expect(after.fresh).toEqual(before.fresh.filter((row) => row.draftId !== p.draft.id));
     expect(after.drafts.find((r) => r.id === other.draft.id)).toEqual(

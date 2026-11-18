@@ -2,10 +2,10 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   newId,
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   parties,
   serviceCommands,
@@ -117,7 +117,10 @@ function command(app: Hono, _action: Action, p: Awaited<ReturnType<typeof prepar
 async function state() {
   return {
     groups: await suite.db.select().from(orderGroups),
-    events: await suite.db.select().from(orderGroupEvents),
+    events: await suite.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'group.%'`),
     orders: await suite.db.select().from(workingOrders),
     lines: await suite.db.select().from(workingOrderLines),
     tickets: await suite.db.select().from(ticketItems),

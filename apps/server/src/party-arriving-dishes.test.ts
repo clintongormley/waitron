@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   devices,
   kitchenStations,
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   printJobs,
   ticketItems,
@@ -177,13 +177,13 @@ async function eventsOf(groupId: string) {
   return inTx(v, (tx) =>
     tx
       .select({
-        partyId: orderGroupEvents.partyId,
-        kind: orderGroupEvents.kind,
-        actorId: orderGroupEvents.actorId,
-        detail: orderGroupEvents.detail,
+        partyId: orderEvents.partyId,
+        kind: orderEvents.kind,
+        actorId: orderEvents.actorId,
+        detail: orderEvents.detail,
       })
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.groupId, groupId)),
+      .from(orderEvents)
+      .where(eq(orderEvents.groupId, groupId)),
   );
 }
 
@@ -233,7 +233,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(await eventsOf(made)).toEqual([
       {
         partyId: receivingParty.partyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: OPERATOR,
         detail: { workingOrderId: b2, arrived: true },
       },
@@ -358,7 +358,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(await eventsOf(held!.id)).toEqual([
       {
         partyId: receivingParty.partyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: OPERATOR,
         detail: { workingOrderId: originalParty.tabId, arrived: true },
       },
@@ -406,7 +406,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       expect(await eventsOf(held.id)).toEqual([
         {
           partyId: receivingParty.partyId,
-          kind: "lines_moved",
+          kind: "group.lines_moved",
           actorId: OPERATOR,
           detail: { workingOrderId: originalParty.tabId, arrived: true },
         },
@@ -855,7 +855,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const linesBefore = await lineRows(originalParty.tabId);
     const revision = await revisionOf(v, originalParty.partyId);
     const [{ events }] = v.db.all<{ events: number }>(
-      sql`select count(*) as events from order_group_events where party_id = ${originalParty.partyId}`,
+      sql`select count(*) as events from order_events where kind like 'group.%' and party_id = ${originalParty.partyId}`,
     );
 
     const made = await inTx(v, (tx: Transaction) =>
@@ -875,7 +875,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(await revisionOf(v, originalParty.partyId)).toBe(revision);
     expect(
       v.db.all<{ events: number }>(
-        sql`select count(*) as events from order_group_events where party_id = ${originalParty.partyId}`,
+        sql`select count(*) as events from order_events where kind like 'group.%' and party_id = ${originalParty.partyId}`,
       ),
     ).toEqual([{ events }]);
   });

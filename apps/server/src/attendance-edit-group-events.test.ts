@@ -4,13 +4,12 @@ import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   newId,
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
-  orderGroupEvents,
   orderGroups,
   parties,
   serviceCommands,
@@ -183,10 +182,16 @@ async function state() {
     orders: await suite.db.select().from(workingOrders),
     lines: await suite.db.select().from(workingOrderLines),
     groups: await suite.db.select().from(orderGroups),
-    events: await suite.db.select().from(orderGroupEvents),
+    events: await suite.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'group.%'`),
     drafts: await suite.db.select().from(orderDrafts),
     draftLines: await suite.db.select().from(orderDraftLines),
-    draftEvents: await suite.db.select().from(orderDraftEvents),
+    draftEvents: await suite.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'draft.%'`),
     tickets: await suite.db.select().from(ticketItems),
     parties: await suite.db.select().from(parties),
     commands: await suite.db.select().from(serviceCommands),
@@ -205,11 +210,11 @@ describe("group events from draft submission and order editing", () => {
         events = saved.events.filter((e) => e.actorId === v.operatorId);
       expect(events.map((e) => e.kind)).toEqual(
         action === "submit-draft"
-          ? ["submitted", "submitted"]
+          ? ["group.submitted", "group.submitted"]
           : action === "add-group"
-            ? ["submitted"]
+            ? ["group.submitted"]
             : action === "remove-group"
-              ? ["removed"]
+              ? ["group.removed"]
               : [],
       );
       expect(saved.facts).toMatchObject([

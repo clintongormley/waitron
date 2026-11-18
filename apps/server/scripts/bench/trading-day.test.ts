@@ -114,20 +114,23 @@ describe("tradeDay", () => {
       const counts = countRows(venue);
       expect(counts.order_drafts).toBe(counts.order_groups);
       expect(
-        rows(venue, sql`select kind, count(*) as n from order_draft_events group by kind`),
+        rows(
+          venue,
+          sql`select kind, count(*) as n from order_events where kind like 'draft.%' group by kind`,
+        ),
       ).toEqual([
-        { kind: "created", n: counts.order_drafts },
-        { kind: "submitted", n: counts.order_drafts },
+        { kind: "draft.created", n: counts.order_drafts },
+        { kind: "draft.submitted", n: counts.order_drafts },
       ]);
       // Only a held group is fired by a command of its own.
       const held = rows(
         venue,
         sql`select g.state, g.fired_at as firedAt, min(t.preparing_at) as firstAdvance
-            from order_group_events e
+            from order_events e
             join order_groups g on g.id = e.group_id
             join working_order_lines l on l.group_id = g.id
             join ticket_items t on t.working_order_line_id = l.id
-            where e.kind = 'fired'
+            where e.kind = 'group.fired'
             group by g.id`,
       );
       expect(held.length).toBeGreaterThan(0);
@@ -145,7 +148,7 @@ describe("tradeDay", () => {
               (select count(distinct t.station_id) from ticket_items t
                  join working_order_lines l on l.id = t.working_order_line_id
                  where l.group_id = e.group_id) as stations
-            from order_group_events e where e.kind = 'fired'`,
+            from order_events e where e.kind = 'group.fired'`,
       );
       expect.soft(counts.order_group_hold_stations).toBeGreaterThan(0);
       for (const group of paper)

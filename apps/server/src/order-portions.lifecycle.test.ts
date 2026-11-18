@@ -179,7 +179,7 @@ function eventsOf(portions: readonly Pick<PortionRef, "lineId">[]) {
       to_order_id: string | null;
       actor_id: string | null;
     }>(
-      sql`select line_id, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
+      sql`select line_id, kind, from_order_id, to_order_id, actor_id from order_events where kind like 'dish.%' order by rowid`,
     )
     .filter((event) => wanted.has(event.line_id));
 }
@@ -193,15 +193,15 @@ function bindingOf(lineId: string) {
 function cancelledCohortOf(lineId: string) {
   return venue.db.all(
     sql`select json_extract(detail, '$.cohortId') as cohortId,
-        json_extract(detail, '$.ordinal') as ordinal from order_portion_events
-        where line_id = ${lineId} and kind = 'cancelled'`,
+        json_extract(detail, '$.ordinal') as ordinal from order_events
+        where line_id = ${lineId} and kind = 'dish.cancelled'`,
   );
 }
 
 /** Every row of the portion tables, in insertion order. */
 function portionTables() {
   return Object.fromEntries(
-    ["working_order_lines", "order_portion_events"].map((name) => [
+    ["working_order_lines", "order_events"].map((name) => [
       name,
       venue.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
     ]),
@@ -257,7 +257,7 @@ describe("A803 portion lifecycle: moves", () => {
     expect(eventsOf(p.portions)).toEqual([
       {
         line_id: first!.lineId,
-        kind: "moved",
+        kind: "dish.moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
         actor_id: venue.adminId,
@@ -278,7 +278,7 @@ describe("A803 portion lifecycle: moves", () => {
     expect(eventsOf(p.portions)).toEqual(
       p.portions.map((portion) => ({
         line_id: portion.lineId,
-        kind: "moved",
+        kind: "dish.moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
         actor_id: venue.adminId,
@@ -299,7 +299,7 @@ describe("A803 portion lifecycle: moves", () => {
     expect(eventsOf(p.portions)).toEqual([
       {
         line_id: first!.lineId,
-        kind: "moved",
+        kind: "dish.moved",
         from_order_id: p.billId,
         to_order_id: result.billId,
         actor_id: venue.adminId,
@@ -341,7 +341,7 @@ describe("A803 portion lifecycle: cancellations", () => {
     expect(eventsOf(p.portions)).toEqual([
       {
         line_id: first!.lineId,
-        kind: "cancelled",
+        kind: "dish.cancelled",
         from_order_id: p.billId,
         to_order_id: null,
         actor_id: venue.adminId,
@@ -393,7 +393,7 @@ describe("A803 portion lifecycle: cancellations", () => {
     expect(eventsOf(p.portions)).toEqual([
       {
         line_id: first!.lineId,
-        kind: "cancelled",
+        kind: "dish.cancelled",
         from_order_id: p.billId,
         to_order_id: null,
         actor_id: venue.adminId,
@@ -419,7 +419,7 @@ describe("A803 portion lifecycle: cancellations", () => {
     expect(eventsOf(p.portions)).toEqual([
       {
         line_id: first!.lineId,
-        kind: "cancelled",
+        kind: "dish.cancelled",
         from_order_id: p.billId,
         to_order_id: null,
         actor_id: venue.adminId,
@@ -934,7 +934,7 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
     expect(eventsOf([p.weighed])).toEqual([
       {
         line_id: p.weighed.lineId,
-        kind: "moved",
+        kind: "dish.moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
         actor_id: venue.adminId,

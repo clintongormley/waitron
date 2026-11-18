@@ -4,9 +4,9 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
   parties,
@@ -119,7 +119,10 @@ const state = async () => ({
   tables: await suite.db.select().from(partyTables),
   drafts: await suite.db.select().from(orderDrafts),
   lines: await suite.db.select().from(orderDraftLines),
-  events: await suite.db.select().from(orderDraftEvents),
+  events: await suite.db
+    .select()
+    .from(orderEvents)
+    .where(sql`${orderEvents.kind} like 'draft.%'`),
   facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDays),
 });

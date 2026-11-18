@@ -30,7 +30,7 @@ import {
   lineServiceCancellations,
   kitchenStations,
   kitchenCourses,
-  orderGroupEvents,
+  orderEvents,
   orderGroupHoldStations,
   orderGroups,
   printJobs,
@@ -423,13 +423,13 @@ async function printed(v: Venue): Promise<string[]> {
 async function eventsOf(partyId: string) {
   return db
     .select({
-      groupId: orderGroupEvents.groupId,
-      kind: orderGroupEvents.kind,
-      actorId: orderGroupEvents.actorId,
-      detail: orderGroupEvents.detail,
+      groupId: orderEvents.groupId,
+      kind: orderEvents.kind,
+      actorId: orderEvents.actorId,
+      detail: orderEvents.detail,
     })
-    .from(orderGroupEvents)
-    .where(eq(orderGroupEvents.partyId, partyId))
+    .from(orderEvents)
+    .where(and(eq(orderEvents.partyId, partyId), sql`${orderEvents.kind} like 'group.%'`))
     .orderBy(sql`rowid`);
 }
 
@@ -901,10 +901,10 @@ describe("per-group submission destinations", () => {
     expect((await linesIn(s.partyId, s.warm)).map((l) => l.quantity)).toEqual(Array(5).fill(1000));
     expect((await linesIn(s.partyId, s.mains)).map((l) => l.quantity)).toEqual(Array(4).fill(1000));
     expect((await eventsOf(s.partyId)).slice(oldEvents).map((e) => [e.groupId, e.kind])).toEqual([
-      [fired!.id, "submitted"],
-      [s.warm, "joined"],
-      [s.mains, "joined"],
-      [held!.id, "submitted"],
+      [fired!.id, "group.submitted"],
+      [s.warm, "group.joined"],
+      [s.mains, "group.joined"],
+      [held!.id, "group.submitted"],
     ]);
     const beforeRetry = await snapshot(v, s.partyId);
     expect(await inTx((tx) => submitGroups(tx, v.cfg, s.partyId, { ...command, groups }))).toEqual(
@@ -1229,7 +1229,7 @@ describe("later additions (§12 item 4)", () => {
     expect(mains.lineIds).toHaveLength(4);
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: s.mains,
-      kind: "joined",
+      kind: "group.joined",
       actorId: ALEX,
     });
   });
@@ -1504,7 +1504,7 @@ describe("editing held groups", () => {
     });
     const after = await eventsOf(s.partyId);
     expect(after.slice(events).map((event) => [event.groupId, event.kind])).toEqual([
-      [s.mains, "lines_moved"],
+      [s.mains, "group.lines_moved"],
     ]);
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
   });
@@ -1522,7 +1522,7 @@ describe("editing held groups", () => {
     expect(row!.state).toBe("removed");
     expect((await groupsOf(s.partyId)).groups.map((group) => group.id)).not.toContain(fishOnly);
     const events = (await eventsOf(s.partyId)).filter((event) => event.groupId === fishOnly);
-    expect(events.map((event) => event.kind)).toEqual(["submitted", "removed"]);
+    expect(events.map((event) => event.kind)).toEqual(["group.submitted", "group.removed"]);
     expect((await linesIn(s.partyId, s.desserts)).map((line) => line.id)).toContain(fish!.id);
   });
 
@@ -1533,7 +1533,7 @@ describe("editing held groups", () => {
     let fishGroup = "";
     const changes: [string, () => Promise<unknown>][] = [
       [
-        "submitted",
+        "group.submitted",
         async () => {
           const result = await submit(
             v,
@@ -1545,7 +1545,7 @@ describe("editing held groups", () => {
         },
       ],
       [
-        "joined",
+        "group.joined",
         () =>
           submit(v, s.partyId, [{ release: "hold", lines: [line(v, "flan")] }], {
             joinGroupId: s.desserts,
@@ -1553,11 +1553,11 @@ describe("editing held groups", () => {
           }),
       ],
       [
-        "reordered",
+        "group.reordered",
         () => reorder(s.partyId, [fishGroup, s.warm, s.mains, s.desserts], { operatorId: MIA }),
       ],
       [
-        "lines_moved",
+        "group.lines_moved",
         () =>
           move(
             v,
@@ -1567,7 +1567,7 @@ describe("editing held groups", () => {
             { operatorId: MIA },
           ),
       ],
-      ["fired", () => fire(v, s.partyId, s.warm, { operatorId: MIA })],
+      ["group.fired", () => fire(v, s.partyId, s.warm, { operatorId: MIA })],
     ];
     for (const [kind, change] of changes) {
       const revision = await revisionOf(s.partyId);
@@ -1631,7 +1631,7 @@ describe("firing", () => {
     expect(group).toMatchObject({ state: "fired", firedBy: MIA, firedAt: expect.any(String) });
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: s.warm,
-      kind: "fired",
+      kind: "group.fired",
       actorId: MIA,
     });
   });
@@ -3023,8 +3023,8 @@ describe("a device as the firer", () => {
     expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
     const [event] = await db
       .select()
-      .from(orderGroupEvents)
-      .where(and(eq(orderGroupEvents.groupId, s.mains), eq(orderGroupEvents.kind, "fired")));
+      .from(orderEvents)
+      .where(and(eq(orderEvents.groupId, s.mains), eq(orderEvents.kind, "group.fired")));
     expect(event).toMatchObject({ actorId: null, actorDeviceId: device.id });
     // The missing historical firer is distinct from the party's checked opening person.
     await db.update(orderGroups).set({ firedBy: randomUUID() }).where(eq(orderGroups.id, s.drinks));
@@ -3045,7 +3045,7 @@ describe("a device as the firer", () => {
     expect(group).toMatchObject({ state: "fired", firedBy: null, firedByDeviceId: device.id });
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: s.warm,
-      kind: "fired",
+      kind: "group.fired",
       actorId: null,
     });
     const replay = await inTx((tx) =>
@@ -3093,7 +3093,7 @@ describe("waiter group and recalled-line release", () => {
     expect(group).toMatchObject({ firedBy: MIA, firedAt: expect.any(String) });
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: s.mains,
-      kind: "fired",
+      kind: "group.fired",
       actorId: MIA,
     });
   });
@@ -3115,7 +3115,7 @@ describe("waiter group and recalled-line release", () => {
     expect((await linesIn(s.partyId, steakGroup!))[0]!.sentAt).toBeNull();
     await fire(v, s.partyId, steakGroup!, { operatorId: ALEX });
 
-    const fired = (await eventsOf(s.partyId)).filter((event) => event.kind === "fired");
+    const fired = (await eventsOf(s.partyId)).filter((event) => event.kind === "group.fired");
     expect(fired.map((event) => event.groupId)).toEqual([fishGroup, steakGroup]);
     const flan = (await linesIn(s.partyId, fishGroup!)).find(
       (row) => row.productId === v.productId.flan,
@@ -3258,8 +3258,8 @@ describe("edits inside groups (D19)", () => {
     expect((await groupsOf(s.partyId)).groups.map((group) => group.id)).not.toContain(fishOnly);
     const events = (await eventsOf(s.partyId)).filter((event) => event.groupId === fishOnly);
     expect(events.map((event) => [event.kind, event.actorId])).toEqual([
-      ["submitted", ALEX],
-      ["removed", MIA],
+      ["group.submitted", ALEX],
+      ["group.removed", MIA],
     ]);
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
   });
@@ -3277,7 +3277,7 @@ describe("edits inside groups (D19)", () => {
     expect((await groupRow(fishOnly)).state).toBe("removed");
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: fishOnly,
-      kind: "removed",
+      kind: "group.removed",
       actorId: MIA,
     });
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
@@ -3345,7 +3345,7 @@ describe("edits inside groups (D19)", () => {
     });
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: added.id,
-      kind: "submitted",
+      kind: "group.submitted",
       actorId: MIA,
     });
     expect(await groupRow(added.id)).toMatchObject({ submittedBy: MIA, firedBy: MIA });
@@ -3481,7 +3481,7 @@ describe("edits inside groups (D19)", () => {
     expect(await firedTicketLineIds(s.partyId)).toContain(flan!.id);
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
       groupId: groups[5]!.id,
-      kind: "submitted",
+      kind: "group.submitted",
       actorId: MIA,
     });
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
@@ -3627,10 +3627,10 @@ describe("the bill a group's first event names", () => {
     expect(
       (await eventsOf(s.partyId)).map((event) => [event.groupId, event.kind, event.detail]),
     ).toEqual([
-      [first, "submitted", { workingOrderId: s.tabId, release: "fire" }],
-      [held, "submitted", { workingOrderId: s.tabId, release: "hold" }],
-      [held, "joined", { workingOrderId: s.tabId, release: "hold" }],
-      [added, "submitted", { workingOrderId: checkId, release: "fire" }],
+      [first, "group.submitted", { workingOrderId: s.tabId, release: "fire" }],
+      [held, "group.submitted", { workingOrderId: s.tabId, release: "hold" }],
+      [held, "group.joined", { workingOrderId: s.tabId, release: "hold" }],
+      [added, "group.submitted", { workingOrderId: checkId, release: "fire" }],
     ]);
   });
 });

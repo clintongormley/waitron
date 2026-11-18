@@ -12,10 +12,10 @@ import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { tillSessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   devices,
   deviceProfiles,
@@ -176,9 +176,9 @@ async function dishLines(tabId: string) {
 async function eventCount(partyId: string): Promise<number> {
   const rows = await inTx(venue, (tx) =>
     tx
-      .select({ id: orderGroupEvents.id })
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.partyId, partyId)),
+      .select({ id: orderEvents.id })
+      .from(orderEvents)
+      .where(and(eq(orderEvents.partyId, partyId), sql`${orderEvents.kind} like 'group.%'`)),
   );
   return rows.length;
 }
@@ -468,11 +468,9 @@ describe("POST /api/parties/:id/groups/:gid/fire", () => {
     expect(fired.json).toEqual({ revision: revision + 1 });
     const [event] = await inTx(venue, (tx) =>
       tx
-        .select({ actorId: orderGroupEvents.actorId })
-        .from(orderGroupEvents)
-        .where(
-          and(eq(orderGroupEvents.groupId, party.cake.id), eq(orderGroupEvents.kind, "fired")),
-        ),
+        .select({ actorId: orderEvents.actorId })
+        .from(orderEvents)
+        .where(and(eq(orderEvents.groupId, party.cake.id), eq(orderEvents.kind, "group.fired"))),
     );
     expect(event).toEqual({ actorId: venue.operatorId });
   });
@@ -1001,11 +999,9 @@ describe("the tab routes that release lines, on a party with groups", () => {
       ]);
       const [event] = await inTx(venue, (tx) =>
         tx
-          .select({ actorId: orderGroupEvents.actorId, detail: orderGroupEvents.detail })
-          .from(orderGroupEvents)
-          .where(
-            and(eq(orderGroupEvents.groupId, party.cake.id), eq(orderGroupEvents.kind, "fired")),
-          ),
+          .select({ actorId: orderEvents.actorId, detail: orderEvents.detail })
+          .from(orderEvents)
+          .where(and(eq(orderEvents.groupId, party.cake.id), eq(orderEvents.kind, "group.fired"))),
       );
       expect(event).toEqual({
         actorId: venue.operatorId,
@@ -1033,10 +1029,10 @@ describe("the line-editing routes act as the session's operator", () => {
   async function eventsOfGroup(groupId: string) {
     return inTx(venue, (tx) =>
       tx
-        .select({ kind: orderGroupEvents.kind, actorId: orderGroupEvents.actorId })
-        .from(orderGroupEvents)
-        .where(eq(orderGroupEvents.groupId, groupId))
-        .orderBy(asc(orderGroupEvents.createdAt)),
+        .select({ kind: orderEvents.kind, actorId: orderEvents.actorId })
+        .from(orderEvents)
+        .where(eq(orderEvents.groupId, groupId))
+        .orderBy(asc(orderEvents.at)),
     );
   }
 
@@ -1051,8 +1047,8 @@ describe("the line-editing routes act as the session's operator", () => {
 
     expect(voided.status).toBe(200);
     expect(await eventsOfGroup(party.croquettes.id)).toEqual([
-      { kind: "submitted", actorId: venue.operatorId },
-      { kind: "removed", actorId: venue.operatorId },
+      { kind: "group.submitted", actorId: venue.operatorId },
+      { kind: "group.removed", actorId: venue.operatorId },
     ]);
     expect(await revisionOf(party.partyId)).toBe(revision + 1);
   });
@@ -1078,7 +1074,7 @@ describe("the line-editing routes act as the session's operator", () => {
     expect(added).toMatchObject({ name: "Caña", creditedTo: venue.operatorId });
     expect(added.groupId).not.toBe(party.fired.id);
     expect(await eventsOfGroup(added.groupId!)).toEqual([
-      { kind: "submitted", actorId: venue.operatorId },
+      { kind: "group.submitted", actorId: venue.operatorId },
     ]);
   });
 
@@ -1681,8 +1677,10 @@ describe("the pass routes, one after the other", () => {
           ),
           events: await tx
             .select()
-            .from(orderGroupEvents)
-            .where(eq(orderGroupEvents.partyId, party.partyId)),
+            .from(orderEvents)
+            .where(
+              and(eq(orderEvents.partyId, party.partyId), sql`${orderEvents.kind} like 'group.%'`),
+            ),
           commands: await tx
             .select()
             .from(serviceCommands)
@@ -2223,12 +2221,9 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const [event] = await inTx(venue, (tx) =>
       tx
         .select()
-        .from(orderGroupEvents)
+        .from(orderEvents)
         .where(
-          and(
-            eq(orderGroupEvents.partyId, party.partyId),
-            eq(orderGroupEvents.kind, "lines_moved"),
-          ),
+          and(eq(orderEvents.partyId, party.partyId), eq(orderEvents.kind, "group.lines_moved")),
         ),
     );
     expect(event).toMatchObject({
@@ -2540,8 +2535,8 @@ describe("POST one held dish's Fire now", () => {
     expect(held[0]!.groupId).toBe(party.croquettes.id);
     const fired = await venue.db
       .select()
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.partyId, party.partyId));
+      .from(orderEvents)
+      .where(and(eq(orderEvents.partyId, party.partyId), sql`${orderEvents.kind} like 'group.%'`));
     expect(fired.at(-1)).toMatchObject({ actorId: venue.operatorId });
     const before = await snapshot(party);
     expect(await call("POST", path, command)).toEqual(answer);

@@ -22,7 +22,7 @@ import {
 } from "@waitron/adjustments";
 import {
   kitchenStations,
-  orderPortionEvents,
+  orderEvents,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -613,7 +613,7 @@ export async function placeGrouped(
   await recordGroupEvent(tx, {
     partyId: seated.partyId,
     groupId,
-    kind: "submitted",
+    kind: "group.submitted",
     actorId: operatorId,
     detail: { workingOrderId: seated.tabId, release },
   });
@@ -701,20 +701,20 @@ export async function todayLine(
       .orderBy(asc(workingOrderLines.lineNo)),
     left: await tx
       .select({
-        id: orderPortionEvents.lineId,
-        detail: orderPortionEvents.detail,
+        id: orderEvents.lineId,
+        detail: orderEvents.detail,
       })
-      .from(orderPortionEvents)
-      .where(eq(orderPortionEvents.fromOrderId, billId)),
+      .from(orderEvents)
+      .where(and(eq(orderEvents.fromOrderId, billId), sql`${orderEvents.kind} like 'dish.%'`)),
   }));
   const byId = new Map(rows.map((row) => [row.id, row]));
   // Every dish of each cohort that was on this bill, still here or since gone: its ordinal.
   const placed = new Map<string, Map<string, number>>();
   for (const { id, cohortId, ordinal } of [
     ...rows,
-    ...left.map(({ id, detail }) => ({ id, ...detail })),
+    ...left.map(({ id, detail: { cohortId, ordinal } }) => ({ id, cohortId, ordinal })),
   ]) {
-    if (cohortId == null || ordinal == null) continue;
+    if (id === null || typeof cohortId !== "string" || typeof ordinal !== "number") continue;
     const dishes = placed.get(cohortId) ?? new Map<string, number>();
     dishes.set(id, ordinal);
     placed.set(cohortId, dishes);

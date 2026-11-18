@@ -10,7 +10,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   insertInChunks,
-  orderPortionEvents,
+  orderEvents,
   orderGroups,
   captureError,
   tableMerges,
@@ -3142,11 +3142,13 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
   expect(tickets.filter((row) => !movedIds.has(row.workingOrderLineId))).toEqual(unrelated);
   const events = await db
     .select()
-    .from(orderPortionEvents)
-    .where(eq(orderPortionEvents.fromOrderId, source.tabId));
+    .from(orderEvents)
+    .where(eq(orderEvents.fromOrderId, source.tabId));
   expect(events).toHaveLength(32772);
   expect(new Set(events.map((row) => row.lineId))).toEqual(new Set(ids));
-  expect(events.every((row) => row.kind === "moved" && row.toOrderId === target.tabId)).toBe(true);
+  expect(events.every((row) => row.kind === "dish.moved" && row.toOrderId === target.tabId)).toBe(
+    true,
+  );
 
   const destinationTable = await v.table("Large destination");
   const expectedPartyRevision = await revisionOf(v, target.partyId);

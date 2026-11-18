@@ -30,7 +30,7 @@ import {
   kitchenCourses,
   kitchenStations,
   nowIso,
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   printJobs,
   products,
@@ -5591,7 +5591,12 @@ describe("placeOrder fire ticket items", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(lines).toEqual([{ groupId: null }, { groupId: null }]);
     expect(await db.select().from(orderGroups)).toEqual([]);
-    expect(await db.select().from(orderGroupEvents)).toEqual([]);
+    expect(
+      await db
+        .select()
+        .from(orderEvents)
+        .where(sql`${orderEvents.kind} like 'group.%'`),
+    ).toEqual([]);
   });
 
   it("keeps a placed counter's released dishes after a sold-out change and repeated line release", async () => {

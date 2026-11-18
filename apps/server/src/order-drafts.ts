@@ -6,7 +6,7 @@ import {
   kitchenCourses,
   newId,
   nowIso,
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
   orderGroups,
@@ -101,7 +101,7 @@ export interface Draft {
   ownerName: string;
   revision: number;
   lines: DraftLine[];
-  /** The owner before the draft's latest `taken_over` event; null when it was never taken over. */
+  /** The owner before the draft's latest `draft.taken_over` event; null when it was never taken over. */
   takenOverFrom: { personId: string; name: string } | null;
 }
 
@@ -200,7 +200,7 @@ export async function splitDraft(
         attendance === undefined ? undefined : { recorder: attendance, at },
         {
           draftId: newDraftId,
-          kind: "created",
+          kind: "draft.created",
           fromPerson: null,
           toPerson: input.operatorId,
           actorId: input.operatorId,
@@ -213,7 +213,7 @@ export async function splitDraft(
           attendance === undefined ? undefined : { recorder: attendance, at },
           {
             draftId: id,
-            kind: "discarded",
+            kind: "draft.discarded",
             fromPerson: draft.ownerId,
             toPerson: draft.ownerId,
             actorId: input.operatorId,
@@ -334,7 +334,7 @@ export async function saveDraft(
       attendance === undefined ? undefined : { recorder: attendance, at },
       {
         draftId,
-        kind: "created",
+        kind: "draft.created",
         fromPerson: null,
         toPerson: operatorId,
         actorId: operatorId,
@@ -388,7 +388,7 @@ export async function saveDraft(
       attendance === undefined ? undefined : { recorder: attendance, at },
       {
         draftId,
-        kind: "discarded",
+        kind: "draft.discarded",
         fromPerson: operatorId,
         toPerson: operatorId,
         actorId: operatorId,
@@ -437,7 +437,7 @@ export async function takeOverDraft(
           attendance === undefined ? undefined : { recorder: attendance, at },
           {
             draftId: draft.id,
-            kind: "taken_over",
+            kind: "draft.taken_over",
             fromPerson: draft.ownerId,
             toPerson: operatorId,
             actorId: operatorId,
@@ -579,7 +579,7 @@ export async function discardPartyDrafts(
     attendance === undefined ? undefined : { recorder: attendance.recorder, at },
     ...open.map((draft) => ({
       draftId: draft.id,
-      kind: "discarded" as const,
+      kind: "draft.discarded" as const,
       fromPerson: draft.ownerId,
       toPerson: draft.ownerId,
       actorId: operatorId,
@@ -662,7 +662,7 @@ export async function discardDraft(
         attendance === undefined ? undefined : { recorder: attendance.recorder, at },
         {
           draftId: draft.id,
-          kind: "discarded",
+          kind: "draft.discarded",
           fromPerson: operatorId,
           toPerson: operatorId,
           actorId: operatorId,
@@ -840,7 +840,7 @@ export async function submitDraft(
         attendance === undefined ? undefined : { recorder: attendance, at },
         {
           draftId: id,
-          kind: "submitted",
+          kind: "draft.submitted",
           fromPerson: operatorId,
           toPerson: operatorId,
           actorId: operatorId,
@@ -1148,7 +1148,7 @@ async function addDiscardedDraft(
 ): Promise<void> {
   await recordDraftEvents(tx, attendance, {
     draftId: fromDraftId,
-    kind: "discarded",
+    kind: "draft.discarded",
     fromPerson: ownerId,
     toPerson: ownerId,
     actorId,
@@ -1174,27 +1174,32 @@ function absorbLines(receiving: readonly DraftLine[], absorbed: readonly DraftLi
   ];
 }
 
-type DraftEvent = typeof orderDraftEvents.$inferInsert;
+type DraftEvent = typeof orderEvents.$inferInsert & {
+  kind: Extract<(typeof orderEvents.$inferInsert)["kind"], `draft.${string}`>;
+  draftId: string;
+  actorId: string;
+  toPerson: string;
+};
 
 async function recordDraftEvents(
   tx: Transaction,
   attendance: { recorder: AttendanceRecorder; at: string } | undefined,
   ...events: DraftEvent[]
 ): Promise<void> {
-  const saved = await tx.insert(orderDraftEvents).values(events).returning();
+  const saved = await tx.insert(orderEvents).values(events).returning();
   if (attendance === undefined) return;
   for (const event of saved) {
     const [order] = await tx
       .select({ id: workingOrders.id })
       .from(workingOrders)
       .innerJoin(orderDrafts, eq(orderDrafts.billId, workingOrders.id))
-      .where(eq(orderDrafts.id, event.draftId))
+      .where(eq(orderDrafts.id, event.draftId!))
       .limit(1);
     if (order === undefined) continue;
     await attendance.recorder(tx, {
       source: "draft",
       key: `event:${event.id}`,
-      personId: event.actorId,
+      personId: event.actorId!,
       kind: "order",
       at: attendance.at,
       offsetMinutes: 0,
@@ -1388,8 +1393,8 @@ async function readOpenDrafts(
 }
 
 /**
- * Each draft's owner before its latest `taken_over` event, named as the floor names an owner. The
- * latest is the last by `rowid`, not `created_at`, which a clock stepped back can put out of order:
+ * Each draft's owner before its latest `draft.taken_over` event, named as the floor names an owner. The
+ * latest is the last by `rowid`, not `at`, which a clock stepped back can put out of order:
  * SQLite gives a new row one more than the table's largest `rowid`, and this table is append-only.
  * `VACUUM` and `VACUUM INTO` kept that order when measured (node:sqlite, Node v26.7.0, 2026-09-28).
  */
@@ -1399,21 +1404,18 @@ async function takenOverFrom(
 ): Promise<Map<string, { personId: string; name: string }>> {
   const rows = await tx
     .select({
-      draftId: orderDraftEvents.draftId,
-      personId: orderDraftEvents.fromPerson,
+      draftId: orderEvents.draftId,
+      personId: orderEvents.fromPerson,
       name: persons.displayName,
     })
-    .from(orderDraftEvents)
-    .leftJoin(persons, eq(persons.id, orderDraftEvents.fromPerson))
+    .from(orderEvents)
+    .leftJoin(persons, eq(persons.id, orderEvents.fromPerson))
     .where(
-      and(
-        inArray(orderDraftEvents.draftId, [...draftIds]),
-        eq(orderDraftEvents.kind, "taken_over"),
-      ),
+      and(inArray(orderEvents.draftId, [...draftIds]), eq(orderEvents.kind, "draft.taken_over")),
     )
-    .orderBy(sql`${orderDraftEvents}.rowid`);
+    .orderBy(sql`${orderEvents}.rowid`);
   return new Map(
-    rows.map((row) => [row.draftId, { personId: row.personId!, name: row.name ?? "" }] as const),
+    rows.map((row) => [row.draftId!, { personId: row.personId!, name: row.name ?? "" }] as const),
   );
 }
 

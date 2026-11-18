@@ -733,6 +733,12 @@ describe("A803 race replay: Split a table against another command, from one read
       .n;
   }
 
+  function howManyGroupEvents() {
+    return venue.db.all<{ n: number }>(sql`
+      select count(*) as n from order_events where kind like 'group.%'
+    `)[0]!.n;
+  }
+
   function groupStateOf(groupId: string) {
     return venue.db.all<{ partyId: string; state: string }>(sql`
       select party_id as partyId, state from order_groups where id = ${groupId}`)[0]!;
@@ -851,7 +857,7 @@ describe("A803 race replay: Split a table against another command, from one read
             operator,
           ),
       };
-      const events = howMany("order_group_events");
+      const events = howManyGroupEvents();
       const notices = howMany("kitchen_notices");
       const idsOn = (billId: string) => linesOf(billId).map((line) => line.id);
 
@@ -860,7 +866,7 @@ describe("A803 race replay: Split a table against another command, from one read
       const payments = await paymentRows(venue, anna.tabId);
       if (order[0] === "pay") {
         await judge(raced, "bill.line_paid");
-        expect(howMany("order_group_events")).toBe(events);
+        expect(howManyGroupEvents()).toBe(events);
         expect(howMany("kitchen_notices")).toBe(notices);
         expect(holderOf(table)).toBe(anna.partyId);
         expect(idsOn(anna.tabId)).toEqual([dish!.id, staying!.id]);
