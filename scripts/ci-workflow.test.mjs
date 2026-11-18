@@ -7926,7 +7926,9 @@ describe("the release job", () => {
     expect(upload.script).toMatch(
       /timeout [1-9]\d* scripts\/release\/github-release\.sh --signed-file/,
     );
-    expect(at(RELEASE_SIGN_STEP)).toBeGreaterThan(at(RELEASE_ATTACH_STEP));
+    const node = steps().findIndex((step) => /uses: actions\/setup-node@/.test(step.text));
+    expect(node).toBeGreaterThan(at(RELEASE_ATTACH_STEP));
+    expect(at(RELEASE_SIGN_STEP)).toBeGreaterThan(node);
     expect(at(RELEASE_UPLOAD_STEP)).toBeGreaterThan(at(RELEASE_SIGN_STEP));
   });
 

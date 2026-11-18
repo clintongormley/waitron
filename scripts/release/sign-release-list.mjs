@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { signReleaseList, verifyReleaseList } from "../box/release-list.mjs";
+import { isMainScript } from "../is-main-script.mjs";
 
 function readKey(path) {
   try {
@@ -11,15 +12,15 @@ function readKey(path) {
   }
 }
 
-function writeReleaseList(keysDir, output, env) {
+export function main([keysDir, output], env, logger = console) {
   let next = "check that both public key files can be read";
   try {
     const privateKey = env.WAITRON_RELEASE_SIGNING_KEY;
     const current = readKey(join(keysDir, "current.pem"));
     const spare = readKey(join(keysDir, "spare.pem"));
     if (!privateKey && current === undefined && spare === undefined) {
-      console.log("Release signing is not configured.");
-      return;
+      logger.log("Release signing is not configured.");
+      return 0;
     }
     next = "set the signing secret and both public keys";
     if (!privateKey || !current || !spare) throw new Error("Incomplete signing configuration");
@@ -41,10 +42,11 @@ function writeReleaseList(keysDir, output, env) {
     verifyReleaseList(bytes, [current, spare]);
     next = "check that the output path is writable and unused";
     writeFileSync(output, bytes, { flag: "wx" });
+    return 0;
   } catch {
-    console.error(`Could not sign the release. Please ${next}.`);
-    process.exitCode = 1;
+    logger.error(`Could not sign the release. Please ${next}.`);
+    return 1;
   }
 }
 
-writeReleaseList(process.argv[2], process.argv[3], process.env);
+if (isMainScript(import.meta.url)) process.exitCode = main(process.argv.slice(2), process.env);

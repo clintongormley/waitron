@@ -35,6 +35,29 @@ describe("the signed release file", () => {
     expect(verifyReleaseList(bytes, trusted)).toEqual(release);
   });
 
+  it("counts equivalent PEM encodings as one trusted key", () => {
+    const bytes = signReleaseList(release, current.privateKey);
+    const crlf = current.publicKey.replaceAll("\n", "\r\n");
+    expect(verifyReleaseList(bytes, [crlf])).toEqual(release);
+    expect(() => verifyReleaseList(bytes, [current.publicKey, crlf])).toThrow(/distinct/i);
+  });
+
+  it("uses only Ed25519 keys", () => {
+    const ec = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    const bytes = signReleaseList(release, current.privateKey);
+    expect(() => signReleaseList(release, ec.privateKey)).toThrow(/Ed25519/i);
+    expect(() => verifyReleaseList(bytes, [ec.publicKey])).toThrow(/Ed25519/i);
+  });
+
+  it("refuses non-object release data and a public key in the signing slot", () => {
+    expect(() => signReleaseList(null, current.privateKey)).toThrow(/payload/i);
+    expect(() => signReleaseList(release, current.publicKey)).toThrow(/PKCS#8/i);
+  });
+
   it("writes identical bytes for the same release and key", () => {
     const { images, ...rest } = release;
     expect(
@@ -83,6 +106,15 @@ describe("the signed release file", () => {
     );
     expect(() => signReleaseList(invalid, current.privateKey)).toThrow(/payload/i);
   });
+
+  it.each([{}, { payload: "", signature: "" }])(
+    "refuses a missing envelope field (%j)",
+    (invalid) => {
+      expect(() => verifyReleaseList(Buffer.from(JSON.stringify(invalid)), trusted)).toThrow(
+        /envelope/i,
+      );
+    },
+  );
 
   it("refuses a malformed encoding before attempting signature verification", () => {
     const signed = envelope(JSON.stringify(release));
