@@ -31,7 +31,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
-import { modulesNamed } from "./modules.js";
+import { ALL_MODULES } from "./modules.js";
 import { advanceTicketItem } from "./working-order.js";
 import {
   billWith,
@@ -450,11 +450,12 @@ useVenueDb({
   },
 });
 
+const ADJUSTMENT_VENUE_MODULES = ALL_MODULES.filter((m) =>
+  ["core", "identity", "adjustments"].includes(m.name),
+);
+
 // As `sendPersonalData` does: prepare inside the snapshot turn, build outside it.
-async function download(
-  personId: string,
-  parts = personalDataParts(modulesNamed(["core", "identity", "adjustments"])),
-) {
+async function download(personId: string, parts = personalDataParts(ADJUSTMENT_VENUE_MODULES)) {
   const { db } = story.venue;
   const build = await db.withWriteLock(() =>
     preparePersonalData(db, parts, {
@@ -497,7 +498,7 @@ describe("the worked example's line voids in Martha's download", () => {
 // The whole download as the route builds it for a venue running the adjustments module.
 function downloadAll(personId: string) {
   return download(personId, [
-    ...personalDataParts(modulesNamed(["core", "identity", "adjustments"])),
+    ...personalDataParts(ADJUSTMENT_VENUE_MODULES),
     ...actionsPersonalData(story.venue.db),
   ]);
 }

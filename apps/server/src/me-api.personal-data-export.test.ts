@@ -20,7 +20,10 @@ import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
-import { mountMeApi } from "./me-api.js";
+import { ALL_MODULES } from "./modules.js";
+import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
+import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
@@ -31,13 +34,14 @@ const PATH = "/management-api/me/personal-data/export";
 // Leaves `now` unset, so the route's own clock is exercised.
 function mounted(modules: string[], patch: { venueLocale?: string } = {}): Hono {
   const app = new Hono();
-  mountMeApi(
+  const enabled = ALL_MODULES.filter((m) => modules.includes(m.name));
+  mountPersonalDataExportApi(
     app,
     {
       db: suite.db,
+      modules: enabled,
+      serverParts: [...timeRecordPersonalData(enabled), ...actionsPersonalData(suite.db)],
       venueLocale: "en-GB",
-      modules,
-      credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
       ...patch,
     },
     () => {},
@@ -65,7 +69,7 @@ async function download(
   return Object.fromEntries(Object.entries(files).map(([name, data]) => [name, strFromU8(data)]));
 }
 
-describe("the own personal-data download, mounted by mountMeApi", () => {
+describe("the own personal-data download", () => {
   it("reads the identity part when identity is enabled", async () => {
     const files = await download(["core", "identity"]);
     expect(Object.keys(files).sort()).toEqual(["README.txt", "profile.json", "sign-in.json"]);

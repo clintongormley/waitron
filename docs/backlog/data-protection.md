@@ -151,15 +151,6 @@ by the answers):
   [design-system.md](../developers/design-system.md) (`wt-help-tooltip`) hangs the badge over the
   top trailing corner of the nearest positioned box, so the fix is likely which box is positioned
   on the Profile row, not the shared rule (not measured). Place it so it never covers the label.
-- **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
-  gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
-  and is not given boot's `now`.
-  `mountMeApi` also builds the working-time part from `modulesNamed`
-  (`apps/server/src/me-api.ts`). The next step is for `boot.ts` to pass
-  its module list (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete
-  `modulesNamed` and `MeApiDeps.now`.
-  The admin's download of another person (S2c) is mounted by the same function,
-  `mountPersonalDataExportApi`, so the move takes both routes.
 - **What the box keeps with a tax number outside issued sales is not in the invoice customer's
   download** (S3 decision 19): the customer typed for a full invoice on a bill
   (`working_orders.recipient_tax_id`, `recipient_legal_name`, `recipient_address` and
