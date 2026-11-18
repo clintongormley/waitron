@@ -51,7 +51,6 @@ export const ticketItems = table(
     queuedAt: tsString("queued_at").notNull().$defaultFn(nowIso),
     preparingAt: tsString("preparing_at"),
     readyAt: tsString("ready_at"),
-    // NULL = no course (fires earliest).
     /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
     /* v8 ignore stop */

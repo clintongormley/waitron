@@ -245,7 +245,7 @@ export async function setDefaultStation(tx: Transaction, id: string): Promise<vo
 }
 
 // ── Kitchen courses ──────────────────────────────────────────────────────────────────────────────
-// Like the station verbs, minus the default: a line with no course fires earliest.
+// Like the station verbs, minus the default.
 
 export interface Course {
   id: string;

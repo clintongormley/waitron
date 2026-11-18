@@ -119,7 +119,6 @@ export const products = table(
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
     /* v8 ignore stop */
-    // A line with no course fires earliest.
     /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
     /* v8 ignore stop */

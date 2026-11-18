@@ -46,8 +46,6 @@ export const drawerOpens = table(
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */
     tenderRefundId: id("tender_refund_id").references(() => tenderRefunds.id),
-    // Who authorized the manual open; NULL for a
-    // `cash_sale`, `bill_payment` or `card_slip` open.
     authorizedBy: id("authorized_by"),
     // A person holding cash.drawer authorized the open on behalf of an operator who does not.
     viaOverride: flag("via_override").notNull().default(false),

@@ -240,7 +240,7 @@ export const workingOrderLines = table(
     // Set only once the whole line is served; `served_quantity` counts a part served before that.
     servedAt: tsString("served_at"),
     servedQuantity: quantity("served_quantity").notNull().default(0),
-    // The kitchen course this line was rung under. No course means the line fires earliest.
+    // The kitchen course this line was rung under.
     courseId: id("course_id"),
     makeAtStationId: id("make_at_station_id"),
     // The dish line an extras pick belongs to; a top-level line leaves it NULL.
