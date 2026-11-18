@@ -52,8 +52,10 @@ and M3. README §5 U11 (person keys). Rules: [slice rules](2026-11-08-a1308-slic
 **Who lands:** the lane. No sale, invoice number or hash input changes: the sale copies lines by value
 (`sale_lines`, tables-ordersales.md §1.14), and none of these columns is copied into it.
 
-**First line of the PR description:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported."
+**First line of the PR description:** "Every venue is reset: core. Backups from before this cannot
+be restored. Configuration exports stay at format 45." The watcher cleared that wording at 03:54
+on 18 November. The configuration-transfer case exported on `eb8b6f08fa` and imported the same
+encrypted artifact after the fold, preserving the languages, holiday area and default menu.
 
 ---
 
