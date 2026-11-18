@@ -2052,10 +2052,11 @@ async function claimMailAt(id: string, at: string) {
 describe("invoice mail pass", () => {
   it("can send an invoice after its claim transaction failed once", async () => {
     const { delivery } = await queued();
+    let now = start;
     const pass = () =>
       runInvoiceMailPass({
         db: suite.db,
-        now: () => start,
+        now: () => now,
         readDocument: documentFor,
         send: async () => ({ status: "sent" }),
       });
@@ -2063,7 +2064,7 @@ describe("invoice mail pass", () => {
       before update of status on invoice_deliveries when new.status = 'sending'
       begin select raise(abort, 'Claim write failed'); end`);
     try {
-      await expect(pass()).rejects.toThrow("Claim write failed");
+      expect(await pass()).toMatchObject({ processed: true, subjectId: delivery.id });
     } finally {
       await suite.db.execute(sql`drop trigger refuse_invoice_mail_claim`);
     }
@@ -2072,7 +2073,9 @@ describe("invoice mail pass", () => {
       status: "pending",
       attempts: 0,
       finishedAt: null,
+      nextAttemptAt: "2026-10-07T12:00:05.000Z",
     });
+    now = new Date("2026-10-07T12:00:05.000Z");
     await pass();
     expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
   });

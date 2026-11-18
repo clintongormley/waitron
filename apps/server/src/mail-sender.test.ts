@@ -209,6 +209,30 @@ describe("one mail sender", () => {
     expect(await row()).toMatchObject({ status: "sent", attempts: 2 });
     expect(deps.send).toHaveBeenCalledTimes(1);
   });
+  it("sends other mail while a failed invoice claim waits to retry", async () => {
+    deps.owners = [
+      {
+        ...owner,
+        kind: "invoice",
+        deliveryRule: "invoice",
+        retryDelaysMs: [],
+        claim: async () => {
+          throw new Error("Invoice claim failed");
+        },
+      },
+      owner,
+    ];
+    await queue("invoice", { kind: "invoice", personId: null });
+    await queue();
+    await runMailPass(deps);
+    await runMailPass(deps);
+    expect(await row("invoice")).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      finishedAt: null,
+    });
+    expect(await row()).toMatchObject({ status: "sent" });
+  });
   it("resolves delivery in the claim transaction and commits before sending", async () => {
     await queue();
     deps.resolveDelivery = async (tx) => {

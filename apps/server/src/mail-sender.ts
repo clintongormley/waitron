@@ -355,18 +355,23 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           : { processed: false };
     });
   } catch (error) {
-    // A rolled-back invoice claim still holds the sale's active delivery slot.
-    if (failed === undefined || failed.kind === "invoice") throw error;
+    if (failed === undefined) throw error;
     const mail = failed;
     const owner = owners.get(mail.kind)!;
+    const now = deps.now();
     // The owner’s writes rolled back; a fresh transaction retains only the failed attempt’s back-off.
     await withTransaction(deps.db, (tx) =>
       tx
         .update(outgoingMail)
-        .set({
-          ...retryPatch(mail, owner, deps.now(), "mail.claim_failed"),
-          attempts: mail.attempts,
-        })
+        .set(
+          // An invoice whose claim rolled back still holds the sale's active delivery slot.
+          mail.kind === "invoice"
+            ? { nextAttemptAt: new Date(now.getTime() + 5_000).toISOString() }
+            : {
+                ...retryPatch(mail, owner, now, "mail.claim_failed"),
+                attempts: mail.attempts,
+              },
+        )
         .where(
           and(
             eq(outgoingMail.id, mail.id),
