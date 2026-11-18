@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
-**Goal:** At a seated table, a waiter sets how many set menus of each type the table is having,
-orders their dishes as ordinary dishes from the set-menu folders, and sees which set menu each dish
-is on; each dish is placed once, when it is sent, and keeps its place and price.
+**Goal:** Staff add set menus by type to table, takeaway and delivery orders. They order dishes
+from the set-menu folders and see which set menu each dish goes on. Each dish is placed when it
+is sent and keeps its place and price.
 
 **Architecture:** Each set menu on a bill is an order line of its own (`working_order_lines`,
 `set_menu_role = 'set_menu'`, no product, its copy and its price). Each set-menu dish is an ordinary
@@ -49,7 +49,8 @@ at `33be7eaaf3` before those two landed, is in the owner's checkout at
     counts as placed in THAT set menu (piece 1 decision 4). Its `courseId` is the set menu's own
     course while that course exists, else the product's live course (piece 1 decision 9, Fable
     F7): the course the dish is sent with when tapped in that folder.
-  - `SetMenuTerms`: `price`, `vatClass`, `names` (may be `{}`), `lines: { id; count; courseIds }[]`.
+  - `SetMenuTerms`: `price`, `vatClass`, `takeawayVatClass`, `names` (may be `{}`), and
+    `lines: { id; count; courseIds }[]`.
   - `serveRecordedSetMenus(tx, [{ versionId, menuId }]): Promise<ServedSetMenuCopy[]>`
     (`packages/venue-service/src/set-menu-copies.ts`, piece 1 Task 6b): a bill's recorded copies,
     in the order asked, with the same live fields, course rule and `key` as the zone read, also for
@@ -178,7 +179,7 @@ writer)** here and where they first appear in a task.
 | set-menu line | `set_menu_version_id` | the full menu's version whose copy it is (`menu_versions.id`) |
 | set-menu line | `unit_price_gross`, `line_total` | the copy's `terms.price`, written once when added |
 | set-menu line | `name`, `descriptions` | the copy's name, and its `terms.names` over the venue's invoice languages |
-| set-menu line | `vat_class`, `takeaway_vat_class` | the copy's `terms.vatClass` (both) |
+| set-menu line | `vat_class`, `takeaway_vat_class` | the copy's `terms.vatClass` and `terms.takeawayVatClass`, respectively |
 | set-menu dish | `set_menu_role` | `'dish'` |
 | set-menu dish | `set_menu_id` | the set menu whose folder it was tapped in (its offer, options, extras and sending course) |
 | set-menu dish | `set_menu_line_id` | the set-menu line it is placed on (null only for a cancelled dish whose set menu was removed, decision 12) |
@@ -189,12 +190,12 @@ writer)** here and where they first appear in a task.
 
 - **The one writer of a dish's place.** `setMenuDishColumns(result, copy)` (`apps/server/src/set-menu-bill.ts`,
   Task 5) returns the place, price and counts-as columns, and is handed the landing copy, so
-  piece 4 can add `vat_class` from `copy` without changing a caller. Every path that writes them
+  piece 4 can write both VAT classes from `copy` without changing a caller. Every path that writes them
   calls it: placing at Send and a raised quantity (Task 7b's `placeSetMenuRows`, called by
   `insertTabRound` and by the edit path), the waiter's move on the bill (Task 8,
   `moveSetMenuDishes`) and re-placing a dish moved alone to another bill (Task 11a,
-  `replaceMovedDishes`). Piece 4 adds `vat_class` there. This piece writes a dish's `vat_class`
-  exactly as for any dish (its offer's class) and never changes it.
+  `replaceMovedDishes`). This piece writes the dish offer's classes. Piece 4 assigns the set
+  menu's classes to included dishes and drink supplements in the set menu.
 - **The one removal writer.** `removeSetMenuLines` (`apps/server/src/set-menu-count.ts`, Task 6) is
   called by − and by Cancel. Piece 4 adds `set_menu.remove_paid` there.
 - **The money refusal.** `refuseSetMenuMoney` (`apps/server/src/set-menu-bill.ts`, Task 10), in
@@ -228,9 +229,10 @@ writer)** here and where they first appear in a task.
   turn.
 - **Menu data once per request:** read set-menu copies once before any line loop, never per line
   (CLAUDE.md §3).
-- **Seated:** the bill has a party (`party_id`), its zone's mode is `table_tab`
-  (`packages/venue-service/src/operations.ts:452-485`), and its dining is `eat_in`. One function
-  answers it, `refuseUnlessSetMenuBill` (Task 5).
+- **Set-menu orders:** A seated table's bill has a party (`party_id`) and a `table_tab` zone
+  (`packages/venue-service/src/operations.ts:452-485`). Takeaway and delivery orders may hold
+  set menus too and use the takeaway VAT class. `refuseUnlessSetMenuBill` (Task 5) refuses
+  eat-in counter orders. See question 4 of the [owner's decisions](../../compliance/2026-11-19-adviser-meeting.md).
 - **Errors:** `AppError`, codes declared in `apps/server/src/errors.ts`, a status in `STATUS`
   (`apps/server/src/till-api.ts:443`), wording in English and Spanish in `apps/till/src/i18n/codes.ts`
   with a `codeMessage` branch (`:998`) for each param the wording reads. Every refusal says what
@@ -238,8 +240,7 @@ writer)** here and where they first appear in a task.
 
   | Code                           | Params                                   | Status | When                                                                      |
   | ------------------------------ | ---------------------------------------- | ------ | ------------------------------------------------------------------------- |
-  | `set_menu.not_seated`          | `{}`                                     | 409    | a set menu or set-menu dish on a bill that is not a seated table's        |
-  | `set_menu.takeaway`            | `{ setMenuName: string }`                | 409    | a set menu on a takeaway bill, or switching a bill holding one to takeaway |
+  | `set_menu.not_seated`          | `{}`                                     | 409    | a set menu or set-menu dish outside a seated table, takeaway or delivery order |
   | `set_menu.not_selling`         | `{ setMenuName: string }`                | 409    | adding a set menu the bill holds no copy of while none is on sale         |
   | `set_menu.holds_dishes`        | `{ setMenuName: string; dishNames: string[] }` | 409 | − or Cancel on set menus that hold dishes                                 |
   | `set_menu.needed_by_draft`     | `{ setMenuName: string; dishNames: string[] }` | 409 | − or Cancel that would leave an unsent dish with no place (decision 13)   |
@@ -264,6 +265,7 @@ writer)** here and where they first appear in a task.
 ```ts
 // packages/shared/src/set-menu-bill.ts (browser-safe; exported from the shared index)
 import type { SetMenuOffer } from "./set-menu-fit.js";
+import type { ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
 
 /** One copy of a set menu, as the bill uses it: the calculation's offer (`id` is piece 1's copy
  * `key`; `dishes` one per offer with no variants and per kept variant) plus what the bill needs. */
@@ -272,6 +274,7 @@ export interface SetMenuCopy extends SetMenuOffer {
   /** The version the bill records it from, or the till drafts it from (Builds on, piece 1). */
   versionId: string;
   name: string;
+  terms: Pick<ServedSetMenuCopy["terms"], "vatClass" | "takeawayVatClass">;
 }
 export interface BillSetMenu { lineId: string; copyId: string; lineNo: number }
 export interface DishPlace { setMenuLineId: string; place: number }
@@ -574,8 +577,7 @@ export function checkMoves(
 - Produces in `set-menu-bill.ts`:
 
 ```ts
-/** Refuses `set_menu.not_seated` unless the bill has a party, a `table_tab` zone and eat-in
- * dining; `set_menu.takeaway` when it is a table's takeaway bill. */
+/** Refuses `set_menu.not_seated` unless the bill is at a seated table or for takeaway or delivery. */
 export function refuseUnlessSetMenuBill(tx: Transaction, workingOrderId: string): Promise<void>;
 /** The bill's copies (each set-menu line's `(set_menu_version_id, set_menu_id)` and each
  * recorded row's, served in one `serveRecordedSetMenus` call, converted by `setMenuCopyOf` and
@@ -583,8 +585,7 @@ export function refuseUnlessSetMenuBill(tx: Transaction, workingOrderId: string)
  * its set menus and its placed dishes, leaving out cancelled dishes and dishes whose link is
  * null. A bill with no set-menu row and no recorded copy answers empty without that call. */
 export function readBillSetMenus(tx: Transaction, workingOrderId: string): Promise<BillSetMenuState>;
-/** The one place a set-menu dish's place, price and counts-as columns are built (piece 4 adds
- * `vatClass` here). */
+/** Builds a set-menu dish's place, price and counts-as columns (piece 4 adds both VAT classes). */
 export function setMenuDishColumns(result: PlacementResult, copy: SetMenuCopy): {
   setMenuLineId: string; setMenuPlace: number; setMenuCountsAsCourseId: string;
   unitPriceGross: number; lineTotal: number;
@@ -628,8 +629,8 @@ export function setMenuOfferLookup(
 
 - [ ] **Step 1: Write the failing tests** (`useVenueDb`; a seated party venue from
   `apps/server/src/testing/party-venue.ts`; Daily and Special published in a full menu "Lunch"):
-  - `"a counter order, a takeaway bill and a bill with no table-service zone are refused"`, one
-    case each, with the code.
+  - `"an eat-in counter order is refused"` with `set_menu.not_seated`.
+  - `"a takeaway or delivery order accepts a set menu"`, with a case for each.
   - `"a bill's state holds its set menus, copies and placed dishes"`.
   - `"a set-menu line moved in from another bill brings its own copy"`: a line whose version is not
     the recorded one is read with its own copy.
@@ -673,10 +674,10 @@ export function setMenuOfferLookup(
   adds from it, on sale or not (owner, Q7).
   Each new line: role `set_menu`, the copy's `set_menu_id` and `set_menu_version_id`, quantity 1,
   `sent_at` and `served_at` now with `served_quantity` 1 (decision 2), `unit_price_gross` and
-  `line_total` the copy's price, `vat_class` and `takeaway_vat_class` the copy's `vatClass`, `name`
-  the copy's name and `descriptions` from `setMenuLineDescriptions`, `credited_to` the signed-in
-  person, no group, course or cohort. A born-sent line also fixes the bill's dining by the
-  existing trigger (`working_orders_dining_fixed`, `core.sql:672-689`); that is a backstop only.
+  `line_total` the copy's price, `vat_class` the copy's `terms.vatClass`, `takeaway_vat_class`
+  its `terms.takeawayVatClass`, `name` the copy's name, `descriptions` from `setMenuLineDescriptions`,
+  `credited_to` the signed-in person, no group, course or cohort. The existing dining lock applies
+  to the sent line (`working_orders_dining_fixed`, `core.sql:672-689`).
 - Lowering a count removes empty lines of that type, the last added first. Fewer empty ones than
   asked → `set_menu.holds_dishes` naming the dishes on the set menus of that type, and nothing is
   removed.
@@ -697,7 +698,8 @@ export function setMenuOfferLookup(
   `setMenuCopies` holds the ones it uses. A party with no set menus makes no call.
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-count.test.ts`:
-  - `"setting 2 Daily menus adds two set-menu lines at 14.00 and records the copy"`.
+  - `"setting 2 Daily menus adds two set-menu lines at 14.00 and records the copy"`. Give the copy
+    different eat-in and takeaway VAT classes and assert both on the stored lines.
   - `"an empty set menu is charged"` (Review Focus 2): the bill's stored total is 28.00 with no
     dishes.
   - `"a set menu the bill does not hold cannot be added once nothing sells it"`, and `"a bill
@@ -737,14 +739,14 @@ export function setMenuOfferLookup(
 - Consumes: `setMenuOfferLookup`, `refuseUnlessSetMenuBill` (Task 5).
 - A draft line with `setMenuId` is looked up through the lookup, built once per save, never in
   the zone's `offers`; it is never marked unavailable for not being there. It is accepted on a
-  seated bill only, with quantity exactly 1 (decision 6, else `management.request_invalid`
+  bill eligible under Task 5, with quantity exactly 1 (decision 6, else `management.request_invalid`
   `{ field: "quantity" }`), and never merges with another line. A dish sold by measure is refused
   `set_menu.dish_sold_by_measure` (decision 7). Saving never checks places (owner, Q6).
 - A reservation is stored as given; nothing checks it until the dish is placed.
 
 - [ ] **Step 1: Write the failing tests:** `"a set-menu soup is saved in the draft and read back
   with its set menu"`; `"two set-menu soups stay two lines"`; `"a set-menu line of quantity 2 is
-  refused"`; `"a weighed dish from a set-menu folder is refused"`; `"a set-menu dish on a counter
+  refused"`; `"a weighed dish from a set-menu folder is refused"`; `"a set-menu dish on an eat-in counter
   order is refused"`; `"a sold-out set-menu dish is marked unavailable, and an available one is
   not"`; `"a draft line's reservation is saved and read back"`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/set-menu-drafts.test.ts`; they fail.
@@ -958,37 +960,36 @@ export function setMenuOfferLookup(
   `"a dish moved alone to a bill with no place for it is refused and nothing moves"`; `"the target
   keeps its own copy, and a moved set menu keeps its price"`; `"merging keeps every set menu and
   place"`; `"a set menu's dishes are on its bill after every move"` (in place of a database
-  trigger, Task 4); `"a set menu cannot move to a counter order"`.
+  trigger, Task 4); `"a set menu cannot move to an eat-in counter order"`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/set-menu-bill-moves.test.ts`; they fail.
 - [ ] **Step 3: Implement.** **Step 4: Run it, `src/move-dishes.test.ts`, `src/move-merge.test.ts`
   and `src/transfer-lines.test.ts`.**
 - [ ] **Step 5: Commit** — "Set menus: move set menus and their dishes between bills".
 
-### Task 11b: Moving a whole bill, changing its dining, and splitting a table or draft
+### Task 11b: Moving a whole bill and splitting a table or draft
 
 **Files:**
 - Modify: `apps/server/src/move-bill.ts` (`moveBill` `:136`, `refuseUnseatable` `:461-470`),
-  `apps/server/src/order-dining.ts` (`switchOrderDining` `:95-140`), `apps/server/src/table-actions.ts`
-  (`splitTable` `:345`), `apps/server/src/order-drafts.ts` (`splitDraft` `:135`)
+  `apps/server/src/table-actions.ts` (`splitTable` `:345`), `apps/server/src/order-drafts.ts`
+  (`splitDraft` `:135`)
 - Test: `apps/server/src/set-menu-bill-split.test.ts`
 
 **Interfaces:**
-- A bill holding set menus cannot move to a counter or to a zone that is not table service
-  (`set_menu.not_seated`), nor switch to takeaway (`set_menu.takeaway`, checked before
-  `order.dining_locked`, so the waiter reads the set-menu reason, spec §5). Moving it to another
-  table keeps its copies, set menus and dishes.
+- Moving a bill follows Task 5's eligibility rule and keeps its copies, set menus and dishes.
+  The existing dining rules apply. Staff choose takeaway before adding a set menu because its
+  sent line locks the bill's dining (Task 6).
 - `splitTable` moves loose dishes through Task 11a's move, so its refusals apply.
 - `splitDraft` carries a set-menu draft line's `setMenuId` and clears its reservation (it named the
   source bill's set menu).
 
-- [ ] **Step 1: Write the failing tests:** `"a bill holding set menus cannot move to a counter or
-  become takeaway"`; `"moving it to another table keeps its set menus and prices"`; `"splitting a
+- [ ] **Step 1: Write the failing tests:** `"a bill holding set menus cannot move to an eat-in
+  counter order"`; `"moving it to another table keeps its set menus and prices"`; `"splitting a
   table moves a set-menu dish only where it has a place"`; `"splitting a draft takes its set-menu
   dishes without their reservations"`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/set-menu-bill-split.test.ts`; they fail.
 - [ ] **Step 3: Implement.** **Step 4: Run it, `src/till-api.move-bill.test.ts`,
   `src/order-drafts.test.ts` and the split-table suites (grep `splitTable` under `apps/server/src/*.test.ts`).**
-- [ ] **Step 5: Commit** — "Set menus: keep set menus to seated, eat-in bills when a bill moves or a table splits".
+- [ ] **Step 5: Commit** — "Set menus: preserve set menus when eligible bills move or split".
 
 ### Task 12a: A set-menu line never reaches a ticket or a station
 
@@ -1113,8 +1114,8 @@ export function draftPlacements(
 
 **Interfaces:**
 - Consumes: `orderingCopies` (Task 13); piece 1's `set_menu` `DocumentMember`.
-- A `set_menu` member draws as a folder tile with the set menu's name and price, on a seated
-  table's bill only. It opens the bill's recorded copy of that set menu, else the zone's
+- A `set_menu` member draws as a folder tile with the set menu's name and price on a bill
+  eligible under Task 5. It opens the bill's recorded copy of that set menu, else the zone's
   `newestOnSale` copy (a set menu with neither is not drawn).
 - `till-set-menu-folder` draws the copy like its board: each line a heading worded from its
   courses' names ("Starter", "Main or starter", "2 × Starter" when its count is above 1), the
@@ -1133,8 +1134,9 @@ export function draftPlacements(
   dish as included or with its surcharge"`; `"a dish two lines accept is listed under the first"`;
   `"tapping a sirloin opens its doneness question and adds a set-menu line of quantity 1"`;
   `"bravas the set menu gives Starters are drafted in the Starters course, and à la carte bravas
-  in Sharing plates"`; `"a counter order draws no set-menu folder"`; `"Add a Special menu raises
-  its count"`; `"after the period a bill holding set menus still opens their folders from the Set
+  in Sharing plates"`; `"an eat-in counter order draws no set-menu folder"`; `"a takeaway order
+  draws its set-menu folders"`; `"Add a Special menu raises its count"`;
+  `"after the period a bill holding set menus still opens their folders from the Set
   menus tile"`; `"after the full menu is republished mid-meal at 15.00, the bill's Daily folder
   still opens at 14.00 from its recorded copy, a soup tapped there is drafted, and a new bill's
   folder shows 15.00"`; a11y in both themes.
@@ -1154,7 +1156,8 @@ export function draftPlacements(
   `apps/till/src/screens/till-table-order-screen.set-menus.test.ts`
 
 **Interfaces:**
-- On a seated bill, above the order's lines, `till-set-menu-counts` shows one `wt-number-stepper`
+- On a bill eligible under Task 5, `till-set-menu-counts` shows one `wt-number-stepper` above the
+  order's lines
   (`packages/ui/src/components/wt-number-stepper.ts`, used as in `apps/till/src/widgets/guest-count.ts:56-70`)
   per set menu the bill holds or the zone has on sale: "Menú del día − 2 +". Each tap is saved at
   once (owner, Q4); a refusal shows its wording beside that stepper and puts the count back. A
@@ -1175,8 +1178,8 @@ export function draftPlacements(
   names the set menus and the open places"`; `"unfolded, each set menu shows its dishes, draft
   dishes and open places"`; `"Cancel on an empty set menu removes it; on one holding dishes it
   shows the refusal naming them"`; `"Move shows the open places with their prices and saves the
-  move"`; `"− on the Special a draft sea bass is previewed on is refused, naming it, and sends nothing"`; `"a counter order
-  shows no counts"`; a11y for the counts and the summary, folded and
+  move"`; `"− on the Special a draft sea bass is previewed on is refused, naming it, and sends nothing"`;
+  `"an eat-in counter order shows no counts"`; a11y for the counts and the summary, folded and
   unfolded, in both themes.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/set-menu-counts.test.ts src/widgets/set-menu-counts.a11y.test.ts src/widgets/set-menu-summary.test.ts src/widgets/set-menu-summary.a11y.test.ts src/screens/till-table-order-screen.set-menus.test.ts`; they fail.
 - [ ] **Step 3: Implement.** **Step 4: Run them and the `src/screens/till-table-order-screen*.test.ts` files.**
@@ -1294,8 +1297,8 @@ export function draftPlacements(
   (`readBillSetMenus`, placed with `placeInOrder`) (spec §4). Refusals show their wording.
 - Guide: a `## Set menus at a table {#set-menus}` section in both languages, written from the code
   as built: setting the counts, ordering from the folders, reading the summary, what happens when
-  a dish has no place, moving a dish between set menus, moving set menus to another bill, and that
-  a counter order cannot have one. A sentence earns its place by changing what staff do
+  a dish has no place, moving a dish between set menus, moving set menus to another bill, and when
+  to choose takeaway. A sentence earns its place by changing what staff do
   (CLAUDE.md §3). Both languages share the `{#set-menus}` id.
 
 - [ ] **Step 1: Write the failing tests:** `"a set menu moves to another bill with its dishes"`;
