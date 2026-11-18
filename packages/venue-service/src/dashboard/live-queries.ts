@@ -57,7 +57,6 @@ export const QUERY_DEPENDENCIES = {
     "order_draft_lines",
     "kitchen_stations",
     "printers",
-    "device_made_here_stations",
     "devices",
     "device_profiles",
     "device_profile_kitchen_screens",

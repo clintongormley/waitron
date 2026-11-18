@@ -857,6 +857,8 @@ also qualifies the historical operation-description references in this section.
   stays off until the latest possible till retry is confirmed; its bill branch retains abandoned
   bills because they have no closing timestamp.
   The remaining jobs still need moving onto the runner.
+  Devices hold their assigned station and invoice printer choice revision on the device row.
+  The devices and printing work continues with printer holders.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Floor splits now check the parties the till read, separately from the room layout revision;
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;

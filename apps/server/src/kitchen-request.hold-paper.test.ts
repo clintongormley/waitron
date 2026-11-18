@@ -43,7 +43,7 @@ import { cancelItem } from "./line-cancel.js";
 import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import { moveDishesToStation, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { setMadeHereStations } from "./made-here.js";
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
@@ -1370,7 +1370,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
       profileId: profile!.id,
     });
     await withTransaction(db, async (tx) => {
-      await setMadeHereStations(tx, here.deviceId, [venue.stations.grill]);
+      await setMadeHere(tx, here.deviceId, [venue.stations.grill]);
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
       await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
       const placed = await placeGroups(

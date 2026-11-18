@@ -69,11 +69,13 @@ it("routing upgrade preserves populated predecessor rows", async () => {
     "document_delivery_requests",
     "document_delivery_sequences",
     "device_invoice_save_operations",
-    "device_invoice_revisions",
     "document_page_jobs",
     "document_page_reprints",
   ]) {
     expect(db.all(sql`select * from ${sql.identifier(table)}`)).toEqual([]);
   }
+  expect(db.all(sql`select invoice_revision from devices where id = ${deviceId}`)).toEqual([
+    { invoice_revision: 0 },
+  ]);
   expect(db.all(sql`pragma foreign_key_check`)).toEqual([]);
 });

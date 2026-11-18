@@ -81,7 +81,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
-import { setMadeHereStations } from "./made-here.js";
+import { setMadeHere } from "./testing/made-here-fixture.js";
 
 describe("counter handover timing", () => {
   it("never treats the retired invoice-first mode as pay-after-sending", () => {
@@ -2433,7 +2433,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
         capabilities: [],
       });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
-      await setMadeHereStations(tx, deviceId, [station]);
+      await setMadeHere(tx, deviceId, [station]);
       return deviceId;
     });
     const id = randomUUID();

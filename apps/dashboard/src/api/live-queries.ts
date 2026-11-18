@@ -119,7 +119,6 @@ export const QUERY_DEPENDENCIES = {
     "printers",
     "card_readers",
     "join_requests",
-    "device_made_here_stations",
     "kitchen_stations",
     "device_approved_profiles",
     "device_profiles",
@@ -383,7 +382,6 @@ export const QUERY_DEPENDENCIES = {
     "devices",
     "device_profiles",
     "kitchen_stations",
-    "device_made_here_stations",
     "device_approved_profiles",
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
     "printer_holders",
@@ -409,7 +407,6 @@ export const QUERY_DEPENDENCIES = {
     "order_draft_lines",
     "kitchen_stations",
     "printers",
-    "device_made_here_stations",
     "devices",
     "device_profiles",
     "device_profile_kitchen_screens",

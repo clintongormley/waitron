@@ -1,8 +1,8 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql, inArray } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceMadeHereStations,
   orderGroups,
   parties,
   printJobs,
@@ -204,7 +204,7 @@ async function holdChipsAgain(tx: Transaction, chipsLineId: string) {
 
 async function madeHereDevice(tx: Transaction, stationId: string) {
   const { deviceId } = await seedDevice(tx, { label: "Here" });
-  await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
+  await setMadeHere(tx, deviceId, [stationId]);
   return deviceId;
 }
 

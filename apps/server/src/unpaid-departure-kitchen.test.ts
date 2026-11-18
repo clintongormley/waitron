@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type AddressInfo, type Socket } from "node:net";
@@ -6,7 +7,6 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   lineServiceCancellations,
-  deviceMadeHereStations,
   orderGroups,
   orderAmendments,
   parties,
@@ -791,9 +791,7 @@ describe("unpaid departure stops kitchen work", () => {
     async (remoteExtra, waitingExtra) => {
       const stops = remoteExtra && !waitingExtra;
       if (waitingExtra) await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [extraStation]));
-      await venue.db
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: venue.deviceId, stationId: venue.stationId });
+      await setMadeHere(venue.db, venue.deviceId, [venue.stationId]);
       let order;
       try {
         order = await billWith(
@@ -804,14 +802,7 @@ describe("unpaid departure stops kitchen work", () => {
       } finally {
         if (waitingExtra)
           await inTx(venue, (tx) => setStationsWaitForPass(tx, false, [extraStation]));
-        await venue.db
-          .delete(deviceMadeHereStations)
-          .where(
-            and(
-              eq(deviceMadeHereStations.deviceId, venue.deviceId),
-              eq(deviceMadeHereStations.stationId, venue.stationId),
-            ),
-          );
+        await setMadeHere(venue.db, venue.deviceId, []);
       }
       const lines = await linesOf(order.billId);
       const tickets = await ticketItemsWithBill(venue.db).where(

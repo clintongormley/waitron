@@ -233,7 +233,7 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended"] as const)(
     if (kind === "deleted")
       await suite.db
         .update(devices)
-        .set({ deletedAt: instant.toISOString() })
+        .set({ active: false, deletedAt: instant.toISOString() })
         .where(eq(devices.id, venue.deviceId));
     if (kind === "admission")
       await suite.db

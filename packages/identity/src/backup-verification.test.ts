@@ -95,7 +95,6 @@ beforeEach(async () => {
       label: "Till",
       tokenHash: "fixture",
       enrolledAt: now,
-      createdAt: now,
     });
     await seedPersons(suite.db, [
       {

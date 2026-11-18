@@ -55,7 +55,7 @@ beforeEach(() => {
       sql`insert into device_profiles (id,name,form_factor,capabilities,created_at,updated_at) values ('profile','Counter','till','[]','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into devices (id,device_profile_id,label,token_hash,created_at,enrolled_at) values ('device','profile','Till','synthetic','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
+      sql`insert into devices (id,device_profile_id,label,token_hash,enrolled_at) values ('device','profile','Till','synthetic','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into working_orders (id,source,order_number,opened_at,dining) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z','eat_in')`,

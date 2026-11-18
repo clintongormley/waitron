@@ -547,7 +547,7 @@ describe("device-profile store against a real migrated database", () => {
     const deviceId = await seedBoundDevice(created.id, false);
     await suite.db
       .update(devices)
-      .set({ deletedAt: "2026-10-10T10:00:00.000Z", tokenHash: "" })
+      .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z", tokenHash: "" })
       .where(eq(devices.id, deviceId));
     const row = () => suite.db.execute(sql`select * from devices where id = ${deviceId}`);
     const before = (await row()).rows;
@@ -1251,6 +1251,7 @@ describe("listDevices", () => {
     await device({ label: "Inactive", active: false, enrolledAt: "2026-11-03T10:00:00.000Z" });
     await device({
       label: "Deleted",
+      active: false,
       deletedAt: "2026-11-04T10:00:00.000Z",
       enrolledAt: "2026-11-04T09:00:00.000Z",
     });

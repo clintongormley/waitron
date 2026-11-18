@@ -1,9 +1,9 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
-  deviceMadeHereStations,
   orderGroups,
   parties,
   printJobs,
@@ -282,7 +282,7 @@ describe("A773 waiter request: send", () => {
         capabilities: [],
       });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Grill till" });
-      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: venue.stations.grill });
+      await setMadeHere(tx, deviceId, [venue.stations.grill]);
       await submitGroups(tx, { ...venue.cfg, sendingDeviceId: deviceId }, venue.party.partyId, {
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(tx, venue.party.partyId),

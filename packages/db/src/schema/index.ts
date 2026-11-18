@@ -18,7 +18,6 @@ export * from "./kitchen-stations.js";
 export * from "./kitchen-courses.js";
 export * from "./ticket-items.js";
 export * from "./devices.js";
-export * from "./device-made-here-stations.js";
 export * from "./device-approved-profiles.js";
 export * from "./join-requests.js";
 export * from "./print-agents.js";
@@ -68,8 +67,6 @@ export * from "./venue-service/index.js";
 export * from "./document-delivery-requests.js";
 
 export * from "./device-invoice-save-operations.js";
-
-export * from "./device-invoice-revisions.js";
 
 export * from "./document-page-jobs.js";
 

@@ -745,23 +745,21 @@ CREATE TABLE `devices` (
 	`battery_charging` integer,
 	`battery_reported_at` text,
 	`enrolled_at` text NOT NULL,
-	`created_at` text NOT NULL,
+	`made_here_station_ids` text DEFAULT '[]' NOT NULL,
+	`invoice_revision` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`receipt_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`payment_slip_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`cash_drawer_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`invoice_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "devices_battery_level_ck" CHECK("devices"."battery_level" is null or "devices"."battery_level" between 0 and 100),
+	CONSTRAINT "devices_deleted_ck" CHECK("devices"."deleted_at" is null or "devices"."active" = 0),
+	CONSTRAINT "devices_made_here_station_ids_ck" CHECK(json_valid("devices"."made_here_station_ids") and json_type("devices"."made_here_station_ids") = 'array' and json_array_length("devices"."made_here_station_ids") <= 1),
+	CONSTRAINT "devices_invoice_revision_ck" CHECK("devices"."invoice_revision" between 0 and 9007199254740991 and "devices"."invoice_revision" = cast("devices"."invoice_revision" as integer))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `devices_label_active_key` ON `devices` (`label`) WHERE "devices"."active" = 1;--> statement-breakpoint
-CREATE TABLE `device_made_here_stations` (
-	`device_id` text PRIMARY KEY NOT NULL,
-	`station_id` text NOT NULL,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `device_approved_profiles` (
 	`device_id` text NOT NULL,
 	`device_profile_id` text NOT NULL,
@@ -2739,13 +2737,6 @@ CREATE TABLE `device_invoice_save_operations` (
 );
 --> statement-breakpoint
 CREATE INDEX `device_invoice_save_operations_recovery_idx` ON `device_invoice_save_operations` (`node_id`,`recovery_epoch`,`device_id`,`acknowledged`);--> statement-breakpoint
-CREATE TABLE `device_invoice_revisions` (
-	`device_id` text PRIMARY KEY NOT NULL,
-	`revision` integer NOT NULL,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "device_invoice_revisions_revision_ck" CHECK("device_invoice_revisions"."revision" between 0 and 9007199254740991 and "device_invoice_revisions"."revision" = cast("device_invoice_revisions"."revision" as integer))
-);
---> statement-breakpoint
 CREATE TABLE `document_page_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,

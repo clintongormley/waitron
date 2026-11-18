@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ensureFixtureJobRole, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
@@ -9,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import {
   billPayments,
-  deviceMadeHereStations,
   deviceProfiles,
   devices,
   lineServiceCancellations,
@@ -1200,11 +1200,7 @@ describe("the public cancellation read and command", () => {
   );
 
   it("replays the made-here answer after cancellation deletes its subject line", async () => {
-    await inTx(venue, (tx) =>
-      tx
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: venue.deviceId, stationId: venue.stationId }),
-    );
+    await inTx(venue, (tx) => setMadeHere(tx, venue.deviceId, [venue.stationId]));
     try {
       const p = await fixture("hold", true);
       await inTx(venue, (tx) => storePrepayMadeHere(tx, p.billId, [p.water.id]));
@@ -1241,11 +1237,7 @@ describe("the public cancellation read and command", () => {
       expect(second.json).toEqual(first.json);
       expect(await frozen()).toEqual(beforeReplay);
     } finally {
-      await inTx(venue, (tx) =>
-        tx
-          .delete(deviceMadeHereStations)
-          .where(eq(deviceMadeHereStations.deviceId, venue.deviceId)),
-      );
+      await inTx(venue, (tx) => setMadeHere(tx, venue.deviceId, []));
     }
   });
 

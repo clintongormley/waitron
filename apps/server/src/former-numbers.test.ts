@@ -15,7 +15,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
-import { setMadeHereStations } from "./made-here.js";
+import { setMadeHere } from "./testing/made-here-fixture.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { readScopedPassBoard } from "./pass-board.js";
@@ -61,7 +61,7 @@ useVenueDb({
           { kind: "station", stationId: id },
         );
       }
-      await setMadeHereStations(tx, v.cfg.origin.deviceId, [stations.bar]);
+      await setMadeHere(tx, v.cfg.origin.deviceId, [stations.bar]);
     });
   },
 });

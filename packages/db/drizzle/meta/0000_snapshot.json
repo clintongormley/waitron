@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d0dc150b-fe5b-4235-ba93-53ba5da63b62",
+  "id": "70cc53f5-b02a-4e6c-81ac-04c769aa76af",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4893,12 +4893,21 @@
           "notNull": true,
           "autoincrement": false
         },
-        "created_at": {
-          "name": "created_at",
+        "made_here_station_ids": {
+          "name": "made_here_station_ids",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "invoice_revision": {
+          "name": "invoice_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {
@@ -4993,58 +5002,24 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "device_made_here_stations": {
-      "name": "device_made_here_stations",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
+      "checkConstraints": {
+        "devices_battery_level_ck": {
+          "name": "devices_battery_level_ck",
+          "value": "\"devices\".\"battery_level\" is null or \"devices\".\"battery_level\" between 0 and 100"
         },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_made_here_stations_device_fk": {
-          "name": "device_made_here_stations_device_fk",
-          "tableFrom": "device_made_here_stations",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+        "devices_deleted_ck": {
+          "name": "devices_deleted_ck",
+          "value": "\"devices\".\"deleted_at\" is null or \"devices\".\"active\" = 0"
         },
-        "device_made_here_stations_station_fk": {
-          "name": "device_made_here_stations_station_fk",
-          "tableFrom": "device_made_here_stations",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+        "devices_made_here_station_ids_ck": {
+          "name": "devices_made_here_station_ids_ck",
+          "value": "json_valid(\"devices\".\"made_here_station_ids\") and json_type(\"devices\".\"made_here_station_ids\") = 'array' and json_array_length(\"devices\".\"made_here_station_ids\") <= 1"
+        },
+        "devices_invoice_revision_ck": {
+          "name": "devices_invoice_revision_ck",
+          "value": "\"devices\".\"invoice_revision\" between 0 and 9007199254740991 and \"devices\".\"invoice_revision\" = cast(\"devices\".\"invoice_revision\" as integer)"
         }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
+      }
     },
     "device_approved_profiles": {
       "name": "device_approved_profiles",
@@ -18166,49 +18141,6 @@
         "device_invoice_save_operations_revision_ck": {
           "name": "device_invoice_save_operations_revision_ck",
           "value": "\"device_invoice_save_operations\".\"expected_revision\" between 0 and 9007199254740991 and \"device_invoice_save_operations\".\"expected_revision\" = cast(\"device_invoice_save_operations\".\"expected_revision\" as integer)"
-        }
-      }
-    },
-    "device_invoice_revisions": {
-      "name": "device_invoice_revisions",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_invoice_revisions_device_id_devices_id_fk": {
-          "name": "device_invoice_revisions_device_id_devices_id_fk",
-          "tableFrom": "device_invoice_revisions",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_invoice_revisions_revision_ck": {
-          "name": "device_invoice_revisions_revision_ck",
-          "value": "\"device_invoice_revisions\".\"revision\" between 0 and 9007199254740991 and \"device_invoice_revisions\".\"revision\" = cast(\"device_invoice_revisions\".\"revision\" as integer)"
         }
       }
     },

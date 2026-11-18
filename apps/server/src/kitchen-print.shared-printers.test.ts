@@ -1,8 +1,8 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  deviceMadeHereStations,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   printJobs,
@@ -640,7 +640,7 @@ describe("a printer shared by several stations, and dishes made at the till", ()
         capabilities: [],
       });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Fryer till" });
-      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: stations.fryer });
+      await setMadeHere(tx, deviceId, [stations.fryer]);
       const orderId = await fireNewOrder(tx, { ...cfg, sendingDeviceId: deviceId }, [
         {
           productId: products.burger,

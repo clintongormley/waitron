@@ -2192,7 +2192,9 @@ department deletion refuses a live profile in `service-delete.ts`, and `checkedS
 `profile-access.ts` refuses disabled departments or zones; retired profiles are deliberately left
 behind. The synthetic round-trip and refusal cases are in
 `packages/provisioning/src/configuration-transfer.json-lists.test.ts`; each later list owner adds
-its own declaration, deletion call and round-trip case.
+its own declaration, deletion call and round-trip case. Enrolled devices do not travel in
+configuration bundles. Their `devices.made_here_station_ids` list holds at most one station, and
+`deleteStation` clears that id in the same transaction.
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0

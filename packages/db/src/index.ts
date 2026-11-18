@@ -147,7 +147,6 @@ export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { deviceNotDeleted, devices } from "./schema/devices.js";
-export { deviceMadeHereStations } from "./schema/device-made-here-stations.js";
 export { deviceApprovedProfiles } from "./schema/device-approved-profiles.js";
 export { joinRequestKind, joinRequests } from "./schema/join-requests.js";
 export { printAgents } from "./schema/print-agents.js";
@@ -451,8 +450,6 @@ export type { ServiceStepStart } from "./schema/venue-service/service-steps.js";
 export * from "./schema/document-delivery-requests.js";
 
 export * from "./schema/device-invoice-save-operations.js";
-
-export * from "./schema/device-invoice-revisions.js";
 
 export * from "./schema/document-page-jobs.js";
 

@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
@@ -9,7 +10,6 @@ import {
   billPaymentRefunds,
   billPayments,
   devices,
-  deviceMadeHereStations,
   kitchenStations,
   printJobs,
   kitchenPrintJobs,
@@ -136,7 +136,7 @@ async function snapshot(v: PartyVenue) {
     const result: Record<string, unknown> = {};
     for (const name of [
       "kitchen_stations",
-      "device_made_here_stations",
+      "devices",
       "routing_cells",
       "routing_cell_periods",
       "device_profile_kitchen_screens",
@@ -271,9 +271,7 @@ describe("permanent station deletion", () => {
     async (formFactor) => {
       const { v, id } = await fixture();
       await inTx(v, async (tx) => {
-        await tx
-          .insert(deviceMadeHereStations)
-          .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+        await setMadeHere(tx, v.cfg.origin.deviceId, [id]);
         const [profile] = await seedDeviceProfiles(tx, { name: "Portable", formFactor });
         await tx
           .update(devices)
@@ -292,9 +290,7 @@ describe("permanent station deletion", () => {
         .update(devices)
         .set({ label: "Terrace" })
         .where(eq(devices.id, v.cfg.origin.deviceId));
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+      await setMadeHere(tx, v.cfg.origin.deviceId, [id]);
       await deleteDevice(tx, v.cfg, v.cfg.origin.deviceId);
     });
     const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
@@ -349,9 +345,7 @@ describe("permanent station deletion", () => {
     );
     await inTx(v, async (tx) => {
       await attachStationPrinterForTest(tx, id, printer!.id);
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+      await setMadeHere(tx, v.cfg.origin.deviceId, [id]);
     });
     const [sender] = await inTx(v, (tx) =>
       tx.select().from(devices).where(eq(devices.id, v.cfg.origin.deviceId)),
@@ -420,8 +414,14 @@ describe("permanent station deletion", () => {
       (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, id)))[0]!
         .printerIds,
     ).toEqual([]);
-    for (const table of [deviceMadeHereStations])
-      expect(await inTx(v, (tx) => tx.select().from(table))).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({ id: devices.id })
+          .from(devices)
+          .where(sql`json_array_length(${devices.madeHereStationIds}) > 0`),
+      ),
+    ).toEqual([]);
     expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === id)).toBe(false);
     for (const action of [
       () => inTx(v, (tx) => deleteStation(tx, id)),

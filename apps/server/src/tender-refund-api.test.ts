@@ -255,7 +255,7 @@ it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspe
     if (kind === "deleted")
       await store.db
         .update(devices)
-        .set({ deletedAt: new Date().toISOString() })
+        .set({ active: false, deletedAt: new Date().toISOString() })
         .where(eq(devices.id, venue.deviceId));
     if (kind === "retired")
       await store.db

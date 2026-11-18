@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
@@ -15,7 +16,6 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
-  deviceMadeHereStations,
   kitchenStations,
   orderGroupHoldStations,
   orderGroups,
@@ -79,7 +79,7 @@ useVenueDb({
         .where(eq(kitchenStations.isDefault, true));
       const stationId = bar!.id;
       const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
-      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
+      await setMadeHere(tx, deviceId, [stationId]);
       const printer = await createPrinter(tx, {
         name: "Bar",
         transport: "cloud_poll",

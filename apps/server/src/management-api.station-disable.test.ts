@@ -123,7 +123,7 @@ async function snapshot() {
     const result: Record<string, unknown> = {};
     for (const name of [
       "kitchen_stations",
-      "device_made_here_stations",
+      "devices",
       "routing_cells",
       "routing_cell_periods",
       "device_profile_kitchen_screens",

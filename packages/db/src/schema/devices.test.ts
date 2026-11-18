@@ -33,8 +33,8 @@ describe("device labels without a venue", () => {
     });
     const insert = (id: string, active: number) =>
       suite.db.run(sql`insert into devices
-        (id, device_profile_id, label, token_hash, active, enrolled_at, created_at)
-        values (${id}, ${KDS_PROFILE_A}, 'Till', 'hash', ${active}, '2026-11-11', '2026-11-11')`);
+        (id, device_profile_id, label, token_hash, active, enrolled_at)
+        values (${id}, ${KDS_PROFILE_A}, 'Till', 'hash', ${active}, '2026-11-11')`);
     await insert("active", 1);
     await insert("inactive", 0);
     const error = await captureError(() => insert("duplicate", 1));
@@ -58,8 +58,8 @@ describe("deviceNotDeleted", () => {
     });
     const insert = (id: string, deletedAt: string | null) =>
       suite.db.run(sql`insert into devices
-        (id, device_profile_id, label, token_hash, active, deleted_at, enrolled_at, created_at)
-        values (${id}, ${KDS_PROFILE_A}, ${id}, 'hash', 0, ${deletedAt}, '2026-11-11', '2026-11-11')`);
+        (id, device_profile_id, label, token_hash, active, deleted_at, enrolled_at)
+        values (${id}, ${KDS_PROFILE_A}, ${id}, 'hash', 0, ${deletedAt}, '2026-11-11')`);
     await insert("live", null);
     await insert("deleted", "2026-11-12T10:00:00.000Z");
     const rows = await suite.db.select({ id: devices.id }).from(devices).where(deviceNotDeleted());
@@ -143,7 +143,10 @@ describe("devices schema (columns, FKs, unique)", () => {
     );
     expect(fresh!.deleted_at).toBeNull();
     await inTx((tx) =>
-      tx.update(devices).set({ deletedAt: "2026-10-10T10:00:00.000Z" }).where(eq(devices.id, id)),
+      tx
+        .update(devices)
+        .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z" })
+        .where(eq(devices.id, id)),
     );
     const [typed] = await inTx((tx) =>
       tx.select({ deletedAt: devices.deletedAt }).from(devices).where(eq(devices.id, id)),

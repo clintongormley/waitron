@@ -1,10 +1,10 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import {
-  deviceMadeHereStations,
   kitchenStations,
   printJobs,
   printers,
@@ -918,9 +918,7 @@ describe("A669 capture", () => {
 
   it("does not freeze made-here work", async () => {
     const p = await party();
-    await v.db
-      .insert(deviceMadeHereStations)
-      .values({ deviceId: v.cfg.origin.deviceId, stationId });
+    await setMadeHere(v.db, v.cfg.origin.deviceId, [stationId]);
     const ask = await command(p);
     await inTx(v, (tx) =>
       submitGroups(tx, { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId }, p.partyId, ask),

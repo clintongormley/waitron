@@ -1,7 +1,7 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceMadeHereStations,
   orderGroups,
   printJobs,
   ticketItems,
@@ -118,7 +118,7 @@ async function madeHereDevice(tx: Transaction, stationId: string) {
     capabilities: [],
   });
   const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Here" });
-  await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
+  await setMadeHere(tx, deviceId, [stationId]);
   return deviceId;
 }
 

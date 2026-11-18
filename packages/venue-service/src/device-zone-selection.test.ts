@@ -371,7 +371,7 @@ describe("device zone selection", () => {
     await run((tx) =>
       tx
         .update(devices)
-        .set({ deletedAt: new Date().toISOString() })
+        .set({ active: false, deletedAt: new Date().toISOString() })
         .where(eq(devices.id, f.deviceId)),
     );
     await expect(read(f)).rejects.toMatchObject({ code: "device.not_found" });

@@ -260,7 +260,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   device_profile_admission_roles: ["role"],
   nodes: ["location_id"],
   adjustment_reasons: ["apply_roles", "approver_roles"],
-  devices: ["location_id"],
+  devices: ["location_id", "created_at"],
   working_orders: ["location_id"],
   tender_refunds: ["location_id"],
   join_requests: ["location_id"],
@@ -301,7 +301,6 @@ const ADDED_TABLES = [
   "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
-  "device_invoice_revisions",
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",
@@ -736,13 +735,6 @@ for (const locale of ["en", "es"] as const) {
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
-    for (const phase of ["before", "provisioned", "seeded"] as const) {
-      const station = expected[phase].tables.device_made_here_stations!.columns.find(
-        (column) => column.name === "station_id",
-      )!;
-      expect(station.pk).toBe(2);
-      station.pk = 0;
-    }
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       const profilePrinters = expected[phase].tables.device_profile_printers!;
@@ -2184,6 +2176,13 @@ for (const locale of ["en", "es"] as const) {
       const profileReaders = expected[phase].tables.device_profile_card_readers!;
       expected[phase] = madridWithFoldedTables(expected[phase], [
         {
+          from: "device_made_here_stations",
+          into: "devices",
+          match: { from: "device_id", into: "id" },
+          columns: {},
+          collect: { from: "station_id", into: "made_here_station_ids" },
+        },
+        {
           from: "device_card_readers",
           into: "devices",
           match: { from: "device_id", into: "id" },
@@ -2198,6 +2197,14 @@ for (const locale of ["en", "es"] as const) {
         0,
         choiceColumn,
       );
+      deviceTable.columns.push({
+        name: "invoice_revision",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "0",
+        pk: 0,
+      });
+      for (const row of Object.values(deviceTable.rows)) row.invoice_revision = 0;
       deviceTable.foreignKeys = deviceTable.foreignKeys
         .filter((key) => key.from !== "card_reader_id")
         .map((key) => ({ ...key, id: key.id - 1 }));
@@ -2220,6 +2227,7 @@ for (const locale of ["en", "es"] as const) {
               };
       }
       delete expected[phase].tables.device_profile_card_readers;
+      delete phases[phase]!.device_made_here_stations;
       delete phases[phase]!.device_card_readers;
       delete phases[phase]!.device_profile_card_readers;
 
