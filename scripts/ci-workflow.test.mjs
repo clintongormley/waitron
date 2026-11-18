@@ -6580,6 +6580,30 @@ describe("the workflows' Node setups", () => {
     expect(sites.length).toBeGreaterThan(0);
   });
 
+  it("restores the pnpm cache only on GitHub-hosted CI runners", () => {
+    const routedInstalls = jobBlocks(lines.join("\n"))
+      .filter((job) => job.lines.some((line) => /^ {4}runs-on:.*"self-hosted"/.test(line)))
+      .map((job) => ({ id: job.id, steps: workflowSteps(job.lines.join("\n")) }))
+      .filter(({ steps }) => steps.some((step) => /^\s*pnpm install\b/m.test(step.command)));
+    expect(routedInstalls.length).toBeGreaterThan(0);
+
+    for (const { id, steps } of routedInstalls) {
+      const attempts = steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
+      expect(attempts, id).toHaveLength(2);
+      for (const attempt of attempts) {
+        const cache = (environment) => {
+          const input = attempt.with.cache;
+          return input?.startsWith("${{")
+            ? expressionValue(input, { runner: { environment } })
+            : input;
+        };
+        const site = `${id} / ${attempt.step}`;
+        expect(cache("self-hosted"), site).toBe("");
+        expect(cache("github-hosted"), site).toBe("pnpm");
+      }
+    }
+  });
+
   it.each(sites)(
     "bounds both attempts and retries only a failed first: $name / $id",
     ({ steps }) => {
