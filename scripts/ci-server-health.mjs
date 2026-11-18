@@ -637,7 +637,8 @@ export async function healthCommand(command, options, { report, output }) {
         output(`server_families=${JSON.stringify(families)}`);
         output(`server_jobs=${JSON.stringify(serverJobs)}`);
         output(`server_route_attempt=${options.attempt}`);
-        report(`CI server job candidates: ${JSON.stringify(serverJobs)}`);
+        if (options.attempt === 1)
+          report(`CI server job candidates: ${JSON.stringify(serverJobs)}`);
       }
       output(`server_route=${answer.route}`);
       report(`CI route: ${answer.route}; ${answer.reason}`);

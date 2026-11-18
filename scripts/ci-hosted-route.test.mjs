@@ -96,6 +96,25 @@ describe("queue-pressure routing", () => {
     );
   });
 
+  it("logs the whole route on a fresh rerun without a first-batch candidate list", async () => {
+    const { options, run } = fixture(20);
+    const read = options.request;
+    options.attempt = 2;
+    options.families = [{ id: "lint", count: 1, enabled: true }];
+    options.request = async (path, requestOptions) => {
+      if (path.endsWith("/runs/51")) return { ...run, id: 51, head_repository: { id: 42 } };
+      if (path.includes("/runs/51/attempts/1/jobs?")) return { total_count: 0, jobs: [] };
+      return read(path, requestOptions);
+    };
+    const reports = [];
+    await healthCommand("route", options, {
+      output: () => {},
+      report: (line) => reports.push(line),
+    });
+    expect(reports.join("\n")).toContain("CI route: server;");
+    expect(reports.join("\n")).not.toContain("CI server job candidates:");
+  });
+
   it.each(["health", "hosted"])(
     "routes past an old queued-list mismatch in the %s read but refuses differing fresh rows",
     async (scope) => {
