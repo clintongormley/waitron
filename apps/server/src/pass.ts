@@ -7,7 +7,7 @@ import type { Logger } from "./logger.js";
  * a ledger duty (`packages/payments/src/reconciliation-schedule/duty.ts` says why). */
 export const DRAIN_DUTY = "fiscal.drain";
 /** Aggregate payment-audit health label; scheduled runs keep their provider-specific duty names. */
-export const RECONCILE_DUTY = "payments.reconcile.stripe";
+export const RECONCILE_DUTY = "payments.reconcile";
 
 /** Consumers that must cover every duty (`health.ts`'s `DUTY_BUDGET_MS`) key off `Duty`, so adding a
  * duty here without updating them is a compile error. */

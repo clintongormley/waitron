@@ -10,7 +10,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import type Stripe from "stripe";
 import { createLogger } from "./logger.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
-import { runPass, RECONCILE_DUTY } from "./pass.js";
+import { runPass } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
@@ -110,7 +110,7 @@ describe("one composed pass against a migrated database", () => {
     // A `succeeded` row means the read, the insert and the update on `reconciliation_runs` each landed.
     const rows = await suite.db.execute<{ count: string }>(
       sql`select count(*) as count from reconciliation_runs
-          where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
+          where duty = 'payments.reconcile.stripe' and state = 'succeeded'`,
     );
     expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 
