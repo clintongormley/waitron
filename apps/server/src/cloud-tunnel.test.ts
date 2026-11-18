@@ -13,8 +13,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...actual, rename: vi.fn(actual.rename) };
 });
 
-async function fixture() {
-  const f = await installationFixture();
+async function fixture(environment: "test" | "production" = "test") {
+  const f = await installationFixture(undefined, { environment });
   const venueId = (await f.client.status()).registration!.venueId;
   const tunnelDir = join(f.stateDir, "tunnel"),
     peerPublicKey = randomBytes(32).toString("base64"),
@@ -78,6 +78,17 @@ it.each(["ready", "provisioning"])(
     }
   },
 );
+
+it("leaves the companion idle for a production installation even when Cloud lists a placement", async () => {
+  const f = await fixture("production");
+  try {
+    await writeFile(f.peer, "stale peer");
+    await f.client.refresh();
+    expect(await files.readdir(f.tunnelDir)).toEqual(["public-key"]);
+  } finally {
+    await f.close();
+  }
+});
 
 it.each([
   { installationId: randomUUID() },

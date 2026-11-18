@@ -238,7 +238,7 @@ correct the keys on main.
 
 If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
 pushed last, so a run that stopped before that push has not published the version, and the re-run
-pushes both images.
+pushes all three images.
 
 ## 8. Install the release on a box
 
@@ -249,8 +249,13 @@ sudo bash /opt/waitron-host/waitron.sh install v1.0.0
 ```
 
 The installer verifies the signed release file with the public keys already on the box and
-pulls the three images it names by digest. For the first upgrade on an existing development box,
-follow [the deploy guide](../../deploy/README.md#installing-a-release) to install release trust.
+pulls the three images it names by digest. Before installing the first release that includes the
+tunnel companion, use the checked main upgrade in the deploy guide to update the retained verifier
+and keys. [Install a release](../../deploy/README.md#installing-a-release)
+
+For the first publication of the tunnel companion on main, check that a box without registry
+credentials can pull `ghcr.io/clintongormley/waitron-tunnel:main` before using the new Compose file
+for a fresh main install.
 A production box starts only on a numbered release.
 
 ## Offer a release to a group

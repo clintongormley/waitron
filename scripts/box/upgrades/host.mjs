@@ -217,6 +217,7 @@ export async function createUpgradeHost({
           compose: rawCandidate,
         });
         await stopUpgradeWriters({ compose, run });
+        // GNU cp preserves sockets, and the snapshot flush cannot open them.
         try {
           if ((await fs.lstat(staffSocket)).isSocket()) await fs.unlink(staffSocket);
         } catch (error) {

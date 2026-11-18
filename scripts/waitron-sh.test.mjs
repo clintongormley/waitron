@@ -173,7 +173,13 @@ case "$1" in
       config)
         # Compose lists the active profiles' images, one per line.
         case "$args" in
-          *"--format json") printf '{"services":{"app":{"image":"%s"}}}\\n' "\${WAITRON_IMAGE:-waitron:configured}" ;;
+          *"--format json")
+            extra=''
+            case "\${WT_LEGACY_TUNNEL:-no}" in
+              no) extra=',"tunnel":{"image":"tunnel:default"}' ;;
+              optional) extra=',"tunnel":{"image":"tunnel:dev","profiles":["staff-tunnel"]}' ;;
+            esac
+            printf '{"services":{"app":{"image":"%s"}%s}}\\n' "\${WAITRON_IMAGE:-waitron:configured}" "$extra" ;;
           *--environment*) printf 'COMPOSE_PROFILES=%s\\n' "\${WT_COMPOSE_ENV_PROFILES-$profiles}" ;;
           *--images*)
             printf '%s\\n' "$profiles" >> "\${WT_LOG}.images-profiles"
@@ -802,6 +808,31 @@ describe("waitron.sh published candidate", () => {
     expect(pulls.every((line) => line.includes("@sha256:"))).toBe(true);
     expect(pulls.some((line) => line.endsWith(":main"))).toBe(false);
   });
+});
+
+it.each([
+  ["main", "missing"],
+  ["my-branch", "optional"],
+])("selects only app and agent for %s with a %s companion", (ref, legacy) => {
+  const sb = sandbox();
+  installedBox(sb);
+  const host = join(sb.root, "host");
+  mkdirSync(host);
+  const result = run(
+    sb,
+    ["__candidate", ref, "0123456789abcdef0123456789abcdef01234567:1792062000", sb.boxDir],
+    { WT_LEGACY_TUNNEL: legacy, WAITRON_HOST_DIR: host },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(result.stdout).images).toEqual({
+    app: "sha256:candidate-app",
+    "print-agent": "sha256:candidate-agent",
+  });
+  expect(
+    loggedCalls(sb).filter(
+      (line) => line.startsWith("docker build ") || line.startsWith("docker pull "),
+    ),
+  ).toHaveLength(2);
 });
 
 describe("waitron.sh recovery owner", () => {
@@ -1965,6 +1996,10 @@ describe("waitron.sh install of a release", () => {
 
   it("install main still pulls compose.yml's own images and records no image override", () => {
     const sb = sandbox();
+    writeFileSync(
+      join(sb.boxDir, ".env"),
+      "WAITRON_IMAGE=old:app\nWAITRON_PRINT_AGENT_IMAGE=old:agent\nWAITRON_TUNNEL_IMAGE=old:tunnel\n",
+    );
     const r = run(sb, ["install", "main"]);
     expect(r.status, r.stderr).toBe(0);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));

@@ -417,9 +417,12 @@ it("serves marked remote requests over a private TLS socket and can reopen it", 
     hostnames: [hostname],
     ipAddresses: [],
   });
-  const app = new Hono<{ Bindings: { remoteStaff?: boolean } }>();
+  const app = new Hono();
   app.get("/management-api/session", (c) =>
-    c.json({ remote: c.env.remoteStaff === true, onBox: requestFromBox(c) }),
+    c.json({
+      remote: (c.env as { remoteStaff?: boolean } | undefined)?.remoteStaff === true,
+      onBox: requestFromBox(c),
+    }),
   );
   const start = () =>
     startStaffListener(

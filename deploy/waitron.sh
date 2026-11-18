@@ -484,6 +484,15 @@ resolve_source_metadata() {
   printf '%s\n' "$source_metadata"
 }
 
+uses_default_tunnel() {
+  local config enabled
+  config="$(docker compose -f "$WAITRON_DIR/compose.yml" config --format json)" \
+    || die 'could not read the selected box Compose file'
+  enabled="$(jq -r '.services.tunnel != null and ((.services.tunnel.profiles // []) | length == 0)' <<< "$config")" \
+    || die 'could not read the selected tunnel service'
+  [ "$enabled" = true ]
+}
+
 # 3. main pulls every image in compose.yml and records no override; development refs other than
 #    main build the Waitron images and record their tags or ids.
 select_image() {
@@ -492,6 +501,7 @@ select_image() {
     local why="check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
     env_unset WAITRON_IMAGE
     env_unset WAITRON_PRINT_AGENT_IMAGE
+    env_unset WAITRON_TUNNEL_IMAGE
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images for $ref: $why"
   else
@@ -515,17 +525,20 @@ select_image() {
       --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
-    docker build "${tunnel_output[@]}" -f deploy/tunnel/Dockerfile \
-      --build-arg "WAITRON_BUILD_ID=$sha" \
-      --label "org.opencontainers.image.created=$created" \
-      --label "org.opencontainers.image.ref.name=$ref" \
-      "https://github.com/clintongormley/waitron.git#${sha}"
+    if uses_default_tunnel; then
+      docker build "${tunnel_output[@]}" -f deploy/tunnel/Dockerfile \
+        --build-arg "WAITRON_BUILD_ID=$sha" \
+        --label "org.opencontainers.image.created=$created" \
+        --label "org.opencontainers.image.ref.name=$ref" \
+        "https://github.com/clintongormley/waitron.git#${sha}"
+      if [ -n "${3:-}" ]; then tunnel_tag="$(cat "$3/tunnel.id")"; fi
+      env_set WAITRON_TUNNEL_IMAGE "$tunnel_tag"
+    fi
     if [ -n "${3:-}" ]; then
-      tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"; tunnel_tag="$(cat "$3/tunnel.id")"
+      tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"
     fi
     env_set WAITRON_IMAGE "$tag"
     env_set WAITRON_PRINT_AGENT_IMAGE "$agent_tag"
-    env_set WAITRON_TUNNEL_IMAGE "$tunnel_tag"
   fi
 }
 
@@ -1071,7 +1084,7 @@ immutable_main_image() {
 }
 
 prepare_upgrade_candidate() (
-  local ref="$1" metadata="$2" installed="$3" work app agent tunnel revision reference
+  local ref="$1" metadata="$2" installed="$3" work app agent tunnel="" revision reference
   work="$(mktemp -d "$WAITRON_HOST_DIR/.candidate.XXXXXX")"
   trap 'rm -rf -- "$work"' EXIT
   WAITRON_DIR="$work"
@@ -1088,11 +1101,13 @@ prepare_upgrade_candidate() (
     agent="$(docker image inspect "$reference" --format '{{.Id}}')"
     [ "$(docker image inspect "$agent" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
       || die 'candidate app and print agent name different source revisions'
-    reference="$(immutable_main_image "$TUNNEL_IMAGE_REPO")"
-    docker pull "$reference" >&2
-    tunnel="$(docker image inspect "$reference" --format '{{.Id}}')"
-    [ "$(docker image inspect "$tunnel" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
-      || die 'candidate app and tunnel name different source revisions'
+    if uses_default_tunnel; then
+      reference="$(immutable_main_image "$TUNNEL_IMAGE_REPO")"
+      docker pull "$reference" >&2
+      tunnel="$(docker image inspect "$reference" --format '{{.Id}}')"
+      [ "$(docker image inspect "$tunnel" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
+        || die 'candidate app and tunnel name different source revisions'
+    fi
   elif is_release_tag "$ref"; then
     [[ "${4:-}" =~ ^sha256:[a-f0-9]{64}$ && "${5:-}" =~ ^sha256:[a-f0-9]{64}$ && "${6:-}" =~ ^sha256:[a-f0-9]{64}$ ]] \
       || die "signed image digests are required for $ref"
@@ -1109,10 +1124,10 @@ prepare_upgrade_candidate() (
     select_image "$ref" "$metadata" "$work" >&2
     app="$(docker image inspect "$(sed -n 's/^WAITRON_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
     agent="$(docker image inspect "$(sed -n 's/^WAITRON_PRINT_AGENT_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
-    tunnel="$(docker image inspect "$(sed -n 's/^WAITRON_TUNNEL_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
+    if [ -f "$work/tunnel.id" ]; then tunnel="$(cat "$work/tunnel.id")"; fi
   fi
   jq -Rsc --arg app "$app" --arg agent "$agent" --arg tunnel "$tunnel" \
-    '{compose:.,images:{app:$app,"print-agent":$agent,tunnel:$tunnel}}' "$WAITRON_DIR/compose.yml"
+    '{compose:.,images:{app:$app,"print-agent":$agent}} | if $tunnel != "" then .images.tunnel=$tunnel else . end' "$WAITRON_DIR/compose.yml"
 )
 
 # `docker compose up` creates the state volume, and a first install writes compose.yml well before
