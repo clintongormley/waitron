@@ -103,9 +103,9 @@ afterwards.
 
 **Creating one.** On Menus, **Add menu** offers **Menu** or **Set menu** (from the writer's
 dashboard mock-ups; the owner reshaped the editor, below, but has not yet said yes to the second
-mock-up as a whole, so **my call** until the owner approves this document). A set menu is a menu (a row in `menus`, published as versions in
-`menu_versions` the way every menu is, `packages/db/src/schema/menu/publication.ts:12-39`), marked
-as a set menu.
+mock-up as a whole, so **my call** until the owner approves this document). A set menu is a menu (a row in `menus`), marked as a set menu. It
+has no published versions of its own: it is copied into each full menu that holds it (see
+**Publishing** below).
 
 **The editor is one page** (**owner**: drop the sections, products and "counts as" tabs of the first
 mock-up; dishes first, then the rules). Its parts, in order:
@@ -136,18 +136,22 @@ mock-up; dishes first, then the rules). Its parts, in order:
 **Placing it.** A set menu is put into a full menu's structure, anywhere in its tree, as a member
 the way a folder is (from the writer's first dashboard mock-up, which the owner reacted to without
 objecting to this part; **my call** until approved). The
-till draws it as a folder named after the set menu with its price. It is not an included menu:
+till draws it as a folder named after the set menu with its price. For prices it is not an included menu:
 included menus share one price per product with the menu that includes them, and a disagreement is
 a clash that blocks publishing (`packages/menu/src/menu-combine.ts:4-13,37-41`; refused at
 `packages/menu/src/menu-publication.ts:669-671`). Sirloin at €18 à la carte, +€5 on the del día and
 included on the especial would clash. So a set-menu member carries its own dish offers, priced by
 the set menu, beside the full menu's own offers and never combined with them.
 
-**Publishing.** A set menu is published like any menu. The full menu that holds it shows the set
-menu's live version, so publishing the set menu is enough to change it on the tills. (Corrected
-18 November 2026: this first said "as it does for an included menu", but an included menu is
-copied in when the full menu is published, `packages/menu/src/menu-document.ts:258-292`; see
-decision 3 of the [piece 1 plan](../plans/2026-11-18-a1515-set-menu-dashboard.md).)
+**Publishing.** A set menu works exactly like an included menu (**owner**, 18 November 2026,
+correcting this design: "The set menu should be copied in at the time it is published", then
+"Full menu publish, draft" when asked which of three readings was meant). Publishing a full menu
+copies in each set menu it holds as it stands on the dashboard, and that copy is what the tills
+sell until the full menu is published again. A set menu has no Publish of its own. A change to it
+marks every full menu holding it as changed, and a set menu with a problem (a dish no line
+accepts, say) stops those full menus being published. Two full menus published at different
+times can hold different copies of the same set menu. Detail: decision 3 of the
+[piece 1 plan](../plans/2026-11-18-a1515-set-menu-dashboard.md).
 
 **The product's Set lunch switch** is gone (removed by A1515-REMOVE, not by this work).
 
@@ -176,8 +180,10 @@ Which folder it came from does not matter to the bill (**owner**, answer A). The
 ordered from an à la carte folder is an ordinary à la carte line at its à la carte price, and the
 bill never turns it into a set-menu dish (**my call**).
 
-**What a dish counts as.** A set-menu dish counts as its product's course **at the moment it was
-ordered**, recorded on the line. Moving it to another course to serve it (a starter served as a
+**What a dish counts as.** A set-menu dish counts as the course its product had when the full
+menu holding the set menu was last published, fixed in that copy and recorded on the line
+(**owner**, 18 November 2026: "The menu should freeze the definition - we shouldn't read courses
+from the live product list"; this replaces "its product's course at the moment it was ordered"). Moving it to another course to serve it (a starter served as a
 main) changes when it is sent, not what it counts as on the bill (**owner**: "classification is
 fixed"). An order line already keeps its course (`course_id`) apart from its firing group
 (`group_id`) (`packages/db/src/schema/orders.ts:210-226`); the counts-as course is a third,
@@ -273,9 +279,10 @@ server use (browser-safe). The till runs it to show the summary and to ask about
 before sending; the server runs it on every change to the bill and its answer is the one stored
 (**my call**).
 
-**Which set menus it may use.** The set-menu versions live for that bill's zone when the bill's
-first set menu was added, recorded on the bill, for the rest of that bill's life (**my call**: a
-set menu republished mid-meal must not reprice a table already eating).
+**Which set menus it may use.** The set-menu copies live and selling for that bill's zone when the
+bill's first set menu was added (each named by the full menu's version and the set menu), recorded on the
+bill, for the rest of that bill's life (**my call**: a full menu republished mid-meal must not
+reprice a table already eating).
 
 **After the set menu stops selling.** A bill that already holds set menus keeps its set-menu
 folders, from the versions it recorded, after the full menu's period ends, so a table that sat down
