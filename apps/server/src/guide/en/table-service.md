@@ -79,8 +79,8 @@ Press **Done** or close the window to carry on. Unless you emailed it, the recei
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
 not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
 prints: choose one or send the email before closing. You close the table separately.
-After the last payment of a bill printed with **Print the bill**, the guests already have their
-receipt or invoice: print a copy only if they ask.
+After the last payment of a bill printed with **Print the bill**, the window offers a copy instead
+of the original.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
@@ -92,7 +92,7 @@ customer to pay a second time.
 ## Issue a full invoice {#full-invoice}
 
 When a table customer needs an invoice in their name, choose **Full invoice** for the bill and
-enter their identifier, legal name and complete address before its final payment. The
+enter their identifier, legal name and complete address before the bill is printed or takes its final payment. The
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
 or printing it with **Print the bill** issues the invoice; recording an unpaid departure also issues
 it, leaving the amount unpaid.
@@ -545,8 +545,8 @@ are unsent.
 
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
-unpaid bill on screen so you can take its payment. **Print the bill**, offered when that bill is not
-printed yet, puts it on screen and prints it, or lists dishes not yet served.
+unpaid bill on screen so you can take its payment. **Print the bill**, when offered, puts that bill on
+screen and prints it, or lists dishes not yet served.
 
 If a guest leaves without paying, select their bill, open **⋮**, then choose **Record unpaid
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
@@ -577,15 +577,15 @@ Check the bill balance before taking another payment, so you collect only what i
 
 When guests ask for their bill, put it on screen, open **⋮** and choose **Print the bill**. Its
 receipt is issued now and prints on this device's receipt printer, and the till says **Bill
-printed**. A full invoice set for A4 or email goes there instead. Each bill at the table is printed
+issued**. A full invoice set for A4 or email goes there instead. Each bill at the table is printed
 on its own, so another bill's guests can carry on eating.
 
 Choose **Full invoice** before printing: once the bill is printed, its invoice type cannot change.
 
-If dishes on the bill are not marked served, nothing prints yet: the till lists them under **Not
-served yet:**. If the guests have had them, choose **Mark served**, then **Print the bill** again.
-Send or take off dishes not yet sent or on hold as usual. Otherwise choose **Print anyway**: a dish
-that then never comes is refunded after payment with
+Send or take off any dishes not yet sent first. If dishes on the bill are not marked served,
+nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
+choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
+anyway**: a dish that then never comes is refunded after payment with
 [Correct an invoice](table-service.md#correct-invoice).
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.

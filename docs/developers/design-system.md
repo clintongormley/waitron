@@ -1209,8 +1209,8 @@ Tab button and no side drawer.
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
   a rule. The bill section, headed with the bill on screen's short label and left out when no bill
   is on screen, lists Name this bill, then for an open bill Move dishes… and Merge bills,
-  then Move this bill, Comp the bill and Full invoice, in that order; Receipt
-  copy and Cancel and credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
+  then Move this bill, Comp the bill, Record unpaid departure, Full invoice and Print the bill, in
+  that order; Receipt copy and Cancel and credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
   Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
   table, Move guests and Finish table. With no party it offers Merge bills under "Bill" and Join a
   table and Move guests under Whole table; Move dishes… is not offered there, because the app moves
@@ -1226,8 +1226,11 @@ Tab button and no side drawer.
   refusal names a bill the till's list has lost, a saved language has drawn the screen afresh, or a
   take-over was refused after the panel closed under its dialog. A refusal arriving after the waiter has left the party or the table says nothing.
 - **The foot**, in order: the Finish table refusal, only after Finish table was refused
-  (`role="alert"`, with Take payment and Record unpaid departure, brought into view at
-  1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
+  (`role="alert"`, with Take payment, Print the bill where that bill can be printed, and a line
+  pointing to Record unpaid departure, brought into view at 1024×768 and at 390×844); Print the
+  bill's answer, either a `role="status"` "Bill issued" line or the not-served list
+  (`role="alert"`, with Mark served where it applies and Print anyway, brought into view the same
+  way); this bill's total; "Still to pay at this table" with the party's
   outstanding, only with a party; then the pay section. Both desktop and handheld show one Pay for an open owing bill, followed by the bill's
   Full invoice choice (with a saved customer's name and identifier below it) and its receipt
   language when several are offered. A part-paid bill also shows what it has received and still

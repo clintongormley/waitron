@@ -86,8 +86,8 @@ electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada 
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, no se imprime nada: elige una o envía el
 correo antes de cerrar. Cierras la mesa por separado.
-Después del último pago de una cuenta impresa con **Imprimir la cuenta**, los clientes ya tienen su
-ticket o su factura: imprime una copia solo si la piden.
+Después del último pago de una cuenta impresa con **Imprimir la cuenta**, la ventana ofrece una
+copia en lugar del original.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
 
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
@@ -99,8 +99,8 @@ cobró la tarjeta, no pidas al cliente que pague otra vez.
 ## Emitir una factura completa {#full-invoice}
 
 Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura completa** para
-la cuenta e introduce su identificador, su razón social y su dirección completa antes del último
-pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
+la cuenta e introduce su identificador, su razón social y su dirección completa antes de imprimir
+la cuenta o de su último pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
 la cuenta o al imprimirla con **Imprimir la cuenta** se emite la factura; al registrar que se han
 ido sin pagar también se emite y queda pendiente de pago.
 
@@ -584,8 +584,8 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
-una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, que aparece cuando esa cuenta aún
-no está impresa, la pone en pantalla y la imprime, o muestra los platos aún sin servir.
+una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, cuando aparece, pone esa cuenta
+en pantalla y la imprime, o muestra los platos aún sin servir.
 
 Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
@@ -616,17 +616,17 @@ Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo q
 
 Cuando los clientes pidan la cuenta, ponla en pantalla, abre **⋮** y elige **Imprimir la cuenta**.
 Su ticket se emite en ese momento y se imprime en la impresora de tickets de este dispositivo, y la
-caja indica **Cuenta impresa**. Una factura completa preparada para A4 o correo electrónico va allí.
+caja indica **Cuenta emitida**. Una factura completa preparada para A4 o correo electrónico va allí.
 Cada cuenta de la mesa se imprime por separado, así que los clientes de otra cuenta pueden seguir
 comiendo.
 
 Elige **Factura completa** antes de imprimir: una vez impresa la cuenta, su tipo de factura no puede
 cambiar.
 
-Si hay platos de la cuenta sin marcar como servidos, todavía no se imprime nada: la caja los muestra
-bajo **Aún sin servir:**. Si los clientes ya los han tomado, elige **Marcar como servidos** y vuelve
-a elegir **Imprimir la cuenta**. Los platos sin enviar o en espera se envían o se quitan como
-siempre. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
+Primero envía o quita los platos que aún no se han enviado. Si hay platos de la cuenta sin marcar
+como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
+clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
+**Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
 del cobro con [Rectificar una factura](table-service.md#correct-invoice).
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta

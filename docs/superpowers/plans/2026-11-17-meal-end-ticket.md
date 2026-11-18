@@ -12,7 +12,7 @@ replace the adviser sheet's question 3 (17:52); and the owner asked that "once a
 (its invoice issued), neither invoice switch may happen" (17:59, lane L `queue.md`), which Task 3a
 builds.
 
-**Corrected 2026-11-18** after PR B's Task 10 review: §2.2, Task 6 Step 1 and §6 Q7 now say what
+**Corrected 2026-11-18** after PR B's Task 10 review: §2.2, §2.6, Task 6 Step 1, Task 10 and §6 Q7 now say what
 the code does after the last payment of a printed bill (commit `8613b6b952`, pinned by
 `till-app-bill-payments.test.ts`'s "the payment that settles a bill %s shows the change").
 
@@ -293,7 +293,7 @@ others are sent or taken off with today's buttons.
 | **B1 Example 1.** Table of four, one bill, €120. 21:30 Ana pays €30 by card and leaves; mains still to come. At 22:55 the table asks for the bill; 23:00 the others pay €90. | No ticket at 21:30 or 22:55; one €120 ticket at 23:00 listing both payments. | 21:30 unchanged (change 4 waits for question 15). 22:55 **Print the bill** (every dish served): one €120 ticket, dated 22:55, prints; the bill owes €90. 23:00 the others pay €90 through **Pay**; the sale settles with the €30 and €90 as its tenders. Cash-up: €30 at 21:30 and €90 at 23:00 on their devices. |
 | **B1 Example 2.** €120. Two guests pay €80 after the meal; the third leaves. | No ticket; "left without paying" refused (`bill_holds_payment`); the bill stays open. | If printed: the €120 ticket exists; **Record unpaid departure** records €40 owed. If not printed: the departure issues the €120 ticket and records €40 owed. The table can then be finished. Next week the third guest pays €40 through **Find bill**; the ticket settles. |
 | **B1 Example 3.** Guests pay on Monday for what they ate; a dessert ordered was never served; staff remove it on Wednesday. | No ticket until Wednesday's removal. | Monday, **Print the bill** lists the dessert as not served; staff take it off (Cancel dish) and print: the ticket, dated Monday, is for what was eaten. If they press **Print anyway**, the dessert is on Monday's ticket, and once paid they refund it with **Correct invoice**. If staff skip printing and press **Finish table**, its refusal offers **Print the bill**, which lists the dessert the same way. |
-| A couple, €54, everything marked served. | €54 ticket at payment, then the document choice. | **Print the bill**: €54 ticket prints. **Pay** €54 by card; the till shows the result and returns to the table. **Finish table** as today. |
+| A couple, €54, everything marked served. | €54 ticket at payment, then the document choice. | **Print the bill**: €54 ticket prints. **Pay** €54 by card; the document window shows the change and offers a copy, not the original. **Finish table** as today. |
 | Two bills at one table, €38.50 (a couple who have finished) and €54.00 (still on dessert). | Each ticket at its own full payment. | **Print the bill** on Bill 1: its ticket prints; Bill 2 is untouched until its guests ask. |
 | A bill comped to €0.00. | €0.00 ticket when settled ("Comp closes it"). | **Print the bill** issues the €0.00 ticket and settles it in the same step. |
 | A guest asks for a coffee after the bill is printed. | (Not reachable.) | The printed bill takes no new dishes (`bill.presented`, new wording in Task 10): put the coffee on **+ New bill**, which gets its own ticket. |
@@ -666,7 +666,7 @@ Model the send on the departure flow (`#sendDeparture`, `till-app.ts:19818-19890
 id per press, `#resend` under `TABLE_REQUEST_LIMIT_MS`, nothing sent when the screen has changed.
 
 - [ ] **Step 1: failing tests:** a press sends `endMeal` and rereads the party's bills, showing
-  **Bill printed**; `meal_end.unserved_dishes` shows the dishes by name with **Mark served** for those
+  **Bill issued**; `meal_end.unserved_dishes` shows the dishes by name with **Mark served** for those
   the kitchen has (sends the existing `markServed` for those lines; hidden on a profile without
   `hand-over-orders`) and **Print anyway** (sends `printAnyway: true`, one new submission id), and a
   press of Print the bill after serving them prints; **Full invoice** is not offered in **Bill ⋯** for
@@ -711,14 +711,16 @@ it) and `apps/server/src/find-bill-api.test.ts`.
 | Key | English | Spanish |
 |---|---|---|
 | `bill.print` | Print the bill | Imprimir la cuenta |
-| `bill.printed` | Bill printed | Cuenta impresa |
+| `bill.issued` | Bill issued | Cuenta emitida |
 | `meal_end.unserved_heading` | Not served yet: | Aún sin servir: |
 | `meal_end.mark_served` | Mark served | Marcar como servidos |
 | `meal_end.print_anyway` | Print anyway | Imprimir igualmente |
-| code `meal_end.unserved_dishes` | Some dishes on this bill are not marked served. Mark served what has been served, or print anyway: a dish that never comes is refunded after payment with Correct invoice. | Algunos platos de esta cuenta no están marcados como servidos. Marca como servido lo que se ha servido, o imprime igualmente: un plato que no llegue se devuelve después del cobro con Rectificar factura. |
-| code `meal_end.already_issued` | This bill already has its receipt. Take payment, or print a receipt copy. | Esta cuenta ya tiene su tique. Cóbrala o imprime una copia del tique. |
-| code `meal_end.no_printer` | This device has no receipt printer. Choose one in Equipment, then print the bill. | Este dispositivo no tiene impresora de tiques. Elige una en Equipo y luego imprime la cuenta. |
+| code `meal_end.unserved_dishes` | Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice. | Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura. |
+| `meal_end.unserved_no_mark` (no Mark served drawn) | Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice. | Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura. |
+| code `meal_end.already_issued` | This bill already has its receipt. Take payment, or print a receipt copy. | Esta cuenta ya tiene su ticket. Cóbrala o imprime una copia del ticket. |
+| code `meal_end.no_printer` | This device has no receipt printer. Choose one in Equipment, then print the bill. | Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta. |
 | code `meal_end.delivery_unavailable` | This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill. | Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta. |
+| `meal_end.not_admitted` (for `device_profile.not_admitted`) | This device's profile no longer lets you work on it, so it cannot print the bill for you. Sign in on a device whose profile admits you. | El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita. |
 | code `bill.presented` (changed) | This bill has been presented, so it cannot be changed. Put anything more on a new bill. | Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva. |
 
 `codes.test.ts:307-312` asserts today's `bill.presented` text: **before** "…so it cannot be changed";
@@ -741,7 +743,8 @@ place…"), both languages, anchors shared:
 - `{#full-invoice}`: "Paying the table bill in full issues the invoice" gains printing the bill, and
   the way back to a simplified invoice (#3663) is open until the bill is printed or a payment is
   received;
-- `{#settlement-document}`: a bill printed before payment skips the choice.
+- `{#settlement-document}`: after the last payment of a bill printed before payment, the window
+  offers a copy instead of the original.
 
 - [ ] **Step 1:** update `codes.test.ts` and `strings.test.ts` expectations first; run
   `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts src/i18n/strings.test.ts` — expect
