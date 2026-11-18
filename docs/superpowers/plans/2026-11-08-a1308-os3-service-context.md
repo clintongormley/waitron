@@ -20,10 +20,11 @@ settled bill"), §8 M8. Rules: [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **Who lands:** the lane (rules §6: nothing fiscal; the receipt header that reads the zone is os8's).
 
-**First line of the PR description:** "Every venue is reset for the core schema change. Venue
-backups made before the rebuild cannot be restored with this schema. Configuration exports stay at
-format 45." The 18 November 02:23 watcher clearance follows a configuration export at
-`3426e7ead9c9` imported at `e4c9d8aabc` through the configuration-transfer database test.
+**First line of the PR description:** "Every venue is reset for the core schema change. Earlier
+venue backups cannot be restored with this schema. Configuration exports stay at format 45."
+The watcher cleared this wording in Lane H’s `questions.md` at 02:23 on 18 November. A disposable
+copy of the configuration-transfer case wrote an encrypted export at `3426e7ead9c9` and imported
+the same artifact at `e4c9d8aabc`, checking the default menu, languages and holiday area.
 
 ---
 
