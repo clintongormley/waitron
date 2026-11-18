@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
@@ -120,6 +121,8 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
       expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
       expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
+    const smallCell = root.querySelector('tr[data-row-key="mi-lemonade:v-small"] td')!;
+    await expect.element(page.elementLocator(smallCell)).toHaveAccessibleName("Lemonade Small");
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
     // The filter is off Clashes, so the red line offers to put it back.
     await vi.waitFor(() =>

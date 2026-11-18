@@ -268,7 +268,25 @@ for (const succeeds of [true, false]) {
         written = true;
         return { ...product, id: "created" };
       }),
-      getMenuStructure: async () => ({ members: [] }),
+      getMenuStructures: async () => [
+        {
+          menu: { id: "menu", name: "Menu", active: true },
+          structure: {
+            rootSectionId: "root",
+            root: {
+              id: "root",
+              internalName: "Menu",
+              names: {},
+              image: null,
+              color: null,
+              members: [],
+            },
+            nodes: [],
+            includable: [],
+            includedBy: [],
+          },
+        },
+      ],
     } as unknown as DashboardApi;
     Object.defineProperty(api, "background", { get: () => api });
     const { el: app } = await mountWidget<ProductLeaveApp>("product-leave-test-app", {

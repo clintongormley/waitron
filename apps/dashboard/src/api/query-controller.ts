@@ -33,26 +33,6 @@ export class DashboardQueries {
     this.#queries.release(name);
   }
 
-  watchGroup<N extends DashboardQueryName>(
-    name: N,
-    args: Parameters<DashboardApi[N]>[],
-    apply: (values: Awaited<ReturnType<DashboardApi[N]>>[]) => void,
-  ): Promise<void> {
-    const api = this.#client(name);
-    const queries = args.map((arg) => dashboardQuery(api, name, arg));
-    return this.#queries.watch(
-      name,
-      {
-        key: JSON.stringify([name, args]),
-        dependencies: queries.flatMap((query) => query.dependencies),
-        read: () => Promise.all(queries.map((query) => query.read())),
-        refreshMs: 60_000,
-        quietWhileConnected: queries.every((query) => query.quietWhileConnected),
-      },
-      apply,
-    );
-  }
-
   watch<N extends DashboardQueryName>(
     name: N,
     args: Parameters<DashboardApi[N]>,

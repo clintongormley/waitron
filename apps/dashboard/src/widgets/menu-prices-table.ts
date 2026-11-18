@@ -6,6 +6,7 @@ import {
   baseStyles,
   belongsToComposition,
   formatDecimalInput,
+  visuallyHiddenStyles,
   type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -178,6 +179,9 @@ export class MenuPricesTable extends LitElement {
         display: inline-block;
         padding-inline-start: var(--wt-space-4);
         overflow-wrap: anywhere;
+      }
+      wt-data-table::part(visually-hidden) {
+        ${visuallyHiddenStyles}
       }
       wt-data-table::part(placement) {
         display: block;
@@ -1029,7 +1033,13 @@ export class MenuPricesTable extends LitElement {
     const sectionOptions = [...reached]
       .map((id) => ({ value: id, label: this.#sectionNames.get(id) ?? t("members.missing") }))
       .sort((a, b) => byLabel(a.label, b.label));
+    const offeredCategories = new Set(
+      this.rows.flatMap(({ categoryId }) =>
+        categoryId === null ? [] : (this.#categoryChains.get(categoryId) ?? []),
+      ),
+    );
     const categoryOptions = [...this.#categoryPaths]
+      .filter(([value]) => offeredCategories.has(value))
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => byLabel(a.label, b.label));
     return [
@@ -1042,7 +1052,8 @@ export class MenuPricesTable extends LitElement {
           variant ? `${this.#variantName(variant.variantId)} ${item.name}` : item.name,
         cell: ({ item, variant }) =>
           variant
-            ? html`<span part="variant-name">${this.#variantName(variant.variantId)}</span>`
+            ? html`<span part="visually-hidden">${item.name} </span
+                ><span part="variant-name">${this.#variantName(variant.variantId)}</span>`
             : html`<span part="name-box"
                 ><span part="name">${item.name}</span> ${
                   item.variants.length

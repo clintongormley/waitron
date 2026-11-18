@@ -199,18 +199,15 @@ the 2026-09-30 folders design; what remains:
 - **A product reached through a section offers no extras list** (noted at #659, and already so
   before it, checked at `002b79f69`).
 - **The Menus screen (#664).** Which section is being edited is not in the address, only the menu
-  and the tab. Opening "Add to menus" sends one `getMenuStructure` request per menu, each reading
-  the whole section graph (`readMenuStructure`, `packages/menu/src/menu-structure.ts`); one
-  server read returning every menu's structure would make it one. A refused change's message sits
+  and the tab. A refused change's message sits
   under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
   names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
   their change until the menu is next read; and no accessibility test covers that message.
 - **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
   that removing a product's last placement needs no warning before it clears the menu price and
-  variant settings. Open: the main-category filter offers every category, not only those on the
-  menu; the product editor's help lines are paragraphs beside their inputs, not linked to them (a
+  variant settings. Open: the product editor's help lines are paragraphs beside their inputs, not linked to them (a
   `hint` shows only as the placeholder since C104, so moving them there would hide them whenever
-  the field holds a value); a variant row is announced by its name alone; and,
+  the field holds a value); and,
   from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
   not re-placed on resize.
 - **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the

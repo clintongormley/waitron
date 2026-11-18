@@ -153,6 +153,8 @@ export {
 export {
   createMenuShell,
   readMenuStructure,
+  readMenuStructures,
+  type MenuStructure,
   requireMenuRoot,
   syncMenuOffers,
   type MenuStructureNode,

@@ -160,7 +160,8 @@ function headers(el: MenuPricesTable): string[] {
 function visibleText(node: Element | undefined): string {
   if (node === undefined) return "";
   const clone = node.cloneNode(true) as Element;
-  for (const hidden of clone.querySelectorAll(".tree-toggle")) hidden.remove();
+  for (const hidden of clone.querySelectorAll('.tree-toggle, [part~="visually-hidden"]'))
+    hidden.remove();
   return text(clone);
 }
 
@@ -455,14 +456,19 @@ it("names a missing section or category, and a product with no reporting categor
   });
   expect(column(el, "placements")).toEqual([t("members.missing"), t("menu_prices.top_level")]);
   expect(column(el, "category")).toEqual([t("categories.none"), t("editor.missing_choice")]);
-  await choose(el, "category", ["c-drinks"]);
-  expect(shown(el)).toEqual([]);
+  expect(options(el, "category")).toEqual([t("menu_prices.all_categories")]);
 });
 
 it("finds a product by its name", async () => {
   const el = await mount();
   await search(el, "lemon");
   expect(shown(el)).toEqual(["mi-lemonade"]);
+});
+
+it("leaves a product with a deleted category out of a reached category filter", async () => {
+  const el = await mount({ rows: [lager, { ...burger, categoryId: "c-gone" }] });
+  await choose(el, "category", ["c-drinks"]);
+  expect(shown(el)).toEqual(["mi-lager"]);
 });
 
 it.each([
@@ -557,7 +563,17 @@ it("a category filter long enough to search shows its search box and empty list 
     parentId: null,
     color: null,
   }));
-  const el = await mount({ categories: many });
+  const el = await mount({
+    categories: many,
+    rows: many.map((category, index) => ({
+      ...burger,
+      menuItemId: `mi-${index}`,
+      productId: `p-${index}`,
+      name: `Dish ${index}`,
+      categoryId: category.id,
+      combined: combinedFixture(`p-${index}`, "12.00", [], null, "12.00", {}),
+    })),
+  });
   const filter = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     'wt-combobox[data-filter="category"]',
   )!;
@@ -569,6 +585,43 @@ it("a category filter long enough to search shows its search box and empty list 
   await userEvent.type(search, "zzz");
   await filter.updateComplete;
   expect(text(filter.shadowRoot!.querySelector(".empty"))).toBe("Sin resultados");
+});
+
+it("offers only reached reporting categories and their ancestors", async () => {
+  const el = await mount({
+    rows: [lager],
+    categories: [
+      ...categories,
+      { id: "c-cider", name: "Cider", parentId: "c-drinks", color: null },
+    ],
+  });
+  expect(options(el, "category")).toEqual([
+    t("menu_prices.all_categories"),
+    "Beverages",
+    "Beverages › Brews",
+  ]);
+  await choose(el, "category", ["c-drinks"]);
+  expect(shown(el)).toEqual(["mi-lager"]);
+});
+
+it("keeps a category selection while its choices are empty, then drops it on another menu", async () => {
+  const el = await mount({ rows: [lager] });
+  await choose(el, "category", ["c-beer"]);
+  el.rows = [];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  el.rows = [lager, burger];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(shown(el)).toEqual(["mi-lager"]);
+  el.menuName = "Other menu";
+  el.rows = [burger];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect((table(el) as HTMLElementTagNameMap["wt-data-table"]).filterValues("category")).toEqual(
+    [],
+  );
+  expect(shown(el)).toEqual(["mi-burger"]);
 });
 
 it("filters by a reporting category, including the categories inside it", async () => {

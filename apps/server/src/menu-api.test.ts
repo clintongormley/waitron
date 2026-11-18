@@ -4319,6 +4319,40 @@ describe("menu name edits", () => {
   });
 });
 
+describe("all menu structures", () => {
+  it("returns the listed menus and their structures in one authorised answer", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, `Aggregate ${crypto.randomUUID()}`);
+    const expectedMenus = (await (await send(app, "GET", "/management-api/menus")).json()) as {
+      id: string;
+    }[];
+    const expected = [];
+    for (const menu of expectedMenus)
+      expected.push({
+        menu,
+        structure: await (
+          await send(app, "GET", `/management-api/menus/${menu.id}/structure`)
+        ).json(),
+      });
+    const response = await send(app, "GET", "/management-api/menus/structures");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(expected);
+    expect(expectedMenus.some((menu) => menu.id === menuId)).toBe(true);
+  });
+
+  it("requires a manager session before returning any structures", async () => {
+    const app = mountApp();
+    for (const [cookie, status, code] of [
+      [null, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(app, "GET", "/management-api/menus/structures", { cookie });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+});
+
 describe("a menu's structure", () => {
   it("creates a menu with its top level, and reads what the top level holds", async () => {
     const app = mountApp();

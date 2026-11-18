@@ -276,6 +276,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
     getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
+    getMenuStructures: vi
+      .fn()
+      .mockResolvedValue(menus.map((menu) => ({ menu, structure: structures[menu.id] }))),
     listSections: vi.fn().mockResolvedValue(sections),
     addSectionProducts: vi.fn().mockResolvedValue({ added: 1 }),
     createUnit: vi.fn().mockResolvedValue({
@@ -504,7 +507,7 @@ describe("menu-screen", () => {
 
   it("loads the products once the server answers again after a failed first load", async () => {
     const api = Object.assign(
-      stubApi({ listMenus: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ listUnits: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
@@ -513,7 +516,7 @@ describe("menu-screen", () => {
       expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
     );
     expect(api.listProducts).not.toHaveBeenCalled();
-    vi.mocked(api.listMenus).mockResolvedValue(menus);
+    vi.mocked(api.listUnits).mockResolvedValue([]);
     api.liveData.refresh();
     await vi.waitFor(() => expect(list(el).products).toEqual(products));
     expect(alert()).toBeNull();
@@ -3216,8 +3219,8 @@ describe("menu-screen", () => {
       const el = await create(api);
       expect(editor(el).open).toBe(false);
       expect(step(el).open).toBe(true);
-      expect(api.getMenuStructure).toHaveBeenCalledWith("cat-a");
-      expect(api.getMenuStructure).toHaveBeenCalledWith("cat-b");
+      expect(api.getMenuStructures).toHaveBeenCalledExactlyOnceWith();
+      expect(api.getMenuStructure).not.toHaveBeenCalled();
       const text = step(el).shadowRoot!.textContent!;
       expect(step(el).productName).toBe("Croquettes");
       expect(step(el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).not.toMatch(
@@ -3319,19 +3322,11 @@ describe("menu-screen", () => {
       ]);
     });
 
-    it("asks for every menu's structure at once", async () => {
-      const api = stubApi({
-        getMenuStructure: vi
-          .fn()
-          .mockImplementation((id: string) =>
-            id === "cat-a" ? new Promise(() => {}) : Promise.resolve(structures[id]),
-          ),
-      });
-      await create(api);
-      expect(vi.mocked(api.getMenuStructure).mock.calls.map(([id]) => id)).toEqual([
-        "cat-a",
-        "cat-b",
-      ]);
+    it("takes destination menus and structures from the same answer when the menu list changed", async () => {
+      const api = stubApi({ listMenus: vi.fn().mockResolvedValue([menus[0]]) });
+      const el = await create(api);
+      expect(place(el, "cat-b", "root-b")).not.toBeNull();
+      expect(step(el).shadowRoot!.textContent).toContain("Drinks list");
     });
 
     it("sends nothing and changes nothing when the step is skipped", async () => {
@@ -3349,7 +3344,7 @@ describe("menu-screen", () => {
 
     it("reports menus that fail to load as a load failure, with the product still saved", async () => {
       const api = stubApi({
-        getMenuStructure: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        getMenuStructures: vi.fn().mockRejectedValue({ code: "server.internal" }),
       });
       const el = await create(api);
       expect(editor(el).open).toBe(false);
@@ -3360,15 +3355,15 @@ describe("menu-screen", () => {
 
     it("offers the menus once the server answers again after they failed to load", async () => {
       const api = Object.assign(
-        stubApi({ getMenuStructure: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+        stubApi({ getMenuStructures: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
         { liveData: new LiveData() },
       );
       const el = await create(api);
       await vi.waitFor(() =>
         expect(control(el, "load-error").textContent).toContain(codeMessage("connection.failed")),
       );
-      vi.mocked(api.getMenuStructure).mockImplementation((id: string) =>
-        Promise.resolve(structures[id]!),
+      vi.mocked(api.getMenuStructures).mockResolvedValue(
+        menus.map((menu) => ({ menu, structure: structures[menu.id]! })),
       );
       api.liveData.refresh();
       await vi.waitFor(() => expect(control(el, "load-error")).toBeNull());
@@ -3387,7 +3382,7 @@ describe("menu-screen", () => {
       expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(editor(el).open).toBe(false);
       expect(step(el)?.open ?? false).toBe(false);
-      expect(api.getMenuStructure).not.toHaveBeenCalled();
+      expect(api.getMenuStructures).not.toHaveBeenCalled();
     });
   });
 

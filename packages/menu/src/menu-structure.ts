@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
+import { listMenus, type Menu } from "./operations.js";
 import { menuItems, menuItemVariantOverrides, sections } from "@waitron/db";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
@@ -121,37 +122,63 @@ function nodesOf(graph: SectionGraph, sectionId: string): MenuStructureNode[] {
   );
 }
 
-export async function readMenuStructure(
-  tx: Transaction,
-  menuId: string,
-): Promise<{
+export interface MenuStructure {
   rootSectionId: string;
   root: SectionDetails;
   nodes: MenuStructureNode[];
   includable: { id: string; name: string; rootSectionId: string }[];
   includedBy: { id: string; name: string }[];
-}> {
-  const rootSectionId = await requireMenuRoot(tx, menuId);
-  const graph = await loadSectionGraph(tx);
-  const includable = includableMenus(graph, menuId).map((id) => ({
-    id,
-    name: graph.menu(id)!.name,
-    rootSectionId: graph.roots().find((root) => root.menuId === id)!.sectionId,
-  }));
-  const includedBy = graph
-    .roots()
-    .filter((root) => directIncludedMenus(graph, root.menuId).includes(menuId))
-    .map((root) => ({ id: root.menuId, name: graph.menu(root.menuId)!.name }));
-  const details = graph.section(rootSectionId)!;
-  const root: SectionDetails = {
-    id: rootSectionId,
-    internalName: details.internalName!,
-    names: details.names!,
-    image: details.image!,
-    color: details.color!,
-    members: graph.children(rootSectionId),
+}
+
+function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
+  const roots = new Map(graph.roots().map((root) => [root.menuId, root.sectionId]));
+  const includedBy = new Map<string, { id: string; name: string }[]>();
+  for (const { menuId } of graph.roots()) {
+    for (const included of directIncludedMenus(graph, menuId)) {
+      const holders = includedBy.get(included) ?? [];
+      holders.push({ id: menuId, name: graph.menu(menuId)!.name });
+      includedBy.set(included, holders);
+    }
+  }
+  return (menuId) => {
+    const rootSectionId = roots.get(menuId);
+    if (rootSectionId === undefined) throw new AppError("menu.not_found", { menuId });
+    const includable = includableMenus(graph, menuId).map((id) => ({
+      id,
+      name: graph.menu(id)!.name,
+      rootSectionId: roots.get(id)!,
+    }));
+    const details = graph.section(rootSectionId)!;
+    const root: SectionDetails = {
+      id: rootSectionId,
+      internalName: details.internalName!,
+      names: details.names!,
+      image: details.image!,
+      color: details.color!,
+      members: graph.children(rootSectionId),
+    };
+    return {
+      rootSectionId,
+      root,
+      nodes: nodesOf(graph, rootSectionId),
+      includable,
+      includedBy: includedBy.get(menuId) ?? [],
+    };
   };
-  return { rootSectionId, root, nodes: nodesOf(graph, rootSectionId), includable, includedBy };
+}
+
+export async function readMenuStructure(tx: Transaction, menuId: string): Promise<MenuStructure> {
+  await requireMenuRoot(tx, menuId);
+  return structuresIn(await loadSectionGraph(tx))(menuId);
+}
+
+export async function readMenuStructures(
+  tx: Transaction,
+): Promise<{ menu: Menu; structure: MenuStructure }[]> {
+  const menus = await listMenus(tx);
+  if (menus.length === 0) return [];
+  const structure = structuresIn(await loadSectionGraph(tx));
+  return menus.map((menu) => ({ menu, structure: structure(menu.id) }));
 }
 
 /**
