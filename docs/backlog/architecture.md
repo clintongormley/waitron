@@ -1050,16 +1050,14 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 1 entry, size S.
 
 - **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
-  `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
-  `readTransactionReceipt` retain `_cfg` in their signatures, among others
-  (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
-  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14 for
-  four of the most-called, counted as matches of `<name>(` in `apps/server/src` (declarations and
-  same-named test wrappers included): `offerProducts` 284, `createTable` 187, `defaultLayout` 68,
-  `setLineCourse` 20, mostly in tests, plus 11 `void cfg;` lines. On 2026-11-18 `readDrafts`,
-  `readOpenDraft` and `writeMerge` lost theirs, leaving `saveDraft` (68), `takeOverDraft` (20),
-  `readPartyAllergyView` (12) and `readAllergySendView` (5) carrying `_cfg` instead (lines counted
-  with `git grep -c`).
+  `void cfg;` (`git grep -n 'void cfg;' apps/server/src`), and the functions named in the size line
+  below keep an unread `_cfg` parameter (`git grep -n '_cfg:' apps/server/src`). Left open by
+  SQLite slice 1 (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on
+  2026-11-18, counted as lines matching `<name>(` in `apps/server/src` with `git grep -c`
+  (declarations and same-named test wrappers included): `offerProducts` 286, `createTable` 195,
+  `defaultLayout` 71 (these three are test helpers in `apps/server/src/testing/`), `saveDraft` 68,
+  `setLineCourse` 20, `takeOverDraft` 20, `readPartyAllergyView` 12 and `readAllergySendView` 5,
+  mostly in tests, plus 11 `void cfg;` lines.
 
 ## Bundle: Printer, reader and device delete wording and tidying
 
