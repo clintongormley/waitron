@@ -29,24 +29,17 @@ The source audit at `213d0ec3bc` covered 229 allocation expressions in 85 operat
 | Caller under `apps/server/src/` | Allocation line(s) | Remaining contract or ownership gap |
 | --- | --- | --- |
 | `boot-peer-check.test.ts` | 1821 | Unused peer address; nothing holds it while the refusal is checked. |
-| `boot.failed-start.test.ts` | 485, 505, 616, 1165, 1412 | Configured main/landing/staff first binds remain unreserved; keep the failed-start and exact listener-release checks. |
-| `boot.invoice-delivery.test.ts` | 188 | Ordinary HTTP binds at zero; configured mirror starts still have an initial gap, and the unused peer address is unreserved. |
-| `boot.joining-spare-answers.test.ts` | 206 | Advertised HTTPS and public store addresses are known before the first binds, which remain unreserved; the fake gateway does not bind its loopback argument. |
+| `boot.invoice-delivery.test.ts` | 188 | The unused peer address is unreserved. |
 | `boot.mirror.test.ts` | 381, 948, 1150 | The staff address is intentionally unused and unreserved. Fake-gateway loopback arguments are configured data, not listening sockets. |
 | `boot.reconcile.test.ts` | 415, 461, 490 | Unused peer addresses remain unreserved. |
 | `boot.restore.test.ts` | 443 | Malformed-membership cases expect a refusal rather than a successful listener; their unused peer input remains unreserved. |
 | `boot.setup-routes.test.ts` | 480 | The extra unused peer is unreserved. |
-| `boot.start-check.test.ts` | 877 | The first configured waiting listener is unreserved; preserve the separate, intentional waiting-to-normal rebind check. |
 | `boot.test.ts` | 2745 | The unresolvable-host case keeps configured port input and expects ENOTFOUND. |
-| `boot.upgrade.test.ts` | 346 | The built-entry child checks still release the configured address before each new child binds; preserve their release/rebind checks. |
 | `boot.adoption-allocation.test.ts` | 324 | The sleep stub records its configured loopback argument without binding a listener. |
-| `handover-controlled.e2e.test.ts` | 576 | Both advertised box addresses are released before first use. Later saved-origin restarts also retain their existing binding contract. |
-| `testing/s3-test-server.ts` | 152 | The real Go listener still has a first-bind gap; bounded PortTaken retries and instance-signed readiness recover collisions without retaining the socket. |
-| `testing/spare-join-scenario.ts` | 631 | Main/spare HTTPS and store addresses are released before their first listeners bind; preserve the saved origins and later restarts. |
-| `testing/stream-loop-scenario.ts` | 264, 492 | The primary/restore addresses are persisted before later starts bind them; first-bind ownership remains open. |
-| `testing/stream-loop-spare.ts` | 148 | Spare HTTPS/store addresses remain configured and unreserved through their first starts. |
-| `testing/stream-pause-scenario.ts` | 273 | The advertised address is persisted before the first start binds it; ownership remains open. |
-| `spare-store.test.ts` | 275 | The real versitygw process, launched through spawnLitestream, receives a configured loopback port. Its first bind remains unreserved; keep the real successful-key and 403/404 checks. |
+| `testing/s3-test-server.ts` | 152 | The real Go listener still has a first-bind gap; bounded PortTaken retries and instance-signed readiness recover collisions without retaining the socket. Socket handoff to the pinned Go binary is unverified. |
+| `testing/spare-join-scenario.ts` | 631 | The spare’s versitygw loopback address is unreserved. Socket handoff to the pinned Go binary is unverified. |
+| `testing/stream-loop-spare.ts` | 148 | The spare’s versitygw loopback address is unreserved. Socket handoff to the pinned Go binary is unverified. |
+| `spare-store.test.ts` | 275 | The real versitygw process, launched through spawnLitestream, receives a configured loopback port. Its first bind remains unreserved; keep the real successful-key and 403/404 checks. Socket handoff to the pinned Go binary is unverified. |
 
 Fiscal rows, left unchanged for Lane L:
 
@@ -62,7 +55,7 @@ Fiscal rows, left unchanged for Lane L:
 | `hour-promotion.test.ts` | 847, 944 | Configured origins; initial binds unreserved, later rebind separate. |
 | `hour-recovery-placement-3.test.ts` | 419, 780 | Configured management origin and later recovery start; initial binds unreserved. |
 
-Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run). Later same-port rebinds inside one process still need their own handoff audit. The bench’s refused endpoint has its own entry below.
+Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run). Later saved-origin rebinds still need their own handoff audit, including those in `handover-controlled.e2e.test.ts` and the spare join scenarios. The bench’s refused endpoint has its own entry below.
 
 A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.test.ts`
 siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests

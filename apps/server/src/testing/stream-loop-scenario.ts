@@ -53,7 +53,11 @@ import { unsealNodeState } from "../sealed-state.js";
 import type { StreamHostDeps } from "../stream-host.js";
 import { exemptBucket } from "./aws-send-gate.js";
 import { httpsVia } from "./boot-harness.js";
-import { freePort } from "./free-ports.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+  type RetainedHttpListener,
+} from "./retained-http-listener.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
@@ -226,6 +230,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     waitUntil(what, timeoutMs, probe, signal, POLL_MS);
   // Each server leaves the set before it is closed, so an abort and the body never close one twice.
   const running = new Set<StartedServer>();
+  const retained: RetainedHttpListener[] = [];
   const closeRunning = async (): Promise<unknown[]> => {
     const closeFailures: unknown[] = [];
     for (const server of running) {
@@ -261,7 +266,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     //    a migrated and provisioned venue, a node key and a term-0 membership document, and streaming
     //    switched on with a recovery key.
     const dirsA = await boxDirs(scratch, "box-a");
-    const portA = await freePort();
+    const heldA = await retainHttpListener();
+    retained.push(heldA);
+    const portA = heldA.port;
     const { nodeSecret: mintedSecret, ...a } = await provisionStreamBox({
       dirs: dirsA,
       advertisedOrigin: `https://127.0.0.1:${portA}`,
@@ -273,10 +280,12 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     let nodeSecret = mintedSecret;
 
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
-    const serverA = await startServer(
-      await loadBoxEnv(bootEnv(dirsA, portA, migrationsRoot, litestreamBin), dirsA.state),
-      {},
-      { stream: { ...fixture.serverSeams } },
+    const serverA = await startWithRetainedListeners([heldA], async () =>
+      startServer(
+        await loadBoxEnv(bootEnv(dirsA, portA, migrationsRoot, litestreamBin), dirsA.state),
+        {},
+        { stream: { ...fixture.serverSeams } },
+      ),
     );
     running.add(serverA);
     const streamId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
@@ -489,7 +498,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     // 6. B is rebuilt from the bucket through the command line. A changed within the last ten
     //    minutes, so the owner's confirmation that it is gone is required, and given.
     const dirsB = await boxDirs(scratch, "box-b");
-    const portB = await freePort();
+    const heldB = await retainHttpListener();
+    retained.push(heldB);
+    const portB = heldB.port;
     const recoveryFixture = allocationFixture({
       node: { nodeId: nodeId(a.nodeId) },
       taxpayerNif: "74000001P",
@@ -549,10 +560,12 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     clock.begin("pointer-b");
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
     //    pointer moved — still verifiable with the key the owner's kit carries.
-    const serverB = await startServer(
-      await loadBoxEnv(bootEnv(dirsB, portB, migrationsRoot, litestreamBin), dirsB.state),
-      {},
-      { stream: { ...fixture.serverSeams } },
+    const serverB = await startWithRetainedListeners([heldB], async () =>
+      startServer(
+        await loadBoxEnv(bootEnv(dirsB, portB, migrationsRoot, litestreamBin), dirsB.state),
+        {},
+        { stream: { ...fixture.serverSeams } },
+      ),
     );
     running.add(serverB);
     const pointerB = await waitFor(
@@ -780,6 +793,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeRunning()));
+    for (const held of retained) {
+      if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
+    }
   }
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) throw new AggregateError(failures, "stream loop failed");

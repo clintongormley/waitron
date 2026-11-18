@@ -59,7 +59,13 @@ import { claimInvoicePrintJobs } from "./invoice-print.js";
 import { writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { freePorts } from "./testing/free-ports.js";
+import { DEFAULT_HTTP_PORT } from "./config.js";
+import { freePort } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+  type RetainedHttpListener,
+} from "./testing/retained-http-listener.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { savePrivacyContact } from "@waitron/provisioning";
@@ -185,12 +191,11 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     sql`pragma database_list`,
   );
   const venueDir = dirname(files.find((file) => file.name === "main")!.file);
-  const [port, deadPeerPort] = await freePorts(2);
   const env = {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_STATE_DIR: stateDir,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_PORT: String(DEFAULT_HTTP_PORT),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_ENV: environment,
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -207,9 +212,14 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     identity,
     env,
     node,
-    deadPeerPort,
     claim: { ...job!.invoiceClaim!, holder: identity.agentId },
   };
+}
+
+async function startMirror(env: NodeJS.ProcessEnv, held: RetainedHttpListener) {
+  return startWithRetainedListeners([held], () =>
+    startConfiguredServer({ ...env, WAITRON_HTTP_PORT: String(held.port) }),
+  );
 }
 
 async function delivery(id: string) {
@@ -327,19 +337,21 @@ describe("invoice delivery recovery at trading boot", () => {
 
   it("leaves inherited delivery claims unchanged when the trading node is read-only", async () => {
     const ctx = await fixture();
-    await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror", "adopt");
-    await writeMirrorLink(suite.node, ctx.node, {
-      originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
-      boxHostname: "waitron.local",
-      boxCaPem: "unused",
-      originNodeId: ctx.node,
-    });
-    const before = await delivery(ctx.paper.id);
+    const held = await retainHttpListener();
     let server: StartedServer | undefined;
     try {
-      server = await startConfiguredServer(ctx.env);
+      const deadPeerPort = await freePort();
+      await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror", "adopt");
+      await writeMirrorLink(suite.node, ctx.node, {
+        originUrl: `http://127.0.0.1:${deadPeerPort}`,
+        boxHostname: "waitron.local",
+        boxCaPem: "unused",
+        originNodeId: ctx.node,
+      });
+      const before = await delivery(ctx.paper.id);
+      server = await startMirror(ctx.env, held);
       await vi.waitFor(async () => {
-        const response = await fetch(`http://127.0.0.1:${ctx.env.WAITRON_HTTP_PORT}/health`);
+        const response = await fetch(`http://127.0.0.1:${held.port}/health`);
         expect(response.status).toBe(503);
       });
       expect(await delivery(ctx.paper.id)).toEqual(before);
@@ -347,6 +359,7 @@ describe("invoice delivery recovery at trading boot", () => {
       expect(job).toMatchObject({ status: "printing", claimedBy: ctx.identity.agentId });
     } finally {
       await server?.close();
+      if (held.server.listening) await held.close();
     }
   });
 });
@@ -738,23 +751,27 @@ describe("invoice email worker at trading boot", () => {
   it("leaves queued email untouched on a read-only mirror", async () => {
     const ctx = await fixture();
     const smtp = await smtpFixture();
+    let held: RetainedHttpListener | undefined;
     let server: StartedServer | undefined;
     try {
       const email = await queuedEmail(ctx, smtp.smtp);
+      held = await retainHttpListener();
+      const deadPeerPort = await freePort();
       await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror", "adopt");
       await writeMirrorLink(suite.node, ctx.node, {
-        originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
+        originUrl: `http://127.0.0.1:${deadPeerPort}`,
         boxHostname: "waitron.local",
         boxCaPem: "unused",
         originNodeId: ctx.node,
       });
       const before = await delivery(email.id);
-      server = await startConfiguredServer(ctx.env);
+      server = await startMirror(ctx.env, held);
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
       expect(await delivery(email.id)).toEqual(before);
       expect(smtp.messages).toEqual([]);
     } finally {
       await server?.close();
+      if (held?.server.listening) await held.close();
       await smtp.close();
     }
   });

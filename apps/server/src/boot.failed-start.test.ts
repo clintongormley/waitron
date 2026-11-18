@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments } from "@waitron/payments";
 import { sql } from "drizzle-orm";
-import { connect, createServer as createNetServer } from "node:net";
+import { connect, createServer as createNetServer, type Server } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +32,7 @@ import { startSpareFollow } from "./spare-follow.js";
 import { runSpareSettings } from "./spare-settings.js";
 import { StreamHost } from "./stream-host.js";
 import { clockWatchJob } from "./clock-watch.js";
-import { startServer, type StartedServer } from "./boot.js";
+import { startServer as bootServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { backupsJob } from "./backup-supervisor.js";
@@ -45,7 +45,8 @@ import { createJobRunner } from "./job-runner.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
-import { freePorts } from "./testing/free-ports.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
+import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { startStaffListener } from "./cloud-remote.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { stopBackgroundDuties } from "./background-duties.js";
@@ -198,6 +199,41 @@ beforeAll(async () => {
   });
 }, 180_000);
 
+const reservations = new Map<number, RetainedHttpListener>();
+const adopted = new Map<number, Server>();
+
+async function reservePort(): Promise<number> {
+  const held = await retainHttpListener();
+  reservations.set(held.port, held);
+  return held.port;
+}
+
+async function withPortAdoption<T>(
+  ports: readonly number[],
+  start: () => T | Promise<T>,
+): Promise<T> {
+  const entries = ports.flatMap((port) => {
+    const held = reservations.get(port);
+    return held !== undefined && !adopted.has(port) ? [held] : [];
+  });
+  if (entries.length === 0) return start();
+  const adoption = adoptRetainedListeners(entries);
+  try {
+    return await start();
+  } finally {
+    adoption.restore();
+    for (const [port, server] of adoption.adopted) adopted.set(port, server);
+  }
+}
+
+function startServer(...args: Parameters<typeof bootServer>): ReturnType<typeof bootServer> {
+  const env = args[0];
+  return withPortAdoption(
+    [env?.WAITRON_HTTP_PORT, env?.WAITRON_HTTP_LANDING_PORT, env?.WAITRON_STAFF_PORT].map(Number),
+    () => bootServer(...args),
+  );
+}
+
 afterEach(async () => {
   vi.mocked(startMdnsResponder).mockReset();
   vi.mocked(listBoxIpv4).mockReset();
@@ -210,6 +246,9 @@ afterEach(async () => {
   vi.mocked(tamperWatchJob).mockClear();
   vi.mocked(runTenderRefundRecoveryLoop).mockReset();
   vi.mocked(runPendingCardLoop).mockReset();
+  for (const held of reservations.values()) if (held.server.listening) await held.close();
+  reservations.clear();
+  adopted.clear();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -389,14 +428,16 @@ async function triggerFaults(venueDir: string, tables: readonly string[]) {
  */
 async function listening(port: number): Promise<void> {
   await vi.waitFor(
-    () =>
-      new Promise<void>((resolve, reject) => {
+    () => {
+      expect(adopted.get(port)?.listening).toBe(true);
+      return new Promise<void>((resolve, reject) => {
         const socket = connect(port, "127.0.0.1", () => {
           socket.destroy();
           resolve();
         });
         socket.once("error", reject);
-      }),
+      });
+    },
     { timeout: 10_000 },
   );
 }
@@ -434,12 +475,13 @@ async function stateDir(
 
 /** Resolves once `port` could be bound on boot's default host; rejects `EADDRINUSE` while held. */
 async function bindAndRelease(port: number): Promise<void> {
-  const probe = createNetServer();
-  await new Promise<void>((resolve, reject) => {
-    probe.once("error", reject);
-    probe.listen(port, "127.0.0.1", resolve);
-  });
-  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  const unused = reservations.get(port);
+  if (!adopted.has(port) && unused?.server.listening) {
+    await unused.close();
+    reservations.delete(port);
+  }
+  const probe = await retainHttpListener("127.0.0.1", undefined, port);
+  await probe.close();
 }
 
 /** Every line boot logs to stdout while `fn` runs, parsed; each chunk still reaches stdout. */
@@ -490,11 +532,11 @@ function failLandingAfterMdns(
   return stop;
 }
 
-/** With `landing`, the landing port is drawn beside the HTTP one, so the two cannot coincide. */
 async function tradingEnv(venueDir: string, state: string, { landing = false } = {}) {
   const overrides = moduleOverrides.get(state);
   if (overrides !== undefined) await seedModuleSettings(venueDir, overrides);
-  const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
+  const httpPort = await reservePort();
+  const landingPort = landing ? await reservePort() : 0;
   return {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_STATE_DIR: state,
@@ -514,7 +556,10 @@ describe("a start that fails after the venue folder is opened gives the folder b
     async (mode) => {
       const venueDir = await seededVenueDir(),
         state = await stateDir(undefined, { leaf: true });
-      const [localPort, staffPort] = await freePorts(2);
+      const localPort = await reservePort();
+      const blocker = mode === "busy" ? await retainHttpListener() : undefined;
+      const staffPort = blocker?.port ?? (await reservePort());
+      let originalStaffHolder: RetainedHttpListener | undefined;
       const material = mintSelfSignedServerCert({
         now: new Date(),
         hostnames: ["staff.example.test"],
@@ -541,30 +586,28 @@ describe("a start that fails after the venue folder is opened gives the folder b
           },
         };
       });
-      const blocker = createNetServer();
       let refused = () => {};
       const refusal = new Promise<void>((resolve) => {
         refused = resolve;
       });
-      if (mode === "busy") {
-        await install();
-        await new Promise<void>((resolve) => blocker.listen(staffPort, "127.0.0.1", resolve));
-        const actual =
-          await vi.importActual<typeof import("./cloud-remote.js")>("./cloud-remote.js");
-        vi.mocked(startStaffListener).mockImplementationOnce((config, app, log) =>
-          actual.startStaffListener(
-            config,
-            app,
-            (...args) => {
-              if (args[1] === "server.listen_failed") refused();
-              log(...args);
-            },
-            async () => true,
-          ),
-        );
-      }
       let server: StartedServer | undefined;
       try {
+        if (mode === "busy") {
+          await install();
+          const actual =
+            await vi.importActual<typeof import("./cloud-remote.js")>("./cloud-remote.js");
+          vi.mocked(startStaffListener).mockImplementationOnce((config, app, log) =>
+            actual.startStaffListener(
+              config,
+              app,
+              (...args) => {
+                if (args[1] === "server.listen_failed") refused();
+                log(...args);
+              },
+              async () => true,
+            ),
+          );
+        }
         const lines = await withLoggedLines(async () => {
           server = await startServer({
             WAITRON_VENUE_DIR: venueDir,
@@ -586,20 +629,37 @@ describe("a start that fails after the venue folder is opened gives the folder b
               (line) => line.event === "server.listen_failed" && line.listener === "staff",
             ),
           ).toEqual([]);
-          await bindAndRelease(staffPort);
+          expect(adopted.has(staffPort)).toBe(false);
+          originalStaffHolder = reservations.get(staffPort)!;
+          const { host } = originalStaffHolder;
+          const handoff = adoptRetainedListeners([originalStaffHolder]);
+          try {
+            reservations.set(
+              staffPort,
+              await retainHttpListener(
+                host,
+                createNetServer((socket) => socket.destroy()),
+                staffPort,
+              ),
+            );
+          } finally {
+            handoff.restore();
+          }
           await install();
           expect(workerOptions?.onStaffCertificate).toBeTypeOf("function");
-          await workerOptions?.onStaffCertificate?.(workerSignal);
-          await vi.waitFor(async () => {
-            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
-          });
+          await withPortAdoption([staffPort], () =>
+            workerOptions!.onStaffCertificate!(workerSignal),
+          );
+          await listening(staffPort);
+          await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
         } else if (mode === "busy") {
           await refusal;
-          await new Promise<void>((resolve) => blocker.close(() => resolve()));
-          await workerOptions!.onStaffCertificate!(workerSignal);
-          await vi.waitFor(async () => {
-            await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
-          });
+          reservations.set(staffPort, blocker!);
+          await withPortAdoption([staffPort], () =>
+            workerOptions!.onStaffCertificate!(workerSignal),
+          );
+          await listening(staffPort);
+          await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
           const calls = vi.mocked(startStaffListener).mock.calls.length;
           await workerOptions!.onStaffCertificate!(workerSignal);
           expect(vi.mocked(startStaffListener).mock.calls.length).toBe(calls);
@@ -610,17 +670,23 @@ describe("a start that fails after the venue folder is opened gives the folder b
               "./background-duties.js",
             );
           vi.mocked(stopBackgroundDuties).mockImplementationOnce(async (duties) => {
-            await workerOptions!.onStaffCertificate!(workerSignal);
+            await withPortAdoption([staffPort], () =>
+              workerOptions!.onStaffCertificate!(workerSignal),
+            );
             await actual.stopBackgroundDuties(duties);
           });
         }
         await server!.close();
         await bindAndRelease(staffPort);
       } finally {
-        if (blocker.listening) await new Promise<void>((resolve) => blocker.close(() => resolve()));
-        await server?.close();
-        for (const result of vi.mocked(startStaffListener).mock.results)
-          await result.value?.close();
+        try {
+          await server?.close();
+          for (const result of vi.mocked(startStaffListener).mock.results)
+            await result.value?.close();
+        } finally {
+          if (originalStaffHolder?.server.listening) await originalStaffHolder.close();
+          if (blocker?.server.listening && !reservations.has(staffPort)) await blocker.close();
+        }
       }
     },
     60000,
@@ -629,7 +695,9 @@ describe("a start that fails after the venue folder is opened gives the folder b
   it("closes the staff socket when a later boot step fails", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
-    const [localPort, landingPort, staffPort] = await freePorts(3);
+    const localPort = await reservePort();
+    const landingPort = await reservePort();
+    const staffPort = await reservePort();
     const certificate = mintSelfSignedServerCert({
       now: new Date(),
       hostnames: ["staff.example.test"],
@@ -657,6 +725,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
           WAITRON_STAFF_PORT: String(staffPort),
         }),
       ).rejects.toBe(failure);
+      expect(adopted.has(staffPort)).toBe(true);
       await expect(bindAndRelease(staffPort)).resolves.toBeUndefined();
     } finally {
       await vi.mocked(startStaffListener).mock.results.at(-1)?.value?.close();
@@ -839,6 +908,15 @@ describe("a start that fails after the venue folder is opened gives the folder b
       ...(await tradingEnv(venueDir, state, { landing: true })),
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     };
+    const competingBind = retainHttpListener("127.0.0.1", undefined, Number(env.WAITRON_HTTP_PORT));
+    try {
+      await expect(competingBind).rejects.toMatchObject({ code: "EADDRINUSE" });
+    } finally {
+      await competingBind.then(
+        (held) => held.close(),
+        () => {},
+      );
+    }
     const failure = new Error("interfaces unreadable");
     const mdnsStop = failLandingAfterMdns(failure);
     const { subscribeToChanges: realSubscribe } =
@@ -856,6 +934,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
       await expect(startServer(env)).rejects.toBe(failure);
     });
     expect(readVenueHolder(venueDir)).toBeNull();
+    expect(adopted.has(Number(env.WAITRON_HTTP_PORT))).toBe(true);
     await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
     expect(unsubscribe).toHaveBeenCalledOnce();
     expect(events).toContain("loop.stopped");
@@ -1173,7 +1252,8 @@ describe("a start that fails after the venue folder is opened gives the folder b
 
   describe("in setup mode", () => {
     async function setupEnv({ landing = false } = {}) {
-      const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
+      const httpPort = await reservePort();
+      const landingPort = landing ? await reservePort() : 0;
       const venueDir = await tempDir("waitron-failed-start-setup-venue-");
       const state = await tempDir("waitron-failed-start-setup-state-");
       return {
@@ -1420,7 +1500,7 @@ describe("which starts watch the append-only triggers", () => {
   }, 60_000);
 
   it("a setup start does not", async () => {
-    const [httpPort] = await freePorts(1);
+    const httpPort = await reservePort();
     await startAndClose({
       WAITRON_VENUE_DIR: await tempDir("waitron-failed-start-setup-venue-"),
       WAITRON_STATE_DIR: await tempDir("waitron-failed-start-setup-state-"),

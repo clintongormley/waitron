@@ -29,7 +29,9 @@ import {
   type LogLine,
 } from "./boot-harness.js";
 import { FISCAL_TABLES, preparationIn } from "./fiscal-rows.js";
-import { freePorts } from "./free-ports.js";
+import { freePort } from "./free-ports.js";
+import { adoptRetainedListeners } from "./retained-http-adoption.mjs";
+import { retainHttpListener, type RetainedHttpListener } from "./retained-http-listener.js";
 import { waitUntil } from "./scenario-stages.js";
 import {
   BOOT_MS,
@@ -126,6 +128,8 @@ export function runLoopSpare(input: LoopSpareInput): Promise<void> {
 async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promise<void> {
   const { dirsB, portB, nodeIdB, signal, begin } = input;
   const boxes: TestBox[] = [];
+  const retained: RetainedHttpListener[] = [];
+  let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
   const closers: Array<() => Promise<void>> = [];
   let abortClose: Promise<unknown[]> | undefined;
   const onAbort = (): void => {
@@ -145,7 +149,13 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
   const failures: unknown[] = [];
   try {
     begin("spare-refused");
-    const [portC, storeC, storeLoopbackC] = (await freePorts(3)) as [number, number, number];
+    const spareListener = await retainHttpListener();
+    retained.push(spareListener);
+    const storeListener = await retainHttpListener();
+    retained.push(storeListener);
+    const portC = spareListener.port;
+    const storeC = storeListener.port;
+    const storeLoopbackC = await freePort();
     const boxEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
       ...bootEnv(dirs, port, input.migrationsRoot, input.litestreamBin),
       WAITRON_MANAGEMENT_ORIGIN: `https://${BOX_HOSTNAME}:${port}`,
@@ -171,11 +181,15 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     );
     boxes.push(boxC);
     const logAtStart = logSoFar().length;
+    adoption = adoptRetainedListeners([spareListener]);
     const started = await Promise.allSettled([
       boundedStart(boxB.start(), "B's start with a spare to add"),
       boundedStart(boxC.start(), "C's setup start"),
     ]);
     for (const result of started) if (result.status === "rejected") throw result.reason;
+    expect(adoption.adopted.has(spareListener.port)).toBe(true);
+    await adoption.bound;
+    adoption.restore();
 
     const urlB = `https://127.0.0.1:${portB}`;
     const caB = await readFile(join(dirsB.state, "tls", "ca.crt"), "utf8");
@@ -214,6 +228,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     expect(Object.values(fiscalAtJoin).flat()).not.toEqual([]);
     const preparationB = await preparationIn(dirsB.state);
     const logAtJoin = logSoFar().length;
+    adoption = adoptRetainedListeners([storeListener]);
     const joined = await adoptFrom(urlC, clientC.via, primary);
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
@@ -224,6 +239,9 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
       }),
     );
     expect(link.role).toBe("streams");
+    expect(adoption.adopted.has(storeListener.port)).toBe(true);
+    await adoption.bound;
+    adoption.restore();
     const nodeIdC = link.peerNodeId;
     expect(fiscalRowsIn(dirsB.venue)).toEqual(fiscalAtJoin);
     expect(await preparationIn(dirsB.state)).toBe(preparationB);
@@ -387,6 +405,10 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeBoxes(boxes)));
+    adoption?.restore();
+    for (const held of retained) {
+      if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
+    }
     for (const close of closers) await close().catch(() => {});
   }
   if (failures.length === 1) throw failures[0];

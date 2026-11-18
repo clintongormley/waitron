@@ -1557,7 +1557,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
-- **Remaining configured first binds, unused peers, the real-Go spare-store test, fiscal callers and Cloud’s fixed-origin stop/relaunch gap need port ownership (A80/#740, A907, A1152).**
+- **Unused peers, versitygw binds, fiscal callers and saved-origin restarts still need port ownership (A80/#740, A907, A1152).**
   [Remaining caller audit](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 - **Give the failover bench an endpoint that stays refused for its lifetime**, preserving its bounded actual-ECONNREFUSED probe and SDK/Litestream consumers.
   [Detail](backlog/ci.md#give-the-failover-bench-an-endpoint-that-stays-refused).

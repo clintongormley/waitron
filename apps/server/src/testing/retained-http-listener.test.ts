@@ -32,6 +32,21 @@ it("keeps its selected port unavailable to a competing listener until released",
   }
 });
 
+it("can hold the exact port a previous listener released", async () => {
+  const previous = await retainHttpListener();
+  await previous.close();
+  const held = await retainHttpListener(previous.host, undefined, previous.port);
+  const competitor = createServer();
+  try {
+    expect(held.port).toBe(previous.port);
+    await expect(bind(competitor, previous.port)).rejects.toMatchObject({ code: "EADDRINUSE" });
+  } finally {
+    if (competitor.listening)
+      await new Promise<void>((resolve) => competitor.close(() => resolve()));
+    await held.close();
+  }
+});
+
 it("closes an early connection instead of leaving a readiness read hanging", async () => {
   const held = await retainHttpListener();
   const socket = connect({ host: held.host, port: held.port });

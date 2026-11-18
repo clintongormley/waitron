@@ -536,6 +536,8 @@ its receiver and acknowledges receipt; the parent then closes its copies. Before
 adopts a socket, its holder destroys incoming connections. The preload redirects the matching
 positive-port bind to the held socket, checks its address and requested host, and restores the
 original `listen` after the reservations are consumed. It disconnects its temporary IPC channel.
+Node workers can inherit the preload argument. The preload receives handles only on the child’s
+main thread, which has the launcher’s IPC channel.
 Do not apply it to a process whose IPC channel belongs to another caller.
 
 Give each new child its own reservation and update the client destinations after a restart.

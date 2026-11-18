@@ -38,7 +38,12 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { freePorts } from "./testing/free-ports.js";
+import { freePort } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+  type RetainedHttpListener,
+} from "./testing/retained-http-listener.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -94,6 +99,7 @@ let spareState: string;
 let migrationsRoot: string;
 let fakeStoreDir: string;
 const running: StartedServer[] = [];
+const retained: RetainedHttpListener[] = [];
 
 beforeEach(async () => {
   latch.dropJoining = false;
@@ -110,6 +116,7 @@ afterEach(async () => {
   try {
     while (running.length > 0) await running.pop()!.close();
   } finally {
+    for (const held of retained.splice(0)) if (held.server.listening) await held.close();
     for (const dir of [mainState, spareState, migrationsRoot, fakeStoreDir])
       await rm(dir, { recursive: true, force: true });
   }
@@ -203,7 +210,13 @@ async function joinedPair() {
 
   // The spare's chart entry names its own box name at a fixed port; its leaf covers that name,
   // under the venue authority the join copied to it.
-  const [sparePort, loopbackPort, storePort] = await freePorts(3);
+  const spareListener = await retainHttpListener();
+  retained.push(spareListener);
+  const storeListener = await retainHttpListener();
+  retained.push(storeListener);
+  const sparePort = spareListener.port;
+  const storePort = storeListener.port;
+  const loopbackPort = await freePort();
   let standby!: { nodeId: string; publicKey: string };
   let spareId!: string;
   await adoptFromPrimary(
@@ -233,7 +246,7 @@ async function joinedPair() {
         return bundle as MirrorBundle;
       },
       advertisedOrigin: `https://waitron.local:${sparePort}`,
-      spareStorePort: storePort!,
+      spareStorePort: storePort,
       environment: "preproduction",
       persistTrading: async (args) => {
         spareId = args.nodeId;
@@ -278,20 +291,22 @@ async function joinedPair() {
 
   /** The spare's real start over its files: `pending-adoption.json` makes it the latch start. */
   const startSpare = async () => {
-    const server = await startConfiguredServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: venueDirOf(spareBox.db),
-      WAITRON_STATE_DIR: spareState,
-      WAITRON_LOG_DIR: join(spareState, "logs"),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_HTTP_PORT: String(sparePort),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_NODE_ID: spareId,
-      WAITRON_ENV: "preproduction",
-      WAITRON_VERSITYGW_BIN: versitygw,
-      WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
-      WAITRON_SPARE_STORE_PORT: String(storePort),
-    });
+    const server = await startWithRetainedListeners([spareListener, storeListener], () =>
+      startConfiguredServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDirOf(spareBox.db),
+        WAITRON_STATE_DIR: spareState,
+        WAITRON_LOG_DIR: join(spareState, "logs"),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_HTTP_PORT: String(sparePort),
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_NODE_ID: spareId,
+        WAITRON_ENV: "preproduction",
+        WAITRON_VERSITYGW_BIN: versitygw,
+        WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+        WAITRON_SPARE_STORE_PORT: String(storePort),
+      }),
+    );
     running.push(server);
     // The main box reaches the spare's box name at loopback, under the venue authority, and keeps
     // that address in its state folder, as it would after reaching it on the venue's network.

@@ -14,6 +14,7 @@ export function adoptRetainedListeners(entries) {
   }
   const pending = new Map(entries.map((entry) => [entry.port, entry]));
   const original = Server.prototype.listen;
+  const adopted = new Map();
   const boundServers = [];
   let ready;
   const bound = new Promise((resolve) => {
@@ -27,6 +28,7 @@ export function adoptRetainedListeners(entries) {
     if (entry === undefined) return Reflect.apply(original, this, args);
     if (args[1] !== entry.host) throw new Error("retained listener host mismatch");
     pending.delete(entry.port);
+    adopted.set(entry.port, this);
     if (pending.size === 0) restore();
     this.once("listening", () => {
       boundServers.push(this);
@@ -42,5 +44,5 @@ export function adoptRetainedListeners(entries) {
     return result;
   }
   Server.prototype.listen = intercept;
-  return { bound, restore };
+  return { adopted, bound, restore };
 }
