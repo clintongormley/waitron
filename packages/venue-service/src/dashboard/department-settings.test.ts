@@ -2185,11 +2185,6 @@ async function addStep(el: DepartmentSettings) {
   stepList(el).shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
   await settled(el);
 }
-function listError(el: DepartmentSettings) {
-  return (
-    stepList(el).shadowRoot!.querySelector("[data-test=list-error]")?.textContent?.trim() ?? ""
-  );
-}
 function stepErrors(el: DepartmentSettings) {
   return stepRows(el).map((_, index) =>
     (["Name", "Start", "Minutes"] as const).map((name) => stepControl(el, index, name).error),
@@ -2866,7 +2861,6 @@ it("a refusal naming a step's field, sent while Details shows, brings back Table
     await settled(el);
     expect(stepControl(el, index, control).error).toBe(REFUSED);
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([REFUSED]);
-    expect(listError(el)).toBe("");
     await strip(el).updateComplete;
     expect(strip(el).items.map((item) => item.marked)).toEqual([
       undefined,
@@ -2895,7 +2889,6 @@ it.each(["serviceSteps", "serviceSteps.1", "serviceSteps.1.id"])(
     await expect.poll(() => el.tab).toBe("tables");
     await settled(el);
     await expect.poll(() => bottom(el)).toBe(LIST_REFUSED);
-    expect(listError(el)).toBe("");
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([]);
     expect(save(el).disabled).toBe(false);
     save(el).click();
@@ -2920,7 +2913,6 @@ it("a course deleted meanwhile is named under every step that starts from it", a
     ["", COURSE_GONE, ""],
     ["", COURSE_GONE, ""],
   ]);
-  expect(listError(el)).toBe("");
   expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(save(el).disabled).toBe(false);
   await chooseStart(el, 1, "all_served");
@@ -2964,7 +2956,6 @@ it("a step another manager deleted says so, and Cancel emits cancelled", async (
   await editStep(el, 1, "Name", "Take orders");
   save(el).click();
   await expect.poll(() => bottom(el)).toBe(STEP_CHANGED);
-  expect(listError(el)).toBe("");
   expect(stepErrors(el).flat().filter(Boolean)).toEqual([]);
   expect(save(el).disabled).toBe(false);
   const heard: unknown[] = [];

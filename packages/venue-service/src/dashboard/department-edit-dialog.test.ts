@@ -41,9 +41,13 @@ it("puts the selected tab's sole action row in the modal footer", async () => {
     expect(form.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
   }
 });
-it.each(["light", "dark"] as const)(
-  "shows a list refusal directly above Save in the modal footer (%s)",
-  async (theme) => {
+it.each([
+  ["light", "en", "The service steps were not accepted. Change them and save again."],
+  ["dark", "es", "No se han aceptado los pasos de servicio. Cámbialos y vuelve a guardar."],
+] as const)(
+  "shows a list refusal only above Save in the modal footer (%s, %s)",
+  async (theme, locale, refusal) => {
+    setLocale(locale);
     const { app, form, modal } = await mount(
       (async (path, method) => {
         if (method === "GET")
@@ -71,7 +75,8 @@ it.each(["light", "dark"] as const)(
     departmentSave(form).click();
     await expect
       .poll(async () => (await formMessageOf(departmentActions(form)))?.textContent?.trim())
-      .toBe("The service steps were not accepted. Change them and save again.");
+      .toBe(refusal);
+    expect(steps.shadowRoot!.textContent).not.toContain(refusal);
     const message = (await formMessageOf(departmentActions(form)))!;
     expect(message.checkVisibility()).toBe(true);
     expect(message.getBoundingClientRect().bottom).toBeLessThanOrEqual(
