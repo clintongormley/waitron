@@ -1598,8 +1598,8 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   tablet, and that person could already act as the device while it was enabled. Keeping the old
   cookie valid as a second lasting proof would add a credential to guard. Outside development mode
   an ask only waits: a route that requires the device refuses a disabled one (`requireDeviceProof`,
-  through `readDeviceProof`, reads only `active` devices, `apps/server/src/device-session.ts:197`) until a manager with hardware
-  administration checks the number on the device's screen and accepts
+  through `readDeviceProof`, reads only `active` devices, `apps/server/src/device-session.ts:197`)
+  until a manager with hardware administration checks the number on the device's screen and accepts
   (`POST /management-api/device-join-requests/:id/accept`, `apps/server/src/join-api.ts:334`).
   Pinned by "a disabled device that asks again reaches no device route until its ask is accepted"
   in `apps/server/src/device-api.test.ts`, for the device's own read (`GET /api/device/me`). In
