@@ -684,7 +684,9 @@ export function coverFor(
   dish more than one line accepts is listed under the first (spec, **my call**). Each dish shows
   **Included** or its surcharge ("+€5.00"). Tapping a dish opens exactly what it opens à la carte
   (`pickProduct`, the modifier picker), and the line it adds carries `setMenuId` and its copy's
-  version and menu item.
+  version and menu item. Its course, which places it with `placeFor`, is the served set-menu
+  offer's `courseId` for the chosen variant, never the à la carte offer's: piece 1 serves the set
+  menu's own course there when the set menu gives the dish one (piece 1, decision 9).
 - At the top of the folder, **Add a {set menu}** adds one set menu fixed to this copy.
 - After the period ends, a bill holding copies whose set menu is in no served tree gets a **Set
   menus** tile on the home that lists them as folders (decision 7, **my call**).
@@ -692,7 +694,9 @@ export function coverFor(
 
 - [ ] **Step 1: Write the failing tests:** `"a set-menu folder shows its lines as headings and each
   dish as included or with its surcharge"`; `"a dish two lines accept is listed under the first"`;
-  `"tapping a sirloin opens its doneness question and adds a set-menu line"`; `"a counter order
+  `"tapping a sirloin opens its doneness question and adds a set-menu line"`; `"bravas the set
+  menu gives Starters are drafted in the Starters course, and à la carte bravas in Sharing
+  plates"`; `"a counter order
   draws no set-menu folder"`; `"Add a Special menu adds a fixed set menu"`; `"after the period a
   bill holding set menus still opens its folders from the Set menus tile"`; a11y in both themes.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.** **Step 4: Run them and the

@@ -79,7 +79,8 @@ further than that and are marked **my call** where they first appear in a task:
    published again. The dish's served `courseId`, which decides when it is sent, stays live as for
    every dish (`OverlayOfferField`, `menu-document-types.ts:19-20`), and is kept apart from what it
    counts as. Piece 2 records `countsAsCourseId` on the order line. The spec's "its product's course
-   at the moment it was ordered" is corrected to match in the same commit.
+   at the moment it was ordered" is corrected to match in the same commit. Decision 9 adds a course
+   chosen in the set menu, which takes the product's place in both.
 5. **Adding dishes adds lines, and says so.** Adding a dish whose course no line accepts appends a
    line "1 × that course", and the editor shows "Added a line: 1 × Coffee" so the person sees it.
    This is how "it starts as one line per course present" is kept true without a separate
@@ -93,6 +94,18 @@ further than that and are marked **my call** where they first appear in a task:
 8. **The set-up guide section and the editor's help bubble land with the screen** (CLAUDE.md §3: a
    screen change updates its guide in English and Spanish). Piece 2 takes the table-service guide
    and the help bubble on the order panel's count, for the same reason; piece 5 keeps the demo.
+9. **A set menu can give a dish another course** (**owner**, 18 November 2026: "after adding
+   products to the set menu, we should be able to change the course they belong to from the
+   default course. for instance we could treat a tapa as a starter"; asked whether that course
+   should also decide when the dish is sent, answered "both").
+   - A row in `set_menu_dish_courses` gives the dish, in that set menu only, a course of its own.
+     The dish and every kept variant of it then count as that course and are sent with it. Without
+     a row, the dish counts as its product's course (or each variant's own) and is sent as today.
+   - Like the rest of the set menu, the chosen course reaches the tills in the copy, when a full
+     menu holding the set menu is published (decision 4). In the copy it is `courseOverrideId`,
+     which piece 2's tills use as the line's course.
+   - Choosing the product's own course again clears the row, so the dish follows its product later
+     (**my call**). The same product à la carte is never affected.
 
 ## Global Constraints
 
@@ -197,6 +210,8 @@ further than that and are marked **my call** where they first appear in a task:
   `menu_item_variant_overrides` (`schema/menu/variant-overrides.ts:21-31`): `(menu_item_id,
   product_id)` → `menu_items (id, product_id)` cascade, `(product_id, variant_id)` →
   `products (parent_id, id)` restrict.
+- Produces `setMenuDishCourses` (`set_menu_dish_courses`, decision 9): `menuItemId` → `menu_items.id`
+  on delete cascade, the primary key; `courseId` → `kitchen_courses.id`.
 - Nothing in the database checks that these rows belong to a set menu; the menu package's writers
   (Task 4) are the only writers. Say so in one line at the table.
 
@@ -216,20 +231,25 @@ further than that and are marked **my call** where they first appear in a task:
   `"deleting a course takes it off set-menu lines and says how many"`: a set menu with lines
   "1 × Starters" and "1 × Mains or Starters"; `readCourseDeleteImpact(Starters)` lists
   `{ key: "course_set_menu_lines", count: 2 }` in `removes`; after `deleteCourse`, the second line
-  keeps Mains, the first holds no course, and both lines still exist.
+  keeps Mains, the first holds no course, and both lines still exist. In the same test, a dish
+  given Starters in the set menu (decision 9) loses that row, counts again as its product's
+  course, and the impact lists `{ key: "course_set_menu_dishes", count: 1 }`.
 - [ ] **Step 3: Run both; they fail** (`no such column: kind`, unknown table).
-- [ ] **Step 4: Add the columns and tables, classify the three tables `state`, run
-  `pnpm --filter @waitron/db db:generate`.** Add `setMenuLineCourses.courseId` to
-  `COURSE_REFERENCES` (the guard `apps/server/src/in-use-references.test.ts` requires every foreign
-  key into `kitchen_courses` there), delete its rows for the course in `deleteCourse`, and add the
-  `course_set_menu_lines` removal (count of distinct lines) to `courseDeleteRules`' impact. Add its
+- [ ] **Step 4: Add the columns and tables, classify the four tables `state`, run
+  `pnpm --filter @waitron/db db:generate`.** Add `setMenuLineCourses.courseId` and
+  `setMenuDishCourses.courseId` to `COURSE_REFERENCES` (the guard
+  `apps/server/src/in-use-references.test.ts` requires every foreign key into `kitchen_courses`
+  there), delete their rows for the course in `deleteCourse`, and add the `course_set_menu_lines`
+  removal (count of distinct lines) and the `course_set_menu_dishes` removal to
+  `courseDeleteRules`' impact. Add its
   English and Spanish impact wording wherever the existing `course_products` key is worded on the
   dashboard (grep `course_products`).
 - [ ] **Step 5: Run both test files, then the schema verification list in Global Constraints,
   `apps/server/src/in-use-references.test.ts`, `packages/composition/src/composition.test.ts`
   (it compares `MENU_TABLES` with the classification, `:176-185`) and the configuration-transfer
   tests (grep `MENU_CONFIGURATION_TRANSFER` for them), with one added case there: `"a set menu
-  exports and imports with its lines, their courses and its left-out variants"`.** All pass; read
+  exports and imports with its lines, their courses, its dishes' own courses and its left-out
+  variants"`.** All pass; read
   each `Tests` count.
 - [ ] **Step 6: Commit** — "Set menus: the set-menu kind of menu, its lines and its left-out variants".
 
@@ -441,14 +461,20 @@ export interface SetMenuDishSetting {
   name: string;
   /** null: included. */
   surcharge: string | null;
-  /** The dish's effective course; null when it has none or it is inactive. */
+  /** The course the dish counts as and is sent with here: `courseOverrideId` when set, else the
+   * product's effective course; null when it has none or it is inactive. */
   courseId: string | null;
+  /** The product's own effective course, shown as the default. */
+  productCourseId: string | null;
+  /** The course this set menu gives the dish (decision 9); null: the product's. */
+  courseOverrideId: string | null;
   variants: {
     id: string;
     name: string;
     included: boolean;
     /** null: the dish's surcharge. */
     surcharge: string | null;
+    /** The dish's `courseOverrideId` when set, else the variant's own effective course. */
     courseId: string | null;
   }[];
 }
@@ -487,6 +513,14 @@ export function addSetMenuDishes(
   dishes: readonly { productId: string; excludedVariantIds: readonly string[] }[],
 ): Promise<SetMenuLine[]>;
 export function copySetMenuDishes(tx: Transaction, menuId: string, fromMenuId: string): Promise<SetMenuLine[]>;
+/** Gives the dish a course in this set menu (decision 9), or clears it with null; answers the
+ * lines `addLinesForCourses` added for the new course. */
+export function saveSetMenuDishCourse(
+  tx: Transaction,
+  menuId: string,
+  menuItemId: string,
+  courseId: string | null,
+): Promise<SetMenuLine[]>;
 /** Appends "1 × course" for each course among these dishes that no line accepts; answers the
  * lines it added, for the editor's "Added a line" note. */
 export function addLinesForCourses(
@@ -509,24 +543,32 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
   exclusion and deletes any override; `included: true` deletes any exclusion and stores the
   surcharge as `menu_item_variant_overrides.price`, or deletes it when null. A variant not of this
   dish → `product.variant_not_found`, as `setMenuVariants` does (`variants.ts:403-406`).
+- `saveSetMenuDishCourse` refuses an inactive or unknown course with `set_menu.invalid`
+  `{ field: "courseId" }`, and a menu item not on this set menu with `set_menu.not_found`. A course
+  equal to the product's own effective course is stored as no row (decision 9, **my call**). When
+  no line accepts the new course, it appends one through `addLinesForCourses`, as adding a dish
+  does (decision 5).
 - `copySetMenuDishes` adds, in the source's order, every dish the source lists that this set menu
-  does not, with the source's surcharge, variant exclusions and variant surcharges; dishes already
+  does not, with the source's surcharge, course, variant exclusions and variant surcharges; dishes already
   here keep theirs (**my call**). Both menus must be set menus. It calls `addLinesForCourses` for the
   dishes it added.
 - The member write that adds products to a set menu's root calls `addLinesForCourses` in the same
   transaction (find it through `onStructureChanged`, `section-structure.ts:11-15`), and its route
   answer carries `addedLines` (Task 7).
 - `syncMenuOffers`' reset of a row the menu no longer reaches (`menu-structure.ts:225-232`) also
-  deletes that row's `set_menu_variant_exclusions`, so a dish removed and added again starts with
-  every variant included, as the spec says new dishes do. (The reset keeps the row, so the
+  deletes that row's `set_menu_variant_exclusions` and its `set_menu_dish_courses` row, so a dish
+  removed and added again starts with every variant included and its product's course, as the spec
+  says new dishes do. (The reset keeps the row, so the
   exclusion's cascade never fires.)
-- `duplicateMenu` of a set menu copies its kind, price, class, lines with their courses, and
-  exclusions (it already copies `menu_items` and overrides; check that it does).
+- `duplicateMenu` of a set menu copies its kind, price, class, lines with their courses, its
+  dishes' own courses, and exclusions (it already copies `menu_items` and overrides; check that it does).
 - Problems (pure, from the details): `no_dishes`; `no_lines`; `line_without_course`;
   `dish_without_course` for an included product with no Active variant and no course, and for each
   included variant with no course (`parentName` set); `dish_not_included` when no line accepts that
   course; `line_unfillable` when no included dish or variant counts as any of the line's courses
-  (decision 5). Courses here are the dishes' current ones: the copy takes them when a full menu
+  (decision 5). Every problem reads the course the dish has in this set menu (`courseId` above), so
+  a product with no course stops being a problem once the set menu gives it one. Courses here are
+  the dishes' current ones: the copy takes them when a full menu
   holding the set menu is published (decision 4). A dish whose variants are all left out is a problem of kind `no_dishes`
   only if it was the last dish; otherwise it is simply not offered (**my call**).
 
@@ -550,6 +592,12 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
   - `"a variant can be left out or given its own surcharge"`: Wine with Glass and Bottle; leave
     Bottle out, give Glass "1.50" → read back `{Glass: included, "1.50"}, {Bottle: included: false}`;
     include Bottle again → no exclusion row remains.
+  - `"a set menu can give a dish another course"`: Bravas (Sharing plates) is added, which appends
+    `1 × Sharing plates`; `saveSetMenuDishCourse(Bravas, Starters)` → `readSetMenu` shows
+    `courseId: Starters`, `productCourseId: Sharing plates`, `courseOverrideId: Starters`, and its
+    variants' `courseId` is Starters. Saving Sharing plates again stores no row. Bravas sold à la
+    carte keeps Sharing plates. An inactive course → `set_menu.invalid` `{ field: "courseId" }`.
+  - `"a dish with no course stops being a problem once the set menu gives it one"`.
   - `"a variant's own course is reported and checked"`: Bottle's own course is Desserts and no line
     accepts Desserts → `problems` holds `dish_not_included` with `parentName: "Wine"`.
   - `"problems name every reason publishing would refuse"`: one case per problem kind.
@@ -596,6 +644,9 @@ export type SetMenuFrozenOffer = Omit<FrozenOffer, "variants"> & {
   /** Fixed when the full menu is published (decision 4); null only for a dish whose variants
    * each carry their own. */
   countsAsCourseId: string | null;
+  /** The course this set menu gives the dish (decision 9); the tills send the dish, and every
+   * kept variant, with it instead of the live course. null: none. */
+  courseOverrideId: string | null;
   variants: SetMenuOfferVariant[];
 };
 /** A set menu as a full menu's published version holds it. */
@@ -619,7 +670,9 @@ export interface PublishedSetMenu {
     is removed from `variants`; each kept variant's `unitPrice` and `menuPrice` are its surcharge
     (its own, else the dish's, else `"0.00"`). An offer whose variants are all left out is dropped,
     with its product member.
-  - `countsAsCourseId` is the course `readSetMenu` reports for the dish and for each kept variant.
+  - `countsAsCourseId` is the course `readSetMenu` reports for the dish and for each kept variant,
+    which is the set menu's own course for the dish when it gives one; `courseOverrideId` is
+    `readSetMenu`'s `courseOverrideId`.
   - `terms` is `{ price, vatClass, names, lines }`, `names` from the set menu's root section.
 - `buildMenuDocuments` adds a set menu to the menus it builds whenever a requested menu's tree, or
   the tree of a menu it includes, holds it as an active `set_menu` member (as `visit` does for
@@ -672,6 +725,9 @@ export interface PublishedSetMenu {
   - `"the copy carries the terms and what each dish counts as"`: `terms` equals
     `{ price: "14.00", vatClass: "reduced", names: { en: "Daily menu" }, lines: [...] }`; Soup's
     `countsAsCourseId` is Starters; Glass's is its own course.
+  - `"a dish given another course in the set menu carries it in the copy"`: Bravas given Starters
+    → its offer's `countsAsCourseId` and `courseOverrideId` are Starters; Lunch's own Bravas offer
+    keeps Sharing plates and no override.
   - `"changing the set menu changes Lunch's working hash, and nothing reaches the live version
     until Lunch is published"`: publish Lunch; change Sirloin to +€6 → Lunch's `workingHash`
     differs from its live hash, `previewMenu(Lunch)` has one `set_menu_changed` with
@@ -750,6 +806,10 @@ export interface ServedSetMenu {
   and `ServiceZoneOffers.setMenus: readonly ServedSetMenu[]`: the `setMenus` copies of the zone's
   served documents, each offer passed through `applyLiveFields` like any offer, so `available` and
   the served `courseId` (which decides sending) are live while `countsAsCourseId` stays as copied.
+  An offer whose copy has a `courseOverrideId` is served with that as its `courseId`, and so is
+  each of its variants, over the live course (decision 9). Test it in `zone-offers.set-menus.test.ts`:
+  `"a dish the set menu gives Starters is served with Starters, and its product's course change
+  does not move it"`.
   Copies that are equal (same `menuDocumentHash` of the `PublishedSetMenu`) are served once, with
   every version that holds them in `versionIds`; different copies of one set menu, from two served
   full menus published at different times, are served one each (**my call**: each is what its full
@@ -816,6 +876,8 @@ export interface ServedSetMenu {
 - `GET /management-api/menus/:id/set-menu` → `SetMenuDetails`.
 - `PUT /management-api/menus/:id/set-menu/lines` body `{ lines: { count, courseIds }[] }` →
   `{ lines: SetMenuLine[] }`.
+- `PUT /management-api/menus/:id/set-menu/items/:itemId/course` body `{ courseId: string | null }`
+  → `{ details: SetMenuDetails; addedLines: SetMenuLine[] }`.
 - `PUT /management-api/menus/:id/set-menu/items/:itemId/variants` body
   `{ variants: { variantId, included, surcharge }[] }` → `SetMenuDetails`.
 - `POST /management-api/menus/:id/set-menu/dishes` body
@@ -826,8 +888,8 @@ export interface ServedSetMenu {
   `PATCH .../items/:itemId` routes; the existing add-products member route still works on a set
   menu's list (all variants included) and answers `addedLines` too. Placing a set menu uses the existing
   `POST /management-api/sections/:id/members` with the `set_menu` ref.
-- **Dashboard refresh.** Add `set_menu_lines`, `set_menu_line_courses` and
-  `set_menu_variant_exclusions` to `MENU_PUBLICATION_READS` (`apps/dashboard/src/api/live-queries.ts:4-22`),
+- **Dashboard refresh.** Add `set_menu_lines`, `set_menu_line_courses`, `set_menu_dish_courses`
+  and `set_menu_variant_exclusions` to `MENU_PUBLICATION_READS` (`apps/dashboard/src/api/live-queries.ts:4-22`),
   so a change to a set menu refreshes the status and Preview of the full menus holding it; no guard
   catches a missing table here. `menuStatus` (`menu-publication.ts:216-227`) leaves set menus out,
   and the menus list shows no publication status for one (Task 8a).
@@ -960,8 +1022,11 @@ export interface ServedSetMenu {
 - After adding or copying, any `addedLines` show once as a note above the lines: "Added a line:
   1 × Coffee" (decision 5).
 - One `wt-data-table` per course, in course order, headed by the course name, then **No course**
-  last with "Give it a course on the product to use it here" and a link to each product's editor.
-  Columns: dish, **Surcharge** (a `wt-price-input`, blank shown as "Included"), and an `actions`
+  last with "Choose a course for it here, or give it one on the product" and a link to each
+  product's editor. A dish sits under the course it has in this set menu.
+  Columns: dish, **Course** (a select from the field primitives listing the active courses, its
+  first choice "{product's course} (from the product)", or "No course (from the product)"; saved
+  on change through `saveSetMenuDishCourse`, decision 9), **Surcharge** (a `wt-price-input`, blank shown as "Included"), and an `actions`
   column pinned `"end"` with **Variants…** (only for a dish with variants) and **Remove**. A variant
   with a course other than its dish's shows that course beside its name in the variants dialog.
 - **Variants…** opens a dialog listing every Active variant with an **Included** switch and its own
@@ -975,7 +1040,9 @@ export interface ServedSetMenu {
   `"adding a coffee dish shows Added a line: 1 × Coffee"`; `"dishes are grouped by course in
   course order, with No course last"`; `"a blank surcharge reads Included and an amount saves on commit"`;
   `"a refused surcharge shows its error on that row"`; `"Variants… leaves a variant out and gives
-  another its own surcharge"`; `"a dish with no course links to its product"`; `"copying dishes from
+  another its own surcharge"`; `"a dish with no course links to its product"`; `"choosing Starters for Bravas moves it under
+  Starters and saves, and choosing its product's course again moves it back"`; `"a course that no
+  line accepts shows Added a line"`; `"copying dishes from
   another set menu adds them and keeps this one's surcharges"`; a11y for each table state and the
   two dialogs in both themes; unsaved for the variants dialog.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.** **Step 4: Run them.**
@@ -1027,7 +1094,8 @@ export interface ServedSetMenu {
 - The include picker, the period dialog's customer and staff menu choices, and the default-menu
   choice list ordinary menus only (`kind === "menu"`).
 - Guide: a `## Set menus {#set-menus}` section in both languages, written from the code as built:
-  what a set menu is, creating one, its dishes and surcharges, variants, what one set menu
+  what a set menu is, creating one, its dishes and surcharges, giving a dish another course in
+  the set menu (it counts as that course and is sent with it), variants, what one set menu
   includes, placing it in a menu, and that its changes reach the tills only when a menu that holds
   it is published. Remove any "set lunch" wording A1515-REMOVE left behind in these two files.
   Short; a sentence earns its place by changing what staff do (CLAUDE.md §3).

@@ -123,9 +123,14 @@ mock-up; dishes first, then the rules). Its parts, in order:
   itself under each product's course (the dish's course is set on the product, as today). Beside
   each dish, a **surcharge**: empty means included, an amount means the dish costs that much on
   top of the set menu. **Copy dishes from another set menu** copies another set menu's list, with
-  its surcharges, into this one. A product with no course is listed under **No course** with "Give
-  it a course on the product to use it here" and a link to the product; a set menu holding one
-  cannot be published.
+  its surcharges, into this one. Beside each dish, a **course**: it starts as the product's
+  course, and can be changed for this set menu only (**owner**, 18 November 2026: "we should be
+  able to change the course they belong to from the default course. for instance we could treat a
+  tapa as a starter"; asked whether that course also decides when the dish is sent: "both"). The
+  dish then counts as that course on the bill and is sent with it; the same product à la carte is
+  unchanged. A product with no course is listed under **No course** with "Choose a course for it
+  here, or give it one on the product" and a link to the product; a set menu holding a dish with no
+  course cannot be published.
 - **What one set menu includes.** A list of lines, each "N × course", where a line may accept more
   than one course ("1 × Mains or Starters", "1 × Desserts or Coffee"). It starts as one line per
   course present among the dishes, each "1 ×"; the person joins courses with "or", removes a line,
@@ -180,7 +185,9 @@ Which folder it came from does not matter to the bill (**owner**, answer A). The
 ordered from an à la carte folder is an ordinary à la carte line at its à la carte price, and the
 bill never turns it into a set-menu dish (**my call**).
 
-**What a dish counts as.** A set-menu dish counts as the course its product had when the full
+**What a dish counts as.** A set-menu dish counts as the course the set menu gives it, if it gives
+one, and is sent with that course too (**owner**, 18 November 2026, "both"). Otherwise it counts as
+the course its product had when the full
 menu holding the set menu was last published, fixed in that copy and recorded on the line
 (**owner**, 18 November 2026: "The menu should freeze the definition - we shouldn't read courses
 from the live product list"; this replaces "its product's course at the moment it was ordered"). Moving it to another course to serve it (a starter served as a
