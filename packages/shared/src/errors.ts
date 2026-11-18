@@ -25,6 +25,17 @@
  * an import written in a comment or string of another file the barrel reaches fakes an edge.
  */
 export interface ErrorParams {
+  "set_menu.fit_invalid_input": {
+    reason:
+      | "duplicate_id"
+      | "unknown_offer"
+      | "unknown_set_menu"
+      | "pinned_to_unfixed"
+      | "pinned_place_invalid"
+      | "invalid_amount"
+      | "invalid_line";
+    id: string;
+  };
   // Receipt params name known fields and approved languages, never authored text or unknown keys.
   "receipt.invalid": {
     reason:
