@@ -153,6 +153,7 @@ import {
   readHolidays,
   readHolidayAreaModel,
   readProfileServiceAccess,
+  readProfileServiceScopes,
   saveHolidayArea,
   saveMenuPeriod,
   replaceMenuWeek,
@@ -4653,6 +4654,82 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     const handheld = profiles.find((row) => row.name === "Handheld")!;
     const lists = await readProfilePrinterLists(tx, handheld.id);
     expect(lists.receiptPrinterIds).toHaveLength(1);
+  });
+});
+
+describe("device profile scope round trip (M4)", () => {
+  it("keeps the profile and remaps its scope after a list member switches off", async () => {
+    const source = await applyVenue(planVenue(venue("B24680136"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const original = await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, {
+        name: "Scope restaurant",
+        orderStart: "table",
+      });
+      const start = await createServiceZone(tx, {
+        name: "Scope dining room",
+        departmentId: department.id,
+      });
+      const closed = await createServiceZone(tx, {
+        name: "Scope terrace",
+        departmentId: department.id,
+      });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Scope handheld",
+        formFactor: "phone-portrait",
+      });
+      await setProfileServiceScope(tx, profile!.id, {
+        departmentId: department.id,
+        startingZoneId: start.id,
+        allowedZoneIds: [start.id, closed.id],
+      });
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, closed.id));
+      return { profile: profile!.id, department: department.id, start: start.id };
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-06T12:00:00Z"),
+      versions,
+    );
+    await applyVenue(planVenue(venue("B13570247"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+    });
+    await withTransaction(targetSuite.db, async (tx) => {
+      const [profile] = await tx
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, "Scope handheld"));
+      const [department] = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.name, "Scope restaurant"));
+      const zones = await tx
+        .select({ id: floorZones.id, name: floorZones.name })
+        .from(floorZones)
+        .where(eq(floorZones.departmentId, department!.id));
+      expect(zones.map((zone) => zone.name)).toEqual(["Scope dining room"]);
+      expect(profile!.id).not.toBe(original.profile);
+      expect(department!.id).not.toBe(original.department);
+      expect(zones[0]!.id).not.toBe(original.start);
+      expect(await readProfileServiceScopes(tx, [profile!.id])).toEqual([
+        {
+          profileId: profile!.id,
+          departmentId: department!.id,
+          startingZoneId: zones[0]!.id,
+          allowedZoneIds: [zones[0]!.id],
+        },
+      ]);
+    });
   });
 });
 
