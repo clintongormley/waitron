@@ -10,14 +10,14 @@ import type {
   ManagerHours,
   PersonHours,
 } from "./attendance-contract.js";
-import { readAttendanceInboxWork } from "./attendance-reads.js";
+import { projectAttendanceInboxWork, readAttendanceInboxInputs } from "./attendance-reads.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { readClosures } from "./pay-period-reads.js";
 import { readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
 import type { Period, TimeEntryRecord } from "./projection.js";
 import { isRecordDate } from "./record-dates.js";
 import { projectTimeRecord, recordRoot } from "./record-projection.js";
-import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
+import { readOutstandingHoursEntries, readTimeRecord } from "./record-reads.js";
 import "./errors.js";
 
 interface HoursInput {
@@ -99,9 +99,22 @@ async function personInWindow(
   const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
   const { period, businessDay } = window;
-  const entries = await readRecordedEntries(tx, { personId });
+  const inputs = await readAttendanceInboxInputs(tx, personId, "possible-prompts");
+  const questionIds = new Set(inputs.questions.map((q) => q.id));
+  const questionEntryIds = inputs.questions
+    .flatMap((q) => [q.openEntryId, q.automaticEntryId, q.resolvedByEntryId])
+    .filter((id) => id !== null);
+  for (const command of inputs.commands) {
+    if (command.questionId !== null && questionIds.has(command.questionId))
+      questionEntryIds.push(...command.entryIds);
+  }
+  const entries = await readOutstandingHoursEntries(tx, {
+    personId,
+    questionWindows: inputs.questions.map((q) => [q.startAt, q.endAt]),
+    questionEntryIds,
+  });
   const record = await readTimeRecord(tx, { personId, period }, policy);
-  const inbox = await readAttendanceInboxWork(tx, personId, entries);
+  const inbox = projectAttendanceInboxWork(personId, entries, inputs);
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
   const pending = {

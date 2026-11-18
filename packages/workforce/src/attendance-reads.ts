@@ -1,5 +1,5 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
-import { and, eq, getTableColumns, isNull } from "drizzle-orm";
+import { and, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type {
@@ -17,6 +17,7 @@ import { readAttendanceRevision, projectCorrectionItems } from "./attendance-res
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
 import { attendanceAnswers } from "./schema/attendance-responses.js";
+import { timeEntries } from "./schema/time-entries.js";
 import "./errors.js";
 
 const invalid = () => new AppError("attendance.invalid", { reason: "record_scope_or_period" });
@@ -29,20 +30,20 @@ export async function readAttendanceInbox(
 ): Promise<AttendanceInbox> {
   requireId(personId);
   const entries = await readRecordedEntries(tx, { personId });
-  const work = await readAttendanceInboxWork(tx, personId, entries);
+  const inputs = await readAttendanceInboxInputs(tx, personId);
+  const work = projectAttendanceInboxWork(personId, entries, inputs);
   return { ...work, revision: await readAttendanceRevision(tx, personId) };
 }
 
-export async function readAttendanceInboxWork(
+export async function readAttendanceInboxInputs(
   tx: Transaction,
   personId: string,
-  entries: TimeEntryRecord[],
-): Promise<Omit<AttendanceInbox, "revision">> {
+  scope: "all" | "possible-prompts" = "all",
+) {
   const commands = await tx
     .select()
     .from(attendanceAnswers)
     .where(eq(attendanceAnswers.personId, personId));
-  const items = projectCorrectionItems(entries, commands);
   const questions = await tx
     .select({
       ...getTableColumns(attendanceQuestions),
@@ -57,9 +58,39 @@ export async function readAttendanceInboxWork(
         eq(attendanceQuestions.personId, personId),
         eq(attendanceQuestions.active, true),
         isNull(attendanceQuestions.canonicalQuestionId),
+        // With no linked command, answerForQuestion can reopen a saved automatic-out
+        // resolution only when its resolving entry is a correction request.
+        scope === "all"
+          ? undefined
+          : sql`(
+              ${attendanceQuestions.resolvedByEntryId} is null
+              or exists (
+                select 1 from ${attendanceAnswers}
+                where ${attendanceAnswers.personId} = ${personId}
+                  and ${attendanceAnswers.questionId} = ${attendanceQuestions.id}
+              )
+              or (
+                ${attendanceQuestions.kind} = 'automatic-out'
+                and exists (
+                  select 1 from ${timeEntries}
+                  where ${timeEntries.id} = ${attendanceQuestions.resolvedByEntryId}
+                    and ${timeEntries.personId} = ${personId}
+                    and ${timeEntries.correctionStatus} = 'requested'
+                )
+              )
+            )`,
       ),
     );
   const { timeZone } = await readVenue(tx);
+  return { commands, questions, timeZone };
+}
+
+export function projectAttendanceInboxWork(
+  personId: string,
+  entries: TimeEntryRecord[],
+  { commands, questions, timeZone }: Awaited<ReturnType<typeof readAttendanceInboxInputs>>,
+): Omit<AttendanceInbox, "revision"> {
+  const items = projectCorrectionItems(entries, commands);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const prompts: { at: string; prompt: AttendancePrompt }[] = [];
   for (const question of questions) {

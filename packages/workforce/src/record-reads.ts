@@ -85,6 +85,50 @@ const OFFSET_MARGIN_MS = 14 * 60 * 60 * 1000;
 const FIRST_EVENT_AT = "0000-01-01T00:00:00.000Z";
 const LAST_EVENT_AT = "9999-12-31T23:59:59.000Z";
 
+function hasNoApprovedReplacement(entryId: SQL, personId: SQL): SQL {
+  return sql`not exists (
+    select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
+    where corrected.corrects_entry_id = ${entryId} and corrected.person_id = ${personId}
+      and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
+  )`;
+}
+const unretimedAnchor = hasNoApprovedReplacement(sql`anchor.id`, sql`anchor.person_id`);
+const seedColumns = sql`seed.id, seed.person_id, seed.event_at, seed.corrects_entry_id, seed.responds_to_entry_id`;
+
+function entryFamily(seed: SQL): SQL {
+  return sql`family(id, person_id, event_at, corrects_entry_id, responds_to_entry_id) as (
+  ${seed}
+  union
+  select parent.id, parent.person_id, parent.event_at, parent.corrects_entry_id, parent.responds_to_entry_id
+  from family join time_entries parent
+    on parent.id in (family.corrects_entry_id, family.responds_to_entry_id)
+    and parent.person_id = family.person_id
+  union
+  select correction.id, correction.person_id, correction.event_at,
+    correction.corrects_entry_id, correction.responds_to_entry_id
+  from family join time_entries correction indexed by time_entries_corrects_entry_idx
+    on correction.corrects_entry_id = family.id and correction.person_id = family.person_id
+  union
+  select response.id, response.person_id, response.event_at,
+    response.corrects_entry_id, response.responds_to_entry_id
+  from family join time_entries response indexed by time_entries_person_event_idx
+    on response.person_id = family.person_id and response.event_at = family.event_at
+    and response.responds_to_entry_id = family.id
+)`;
+}
+
+async function readSelectedEntries(
+  tx: Database | Transaction,
+  selected: SQL,
+): Promise<TimeEntryRecord[]> {
+  const rows = await tx
+    .select()
+    .from(timeEntries)
+    .where(sql`${timeEntries.id} in (${selected})`)
+    .orderBy(sql`time_entries.rowid`);
+  return rows.map(recordFromRow);
+}
+
 /** Filter projected sessions by the requested work dates. Rows outside the period supply context. */
 export async function readPeriodEntries(
   tx: Database | Transaction,
@@ -103,11 +147,7 @@ export async function readPeriodEntries(
   const later = sql`(
     select anchor.event_at from time_entries anchor indexed by time_entries_person_event_idx
     where anchor.person_id = people.person_id and anchor.entry_kind = 'in' and anchor.event_at >= ${until}
-      and not exists (
-        select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
-        where corrected.corrects_entry_id = anchor.id and corrected.person_id = anchor.person_id
-          and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
-      )
+      and ${unretimedAnchor}
     order by anchor.event_at limit 1
   )`;
 
@@ -120,35 +160,84 @@ export async function readPeriodEntries(
       select person_id, coalesce(${later}, ${LAST_EVENT_AT}) as last_at
       from people
     ),
-    family(id, person_id, event_at, corrects_entry_id, responds_to_entry_id) as (
-      select seed.id, seed.person_id, seed.event_at, seed.corrects_entry_id, seed.responds_to_entry_id
+    ${entryFamily(sql`
+      select ${seedColumns}
       from bounds cross join time_entries seed indexed by time_entries_person_event_idx
       where seed.person_id = bounds.person_id and seed.event_at between ${from} and bounds.last_at
-      union
-      select parent.id, parent.person_id, parent.event_at, parent.corrects_entry_id, parent.responds_to_entry_id
-      from family join time_entries parent
-        on parent.id in (family.corrects_entry_id, family.responds_to_entry_id)
-        and parent.person_id = family.person_id
-      union
-      select correction.id, correction.person_id, correction.event_at,
-        correction.corrects_entry_id, correction.responds_to_entry_id
-      from family join time_entries correction indexed by time_entries_corrects_entry_idx
-        on correction.corrects_entry_id = family.id and correction.person_id = family.person_id
-      union
-      select response.id, response.person_id, response.event_at,
-        response.corrects_entry_id, response.responds_to_entry_id
-      from family join time_entries response indexed by time_entries_person_event_idx
-        on response.person_id = family.person_id and response.event_at = family.event_at
-        and response.responds_to_entry_id = family.id
-    )
+    `)}
     select id from family
   `;
-  const rows = await tx
-    .select()
-    .from(timeEntries)
-    .where(sql`${timeEntries.id} in (${selected})`)
-    .orderBy(sql`time_entries.rowid`);
-  return rows.map(recordFromRow);
+  return readSelectedEntries(tx, selected);
+}
+
+export async function readOutstandingHoursEntries(
+  tx: Transaction,
+  {
+    personId,
+    questionWindows,
+    questionEntryIds,
+  }: {
+    personId: string;
+    questionWindows: readonly (readonly [string, string])[];
+    questionEntryIds: readonly string[];
+  },
+): Promise<TimeEntryRecord[]> {
+  // Checking whether an undecided correction is ready still needs the full sequence.
+  const undecided = await tx.execute(sql`
+    select 1 from time_entries request indexed by time_entries_person_event_idx
+    where request.person_id = ${personId} and request.entry_kind = 'correction'
+      and request.correction_status = 'requested'
+      and request.correction_direction in ('worker_request', 'manager_proposal')
+      and ${hasNoApprovedReplacement(sql`request.corrects_entry_id`, sql`request.person_id`)}
+      and not exists (
+        select 1 from time_entries decision indexed by time_entries_person_event_idx
+        where decision.person_id = request.person_id and decision.event_at = request.event_at
+          and decision.entry_kind = 'correction' and decision.correction_status <> 'requested'
+          and decision.responds_to_entry_id = request.id
+      )
+    limit 1
+  `);
+  if (undecided.rows.length > 0) return readRecordedEntries(tx, { personId });
+
+  // An unretimed direct in or out resets open shifts. Keep every event at its instant.
+  const latest = sql`(
+    select anchor.event_at from time_entries anchor indexed by time_entries_person_event_idx
+    where anchor.person_id = ${personId} and anchor.entry_kind in ('in', 'out')
+      and ${unretimedAnchor}
+    order by anchor.event_at desc limit 1
+  )`;
+  const seeds = sql`
+    select ${seedColumns}
+    from time_entries seed indexed by time_entries_person_event_idx
+    where seed.person_id = ${personId} and seed.event_at >= coalesce(${latest}, ${FIRST_EVENT_AT})
+    union
+    select ${seedColumns}
+    from time_entries seed indexed by time_entries_person_event_idx
+    where seed.person_id = ${personId}
+      and (
+        (seed.entry_kind = 'out' and seed.author_kind = 'automatic' and not exists (
+          select 1 from time_entries confirmation indexed by time_entries_person_event_idx
+          where confirmation.person_id = seed.person_id and confirmation.event_at = seed.event_at
+            and confirmation.entry_kind = 'confirmation' and confirmation.author_kind = 'worker'
+            and confirmation.responds_to_entry_id = seed.id
+        ))
+        or (seed.entry_kind = 'correction' and seed.correction_status = 'disputed'
+          and seed.responds_to_entry_id is not null)
+      )
+    union
+    select ${seedColumns}
+    from json_each(${JSON.stringify(questionWindows)}) question
+    cross join time_entries seed indexed by time_entries_person_event_idx
+    where seed.person_id = ${personId}
+      and seed.event_at >= json_extract(question.value, '$[0]')
+      and seed.event_at < json_extract(question.value, '$[1]')
+    union
+    select ${seedColumns}
+    from json_each(${JSON.stringify(questionEntryIds)}) reference
+    cross join time_entries seed
+    where seed.id = reference.value and seed.person_id = ${personId}
+  `;
+  return readSelectedEntries(tx, sql`with recursive ${entryFamily(seeds)} select id from family`);
 }
 
 /**

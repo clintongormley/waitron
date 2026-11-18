@@ -279,5 +279,5 @@ it("keeps a week's reads bounded on a year of clock history", async () => {
   expect(hours.result.workedMinutes).toBe(3420);
   expect.soft(summary.rows).toBeLessThanOrEqual(48);
   expect.soft(comparison.rows).toBeLessThanOrEqual(48);
-  expect.soft(hours.rows).toBeLessThanOrEqual(780);
+  expect.soft(hours.rows).toBeLessThanOrEqual(80);
 });

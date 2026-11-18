@@ -7,7 +7,10 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { type BusinessDayClock } from "@waitron/shared";
 import { attendanceFixture } from "../test/attendance-fixture.js";
+import { seedAttendanceDay } from "../test/fixtures.js";
 import * as api from "./index.js";
+import * as attendanceReads from "./attendance-reads.js";
+import * as recordReads from "./record-reads.js";
 import { readAttendanceRevision } from "./attendance-responses.js";
 import type { AttendanceCommandPayload, HoursSelection } from "./attendance-contract.js";
 
@@ -42,6 +45,21 @@ function manager(
 ) {
   expect(api).toHaveProperty("readManagerHours", expect.any(Function));
   return f.run((tx) => api.readManagerHours(tx, { selection, clock: venueClock, now }));
+}
+async function expectFullHistoryResult<T>(actual: T, getHours: () => Promise<T>) {
+  const loadInputs = attendanceReads.readAttendanceInboxInputs;
+  const allInputs = vi
+    .spyOn(attendanceReads, "readAttendanceInboxInputs")
+    .mockImplementation((tx, personId) => loadInputs(tx, personId));
+  const allEntries = vi
+    .spyOn(recordReads, "readOutstandingHoursEntries")
+    .mockImplementation((tx, { personId }) => recordReads.readRecordedEntries(tx, { personId }));
+  try {
+    expect(await getHours()).toEqual(actual);
+  } finally {
+    allEntries.mockRestore();
+    allInputs.mockRestore();
+  }
 }
 async function event(
   kind: "clockIn" | "clockOut" | "breakStart" | "breakEnd",
@@ -216,6 +234,26 @@ it("shows old open work and its current break without inventing a completed sess
   await event("breakEnd", "2026-01-05T12:30:00Z");
   expect((await read()).openShifts[0]!.breakStart).toBeNull();
 });
+it("still shows the selected month if an unrelated old entry has incomplete attribution", async () => {
+  await f.run((tx) =>
+    api.appendToChain(
+      tx,
+      { nodeId: f.nodeId },
+      {
+        personId: f.personId,
+        entryKind: "out",
+        eventAt: "2024-01-05T17:00:00Z",
+        eventOffsetMinutes: 0,
+        recordedByPersonId: f.personId,
+        origin: f.event("").origin,
+      },
+    ),
+  );
+  const { start, end } = await shift();
+  const value = await read();
+  expect(value.workedMinutes).toBe(480);
+  expect(value.record.entries.map((row) => row.entry.entryId)).toEqual([start, end]);
+});
 it("counts an unacknowledged automatic end and keeps it visible while a retime awaits approval", async () => {
   const { end, questionId } = await automatic();
   let value = await read();
@@ -300,6 +338,175 @@ it("keeps old missing questions and unacknowledged automatic history outside a s
   expect(value.pending.automaticEntryIds).toEqual([end]);
   expect(value.pending.prompts.map((p) => p.id)).toEqual([questionId]);
   expect(value.record.entries.map((e) => e.entry.entryId)).toEqual([start, end]);
+});
+it("reads only the current shift boundary once a competing correction has changed the target", async () => {
+  await shift("2026-01-02");
+  const { end } = await shift();
+  await request(end);
+  const proposal = await send(
+    {
+      action: "propose",
+      personId: f.personId,
+      changes: [{ target: { entryId: end }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 }],
+      reason: "Later finish",
+    },
+    f.manager,
+  );
+  await send({ action: "accept", itemId: proposal.entryIds[0]! });
+  const latest = await shift("2026-03-02");
+  const entries = await f.run((tx) =>
+    recordReads.readOutstandingHoursEntries(tx, {
+      personId: f.personId,
+      questionWindows: [],
+      questionEntryIds: [],
+    }),
+  );
+  expect(entries.map(({ entryId }) => entryId)).toEqual([latest.end]);
+  const getHours = () => read({ kind: "month", date: "2026-03-02" });
+  const hours = await getHours();
+  expect(hours.pending.items).toEqual([]);
+  await expectFullHistoryResult(hours, getHours);
+});
+it("matches full-history Hours with a year of settled shifts and older outstanding work", async () => {
+  const { questionId } = await automatic();
+  const automaticEnd = async (date: string) => {
+    const start = await f.open(`${date}T09:00:00Z`);
+    return f.run((tx) =>
+      f.backend.recordAutomaticClose(tx, { ...f.event(`${date}T17:00:00Z`), openEntryId: start }),
+    );
+  };
+  const unconfirmed = await automaticEnd("2026-01-06");
+  const { end: disputedEnd } = await shift("2026-01-07");
+  const proposal = await send(
+    {
+      action: "propose",
+      personId: f.personId,
+      changes: [{ target: { entryId: disputedEnd }, at: "2026-01-07T18:00:00Z", offsetMinutes: 0 }],
+      reason: "Check finish",
+    },
+    f.manager,
+  );
+  const disputed = proposal.entryIds[0]!;
+  await send({ action: "disagree", itemId: disputed, reason: "I left at five" });
+
+  const { end: anotherEnd } = await shift("2026-01-08");
+  const {
+    entryIds: [declined],
+  } = await request(anotherEnd, "2026-01-08T18:00:00Z");
+  await send({ action: "decline", itemId: declined! }, f.manager);
+
+  const { start: missingDayStart, end: missingDayEnd } = await shift("2026-01-09");
+  const missingDay = {
+    businessDay: "2026-01-09",
+    startAt: "2026-01-09T04:00:00.000Z",
+    endAt: "2026-01-10T04:00:00.000Z",
+  };
+  const missingQuestion = await f.run(async (tx) => {
+    const dayId = await seedAttendanceDay(tx, missingDay);
+    return api.upsertAttendanceQuestion(
+      tx,
+      {
+        personId: f.personId,
+        day: missingDay,
+        shiftKey: "another-shift",
+        kind: "missing-times",
+        missingKinds: ["in", "out"],
+        openEntryId: null,
+        automaticEntryId: null,
+        evidenceKeys: ["order:another"],
+      },
+      now,
+      dayId,
+    );
+  });
+  const pair = await send({
+    action: "request",
+    questionId: missingQuestion,
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-09T22:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-10T05:00:00Z", offsetMinutes: 0 },
+    ],
+    reason: "I missed both stamps",
+  });
+  const decline = await send({ action: "decline", itemId: pair.commandId }, f.manager);
+  // Exercise a saved resolution pointing outside the question's day and other entry families.
+  await f.suite.db
+    .update(api.attendanceQuestions)
+    .set({ resolvedByEntryId: declined! })
+    .where(eq(api.attendanceQuestions.id, questionId));
+  // A linked decline leaves the question open even when the saved resolution names a clock-in.
+  await f.suite.db
+    .update(api.attendanceQuestions)
+    .set({ resolvedByEntryId: missingDayStart })
+    .where(eq(api.attendanceQuestions.id, missingQuestion));
+  const confirmed = await automaticEnd("2026-01-10");
+  await f.run((tx) =>
+    f.backend.confirmAutomaticEntry(tx, {
+      nodeId: f.nodeId,
+      entryId: confirmed,
+      workerPersonId: f.personId,
+      origin: f.event("").origin,
+    }),
+  );
+
+  const { end: pendingEnd } = await shift("2026-01-05", f.other);
+  const pending = await f.run((tx) =>
+    f.backend.requestCorrection(tx, {
+      nodeId: f.nodeId,
+      correctsEntryId: pendingEnd,
+      at: "2026-01-06T18:00:00Z",
+      offsetMinutes: 0,
+      actorPersonId: f.other,
+      origin: f.event("").origin,
+      reason: "I left the following day",
+    }),
+  );
+  await shift("2026-01-06", f.other);
+  await f.run(async (tx) => {
+    for (
+      let date = new Date("2026-01-11T00:00:00Z");
+      date < new Date("2027-01-11T00:00:00Z");
+      date.setUTCDate(date.getUTCDate() + 1)
+    ) {
+      const day = date.toISOString().slice(0, 10);
+      await f.backend.clockIn(tx, f.event(`${day}T09:00:00Z`));
+      await f.backend.clockOut(tx, f.event(`${day}T17:00:00Z`));
+    }
+  });
+  const start = await f.open("2027-01-11T09:00:00Z");
+  const pause = await event("breakStart", "2027-01-11T12:00:00Z");
+  const getHours = () =>
+    f.run((tx) =>
+      api.readManagerHours(tx, {
+        selection: { kind: "pay-period", date: "2026-06-16" },
+        clock,
+        now: new Date("2027-01-11T12:30:00Z"),
+      }),
+    );
+  const actual = await getHours();
+  const { hours } = actual.people.find((person) => person.personId === f.personId)!;
+  const { hours: otherHours } = actual.people.find((person) => person.personId === f.other)!;
+  expect(hours.workedMinutes).toBe(14_400);
+  expect(hours.openShifts).toMatchObject([
+    { start: { entryId: start }, breakStart: { entryId: pause } },
+  ]);
+  expect(hours.pending.items.map(({ id, status }) => ({ id, status }))).toEqual([
+    { id: disputed, status: "disputed" },
+  ]);
+  expect(hours.pending.automaticEntryIds).toContain(unconfirmed);
+  expect(hours.pending.automaticEntryIds).not.toContain(confirmed);
+  expect(hours.pending.prompts.map(({ id }) => id)).toEqual([questionId, missingQuestion]);
+  expect(hours.pending.prompts[1]!.history.map(({ entryId }) => entryId)).toEqual([
+    missingDayStart,
+    missingDayEnd,
+    ...pair.entryIds,
+    ...decline.entryIds,
+  ]);
+  expect(otherHours.pending.items).toMatchObject([
+    { id: pending, status: "waiting-manager", readyToApply: false },
+  ]);
+
+  await expectFullHistoryResult(actual, getHours);
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {
   await setBuiltInRoleForTest(f.suite.db, f.personId, "admin");
