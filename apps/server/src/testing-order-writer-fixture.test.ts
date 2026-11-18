@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   inTx,
   seatWithNoAllergies,
@@ -43,4 +43,24 @@ it("addTabRound writes a quantity of three as three dishes, each with its own fi
     .filter((item) => item.firedAt !== null)
     .map((item) => item.workingOrderLineId);
   expect([...firedLines].sort()).toEqual(lines.map((line) => line.id).sort());
+});
+
+it("addGroupedTabRound writes a quantity of three as one unbound row of three, with one fired ticket item", async () => {
+  const p = await seatWithNoAllergies(v, await v.table(`Round ${randomUUID().slice(0, 8)}`));
+
+  await inTx(v, (tx) =>
+    addGroupedTabRound(tx, v.cfg, p.tabId, [{ menuItemId: v.item("Burger"), quantity: "3" }]),
+  );
+
+  const lines = await v.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, p.tabId));
+  expect(lines.map((line) => line.quantity)).toEqual([3000]);
+  expect(lines.map((line) => line.cohortId)).toEqual([null]);
+  const items = await v.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, lines[0]!.id));
+  expect(items.map((item) => item.firedAt !== null)).toEqual([true]);
 });

@@ -22,6 +22,7 @@ import {
   bumpRevision,
   fireLines,
   insertTabRound,
+  priceTabRound,
   type TabRoundLine,
   abandonHeldOrder as abandon,
 } from "../working-order.js";
@@ -172,17 +173,30 @@ export async function placeOrder(
   return place(deps, cfg, id, operatorId, observed.expectedEdit);
 }
 
-/**
- * A round appended to an open party bill as the product's add writes it: priced once, one row per
- * dish, fired with each request line's `hold` and `release`. A `stamp` carrying `expectedEdit` is
- * the editing authority as given; otherwise the bill's current one is observed.
- */
-export async function addTabRound(
+type RoundStamp = { groupId?: string; creditedTo?: string } & Partial<OrderEditAuthority>;
+
+/** Each dish row's index in the request, extras rows aside: dish rows by line number are the
+ * request's lines in order. */
+async function priceGroupedRound(
   tx: Transaction,
   cfg: TradingContext,
   id: string,
   lines: TabRoundLine[],
-  stamp: { groupId?: string; creditedTo?: string } & Partial<OrderEditAuthority> = {},
+): ReturnType<typeof pricePortionRound> {
+  const round = await priceTabRound(tx, cfg, id, lines, "checked");
+  const dishes = round.rows
+    .filter((row) => row.parentLineId == null)
+    .sort((a, b) => a.lineNo - b.lineNo);
+  return { round, requestOfRow: round.rows.map((row) => dishes.indexOf(row)) };
+}
+
+async function appendRound(
+  tx: Transaction,
+  cfg: TradingContext,
+  id: string,
+  lines: TabRoundLine[],
+  stamp: RoundStamp,
+  price: typeof pricePortionRound,
 ) {
   await assertPartyBillOpen(tx, id);
   await requireOrderBillEditor(
@@ -192,7 +206,7 @@ export async function addTabRound(
       ? { operatorId: stamp.operatorId, expectedEdit: stamp.expectedEdit ?? null }
       : await authority(tx, id, stamp.creditedTo),
   );
-  const { round, requestOfRow } = await pricePortionRound(tx, cfg, id, lines);
+  const { round, requestOfRow } = await price(tx, cfg, id, lines);
   const inserted = await insertTabRound(
     tx,
     cfg,
@@ -205,7 +219,7 @@ export async function addTabRound(
   );
   const requestOfDish = new Map(
     round.rows.flatMap((row, i) =>
-      row.parentLineId == null ? [[row.id!, lines[requestOfRow[i]!]] as const] : [],
+      row.parentLineId == null ? [[row.lineNo, lines[requestOfRow[i]!]] as const] : [],
     ),
   );
   await fireLines(
@@ -214,11 +228,41 @@ export async function addTabRound(
     id,
     inserted.map((row) => ({
       ...row,
-      hold: requestOfDish.get(row.id)?.hold === true,
-      release: requestOfDish.get(row.id)?.release === true,
+      hold: requestOfDish.get(row.lineNo)?.hold === true,
+      release: requestOfDish.get(row.lineNo)?.release === true,
     })),
   );
   await bumpRevision(tx, [id]);
+}
+
+/**
+ * A round appended to an open party bill as the product's add writes it: priced once, one row per
+ * dish, fired with each request line's `hold` and `release`. A `stamp` carrying `expectedEdit` is
+ * the editing authority as given; otherwise the bill's current one is observed.
+ */
+export async function addTabRound(
+  tx: Transaction,
+  cfg: TradingContext,
+  id: string,
+  lines: TabRoundLine[],
+  stamp: RoundStamp = {},
+) {
+  await appendRound(tx, cfg, id, lines, stamp, pricePortionRound);
+}
+
+/**
+ * {@link addTabRound} with each request line stored as ONE row holding its whole quantity, bound to
+ * no portion: the grouped shape the part-quantity paths still handle (A803 slice 1's D12), which
+ * the product does not write for whole dishes.
+ */
+export async function addGroupedTabRound(
+  tx: Transaction,
+  cfg: TradingContext,
+  id: string,
+  lines: TabRoundLine[],
+  stamp: RoundStamp = {},
+) {
+  await appendRound(tx, cfg, id, lines, stamp, priceGroupedRound);
 }
 
 export async function abandonHeldOrder(
