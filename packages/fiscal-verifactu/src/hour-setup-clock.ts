@@ -33,6 +33,8 @@ interface Reading {
   readonly observations: readonly HourClockObservation[];
   readonly wall: number;
   readonly monotonic: number;
+  /** Whether the box's own clock counts as the second clock, as when the reading was taken. */
+  readonly boxClockAlone: boolean;
 }
 export interface SetupClockClient {
   readonly onBox: boolean;
@@ -109,7 +111,7 @@ export function bootStanding(
   return {
     standing,
     /** The time agreed when `binding`'s hour was chosen, while it stands; with `confirmedOnly`,
-     * only a device's time the person confirmed. */
+     * only a time the person confirmed. */
     chosen(
       state: Parameters<typeof chosenHourBoot>[0],
       binding: OperationBinding,
@@ -157,7 +159,9 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
     if (elapsed < 0 || elapsed > 30_000 || !Number.isFinite(elapsed)) return refuse("clock_stale");
     if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > STEP_MS)
       return refuse("clock_corrected");
-    return compareHourClocks([...held.observations, sample], release());
+    return compareHourClocks([...held.observations, sample], release(), {
+      boxClockAlone: held.boxClockAlone,
+    });
   };
   const take = (state: Session, browser: SetupBrowserClockSample, onBox: boolean) => {
     const challenge =
@@ -213,6 +217,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       browser: SetupBrowserClockSample | null,
       client: SetupClockClient,
       carried?: () => HourClockObservation | undefined,
+      admit: { boxClockAlone?: boolean } = {},
     ) {
       const state = session(key);
       const sent: HourClockObservation | undefined =
@@ -224,12 +229,14 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         internet,
       ];
       const sample = box();
-      const clock = compareHourClocks([...observations, sample], release());
+      const boxClockAlone = admit.boxClockAlone === true;
+      const clock = compareHourClocks([...observations, sample], release(), { boxClockAlone });
       const reading: Reading = {
         id: randomUUID(),
         observations,
         wall: sample.wallFinishedMs,
         monotonic: sample.monotonicFinishedMs,
+        boxClockAlone,
       };
       keep(state.readings, reading.id, reading);
       return { id: reading.id, clock };

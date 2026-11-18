@@ -1044,10 +1044,10 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   synchronises or the node recovery key confirms again, held by the browser that pressed Restore
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
   person confirmed on that page, while the box has not rebooted, the server has not restarted and
-  its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's).
+  its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's).
   A minute whose name is already in a history the box reads is not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
-  preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
+  preproduction throwaway skips second-clock/history checks; refuse it outside preproduction. On a development box (`WAITRON_ENV=dev`) a preproduction first setup on the setup page takes the box's own clock as its second clock (owner, 2026-11-17); the person still confirms it there.
   Restore takes one source; working-time chain continues from its head. Guards:
   hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hour-setup-defaults/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name
   suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`,

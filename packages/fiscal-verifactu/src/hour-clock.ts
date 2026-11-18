@@ -67,6 +67,7 @@ function validSample(sample: Extract<HourClockObservation, { result: "usable" }>
 export function compareHourClocks(
   observations: readonly HourClockObservation[],
   releaseInstantMs: number | null,
+  options: { boxClockAlone?: boolean } = {},
 ): HourClockDecision {
   const counts = new Map<HourClockSource, number>();
   for (const sample of observations)
@@ -127,7 +128,7 @@ export function compareHourClocks(
   const decision: HourClockDecision = Object.freeze({
     usable: Object.freeze(usable),
     unavailable: Object.freeze(unavailable),
-    secondClock: others.length > 0,
+    secondClock: others.length > 0 || (options.boxClockAlone === true && boxRange !== undefined),
     disagreement:
       boxRange !== undefined &&
       judged.some((sample) => Math.abs(middle(sample) - middle(boxRange)) > AGREEMENT_MS),

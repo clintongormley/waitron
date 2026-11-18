@@ -431,11 +431,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
-- **A dev stack cannot finish a Live setup**: it stops at the readiness step, which needs a second
-  clock nothing on a dev stack can be; the owner chose to let development mode take the box's own
-  clock (2026-11-17), not built yet.
-  [Detail](backlog/setup.md#a-dev-stack-cannot-finish-a-live-setup)
-
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 

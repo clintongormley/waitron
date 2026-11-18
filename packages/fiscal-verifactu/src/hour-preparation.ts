@@ -160,6 +160,10 @@ export function createHostedHourPreparation(
     monotonic: monotonicNow,
     timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
   });
+  const admission = (context: InitialSetupContext) => ({
+    boxClockAlone:
+      host.environment.WAITRON_ENV === "dev" && context.environment === "preproduction",
+  });
   const kept = bootStanding(host, options.wall ?? Date.now, monotonicNow);
   const preparation = createHourPreparation({
     withState: host.withPreparationState,
@@ -167,11 +171,15 @@ export function createHostedHourPreparation(
     readBoot: () => selectionBoot(host),
     refreshClock: async (binding, state) => {
       if (options.readClock !== undefined) return;
-      const { contextKey } = await host.readSetupFacts!(binding);
+      const { contextKey, context } = await host.readSetupFacts!(binding);
       // Twenty seconds leaves a held reading ten of its thirty when `read` takes it.
       if (clocks.admitsWithin(contextKey, 20_000)) return;
-      await clocks.compare(contextKey, null, { onBox: true }, () =>
-        kept.chosen(state, binding, true),
+      await clocks.compare(
+        contextKey,
+        null,
+        { onBox: true },
+        () => kept.chosen(state, binding, true),
+        admission(context),
       );
     },
     read: async (binding, comparisonId) => {
@@ -224,7 +232,9 @@ export function createHostedHourPreparation(
       browser: Parameters<typeof clocks.compare>[1],
       client: Parameters<typeof clocks.compare>[2],
     ) {
-      return withFacts(binding, (facts) => clocks.compare(facts.contextKey, browser, client));
+      return withFacts(binding, (facts) =>
+        clocks.compare(facts.contextKey, browser, client, undefined, admission(facts.context)),
+      );
     },
   };
 }

@@ -30,7 +30,7 @@ interface SelectionRequest {
   binding: OperationBinding;
   authority: OperationAuthority;
   comparisonId: string;
-  /** The person proved on the page confirmed a device's agreeing time. */
+  /** The person proved on the page confirmed the time the clock check admitted. */
   confirmed?: true;
 }
 type BareRequest = Omit<SelectionRequest, "comparisonId" | "confirmed">;
@@ -58,7 +58,7 @@ export interface SelectBoot {
   bootId: string;
   uptimeMs: number;
   wallMs: number;
-  /** The reading `wallMs` came from held a device's time the person confirmed. */
+  /** The person confirmed the time of the reading `wallMs` came from. */
   confirmed?: true;
 }
 /** The box's time `kept` carries forward to `boot`'s uptime: none after a restart, or once the
@@ -459,7 +459,6 @@ export function createHourSelection(options: {
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
       if (!canSelectHour(facts.clock)) return refuse(clockRefusal(facts.clock));
       // A device's time counts only once the person confirms it; the internet time service needs no one.
-      // Without the time service, an admitted clock is a device's that agreed with the box.
       const byDevice = !facts.clock.usable.some((sample) => sample.source === "internet");
       if (persist && request.confirmed !== true && byDevice) return refuse("confirmation_required");
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;

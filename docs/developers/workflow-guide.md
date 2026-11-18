@@ -392,9 +392,9 @@ can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 **A Live setup on a dev stack goes through the setup app's own page**, the stack's wizard address
 (`http://localhost:5192/setup/` on slot 0, `http://localhost:5392/setup/` on slot 2). The
 server's own HTTPS address serves only a "needs setup" placeholder from a source run, which names
-no built wizard (`WAITRON_SETUP_APP_DIR` unset). Two things in the dev scripts take a Live setup
-as far as its readiness step, where it stops: that step needs a second clock (see the owned flow
-below), and nothing on a dev stack can be one. The development
+no built wizard (`WAITRON_SETUP_APP_DIR` unset). Two things in the dev scripts let a Live setup
+through to its readiness step, which on a development box takes the box's own clock (see the owned
+flow below). The development
 servers' proxy (`scripts/dev-server-proxy.ts`) checks for the box's certificate on every request,
 so it switches to HTTPS once an onboarding box makes one during start-up; and when it forwards to
 that HTTPS box it presents the page's `Origin` as `https://` when it names the page's own host,
@@ -407,6 +407,12 @@ commit. That stamp also changes the software version written into every fiscal r
 (Demo included), from `0.0.0-dev` to `0.0.0-dev+<commit>` (`softwareVersion`,
 `packages/fiscal-verifactu/src/software-identity.ts`).
 Only the dev launcher does this: a server started from source any other way still has no stamp.
+After **Provision** the source-run server stops to restart, and `tsx watch`
+(`apps/server/scripts/dev-server.mjs`) starts it again only when a file it watches changes: save
+`apps/server/src/bin.ts` to start it (seen on a Live walk, 2026-11-17). The Live venue then waits
+at start for its time to be confirmed (`clock_start.waiting`, `apps/server/src/boot.ts`), by a
+person on a till or on Box status, like any box that files records without an
+internet time service.
 
 ### The owner's dev stack and Claude's
 
@@ -481,7 +487,16 @@ readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints
 why it waits and until when, and keeps the wait"), and neither does the setup page, which has no
 such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
-Signed allocation files do not replace that flow.
+Signed allocation files do not replace that flow. On a development box (`WAITRON_ENV=dev`), for a
+setup frozen for preproduction, the setup page's readiness step and **Provision** take the box's own
+clock as the second clock (owner, 2026-11-17, for the readiness step; at Provision, also after a
+restart or a clock step, the lane's choice, not the owner's), and the person still confirms the time with
+**Proceed** (`packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "in development the box's
+clock alone, confirmed, passes the first setup's clock check", "in development the box's clock
+alone still needs the person to confirm the time" and "in development with no boot id, Provision
+two minutes after the box's clock alone was confirmed takes the box's clock, %s"). The terminal
+still explains and cancels (`initial-hour-setup.test.ts`, "the terminal with only the box's clock,
+environment %j, explains and cancels without a question").
 
 Production and preproduction remain separate databases. A disposable preproduction allocation
 is not production authority. Follow the [first Live procedure](../operations/first-live-fiscal-setup.md)
