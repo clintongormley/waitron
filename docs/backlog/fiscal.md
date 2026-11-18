@@ -273,55 +273,6 @@ after go-live, well before the first deadline below.
 
 Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.
 
-## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
-
-**Design approved; reviewed plan published (2026-10-22).** Owner, 2026-10-22 15:55:
-“A275 looks fine”. This approves the revised minimal design and authorises plan authoring,
-fresh-context review and docs-only publication. The build retains its separate gates.
-
-The [approved design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md),
-16 synthetic pictures (removed from the repository on 2026-11-02) and
-[implementation plan](../superpowers/plans/2026-10-22-a275-final-transfer-close.md) retain the
-owner's 2026-10-21 02:40 policy: invoice at the meal, then close the whole eligible bill finally
-as “to be paid by transfer”. Preserve split bills and release the party/table only through the
-normal all-bills/service/editor checks and clearing requirement. The deferred tender is final
-classification, not bank receipt. No awaiting-transfer balance, later receipt, reversal, debt list
-or receivables module. A separate daily-close deferred-payment line and dashboard invoice CSV under
-`report.export` let the accountant reconcile outside Waitron.
-
-The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
-`db7cddeb2d38984b284b23e8e391e7ebd7cb9156`. New orchestration/storage/export interfaces are
-proposals; no product test, renderer, fiscal or legal verification was run. A1003 is now landed
-(PR #1973); preserve its refusal/rollback boundary. Recheck released A696 clock, F/A739 Pay,
-A948 delivery and A947 minute-allocation contracts before their dependent build steps.
-A948 enables existing table-payment and unpaid-departure F1 paths. Physical/manual-remedy/B2B qualification remains separate. The €5,000 transfer example
-is still a future path; €220 F2 stays within existing limits. The plan places a precise
-RUNNER H2 approval gate before later work reaches protected fiscal behavior, and keeps golden
-huella/inmutabilidad unedited. Design approval does not waive that gate.
-
-The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
-historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
-questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
-Tasks 0–4 and 6 are built: the `deferred_closures` table, the party readiness read, the close command
-([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), its till
-route, recovery read and device-profile action, off by default
-([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)); the wording:
-receipts, Orders, Find bill's Transactions and the Counter screen name a closed bill Deferred
-payment (owner, 2026-11-11: not "To be paid by transfer", since the payment need not be a bank transfer), and Orders' Paid filter no longer lists it; it has a filter of its own
-([Task 4 plan](../superpowers/plans/2026-11-11-a275-transfer-labels.md)); and the
-accountant's file (Task 6,
-[plan](../superpowers/plans/2026-11-11-a275-transfer-export.md): its server route, and a button on
-**Sales & takings** for a session holding `report.export`). Task 5 is built: the overview and Sales
-report show Bills closed and Deferred payment apart from money received
-([Task 5 plan](../superpowers/plans/2026-11-11-a275-closed-bills.md)). Task 7 is built: the
-open bill's, the presented bill's and the Counter's Pay windows offer Close as deferred payment
-([plan](../superpowers/plans/2026-11-11-a275-till-deferred-close.md)). A275 stays open for the
-owner's acceptance. The reviewed plan includes an explicit recovery read,
-party completion before its retained result, live Bills exclusion, separate delivery/closing actors
-and bounded implementation checkpoints.
-2026-11-10: the table's digest column is now `fingerprint`, the request id `submissionId`, and
-`actor_id` references `persons` ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)).
-
 ## Protected write-path test policy quotation
 
 W41s-7's two run-it reviews found the header of

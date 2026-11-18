@@ -28,6 +28,9 @@ one short asesor confirmation question attached, before building. The authority 
 and its reference to Q42. Do not reopen the invoice-now choice or offer consumer proforma-first
 as an alternative.
 
+> **2026-11-18:** A275 is finished and accepted by the owner, so that backlog entry has been removed;
+> it remains in the history of `docs/backlog/fiscal.md`.
+
 The goal is a usable list of debts and an honest separation of invoicing, receiving money,
 delivering documents and clearing tables. This is not bank integration, automatic payment
 matching, credit scoring, recurring debt collection, deposits, bad-debt VAT recovery or a new
