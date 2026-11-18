@@ -7,9 +7,37 @@ import type { AppError } from "@waitron/shared";
 import type { SumUpClient } from "./client.js";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
-// `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: these tests
-// still run. A fetch that never resolves models an outage; the client's own deadline must turn it
-// into a bounded rejection, which `collect` and `resolvePending` treat as pending (CLAUDE.md §5).
+/** Runs `act`, then waits a timer turn so a rejection nobody handled has been reported. */
+async function unhandledRejectionsDuring(act: () => Promise<void>): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const record = (reason: unknown) => seen.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    await act();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", record);
+  }
+  return seen;
+}
+
+/** A response whose body cannot be released: `cancel()` rejects, as on a dropped socket. */
+function uncancellable(status: number): { response: Response; cancelCalls: () => number } {
+  let calls = 0;
+  const response = {
+    status,
+    body: {
+      cancel: () => {
+        calls += 1;
+        return Promise.reject(new Error("socket gone"));
+      },
+    },
+  } as unknown as Response;
+  return { response, cancelCalls: () => calls };
+}
+
+// A fetch that never resolves models an outage; the client's own deadline must turn it into a
+// bounded rejection, which `collect` and `resolvePending` treat as pending (CLAUDE.md §5).
 describe("sumupClient request deadline", () => {
   it("aborts and rejects a hung request within the timeout rather than hanging forever", async () => {
     let abortSignal: AbortSignal | undefined;
@@ -319,6 +347,62 @@ describe("sumupClient reader management", () => {
     const r = await client.getReader("rdr_missing");
 
     expect(r).toBeNull();
+  });
+
+  it.each([{ status: "paired" }, { id: "rdr_1" }, { id: 7, status: "paired" }])(
+    "returns null for a reader answer without a usable id and status: %j",
+    async (body) => {
+      const s = stub(() => ({ status: 200, body }));
+      const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+      expect(await client.getReader("rdr_1")).toBeNull();
+    },
+  );
+
+  it.each([{ status: "processing" }, { id: "rdr_9" }, { id: "rdr_9", status: 1 }])(
+    "refuses a 2xx pairing answer without a usable reader id and status: %j",
+    async (body) => {
+      const s = stub(() => ({ status: 201, body }));
+      const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+      const error = await client
+        .pairReader({ pairingCode: "ABC12345", name: "Counter" })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SumUpPairingRefused);
+      if (error instanceof SumUpPairingRefused)
+        expect(error.title).toBe("malformed reader response");
+    },
+  );
+
+  it("rejects a reader list SumUp refuses", async () => {
+    const s = stub(() => ({ status: 401, body: { title: "Unauthorized" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    await expect(client.listReaders()).rejects.toThrow("sumup GET readers: HTTP 401");
+  });
+
+  it("rejects a reader status SumUp refuses", async () => {
+    const s = stub(() => ({ status: 404, body: { title: "Reader not found" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    await expect(client.readerStatus("rdr_missing")).rejects.toThrow(
+      "sumup GET reader status: HTTP 404",
+    );
+  });
+
+  it("rejects a 5xx whose body cannot be released, leaving no unhandled rejection", async () => {
+    const { response, cancelCalls } = uncancellable(503);
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: () => Promise.resolve(response),
+    });
+
+    const unhandled = await unhandledRejectionsDuring(async () => {
+      await expect(client.getReader("rdr_1")).rejects.toThrow("HTTP 503");
+    });
+    expect(unhandled).toEqual([]);
+    expect(cancelCalls()).toBe(1);
   });
 
   it("maps an ONLINE reader status to online:true with connection/screen detail", async () => {
@@ -837,6 +921,23 @@ describe("sumupClient sendRefund", () => {
     },
   );
 
+  it("answers a 201 whose body cannot be released, leaving no unhandled rejection", async () => {
+    const { response, cancelCalls } = uncancellable(201);
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: () => Promise.resolve(response),
+    });
+
+    const unhandled = await unhandledRejectionsDuring(async () => {
+      expect(await client.sendRefund({ transactionId: "t", amount: decimal("1.00") })).toEqual({
+        httpStatus: 201,
+      });
+    });
+    expect(unhandled).toEqual([]);
+    expect(cancelCalls()).toBe(1);
+  });
+
   it("answers a 201 whose body never ends without waiting for the body", async () => {
     const answer = await againstServer(
       (_req, res) => {
@@ -847,6 +948,49 @@ describe("sumupClient sendRefund", () => {
       2_000,
     );
     expect(answer).toEqual({ httpStatus: 201 });
+  });
+});
+
+describe("sumupClient findTransaction lookup", () => {
+  it.each([
+    [{ clientTransactionId: "c/1" }, "client_transaction_id=c%2F1"],
+    [{ foreignTransactionId: "f/1" }, "foreign_transaction_id=f%2F1"],
+    [{ id: "t/1" }, "id=t%2F1"],
+  ])("asks SumUp by the key it is given: %j", async (query, param) => {
+    const seen: string[] = [];
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: async (url) => {
+        seen.push(String(url));
+        return Response.json({ id: "tx", status: "SUCCESSFUL", amount: 1 });
+      },
+    });
+
+    expect(await client.findTransaction(query)).toMatchObject({ id: "tx" });
+    expect(seen).toEqual([`https://api.sumup.com/v2.1/merchants/MC/transactions?${param}`]);
+  });
+
+  it("answers null for a transaction SumUp does not know, even with an empty body", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: async () => new Response("", { status: 404 }),
+    });
+
+    expect(await client.findTransaction({ id: "tx_missing" })).toBeNull();
+  });
+
+  it("rejects a transaction lookup SumUp refuses", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: async () => Response.json({ title: "Bad Request" }, { status: 400 }),
+    });
+
+    await expect(client.findTransaction({ id: "tx" })).rejects.toThrow(
+      "sumup GET transactions: HTTP 400",
+    );
   });
 });
 
@@ -1005,6 +1149,7 @@ describe("SumUp refund evidence", () => {
   it.each([
     null,
     "unknown",
+    [null],
     [{ id: 1, amount: 0.4, timestamp: "2026-11-09T10:00:00Z" }],
     [{ type: "REFUND", id: "", amount: 0.4, timestamp: "bad" }],
   ])("retains malformed refund evidence (%s) instead of silently dropping it", async (events) => {
@@ -1014,6 +1159,27 @@ describe("SumUp refund evidence", () => {
       fetch: async () => Response.json({ id: "txn", status: "SUCCESSFUL", amount: 1, events }),
     });
     expect((await client.findTransaction({ id: "txn" }))?.refundEvidenceInvalid).toBe(true);
+  });
+
+  it("keeps a well-formed refund beside an entry that is not an event, and flags the evidence", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "M",
+      fetch: async () =>
+        Response.json({
+          id: "txn",
+          status: "SUCCESSFUL",
+          amount: 1,
+          events: [null, { type: "REFUND", id: 4, amount: 0.4, timestamp: "2026-11-09T10:00:00Z" }],
+        }),
+    });
+
+    expect(await client.findTransaction({ id: "txn" })).toMatchObject({
+      refundEvents: [
+        { id: "4", status: "", amount: decimal("0.40"), timestamp: "2026-11-09T10:00:00Z" },
+      ],
+      refundEvidenceInvalid: true,
+    });
   });
 });
 
