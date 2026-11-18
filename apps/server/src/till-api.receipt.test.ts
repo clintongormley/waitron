@@ -519,7 +519,10 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
   it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES"] });
-    await suite.db.update(departments).set({ tradingName: "Terrace Bar" });
+    await suite.db
+      .update(departments)
+      .set({ tradingName: "Terrace Bar" })
+      .where(eq(departments.isDefault, true));
     const printerId = await makePrinter();
     await configureReceipt({ printerId });
     const app = new Hono();

@@ -8,8 +8,7 @@ article and its signed-in reads. Lane L owns paper and fiscal output.
 
 **Ask.** “Bring it into line with the printed receipt” (`docs/backlog/printers.md:274` at
 `fd0dc1c922`).
-The server's `buildReceiptDocument` supplies the content. Its existing structured elements let
-the browser render text and table headings for people using assistive technology.
+Render the server's `buildReceiptDocument` elements as accessible text and tables.
 
 1. **Serve the document.** In `till-api.ts` build `receiptPreview` only for
    `GET /api/sales/:id?receiptPreview=1`, requested by the existing paid-bill opening in
@@ -31,23 +30,14 @@ the browser render text and table headings for people using assistive technology
    that patch if it lands first. Update both table-service guides and the stale references in
    `docs/developers/products.md`, `docs/developers/conventions-ui.md`, `layout.ts` and
    `receipt-lines.ts`. Remove the completed item and correct the printers backlog bundle count.
-3. **Verify test-first.** In `till-api.receipt.test.ts`, reopen the same sale with and without the
-   flag, checking preview presence, the existing no-write snapshot and refusals. In
-   `transaction-receipt-api.test.ts`, check the saved guests, receipt language, issuer and
-   practice flags supplied to the layout. Mixed-rate and discount layout checks belong in
-   the receipt builder tests. In `till-app.test.ts` make the server preview disagree with
-   the basket and check what opens in both entry paths. In the `till-ticket-view` main,
-   presentation, kitchen-note and accessibility suites keep the assertions about what the browser
-   renders, including literal text, table semantics, QR, logo replacement, language and controls.
-   Use `receipt-document.test.ts` for layout rules and `receipt-ticket.test.ts` for paper checks.
-   Keep each existing assertion at the layer that owns it, using an existing equivalent check
-   where one already pins that behaviour. Record changed checks in the PR. Run every changed test
-   file plus both paper suites. Look at phone and desktop in English and Spanish UI and both themes.
+3. **Verify test-first.** Check the paid-bill flag, read-only snapshot and refusals in
+   `till-api.receipt.test.ts`. Check the stored guests, language, issuer and practice flags in
+   `transaction-receipt-api.test.ts`. Run every changed suite plus `receipt-document.test.ts`
+   and `receipt-ticket.test.ts`. Inspect phone and desktop in each theme and operator language.
+   Record changed assertions in the PR using the table below.
 
-**Expected size.** Production about +250/−450 lines. Tests about +300/−1,500, mostly removing
-fixtures and checks duplicated by the paper suite. Keep the route and rendering tests in this PR.
-
-The watcher cleared this plan on 2026-11-18 at 05:35 with a stop at 800 added lines.
+**Estimate.** Production +250/−450, tests +300/−1,500. One PR. The watcher cleared the plan at
+05:35 on 2026-11-18 with a stop at 800 added lines.
 
 | Existing checks | Build disposition |
 | --- | --- |

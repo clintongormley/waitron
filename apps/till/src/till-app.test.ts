@@ -14249,39 +14249,19 @@ describe("till-app", () => {
   });
 
   describe("receipt trim", () => {
-    it("shows each successive invoice presentation without boot or previous-answer text", async () => {
-      const presentations = [
-        {
-          receiptTrim: {
-            headerSubtitle: "Terraza",
-            phone: "910001111",
-            footerMessage: "Hasta pronto",
-          },
-          venueAddress: ["Current Street"],
-          receiptSettings: { printAddress: true },
-        },
-        {
-          receiptTrim: { headerSubtitle: "Comedor", email: "comedor@example.com" },
-          venueAddress: ["Edited Street"],
-          receiptSettings: { printAddress: false },
-        },
-        { receiptTrim: {}, venueAddress: [], receiptSettings: { printAddress: false } },
-      ];
-      const text = [
+    it("replaces each received preview without keeping boot or previous receipt text", async () => {
+      const previews = [
         ["Terraza", "Current Street", "910001111", "Hasta pronto"],
         ["Comedor", "comedor@example.com"],
         ["Filed issuer"],
       ];
-      const recordSale = vi.fn();
+      const recordSale = vi.fn().mockResolvedValue(saleResult);
       const getTransactionReceipt = vi.fn();
-      for (const [index, presentation] of presentations.entries()) {
-        recordSale.mockResolvedValueOnce({ ...saleResult, ...presentation });
+      for (const words of previews)
         getTransactionReceipt.mockResolvedValueOnce({
           ...saleResult,
-          ...presentation,
-          receiptPreview: text[index]!.map((text) => ({ kind: "text", text, indent: 0 })),
+          receiptPreview: words.map((text) => ({ kind: "text", text, indent: 0 })),
         });
-      }
       const { el } = await mountApp({
         recordSale,
         getTransactionReceipt,
@@ -14292,35 +14272,18 @@ describe("till-app", () => {
         }),
       });
       await toCounter(el);
-      for (const [index, presentation] of presentations.entries()) {
+      for (const words of previews) {
         const c = counter(el)!;
         c.store.addProduct(coffee, "2");
         await flush(el);
         emit(c, "confirm-payment", { method: "cash", amount: "5" });
         await flush(el);
-        expect(ticket(el)!.result).toMatchObject(presentation);
+        expect(ticket(el)!.result).toEqual(saleResult);
         await openFiledReceipt(el);
         const view = ticket(el)!;
-        expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
-        expect(view.result.receiptSettings).toEqual(presentation.receiptSettings);
-        const printed = view.shadowRoot!.querySelector("article")!.textContent!;
-        expect(printed).not.toContain("Stale boot");
-        expect(printed).not.toContain("Stale boot street");
-        if (index === 0) {
-          expect(printed).toContain("Terraza");
-          expect(printed).toContain("Current Street");
-        } else {
-          expect(printed).not.toContain("Terraza");
-          expect(printed).not.toContain("910001111");
-          expect(printed).not.toContain("Hasta pronto");
-          expect(printed).not.toContain("Current Street");
-          expect(printed).not.toContain("Edited Street");
-          if (index === 1) expect(printed).toContain("Comedor");
-          else {
-            expect(printed).not.toContain("Comedor");
-            expect(printed).not.toContain("comedor@example.com");
-          }
-        }
+        const article = view.shadowRoot!.querySelector("article")!;
+        expect([...article.querySelectorAll("p")].map((p) => p.textContent!.trim())).toEqual(words);
+        expect(article.textContent).not.toContain("Stale boot");
         expect(view.result.tender).toEqual(saleResult.tender);
         emit(view, "new-sale");
         await flush(el);

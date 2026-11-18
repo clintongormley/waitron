@@ -134,6 +134,7 @@ it("keeps the invoice available when its preview cannot be built", async () => {
   onTestFinished(() => preview.mockRestore());
   const answer = await get(id);
   expect(answer).toMatchObject({ status: 200, json: { invoiceNumber: "A/1", total: "12.10" } });
+  expect(preview).toHaveBeenCalledOnce();
   expect(answer.json).not.toHaveProperty("receiptPreview");
 });
 it("reads paid and orderless original sales and a correction by their own identity", async () => {
