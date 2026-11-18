@@ -147,6 +147,7 @@ export interface CountryPack {
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
   readonly timeZones: readonly string[];
+  readonly timeZoneNames?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly defaultProductVatClass?: string;
   readonly invoiceLocales: readonly string[];
   /** Resource locales can include display translations beyond the offered invoice locales. */

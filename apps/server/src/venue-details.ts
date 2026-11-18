@@ -8,9 +8,14 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
-import { getCountryPack } from "@waitron/country-packs";
+import { getCountryPack, requireCountryTimeZone } from "@waitron/country-packs";
 import { readBusinessDayClockModel } from "./business-day-start.js";
-import { AppError, classifyTimeZone, cutoverForBusinessDay } from "@waitron/shared";
+import {
+  AppError,
+  classifySavedTimeZone,
+  classifyTimeZone,
+  cutoverForBusinessDay,
+} from "@waitron/shared";
 import type {
   BusinessDayClockModel,
   VenueDetailField,
@@ -72,13 +77,25 @@ function equivalent(field: VenueDetailField, value: string | null, country: stri
       ? normalized
       : (findAdministrativeArea(pack, normalized)?.code ?? normalized);
   }
-  if (field === "timeZone") {
-    const zone = classifyTimeZone(normalized);
-    return zone.kind === "valid" ? zone.timeZone : normalized;
-  }
   if (field === "dayCutover" && /^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized))
     return normalized.slice(0, 5);
   return normalized;
+}
+function sameDetail(
+  field: VenueDetailField,
+  value: string | null,
+  saved: string | null,
+  country: string,
+  classifyValue = classifySavedTimeZone,
+): boolean {
+  if (field !== "timeZone")
+    return equivalent(field, value, country) === equivalent(field, saved, country);
+  if (value === saved) return true;
+  const current = classifySavedTimeZone(saved);
+  const compared = classifyValue(value);
+  return (
+    current.kind === "valid" && compared.kind === "valid" && current.timeZone === compared.timeZone
+  );
 }
 /** `clockModel`, when given, is the business-day clock model this transaction already read at `at`
  * and has not changed since. */
@@ -154,6 +171,7 @@ export async function readVenueDetails(
       dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
     },
     provinces: pack?.administrativeAreas.map(({ code, name }) => ({ code, name })) ?? [],
+    timeZones: pack?.timeZones ?? [],
   };
 }
 export async function writeVenueDetails(
@@ -182,10 +200,7 @@ export async function writeVenueDetails(
     if (typeof value !== "string" && !(value === null && nullable.has(field)))
       invalid(field, "type");
     const typed = value as string | null;
-    if (
-      equivalent(field, typed, model.issuer.country) ===
-      equivalent(field, model.details[field], model.issuer.country)
-    )
+    if (sameDetail(field, typed, model.details[field], model.issuer.country, classifyTimeZone))
       continue;
     let normalized: string | null = typed === null ? null : normalizeVenueText(typed);
     if (field === "addressLine2" && normalized === "") normalized = null;
@@ -198,9 +213,13 @@ export async function writeVenueDetails(
     )
       invalid(field, "length");
     if (field === "timeZone") {
-      const zone = classifyTimeZone(normalized);
-      if (zone.kind !== "valid") invalid(field, "time_zone");
-      normalized = zone.timeZone;
+      try {
+        normalized = requireCountryTimeZone(model.issuer.country, normalized);
+      } catch (error) {
+        if (error instanceof AppError && error.code === "venue.time_zone_invalid")
+          invalid(field, "time_zone");
+        throw error;
+      }
     }
     if (field === "dayCutover") {
       if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized!)) invalid(field, "cutover");
@@ -234,8 +253,12 @@ export async function writeVenueDetails(
       }
     }
     if (
-      equivalent(field, expected[field] as string | null, model.issuer.country) !==
-      equivalent(field, model.details[field], model.issuer.country)
+      !sameDetail(
+        field,
+        expected[field] as string | null,
+        model.details[field],
+        model.issuer.country,
+      )
     )
       throw new AppError("venue.detail_changed", { field });
     if (field === "province" || field === "timeZone") {

@@ -1,3 +1,4 @@
+import { classifySavedTimeZone, classifyTimeZone } from "@waitron/shared";
 import type { VenueDetailPatch, VenueDetailValues, VenueDetailField } from "../api/client.js";
 
 export const VENUE_DETAIL_FIELDS: readonly VenueDetailField[] = [
@@ -17,13 +18,6 @@ function normalized(field: VenueDetailField, value: string | null): string | nul
   const text = value.normalize("NFC").trim();
   if (field === "addressLine2" && text === "") return null;
   if (field === "dayCutover" && CUTOVER.test(text)) return text.slice(0, 5);
-  if (field === "timeZone") {
-    try {
-      return new Intl.DateTimeFormat("en-GB", { timeZone: text }).resolvedOptions().timeZone;
-    } catch {
-      return text;
-    }
-  }
   return text;
 }
 
@@ -33,6 +27,18 @@ export function venueDetailPatch(
 ): VenueDetailPatch {
   const patch: VenueDetailPatch = {};
   for (const field of VENUE_DETAIL_FIELDS) {
+    if (field === "timeZone") {
+      if (draft.timeZone === saved.timeZone) continue;
+      const current = classifySavedTimeZone(saved.timeZone);
+      const proposed = classifyTimeZone(draft.timeZone);
+      if (proposed.kind === "valid") {
+        if (current.kind === "valid" && current.timeZone === proposed.timeZone) continue;
+        patch.timeZone = proposed.timeZone;
+      } else {
+        patch.timeZone = draft.timeZone.trim();
+      }
+      continue;
+    }
     const value = normalized(field, draft[field]);
     const initial = normalized(field, saved[field]);
     if (value === initial || (initial === null && value === "")) continue;
@@ -55,15 +61,8 @@ export function venueDetailProblems(
     if (["name", "addressLine1", "addressLine2", "city"].includes(field) && [...value].length > 200)
       problems[field] = "length";
     if (field === "dayCutover" && !CUTOVER.test(value)) problems[field] = "cutover";
-    if (field === "timeZone") {
-      try {
-        const zone = new Intl.DateTimeFormat("en-GB", { timeZone: value }).resolvedOptions()
-          .timeZone;
-        if (/^[+-]/.test(zone)) problems[field] = "time_zone";
-      } catch {
-        problems[field] = "time_zone";
-      }
-    }
+    if (field === "timeZone" && classifyTimeZone(value).kind !== "valid")
+      problems[field] = "time_zone";
   }
   return problems;
 }

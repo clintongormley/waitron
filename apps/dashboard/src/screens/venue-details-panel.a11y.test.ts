@@ -97,9 +97,9 @@ it.each(cases)(
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
         await flush();
         if (state.startsWith("clock-")) {
-          el.shadowRoot!.querySelector<WtInput>("[name=timeZone]")!.dispatchEvent(
+          el.shadowRoot!.querySelector("[name=timeZone]")!.dispatchEvent(
             new CustomEvent("wt-change", {
-              detail: { value: "UTC" },
+              detail: { value: "Atlantic/Canary" },
               bubbles: true,
               composed: true,
             }),

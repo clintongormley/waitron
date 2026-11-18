@@ -2525,11 +2525,11 @@ describe("mountPrintApi — management: print-test-page", () => {
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
     try {
-      expect(await print()).toContain("1 Oct 2026, 13:05");
+      expect(await print()).toContain("1 Oct 2026, 14:05");
       await expect(
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, {
@@ -2544,11 +2544,11 @@ describe("mountPrintApi — management: print-test-page", () => {
       const noOp = await withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: saved.model.details,
-          changes: { timeZone: "UTC" },
+          changes: { timeZone: "Atlantic/Canary" },
         }),
       );
       expect(noOp.changed).toBe(false);
-      expect(await print()).toContain("1 Oct 2026, 13:05");
+      expect(await print()).toContain("1 Oct 2026, 14:05");
     } finally {
       const latest = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       await withTransaction(suite.db, (tx) =>

@@ -108,9 +108,9 @@ for (const [name, value, original] of [
   ["addressLine2", "Floor 2", "   "],
   ["city", "Barcelona", "Madrid"],
   ["postalCode", "28002", " 28001 "],
-  ["timeZone", "invalid-zone", "Europe/Madrid"],
+  ["timeZone", "Atlantic/Canary", "Europe/Madrid"],
 ] as const) {
-  it(`protects ${name}, including invalid values, and exempts its normalized revert`, async () => {
+  it(`protects a changed ${name} and exempts its normalized revert`, async () => {
     const { app, panel } = await mount();
     expect(unload()).toBe(false);
     await change(panel, name, value);

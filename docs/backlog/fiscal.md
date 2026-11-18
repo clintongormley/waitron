@@ -96,7 +96,7 @@ plan's Mutation section lists them). Decide whether it joins the mutation-tested
 New invoice dates and record offsets use the writing node's saved venue zone; the
 [coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
 records the qualification. The 15 October observations below describe the earlier process-zone
-behavior. Wider A166 remains open.
+behavior.
 
 Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
 `transactional-series.test.ts` issued real walk-up invoices with the venue's stored

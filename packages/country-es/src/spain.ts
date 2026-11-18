@@ -318,6 +318,10 @@ export const SPAIN: CountryPack = {
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
   timeZones: ["Europe/Madrid", "Atlantic/Canary"],
+  timeZoneNames: {
+    "Europe/Madrid": { "en-GB": "Mainland Spain", "es-ES": "España peninsular" },
+    "Atlantic/Canary": { "en-GB": "Canary Islands", "es-ES": "Islas Canarias" },
+  },
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   receiptLabels: SPAIN_RECEIPT_LABELS,
   receiptSampleItems: SPAIN_RECEIPT_SAMPLE_ITEMS,

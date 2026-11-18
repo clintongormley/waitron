@@ -63,20 +63,48 @@ const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
 afterEach(() => vi.useRealTimers());
 
 describe("ordinary zone edit revision", () => {
+  it("leaves a padded saved zone alone until it is explicitly replaced", async () => {
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ' Europe/Madrid ') where module = 'business_day'`,
+    );
+    const initial = await read();
+    const retained = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, {
+        expected: initial.details,
+        changes: { name: "New name", timeZone: " Europe/Madrid " },
+      }),
+    );
+    expect(retained.model.details).toMatchObject({ name: "New name", timeZone: " Europe/Madrid " });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, {
+          expected: { ...retained.model.details, timeZone: "Europe/Madrid" },
+          changes: { timeZone: "Atlantic/Canary" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "venue.detail_changed", params: { field: "timeZone" } });
+    const corrected = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, {
+        expected: retained.model.details,
+        changes: { timeZone: "Europe/Madrid" },
+      }),
+    );
+    expect(corrected.model.details.timeZone).toBe("Europe/Madrid");
+  });
   it("uses an eligible committed zone edit for the next sale without restarting admission", async () => {
     const sell = await prepareSale();
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
     expect(saved.model.businessDayClock.revision).toBe(2);
     const result = await sell();
-    expect(result).toMatchObject({ issuedAt: "2026-10-06T12:00:00.000Z", issuedOffsetMinutes: 0 });
+    expect(result).toMatchObject({ issuedAt: "2026-10-06T12:00:00.000Z", issuedOffsetMinutes: 60 });
     expect(suite.db.all(sql`select issued_offset_minutes from sales`)).toEqual([
-      { issued_offset_minutes: 0 },
+      { issued_offset_minutes: 60 },
     ]);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -102,7 +130,7 @@ describe("ordinary zone edit revision", () => {
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, {
             expected: initial.details,
-            changes: { timeZone: "UTC" },
+            changes: { timeZone: "Atlantic/Canary" },
           }),
         ),
       ).rejects.toBe(failure);
@@ -117,14 +145,14 @@ describe("ordinary zone edit revision", () => {
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
     expect(saved.model.businessDayClock.revision).toBe(2);
     const retry = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "Etc/UTC" },
+        changes: { timeZone: " atlantic/canary " },
       }),
     );
     expect(retry.changed).toBe(false);
@@ -140,7 +168,7 @@ describe("ordinary zone edit revision", () => {
       withTransaction(suite.db, async (tx) => {
         const saved = await writeVenueDetails(tx, {
           expected: initial.details,
-          changes: { timeZone: "UTC" },
+          changes: { timeZone: "Atlantic/Canary" },
         });
         expect(saved.model.businessDayClock.revision).toBe(9);
         throw new Error("abort zone edit");
@@ -149,7 +177,10 @@ describe("ordinary zone edit revision", () => {
     expect((await read()).businessDayClock.revision).toBe(8);
     expect((await read()).details.timeZone).toBe("Europe/Madrid");
     const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, { expected: initial.details, changes: { timeZone: "UTC" } }),
+      writeVenueDetails(tx, {
+        expected: initial.details,
+        changes: { timeZone: "Atlantic/Canary" },
+      }),
     );
     expect(saved.model.businessDayClock.revision).toBe(9);
   });
@@ -183,7 +214,7 @@ describe("ordinary zone edit revision", () => {
       await withTransaction(suite.db, async (tx) => {
         await writeVenueDetails(tx, {
           expected: initial.details,
-          changes: { timeZone: "UTC" },
+          changes: { timeZone: "Atlantic/Canary" },
         });
         expect(published).toEqual([]);
       });
@@ -191,7 +222,7 @@ describe("ordinary zone edit revision", () => {
       for (const snapshot of published)
         expect(snapshot).toMatchObject({
           revision: [{ revision: 2 }],
-          zone: [{ time_zone: "UTC" }],
+          zone: [{ time_zone: "Atlantic/Canary" }],
         });
     } finally {
       unsubscribe();
@@ -443,7 +474,7 @@ describe("venue history locks", () => {
         false,
       ]);
       expect(initial.policy.timeZone).toEqual({ decision: "refuse", reasons: ["orders"] });
-      for (const changes of [{ timeZone: "UTC" }, { dayCutover: "04:00" }]) {
+      for (const changes of [{ timeZone: "Atlantic/Canary" }, { dayCutover: "04:00" }]) {
         await expect(
           withTransaction(suite.db, (tx) =>
             writeVenueDetails(tx, {
@@ -511,7 +542,7 @@ describe("venue history locks", () => {
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, {
             expected: initial.details,
-            changes: { [field]: field === "timeZone" ? "UTC" : "04:00" },
+            changes: { [field]: field === "timeZone" ? "Atlantic/Canary" : "04:00" },
           }),
         ),
       ).rejects.toMatchObject({
@@ -557,7 +588,7 @@ describe("venue history locks", () => {
     const initial = await read();
     expect(initial.hasSales).toBe(true);
     for (const [field, value] of [
-      ["timeZone", "UTC"],
+      ["timeZone", "Atlantic/Canary"],
       ["dayCutover", "04:00"],
       ["province", "Barcelona"],
     ] as const) {
@@ -596,10 +627,10 @@ describe("venue history locks", () => {
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
-    expect(saved.model.details.timeZone).toBe("UTC");
+    expect(saved.model.details.timeZone).toBe("Atlantic/Canary");
     expect(saved.model.details.dayCutover).toBe("05:00");
     expect(suite.db.all(sql`select * from settings where module = 'venue'`)).toEqual(document);
     expect(
@@ -865,7 +896,7 @@ describe("venue details preserve committed history", () => {
       withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: initial.details,
-          changes: { name: "Refused together", timeZone: "UTC" },
+          changes: { name: "Refused together", timeZone: "Atlantic/Canary" },
         }),
       ),
     ).rejects.toMatchObject({
@@ -905,11 +936,11 @@ describe("venue details preserve committed history", () => {
       const saved = await withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: initial.details,
-          changes: { timeZone: "UTC" },
+          changes: { timeZone: "Atlantic/Canary" },
         }),
       );
       expect(saved.changed).toBe(true);
-      expect(saved.model.details.timeZone).toBe("UTC");
+      expect(saved.model.details.timeZone).toBe("Atlantic/Canary");
     } finally {
       await suite.db.execute(sql`drop trigger detail_sale_rollback`);
     }
@@ -982,7 +1013,7 @@ describe("venue details preserve committed history", () => {
     const edit = withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { name: "Refused together", timeZone: "UTC" },
+        changes: { name: "Refused together", timeZone: "Atlantic/Canary" },
       }),
     );
     // Attach the rejection observer before waiting for the first queued write.
@@ -1026,7 +1057,7 @@ describe("venue details preserve committed history", () => {
     const edit = withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
     const sale = sell();
@@ -1034,11 +1065,11 @@ describe("venue details preserve committed history", () => {
     expect(saved.changed).toBe(true);
     await sale;
     const current = await read();
-    expect(current.details).toEqual({ ...initial.details, timeZone: "UTC" });
+    expect(current.details).toEqual({ ...initial.details, timeZone: "Atlantic/Canary" });
     expect(current.hasSales).toBe(true);
     expect(clocksReadAtIssuance.length).toBeGreaterThan(0);
     for (const clockRow of clocksReadAtIssuance)
-      expect(clockRow).toEqual([{ time_zone: "UTC", day_cutover: "05:00:00" }]);
+      expect(clockRow).toEqual([{ time_zone: "Atlantic/Canary", day_cutover: "05:00:00" }]);
     expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
   });
 });
@@ -1085,7 +1116,7 @@ describe("all retained sale rows lock venue clocks", () => {
       expect(initial.policy.timeZone).toEqual({ decision: "refuse", reasons: ["sales"] });
       const stored = suite.db.all(sql`select * from sales order by invoice_number`);
       for (const [field, value] of [
-        ["timeZone", "UTC"],
+        ["timeZone", "Atlantic/Canary"],
         ["dayCutover", "04:30"],
         ["province", "Barcelona"],
       ] as const) {
@@ -1117,7 +1148,7 @@ describe("all retained sale rows lock venue clocks", () => {
 describe("venue detail consumer reads", () => {
   it("changes current station days and booking annotations without rewriting their intentions", async () => {
     await seedBusinessDay(suite.db, { dayCutover: "00:00:00" });
-    const at = new Date("2026-10-02T23:30:00Z");
+    const at = new Date("2026-10-02T22:30:00Z");
     const stationIds = await withTransaction(suite.db, async (tx) => {
       const rows = await tx
         .insert(kitchenStations)
@@ -1157,7 +1188,7 @@ describe("venue detail consumer reads", () => {
       {
         tableId: table!.id,
         bookingDate: "2026-10-03",
-        bookingTime: "02:00:00",
+        bookingTime: "01:00:00",
         partySize: 2,
         contactName: "Saturday guest",
         createdBy: creator,
@@ -1189,13 +1220,13 @@ describe("venue detail consumer reads", () => {
       });
     expect(await readCurrent()).toEqual({
       open: [true, false, true, true],
-      annotation: { reservedTime: "02:00" },
+      annotation: { reservedTime: "01:00" },
     });
     const initial = await read();
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC" },
+        changes: { timeZone: "Atlantic/Canary" },
       }),
     );
     expect(await readCurrent()).toEqual({
@@ -1319,7 +1350,7 @@ describe("venue detail consumer reads", () => {
       withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: saved.model.details,
-          changes: { timeZone: "UTC", dayCutover: "06:00", name: "Must not save" },
+          changes: { timeZone: "Atlantic/Canary", dayCutover: "06:00", name: "Must not save" },
         }),
       ),
     ).rejects.toMatchObject({
@@ -1494,9 +1525,9 @@ describe("workforce facts after venue corrections", () => {
       await backend.addShift(tx, {
         versionId,
         personId,
-        startsAt: "2026-10-05T23:30:00Z",
+        startsAt: "2026-10-05T22:30:00Z",
         startsOffsetMinutes: 120,
-        endsAt: "2026-10-06T00:30:00Z",
+        endsAt: "2026-10-05T23:30:00Z",
         endsOffsetMinutes: 120,
       });
       await backend.publishRoster(tx, { versionId, publishedByPersonId: personId });
@@ -1506,8 +1537,8 @@ describe("workforce facts after venue corrections", () => {
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),
       };
-      await backend.clockIn(tx, { ...event, at: "2026-10-05T23:30:00Z" });
-      await backend.clockOut(tx, { ...event, at: "2026-10-06T00:30:00Z" });
+      await backend.clockIn(tx, { ...event, at: "2026-10-05T22:30:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-10-05T23:30:00Z" });
     });
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { method: "password", personId }),
@@ -1562,7 +1593,7 @@ describe("workforce facts after venue corrections", () => {
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
-        changes: { timeZone: "UTC", name: "Current venue label" },
+        changes: { timeZone: "Atlantic/Canary", name: "Current venue label" },
       }),
     );
     expect(await readCurrent()).toEqual(before);
@@ -1570,7 +1601,7 @@ describe("workforce facts after venue corrections", () => {
     expect((await read()).details).toEqual({
       ...initial.details,
       name: "Current venue label",
-      timeZone: "UTC",
+      timeZone: "Atlantic/Canary",
     });
   });
 });
@@ -1637,7 +1668,7 @@ describe("open kitchen work during venue corrections", () => {
       withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: initial.details,
-          changes: { name: "Refused together", timeZone: "UTC" },
+          changes: { name: "Refused together", timeZone: "Atlantic/Canary" },
         }),
       ),
     ).rejects.toMatchObject({
@@ -1661,22 +1692,31 @@ describe("open kitchen work during venue corrections", () => {
   });
 });
 
-it("accepts a named Etc zone containing a sign and passes it to the reporting clock", async () => {
+it("refuses a named Etc zone outside the country pack", async () => {
   const initial = await read();
-  const saved = await withTransaction(suite.db, (tx) =>
-    writeVenueDetails(tx, {
-      expected: initial.details,
-      changes: { timeZone: " Etc/GMT+2 " },
-    }),
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, {
+        expected: initial.details,
+        changes: { timeZone: " Etc/GMT+2 " },
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "venue.detail_invalid",
+    params: { field: "timeZone", reason: "time_zone" },
+  });
+  expect((await read()).details).toEqual(initial.details);
+});
+
+it("reads a saved signed Etc zone in the reporting clock", async () => {
+  await suite.db.execute(
+    sql`update settings set doc = json_set(doc, '$.timeZone', 'Etc/GMT+2') where module = 'business_day'`,
   );
-  expect(saved.changed).toBe(true);
-  expect(saved.model.details.timeZone).toBe("Etc/GMT+2");
-  expect(
-    businessDayStart(new Date("2026-10-06T12:00:00Z"), {
-      ...saved.model.details,
-      cutoverChanges: [],
-    }),
-  ).toBe("2026-10-06T07:00:00.000Z");
+  const { businessDayClock } = await read();
+  expect(businessDayClock.clock.timeZone).toBe("Etc/GMT+2");
+  expect(businessDayStart(new Date("2026-10-06T12:00:00Z"), businessDayClock.clock)).toBe(
+    "2026-10-06T07:00:00.000Z",
+  );
 });
 
 describe("reviewed legacy geography and clock repairs", () => {
@@ -1816,12 +1856,12 @@ it("a zone change raises the business-day document revision", async () => {
   const saved = await withTransaction(suite.db, (tx) =>
     writeVenueDetails(tx, {
       expected: initial.details,
-      changes: { timeZone: "UTC" },
+      changes: { timeZone: "Atlantic/Canary" },
     }),
   );
   expect(saved.model.businessDayClock.revision).toBe(2);
   expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).toEqual({
-    doc: { timeZone: "UTC" },
+    doc: { timeZone: "Atlantic/Canary" },
     revision: 2,
   });
 });

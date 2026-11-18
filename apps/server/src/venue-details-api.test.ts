@@ -67,6 +67,25 @@ describe("venue details HTTP boundary", () => {
       model: { ...model, details: { ...model.details, name: "New display" } },
     });
   });
+  it("offers Spain's two zones in country-pack order", async () => {
+    const response = await request("GET", venue.managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      timeZones: ["Europe/Madrid", "Atlantic/Canary"],
+    });
+  });
+  it("refuses a zone outside the country pack without saving the rest of the edit", async () => {
+    const model = await initial();
+    const response = await request("PATCH", venue.managerCookie, {
+      expected: model.details,
+      changes: { timeZone: "UTC", name: "Should not be saved" },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.detail_invalid", params: { field: "timeZone", reason: "time_zone" } },
+    });
+    expect((await initial()).details).toEqual(model.details);
+  });
   it.each(["GET", "PATCH"])("requires a session and refuses staff for %s", async (method) => {
     const model = await initial();
     const body = { expected: model.details, changes: {} };

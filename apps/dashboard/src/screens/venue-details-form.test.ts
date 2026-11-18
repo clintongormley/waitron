@@ -44,12 +44,25 @@ it("leaves normalized zone aliases, cutover spellings and unchanged legacy inval
   ).toEqual({});
   const legacy = venueDetailsFixture({ timeZone: "legacy-invalid" }).details;
   expect(venueDetailPatch(legacy, { ...legacy, name: "Changed" })).toEqual({ name: "Changed" });
+  const madrid = venueDetailsFixture().details;
+  expect(venueDetailPatch(madrid, { ...madrid, timeZone: " Europe/Madrid " })).toEqual({});
 });
 
 it("keeps proposed clock and city fields relative to the opening snapshot", () => {
   const saved = venueDetailsFixture().details;
-  const proposal = { ...saved, timeZone: "UTC", city: "Toledo" };
-  expect(venueDetailPatch(saved, proposal)).toEqual({ timeZone: "UTC", city: "Toledo" });
+  const proposal = { ...saved, timeZone: "Atlantic/Canary", city: "Toledo" };
+  expect(venueDetailPatch(saved, proposal)).toEqual({
+    timeZone: "Atlantic/Canary",
+    city: "Toledo",
+  });
+});
+
+it("only saves a padded legacy zone when the manager replaces it", () => {
+  const saved = venueDetailsFixture({ timeZone: " Europe/Madrid " }).details;
+  expect(venueDetailPatch(saved, { ...saved, name: "New name" })).toEqual({ name: "New name" });
+  expect(venueDetailPatch(saved, { ...saved, timeZone: "Europe/Madrid" })).toEqual({
+    timeZone: "Europe/Madrid",
+  });
 });
 
 it("marks every invalid changed required field", () => {

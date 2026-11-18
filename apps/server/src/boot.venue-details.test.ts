@@ -240,7 +240,7 @@ describe("a running venue's account email clock", () => {
         ).json()) as VenueDetailsModel;
         expect(model.hasSales || model.hasOrderHistory || model.hasDailyClose).toBe(false);
         const previewPath =
-          "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=05%3A00";
+          "/management-api/venue-details/clock-preview?timeZone=Atlantic%2FCanary&dayCutover=05%3A00";
         let retainedDeadline: string | null = null;
         await expect
           .poll(async () => {
@@ -254,22 +254,22 @@ describe("a running venue's account email clock", () => {
           })
           .toBe(true);
         const oldTime = path === "invitation" ? "14:00 CEST" : "14:30 CEST";
-        const newTime = path === "invitation" ? "12:00 UTC" : "12:30 UTC";
+        const newTime = path === "invitation" ? "13:00 WEST" : "13:30 WEST";
         const before = await send(0);
         expect(before).toContain(oldTime);
         expect(before).not.toContain(newTime);
         const saved = await request("/management-api/venue-details", "PATCH", {
           expected: model.details,
-          changes: { timeZone: "UTC" },
+          changes: { timeZone: "Atlantic/Canary" },
         });
         expect(saved.status).toBe(200);
         const updatedModel = {
           ...model,
-          details: { ...model.details, timeZone: "UTC" },
+          details: { ...model.details, timeZone: "Atlantic/Canary" },
           businessDayClock: {
             ...model.businessDayClock,
             revision: model.businessDayClock.revision + 1,
-            clock: { ...model.businessDayClock.clock, timeZone: "UTC" },
+            clock: { ...model.businessDayClock.clock, timeZone: "Atlantic/Canary" },
           },
         };
         expect(await saved.json()).toEqual({
@@ -282,12 +282,12 @@ describe("a running venue's account email clock", () => {
         const after = await send(1);
         expect(after).toContain(newTime);
         expect(after).not.toContain(oldTime);
-        for (const changes of [{ timeZone: "UTC" }, { timeZone: "not/a-zone" }]) {
+        for (const changes of [{ timeZone: "Atlantic/Canary" }, { timeZone: "not/a-zone" }]) {
           const response = await request("/management-api/venue-details", "PATCH", {
-            expected: { ...model.details, timeZone: "UTC" },
+            expected: { ...model.details, timeZone: "Atlantic/Canary" },
             changes,
           });
-          if (changes.timeZone === "UTC") {
+          if (changes.timeZone === "Atlantic/Canary") {
             expect(response.status).toBe(200);
             expect(await response.json()).toEqual({
               changed: false,
