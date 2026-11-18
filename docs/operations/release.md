@@ -54,7 +54,7 @@ includes both trusted public keys.
    `gh secret set WAITRON_RELEASE_SIGNING_KEY --env release < /path/to/current-private.pem`.
 4. Open a pull request with the public keys in
    `deploy/box/release-keys/current.pem` and `deploy/box/release-keys/spare.pem`.
-   Cut the signed release from main after the keys land.
+   Wait for the keys to land on main before tagging a release.
 
 The release job skips signing while both public keys and the secret are absent.
 A missing key or a secret that matches neither public key fails signing after the
@@ -217,7 +217,9 @@ gh run rerun <run id> --failed
 That repeats the declaration upload from the same app digest. The signed file is
 kept if its bytes match and the job fails if they differ, including if the signing
 key changed between attempts. Re-run only the failed job because `publish` refuses
-to push a version the registry already holds.
+to push a version the registry already holds. For a signing setup error, restore a
+secret matching one of the keys in the tagged commit before retrying. If the tag
+has no public keys, cut a new numbered release after the keys land.
 
 If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
 pushed last, so a run that stopped before that push has not published the version, and the re-run
