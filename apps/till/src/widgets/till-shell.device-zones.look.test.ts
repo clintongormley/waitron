@@ -41,7 +41,6 @@ for (const locale of ["en-GB", "es-ES"]) {
         );
         const floor = document.createElement("till-floor-screen") as TillFloorScreen;
         Object.assign(floor, {
-          embedded: true,
           canChangeToday: true,
           zones: [
             {

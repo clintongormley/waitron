@@ -2655,25 +2655,9 @@ describe("till-app", () => {
       return el;
     }
 
-    it("suppresses the floor's back-to-counter affordance in handheld mode (canExitToCounter=false)", async () => {
-      const el = await toHandheldFloor();
-      expect(floor(el)).not.toBeNull();
-      // A floor card inside the shell shows no Back-to-counter control.
-      expect(floor(el)!.canExitToCounter).toBe(false);
-      expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
-    });
-
     it("gives the handheld's floor no way into a station view when its profile lacks the Station switch", async () => {
       const el = await toHandheldFloor(["print-receipt"]);
       expect(floor(el)!.canOpenStation).toBe(false);
-    });
-
-    it("stays on the floor when back-to-counter fires from the floor", async () => {
-      const el = await toHandheldFloor();
-      emit(floor(el)!, "back-to-counter");
-      await flush(el);
-      expect(floor(el)).not.toBeNull();
-      expect(counter(el)).toBeNull();
     });
 
     it("lands on the floor, not a counter, when back-to-counter bubbles from the table-order screen", async () => {
@@ -10323,25 +10307,6 @@ describe("till-app", () => {
       expect(seatTable).not.toHaveBeenCalled();
       expect(tableOrder(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBeUndefined();
-    });
-
-    it("back-to-counter returns from the floor to the counter, basket intact", async () => {
-      const { el } = await mountApp();
-      const c = await toCounter(el);
-      const store = c.store;
-      store.addProduct(coffee, "2");
-      await el.updateComplete;
-
-      selectTab(el, "floor");
-      await flush(el);
-      expect(floor(el)).not.toBeNull();
-
-      emit(floor(el)!, "back-to-counter");
-      await flush(el);
-
-      expect(counter(el)).not.toBeNull();
-      expect(floor(el)).toBeNull();
-      expect(store.lines).toHaveLength(1);
     });
 
     describe("table-order screen (FP-1)", () => {

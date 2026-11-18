@@ -364,20 +364,6 @@ export class TillFloorScreen extends LitElement {
         }
       }
 
-      .head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-      }
-
-      .title {
-        margin: 0;
-        font-size: var(--wt-font-size-xl);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* The view toggle stays visible in an embedded card without its own header. */
       .actions {
         display: flex;
         flex: none;
@@ -914,7 +900,6 @@ export class TillFloorScreen extends LitElement {
     new Map();
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  @property({ attribute: false }) canExitToCounter = true;
   /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
    * drag and the details sheet's actions. */
   @property({ attribute: false }) canChangeToday = false;
@@ -923,8 +908,6 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) canMarkSteps = false;
   /** The device has a station view, so each station's ready work links into it. */
   @property({ attribute: false }) canOpenStation = false;
-  /** Mounted inside a card host, which supplies the header; the view toggle stays. */
-  @property({ type: Boolean }) embedded = false;
   /** On a handheld, which draws the Ready bar in place of the stations' summary. */
   @property({ type: Boolean }) handheld = false;
   /**
@@ -1345,10 +1328,6 @@ export class TillFloorScreen extends LitElement {
 
   #emit(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-  }
-
-  #back(): void {
-    this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
   #selectZone(key: string): void {
@@ -2252,20 +2231,6 @@ export class TillFloorScreen extends LitElement {
     const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
-        ${
-          this.embedded
-            ? nothing
-            : html`<header class="head">
-                <h1 class="title">${t("floor.title")}</h1>
-                ${
-                  this.canExitToCounter
-                    ? html`<wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-                        ${t("floor.back")}
-                      </wt-button>`
-                    : nothing
-                }
-              </header>`
-        }
         <div class="zone-toolbar">
           ${
             tabs.length > 1

@@ -467,29 +467,6 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-zone]")).toHaveLength(0);
     expect(el.shadowRoot!.querySelectorAll("[data-table]")).toHaveLength(0);
   });
-
-  it("emits a composed, bubbling back-to-counter event when the back control is tapped", async () => {
-    const { el } = await mount();
-    let captured: Event | undefined;
-    el.addEventListener("back-to-counter", (event) => (captured = event));
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.back")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-  });
-
-  it("offers no back-to-counter control on a face that cannot return to the counter", async () => {
-    const { el } = await mount({ canExitToCounter: false });
-    expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-button.back")).toBeNull();
-  });
-
-  it("suppresses its own header + back when embedded, keeping the view toggle", async () => {
-    const { el } = await mount({ embedded: true });
-    expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".back")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".edit-toggle")).toBeNull();
-  });
 });
 
 describe("till-floor-screen — map/list toggle and tray", () => {
