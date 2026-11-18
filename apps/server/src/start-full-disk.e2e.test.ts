@@ -106,10 +106,8 @@ import {
 } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPrintApi } from "./print-api.js";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountThemesApi } from "./themes-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -579,7 +577,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       {
         db,
         modules: ALL_MODULES,
-        serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(db)],
+        serverParts: personalDataServerParts(ALL_MODULES, db),
         venueLocale: "en-GB",
       },
       () => {},

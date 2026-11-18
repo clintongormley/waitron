@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { personStaffRoles, stampDeployment, withTransaction } from "@waitron/db";
+import { drawerOpens, personStaffRoles, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
@@ -47,6 +47,12 @@ describe("the personal-data downloads in a real start", () => {
       body: JSON.stringify({ expectedEntryId: null }),
     });
     expect(clockedIn.status).toBe(200);
+    await suite.db.insert(drawerOpens).values({
+      reason: "manual",
+      personId: venue.personId,
+      deviceId: venue.deviceId,
+      openedAt: new Date("2026-05-01T09:30:00.000Z"),
+    });
     await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const [admin, manager] = await seedPersons(suite.db, [
       { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
@@ -97,7 +103,14 @@ describe("the personal-data downloads in a real start", () => {
         Object.hasOwn(files, "time-record.csv"),
         Object.hasOwn(files, "time-record.pdf"),
         Object.hasOwn(files, "staff-roles.json"),
-      ]).toEqual([true, true, false]);
+        Object.hasOwn(files, "actions.json"),
+      ]).toEqual([true, true, false, true]);
+      const actions = JSON.parse(strFromU8(files["actions.json"]!)) as {
+        drawerOpenings: { reason: string; at: string; yourPart: string[] }[];
+      };
+      expect(
+        actions.drawerOpenings.map(({ reason, at, yourPart }) => ({ reason, at, yourPart })),
+      ).toEqual([{ reason: "manual", at: "2026-05-01T09:30:00.000Z", yourPart: ["opened"] }]);
 
       const url = `http://127.0.0.1:${httpPort()}/management-api/staff/${venue.personId}/personal-data/export`;
       const other = await fetch(url, {

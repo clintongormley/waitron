@@ -51,9 +51,7 @@ import {
   timeEntries,
 } from "@waitron/workforce";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { personalDataReadme } from "./personal-data-readme.js";
 
@@ -690,7 +688,7 @@ async function download(path = PATH, as = cookie): Promise<Record<string, Uint8A
     {
       db: suite.db,
       modules: ALL_MODULES,
-      serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(suite.db)],
+      serverParts: personalDataServerParts(ALL_MODULES, suite.db),
       venueLocale: "en-GB",
       now: () => AT,
     },

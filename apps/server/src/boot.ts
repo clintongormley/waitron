@@ -379,9 +379,7 @@ import { mountWorkforceApi, WORK_TIME_RULES_NOT_FOUND } from "./workforce-api.js
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
@@ -3574,7 +3572,7 @@ async function bootServer(
     {
       db,
       modules: enabledAtStart,
-      serverParts: [...timeRecordPersonalData(enabledAtStart), ...actionsPersonalData(db)],
+      serverParts: personalDataServerParts(enabledAtStart, db),
       venueLocale,
       now,
     },

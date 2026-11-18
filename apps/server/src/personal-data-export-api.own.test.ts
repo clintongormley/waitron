@@ -21,9 +21,7 @@ import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULES } from "./modules.js";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
@@ -40,7 +38,7 @@ function mounted(modules: string[], patch: { venueLocale?: string } = {}): Hono 
     {
       db: suite.db,
       modules: enabled,
-      serverParts: [...timeRecordPersonalData(enabled), ...actionsPersonalData(suite.db)],
+      serverParts: personalDataServerParts(enabled, suite.db),
       venueLocale: "en-GB",
       ...patch,
     },
