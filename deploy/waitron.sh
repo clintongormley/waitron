@@ -15,6 +15,9 @@ set -euo pipefail
 
 WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
 WAITRON_HOST_DIR="${WAITRON_HOST_DIR:-/opt/waitron-host}"
+# As Compose names it: the project (compose.yml's `name: waitron`, or COMPOSE_PROJECT_NAME from the
+# environment), then compose.yml's `state` volume key.
+STATE_VOLUME="${COMPOSE_PROJECT_NAME:-waitron}_state"
 # The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
 # pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
@@ -56,13 +59,14 @@ as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 # Each attempt is cut off and tried three times, because apt's own timeouts do not end every stall:
 # docs/developers/ci-and-gates.md, "Every apt wait is bounded". An install gets longer than an update
 # because Docker's packages are large enough that a slow box link can take more than 300 s to fetch.
+# apt's output goes to standard error, so a caller that captures a function's value never captures it.
 apt_get() {
   local limit seconds=1800 attempt
   limit="$(command -v gtimeout || command -v timeout)" || die "need timeout (GNU coreutils) to bound apt-get — install coreutils and re-run"
   [ "${1:-}" = update ] && seconds=300
   for attempt in 1 2 3; do
     as_root "$limit" "$seconds" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 \
-      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" && return 0
+      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" >&2 && return 0
     echo "waitron.sh: attempt $attempt of 3 failed or stalled: apt-get $*" >&2
   done
   die "apt-get $* failed or stalled on all three attempts — check the network and re-run this command"
@@ -903,6 +907,14 @@ install_upgrade_driver() {
   as_root systemctl enable waitron-upgrade-recovery.service waitron-app.service
 }
 
+# Node's own Linux build loads libatomic.so.1, which a minimal Debian install does not have.
+ensure_host_node_libraries() {
+  command -v apt-get >/dev/null 2>&1 || return 0
+  [ "$(dpkg-query -W -f '${db:Status-Status}' libatomic1 2>/dev/null)" != installed ] || return 0
+  apt_get update
+  apt_get install -y --no-install-recommends libatomic1
+}
+
 cmd_manual_install() (
   local ref="$1" metadata sha preferred="" source="resolved Git SHA" stage result
   [ -d "$SYSTEMD_RUN_DIR" ] || die 'safe manual upgrades require a Linux host running systemd'
@@ -924,6 +936,7 @@ cmd_manual_install() (
   else
     fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
   fi
+  ensure_host_node_libraries
   bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR"
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die 'another host operation is running'
@@ -979,29 +992,41 @@ prepare_upgrade_candidate() (
   jq -Rsc --arg app "$app" --arg agent "$agent" '{compose:.,images:{app:$app,"print-agent":$agent}}' "$WAITRON_DIR/compose.yml"
 )
 
+# `docker compose up` creates the state volume, and a first install writes compose.yml well before
+# that. A listing that fails counts as started.
+box_started() {
+  local state_volumes
+  state_volumes="$(docker volume ls --filter "name=^${STATE_VOLUME}\$" --format '{{.Name}}')" || return 0
+  [ -n "$state_volumes" ]
+}
+
 cmd_install() {
-  local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 state_volumes
+  local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 docker_ready=0
   refuse_pending_upgrade
   if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
     ensure_docker
-    cmd_manual_install "$ref"
-    return
+    docker_ready=1
+    if box_started; then
+      cmd_manual_install "$ref"
+      return
+    fi
   fi
   lock_managed_box
   refresh_self "$ref"
-  ensure_docker
-  if [ ! -f "$WAITRON_DIR/compose.yml" ] &&
-    state_volumes="$(docker volume ls --filter 'name=^waitron_state$' --format '{{.Name}}')" &&
-    [ -z "$state_volumes" ]; then
-    fresh=1
-  fi
+  [ "$docker_ready" -eq 1 ] || ensure_docker
+  box_started || fresh=1
   if [ "$wipe" -eq 1 ]; then
-    if [ -f "$WAITRON_DIR/compose.yml" ]; then
-      confirm_reset
-    else
+    if [ ! -f "$WAITRON_DIR/compose.yml" ]; then
       echo "waitron.sh: no box at $WAITRON_DIR, so nothing to reset — installing" >&2
       wipe=0
+    elif [ "$fresh" -eq 1 ]; then
+      echo "waitron.sh: Docker has no $STATE_VOLUME volume for the box at $WAITRON_DIR, so nothing is wiped — installing" >&2
+      wipe=0
+    else
+      confirm_reset
     fi
+  elif [ "$fresh" -eq 1 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
+    echo "waitron.sh: $WAITRON_DIR has a compose.yml but Docker has no $STATE_VOLUME volume, so this is treated as a first install" >&2
   fi
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
@@ -1093,6 +1118,7 @@ cmd_reset() {
   done
   refuse_pending_upgrade
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+  box_started || die "$WAITRON_DIR has a compose.yml but Docker has no $STATE_VOLUME volume, so nothing was reset — run 'waitron.sh install'"
   lock_managed_box
   confirm_reset
   cd "$WAITRON_DIR"
