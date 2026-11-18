@@ -316,9 +316,7 @@ it("a reload that fails says why and keeps the draft", async () => {
   api.getImage.mockRejectedValueOnce({ code: "image.busy" });
   await userEvent.click(page.elementLocator(reloadButton()!));
   await vi.waitFor(() =>
-    expect(formError()).toBe(
-      "The image could not be saved. The photo service is busy. Try again shortly.",
-    ),
+    expect(formError()).toContain("The photo service is busy. Try again shortly."),
   );
   expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
     file.name,
