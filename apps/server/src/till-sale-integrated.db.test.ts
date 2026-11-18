@@ -1920,7 +1920,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
   });
 
-  it("recovers a lost-T2 captured payment: files from locked lines, no re-charge, links the existing row", async () => {
+  it("recovers a lost capture: files from locked lines, no re-charge, links the existing row", async () => {
     const { cfg, coffee } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(app);
@@ -1951,7 +1951,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
-  it("recovers a lost-T2 captured payment storing each line's unit price before any discount", async () => {
+  it("recovers a lost capture, storing each line's unit price before any discount", async () => {
     const { cfg, coffee } = await setupVenue();
     const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
@@ -2087,7 +2087,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await saleCount(id)).toBe(0);
   });
 
-  it("recovers a lost-T2 capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
+  it("recovers a lost capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId();
     const app = suite.db;
@@ -2537,7 +2537,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     });
   });
 
-  describe("lost-T2 recovery settles (never re-files)", () => {
+  describe("recovering a captured card payment on an issued bill settles it (never re-files)", () => {
     async function seedLostCaptureOnPlaced(
       cfg: DeviceRequestConfig,
       id: string,

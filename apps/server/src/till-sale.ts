@@ -1774,9 +1774,9 @@ async function finalizeCapture(
   wasPlaced = false,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
-  /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`
-     result, whose `settledAt` is always set (provider.ts:66-83). The guard mirrors `readSettledTicket`'s
-     own "impossible" throws — a defended contract, not a claim reasoned away (CLAUDE.md §1). */
+  /* v8 ignore start -- finalizeCapture runs only on a `captured` result from `collect`, which sets
+     `settledAt` (`PaymentResult`, packages/payments/src/provider.ts); this refuses a provider that
+     does not. */
   if (settledAt === null) {
     throw new Error(`finalizeCapture: a ${result.state} result carried no settledAt`);
   }
@@ -1931,9 +1931,8 @@ async function finalizeRecovery(
 
       const tip = subtractDecimal(capturedAmount, priced.total);
 
-      /* v8 ignore start -- a captured row always carries settled_at (store.ts's
-       insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
-       reasoned away (CLAUDE.md §1), mirroring finalizeCapture's own settledAt guard. */
+      /* v8 ignore start -- a captured row always carries settled_at: every writer of a `captured`
+         row is in packages/payments/src/store.ts, and each sets it. */
       if (captured.settledAt === null) {
         throw new Error(
           `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
@@ -2101,9 +2100,9 @@ async function finalizeSettle(
   result: PaymentResult,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
-  /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`
-     result, whose `settledAt` is always set (provider.ts:66-83). The guard mirrors finalizeCapture's
-     own "impossible" throw — a defended contract, not a claim reasoned away (CLAUDE.md §1). */
+  /* v8 ignore start -- finalizeSettle runs only on a `captured` result from `collect`, which sets
+     `settledAt` (`PaymentResult`, packages/payments/src/provider.ts); this refuses a provider that
+     does not. */
   if (settledAt === null) {
     throw new Error(`finalizeSettle: a ${result.state} result carried no settledAt`);
   }
@@ -2183,9 +2182,8 @@ async function finalizeSettleRecovery(
 
     const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
 
-    /* v8 ignore start -- a captured row always carries settled_at (store.ts's
-       insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
-       reasoned away (CLAUDE.md §1), mirroring finalizeRecovery's own settledAt guard. */
+    /* v8 ignore start -- a captured row always carries settled_at: every writer of a `captured`
+       row is in packages/payments/src/store.ts, and each sets it. */
     if (captured.settledAt === null) {
       throw new Error(
         `finalizeSettleRecovery: captured payment for working order ${req.id} carried no settledAt`,

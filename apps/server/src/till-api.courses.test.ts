@@ -297,7 +297,7 @@ async function billBody(tabId: string, body: object): Promise<string> {
   });
 }
 
-describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => {
+describe("fire route + station-queue course/firedAt serialisation", () => {
   it("fires every counter course and the loose line while retaining course facts in the queue", async () => {
     const orderId = await placeOrder([SOUP, STEAK, BREAD]);
     const station = await kitchenStationId();
@@ -519,7 +519,7 @@ function itemsByName(order: { items: PassCardItem[] }): Map<string, PassCardItem
   return new Map(order.items.map((i) => [i.name, i]));
 }
 
-describe("KDS-3 expo routes: the All stations board + whole-card ready", () => {
+describe("expo routes: the All stations board + whole-card ready", () => {
   it("GET /api/expo/board carries every dish of the order; each carries its station name, course and fired time", async () => {
     const orderId = await placeOrder([SOUP, STEAK, BREAD]);
     const order = await expoOrder(orderId);

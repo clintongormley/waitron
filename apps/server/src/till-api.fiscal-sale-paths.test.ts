@@ -443,7 +443,7 @@ beforeAll(() => {
 });
 
 describe("POST /api/session (PIN login body handling)", () => {
-  it("an empty (unparseable) request body is a clean 401 pin.invalid, never an opaque 500", async () => {
+  it("an empty (unparseable) request body is a clean 401 pin.invalid, never a 500", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -738,7 +738,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   });
 });
 
-describe("sale-time device from the authenticated session (SP-A.2 cutover)", () => {
+describe("sale-time device from the authenticated session", () => {
   it("refuses POST /api/sales from a session whose device has been revoked — 401 device.unauthorized, filing nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
@@ -1741,7 +1741,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 
 // Drive place, prep, advance and collect through the same venue.
 // In ticket_then_pay mode, collect files the sale through the real fiscal backend.
-describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
+describe("place → station queue → per-line advance → collect, over HTTP", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const modeCfg: TradingContext = { ...cfg };
@@ -1780,7 +1780,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
     // 3. The per-station kitchen queue shows the fired line `queued` — placing fires the order's lines
-    //    to the kitchen (KDS-1, `placeOrder` → `fireLines`), routed to the venue's DEFAULT station
+    //    to the kitchen (`placeOrder` → `fireLines`), routed to the venue's DEFAULT station
     //    (provisioning seeds one). The display picker reads its stations, then that station's queue,
     //    grouped by order.
     const stations = (await (

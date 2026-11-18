@@ -756,11 +756,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
   - The table-order screen's `#lineGross` comment was not restored (#614).
     [Detail](backlog/till.md#the-table-order-screens-linegross-comment-was-not-restored)
-  - Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite
-    `provider.ts:66-83` (#613). The checker compares tool comments character for character, so
-    repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not a
-    comments-only change.
-    [Detail](backlog/till.md#two-v8-ignore-start-comments-in-till-salets-finalizecapture-finalizesettle-cite-providerts66-83)
 
 - **Cash handed back for a voided cash sale is recorded nowhere** — OPEN (found 2026-09-24 by #605).
   A void writes no payment or refund row, so if staff give a customer cash back, the void's day
