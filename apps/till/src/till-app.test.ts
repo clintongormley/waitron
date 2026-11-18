@@ -15620,6 +15620,25 @@ describe("till-app", () => {
       expect(currentLocale()).toBe("es-ES");
     });
 
+    it("keeps a language picked on the sign-in screen after a sign-in by a person with no saved language", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await flush(el);
+      expect(currentLocale()).toBe("en-GB");
+      emit(lock(el)!, "wt-locale-selected", { code: "es-ES" });
+      await toCounterAs(el, null);
+      expect(currentLocale()).toBe("es-ES");
+    });
+
+    it("shows a person's saved language after sign-in, whatever was picked on the sign-in screen", async () => {
+      const { el } = await mountApp({ getLocales: browserSpeaking("en-GB") });
+      await flush(el);
+      emit(lock(el)!, "wt-locale-selected", { code: "es-ES" });
+      await flush(el);
+      expect(currentLocale()).toBe("es-ES");
+      await toCounterAs(el, "en-GB");
+      expect(currentLocale()).toBe("en-GB");
+    });
+
     it("shows the venue's language after a sign-in with no saved language when the browser matches nothing", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB" }),

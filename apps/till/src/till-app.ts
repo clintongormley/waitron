@@ -6025,7 +6025,7 @@ export class TillApp extends LitElement {
 
   async #onLoggedIn(event: Event): Promise<void> {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
-    setLocale(resolveActiveLocale(locale, this.#unchosenLocale()));
+    setLocale(resolveActiveLocale(locale, this.#preLoginChoice ?? this.#unchosenLocale()));
     this.#preLoginChoice = undefined;
     this.#tabPerson = { personId: signedIn.personId };
     await this.#enterSignedIn(signedIn);

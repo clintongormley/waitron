@@ -963,6 +963,8 @@ logout the till returns to it. A till operator with no saved language, and an en
 display with no language picked on it, get that browser match too (owner, 2026-11-18: "when i open
 a new device, it switches to spanish rather than using the language of my browser"; that the remark
 covers these two cases is the watcher's and lane B's reading, not the owner's words).
+A language picked on the till's sign-in screen carries through that sign-in for a person with no
+saved language, without being saved to them; a saved language wins over it.
 Returning to login after logout or session expiry uses the last browser match, or the venue default
 until that match is available. Guard late locale responses so they cannot overwrite a newly
 authenticated person's language or an explicit choice on sign-in
