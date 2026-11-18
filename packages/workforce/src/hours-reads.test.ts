@@ -46,6 +46,21 @@ function manager(
   expect(api).toHaveProperty("readManagerHours", expect.any(Function));
   return f.run((tx) => api.readManagerHours(tx, { selection, clock: venueClock, now }));
 }
+async function expectFullHistoryResult<T>(actual: T, getHours: () => Promise<T>) {
+  const loadInputs = attendanceReads.readAttendanceInboxInputs;
+  const allInputs = vi
+    .spyOn(attendanceReads, "readAttendanceInboxInputs")
+    .mockImplementation((tx, personId) => loadInputs(tx, personId));
+  const allEntries = vi
+    .spyOn(recordReads, "readOutstandingHoursEntries")
+    .mockImplementation((tx, { personId }) => recordReads.readRecordedEntries(tx, { personId }));
+  try {
+    expect(await getHours()).toEqual(actual);
+  } finally {
+    allEntries.mockRestore();
+    allInputs.mockRestore();
+  }
+}
 async function event(
   kind: "clockIn" | "clockOut" | "breakStart" | "breakEnd",
   at: string,
@@ -347,6 +362,10 @@ it("reads only the current shift boundary once a competing correction has change
     }),
   );
   expect(entries.map(({ entryId }) => entryId)).toEqual([latest.end]);
+  const getHours = () => read({ kind: "month", date: "2026-03-02" });
+  const hours = await getHours();
+  expect(hours.pending.items).toEqual([]);
+  await expectFullHistoryResult(hours, getHours);
 });
 it("matches full-history Hours with a year of settled shifts and older outstanding work", async () => {
   const { questionId } = await automatic();
@@ -487,19 +506,7 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
     { id: pending, status: "waiting-manager", readyToApply: false },
   ]);
 
-  const loadInputs = attendanceReads.readAttendanceInboxInputs;
-  const allInputs = vi
-    .spyOn(attendanceReads, "readAttendanceInboxInputs")
-    .mockImplementation((tx, personId) => loadInputs(tx, personId));
-  const allEntries = vi
-    .spyOn(recordReads, "readOutstandingHoursEntries")
-    .mockImplementation((tx, { personId }) => recordReads.readRecordedEntries(tx, { personId }));
-  try {
-    expect(actual).toEqual(await getHours());
-  } finally {
-    allEntries.mockRestore();
-    allInputs.mockRestore();
-  }
+  await expectFullHistoryResult(actual, getHours);
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {
   await setBuiltInRoleForTest(f.suite.db, f.personId, "admin");
