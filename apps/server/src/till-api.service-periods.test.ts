@@ -2076,30 +2076,38 @@ describe("a dish whose period ended earlier today", () => {
       ).toEqual([expect.objectContaining({ afterPeriod: "Lunch", afterPeriodUnasked: true })]);
     });
 
-    it("is sent when moved to a table at 14:05 without asking, marked with no confirmer", async () => {
-      const { v, id } = await parkedAtLunch();
-      await suite.db
-        .update(departments)
-        .set({ orderStart: "table" })
-        .where(eq(departments.id, v.restaurant));
-      const { id: tableId } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, v.cfg, { label: "Late arrival", zoneId: v.diningZone }),
-      );
-      at(mondayAt("14:05"));
-      const moved = await sendAsTill(v, "POST", `/api/bills/${id}/move`, {
-        to: { tableId },
-        partyId: null,
-        otherPartyId: null,
-        expectedEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, id))],
-        submissionId: randomUUID(),
-        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      });
-      expect(moved.status).toBe(200);
-      expect((await sentState(id)).lines).toEqual([{ sentAt: expect.any(String) }]);
-      expect(await marksOf(id)).toEqual([
-        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
-      ]);
-    });
+    it.each(["open", "placed"] as const)(
+      "is sent when its %s bill moves to a table at 14:05 without asking, marked with no confirmer",
+      async (status) => {
+        const { v, id } = await parkedAtLunch();
+        if (status === "placed")
+          await suite.db.update(workingOrders).set({ status }).where(eq(workingOrders.id, id));
+        await suite.db
+          .update(departments)
+          .set({ orderStart: "table" })
+          .where(eq(departments.id, v.restaurant));
+        const { id: tableId } = await withTransaction(suite.db, (tx) =>
+          createTable(tx, v.cfg, { label: "Late arrival", zoneId: v.diningZone }),
+        );
+        at(mondayAt("14:05"));
+        const moved = await sendAsTill(v, "POST", `/api/bills/${id}/move`, {
+          to: { tableId },
+          partyId: null,
+          otherPartyId: null,
+          expectedEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, id))],
+          submissionId: randomUUID(),
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        });
+        expect(moved.status).toBe(200);
+        expect(await sentState(id)).toEqual({
+          order: { status },
+          lines: [{ sentAt: expect.any(String) }],
+        });
+        expect(await marksOf(id)).toEqual([
+          { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
+        ]);
+      },
+    );
 
     /** Gives Lunch the Deli takeaway menu in place of the Midday menu its dish was parked from. */
     const replaceLunchMenu = (v: Venue) =>
