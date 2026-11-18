@@ -105,16 +105,6 @@ command-line Android tools (`android-commandlinetools`) through Homebrew on 2026
 about 30 minutes, every Homebrew process idle at its sandboxed unpacking step, and was stopped;
 the cause was not found.
 
-## Show a failed automatic invoice copy to staff
-
-`reserveStagedInvoiceDelivery` returns `undefined` after its failed reservation is rolled back;
-`enqueueSaleReceipt` then skips the paper original.
-
-Trace the working-order issuance and bill-payment answers before choosing a till message,
-retry or alternate-copy action. Keep the saved delivery choice, original/duplicate rules,
-operator permissions and sale facts. Do not silently select paper as a substitute for the
-chosen destination.
-
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
 - **`trust` is still refused.** A property write (`trust`) and `Disconnect` were measured still

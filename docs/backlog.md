@@ -898,11 +898,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A print agent somewhere other than the box** (bundle of 4, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
-- **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
-  reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
-  is in the server log. Decide how the till should show that outcome and offer another copy.
-  [Receipt-branch observation](backlog/printers.md#show-a-failed-automatic-invoice-copy-to-staff)
-
 - **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds A739, A773, A552, A553. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
