@@ -194,11 +194,7 @@ export function correctionGroupCanApply(
     const kind = target?.entryKind ?? request.extension?.missingEntryKind;
     if (!kind) return false;
     if (target) targets.add(target.entryId);
-    additions.push(
-      target
-        ? { ...target, eventAt: request.eventAt, offsetMinutes: request.offsetMinutes }
-        : { ...request, entryKind: kind },
-    );
+    additions.push({ ...request, entryId: target?.entryId ?? request.entryId, entryKind: kind });
   }
   try {
     validateSequenceChange(effective, [

@@ -1353,7 +1353,9 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Decisions and deliberate limits
 
-### A1268 part 2: pair a person's entries by write order after a backward clock step.
+<a id="a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step"></a>
+
+### A1268 part 2 correction validation after a backward clock step
 
 The owner chose to fix correction validation and keep event-time pairing. See the
 [workforce decision](workforce.md#a1268-corrections-after-a-backward-clock-step).

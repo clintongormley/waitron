@@ -220,7 +220,7 @@ as recorded in Lane I’s questions. A correction can go through when the worker
 contains a sequence fault. Waitron still refuses a new fault introduced by the correction.
 
 Hours still pair by the recorded times. A shift whose clock-out sorts before its clock-in can be
-missing from hours until you correct the recorded time. The clock step’s existing alerts still apply.
+missing from hours until you correct the recorded time.
 This is the delivered scope for [A1268 §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
 
 ### First and latest staff activity per planned shift (owner, 2026-11-15)
