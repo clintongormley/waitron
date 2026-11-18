@@ -422,7 +422,7 @@ async function triggerFaults(venueDir: string, tables: readonly string[]) {
   }
 }
 
-/** Waits for the adopting server to accept connections before a test tries to close it. */
+/** Waits for the adopter to bind. The holder itself can already accept a TCP connection. */
 async function listening(port: number): Promise<void> {
   await vi.waitFor(
     () => {
@@ -470,6 +470,7 @@ async function stateDir(
   return dir;
 }
 
+/** Tries a separate loopback bind so a leaked listener fails the probe with EADDRINUSE. */
 async function bindAndRelease(port: number): Promise<void> {
   // Closing an adopted holder before probing can hide a server that never released the socket.
   const unused = reservations.get(port);
