@@ -1535,6 +1535,19 @@ describe("waitron.sh install of a release", () => {
     expect(loggedCalls(sb)).toEqual([""]);
   });
 
+  it("explains how to load release trust when the retained verifier is missing", () => {
+    const sb = sandbox();
+    const release = signedRelease(sb);
+    rmSync(join(sb.root, "host/release-trust/verify-release.mjs"));
+    writeFileSync(sb.log, "");
+    const r = run(sb, ["install", "v1.2.3"], release);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(
+      "use a published main image with the verifier and both release keys",
+    );
+    expect(loggedCalls(sb)).toEqual([""]);
+  });
+
   it("checks a release on a provisioned development box and passes the signed digests into its upgrade", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);

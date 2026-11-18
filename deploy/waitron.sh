@@ -419,7 +419,7 @@ verify_numbered_release() {
   [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
     || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
   [ -x "$HOST_NODE" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
-    || die 'numbered installs need the verifier and both release keys — use a main image published with them, then follow the checked upgrade instructions'
+    || die 'release verification is unavailable — use a published main image with the verifier and both release keys, then follow the checked upgrade instructions'
   command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
   curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 \
     --max-time 60 --max-filesize 16384 \
@@ -995,7 +995,7 @@ cmd_manual_install() (
     cp -R "$stage/release-trust" "$WAITRON_HOST_DIR/"
     echo 'waitron.sh: loaded the release verifier and both public keys' >&2
   elif [ "$ref" = main ]; then
-    echo 'waitron.sh: could not load release trust files — check the network and use a published main image with both release keys' >&2
+    echo 'waitron.sh: could not load release trust files — use a published main image with both release keys and check that the files can be downloaded' >&2
   fi
   load_print_agent_apparmor "$sha"
   disable_bluetooth_autopair
