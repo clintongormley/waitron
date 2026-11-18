@@ -44,6 +44,9 @@ afterEach(() => {
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
 // `docker image inspect` reports an image absent when its name contains WT_IMAGE_MISSING, and
 // `docker pull` fails when its arguments contain WT_IMAGE_PULL_FAIL; every other image is present.
+// `docker volume ls` prints WT_STATE_VOLUME (`waitron_state` unless a case sets it) when the call's
+// filter names exactly that volume, prints nothing when WT_STATE_VOLUME_ABSENT=1, and fails when
+// WT_VOLUME_LIST_FAIL=1.
 // `compose up` and `compose down` leave a marker file beside the case's log, and `ps -q` answers no
 // container after a `down` until the next `up`, as real compose does once `down` has removed them.
 // WT_NO_CONTAINERS=1 answers no container at all; =before answers none until the first `up`, a first
@@ -224,7 +227,8 @@ case "$1" in
     case "$2" in
       ls)
         [ "\${WT_VOLUME_LIST_FAIL}" = 1 ] && exit 1
-        [ "\${WT_STATE_VOLUME_ABSENT}" = 1 ] || echo waitron_state
+        [ "\${WT_STATE_VOLUME_ABSENT}" = 1 ] && exit 0
+        case "$args" in *"name=^\${WT_STATE_VOLUME:-waitron_state}\\$"*) echo "\${WT_STATE_VOLUME:-waitron_state}" ;; esac
         exit 0 ;;
       inspect) exit 0 ;;
       rm)
@@ -291,12 +295,20 @@ stub(
   `[ -n "\${WT_IP_ADDRS}" ] && printf '%s\\n' "\${WT_IP_ADDRS}"\nexit "\${WT_IP_STATUS:-0}"`,
 );
 // `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
-// file beside the case's log. `timeout` and `gtimeout` drop the limit and run the rest.
+// file beside the case's log, and prints WT_APT_STDOUT on standard output when a case sets it.
+// `timeout` and `gtimeout` drop the limit and run the rest. `dpkg-query` answers `installed`, so no
+// case reaches a real one on a Linux machine, and `not-installed` with status 1 when
+// WT_LIBATOMIC_MISSING=1.
 stub(
   "apt-get",
   `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
+[ -n "\${WT_APT_STDOUT}" ] && printf '%s\\n' "\${WT_APT_STDOUT}"
 [ "$n" -le "\${WT_APT_FAIL:-0}" ] && exit 100
 exit 0`,
+);
+stub(
+  "dpkg-query",
+  `[ "\${WT_LIBATOMIC_MISSING}" = 1 ] && { echo not-installed; exit 1; }\necho installed`,
 );
 stub("timeout", `shift; exec "$@"`);
 stub("gtimeout", `shift; exec "$@"`);
@@ -562,10 +574,8 @@ function sandbox({
 
 // Two budgets, protecting against different failures. Vitest's per-test timeout bounds how long the
 // whole TEST may take, and a test it fails for its duration alone is a healthy run reported as
-// broken. Every `run()` case below makes exactly ONE `run()` call and does no other slow work, so bounding
-// the test above the spawn timeout covers that side. That reasoning is about THIS suite, not a
-// general rule: a test that waits twice can outlast such a bound. Guard:
-// `scripts/spawn-timeout-budget.test.ts`.
+// broken. The bound is set above one `run()`'s spawn timeout; a test that waits twice can outlast
+// such a bound. Guard: `scripts/spawn-timeout-budget.test.ts`.
 //
 // spawnSync's timeout is the OTHER side, and it kills a child that is still working. It therefore
 // has to clear the child's own worst case: `wait_healthy` in `deploy/waitron.sh` retries for about
@@ -581,6 +591,7 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
     env: {
       ...process.env,
       PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
+      COMPOSE_PROJECT_NAME: "",
       WAITRON_DIR: sb.boxDir,
       WAITRON_HOST_DIR: join(sb.root, "host"),
       WT_HOST_NODE: HOST_NODE_STUB,
@@ -822,6 +833,58 @@ describe("waitron.sh manual upgrade invocation", () => {
     },
   );
 
+  it("installs libatomic1 before the host's Node is fetched when the box has none", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], {
+      WT_LIBATOMIC_MISSING: "1",
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    const library = calls.findIndex((call) =>
+      /^apt-get .* install -y --no-install-recommends libatomic1$/.test(call),
+    );
+    const bootstrap = calls.findIndex((call) => call.startsWith("bootstrap "));
+    expect(library).toBeGreaterThanOrEqual(0);
+    expect(bootstrap).toBeGreaterThan(library);
+  });
+
+  it("leaves apt alone on an upgrade when libatomic1 is already installed", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], { WAITRON_SH_REFRESHED: "1" });
+    expect(result.status, result.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    expect(calls).toContainEqual(expect.stringMatching(/^bootstrap /));
+    expect(calls.filter((call) => call.startsWith("apt-get "))).toEqual([]);
+  });
+
+  it("still upgrades an installed box when Docker cannot list its volumes", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], {
+      WT_VOLUME_LIST_FAIL: "1",
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(loggedCalls(sb)).toContainEqual(expect.stringMatching(/^bootstrap /));
+    expect(composeCalls(sb).some((call) => /^up\b/.test(call))).toBe(false);
+  });
+
+  it("upgrades an installed box whose state volume carries an overridden project name", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], {
+      COMPOSE_PROJECT_NAME: "waitron-dev",
+      WT_STATE_VOLUME: "waitron-dev_state",
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(loggedCalls(sb)).toContainEqual(expect.stringMatching(/^bootstrap /));
+    expect(composeCalls(sb).some((call) => /^up\b/.test(call))).toBe(false);
+  });
+
   it("falls back as one whole driver when the registry revision lacks a required module", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);
@@ -1009,6 +1072,30 @@ describe("waitron.sh image provenance", () => {
     }
   });
 
+  it("builds from the resolved commit when apt-get prints while installing the metadata reader", () => {
+    const sb = sandbox();
+    const startup = join(sb.root, "hide-jq.sh");
+    writeFileSync(
+      startup,
+      'command() { if [ "$1" = -v ] && [ "$2" = jq ]; then return 1; fi; builtin command "$@"; }\n',
+    );
+    const r = run(sb, ["install", "my-branch"], {
+      BASH_ENV: startup,
+      WT_REF_SHA: app,
+      WT_APT_STDOUT: "Hit:1 http://security.debian.org/debian-security trixie-security InRelease",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    expect(calls).toContainEqual(expect.stringMatching(/^apt-get .* install .* jq$/));
+    const builds = calls.filter((line) => line.startsWith("docker build "));
+    expect(builds).toHaveLength(2);
+    for (const line of builds) {
+      expect(line).toContain(`https://github.com/clintongormley/waitron.git#${app}`);
+      expect(line).toContain(`--build-arg WAITRON_BUILD_ID=${app} `);
+      expect(line).not.toContain("#Hit");
+    }
+  });
+
   it.each(["invalid", "", "2026-10-15T11:00:00+02:00"])(
     "refuses unusable source commit time %s before building or pinning an image",
     (time) => {
@@ -1032,6 +1119,60 @@ describe("waitron.sh image provenance", () => {
       expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
     },
   );
+});
+
+describe("waitron.sh install where Docker has no state volume", () => {
+  const HINT = "so this is treated as a first install";
+
+  it("carries on as a first install when an earlier install failed after writing compose.yml", () => {
+    const sb = sandbox({ systemd: true, readError: true });
+    const failed = run(
+      sb,
+      ["install", "my-branch"],
+      { WT_STATE_VOLUME_ABSENT: "1", WT_REF_FAIL: "1" },
+      { timeoutMs: 5_000 },
+    );
+    expect(failed.status).not.toBe(0);
+    expect(failed.stderr).not.toContain(HINT);
+    expect(existsSync(join(sb.boxDir, "compose.yml"))).toBe(true);
+    expect(existsSync(`${sb.log}.up`)).toBe(false);
+    writeFileSync(sb.log, "");
+
+    const r = run(sb, ["install", "my-branch"], { WT_STATE_VOLUME_ABSENT: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).toContain(HINT);
+    const calls = loggedCalls(sb);
+    expect(composeCalls(sb).filter((call) => /^up\b/.test(call))).toHaveLength(1);
+    expect(calls.filter((call) => call === "systemctl enable --now docker")).toHaveLength(1);
+    expect(calls.filter((call) => /bootstrap|^host:/.test(call))).toEqual([]);
+    expect(calls.filter((call) => call.includes("trading.env"))).toEqual([]);
+    expect(readFileSync(`${sb.log}.up-profiles`, "utf8").trim()).toBe("practice-inbox");
+  });
+
+  it("a first install runs neither the upgrade bootstrap nor the host's Node", () => {
+    const sb = sandbox({ systemd: true });
+    const r = run(sb, ["install", "my-branch"], {
+      WT_LIBATOMIC_MISSING: "1",
+      WT_STATE_VOLUME_ABSENT: "1",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    expect(composeCalls(sb).filter((call) => /^up\b/.test(call))).toHaveLength(1);
+    expect(calls.filter((call) => /bootstrap|^host:|libatomic1/.test(call))).toEqual([]);
+  });
+
+  it("--reset install installs, wiping nothing and without reading the box's mode", () => {
+    const sb = sandbox({ readError: true });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "install", "my-branch"], { WT_STATE_VOLUME_ABSENT: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).toContain(
+      `waitron.sh: Docker has no waitron_state volume for the box at ${sb.boxDir}, so nothing is wiped — installing`,
+    );
+    expect(composeCalls(sb).filter((call) => /^run\b/.test(call))).toEqual([]);
+    expect(loggedCalls(sb).filter((call) => call.startsWith("docker volume rm "))).toEqual([]);
+    expect(composeCalls(sb).filter((call) => /^up\b/.test(call))).toHaveLength(1);
+  });
 });
 
 describe("waitron.sh install (published main)", () => {
@@ -2124,6 +2265,27 @@ describe("waitron.sh reset", () => {
     expect(r.stderr).toMatch(/no box at/);
   });
 
+  it("stops, naming install, when the folder holds compose.yml and Docker has no state volume", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"], { WT_STATE_VOLUME_ABSENT: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(
+      `waitron.sh: ${sb.boxDir} has a compose.yml but Docker has no waitron_state volume, so nothing was reset — run 'waitron.sh install'`,
+    );
+    expect(composeCalls(sb).filter((call) => /^(run|down|up)\b/.test(call))).toEqual([]);
+    expect(loggedCalls(sb).filter((call) => call.startsWith("docker volume rm "))).toEqual([]);
+  });
+
+  it("still reads the box's mode when Docker cannot list its volumes", () => {
+    const sb = sandbox({ readError: true });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"], { WT_VOLUME_LIST_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("refusing to reset: this box is PRODUCTION");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^run\b.*trading\.env/));
+  });
+
   // `fetch_box_files` overwrites the installed compose.yml from the ref on EVERY install, so a box
   // upgrading past a change that retires a service meets a running container the new file no longer
   // declares, which a bare `up -d` or `down` leaves running. It is asked for on every lifecycle call
@@ -2435,6 +2597,19 @@ describe("waitron.sh reset", () => {
 describe("waitron.sh --reset install", () => {
   const builds = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker build "));
   const removals = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker volume rm "));
+
+  it("does not skip the production check or the take-down when its state volume carries an overridden project name", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"], {
+      COMPOSE_PROJECT_NAME: "waitron-dev",
+      WT_STATE_VOLUME: "waitron-dev_state",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).not.toContain("nothing is wiped");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^run\b.*trading\.env/));
+    expect(composeCalls(sb).filter((call) => /^down\b/.test(call))).toHaveLength(1);
+  });
 
   it("builds the new images, then wipes the box once, then starts it once on them", () => {
     const sb = sandbox();
@@ -2827,9 +3002,8 @@ describe("the venue stamp reader inside waitron.sh", () => {
   });
 });
 
-// No install case reaches apt: the stub bin carries `qrencode` and a working `docker compose`, which
-// ensure_docker reads as a box with nothing to install. So these take `apt_get` and the two helpers it
-// calls out of the shipped script and run them under the suite's stubs.
+// These take `apt_get` and the two helpers it calls out of the shipped script and run them under the
+// suite's stubs.
 describe("the apt_get wrapper inside waitron.sh", () => {
   const SHIPPED = readFileSync(SCRIPT, "utf8");
   const fn = (name) => {
@@ -2844,14 +3018,23 @@ describe("the apt_get wrapper inside waitron.sh", () => {
   const EMPTY_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-empty-bin-"));
   afterAll(() => rmSync(EMPTY_BIN, { recursive: true, force: true }));
 
-  function aptGet(args, { fail = 0, path = `${STUB_BIN}${delimiter}${process.env.PATH}` } = {}) {
+  function aptGet(
+    args,
+    { fail = 0, stdout = "", path = `${STUB_BIN}${delimiter}${process.env.PATH}` } = {},
+  ) {
     const root = mkdtempSync(join(tmpdir(), "waitron-sh-apt-"));
     dirs.push(root);
     const log = join(root, "calls.log");
     writeFileSync(log, "");
     const result = spawnSync(BASH, ["-c", PROGRAM, "apt_get", ...args], {
       encoding: "utf8",
-      env: { ...process.env, PATH: path, WT_LOG: log, WT_APT_FAIL: String(fail) },
+      env: {
+        ...process.env,
+        PATH: path,
+        WT_LOG: log,
+        WT_APT_FAIL: String(fail),
+        WT_APT_STDOUT: stdout,
+      },
       timeout: RUN_TIMEOUT_MS,
     });
     if (result.error) throw result.error;
@@ -2874,6 +3057,14 @@ describe("the apt_get wrapper inside waitron.sh", () => {
       new RegExp(`^g?timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get ${OPTIONS} update$`),
     );
     expect(r.apts).toEqual([`apt-get ${OPTIONS} update`]);
+  });
+
+  it("sends what apt-get prints to standard error, leaving standard output empty", () => {
+    const line = "Hit:1 http://deb.debian.org/debian trixie InRelease";
+    const r = aptGet(["update"], { stdout: line });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toContain(line);
   });
 
   it("gives an install 1800 s per attempt, because a slow link can take longer than 300 s", () => {

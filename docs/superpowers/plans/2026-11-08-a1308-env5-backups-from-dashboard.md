@@ -128,6 +128,12 @@ only when its captured running-service image map includes Mailpit. Otherwise Com
 from the installed environment. These fixes follow the watcher's
 "USB inbox and profile ... must work with the new profile" instruction; no installer or upgrade flow is added.
 
+**18 November 2026 (branch fix/waitron-sh-fresh-box).** The watcher's queue item
+WAITRON-SH-FRESH-BOX asked that "installed" be decided by "something only a finished install writes,
+not by compose.yml". The marker used is lane B's choice, not the watcher's or the owner's, and a
+failed first start can leave it: an install is now fresh whenever Docker lists no state volume for
+the box, whether or not compose.yml exists. A failed listing still counts as not fresh.
+
 **13 November 2026, watcher 04:06.** Restrict the production-selection claim to `waitron.sh`
 installations. USB Live updates keep the inbox profile; record that in the existing box-installation
 backlog, with no USB updater behaviour change in this slice.

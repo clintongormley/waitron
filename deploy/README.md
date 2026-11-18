@@ -258,6 +258,17 @@ the command still stops the writers and keeps
 a copy of their data and configuration. It checks a disposable copy, including a real primary
 cash sale, before reopening the candidate. The test sale never reaches the live venue.
 
+`install` treats a box as existing when its folder holds a `compose.yml` and Docker either has the
+box's state volume or cannot list volumes. The volume is `waitron_state`, or `<project>_state` when
+`COMPOSE_PROJECT_NAME` is set in the environment `waitron.sh` runs in; a `COMPOSE_PROJECT_NAME` line
+in the box's `.env` is not read. Where there is a `compose.yml` and no such volume, `install` says
+so and installs from the beginning instead. A first start that failed can already have left the
+volume, and `install` then treats the box as existing; `--reset install`, described under "Wiping
+and installing in one run", does not take the upgrade path on such a box: once its production check
+and confirmation pass, it wipes the box as `reset` does and installs. On a host with apt, an upgrade
+installs the `libatomic1` package when it is missing, because the host runtime needs it. On a host
+without apt, install the library that provides `libatomic.so.1` before upgrading.
+
 An already-stopped app skips the online trial, so you can repair a broken version through
 the same stopped-copy checks and mandatory sale. The trial copy is discarded and is never
 used for Restore. A leftover trial folder from an interrupted attempt is removed on the next attempt.
@@ -560,6 +571,9 @@ is synchronised, or a clock on another machine agrees with the box's within 30 s
 person on the setup page confirms both times or sets the box's clock from it with **This device**), unless the box and the machine that confirms its clock are wrong
 by the same amount.
 
+In a folder with a `compose.yml` and no state volume in Docker, `reset` stops with an error and
+tells you to run `install`.
+
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
 
@@ -615,7 +629,8 @@ ref's `compose.yml` names, such as Mailpit, pulled if missing, so an image it ca
 run before anything is wiped, though by then the box's `compose.yml` and `.env` are already set for
 the ref; re-run the command. Only then does it take the box down, wipe it exactly as `reset` does,
 and start it on the new images. `--yes` and `--force-production` mean what they mean for `reset`.
-In a folder with no box installed there is nothing to wipe, so it says so and installs.
+In a folder with no `compose.yml`, or with a `compose.yml` and no state volume in Docker, it wipes
+nothing, says so and installs.
 
 ## Moving to a new tax ID
 
