@@ -7,6 +7,7 @@ import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
+  clearSavedOffer,
   sendLines,
   setLineCourse,
   updateHeldOrder,
@@ -41,7 +42,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedPerson } from "@waitron/db/testing/seed.js";
 import {
   assignMenuToVenue,
   createMenu,
@@ -190,6 +191,11 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     invoiceLocales: [LOCALE],
   });
   const nodeId = await seedNode(db);
+  await seedPerson(db, { id: OPERATOR, displayName: "Order operator" });
+  await seedPerson(db, {
+    id: "cccccccc-0000-4000-8000-0000000000f1",
+    displayName: "Fixture order writer",
+  });
 
   const { coffeeId, waterId, menuId, zoneId, coffeeOfferId, premiumCoffeeOfferId } =
     await withTransaction(db, async (tx) => {
@@ -763,9 +769,7 @@ describe("parkOrder", () => {
       department_name: string;
     }>(sql`
       select menu_item_id, menu_name, department_name
-      from working_line_contexts
-      where working_order_line_id = (
-        select id from working_order_lines where working_order_id = ${id})`);
+      from working_order_lines where working_order_id = ${id}`);
     expect(line.rows).toEqual([{ unit_price_gross: 325 }]);
     expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "prepay" }]);
     expect(attribution.rows).toEqual([
@@ -1183,10 +1187,8 @@ describe("openTab service context", () => {
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }]);
 
       const line = await tx.execute<{ unit_price_gross: number; menu_item_id: string }>(sql`
-        select cast(l.unit_price_gross as int) as unit_price_gross, c.menu_item_id
-        from working_order_lines l
-        join working_line_contexts c on c.working_order_line_id = l.id
-        where l.working_order_id = ${tabId}`);
+        select cast(unit_price_gross as int) as unit_price_gross, menu_item_id
+        from working_order_lines where working_order_id = ${tabId}`);
       expect(line.rows).toEqual([{ unit_price_gross: 325, menu_item_id: premiumCoffeeOfferId }]);
     });
   });
@@ -1633,8 +1635,7 @@ describe("getHeldOrder", () => {
         zoneId,
         lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
       });
-      await db.execute(sql`delete from working_line_contexts where working_order_line_id in
-      (select id from working_order_lines where working_order_id = ${id})`);
+      await clearSavedOffer(db, id);
 
       await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
@@ -1650,14 +1651,16 @@ describe("getHeldOrder", () => {
     async (status) => {
       const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
       const id = randomUUID();
-      await parkOrder({ db }, cfg, {
-        id,
-        zoneId,
-        lines: [
-          { menuItemId: premiumCoffeeOfferId, quantity: "1" },
-          { menuItemId: premiumCoffeeOfferId, quantity: "2" },
-        ],
-      });
+      const park = (billId: string) =>
+        parkOrder({ db }, cfg, {
+          id: billId,
+          zoneId,
+          lines: [
+            { menuItemId: premiumCoffeeOfferId, quantity: "1" },
+            { menuItemId: premiumCoffeeOfferId, quantity: "2" },
+          ],
+        });
+      await park(id);
       await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
       expect((await read({ db }, id)).lines.map((l) => l.quantity)).toEqual([
@@ -1665,11 +1668,13 @@ describe("getHeldOrder", () => {
         "1.000",
         "1.000",
       ]);
-      await db.execute(sql`delete from working_line_contexts where working_order_line_id in
-      (select id from working_order_lines where working_order_id = ${id} and line_no = 3)`);
-      await expect(read({ db }, id)).rejects.toMatchObject({
+      const incomplete = randomUUID();
+      await park(incomplete);
+      await clearSavedOffer(db, incomplete, 3);
+      await db.execute(sql`update working_orders set status = ${status} where id = ${incomplete}`);
+      await expect(read({ db }, incomplete)).rejects.toMatchObject({
         code: "order.service_context_missing",
-        params: { workingOrderId: id },
+        params: { workingOrderId: incomplete },
       });
     },
   );
@@ -3491,11 +3496,9 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       menu_item_id: string;
     }>(sql`
-      select cast(l.quantity as text) as quantity, cast(l.unit_price_gross as int) as unit_price_gross,
-             c.menu_item_id
-      from working_order_lines l
-      join working_line_contexts c on c.working_order_line_id = l.id
-      where l.working_order_id = ${id} order by l.line_no`);
+      select cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross,
+             menu_item_id
+      from working_order_lines where working_order_id = ${id} order by line_no`);
     // Two dishes, each one unit as a count of whole thousandths.
     const coffee = { quantity: "1000", unit_price_gross: 325, menu_item_id: premiumCoffeeOfferId };
     expect(line.rows).toEqual([coffee, coffee]);
@@ -7666,6 +7669,12 @@ describe("a dish's extras children", () => {
         },
         OPERATOR,
       );
+      const units = await tx
+        .select({ soldInEach: workingOrderLines.soldInEach })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(units.map((line) => line.soldInEach)).toEqual([true, false]);
       const [{ revision }] = await tx
         .select({ revision: workingOrders.revision })
         .from(workingOrders)

@@ -16,7 +16,6 @@ import {
   writeContentLanguages,
   writeProductModifiers,
 } from "@waitron/menu";
-import { workingLineContexts } from "@waitron/venue-service";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createOpenOrder, priceOrderLines } from "./working-order.js";
@@ -122,7 +121,6 @@ describe("future order customer fallback", () => {
         [
           "working_orders",
           "working_order_lines",
-          "working_line_contexts",
           "sales",
           "sale_lines",
           "invoice_series",
@@ -238,13 +236,9 @@ describe("future order customer fallback", () => {
       [2, 1000, 1200],
     ]);
     for (const line of lines) {
-      const [context] = await venue.db
-        .select()
-        .from(workingLineContexts)
-        .where(eq(workingLineContexts.workingOrderLineId, line.id));
       expect(line.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
       expect(line.unitName).toEqual({ en: "sp" });
-      expect(context!.unitName).toEqual({ en: "Staff portion" });
+      expect(line.offerUnitName).toEqual({ en: "Staff portion" });
       expect(line.vatClass).toBe("general");
     }
   });

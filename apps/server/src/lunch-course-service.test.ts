@@ -22,7 +22,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { updateProduct, updateExtraList, writeProductModifiers } from "@waitron/menu";
-import { workingLineContexts, setRoutingCell } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -768,10 +768,6 @@ it("selects the dishes of 32,767 set lunches while excluding their priced shells
     const original = await rows(tx, venue.party.tabId);
     const shell = original.find((row) => row.productId === venue.products.burger)!;
     const children = original.filter((row) => row.parentLineId === shell.id);
-    const [context] = await tx
-      .select()
-      .from(workingLineContexts)
-      .where(eq(workingLineContexts.workingOrderLineId, shell.id));
     const shells = Array.from({ length: 32766 }, () => randomUUID());
     const dishes = shells.map(() => randomUUID());
     await insertInChunks(
@@ -781,11 +777,6 @@ it("selects the dishes of 32,767 set lunches while excluding their priced shells
         { ...shell, id, lineNo: 5 + i * 2 },
         { ...children[0]!, id: dishes[i]!, parentLineId: id, lineNo: 6 + i * 2 },
       ]),
-    );
-    await insertInChunks(
-      tx,
-      workingLineContexts,
-      shells.map((id) => ({ ...context!, workingOrderLineId: id })),
     );
     const scope = eq(workingOrderLines.workingOrderId, venue.party.tabId);
     const selected = await tx

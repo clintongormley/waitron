@@ -71,12 +71,7 @@ import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import {
-  configureZone,
-  createDepartment,
-  departments,
-  workingLineContexts,
-} from "@waitron/venue-service";
+import { configureZone, createDepartment, departments } from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -503,14 +498,10 @@ describe("a basket that spans a scheduled activation", () => {
     const lineVersions = (where: SQL) =>
       suite.db
         .select({
-          menuVersionId: workingLineContexts.menuVersionId,
+          menuVersionId: workingOrderLines.menuVersionId,
           gross: workingOrderLines.unitPriceGross,
         })
-        .from(workingLineContexts)
-        .innerJoin(
-          workingOrderLines,
-          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-        )
+        .from(workingOrderLines)
         .where(where);
 
     const early = await pay(v, [lemonadeLine(v, v1)]);

@@ -1450,8 +1450,8 @@ describe("dish extras on kitchen tickets", () => {
       expect(JSON.parse(saved.rows[0]!.unit_name!)).toMatchObject({ es: "kg" });
       expect(await readLinesSoldInEach(tx, [saved.rows[0]!.id])).toEqual(new Set());
       const context = await tx.execute<{ unit_precision: number; hardware_unit: string }>(sql`
-        select unit_precision, hardware_unit from working_line_contexts
-        where working_order_line_id = ${saved.rows[0]!.id}`);
+        select offer_unit_precision as unit_precision, hardware_unit from working_order_lines
+        where id = ${saved.rows[0]!.id}`);
       expect(context.rows).toEqual([{ unit_precision: 3, hardware_unit: "kg" }]);
       return { printerId, jobs: await printJobsFor(tx) };
     });

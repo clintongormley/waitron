@@ -82,6 +82,7 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "unpaid_departures.recorded_by",
     "line_service_cancellations.actor_id",
     "working_order_lines.credited_to",
+    "working_order_lines.late_confirmed_by",
   ].map((column) => [column, NOT_YET_REASON]),
 );
 

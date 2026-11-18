@@ -1309,6 +1309,31 @@ describe("working_order_lines_require_open_parent_update's sent-stamp exception"
     }
   });
 
+  it("allows the first declaration on a stamped paid line, then keeps it fixed", () => {
+    const declaration = '{"allergens":null,"dietaryDeclarations":[]}';
+    connection.exec("savepoint line_declaration_case");
+    try {
+      connection.exec(`update working_orders set status = 'open' where id = 'wo-open'`);
+      connection.exec(
+        `update working_order_lines set menu_item_id = 'offer' where id = 'line-open'`,
+      );
+      connection.exec(`update working_order_lines set sent_at = '${STAMP}' where id = 'line-open'`);
+      connection.exec(
+        `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-open'`,
+      );
+      const update = (value: string) =>
+        refusalFor(
+          connection,
+          `update working_order_lines set sent_nutrition = ${value} where id = 'line-open'`,
+        );
+      expect(update(`'${declaration}'`)).toBeUndefined();
+      expect(update("null")).toBe(OPEN_PARENT_REFUSAL);
+    } finally {
+      connection.exec("rollback to line_declaration_case");
+      connection.exec("release line_declaration_case");
+    }
+  });
+
   // On a presented bill a line may change its group alone, so `group_id` matters most there.
   it.each(
     FROZEN_SENT_LINE_COLUMNS.flatMap((column) => [

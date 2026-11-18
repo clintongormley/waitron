@@ -651,7 +651,7 @@ export async function priceOrderLines(
     unit?: ExtraChild["unitContext"];
     late?: { periodName: string; confirmedBy: string };
   }[];
-  /** The zone's offers the lines were priced from, for `recordLineContexts`. */
+  /** The zone's offers the lines were priced from, for `lineContextColumns`. */
   offers: ZoneOffers;
 }> {
   if (requestedLines.length === 0) {
@@ -1612,13 +1612,17 @@ export async function createOpenOrder(
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
   }
 
-  await insertInChunks(tx, workingOrderLines, lineRows);
   if (placement.copyServiceContextFrom !== undefined) {
     await VENUE_SERVICE.copyOrderContext(tx, placement.copyServiceContextFrom, id);
   } else {
     await VENUE_SERVICE.recordOrderContext(tx, id, effectiveZoneId);
   }
-  await VENUE_SERVICE.recordLineContexts(tx, id, lineContexts, offers);
+  const contextByLine = await VENUE_SERVICE.lineContextColumns(tx, id, lineContexts, offers);
+  await insertInChunks(
+    tx,
+    workingOrderLines,
+    lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
+  );
   await registerPortions(tx, expanded.portions);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
@@ -3341,7 +3345,14 @@ export async function insertTabRound(
 ): Promise<(FireableLine & { lineNo: number; groupId: string | null })[]> {
   const before = await totalBeforeEdit(tx, cfg, round.tabId);
   const inserted: (FireableLine & { lineNo: number; groupId: string | null })[] = [];
-  for (const chunk of statementChunks(workingOrderLines, rows)) {
+  const contextByLine = await VENUE_SERVICE.lineContextColumns(
+    tx,
+    round.tabId,
+    round.lineContexts,
+    round.offers,
+  );
+  const withContexts = rows.map((row) => ({ ...row, ...contextByLine.get(row.id!) }));
+  for (const chunk of statementChunks(workingOrderLines, withContexts)) {
     inserted.push(
       ...(await tx
         .insert(workingOrderLines)
@@ -3353,7 +3364,6 @@ export async function insertTabRound(
         })),
     );
   }
-  await VENUE_SERVICE.recordLineContexts(tx, round.tabId, round.lineContexts, round.offers);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
 }
@@ -5039,6 +5049,27 @@ async function carveLines(
       groupId: workingOrderLines.groupId,
       creditedTo: workingOrderLines.creditedTo,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+      context: {
+        menuItemId: workingOrderLines.menuItemId,
+        menuId: workingOrderLines.menuId,
+        menuName: workingOrderLines.menuName,
+        menuVersionId: workingOrderLines.menuVersionId,
+        offerDepartmentId: workingOrderLines.offerDepartmentId,
+        departmentName: workingOrderLines.departmentName,
+        unitId: workingOrderLines.unitId,
+        soldInEach: workingOrderLines.soldInEach,
+        hardwareUnit: workingOrderLines.hardwareUnit,
+        allergens: workingOrderLines.allergens,
+        diet: workingOrderLines.diet,
+        dietOverride: workingOrderLines.dietOverride,
+        latePeriodName: workingOrderLines.latePeriodName,
+        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
+        sentNutrition: workingOrderLines.sentNutrition,
+        offerUnitName: workingOrderLines.offerUnitName,
+        offerUnitPrecision: workingOrderLines.offerUnitPrecision,
+        offerVatClass: workingOrderLines.offerVatClass,
+        offerCategoryName: workingOrderLines.offerCategoryName,
+      },
       ticketItemId: ticketItems.id,
     })
     .from(workingOrderLines)
@@ -5183,6 +5214,7 @@ async function carveLines(
       const splitRowId = randomUUID();
       const lineNo = ++nextLineNo;
       await tx.insert(workingOrderLines).values({
+        ...row.context,
         id: splitRowId,
         workingOrderId: toTabId,
         lineNo,
@@ -5228,7 +5260,6 @@ async function carveLines(
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       carried.push({ from: row.id, to: splitRowId });
-      await VENUE_SERVICE.copyLineContext(tx, row.id, splitRowId);
       if (parentLineId === null)
         await copyAllergyWorkingTicks(tx, [{ from: row.id, to: splitRowId }]);
       return splitRowId;
@@ -7034,9 +7065,17 @@ async function applyLineEdits(
     }
   });
   if (inserted.length > 0) {
-    await insertInChunks(tx, workingOrderLines, inserted);
-    await VENUE_SERVICE.recordLineContexts(tx, orderId, insertedContexts, priced.offers);
-    await VENUE_SERVICE.copyLineContexts(tx, copiedContexts);
+    const contextByLine = await VENUE_SERVICE.lineContextColumns(
+      tx,
+      orderId,
+      insertedContexts,
+      priced.offers,
+    );
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      inserted.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
+    );
     await registerPortions(tx, newPortions);
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);

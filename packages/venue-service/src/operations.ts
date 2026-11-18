@@ -54,6 +54,8 @@ import {
 } from "@waitron/menu";
 import type {
   LateSendMark,
+  LineContextColumns,
+  LineContextInput,
   PreparedServiceDay,
   ServiceMode,
   ZoneMenuState,
@@ -1178,16 +1180,13 @@ export async function readLunchLineIds(
   if (lineIds.length === 0) return new Set();
   const contexts = await tx
     .select({
-      lineId: workingLineContexts.workingOrderLineId,
-      menuItemId: workingLineContexts.menuItemId,
-      versionId: workingLineContexts.menuVersionId,
+      lineId: workingOrderLines.id,
+      menuItemId: workingOrderLines.menuItemId,
+      versionId: workingOrderLines.menuVersionId,
     })
-    .from(workingLineContexts)
+    .from(workingOrderLines)
     .where(
-      inArray(
-        workingLineContexts.workingOrderLineId,
-        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-      ),
+      inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(lineIds)}))`),
     );
   const documents = await readRecordedDocuments(
     tx,
@@ -1196,6 +1195,7 @@ export async function readLunchLineIds(
   return new Set(
     contexts.flatMap((row) =>
       row.versionId !== null &&
+      row.menuItemId !== null &&
       documents.get(row.versionId)?.offers[row.menuItemId]?.setLunch === true
         ? [row.lineId]
         : [],
@@ -1266,34 +1266,41 @@ export async function listWorkingLineContexts(
 > {
   const rows = await tx
     .select({
-      workingOrderLineId: workingLineContexts.workingOrderLineId,
-      menuItemId: workingLineContexts.menuItemId,
-      menuId: workingLineContexts.menuId,
-      menuVersionId: workingLineContexts.menuVersionId,
-      menuName: workingLineContexts.menuName,
-      departmentId: workingLineContexts.departmentId,
-      categoryName: workingLineContexts.categoryName,
-      unitId: workingLineContexts.unitId,
-      unitName: workingLineContexts.unitName,
-      unitPrecision: workingLineContexts.unitPrecision,
-      hardwareUnit: workingLineContexts.hardwareUnit,
-      vatClass: workingLineContexts.vatClass,
-      allergens: workingLineContexts.allergens,
-      diet: workingLineContexts.diet,
-      dietOverride: workingLineContexts.dietOverride,
+      workingOrderLineId: workingOrderLines.id,
+      menuItemId: workingOrderLines.menuItemId,
+      menuId: workingOrderLines.menuId,
+      menuVersionId: workingOrderLines.menuVersionId,
+      menuName: workingOrderLines.menuName,
+      departmentId: workingOrderLines.offerDepartmentId,
+      categoryName: workingOrderLines.offerCategoryName,
+      unitId: workingOrderLines.unitId,
+      unitName: workingOrderLines.offerUnitName,
+      unitPrecision: workingOrderLines.offerUnitPrecision,
+      hardwareUnit: workingOrderLines.hardwareUnit,
+      vatClass: workingOrderLines.offerVatClass,
+      allergens: workingOrderLines.allergens,
+      diet: workingOrderLines.diet,
+      dietOverride: workingOrderLines.dietOverride,
     })
-    .from(workingLineContexts)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, workingLineContexts.workingOrderLineId))
+    .from(workingOrderLines)
     .where(
       and(
         eq(workingOrderLines.workingOrderId, workingOrderId),
-        lineIds === undefined
-          ? undefined
-          : inArray(workingLineContexts.workingOrderLineId, [...lineIds]),
+        isNotNull(workingOrderLines.menuItemId),
+        lineIds === undefined ? undefined : inArray(workingOrderLines.id, [...lineIds]),
       ),
     );
+  // The context CHECK pairs the required offer fields with menu_item_id.
   return rows.map((row) => ({
     ...row,
+    menuItemId: row.menuItemId!,
+    menuId: row.menuId!,
+    menuName: row.menuName!,
+    departmentId: row.departmentId!,
+    categoryName: row.categoryName!,
+    unitId: row.unitId!,
+    unitName: row.unitName!,
+    unitPrecision: row.unitPrecision!,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
   }));
 }
@@ -1306,15 +1313,12 @@ export async function readLinesSoldInEach(
   if (lineIds.length === 0) return new Set();
   const rows = await tx
     .select({
-      workingOrderLineId: workingLineContexts.workingOrderLineId,
-      soldInEach: workingLineContexts.soldInEach,
+      workingOrderLineId: workingOrderLines.id,
+      soldInEach: workingOrderLines.soldInEach,
     })
-    .from(workingLineContexts)
+    .from(workingOrderLines)
     .where(
-      inArray(
-        workingLineContexts.workingOrderLineId,
-        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-      ),
+      inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(lineIds)}))`),
     );
   return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
@@ -1330,16 +1334,13 @@ export async function readLateSendMarks(
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      workingOrderLineId: workingLineContexts.workingOrderLineId,
-      latePeriodName: workingLineContexts.latePeriodName,
-      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+      workingOrderLineId: workingOrderLines.id,
+      latePeriodName: workingOrderLines.latePeriodName,
+      lateConfirmedBy: workingOrderLines.lateConfirmedBy,
     })
-    .from(workingLineContexts)
+    .from(workingOrderLines)
     .where(
-      and(
-        inArray(workingLineContexts.workingOrderLineId, [...lineIds]),
-        isNotNull(workingLineContexts.latePeriodName),
-      ),
+      and(inArray(workingOrderLines.id, [...lineIds]), isNotNull(workingOrderLines.latePeriodName)),
     );
   return new Map(
     rows.map((row) => [
@@ -1359,9 +1360,9 @@ export async function recordLateSendMarks(
 ): Promise<void> {
   for (const mark of marks) {
     await tx
-      .update(workingLineContexts)
+      .update(workingOrderLines)
       .set({ latePeriodName: mark.periodName, lateConfirmedBy: mark.confirmedBy })
-      .where(eq(workingLineContexts.workingOrderLineId, mark.lineId));
+      .where(and(eq(workingOrderLines.id, mark.lineId), isNotNull(workingOrderLines.menuItemId)));
   }
 }
 
@@ -1369,16 +1370,16 @@ export async function readSentLineNutrition(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<
-  ReadonlyMap<string, NonNullable<(typeof workingLineContexts.$inferSelect)["sentNutrition"]>>
+  ReadonlyMap<string, NonNullable<(typeof workingOrderLines.$inferSelect)["sentNutrition"]>>
 > {
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      id: workingLineContexts.workingOrderLineId,
-      nutrition: workingLineContexts.sentNutrition,
+      id: workingOrderLines.id,
+      nutrition: workingOrderLines.sentNutrition,
     })
-    .from(workingLineContexts)
-    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, [...lineIds]));
   return new Map(rows.flatMap((row) => (row.nutrition === null ? [] : [[row.id, row.nutrition]])));
 }
 
@@ -1386,36 +1387,24 @@ export async function recordSentLineNutrition(
   tx: Transaction,
   rows: readonly {
     lineId: string;
-    nutrition: NonNullable<(typeof workingLineContexts.$inferSelect)["sentNutrition"]>;
+    nutrition: NonNullable<(typeof workingOrderLines.$inferSelect)["sentNutrition"]>;
   }[],
 ): Promise<void> {
   for (const row of rows) {
     await tx
-      .update(workingLineContexts)
+      .update(workingOrderLines)
       .set({ sentNutrition: row.nutrition })
-      .where(eq(workingLineContexts.workingOrderLineId, row.lineId));
+      .where(and(eq(workingOrderLines.id, row.lineId), isNotNull(workingOrderLines.menuItemId)));
   }
 }
 
-export async function recordWorkingLineContexts(
+export async function lineContextColumns(
   tx: Transaction,
   workingOrderId: string,
-  lines: readonly {
-    workingOrderLineId: string;
-    menuItemId: string;
-    variantId?: string;
-    recorded?: { offer: ZoneMenuOffer; versionId: string };
-    unit?: {
-      id: string;
-      name: Record<string, string>;
-      precision: number;
-      hardwareUnit: "kg" | "g" | "mg" | null;
-    };
-    late?: { periodName: string; confirmedBy: string };
-  }[],
+  lines: readonly LineContextInput[],
   offers: ZoneOffers,
-): Promise<void> {
-  if (lines.length === 0) return;
+): Promise<ReadonlyMap<string, LineContextColumns>> {
+  if (lines.length === 0) return new Map();
   const context = await getOrderServiceContext(tx, workingOrderId);
   const [department] = await tx
     .select({ name: departments.name })
@@ -1447,9 +1436,7 @@ export async function recordWorkingLineContexts(
       throw new Error(`the offers name no live version of menu ${menuId}`);
     return versionId;
   };
-  await insertInChunks(
-    tx,
-    workingLineContexts,
+  return new Map(
     lines.map((line) => {
       const offer = line.recorded?.offer ?? byMenuItem.get(line.menuItemId);
       if (offer === undefined) {
@@ -1460,30 +1447,32 @@ export async function recordWorkingLineContexts(
       }
       const unitId = line.unit?.id ?? offer.unit.id;
       const sold = offer.variants.find((variant) => variant.id === line.variantId) ?? offer;
-      return {
-        workingOrderLineId: line.workingOrderLineId,
-        menuItemId: offer.id,
-        menuId: offer.menuId,
-        menuVersionId: line.recorded?.versionId ?? versionOf(offer.menuId),
-        menuName: offer.menuName,
-        departmentId: context.departmentId,
-        departmentName: department.name,
-        categoryName: sold.category ?? "Uncategorised",
-        unitId,
-        unitName: line.unit?.name ?? offer.unit.name,
-        unitPrecision: line.unit?.precision ?? offer.unit.precision,
-        soldInEach: isEachUnit({
-          id: unitId,
-          seedKey: seedKeyById.get(unitId) ?? null,
-        }),
-        hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
-        vatClass: sold.vatClass,
-        allergens: sold.allergens,
-        diet: sold.diet,
-        dietOverride: sold.dietOverride,
-        latePeriodName: line.late?.periodName ?? null,
-        lateConfirmedBy: line.late?.confirmedBy ?? null,
-      };
+      return [
+        line.workingOrderLineId,
+        {
+          menuItemId: offer.id,
+          menuId: offer.menuId,
+          menuVersionId: line.recorded?.versionId ?? versionOf(offer.menuId),
+          menuName: offer.menuName,
+          offerDepartmentId: context.departmentId,
+          departmentName: department.name,
+          offerCategoryName: sold.category ?? "Uncategorised",
+          unitId,
+          offerUnitName: line.unit?.name ?? offer.unit.name,
+          offerUnitPrecision: line.unit?.precision ?? offer.unit.precision,
+          soldInEach: isEachUnit({
+            id: unitId,
+            seedKey: seedKeyById.get(unitId) ?? null,
+          }),
+          hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
+          offerVatClass: sold.vatClass,
+          allergens: sold.allergens,
+          diet: sold.diet,
+          dietOverride: sold.dietOverride,
+          latePeriodName: line.late?.periodName ?? null,
+          lateConfirmedBy: line.late?.confirmedBy ?? null,
+        },
+      ];
     }),
   );
 }

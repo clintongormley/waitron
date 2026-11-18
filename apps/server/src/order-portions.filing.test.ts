@@ -1,6 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+import { StatementSync } from "node:sqlite";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
@@ -12,11 +13,11 @@ import {
   sales,
   ticketItems,
   workingLinePortions,
-  workingLineContexts,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
 import { cancelRefundShare, decimal } from "@waitron/shared";
@@ -936,9 +937,9 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     await inTx(venue, async (tx) => {
       await fireAll(tx, venue.cfg, billId);
       await tx
-        .update(workingLineContexts)
+        .update(workingOrderLines)
         .set({ sentNutrition: null })
-        .where(eq(workingLineContexts.workingOrderLineId, portions[0]!.lineId));
+        .where(eq(workingOrderLines.id, portions[0]!.lineId));
       await VENUE_SERVICE.recordSentLineNutrition(tx, [
         { lineId: portions[1]!.lineId, nutrition: { allergens: null, dietaryDeclarations: [] } },
         { lineId: portions[2]!.lineId, nutrition: { allergens: {}, dietaryDeclarations: [] } },
@@ -1119,9 +1120,14 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     ["part served", { servedQuantity: 500 }],
   ])("A803 portion grouping: a portion whose %s differs stays apart", async (_, change) => {
     const { billId, portions } = await seed(croquettes("2"));
-    await inTx(venue, (tx) =>
-      tx.update(workingOrderLines).set(change).where(eq(workingOrderLines.id, portions[1]!.lineId)),
-    );
+    await inTx(venue, async (tx) => {
+      if (change.creditedTo)
+        await seedPerson(tx, { id: change.creditedTo, displayName: "Other taker" });
+      await tx
+        .update(workingOrderLines)
+        .set(change)
+        .where(eq(workingOrderLines.id, portions[1]!.lineId));
+    });
 
     expect(await detailLines(billId)).toEqual([
       { name: "Croqueta", quantity: "1.000", total: "3.33" },
@@ -1383,28 +1389,30 @@ describe("A803 portions: raising a dish", () => {
     await raise(bound.billId, 1, "2");
 
     const contexts = venue.db.all<Record<string, unknown>>(
-      sql`select c.* from working_line_contexts c
-          join working_order_lines l on l.id = c.working_order_line_id
-          where l.working_order_id = ${bound.billId} order by l.line_no`,
+      sql`select menu_item_id, menu_id, menu_version_id, menu_name, offer_department_id,
+                 department_name, offer_category_name, unit_id, offer_unit_name,
+                 offer_unit_precision, sold_in_each, hardware_unit, offer_vat_class,
+                 allergens, sent_nutrition, diet, diet_override, late_period_name, late_confirmed_by
+          from working_order_lines
+          where working_order_id = ${bound.billId} order by line_no`,
     );
-    const facts = contexts.map((row) => ({ ...row, working_order_line_id: undefined }));
-    expect(facts).toHaveLength(4);
-    expect(facts[2]).toEqual(facts[0]);
-    expect(facts[3]).toEqual(facts[1]);
+    expect(contexts).toHaveLength(4);
+    expect(contexts[2]).toEqual(contexts[0]);
+    expect(contexts[3]).toEqual(contexts[1]);
   });
 
   it("A803 portions: raising a bound burger to 3 copies every copied line's sale context in one call", async () => {
     const bound = await billOf(burgersWithCheese("1"), { bound: true });
-    const one = vi.spyOn(VENUE_SERVICE, "copyLineContext");
-    const many = vi.spyOn(VENUE_SERVICE, "copyLineContexts");
+    const run = vi.spyOn(StatementSync.prototype, "run");
     try {
       await raise(bound.billId, 1, "3");
-      expect(one).not.toHaveBeenCalled();
-      expect(many).toHaveBeenCalledTimes(1);
-      expect(many.mock.calls[0]![1]).toHaveLength(4);
+      const inserts = (run.mock.contexts as StatementSync[]).filter((statement) =>
+        statement.sourceSQL.startsWith('insert into "working_order_lines"'),
+      );
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]!.sourceSQL.split(/\), \(/)).toHaveLength(4);
     } finally {
-      one.mockRestore();
-      many.mockRestore();
+      run.mockRestore();
     }
   });
 

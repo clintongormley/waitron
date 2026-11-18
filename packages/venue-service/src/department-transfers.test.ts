@@ -23,7 +23,6 @@ import {
   diningTables,
   parties,
   kitchenStations,
-  workingLineContexts,
   workingOrderLines,
   deviceProfiles,
   floorZones,
@@ -952,24 +951,24 @@ describe("departmental tab transfers", () => {
         })
         .returning();
       await tx.update(workingOrders).set({ revision: 3 }).where(eq(workingOrders.id, v.tab));
-      const [lineContext] = await tx
-        .insert(workingLineContexts)
-        .values({
-          workingOrderLineId: line!.id,
+      const [beforeLine] = await tx
+        .update(workingOrderLines)
+        .set({
           menuItemId: offer.id,
           menuId: menu.id,
           menuName: "Source menu",
-          departmentId: v.a,
+          offerDepartmentId: v.a,
           departmentName: "Deli",
-          categoryName: "Soup course",
+          offerCategoryName: "Soup course",
           unitId: unit!.id,
-          unitName: { en: "ea" },
-          unitPrecision: 0,
+          offerUnitName: { en: "ea" },
+          offerUnitPrecision: 0,
           soldInEach: true,
-          vatClass: "general",
+          offerVatClass: "general",
         })
+        .where(eq(workingOrderLines.id, line!.id))
         .returning();
-      return { line: line!, context: lineContext! };
+      return beforeLine!;
     });
     expect(service).toHaveProperty("acceptDepartmentTransfer", expect.any(Function));
     await expect(accept(v, 0)).rejects.toMatchObject({
@@ -1001,13 +1000,7 @@ describe("departmental tab transfers", () => {
         .select()
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, v.tab)),
-    ).toEqual([before.line]);
-    expect(
-      await suite.db
-        .select()
-        .from(workingLineContexts)
-        .where(eq(workingLineContexts.workingOrderLineId, before.line.id)),
-    ).toEqual([before.context]);
+    ).toEqual([before]);
     await expect(accept(v, 4)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
     expect(
       await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.b)),
@@ -1443,21 +1436,23 @@ describe("departmental tab transfers", () => {
           "person-1",
         );
         const lineId = await addLine(tx, v);
-        await tx.insert(workingLineContexts).values({
-          workingOrderLineId: lineId,
-          menuItemId: offer.id,
-          menuId: menu.id,
-          menuVersionId: versionId,
-          menuName: "Lunch",
-          departmentId: v.a,
-          departmentName: "Deli",
-          categoryName: "Lunch",
-          unitId: unit!.id,
-          unitName: { en: "ea" },
-          unitPrecision: 0,
-          soldInEach: true,
-          vatClass: "reduced",
-        });
+        await tx
+          .update(workingOrderLines)
+          .set({
+            menuItemId: offer.id,
+            menuId: menu.id,
+            menuVersionId: versionId,
+            menuName: "Lunch",
+            offerDepartmentId: v.a,
+            departmentName: "Deli",
+            offerCategoryName: "Lunch",
+            unitId: unit!.id,
+            offerUnitName: { en: "ea" },
+            offerUnitPrecision: 0,
+            soldInEach: true,
+            offerVatClass: "reduced",
+          })
+          .where(eq(workingOrderLines.id, lineId));
       });
     }
 

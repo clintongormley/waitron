@@ -9,6 +9,7 @@ import {
   sales,
   saleLines,
   withTransaction,
+  workingOrderLines,
   workingOrders,
   floorZones,
 } from "@waitron/db";
@@ -21,7 +22,6 @@ import {
   departments,
   deviceProfileServiceAccess,
   departmentTransferRequests,
-  workingLineContexts,
   saleReceiptHeaders,
   readDepartmentTransfer,
   setProfileServiceScope,
@@ -107,7 +107,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     lines: await tx.select().from(saleLines),
     orders: await tx.select().from(workingOrders),
 
-    lineContexts: await tx.select().from(workingLineContexts),
+    lineContexts: await tx.select().from(workingOrderLines),
     headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
       .select({
@@ -214,7 +214,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     lines: await tx.select().from(saleLines),
     orders: await tx.select().from(workingOrders),
 
-    lineContexts: await tx.select().from(workingLineContexts),
+    lineContexts: await tx.select().from(workingOrderLines),
     headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
       .select({

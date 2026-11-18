@@ -1,3 +1,4 @@
+import * as lineServiceState from "./line-service-state.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
@@ -2256,12 +2257,14 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       ),
     });
     const before = await read();
-    const copy = VENUE_SERVICE.copyLineContext;
+    const copy = lineServiceState.splitLineServiceState;
     let copies = 0;
-    const fail = vi.spyOn(VENUE_SERVICE, "copyLineContext").mockImplementation(async (...args) => {
-      if (++copies === 2) throw new AppError("group.not_held", { groupId: group.id });
-      return copy(...args);
-    });
+    const fail = vi
+      .spyOn(lineServiceState, "splitLineServiceState")
+      .mockImplementation(async (...args) => {
+        if (++copies === 2) throw new AppError("group.not_held", { groupId: group.id });
+        return copy(...args);
+      });
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
         submissionId: randomUUID(),
@@ -2354,7 +2357,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       tx.update(workingOrderLines).set({ quantity: 2500 }).where(eq(workingOrderLines.id, lineId)),
     );
     const before = await snapshot(party);
-    const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
+    const copy = vi.spyOn(lineServiceState, "splitLineServiceState");
     try {
       const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
         submissionId: randomUUID(),

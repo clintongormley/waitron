@@ -50,7 +50,7 @@ import {
   rateLines,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { departments, saleReceiptHeaders, workingLineContexts } from "@waitron/venue-service";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -667,8 +667,7 @@ describe("recordTillSale", () => {
     }>(sql`
       select o.zone_id, l.menu_item_id, l.menu_name, l.department_name
       from working_orders o
-      join working_order_lines w on w.working_order_id = o.id
-      join working_line_contexts l on l.working_order_line_id = w.id
+      join working_order_lines l on l.working_order_id = o.id
       `);
     const attribution = {
       zone_id: zoneId,
@@ -2963,12 +2962,8 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const versionOf = async (workingOrderId: string) =>
       suite.db
-        .select({ menuVersionId: workingLineContexts.menuVersionId })
-        .from(workingLineContexts)
-        .innerJoin(
-          workingOrderLines,
-          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-        )
+        .select({ menuVersionId: workingOrderLines.menuVersionId })
+        .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, workingOrderId));
     const liveVersion = async () => {
       const [row] = await suite.db

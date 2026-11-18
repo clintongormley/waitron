@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { products, workingLineContexts } from "@waitron/db";
+import { nowIso, products, workingOrderLines } from "@waitron/db";
 import type { AllergenMap } from "@waitron/shared";
 import {
   createExtraList,
@@ -137,9 +137,9 @@ it("never substitutes current allergens when a sent row has no captured declarat
   const [line] = await inTx(v, (tx) => readTabLines(tx, party.tabId));
   await inTx(v, async (tx) => {
     await tx
-      .update(workingLineContexts)
+      .update(workingOrderLines)
       .set({ sentNutrition: null })
-      .where(eq(workingLineContexts.workingOrderLineId, line!.id));
+      .where(eq(workingOrderLines.id, line!.id));
     await updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } });
   });
   const lines = await inTx(v, (tx) => readTabLines(tx, party.tabId));
@@ -182,14 +182,30 @@ it("records the current counter declaration when placed and leaves a replay unch
     dietaryDeclarations: ["vegetarian"],
     dietOverride: null,
   });
-  const [line] = await inTx(v, (tx) => readTabLines(tx, id));
-  await inTx(v, (tx) =>
-    tx
-      .update(workingLineContexts)
-      .set({ sentNutrition: null })
-      .where(eq(workingLineContexts.workingOrderLineId, line!.id)),
+  const withMissingDeclaration = randomUUID();
+  await inTx(v, async (tx) => {
+    await createOpenOrder(
+      tx,
+      v.cfg,
+      withMissingDeclaration,
+      [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+      null,
+      { zoneId: v.counter.zoneId, creditedTo: OPERATOR },
+    );
+    await tx
+      .update(workingOrderLines)
+      .set({ sentAt: nowIso() })
+      .where(eq(workingOrderLines.workingOrderId, withMissingDeclaration));
+  });
+  await placeOrder(
+    { ...v, admission: testTradingAdmission() },
+    v.cfg,
+    withMissingDeclaration,
+    OPERATOR,
   );
-  expect((await getPlacedCounterOrder({ db: suite.db }, id)).lines[0]!.product).toMatchObject({
+  expect(
+    (await getPlacedCounterOrder({ db: suite.db }, withMissingDeclaration)).lines[0]!.product,
+  ).toMatchObject({
     allergens: null,
     dietaryDeclarations: [],
     dietOverride: null,

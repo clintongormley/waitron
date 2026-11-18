@@ -433,7 +433,12 @@ BEGIN
       exists (
         SELECT 1 FROM working_orders
         WHERE id = old.working_order_id
-          AND (status = 'placed' OR (status = 'settled' AND new.group_id IS NOT old.group_id))
+          AND (
+            status = 'placed'
+            OR (status = 'settled' AND (
+              new.group_id IS NOT old.group_id OR new.sent_nutrition IS NOT old.sent_nutrition
+            ))
+          )
       )
       AND new.id IS old.id
       AND new.working_order_id IS old.working_order_id
@@ -480,7 +485,17 @@ BEGIN
       AND new.diet_override IS old.diet_override
       AND new.late_period_name IS old.late_period_name
       AND new.late_confirmed_by IS old.late_confirmed_by
-      AND new.sent_nutrition IS old.sent_nutrition
+      -- Sending records the first declaration just after taking the line's sent stamp.
+      AND (
+        new.sent_nutrition IS old.sent_nutrition
+        OR (
+          new.group_id IS old.group_id
+          AND old.menu_item_id IS NOT NULL
+          AND old.sent_at IS NOT NULL
+          AND old.sent_nutrition IS NULL
+          AND new.sent_nutrition IS NOT NULL
+        )
+      )
       AND new.offer_unit_name IS old.offer_unit_name
       AND new.offer_unit_precision IS old.offer_unit_precision
       AND new.offer_vat_class IS old.offer_vat_class

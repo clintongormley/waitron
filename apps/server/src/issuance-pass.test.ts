@@ -1,3 +1,4 @@
+import { clearSavedOffer } from "./testing/order-writer-fixture.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -854,9 +855,7 @@ describe("issuancePass", () => {
   it("leaves the menu empty on a line with no recorded selling context", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
-    await suite.db.run(
-      sql`delete from working_line_contexts where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
-    );
+    await clearSavedOffer(suite.db, id);
 
     const issued = await withTransaction(suite.db, async (tx) =>
       issuancePass(tx, id, await priceStoredOrderForIssuance(tx, id)),
