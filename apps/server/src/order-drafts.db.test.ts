@@ -2296,19 +2296,18 @@ describe("who a draft was taken over from", () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
-    const nobody = randomUUID();
-    await seedPersons(db, { id: nobody, displayName: "Nora" });
-    const nobodys = await saveOnSeparateBill(v, partyId, nobody, null, 0, [item(v, "fish")]);
+    const nora = randomUUID();
+    await seedPersons(db, { id: nora, displayName: "Nora" });
+    const noras = await saveOnSeparateBill(v, partyId, nora, null, 0, [item(v, "fish")]);
     const mia = randomUUID();
     await seedPersons(db, { id: mia, displayName: "Mia" });
     await saveOnSeparateBill(v, partyId, mia, null, 0, [item(v, "wine", { variantId: v.glass })]);
     await takeOver(v, partyId, alex.id, SAM, 0);
-    await takeOver(v, partyId, nobodys.id, ALEX, 0);
-    await db.delete(persons).where(eq(persons.id, nobody));
+    await takeOver(v, partyId, noras.id, ALEX, 0);
 
     const read = byOwner(await draftsOf(v, partyId));
     expect(read.map(({ ownerId, takenOverFrom }) => ({ ownerId, takenOverFrom }))).toEqual([
-      { ownerId: ALEX, takenOverFrom: { personId: nobody, name: "" } },
+      { ownerId: ALEX, takenOverFrom: { personId: nora, name: "Nora" } },
       { ownerId: mia, takenOverFrom: null },
       { ownerId: SAM, takenOverFrom: { personId: ALEX, name: "Alex" } },
     ]);

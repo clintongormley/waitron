@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { checkFailed } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -8,6 +8,7 @@ import { seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { newId } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { orderDrafts } from "./order-drafts.js";
 import { parties } from "./parties.js";
 
@@ -90,5 +91,26 @@ describe("order events", () => {
       `);
     expect(insert(ACTOR)).toEqual({ actor_id: ACTOR });
     expect(isRefusal(await captureError(() => insert(MISSING)), FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("keeps the previous owner of a taken-over draft", async () => {
+    const previousOwner = newId();
+    await seedPerson(suite.db, { id: previousOwner, displayName: "Nora" });
+    const eventId = newId();
+    await suite.db.run(sql`
+      insert into order_events (id, kind, at, draft_id, actor_id, from_person, to_person)
+      values (${eventId}, 'draft.taken_over', ${AT}, ${draftId}, ${ACTOR}, ${previousOwner}, ${ACTOR})
+    `);
+    const deletePerson = (personId: string) =>
+      suite.db.delete(persons).where(eq(persons.id, personId));
+
+    const error = await captureError(() => deletePerson(previousOwner));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const unreferenced = newId();
+    await seedPerson(suite.db, { id: unreferenced, displayName: "Mia" });
+    await deletePerson(unreferenced);
+    expect(
+      await suite.db.select({ id: persons.id }).from(persons).where(eq(persons.id, unreferenced)),
+    ).toEqual([]);
   });
 });
